@@ -408,6 +408,60 @@ class AdaptiveDomainTests(unittest.TestCase):
         assert_states_equal(self, full, end)
 
 
+@unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
+class CardMemoryTests(unittest.TestCase):
+    """Lane 6 step N3: the card's memory stays bounded over a long bake (24 frames of a 128-cell liquid took 4.5 GB: every
+    resize left the old grid on the card, and every frame's solver was kept alive by its cached state)."""
+
+    def tracker(self):
+        from nodebased import gpu3d
+        return gpu3d._state()["memory"]
+
+    def test_a_resize_gives_the_old_grid_back(self):
+        solver = resident({"nx": 16, "ny": 16, "nz": 16, "voxel_size": 0.125, "auto_resize": 1})
+        solver.step(solver.initial_state(), 1, 0, 0)
+        tracker = self.tracker()
+        solver._alloc()
+        after_first = tracker.current
+        for shape in ((24, 24, 24), (16, 16, 16), (24, 24, 24), (16, 16, 16), (32, 24, 24)) * 3:
+            solver._adopt(shape, (0.0, 0.0, 0.0))
+            solver._alloc()
+        self.assertLess(tracker.current, after_first + 6 * 2 ** 20)
+
+    def test_a_read_state_does_not_keep_the_solver_alive(self):
+        solver = resident({"nx": 8, "ny": 8, "nz": 8})
+        state = solver.step(solver.initial_state(), 1, 0, 0)
+        self.assertIsNotNone(state._solver)
+        state.arrays
+        self.assertIsNone(state._solver)
+
+    def test_successive_frames_of_one_run_share_a_solver_and_the_card_stays_bounded(self):
+        import gc
+        from nodebased import fluid3d
+        from nodebased.core import Dispatcher
+        from nodebased.imaging import Evaluator
+        d = Dispatcher()
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "src", "type": "FluidSource3D", "params": {
+                "fluid_type": "liquid", "src_center_y": 0.7, "src_radius": 0.3, "src_vel_y": -0.5}},
+            {"op": "create", "id": "liq", "type": "FluidLiquidSolver3D", "params": {
+                "division_size": 0.1, "bounds_min_x": -0.5, "bounds_max_x": 0.5, "bounds_min_z": -0.5, "bounds_max_z": 0.5,
+                "bounds_max_y": 1.2, "auto_resize": 1, "pressure": "resident", "particles_per_cell": 2, "substeps": 1}},
+            {"op": "connect", "id": "liq", "input": "fluid", "source": "src"},
+            {"op": "create", "id": "cache", "type": "ParticleCache3D", "params": {}},
+            {"op": "connect", "id": "cache", "input": "particles", "source": "liq"}]})
+        evaluator = Evaluator()
+        before = len(fluid3d._SOLVERS)
+        solvers = set()
+        for frame in range(1, 9):
+            value = evaluator.evaluate_raster(d.document, "cache", frame=frame, typed=True)
+            solvers.add(id(value.stream.solver()))
+        self.assertEqual(len(solvers), 1, "every frame built its own solver, and its own grid on the card")
+        gc.collect()
+        live = sum(1 for o in gc.get_objects() if type(o).__name__ == "GpuLiquid3D")
+        self.assertLessEqual(live, fluid3d.MAX_SOLVERS)
+
+
 def fluid3d_source():
     from nodebased import fluid3d
     return fluid3d.Source(center=(0.0, 1.0, 0.0), radius=0.45, fluid_type="liquid", end_frame=1)

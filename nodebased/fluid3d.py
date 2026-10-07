@@ -47,6 +47,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+from collections import OrderedDict
 
 from .cancellation import Cancelled
 from . import simcache
@@ -1581,6 +1582,27 @@ def chain_for(evaluator, doc, key, node, incoming, cancel=None):
     raise ValueError(f"not a fluid chain node: {kind}")
 
 
+_SOLVERS = OrderedDict()
+MAX_SOLVERS = 3
+
+
+def reused_solver(kind, run, backend, build):
+    """The solver of this run if one is alive, else `build()`. The evaluator builds a new stream for every frame it is
+    asked for, and a stream built its own solver: on the resident backends that was a new grid on the card per frame
+    (and, kept alive by the cached states, 4.5 GB of it after 24 frames of a 128-cell liquid), and every frame restarted
+    from a host copy of the last. A run's identity covers its sources, forces, colliders and parameters, so the same run
+    key is the same simulation: its solver, and the resident state it holds, can continue."""
+    key = (kind, run, backend)
+    solver = _SOLVERS.get(key)
+    if solver is None:
+        solver = _SOLVERS[key] = build()
+        while len(_SOLVERS) > MAX_SOLVERS:
+            _SOLVERS.popitem(last=False)
+    else:
+        _SOLVERS.move_to_end(key)
+    return solver
+
+
 class FluidStream:
     """One deterministic fluid run: enough to solve any frame of it. Built by `build_stream`."""
 
@@ -1641,15 +1663,18 @@ class FluidStream:
             solver_fn = None
             if self.backend == "gpu":
                 solver_fn = _gpu_solver().solve
-            if self.backend in ("resident", "resident_sparse"):
-                from .fluid_gpu_solver import GpuSmoke3D
-                self._solver = GpuSmoke3D(params, sources=smoke_sources, forces=self.chain.forces,
-                                          colliders=self.chain.colliders, replace_buoyancy=self.chain.replace_buoyancy,
-                                          sparse=self.backend == "resident_sparse")
-            else:
-                self._solver = Smoke3D(params, pressure_solver=solver_fn, sources=smoke_sources,
-                                       forces=self.chain.forces, colliders=self.chain.colliders,
-                                       replace_buoyancy=self.chain.replace_buoyancy)
+
+            def build():
+                if self.backend in ("resident", "resident_sparse"):
+                    from .fluid_gpu_solver import GpuSmoke3D
+                    return GpuSmoke3D(params, sources=smoke_sources, forces=self.chain.forces,
+                                      colliders=self.chain.colliders, replace_buoyancy=self.chain.replace_buoyancy,
+                                      sparse=self.backend == "resident_sparse")
+                return Smoke3D(params, pressure_solver=solver_fn, sources=smoke_sources,
+                               forces=self.chain.forces, colliders=self.chain.colliders,
+                               replace_buoyancy=self.chain.replace_buoyancy)
+            self._solver = reused_solver("smoke", self.run, self.backend, build) \
+                if self.backend in ("resident", "resident_sparse") else build()
         self._solver.cancel = cancel
         return self._solver
 

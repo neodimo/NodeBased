@@ -821,6 +821,39 @@ _kernel("pack_b", [_c("d"), _c("t"), _c("f"), _c("burn"), _c("p"), _c("out", acc
 _CTX = {}
 
 
+_NOT_OURS = ("_Ctx", "GpuSmoke3D", "GpuLiquid3D", "GPUDevice", "GPUQueue")
+
+
+def destroy_buffers(obj, _seen=None):
+    """Free every device buffer reachable from `obj` (a grid, a set of bins, a list of them) now, and forget the bind
+    groups that cached them. The solvers allocate a new grid whenever the adaptive box changes shape; left to the garbage
+    collector the old grids stayed resident (4.5 GB of the card after 24 frames of a 128-cell liquid)."""
+    seen = set() if _seen is None else _seen
+    if obj is None or id(obj) in seen:
+        return 0
+    if _seen is None:
+        _ctx().flush()          # recorded work that still names these buffers goes out before they do
+    seen.add(id(obj))
+    kind = type(obj).__name__
+    if kind == "GPUBuffer":
+        obj.destroy()
+        return 1
+    if kind in _NOT_OURS:
+        return 0
+    if isinstance(obj, dict):
+        children = list(obj.values())
+    elif isinstance(obj, (list, tuple, set)):
+        children = list(obj)
+    elif hasattr(obj, "__dict__"):
+        children = list(vars(obj).values())
+    else:
+        return 0
+    count = sum(destroy_buffers(child, seen) for child in children)
+    if _seen is None:
+        _ctx()._groups.clear()
+    return count
+
+
 def _ctx():
     if "ctx" not in _CTX:
         _CTX["ctx"] = _Ctx()
@@ -1191,11 +1224,13 @@ class GpuState(State):
     def arrays(self):
         if self._arrays is None:
             self._arrays = self._solver._readback(self.token)
+            self._solver = None        # read: the state no longer pins the solver, and with it the card's buffers
         return self._arrays
 
     @arrays.setter
     def arrays(self, value):
         self._arrays = value
+        self._solver = None
 
 
 class _Gpu:
@@ -1312,6 +1347,18 @@ class GpuSmoke3D(Smoke3D):
         if not self.sparse or self._gpu is None or self._token is None:
             return None
         return int(self.ctx.read(self._gpu.args, 16).view(np.uint32)[3])
+
+    def release(self):
+        """Give the card's buffers back now (a solver that nothing refers to does this from `__del__`)."""
+        destroy_buffers(self._gpu)
+        self._gpu = None
+        self._token = None
+
+    def __del__(self):
+        try:
+            self.release()
+        except Exception:               # interpreter shutdown, device already gone
+            pass
 
     # -- state in and out ---------------------------------------------------------------------------
     def _alloc(self):
@@ -1547,6 +1594,7 @@ class GpuSmoke3D(Smoke3D):
             if changed:
                 # The readback above completes the prior dispatch. New dimensions get fresh
                 # GPU buffers and tile masks; every extent remains a multiple of the sparse tile.
+                destroy_buffers(self._gpu)
                 self._gpu = None
                 self._token = None
                 self._pending = False
@@ -1793,6 +1841,7 @@ class GpuSmoke3D(Smoke3D):
                        tuple(resized.meta.get("domain_origin", self.origin)) != tuple(self.origin))
             if changed:
                 self._sync_domain(resized)
+                destroy_buffers(self._gpu)
                 self._gpu = None
                 self._token = None
                 self._pending = False

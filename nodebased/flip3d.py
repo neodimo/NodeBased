@@ -952,8 +952,9 @@ class LiquidStream:
             hook = None
             if self.backend == "resident":
                 from .flip_gpu_resident import create_solver
-                self._solver = create_solver(params, sources=self.chain.sources, forces=self.chain.forces,
-                                             colliders=self.chain.colliders)
+                from .fluid3d import reused_solver
+                self._solver = reused_solver("liquid", self.run, self.backend, lambda: create_solver(
+                    params, sources=self.chain.sources, forces=self.chain.forces, colliders=self.chain.colliders))
                 self._solver.cancel = cancel
                 return self._solver
             if self.backend == "gpu":

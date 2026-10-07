@@ -715,6 +715,8 @@ def _grow(ctx, buf, old_bytes, new_bytes):
         encoder.copy_buffer_to_buffer(buf, 0, new, 0, old_bytes)
         ctx.device.queue.submit([encoder.finish()])
     ctx.live_bytes -= old_bytes
+    if buf is not None:
+        buf.destroy()           # queued work that reads it finishes first; the card gets the bytes back now
     return new
 
 
@@ -728,6 +730,8 @@ def read_staged(ctx, buf, size):
     wgpu = ctx.wgpu
     staging = _STAGING.get(id(ctx.device))
     if staging is None or staging.size < size:
+        if staging is not None:
+            staging.destroy()
         staging = ctx.device.create_buffer(size=max(int(size), 1 << 20) + 4095 & ~4095,
                                            usage=wgpu.BufferUsage.MAP_READ | wgpu.BufferUsage.COPY_DST)
         _STAGING[id(ctx.device)] = staging
@@ -861,11 +865,13 @@ class GpuLiquidState(State):
     def arrays(self):
         if self._arrays is None:
             self._arrays = self._solver._readback(self.token)
+            self._solver = None        # read: the state no longer pins the solver, and with it the card's buffers
         return self._arrays
 
     @arrays.setter
     def arrays(self, value):
         self._arrays = value
+        self._solver = None
 
 
 class GpuLiquid3D(Liquid3D):
@@ -903,6 +909,20 @@ class GpuLiquid3D(Liquid3D):
         self._token = None
         self._mark_at = None
         self.cycles_total = 0
+
+    def release(self):
+        """Give the card's buffers back now (a solver that nothing refers to does this from `__del__`)."""
+        fgs.destroy_buffers([self._grid, self._bins, self._sets])
+        self._grid = self._bins = None
+        self._sets = [None, None]
+        self._caps = [0, 0]
+        self._token = None
+
+    def __del__(self):
+        try:
+            self.release()
+        except Exception:               # interpreter shutdown, device already gone
+            pass
 
     # -- device bookkeeping ---------------------------------------------------------------------------
     def _alloc(self):
@@ -1105,9 +1125,9 @@ class GpuLiquid3D(Liquid3D):
     def _release_grid(self):
         """Drop the grid buffers when the box no longer matches them."""
         if self._grid is not None and self._grid.shape != tuple(self.shape):
+            fgs.destroy_buffers([self._grid, self._bins])
             self._grid = None
             self._bins = None
-            self.ctx._groups.clear()
 
     # -- forces ---------------------------------------------------------------------------------------
     def _force_ops(self, frame, substep, dt):
