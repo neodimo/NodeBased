@@ -127,6 +127,35 @@ def measure_pair(n, width, height, frames, shape="block", quality=False, rounds=
     return [rows["dense"], rows["sparse"]]
 
 
+def measure_pathtrace(n, shape="block", size=(48, 36), samples=4):
+    """The GPU path tracer's volume buffer, dense against sparse: the bytes the scene packs for the volume (its buffer less the
+    same scene without one) and the device's peak live bytes across one small render, measured the same way."""
+    from nodebased import gpu3d, gpupathtrace, pathtrace as pt, scene3d as s, volumerender
+    dense_volume, sparse_volume = volumes(n, shape=shape)
+    state = gpu3d._state()
+    tracker = state["memory"]
+    settings = volumerender.VolumeSettings(step_size=0.05, density_scale=6.0, shadow_steps=8)
+    light = s.Light("Directional", position=s.Vec3(4, 5, 3), target=s.Vec3())
+
+    def run(volumes_):
+        scene = s.Scene(lights=(light,), volumes=volumes_)
+        packed = gpupathtrace.pack(pt.build_scene(scene, 0.0, volume=settings)).env.nbytes
+        before = tracker.current
+        tracker.reset_peak()
+        started = time.perf_counter()
+        pt.render(scene, camera(), size[0], size[1], volume=settings, backend="gpu", settings=pt.PathSettings(samples=samples))
+        return packed, int(tracker.peak - before), time.perf_counter() - started
+    run((sparse_volume,))      # warm the shader variants
+    run((dense_volume,))
+    bare_packed, bare_peak, _ = run(())
+    rows = []
+    for layout, volume in (("dense", dense_volume), ("sparse", sparse_volume)):
+        packed, peak, seconds = run((volume,))
+        rows.append({"shape": shape, "size": n, "layout": layout, "volume_buffer_bytes": packed - bare_packed,
+                     "volume_peak_bytes": peak - bare_peak, "render_seconds": round(seconds, 3)})
+    return rows
+
+
 def scenes_without_volume(scene):
     from nodebased import scene3d
     return scene3d.Scene(lights=scene.lights)
@@ -141,6 +170,8 @@ def main(argv=None):
     parser.add_argument("--height", type=int, default=540)
     parser.add_argument("--frames", type=int, default=9)
     parser.add_argument("--shapes", default="block,column")
+    parser.add_argument("--rounds", type=int, default=5)
+    parser.add_argument("--pathtrace", action="store_true", help="also measure the GPU path tracer's volume buffer")
     parser.add_argument("--quality", default="fast,quality", help="the viewport's V toggle: fast, quality or both")
     args = parser.parse_args(argv)
     force_adapter(args.adapter)
@@ -149,9 +180,12 @@ def main(argv=None):
     for shape in args.shapes.split(","):
         for quality in args.quality.split(","):
             for n in (int(v) for v in args.sizes.split(",")):
-                rows.extend(measure_pair(n, args.width, args.height, args.frames, shape, quality == "quality"))
-    print(json.dumps({"adapter": gpu3d._state()["info"].get("device"), "viewport": [args.width, args.height],
-                      "rows": rows}, indent=1))
+                rows.extend(measure_pair(n, args.width, args.height, args.frames, shape, quality == "quality", args.rounds))
+    result = {"adapter": gpu3d._state()["info"].get("device"), "viewport": [args.width, args.height], "rows": rows}
+    if args.pathtrace:
+        result["pathtrace"] = [row for shape in args.shapes.split(",") for n in (int(v) for v in args.sizes.split(","))
+                               for row in measure_pathtrace(n, shape)]
+    print(json.dumps(result, indent=1))
 
 
 if __name__ == "__main__":

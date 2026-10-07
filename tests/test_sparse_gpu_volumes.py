@@ -162,6 +162,20 @@ class SparseMatchesDense(unittest.TestCase):
         dense = s.Volume(grid.to_dense()['density'], **kwargs)
         self.agree(dense, sparse)
 
+    def test_the_software_adapter_variant_of_the_sample_functions_agrees_on_any_adapter(self):
+        dense, sparse = twin(32, 'block')
+        expected = render(dense)
+        state = gpu3d._state()
+        with patch.dict(state['pipelines'], clear=True), patch.object(gpuvolume, 'adapter_kind', return_value='cpu'):
+            self.assertIn('let origin', gpuvolume._samplers(True))
+            actual = render(sparse)
+            actual_fire = render(twin(32, 'column')[1], settings=replace(
+                SETTINGS, fire_intensity=2.0, temperature_scale=1.0, fire_threshold=500.0, fire_light=0.0))
+        self.assertLess(float(np.abs(actual - expected).max()), TOLERANCE * 10)
+        reference = render(twin(32, 'column')[0], settings=replace(
+            SETTINGS, fire_intensity=2.0, temperature_scale=1.0, fire_threshold=500.0, fire_light=0.0))
+        self.assertLess(float(np.abs(actual_fire - reference).max()), TOLERANCE * 10)
+
     def test_the_viewport_draw_agrees_and_never_expands_the_tiles(self):
         dense, sparse = twin()
         renderer = viewportgpu.renderer()

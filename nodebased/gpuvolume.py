@@ -478,7 +478,9 @@ _DEPTH_MULTI = ('texture_depth_multisampled_2d',
                 '    if (raw < 1.0) { t_mesh = far * near / (far - raw * (far - near)) * ray_length; }')
 
 
-def _samplers():
+def _samplers(single_tile=False):
+    """The WGSL sample functions. `single_tile` puts a one-index-read path for samples inside one tile in front of the corner
+    reads: a software adapter pays for every fetch and wins by it, a GPU issues the eight corner reads together and loses."""
     pieces = []
     for name, suffix, texture, ret, zero, swizzle, rest in (
             ('density', '_sharp', 'density', 'f32', '0.0', '.r', 'vol.rest.x'),
@@ -511,9 +513,28 @@ def _samplers():
                 f'select(1.0 - f.{a}, f.{a}, {bit} == 1)' for a, bit in zip('xyz', (k & 1, (k >> 1) & 1, (k >> 2) & 1))) + ';'
                        for k in range(8)]
             total = ' + '.join([zero] + [f'w{k} * v{k}' for k in range(8)])
+            same_tile = f'''        let tile = tile_of(i0);
+        if (all(tile == tile_of(i0 + vec3<i32>(1)))) {{
+            let info = tile_info(tile);
+            if (info.w <= 0.0) {{ return {rest}; }}
+            let origin = atlas_voxel(info, i0);
+            var inside = {zero};
+            for (var c = 0; c < 8; c += 1) {{
+                let dx = c & 1;
+                let dy = (c >> 1) & 1;
+                let dz = (c >> 2) & 1;
+                let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
+                inside += w * textureLoad({texture}, origin + vec3<i32>(dx, dy, dz), 0){swizzle};
+            }}
+            return inside;
+        }}
+''' if single_tile else ''
+            body = '\n'.join(corners) + '\n'
+            if single_tile:      # a sample in neighbours that are all empty stops after the eight tile reads
+                body += (f"        if ({' + '.join(f'info{k}.w' for k in range(8))} <= 0.0) {{ return {rest}; }}\n")
+            body += '\n'.join(reads) + '\n' + '\n'.join(weights) + f'\n        return {total};\n'
             fast = (f"    if (vol.sparse.x > 0.0 && all(i0 >= vec3<i32>(0)) && all(i0 + vec3<i32>(1) < dims)) {{\n"
-                    + '\n'.join(corners) + '\n' + '\n'.join(reads) + '\n' + '\n'.join(weights)
-                    + f'\n        return {total};\n    }}\n')
+                    + (same_tile if single_tile else '') + body + '    }\n')
         pieces.append(f'''fn sample_{name}{suffix}(p: vec3<f32>) -> {ret} {{
     let g = (p - vol.box_min.xyz) / vol.box_min.w - vec3<f32>(0.5);
     let base = floor(g);
@@ -536,9 +557,9 @@ def _samplers():
     return ''.join(pieces)
 
 
-def _shader_code(depth_type, depth_load):
+def _shader_code(depth_type, depth_load, single_tile=False):
     from . import volumerender as vr
-    return _SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load, 'SAMPLERS': _samplers(),
+    return _SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load, 'SAMPLERS': _samplers(single_tile),
                       'FIRE_KNOTS': vr.FIRE_KNOTS, 'FIRE_K_LOW': repr(vr.FIRE_K_LOW),
                       'FIRE_K_SPAN': repr(math.log(vr.FIRE_K_HIGH / vr.FIRE_K_LOW)),
                       'FIRE_TOP': repr(float(vr.FIRE_KNOTS - 1)), 'FIRE_LAST': vr.FIRE_KNOTS - 2}
@@ -781,7 +802,7 @@ def pipeline(state, target, samples=1, multisampled_depth=False):
         return state['pipelines'][key]
     device = state['device']
     depth_type, depth_load = _DEPTH_MULTI if multisampled_depth else _DEPTH_SINGLE
-    module = device.create_shader_module(code=_shader_code(depth_type, depth_load))
+    module = device.create_shader_module(code=_shader_code(depth_type, depth_load, adapter_kind(state) == 'cpu'))
     blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
     state['pipelines'][key] = device.create_render_pipeline(
         layout='auto',
@@ -936,7 +957,7 @@ def _pass_pipeline(state, entry, targets):
         return state['pipelines'][key]
     device = state['device']
     depth_type, depth_load = _DEPTH_VIEW
-    module = device.create_shader_module(code=_shader_code(depth_type, depth_load))
+    module = device.create_shader_module(code=_shader_code(depth_type, depth_load, adapter_kind(state) == 'cpu'))
     state['pipelines'][key] = device.create_render_pipeline(
         layout='auto',
         vertex={'module': module, 'entry_point': 'vs', 'buffers': []},
