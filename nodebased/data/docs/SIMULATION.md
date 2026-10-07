@@ -274,20 +274,22 @@ mid-bake checkpoint restart against the uninterrupted result.
 stalled during whitewater at frame 60 at 5:23 AM; the kernel logged `Could not construct VA
 space. Status 62` at 5:34 AM, consistent with the reported adapter failure. The completed
 full-size measurements below are from the Radeon 8060S integrated adapter using resident GPU
-paths, 120 frames. The benchmark holds `/tmp/nb-gpu.lock`; per-fluid times are wall time per frame. Peak host memory is
-process RSS; GPU memory is the driver-reported per-process peak. Sparse/dense cache sizes
-compare the saved steam tiles with the dense equivalent. Playback is measured from the
-baked cache at 960 × 540.
+paths, 120 frames. The benchmark holds `/tmp/nb-gpu.lock`; per-fluid times are mean wall time per frame. Peak host memory is
+process RSS. On Radeon, GPU memory is peak VRAM plus GTT usage above the run's starting baseline; this is device-level
+attribution, not a per-process figure. Sparse/dense cache sizes compare the compressed saved steam tiles with the raw dense
+equivalent. Playback is measured from the baked cache at 960 × 540.
 
 | Adapter / workload | Liquid solver | Surface | Whitewater | Steam solver | Peak host / GPU | Steam cache (sparse / dense) | Playback |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | RTX 3080 Ti, 256 / 192 cells, 120 frames | pending the card's reset | pending | pending | pending | pending | pending | pending |
-| Radeon 8060S, 256 / 192 cells, 120 frames | completed; report lost | completed; report lost | completed; report lost | completed; report lost | pending | pending |
+| Radeon 8060S, 256 / 192 cells, 120 frames | 0.866 s/frame | 0.528 s/frame | 9.662 s/frame | 5.096 s/frame | 9,909 / 11,069 MiB | 3,129 / 3,212 MiB | pending |
 | Radeon 8060S, reduced | pending | pending | pending | pending | pending | pending | pending |
 | llvmpipe, reduced | pending | pending | pending | pending | pending | pending | pending |
 
-Times are mean seconds per frame; memory and cache sizes will be reported in MiB. Playback
-is median frames per second for the whole scene from cache.
+The full-size Radeon bake took 1,938.5 s wall time. The liquid ran on `resident` and steam on
+`resident_sparse`; the steam cache occupied 3,129 MiB on disk against a 3,212 MiB dense raw
+equivalent. RTX 3080 Ti numbers remain pending the card's reset. Times are mean seconds per
+frame; playback is median frames per second for the whole scene from cache.
 
 GPU path-traced showcase stills at 1920 × 1080:
 
@@ -296,10 +298,9 @@ GPU path-traced showcase stills at 1920 × 1080:
 ![Hot pour, frame 120](images/hot_pour_frame_120.png)
 
 The Radeon 8060S full-size bake completed all 120 frames for liquid, surface extraction,
-whitewater and steam, and passed the former frame-60 stall. The benchmark was stopped during
-its long cached-playback measurement before it wrote its results file, so those stage timings,
-memory and cache metrics were lost. RTX 3080 Ti numbers: pending the card's reset.
-Render times: frame 60 pending; frame 120 pending.
+whitewater and steam, and passed the former frame-60 stall. Its reproducible benchmark result
+is committed at `benchmarks/hot_pour/radeon-full-bake.json`. RTX 3080 Ti numbers remain pending
+the card's reset. Render times: frame 60 pending; frame 120 pending.
 Reproduce with
 `python tools/benchmark_hot_pour.py --adapter default --liquid-cells 256 --smoke-cells 192 --frames 120 --playback --stills docs/images --still-size 1920x1080`.
 

@@ -1,6 +1,6 @@
 # Lane 6 N3 finish 2 — active (2026-10-07, 11:40 AM PDT)
 
-Completing the remaining measurements and tests from `finish-L6-1007-1140.md`. RTX 3080 Ti is faulted and will not be accessed. The retained full-size Radeon cache is at `/tmp/hot-pour-integrated-full` (8.7 GB); bake metrics were lost in the prior stopped run. Current worktree changes checkpoint benchmark JSON after each finished pass. `/tmp/nb-gpu.lock` is held by the integration suite; waiting is expected. Next: adapter-targeted tests, reduced runs, full-cache playback/stills if time permits, docs/report/issue update. Unverified: reduced adapter timings and targeted scene tests.
+Update 12:55 PM PDT: the 256/192-cell, 120-frame Radeon bake completed. Means: liquid 0.866, surface 0.528, whitewater 9.662 and steam 5.096 s/frame; host peak 9,909 MiB; Radeon VRAM+GTT above baseline 11,069 MiB. JSON: `benchmarks/hot_pour/radeon-full-bake.json`. Next: docs/JSON commit, then cached playback and stills; reduced runs and targeted tests remain unverified.
 
 # Lane 4 Rendering 8 step T1 — light linking everywhere
 
