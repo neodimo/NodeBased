@@ -551,7 +551,7 @@ class AgentCliLiveProofTests(unittest.TestCase):
         result = responses[0]["result"]
         anim = result["animation"]
         self.assertIn("interpolations", anim)
-        self.assertEqual(set(anim["interpolations"]), {"constant", "linear"})
+        self.assertEqual(set(anim["interpolations"]), {"constant", "linear", "smooth"})
         self.assertEqual(tuple(anim["frame_limits"]), FRAME_LIMITS)
         self.assertIn("set_key", anim)
         self.assertIn("delete_key", anim)

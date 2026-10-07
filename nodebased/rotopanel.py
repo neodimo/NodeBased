@@ -1,5 +1,6 @@
 """Roto shape-list and per-shape controls, isolated from the shared properties builder."""
 import copy
+from . import shapes as shape_model
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
@@ -22,6 +23,10 @@ def build_panel(window, key):
         label.setFrame(False); label.editingFinished.connect(
             lambda idx=index, field=label: row_edit(idx, "name", field.text()))
         row_layout.addWidget(label, 1)
+        key_button = QPushButton("◇"); key_button.setObjectName(f"roto-shape-key-{index}")
+        key_button.setToolTip("Key the whole shape at the current frame")
+        key_button.clicked.connect(lambda _=False, idx=index: key_shape(idx))
+        row_layout.addWidget(key_button)
         for field, caption in (("visible", "V"), ("locked", "L"), ("invert", "I")):
             toggle = QCheckBox(caption); toggle.setToolTip({"visible":"Shape visibility", "locked":"Lock shape points", "invert":"Invert shape matte"}[field])
             toggle.setObjectName(f"roto-shape-row-{field}-{index}")
@@ -34,6 +39,52 @@ def build_panel(window, key):
 
     def current():
         return copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("shapes", []))
+    def key_shape(index):
+        entries = current()
+        if not 0 <= index < len(entries): return
+        frame = int(window.dispatcher.document["time"]["current"])
+        from . import shapes as shape_model
+        shape = entries[index]
+        def keyed(value, field):
+            current_value = shape_model.resolve_scalar(value, frame, field)
+            if isinstance(value, dict) and value.get("curve"):
+                curve = copy.deepcopy(value["curve"])
+            else:
+                curve = {"interpolation": "smooth", "keys": []}
+            keys = [item for item in curve["keys"] if item["frame"] != frame]
+            keys.append({"frame": frame, "value": current_value})
+            keys.sort(key=lambda item: item["frame"])
+            curve["keys"] = keys
+            return {"value": current_value, "curve": curve}
+        shape["opacity"] = keyed(shape["opacity"], "opacity")
+        shape["feather"] = keyed(shape["feather"], "feather")
+        shape["color"] = [keyed(c, "opacity") for c in shape.get("color", [1, 1, 1, 1])]
+        for point in shape["points"]:
+            for field in shape_model.POINT_FIELDS:
+                point[field] = keyed(point[field], field)
+        save(entries, index)
+        window.rebuild_properties_dock()
+    def key_field(index, field):
+        entries = current()
+        if not 0 <= index < len(entries): return
+        frame = int(window.dispatcher.document["time"]["current"])
+        from . import shapes as shape_model
+        shape = entries[index]
+        names = ["color"] if field == "color" else [field]
+        for name in names:
+            old = shape.get(name, [1, 1, 1, 1] if name == "color" else None)
+            if name == "color":
+                shape[name] = [{"value": shape_model.resolve_scalar(c, frame, "opacity"),
+                                "curve": {"interpolation": "smooth", "keys": [{"frame": frame, "value": shape_model.resolve_scalar(c, frame, "opacity")}]}}
+                               for c in old]
+            else:
+                resolved = shape_model.resolve_scalar(old, frame, name)
+                curve = copy.deepcopy(old.get("curve")) if isinstance(old, dict) and old.get("curve") else {"interpolation": "smooth", "keys": []}
+                curve["keys"] = [k for k in curve["keys"] if k["frame"] != frame] + [{"frame": frame, "value": resolved}]
+                curve["keys"].sort(key=lambda k: k["frame"])
+                shape[name] = {"value": resolved, "curve": curve}
+        save(entries, index)
+        window.rebuild_properties_dock()
     def row_edit(index, field, value):
         entries=current()
         if index < len(entries): entries[index][field]=value; save(entries,index)
@@ -73,7 +124,7 @@ def build_panel(window, key):
         for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
             cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
         for field,label,lo,hi,step in (("feather","Feather",0,500,0.5),("opacity","Opacity",0,1,0.05)):
-            spin=QDoubleSpinBox(); spin.setObjectName("roto-shape-"+field); spin.setRange(lo,hi); spin.setSingleStep(step); spin.setValue(float(shape.get(field,0 if field=="feather" else 1))); spin.setKeyboardTracking(False); spin.editingFinished.connect(lambda f=field,w=spin:edit(f,float(w.value()))); layout.addWidget(QLabel(label)); layout.addWidget(spin)
+            spin=QDoubleSpinBox(); spin.setObjectName("roto-shape-"+field); spin.setRange(lo,hi); spin.setSingleStep(step); spin.setValue(float(shape_model.resolve_scalar(shape.get(field,0 if field=="feather" else 1), window.dispatcher.document["time"]["current"], field))); spin.setKeyboardTracking(False); spin.editingFinished.connect(lambda f=field,w=spin:edit(f,float(w.value()))); layout.addWidget(QLabel(label)); row=QHBoxLayout(); row.addWidget(spin); diamond=QPushButton("◇"); diamond.setObjectName("roto-shape-key-"+field); diamond.setToolTip("Set a key at the current frame"); diamond.clicked.connect(lambda _=False,f=field:key_field(i,f)); row.addWidget(diamond); layout.addLayout(row)
         for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",("over","plus","minus","multiply"))):
             combo=QComboBox(); combo.setObjectName("roto-shape-"+field)
             for val in values: combo.addItem(val.title(),val)
@@ -84,5 +135,6 @@ def build_panel(window, key):
             rgba=shape.get("color",[1,1,1,1]); picked=QColorDialog.getColor(QColor.fromRgbF(*rgba),window,"Roto colour",QColorDialog.ColorDialogOption.ShowAlphaChannel)
             if picked.isValid(): edit("color",[picked.redF(),picked.greenF(),picked.blueF(),picked.alphaF()])
         color.clicked.connect(choose); layout.addWidget(color)
+        color_key=QPushButton("◇"); color_key.setObjectName("roto-shape-key-color"); color_key.setToolTip("Set colour keys at the current frame"); color_key.clicked.connect(lambda: key_field(i,"color")); layout.addWidget(color_key)
     draw=QPushButton("Draw shape…"); draw.setObjectName("roto-draw-shape"); draw.clicked.connect(lambda:window.begin_roto_draw(key)); layout.addWidget(draw)
     return root

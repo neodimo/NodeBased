@@ -87,7 +87,7 @@ class RotoOverlayTests(unittest.TestCase):
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
         self.assertEqual(viewer.scene().itemsBoundingRect(), original_bounds)
 
-    def test_dragging_a_point_commits_once_and_updates_animated_coordinates_at_current_frame(self):
+    def test_dragging_a_point_auto_keys_it_when_another_point_in_the_shape_is_animated(self):
         shape = triangle()
         for point in shape["points"][:1]:
             for field, value in (("x", 10.0), ("y", 10.0)):
@@ -103,18 +103,18 @@ class RotoOverlayTests(unittest.TestCase):
         self.window.graph.items_by_id["r"].setSelected(True)
         APP.processEvents()
         viewer = self.window.viewer
-        start = self.scene_pos(15, 15)
-        target = self.scene_pos(30, 40)
+        start = self.scene_pos(90, 10)
+        target = self.scene_pos(80, 40)
         QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=start)
         QTest.mouseMove(viewer.viewport(), target, 20)
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=target)
         # The drop lands on a whole viewport pixel, so the exact value depends on the viewer's
         # zoom, which follows the window's size. Compare against where that pixel really is.
         dropped = viewer.mapToScene(target)
-        self.assertAlmostEqual(dropped.x(), 30.0, delta=1.0)
+        self.assertAlmostEqual(dropped.x(), 80.0, delta=1.0)
         self.assertAlmostEqual(dropped.y(), 40.0, delta=1.0)
-        self.assertTrue(wait_until(lambda: abs(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]["x"]["curve"]["keys"][-1]["value"] - dropped.x()) < 0.01))
-        point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertTrue(wait_until(lambda: isinstance(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][1]["x"], dict)))
+        point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][1]
         self.assertEqual(point["x"]["curve"]["keys"][-1]["frame"], 2)
         self.assertAlmostEqual(point["y"]["curve"]["keys"][-1]["value"], dropped.y(), delta=0.01)
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)

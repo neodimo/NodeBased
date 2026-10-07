@@ -343,6 +343,21 @@ class RenderTests(unittest.TestCase):
         self.assertLess(float(one[16, 40]), 0.5)
         self.assertGreater(float(two[16, 36]), 0.5)
 
+    def test_smoothly_keyed_square_has_hand_interpolated_midpoint_corner_coverage(self):
+        d = Dispatcher(empty_document())
+        moving = square(8, 8, 24, 24)
+        for point in moving["points"]:
+            for field in ("x", "y"):
+                point[field] = keyed(point[field], [(1, point[field]),
+                                                     (24, point[field] + 23.0)], "smooth")
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "r", "type": "Roto"},
+            *sets("r", width=64, height=64),
+            {"op": "set_shapes", "id": "r", "shapes": [moving]}]})
+        # Smoothstep is exactly 0.5 at the midpoint: the hand-computed square is [19,35]^2.
+        alpha = self.render(d.document, "r", 12).pixels[19, 19, 3]
+        self.assertAlmostEqual(float(alpha), 1.0, delta=1e-3)
+
     def test_channel_shuffle_routes_an_alpha_from_b_into_a(self):
         d = Dispatcher(empty_document())
         d.execute({"op": "batch", "commands": [

@@ -2189,9 +2189,13 @@ class Viewer(PanZoomView):
                     best_distance = distance
         return best
 
-    def _roto_scalar_at_frame(self, value, frame, replacement):
+    def _roto_scalar_at_frame(self, value, frame, replacement, auto_key=False):
         """Change a point coordinate while retaining its v8 animated scalar envelope."""
         if not isinstance(value, dict) or "curve" not in value or value.get("curve") is None:
+            if not auto_key:
+                return float(replacement)
+            value = {"value": float(value), "curve": {"interpolation": "smooth", "keys": []}}
+        if value.get("curve") is None:
             return float(replacement)
         updated = copy.deepcopy(value)
         keys = updated["curve"]["keys"]
@@ -2285,8 +2289,13 @@ class Viewer(PanZoomView):
         x, y = self._roto_data_point(drag["scene"], context[1], tier)
         frame = int(self.window.dispatcher.document["time"]["current"])
         point = shapes[shape_index]["points"][point_index]
-        point["x"] = self._roto_scalar_at_frame(point["x"], frame, x)
-        point["y"] = self._roto_scalar_at_frame(point["y"], frame, y)
+        shape = shapes[shape_index]
+        animated = any(isinstance(value, dict) and value.get("curve")
+                       for value in (shape.get("opacity"), shape.get("feather"), *shape.get("color", [])))
+        animated = animated or any(isinstance(value, dict) and value.get("curve")
+                                   for p in shape["points"] for value in p.values())
+        point["x"] = self._roto_scalar_at_frame(point["x"], frame, x, animated)
+        point["y"] = self._roto_scalar_at_frame(point["y"], frame, y, animated)
         self.roto_drag = None
         if node["type"] == "RotoPaint":
             items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))

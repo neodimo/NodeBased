@@ -1,7 +1,7 @@
 # Animation curves — design contract
 
 This document describes the shape and semantics of the animation system as it ships today
-(curve-only, two interpolations, numeric parameters) and how the same shape admits Bezier
+(curve-only, three interpolations, numeric parameters) and how the same shape admits Bezier
 tangents, expressions, a curve editor, clip time mappings, and non-numeric values later.
 Reading this is optional for callers; the implementation is the source of truth, and this file
 documents *why* the shape looks the way it does.
@@ -18,7 +18,7 @@ documents *why* the shape looks the way it does.
     "curves": {
       "<node_id>": {
         "<param_name>": {
-          "interpolation": "constant | linear",
+          "interpolation": "constant | linear | smooth",
           "keys": [
             { "frame": <int>, "value": <number> },
             ...
@@ -55,6 +55,7 @@ a new params dict with curve overrides applied.
   for out-of-range frames.
 * **At an exact key frame** — that key's value, after type coercion.
 * **Between keys (linear)** — ``v0 + (v1 - v0) * (frame - f0) / (f1 - f0)``.
+* **Between keys (smooth)** — the same interpolation with the normalized frame fraction eased by ``t²(3 - 2t)``.
 * **Between keys (constant)** — the previous key's value (step-and-hold).
 * **No curve at all** — the node renders from its stored ``params`` byte-identically to a
   v5 document. That is the path that keeps pre-v6 graphs stable: the upgrade only adds

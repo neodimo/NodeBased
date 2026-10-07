@@ -31,7 +31,7 @@ import math
 
 
 # Stable, ordered list. Documented to agents in `describe` and asserted by validate().
-CURVE_INTERPOLATIONS = ("constant", "linear")
+CURVE_INTERPOLATIONS = ("constant", "linear", "smooth")
 DEFAULT_INTERPOLATION = "linear"
 
 # Frame number is an integer; the range is wide enough to admit pre-rolls and tests, not so
@@ -108,6 +108,11 @@ def evaluate_curve(curve, frame):
     if curve["interpolation"] == "linear":
         k0f, k1f = frames[idx], frames[idx + 1]
         t = (frame - k0f) / (k1f - k0f)
+        return values[idx] * (1.0 - t) + values[idx + 1] * t
+    if curve["interpolation"] == "smooth":
+        k0f, k1f = frames[idx], frames[idx + 1]
+        t = (frame - k0f) / (k1f - k0f)
+        t = t * t * (3.0 - 2.0 * t)
         return values[idx] * (1.0 - t) + values[idx + 1] * t
     raise CurveError(f"Unknown interpolation: {curve['interpolation']}")
 

@@ -128,8 +128,13 @@ def validate_shape(shape, where):
     if shape.get("blend_mode", "over") not in ("over", "plus", "minus", "multiply"):
         raise ValueError(f"{where}.blend_mode is unsupported")
     color = shape.get("color", [1.0, 1.0, 1.0, 1.0])
-    if not isinstance(color, list) or len(color) != 4 or any(not _is_number(c) or not 0 <= c <= 1 for c in color):
+    if not isinstance(color, list) or len(color) != 4:
         raise ValueError(f"{where}.color must be RGBA values between 0 and 1")
+    for channel, component in enumerate(color):
+        validate_scalar(component, "opacity", f"{where}.color[{channel}]")
+        base = component if _is_number(component) else component["value"]
+        if not 0 <= base <= 1:
+            raise ValueError(f"{where}.color[{channel}] must be between 0 and 1")
     points = shape["points"]
     if not isinstance(points, list) or not MINIMUM_SHAPE_POINTS <= len(points) <= MAXIMUM_SHAPE_POINTS:
         raise ValueError(f"{where}.points must hold between {MINIMUM_SHAPE_POINTS} and "
@@ -342,7 +347,8 @@ def resolve_shapes(payload, frame):
                                ("feather_falloff", "linear"), ("color", [1, 1, 1, 1]),
                                ("blend_mode", "over"), ("motion_blur", False)):
             resolved[field] = copy_value = shape.get(field, default)
-            if field == "color": resolved[field] = list(copy_value)
+            if field == "color":
+                resolved[field] = [resolve_scalar(channel, frame, "opacity") for channel in copy_value]
         if resolved["motion_blur"]:
             # A compact one-frame shutter centered on the current frame. Static shapes naturally
             # collapse to one sample; keyed shapes acquire temporal coverage in the same raster path.
