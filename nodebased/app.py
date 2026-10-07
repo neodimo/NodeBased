@@ -16,8 +16,8 @@ import threading
 import time
 import uuid
 
-from PySide6.QtCore import Qt, QLineF, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
-from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
+from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
+from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -3414,6 +3414,9 @@ class BackdropGrip(QGraphicsRectItem):
         event.accept()
 
 
+ERROR_COLOR = "#e3b18d"  # the status bar's problem colour (command_error_label)
+
+
 class NodeItem(QGraphicsRectItem):
     def __init__(self, graph, key, node):
         self.form = node_form(node)
@@ -3428,6 +3431,9 @@ class NodeItem(QGraphicsRectItem):
         self.setBrush(QColor("#303033" if not self.is_dot else "#23242a"))
         self.setPen(QPen(QColor(COLORS[node["type"]]), 1.5))
         self.disabled = bool(node.get("disabled", False))
+        self.error = getattr(graph.window, "node_errors", {}).get(key)
+        if self.error:
+            self.setToolTip(self.error)
         if self.disabled:
             # Keep the graph readable while making bypassed processing unmistakable.  The
             # opacity applies to the card, title, and sockets; paint() adds the persistent X.
@@ -3561,6 +3567,11 @@ class NodeItem(QGraphicsRectItem):
             path.addRect(self.rect())
         return path
 
+    def set_error(self, message):
+        self.error = message or None
+        self.setToolTip(message or "")
+        self.update()
+
     def shape(self):
         if self.is_backdrop:
             # Only the title strip and the grip take clicks: the body has to leave nodes above it,
@@ -3655,6 +3666,19 @@ class NodeItem(QGraphicsRectItem):
                 painter.setPen(pen)
                 painter.setBrush(self.brush())
                 painter.drawPath(self.outline())
+                painter.restore()
+            if self.error:
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setPen(QPen(QColor(ERROR_COLOR), 2.5))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(self.rect().adjusted(-1, -1, 1, 1), 6, 6)
+                badge = QRectF(self.rect().right() - 12, self.rect().top() - 8, 20, 20)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(ERROR_COLOR))
+                painter.drawEllipse(badge)
+                painter.setPen(QColor("#1c1c1e"))
+                painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, "!")
                 painter.restore()
             if self.disabled:
                 painter.save()
@@ -5492,8 +5516,24 @@ def _is_data_target(document, target):
                 and (node.get("params") or {}).get("colorspace") == "Raw")
 
 
+def write_clock(seconds):
+    """Elapsed time on a render's bar: m:ss."""
+    seconds = int(max(0.0, seconds))
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def write_elapsed_text(seconds):
+    """How long a finished render took, in words."""
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    minutes, rest = divmod(int(seconds + .5), 60)
+    return f"{minutes} min {rest:02d} s"
+
+
 class Window(QMainWindow):
     VIEWER_MODES = ("2d", "3d")
+    # One Write render's progress: (position 1..total, total, frame number, seconds elapsed).
+    write_render_progress = Signal(int, int, int, float)
 
     def viewer_mode(self):
         """"2d" or "3d": which page of the shared viewer panel is on top."""
@@ -5650,6 +5690,10 @@ class Window(QMainWindow):
         # of only the single most recent one visible in the status bar -- read-ahead can error on
         # a frame that never becomes "current" and reaches viewer_info at all.
         self.render_errors = deque(maxlen=200)
+        # The Write render in flight (a dict, see render_write) and the nodes whose last render
+        # failed, key -> message; the graph paints a red badge on those until the next render.
+        self._write_job = None
+        self.node_errors = {}
         self.preview_queue = PlaybackQueue()
         self.display_cache = DisplayCache(force_float32=self.preferences.display_cache_float32())
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
@@ -5948,6 +5992,22 @@ class Window(QMainWindow):
         self.render_progress.setTextVisible(False)
         self.render_progress.hide()
         self.statusBar().addPermanentWidget(self.render_progress)
+        # A Write render's controls live beside its progress bar: Cancel while it runs, "Show in
+        # folder" for a while after it finishes (a status-bar message cannot carry a button).
+        self.render_cancel = QPushButton("Cancel")
+        self.render_cancel.setObjectName("render-cancel")
+        self.render_cancel.setToolTip("Stop the Write render after the frame in progress")
+        self.render_cancel.setFlat(True)
+        self.render_cancel.clicked.connect(self.cancel_write_render)
+        self.render_cancel.hide()
+        self.statusBar().addPermanentWidget(self.render_cancel)
+        self.show_in_folder = QPushButton("Show in folder")
+        self.show_in_folder.setObjectName("show-in-folder")
+        self.show_in_folder.setFlat(True)
+        self.show_in_folder.clicked.connect(self.show_write_folder)
+        self.show_in_folder.hide()
+        self._write_folder = None
+        self.statusBar().addPermanentWidget(self.show_in_folder)
         for row_widget, row_layout in ((controls_widget, controls), (controls2_widget, controls2)):
             row_widget.setObjectName("viewer-controls-row")
             row_widget.adjustSize()
@@ -8661,6 +8721,12 @@ class Window(QMainWindow):
                 preset_layout.addWidget(load_knob_preset)
                 form.addRow("Knob presets", preset_row)
             if node["type"] == "Write":
+                if key in self.node_errors:
+                    error_label = QLabel(self.node_errors[key])
+                    error_label.setObjectName("write-error")
+                    error_label.setWordWrap(True)
+                    error_label.setStyleSheet(f"color: {ERROR_COLOR}")
+                    form.addRow(error_label)
                 render_frame = QPushButton("Render current frame")
                 render_frame.setToolTip("Full-resolution reference render of the frame at the playhead")
                 render_frame.clicked.connect(lambda checked=False, k=key: self.render_write(k, single=True))
@@ -10215,6 +10281,8 @@ class Window(QMainWindow):
         self._show_render_progress(stage, fraction, info)
 
     def _show_render_progress(self, stage, fraction, info):
+        if self._write_job is not None:
+            return  # a Write render owns the bar and the status line until it finishes
         text = progress_text(stage, fraction, info)
         if text is None:
             self.render_progress.hide()
@@ -10291,7 +10359,7 @@ class Window(QMainWindow):
         extras = self.compare_results.pop((request.generation, request.frame), None)
         self.preview_queue.finish(cancel)
         self.busy = False
-        if request.display:
+        if request.display and self._write_job is None:
             self.render_progress.hide()
         if frame is None and not cancel.is_set():
             # Logged regardless of whether this result ends up on screen: a read-ahead request
@@ -10557,6 +10625,9 @@ class Window(QMainWindow):
 
     def render_write(self, key, single=True):
         """Render a Write node. Always full resolution through the reference evaluator."""
+        if self._write_job is not None:
+            self.statusBar().showMessage("A Write render is already running", 6000)
+            return
         try:
             path, file_type, bits = self.write_target(key)
         except ValueError as error:
@@ -10580,51 +10651,128 @@ class Window(QMainWindow):
                                                "(it writes a multichannel EXR and a manifest beside it).")
             return
         Path(path).expanduser().parent.mkdir(parents=True, exist_ok=True)
-        progress = QProgressDialog(f"Rendering {Path(path).name}…", "Cancel", 0, len(frames), self)
-        progress.setWindowTitle("Write")
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(0)
+        self.set_node_error(key, None)
+        self._hide_write_folder_button()
+        job = {"key": key, "total": len(frames), "cancel": threading.Event(),
+               "started": time.monotonic(), "position": 0, "frame": frames[0]}
+        self._write_job = job
+        self.render_cancel.show()
+        self.render_progress.setRange(0, job["total"] * 1000)
+        self.render_progress.setTextVisible(True)
+        self.render_progress.show()
         written = 0
+        failure = None
         try:
             for index, frame_number in enumerate(frames):
-                if progress.wasCanceled():
-                    break
-                progress.setValue(index)
-                progress.setLabelText(f"Rendering frame {frame_number} of "
-                                      f"{frames[0]}–{frames[-1]}…")
+                job["position"], job["frame"] = index + 1, frame_number
+                self._report_write_progress(job, 0.0, announce=True)
+                # Full event processing, input included: the Cancel button and the rest of the
+                # window stay alive between frames. Re-entry is refused at the top of this method.
                 QApplication.processEvents()
-                # Render the Write node's own upstream tree. Omitting the target would evaluate
-                # the document's view instead, so a render would silently follow whatever the
-                # Viewer was pointed at -- in Nuke a Write is independent of the Viewer, and an
-                # export that changes with the current view is the worst kind of wrong output:
-                # plausible-looking frames of the wrong tree.
+                if job["cancel"].is_set():
+                    break
+
+                def tile_report(stage, fraction, info, job=job):
+                    self._report_write_progress(job, fraction)
+                    QApplication.processEvents()
                 target = sequence_path(path, frame_number) if is_sequence(path) else path
-                if bundle_on:
-                    # Multichannel EXR plus the JSON manifest that says what each layer means.
-                    write_bundle_frame(self.evaluator, document, key, frame_number, target, bits)
-                    written += 1
-                    continue
-                raster = self.evaluator.evaluate_raster(document, key, frame=frame_number, tier=1)
-                pixels = raster.to_display()
-                if file_type == "exr":
-                    # A multichannel input (Render3D's multichannel output, a multilayer Read)
-                    # writes every named layer into the same part; PNG only ever writes the beauty.
-                    write_exr(target, pixels, bits=bits, layers=raster_layer_arrays(raster), metadata=raster.meta)
-                else:
-                    write_png(target, pixels)
+                try:
+                    with self.render_progress_router.handler(tile_report):
+                        if bundle_on:
+                            # Multichannel EXR plus the JSON manifest that says what each layer means.
+                            write_bundle_frame(self.evaluator, document, key, frame_number, target, bits)
+                        else:
+                            # Render the Write node's own upstream tree. Omitting the target would
+                            # evaluate the document's view instead, so a render would silently
+                            # follow whatever the Viewer was pointed at -- in Nuke a Write is
+                            # independent of the Viewer, and an export that changes with the
+                            # current view is the worst kind of wrong output: plausible-looking
+                            # frames of the wrong tree.
+                            raster = self.evaluator.evaluate_raster(
+                                document, key, cancel=job["cancel"], frame=frame_number, tier=1)
+                            pixels = raster.to_display()
+                            if file_type == "exr":
+                                # A multichannel input (Render3D's multichannel output, a
+                                # multilayer Read) writes every named layer into the same part;
+                                # PNG only ever writes the beauty.
+                                write_exr(target, pixels, bits=bits, layers=raster_layer_arrays(raster),
+                                          metadata=raster.meta)
+                            else:
+                                write_png(target, pixels)
+                except Cancelled:
+                    break
+                except Exception as error:
+                    failure = (frame_number, str(error) or type(error).__name__)
+                    break
                 written += 1
-        except (ValueError, OSError) as error:
-            progress.close()
-            QMessageBox.warning(self, "Write failed",
-                                f"{error}\n\n{written} of {len(frames)} frames written.")
-            return
         finally:
-            progress.close()
+            elapsed = time.monotonic() - job["started"]
+            self._write_job = None
+            self.render_cancel.hide()
+            self.render_progress.setTextVisible(False)
+            self.render_progress.hide()
+        if failure is not None:
+            frame_number, message = failure
+            text = f"Write failed at frame {frame_number}: {message}"
+            self.set_node_error(key, text)
+            self.statusBar().showMessage(f"{text} · {written} of {len(frames)} frames written", 20000)
+            return
         detail = f"{file_type} · {bits + ' float' if file_type == 'exr' else '8-bit sRGB'}"
-        cancelled = " · cancelled" if written < len(frames) else ""
-        self.statusBar().showMessage(
-            f"Wrote {written} frame{'' if written == 1 else 's'} to {path} · {detail}{cancelled}",
-            12000)
+        if written < len(frames):
+            self.statusBar().showMessage(
+                f"Render cancelled after {written} of {len(frames)} frames · {path} · {detail}", 12000)
+        else:
+            self.statusBar().showMessage(
+                f"Rendered {written} frame{'' if written == 1 else 's'} to {path} in "
+                f"{write_elapsed_text(elapsed)} · {detail}", 15000)
+        if written:
+            self._show_write_folder_button(Path(path).expanduser().parent)
+
+    def _report_write_progress(self, job, fraction, announce=False):
+        """Move the status-bar bar and text to frame `job["position"]` of the render in flight."""
+        elapsed = time.monotonic() - job["started"]
+        position, total = job["position"], job["total"]
+        text = f"Frame {position} of {total} · {job['frame']} · {write_clock(elapsed)}"
+        self.render_progress.setRange(0, total * 1000)
+        self.render_progress.setValue(int(1000 * (position - 1 + max(0.0, min(1.0, fraction)))))
+        self.render_progress.setFormat(f"Frame {position} of {total} · {write_clock(elapsed)}")
+        self.statusBar().showMessage(f"Rendering {text}")
+        if announce:
+            self.write_render_progress.emit(position, total, job["frame"], elapsed)
+
+    def cancel_write_render(self):
+        """Stop the Write render in flight: the frame being rendered is dropped, written frames stay."""
+        if self._write_job is not None:
+            self._write_job["cancel"].set()
+            self.render_cancel.setEnabled(False)
+            self.statusBar().showMessage("Cancelling the Write render…")
+
+    def _show_write_folder_button(self, folder):
+        self._write_folder = folder
+        self.show_in_folder.show()
+        token = self._write_folder_token = getattr(self, "_write_folder_token", 0) + 1
+        QTimer.singleShot(60000, lambda: token == self._write_folder_token and self._hide_write_folder_button())
+
+    def _hide_write_folder_button(self):
+        self._write_folder_token = getattr(self, "_write_folder_token", 0) + 1
+        self.show_in_folder.hide()
+
+    def show_write_folder(self):
+        if self._write_folder is not None:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._write_folder)))
+
+    def set_node_error(self, key, message):
+        """Mark (or, with None, clear) a node's last-run error: red badge on the graph, a line on
+        its properties panel."""
+        if message:
+            self.node_errors[key] = message
+        else:
+            self.node_errors.pop(key, None)
+        item = self.graph.items_by_id.get(key) if hasattr(self, "graph") else None
+        if item is not None:
+            item.set_error(message)
+        if hasattr(self, "graph") and self.graph.selected_id() == key:
+            self._refresh_generate_panel(key)
 
     def export(self):
         if self.frame is None or self.frame_generation != self.generation:
