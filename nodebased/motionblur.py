@@ -51,8 +51,76 @@ def advect_geometry(geometry, frames):
     return replace(geometry, vertices=moved.astype(np.float32))
 
 
-def advect_scene(scene, frames):
-    """`scene` with everything that carries a velocity moved along it for `frames` frames (negative goes back)."""
+def _slabs(shape, step=8):
+    for start in range(0, shape[0], step):
+        yield slice(start, min(shape[0], start + step))
+
+
+def _dense(field):
+    """A field of a sparse or dense volume as a plain float32 array."""
+    return np.ascontiguousarray(np.asarray(field), np.float32)
+
+
+def _dense_fields(volume, **dense):
+    """The fields to replace so a sparse volume's copy holds no view of its tiles (the other fields are dropped, the
+    renderers read density, temperature and velocity only); nothing for a dense volume."""
+    if volume.sparse is None:
+        return dense
+    return dict(sparse=None, flame=None, fuel=None, **dense)
+
+
+def advect_volume(volume, frames, fps=24.0):
+    """`volume` with its density and temperature moved forward along its velocity field for `frames` frames at `fps`
+    (negative goes back): each cell reads the stored field at the point the flow brings to it in that time, `p - v t`,
+    the warped lookup the raymarch blurs with (`volumerender._shutter_points`), so the plume is carried by its own speed
+    and its mass is kept. The velocity (units per second, the volume's own space) is not moved. A volume without a
+    velocity field, or a time of zero, is returned as it is; a sparse volume comes back dense."""
+    from . import volumerender as vr
+    frames = float(frames)
+    if volume.velocity is None or not frames:
+        return volume
+    velocity = _dense(volume.velocity)
+    shift = velocity * np.float32(frames / float(fps) / float(volume.voxel_size))
+    fields = {name: _dense(getattr(volume, name)) for name in ("density", "temperature") if getattr(volume, name) is not None}
+    shape = velocity.shape[:3]
+    cells = np.stack(np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), np.arange(shape[2]), indexing="ij"), axis=-1)
+    moved = {}
+    for name, grid in fields.items():
+        out = np.empty(shape, np.float32)
+        for rows in _slabs(shape):
+            at = (cells[rows] - shift[rows]).reshape(-1, 3)
+            out[rows] = vr._trilinear(grid, at).reshape(out[rows].shape)
+        moved[name] = out
+    return replace(volume, **moved, **_dense_fields(volume, velocity=velocity))
+
+
+def blend_volumes(scene, later, fraction):
+    """`scene` with each volume that has no velocity field mixed `fraction` of the way to the volume at the same position
+    in `later` (the cache frame after it): two cache frames stand in for the motion a velocity would give. A volume whose
+    partner has another grid is left alone."""
+    fraction = float(fraction)
+    if not fraction or len(later.volumes) != len(scene.volumes):
+        return scene
+    out = []
+    for a, b in zip(scene.volumes, later.volumes):
+        same = (a.velocity is None and a.density.shape == b.density.shape and a.voxel_size == b.voxel_size
+                and tuple(a.origin) == tuple(b.origin))
+        if not same:
+            out.append(a)
+            continue
+        mixed = {}
+        for name in ("density", "temperature"):
+            x, y = getattr(a, name), getattr(b, name)
+            if x is not None and y is not None:
+                mixed[name] = (_dense(x) * np.float32(1 - fraction) + _dense(y) * np.float32(fraction)).astype(np.float32)
+        out.append(replace(a, **mixed, **_dense_fields(a)))
+    return replace(scene, volumes=tuple(out))
+
+
+def advect_scene(scene, frames, fps=None):
+    """`scene` with everything that carries a velocity moved along it for `frames` frames (negative goes back). The
+    smoke and fire volumes move too when `fps` is given (their velocity is per second): only the path tracer asks for
+    that, the raymarch having its own shutter in `volume_motion_blur`."""
     frames = float(frames)
     if not frames:
         return scene
@@ -67,7 +135,8 @@ def advect_scene(scene, frames):
             matrices[:, :3, 3] += np.asarray(group.velocities, np.float64) * frames
             group = replace(group, matrices=matrices)
         instances.append(group)
-    return replace(scene, geometries=geometries, particles=particles, instances=tuple(instances))
+    volumes = scene.volumes if fps is None else tuple(advect_volume(v, frames, fps) for v in scene.volumes)
+    return replace(scene, geometries=geometries, particles=particles, instances=tuple(instances), volumes=volumes)
 
 
 def point_velocities(points, positions, velocities, cell):

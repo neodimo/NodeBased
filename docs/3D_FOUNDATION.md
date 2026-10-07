@@ -1680,7 +1680,7 @@ buffer is too big for it.
   cubed on the NVIDIA card, 256 cubed on the CPU). The NVIDIA column was taken at 5:23 to 5:25 AM, just before that card
   stopped answering Vulkan (a driver fault, Xid 62, at 5:25 AM) and could not be repeated; the CPU, AMD and llvmpipe columns
   were measured after it.
-- **Limits.** No motion blur; the data passes other than `depth` do not see volumes (`depth` takes the raymarch's first
+- **Limits.** The data passes other than `depth` do not see volumes (`depth` takes the raymarch's first
   sample at its density threshold, merged with the surfaces' depth); the smoke does not take `volume_multi_scatter` or
   `volume_fire_light`.
 
@@ -2151,7 +2151,9 @@ It is off by default (`motion_blur` 0), so an old document renders as before.
 | `shutter_offset` | centred | `start` (closes at the frame), `centred`, `end` (opens at the frame) or `custom`, TimeBlur's offsets; `custom_offset` moves the centre. |
 | `motion_samples` | 8 | Times across the shutter, first at the open and last at the close (one sample is the middle). |
 
-Smoke keeps its own `volume_motion_blur`, which opens at the frame and runs forward; the two are independent.
+In the raster and ray-traced modes smoke keeps its own `volume_motion_blur`, which opens at the frame and runs forward, and the two
+are independent. In the path tracer smoke follows this shutter instead ("Smoke and fire in the path tracer" below), and
+`volume_motion_blur` is not read there.
 
 **What moves.** Render3D evaluates its `scene` and `camera` inputs at every sample time (a nested evaluation at a
 fractional frame, like TimeBlur), so an animated transform, an animated camera and a time-sampled Alembic or USD mesh
@@ -2160,6 +2162,18 @@ velocity instead: `FluidSurface3D` gives every vertex the mean velocity of the l
 (`Geometry.velocities`), `Instance3D` keeps its points' velocities (`InstanceSet.velocities`) and particles have
 theirs. `motionblur.advect_scene` moves each along its velocity (units per frame, the solvers' own) by the part of a
 frame between the frame the solver returned (it truncates the time) and the sample time.
+
+**Smoke and fire in the path tracer.** With `render_mode` pathtrace each shutter time's scene holds the smoke carried to that
+time: `motionblur.advect_volume` moves a volume's density and temperature along its velocity field (per second, in the
+volume's own space; `volume_fps` converts the frames) for the part of a frame between the cache frame the graph returned and
+the sample time, each cell reading the stored field at `p - v t`, the same warped lookup the raymarch's `volume_motion_blur`
+uses, so a plume smears along its own motion by speed times shutter, a still one (or a zero field) does not blur, and the
+mass is kept. Both tracers need nothing more: the CPU reference gives each path a time, the GPU renders each time with its
+own packed grids and averages. A volume without a velocity field is mixed between the cache frame the graph returned and the
+next one by the part of a frame past it (`motionblur.blend_volumes`; the next frame is one more nested evaluation), so a
+cached sequence blurs between its frames; a partner with another grid, origin or voxel size is not mixed, and a
+sparse volume comes back dense. The raster and ray-traced modes do not advect volumes (they keep `volume_motion_blur`).
+The majorant grid is rebuilt for every time. Tests: `tests/test_volume_path_motion_blur.py`.
 
 **Sampling.** On the CPU reference every path carries its own shutter time (an index into the sample times, chosen so
 a pixel's consecutive samples cover the shutter once and neighbouring pixels are not in step) through the one sampling

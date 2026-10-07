@@ -681,10 +681,19 @@ class Evaluator:
             low, high = motionblur.shutter_window(frame, params["shutter"], params["shutter_offset"],
                                                   params["custom_offset"])
             moments = []
+            # the path tracer carries smoke along its velocity (per second, so it needs the frame rate) and mixes the
+            # cache frames of smoke that has none; the raymarch has its own shutter (volume_motion_blur)
+            fps = float(params.get("volume_fps", 24.0)) if params.get("render_mode") == "pathtrace" else None
             for time in motionblur.shutter_times(low, high, params["motion_samples"]):
                 scene, camera, digests = at(time)
                 if isinstance(scene, scene3d.Scene):
-                    scene = motionblur.advect_scene(scene, motionblur.solved_offset(time))
+                    offset = motionblur.solved_offset(time)
+                    if fps is not None and offset and any(v.velocity is None for v in scene.volumes):
+                        later_scene, _, later_digests = at(math.floor(time) + 1)
+                        if isinstance(later_scene, scene3d.Scene):
+                            scene = motionblur.blend_volumes(scene, later_scene, offset)
+                            digests = digests + later_digests
+                    scene = motionblur.advect_scene(scene, offset, fps)
                 moments.append((scene, camera))
                 prints.append([round(time, 9), *digests])
         if wants_motion:
