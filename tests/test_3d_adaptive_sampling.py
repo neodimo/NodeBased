@@ -409,6 +409,13 @@ class AdaptiveGpuDeviceTests(unittest.TestCase):
         self.assertGreaterEqual(psnr(image, reference), psnr(fixed, reference) - 3.0)     # no worse than fixed 64 within noise
         self.assertLess(float(stats["samples"].mean()), 64)
 
+    def test_adaptive_and_fixed_agree_on_a_converged_scene(self):
+        # every pixel of the flat plane stops at its 8 minimum samples, which are the samples a fixed 8 takes: the same image
+        stopped, stats = render(flat_scene(), FLAT_CAMERA, adaptive(0.05, min_samples=8, max_samples=64, max_bounces=1), backend="gpu")
+        fixed, _ = render(flat_scene(), FLAT_CAMERA, pt.PathSettings(samples=8, max_bounces=1), backend="gpu")
+        self.assertTrue(np.all(stats["samples"] == 8))
+        np.testing.assert_allclose(stopped, fixed, rtol=1e-5, atol=1e-6)
+
     def test_a_flat_region_stops_at_min_samples_and_dispatches_nothing_after_it(self):
         _, stats = render(flat_scene(), FLAT_CAMERA, adaptive(0.05, min_samples=8, max_samples=64, max_bounces=1), backend="gpu")
         self.assertTrue(np.all(stats["samples"] == 8), np.unique(stats["samples"]))
