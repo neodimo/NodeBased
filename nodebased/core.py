@@ -468,8 +468,9 @@ SPECS = {
                        "params": {"out_red": "A.r", "out_green": "A.g", "out_blue": "A.b", "out_alpha": "A.a"}},
     # Roto is a generator: it states its own format rather than inheriting one from an image input
     # and then quietly disagreeing with it. Shapes live in document["node_data"], not in params —
-    # see docs/ROTO_TRACKING.md.
-    "Roto": {"inputs": [], "params": {"width": 960, "height": 540, "invert": 0}},
+    # see docs/ROTO_TRACKING.md. A wired optional "bg" is Nuke's Roto input: the plate passes
+    # through and the shape's coverage becomes its alpha, at the plate's own format.
+    "Roto": {"inputs": [], "optional_inputs": ["bg"], "params": {"width": 960, "height": 540, "invert": 0}},
     # RotoPaint filters a plate and stores ordered shapes/strokes in node_data. The optional
     # second image is the reveal source; clone samples from the plate at a source frame.
     # D1: "Detect specks..." samples dustbust_frame_start..dustbust_frame_end and proposes clone
@@ -2046,6 +2047,19 @@ def _viewer_slot(value, name="slot"):
     return value
 
 
+def _add_roto_bg_slot(nodes):
+    """A Roto saved before it had a bg input gets the slot, unwired: it renders its matte as before.
+    Group graphs are walked too, since validation checks their nodes' slots the same way."""
+    for node in nodes.values():
+        if not isinstance(node, dict):
+            continue
+        if node.get("type") == "Roto" and isinstance(node.get("inputs"), dict):
+            node["inputs"].setdefault("bg", None)
+        graph = node.get("graph")
+        if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+            _add_roto_bg_slot(graph["nodes"])
+
+
 def upgrade_document(document):
     doc = copy.deepcopy(document)
     if isinstance(doc, dict) and doc.get("version") == 1:
@@ -2252,6 +2266,7 @@ def upgrade_document(document):
             settings.setdefault("formats", builtin_formats())
         nodes = doc.get("nodes", {})
         if isinstance(nodes, dict):
+            _add_roto_bg_slot(nodes)
             for node in nodes.values():
                 if isinstance(node, dict) and node.get("type") in ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D"):
                     params = node.get("params")

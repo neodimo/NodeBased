@@ -2614,7 +2614,17 @@ class Evaluator:
             # Also a generator, and deliberately one: a Roto that inherited an input's format
             # could disagree with it about the data window and produce a matte that silently
             # fails to line up with the thing it is masking.
-            return Raster.of(Evaluator._kernel(kind, p, [], frame, data))
+            plate = inputs[0] if inputs else None
+            if plate is None:
+                return Raster.of(Evaluator._kernel(kind, p, [], frame, data))
+            # Wired bg (Nuke's Roto default output): the plate's colour with the shape's coverage
+            # as its alpha, drawn at the plate's own display format.
+            out = plate.display
+            plate_pixels = plate.fit(out)
+            coverage = Evaluator._kernel(kind, {**p, "width": out.width, "height": out.height}, [], frame, data)[..., 3]
+            pixels = plate_pixels.copy()
+            pixels[..., 3] = coverage
+            return Raster(pixels, out, out, plate.layers, plate.meta)
         if kind in DRAW_KINDS:
             # A fourth kind of generator: still states its own format like Roto, but also takes an
             # optional "image" it composites the shape over, and an optional "mask" -- so unlike

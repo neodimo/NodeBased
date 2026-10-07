@@ -159,13 +159,19 @@ conversion nobody remembers to apply.
 ## Roto
 
 ```
-Roto  inputs: []   params: width, height, invert
+Roto  inputs: []   optional: bg   params: width, height, invert
 ```
 
-A generator, not a filter. It has no image input, so it cannot inherit a format
-from upstream and then quietly disagree with it; the artist states the format.
-Combining the matte with a plate of a different size hits the existing
+A generator, not a filter. With nothing wired it has no image input, so it cannot
+inherit a format from upstream and then quietly disagree with it; the artist states
+the format. Combining the matte with a plate of a different size hits the existing
 shape-mismatch rule and raises rather than resampling.
+
+The optional `bg` input is Nuke's Roto input. Wired, the node passes the plate's
+colour through and the shape's coverage becomes its alpha, at the plate's own format
+(`width` and `height` are then ignored), so the shape is drawn over the plate it is
+traced against. `O` with a node selected wires the selection to `bg`. Documents
+saved before the slot existed gain it unwired on load and render the matte as before.
 
 Output is a **matte artifact**: float32, scene-linear, premultiplied, with
 `rgb == a == coverage`. That is a premultiplied white matte, so it composites

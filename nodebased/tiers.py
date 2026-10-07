@@ -471,12 +471,12 @@ REGION_RULES = {
     "Generate": _identity,  # provider-write tap keeps the plate flowing through the graph
     "Constant": _generator,
     "Checker": _generator,
-    "Roto": _generator,
+    "Roto": _identity,   # its only input, the optional bg plate, is read pointwise
     "RotoPaint": _identity,
     # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators) state their own format like
     # Roto/Constant/Checker, but the optional "image"/"mask" inputs -- when wired -- are pointwise:
     # the shape is composited over the same pixels it is asked to produce, no halo, so identity is
-    # the right rule for both slots (unlike Roto, which declares no input slots at all).
+    # the right rule for both slots (as Roto's optional bg does).
     "Ramp": _identity,
     "Radial": _identity,
     "Rectangle": _identity,
