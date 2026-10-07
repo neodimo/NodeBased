@@ -2353,8 +2353,17 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     if reason:
         raise gpu3d.Unsupported(reason)
     started = time.perf_counter()
+    phases = {}           # seconds per phase of this render, reported as stats["phases"] (tools/benchmark_adaptive.py --breakdown)
+    mark = started
+
+    def lap(name):
+        nonlocal mark
+        now = time.perf_counter()
+        phases[name] = phases.get(name, 0.0) + now - mark
+        mark = now
     raytrace._cancel(cancel)
     ps = pt.build_scene(scene, ambient, eye=s._view_basis(camera)[0], volume=volume)
+    lap("scene build")
     if (ps.splats is not None or ps.volumes is not None) and not soft_supported(state):
         raise gpu3d.Unsupported("splats and smoke are path traced on the GPU on NVIDIA adapters only for now")
     try:
@@ -2363,6 +2372,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         if "traversal stack" in str(exc):
             raise gpu3d.Unsupported(str(exc)) from exc
         raise
+    lap("pack")
     width, height = int(width), int(height)
     tiles_x, tiles_y = -(-width // pt.TILE), -(-height // pt.TILE)
     if tiles_x * tiles_y > 512 * 4 * 32:
@@ -2394,6 +2404,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         links = bool(ps.linked_bits)
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
+        lap("upload")
         tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
         tile_done = np.zeros(tiles_x * tiles_y, bool)
         tile_count = np.zeros(tiles_x * tiles_y, np.int64)
@@ -2414,6 +2425,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             bits = _tile_bits(tile_done)
             if not len(np.flatnonzero(~tile_done)):
                 break
+            lap("mask update")
             if adaptive:
                 # An adaptive pass is `take` one-sample dispatches (a thread looping over several samples runs about four
                 # times slower per sample, its bands being too small to fill the card), over only the rows that still hold an
@@ -2443,6 +2455,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                         device.queue.write_buffer(uniform, 0, _uniform(
                             packed, ps, camera, width, height, y0, y1, sample_index + j, spp, settings, code, bits, tiles_x,
                             decide=j == steps - 1))
+                        lap("uniform write")
                         encoder = device.create_command_encoder()
                         compute = encoder.begin_compute_pass()
                         compute.set_pipeline(pipeline)
@@ -2451,6 +2464,8 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                         compute.end()
                         device.queue.submit([encoder.finish()])
                         device.queue.read_buffer(accum, 0, 16)     # wait: keeps submissions short and cancellation prompt
+                        lap("dispatch")
+                        phases["dispatches"] = phases.get("dispatches", 0) + 1
             else:
                 rows_per_band = max(1, (GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // max(width * take, 1))
                 for y0 in range(0, height, rows_per_band):
@@ -2469,6 +2484,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                     device.queue.submit([encoder.finish()])
                     device.queue.read_buffer(accum, 0, 16)     # wait for this band: keeps submissions short and cancellation prompt
                     resources.pop().destroy()
+                    lap("dispatch")
             tile_count[~tile_done] += take
             sample_index += take
             passes += 1
@@ -2477,10 +2493,13 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                 # only the rows that were dispatched can have changed, and a pixel that is done stays done
                 first, last = (row_lo * width) // 4, -(-(row_hi * width) // 4)
                 flags = np.frombuffer(device.queue.read_buffer(accum, npix * 32 + first * 16, (last - first) * 16), "f4")
+                lap("flag readback")
+                phases["flag readbacks"] = phases.get("flag readbacks", 0) + 1
                 lo = first * 4
                 span = flags[:min(len(flags), npix - lo)] > 0.5
                 pixel_done[lo:lo + len(span)] |= span
                 tile_done = _tiles_done(pixel_done, width, height, tiles_x, tiles_y)
+                lap("mask update")
             elif settings.noise_threshold > 0 and not data_pass:
                 raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(-1, 2, 4)
                 lum_sum, lum_sq = raw[:, 1, 0].astype(np.float64), raw[:, 1, 1].astype(np.float64)
@@ -2502,6 +2521,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                 break
         raytrace._cancel(cancel)
         raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(npix, 2, 4).astype(np.float64)
+        lap("final readback")
     finally:
         for resource in reversed(resources):
             resource.destroy()
@@ -2521,7 +2541,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             image = image + bg * (1 - image[:, 3:4])
     if stats is not None:
         stats.update(backend="gpu", sampling=settings.sampling, samples=pixel_samples.reshape(height, width).copy(),
-                     passes=passes, seconds=time.perf_counter() - started, adapter=gpu3d.describe(),
+                     passes=passes, seconds=time.perf_counter() - started, adapter=gpu3d.describe(), phases=phases,
                      converged=(pixel_done if adaptive else tile_done[tile_of]).reshape(height, width).copy())
         if not data_pass:
             # the variance of each pixel's mean luminance from the moments the shader summed, as the CPU reference has it
@@ -2533,4 +2553,5 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     if output == "depth" and ps.volumes is not None:
         result = pt.merge_volume_depth(scene, camera, width, height, result, ps.volumes.settings, cancel)
     result.flags.writeable = False
+    lap("postprocess")
     return result

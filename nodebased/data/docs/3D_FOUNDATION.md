@@ -2768,3 +2768,31 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   and llvmpipe (the GPU path tracer draws smoke on NVIDIA only, so its two smoke cases skip on the other two). Left out:
   emissive particles lighting their surroundings in the path tracer are synthetic lights without a name and cannot be linked;
   the viewport's particles and liquids are unlit or headlight-lit; Windows not run.
+- Rendering 8 step T2 of 3: adaptive sampling that saves time on a real GPU. Part 1, where an adaptive render's time goes
+  (`python tools/benchmark_adaptive.py --breakdown --size 1280x720` under the GPU lock, the median of three renders on the
+  NVIDIA GeForce RTX 3080 Ti, October 6, 2026 around 9:10 PM before any change; `stats["phases"]` carries the same
+  milliseconds on every GPU render). Milliseconds per phase:
+
+  | scene | sampling | wall | passes | dispatches | scene build + pack | upload | mask update | uniform write | dispatch | flag readback | final readback | postprocess | denoise filter |
+  | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | X1 | fixed 64 | 295 | 64 | 0 | 9.5 | 67.1 | 6.6 | 0.0 | 162.1 | 0.0 | 12.8 | 37.7 | 8332 |
+  | X1 | adaptive 0.01 | 291 | 31 | 62 | 9.7 | 67.0 | 40.1 | 15.5 | 80.3 | 28.4 | 12.8 | 37.0 | 8385 |
+  | X1 | adaptive 0.05 | 219 | 22 | 53 | 10.0 | 67.1 | 20.5 | 10.3 | 48.1 | 12.7 | 12.5 | 37.5 | 8308 |
+  | Y1 | fixed 64 | 293 | 64 | 0 | 9.4 | 67.1 | 6.7 | 0.0 | 158.4 | 0.0 | 13.1 | 36.4 | 8347 |
+  | Y1 | adaptive 0.01 | 533 | 31 | 174 | 12.2 | 67.2 | 44.8 | 41.4 | 273.4 | 39.0 | 13.1 | 43.0 | 8204 |
+  | Y1 | adaptive 0.05 | 295 | 31 | 83 | 9.6 | 67.0 | 37.1 | 19.1 | 84.5 | 26.6 | 12.7 | 36.1 | 8271 |
+  | Z1 | fixed 64 | 207 | 64 | 0 | 1.0 | 66.5 | 6.1 | 0.0 | 84.5 | 0.0 | 12.6 | 36.9 | 8693 |
+  | Z1 | adaptive 0.01 | 174 | 14 | 45 | 0.9 | 66.4 | 14.8 | 8.1 | 24.2 | 6.6 | 12.9 | 39.2 | 8906 |
+  | Z1 | adaptive 0.05 | 148 | 3 | 34 | 0.9 | 66.5 | 5.4 | 4.1 | 17.2 | 2.2 | 12.9 | 37.9 | 8343 |
+
+  What the numbers say, in the order to fix them: (1) every render, fixed or adaptive, spends 67 ms uploading the 29.5 MB
+  zeroed accumulator (a freshly created buffer is already zero), 38 ms on the host-side division and post-processing in float64
+  and 13 ms reading the accumulator back: 118 ms of a 150 to 300 ms render is a floor that sampling does not touch.
+  (2) The adaptive passes spend almost as much on the host as on the card: on X1 at 0.01 the 31 passes cost 40 ms of mask
+  update, 15 ms of uniform writes and 28 ms of flag readback (83 ms) against 80 ms of dispatch, and each dispatch ends in a
+  blocking read; on Y1 at 0.01 it is 125 ms of host work against 273 ms of dispatch. The saving in dispatch time (X1: 162 ms
+  down to 80 ms) is eaten by that host work, which is why adaptive is no faster than fixed 64 there. (3) Y1 at 0.01
+  runs 174 one-sample dispatches because its active tiles stay spread over the whole frame for 28 passes, each dispatch
+  covering every row that holds one. (4) The denoise filter is 8.3 to 8.9 seconds of CPU work per frame whatever the sampling,
+  which makes it the largest phase by far and one that adaptive sampling cannot shorten; it is not part of the wall time the
+  benchmark tables compare. Inferred: the shader's own noise estimate is inside the dispatch column and no timer separates it.

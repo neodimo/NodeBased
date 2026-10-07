@@ -3,7 +3,7 @@ per-pixel sample-count image (docs/BENCHMARKS-v0.34-adaptive.md).
 
     flock /tmp/nb-gpu.lock python tools/benchmark_adaptive.py [--adapter default|discrete|integrated|cpu]
                                                               [--size 640x360] [--backend gpu|cpu] [--images DIR]
-                                                              [--max-samples 256]
+                                                              [--max-samples 256] [--breakdown]
 
 The scenes are the comparison scenes `tests/test_3d_gpu.py` names X1 (PBR texture maps lit by a Rect and a Point light and
 an environment), Y1 (a PBR sphere on a floor under an environment with a hard sun) and Z1 (a cube casting an area-light
@@ -14,6 +14,12 @@ caps the adaptive renders (256 is Render3D's default; 64 gives them at most fixe
 three renders after a warm-up render (it holds the scene build and upload on the GPU). PSNR is taken on what the viewer shows (values clipped to 0..1 and sRGB encoded, peak 1), over all pixels. With
 `--images DIR` it also writes one contact sheet per scene (2 rows by 3 columns): the reference over fixed 64, adaptive at
 0.01 over 0.05, and the two adaptive renders' per-pixel sample counts (black = the minimum, white = the largest count).
+
+`--breakdown` instead prints, per scene, where the wall time of fixed 64 and of each adaptive render goes on the GPU backend
+(`stats["phases"]`, the median of three renders): scene build, pack, upload, the host's mask update (which tiles still
+hold an active pixel), the per-dispatch uniform write, dispatch (submit plus wait, which holds the shader's own noise
+estimate and its mask update), the flag readback after a pass, the final readback and the post-processing, then the
+denoise filter run on the finished render (`ptdenoise.denoise` with the render's own variance and guides).
 
 Run it under the exclusive GPU lock: it needs the whole card for a minute.
 """
@@ -150,6 +156,47 @@ def _write_sheets(folder, sheets):
         out.close()
 
 
+def breakdown(width, height, max_samples, repeats=3):
+    """Per scene and per render, the median seconds of each phase of the GPU path tracer plus the denoise filter."""
+    from nodebased import ptdenoise
+    rows = []
+    for name, (scene, ambient) in scenes().items():
+        entries = [("fixed 64", FIXED)] + [(f"adaptive {t}", replace(ADAPTIVE, noise_threshold=t, max_samples=max_samples)) for t in THRESHOLDS]
+        for label, settings in entries:
+            samples = []
+            for i in range(repeats + 1):
+                stats = {}
+                started = time.perf_counter()
+                image = pt.render(scene, CAMERA, width, height, (0, 0, 0, 0), ambient, "rgba", settings, stats=stats, backend="gpu")
+                wall = time.perf_counter() - started
+                if i:
+                    samples.append((wall, stats))
+            guides = pt.guide_aovs(scene, CAMERA, width, height, settings, None, "gpu", None, stats)
+            times = []
+            for _ in range(repeats):
+                started = time.perf_counter()
+                ptdenoise.denoise(image, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0], stats.get("variance"))
+                times.append(time.perf_counter() - started)
+            phases = {}
+            for _, st in samples:
+                for key, value in st["phases"].items():
+                    phases.setdefault(key, []).append(value)
+            median = {key: statistics.median(values) for key, values in phases.items()}
+            median["denoise"] = statistics.median(times)
+            rows.append((name, label, statistics.median(w for w, _ in samples), samples[-1][1]["passes"], median))
+    return rows
+
+
+def print_breakdown(rows):
+    keys = ["scene build", "pack", "upload", "mask update", "uniform write", "dispatch", "flag readback", "final readback", "postprocess", "denoise"]
+    print("| scene | sampling | wall time | passes | dispatches | flag readbacks | " + " | ".join(keys) + " |")
+    print("| --- | --- | ---: | ---: | ---: | ---: | " + " | ".join("---:" for _ in keys) + " |")
+    for name, label, wall, passes, ph in rows:
+        cells = " | ".join(f"{ph.get(k, 0.0) * 1000:.1f}" for k in keys)
+        print(f"| {name} | {label} | {wall * 1000:.0f} ms | {passes} | {int(ph.get('dispatches', 0))} | {int(ph.get('flag readbacks', 0))} | {cells} |")
+    print("\nPhase columns are milliseconds.")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter", default=None)
@@ -157,12 +204,17 @@ def main():
     parser.add_argument("--backend", default="gpu")
     parser.add_argument("--images", default=None)
     parser.add_argument("--max-samples", type=int, default=256)
+    parser.add_argument("--breakdown", action="store_true")
     args = parser.parse_args()
     if args.adapter:
         gpu3d._states.setdefault("default", gpu3d._state(args.adapter))
     if args.backend != "cpu":
         print(gpu3d.adapter_report())
     width, height = (int(v) for v in args.size.split("x"))
+    if args.breakdown:
+        print(f"\n{width}x{height}, GPU path tracer phases, adaptive max samples {args.max_samples}\n")
+        print_breakdown(breakdown(width, height, args.max_samples))
+        return
     rows = run(width, height, args.backend, args.images, args.max_samples)
     print(f"\n{width}x{height}, backend {args.backend}, adaptive max samples {args.max_samples}\n")
     print("| scene | sampling | wall time | PSNR | mean samples | min | max |")
