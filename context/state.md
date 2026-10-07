@@ -1,5 +1,32 @@
 ## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (2:05 AM on 2026-10-07 PDT)
+
+`main` moved `fd6cdd7` -> `3988004` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 260 tests in 119.981 s, OK. Full suite on
+the stacked tip `3988004` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1007-0026.log`, started 12:26 AM): **Ran 4541 tests in 5175.515 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step Y3 of 3: rendering and animation that say what they are doing.** Commits:
+  - `0882b69` tests: the cache-band test's set_marks stand-in accepts the key labels the strip now takes
+  - `b760b49` docs: Lane 2 step Y3 notes in PARITY_2D (Write render feedback, animated knobs, key mark tooltips)
+  - `4c6b97f` Timeline key marks name the node and knobs keyed on the hovered frame; tests for the marks following the selection (Lane 2 step Y3 of 3, part 3)
+  - `50347a3` Animated knobs say so: tinted field, a diamond in the field on key frames, a drawn key button with action and shortcut in its tooltip, I sets a key, and the knob menu gains previous and next key and Clear animation (Lane 2 step Y3 of 3, part 2)
+  - `b5200fb` Write renders say what they are doing: frame N of M with elapsed time and Cancel in the status bar, a completion message with Show in folder, a failing frame stops with its number and marks the Write (Lane 2 step Y3 of 3, part 1)
+  Diff: 6 files changed, 692 insertions(+), 108 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step Q1 of 2: the keyer artists actually use: core matte, screen pre-blur and edge colour correction.** Commits:
+  - `de459fe` feat: complete ScreenKeyer artist matte and edge controls
+  Diff: 7 files changed, 99 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (12:05 AM on 2026-10-07 PDT)
 
 `main` moved `e48cd6b` -> `cc59adc` (lane commits cherry-picked onto main in lane order) and then to this
