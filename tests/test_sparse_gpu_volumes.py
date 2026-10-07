@@ -106,6 +106,13 @@ class GridPacking(unittest.TestCase):
             self.assertGreaterEqual(ax * ay * az, count)
             self.assertLess(ax * ay * (az - 1), count)
 
+    def test_the_cpu_reference_samples_a_vector_field_in_an_empty_tile(self):
+        velocity = np.zeros((24, 24, 24, 3), np.float32)
+        velocity[:8, :8, :8] = 1.0
+        grid = SparseGrid.from_dense({'velocity': velocity})
+        samples = grid.sample_trilinear('velocity', np.array([[2.0, 2.0, 2.0], [18.0, 18.0, 18.0], [7.5, 2.0, 2.0]]))
+        np.testing.assert_allclose(samples, [[1, 1, 1], [0, 0, 0], [0.5, 0.5, 0.5]], atol=1e-6)
+
     def test_max_reads_the_stored_tiles_and_the_rest_value(self):
         grid = SparseGrid.from_dense({'density': bench.column_plume(32)})
         self.assertAlmostEqual(grid.max('density'), float(bench.column_plume(32).max()), places=6)
@@ -325,6 +332,53 @@ class SparseUploads(unittest.TestCase):
         self.assertTrue(viewportgpu.renderer().volume_note.startswith('volumes hidden'))
         self.assertTrue(widget._paint_gpu(painter, viewportgpu.renderer(), scene, widget._camera(), None))
         painter.end()
+
+
+@unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
+class SparseThroughTheGraph(unittest.TestCase):
+    """A sparse cache frame reaching Render3D: the node sends it to the GPU, and says why when it cannot."""
+
+    def graph(self, volume, backend, **params):
+        from nodebased.core import Dispatcher
+        from nodebased.imaging import Evaluator
+        d = Dispatcher()
+        for key, (kind, values) in dict(
+                p=('Plume3D', {'plume_resolution': 12}), s=('Scene3D', {}),
+                c=('Camera3D', {'ty': .5, 'tz': 3, 'target_y': .5}),
+                r=('Render3D', {'width': 48, 'height': 36, 'volume_density_scale': 6.0, 'render_backend': backend,
+                                **params})).items():
+            d.execute({'op': 'create', 'id': key, 'type': kind, 'params': values})
+        for target, slot, source in (('s', 'object0', 'p'), ('r', 'scene', 's'), ('r', 'camera', 'c')):
+            d.execute({'op': 'connect', 'id': target, 'input': slot, 'source': source})
+        with patch.object(s, 'analytic_plume', return_value=volume):
+            return Evaluator().evaluate_raster(dict(d.document, view='r'), frame=1)
+
+    def test_render3d_draws_a_sparse_frame_on_the_gpu_like_the_dense_one(self):
+        dense, sparse = twin(24, 'column', velocity=False, temperature=False)
+        with never_dense():
+            gpu = self.graph(sparse, 'gpu')
+        expected = self.graph(dense, 'gpu')
+        self.assertGreater(float(expected.pixels[..., 3].max()), 0.05)
+        np.testing.assert_allclose(gpu.pixels, expected.pixels, atol=TOLERANCE * 10)
+        np.testing.assert_allclose(self.graph(sparse, 'cpu').pixels, expected.pixels, atol=4e-3)
+
+    def test_render3d_path_traces_a_sparse_frame_on_the_gpu_like_the_dense_one(self):
+        dense, sparse = twin(24, 'column', velocity=False, temperature=False)
+        traced = dict(render_mode='pathtrace', pt_samples=16, pt_seed=3)
+        with never_dense():
+            gpu = self.graph(sparse, 'gpu', **traced)
+        expected = self.graph(dense, 'gpu', **traced)
+        self.assertGreater(float(expected.pixels[..., 3].max()), 0.05)
+        np.testing.assert_allclose(gpu.pixels, expected.pixels, atol=2e-4)
+
+    def test_the_vorticity_pass_of_a_sparse_frame_falls_back_to_the_cpu_and_gpu_mode_says_why(self):
+        dense, sparse = twin(24, 'column')
+        passes = {'render_output': 'multichannel', 'passes': 'beauty,volume_vorticity'}
+        auto = self.graph(sparse, 'auto', **passes)
+        cpu = self.graph(sparse, 'cpu', **passes)
+        np.testing.assert_allclose(auto.layers['volume_vorticity'].pixels, cpu.layers['volume_vorticity'].pixels, atol=1e-6)
+        with self.assertRaisesRegex(Exception, 'vorticity'):
+            self.graph(sparse, 'gpu', **passes)
 
 
 if __name__ == '__main__':

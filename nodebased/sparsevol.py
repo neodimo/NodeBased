@@ -181,7 +181,7 @@ class SparseGrid:
                         group_rows = rows[inverse == group]
                         tile_index = self._lookup.get(tuple(int(v) for v in coord))
                         if tile_index is None:
-                            out[group_rows] += weights[group_rows] * self.rest[name]
+                            out[group_rows] += (weights[group_rows, None] if vector else weights[group_rows]) * self.rest[name]
                         else:
                             local = index[group_rows] % tile
                             values = block[tile_index, local[:, 0], local[:, 1], local[:, 2]]
