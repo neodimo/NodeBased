@@ -6,8 +6,10 @@ the cell-centred grid), split into absorption and scattering by the two knobs. T
 medium instead of marching it:
 
 * Free flight is delta tracking. Each volume has a majorant (its largest density times the largest extinction
-  factor); tentative collisions are drawn at that rate along the ray inside the volume's box, and each is real
-  with probability `sigma_t / majorant` (otherwise null and the ray goes on). A path that survives to the
+  factor), refined by a two-level grid of local bounds (`majorant_levels`: cells of `MAJORANT_TILE` voxels, and blocks
+  of `MAJORANT_RATIO` cubed cells above them) so empty space is crossed in a stride and thin space against a tight bound;
+  tentative collisions are drawn at the local rate along the ray inside the volume's box, and each is real
+  with probability `sigma_t / bound` (otherwise null and the ray goes on). A path that survives to the
   surface behind the volume passes unattenuated; the surviving fraction is the transmittance. Volumes are
   independent Poisson processes, so the first real collision of the set is the nearest of each volume's own.
 * A real collision absorbs the path with probability `1 - scattering / (absorption + scattering)` and otherwise
@@ -17,8 +19,9 @@ medium instead of marching it:
   function's own sampling by the same power heuristic, with a shadow ray that meets meshes, splats and every
   volume. Scattering goes on for as many events as the bounce limits allow, so smoke is lit by the dome, by
   light bounced off meshes and splats, and by other smoke, without the multiple-scattering approximation the
-  raymarch uses (`volume_multi_scatter` and `volume_fire_light` are ignored here: the path tracer computes
-  what they approximate).
+  raymarch uses. `volume_multi_scatter` m and `volume_fire_light` are gains on what the tracer computes: the path's
+  throughput is multiplied by `1 + m` once, at its second smoke collision in a row, and fire seen from a smoke vertex is
+  multiplied by `fire_light`; 0 and 1 leave the render as it was.
 * Fire emits `fire_intensity * Le(K) * sigma` per unit length where `temperature * temperature_scale`
   exceeds `fire_threshold` (`Le` the raymarch's blackbody or ramp table). It is added at every tentative
   collision as `emission / majorant` (a track-length estimator), so a path that reaches the fire from a mesh or
@@ -32,10 +35,9 @@ single scattering event lit by a light of intensity `I` gives `I / 4` per unit o
 of a thick cloud's brightness comes from real multiple scattering. A scattering-only cloud of any shape in a
 uniform sky of radiance 1 renders as 1.
 
-Limits, stated: motion blur, the fire-light knob and the multiple-scattering knobs are not used; smoke does not
-light itself through `volume_multi_scatter` but through the tracer's real bounces, so it needs `max_bounces`
-above 1 to show more than single scattering; the data passes other than `depth` do not see volumes, and `depth` is the
-raymarch's first sample whose scaled density reaches `VolumeSettings.depth_threshold` (the rule `scene3d` merges).
+Limits, stated: smoke needs `max_bounces` above 1 to show more than single scattering; the data passes find the smoke by
+the raymarch's first sample whose scaled density reaches `VolumeSettings.depth_threshold` (`volumerender.first_hit_data`,
+merged by `pathtrace.merge_volume_data`); motion blur is the scene's (`motionblur.advect_volume`, one scene per shutter time).
 """
 import math
 from dataclasses import dataclass, field

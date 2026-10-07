@@ -124,6 +124,7 @@ struct Params {
   lens: vec4<f32>,     // aperture radius (0 = pinhole), focus distance, blades, blade rotation (radians)
   lens2: vec4<f32>,    // 1 / anamorphic squeeze, max samples (adaptive)
   ad: vec4<f32>,       // adaptive sampling: noise threshold, min samples, 2 when adaptive (0 = every pixel takes every sample), pass size
+  vp3: vec4<f32>,      // smoke: volume_multi_scatter amount, volume_fire_light gain
   tiles: array<vec4<u32>, 512>,                   // active tile bits
 };
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
@@ -1273,6 +1274,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
 //#endif
 //#if VOLUMES
   let has_vols = params.h.x > 0u && params.d.z < 7u;
+  var smoke_run = 0u;         // smoke vertices in a row so far on this path (`volume_multi_scatter` acts at the second)
 //#endif
   let max_b = params.b.w;
   let eps = params.f.x;
@@ -1320,10 +1322,12 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       t_event = vol_flight_all(o, d, t_end, key, turn, &glow);
       evented = t_event < t_end;
       if (max(glow.x, max(glow.y, glow.z)) > 0.0) {
-        let gathered = thr * glow;
+        // fire seen from a smoke vertex is the fire lighting the smoke: `volume_fire_light` is its gain
+        let gathered = thr * glow * select(1.0, params.vp3.y, smoke_run > 0u);
         if (vdepth == 0u) { (*acc).emission += gathered; } else { add_class(acc, cls, vdepth, gathered); }
       }
     }
+    if (!evented) { smoke_run = 0u; }
     if (evented) {
       // a real collision in the smoke: absorb, or scatter with light sampling and a phase-sampled continuation
       let pos = o + d * t_event;
@@ -1333,6 +1337,8 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       }
       if (!(rnd(key, dim + VOL_ABSORB_DIM) < params.vp0.y) || bounces >= max_b || capped) { break; }
       let g = params.vp0.z;
+      // the second smoke vertex in a row: everything the path gathers from here on gains `1 + volume_multi_scatter`, once
+      if (smoke_run == 1u) { thr = thr * (1.0 + params.vp3.x); }
       var direct = vec3<f32>(0.0);
       var slot = 0u;
       for (var li = 0u; li < lc; li++) {
@@ -1427,6 +1433,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
 //#endif
       bounces++;
       vdepth++;
+      smoke_run++;
 //#if SPLATS
       skip_id = -1; skip_t = 0.0; skip_th = -1e30;
 //#endif
@@ -2464,7 +2471,7 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, env_visible, packed.linked], "u4")
     g = np.array([ps.shapes, packed.splat_count, packed.splat_base, packed.splat_root], "u4")
     h = np.array([packed.volume_count, packed.volume_base, packed.fire_base, packed.flags], "u4")
-    f32 = np.zeros((15, 4), "f4")
+    f32 = np.zeros((16, 4), "f4")
     right, up, forward = view[0], view[1], -view[2]
     f32[0, :3], f32[0, 3] = right, width / max(height, 1)
     f32[1, :3], f32[1, 3] = up, 1.0 / focal
@@ -2482,6 +2489,8 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     if settings.adaptive and code < 7:
         f32[14] = (settings.noise_threshold, settings.min_samples, mode, settings.adaptive_pass_size)
         f32[13, 1] = settings.max_samples
+    if ps.volumes is not None:
+        f32[15, :2] = (ps.volumes.settings.multi_scatter, ps.volumes.settings.fire_light)
     tiles = np.zeros((512, 4), "u4")
     tiles.reshape(-1)[:len(tile_bits)] = tile_bits
     return b"".join((a.tobytes(), b.tobytes(), c.tobytes(), d.tobytes(), e.tobytes(), g.tobytes(), h.tobytes(),
@@ -2631,8 +2640,9 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
 
 
 def render(scene, camera, width, height, background, ambient, output, settings, cancel=None, progress=None,
-           stats=None, volume=None):
-    """Path trace on the GPU; raises `gpu3d.Unsupported` for what it cannot take (the caller falls back)."""
+           stats=None, volume=None, merge_volumes=True):
+    """Path trace on the GPU; raises `gpu3d.Unsupported` for what it cannot take (the caller falls back).
+    `merge_volumes` False leaves the smoke out of a data pass (its surface depth)."""
     if output not in _OUTPUT_CODES:
         raise gpu3d.Unsupported(f"the GPU path tracer does not produce the {output!r} output")
     state = gpu3d._state()
@@ -2795,8 +2805,12 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             stats["variance"] = variance.reshape(height, width)
             stats["noise"] = pt.pixel_noise(lum_sum, lum_sq, n).reshape(height, width)
     result = np.ascontiguousarray(image, np.float32).reshape(height, width, 4)
-    if output == "depth" and ps.volumes is not None:
-        result = pt.merge_volume_depth(scene, camera, width, height, result, ps.volumes.settings, cancel)
+    if data_pass and ps.volumes is not None and merge_volumes:
+        # the smoke's first sample is found by the CPU raymarch for both tracers (it is one ray per pixel), cut at the
+        # card's own surface depth
+        surface = result if output == "depth" else render(scene, camera, width, height, background, ambient, "depth",
+                                                           settings, cancel=cancel, volume=volume, merge_volumes=False)
+        result = pt.merge_volume_data(scene, camera, width, height, result, output, ps.volumes.settings, surface, cancel)
     result.flags.writeable = False
     lap("postprocess")
     return result

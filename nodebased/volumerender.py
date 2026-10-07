@@ -684,7 +684,8 @@ def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want,
     total = width * height
     acc = dict(trans=np.ones(total), rgb=np.zeros((total, 3)), density=np.zeros(total),
                temperature=np.zeros(total), vorticity=np.zeros(total), position=np.zeros((total, 3)),
-               velocity=np.zeros((total, 3)), first_t=np.full(total, np.inf), id=np.zeros(total))
+               velocity=np.zeros((total, 3)), first_t=np.full(total, np.inf), id=np.zeros(total),
+               first_volume=np.full(total, -1))
     for prep, number, (t0, t1) in zip(preps, numbers, clips):
         rays = np.nonzero(t1 - t0 > 0)[0]
         for start in range(0, len(rays), RAY_CHUNK):
@@ -694,6 +695,8 @@ def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want,
             acc["trans"][sel] *= got["trans"]
             for name in ("density", "temperature", "vorticity", "position", "velocity"):
                 acc[name][sel] += got[name]
+            nearer = got["first_t"] < acc["first_t"][sel]
+            acc["first_volume"][sel[nearer]] = number - 1
             acc["first_t"][sel] = np.minimum(acc["first_t"][sel], got["first_t"])
             # Nearest volume that holds smoke on the ray (volumes are visited near to far).
             fresh = (acc["id"][sel] == 0) & (got["density"] > 0)
@@ -714,6 +717,64 @@ def composite_beauty(scene, camera, width, height, out, depth, settings, ambient
     got = integrate(scene, camera, width, height, depth, settings, ambient, {"beauty"}, cancel, occluders)
     out[..., :3] = got["rgb"] + got["trans"][..., None] * out[..., :3]
     out[..., 3] = got["alpha"] + got["trans"] * out[..., 3]
+
+
+def first_hit_data(scene, camera, width, height, mesh_depth, settings, cancel=None):
+    """What the data passes read of the smoke: the first sample at or above `settings.depth_threshold` on each pixel's
+    ray, cut at `mesh_depth` (view depth, inf for none) like `first_hit_depth` (so a shutter in `settings` blurs the depth as it
+    always did; the path tracers pass a sharp one). Returns `hit` (H, W bool), `depth`
+    (view depth, inf where no hit), `volume` (index into `scene.volumes`, -1 for none), `position` (H, W, 3 world),
+    `normal` (H, W, 3 unit world: the density gradient pointing out of the smoke, turned toward the eye) and `velocity`
+    (H, W, 3 world units per second, zeros without a velocity field). The values are read at the hit sample."""
+    got = integrate(scene, camera, width, height, mesh_depth, settings, 0.0, {"depth"}, cancel)
+    height, width = got["first_t"].shape
+    eye, dirs, length = _pixel_rays(camera, width, height)
+    t = got["first_t"].reshape(-1)
+    owner = got["first_volume"].reshape(-1)
+    hit = np.isfinite(t) & (owner >= 0)
+    position = np.zeros((width * height, 3))
+    normal = np.zeros((width * height, 3))
+    velocity = np.zeros((width * height, 3))
+    position[hit] = eye + dirs[hit] * t[hit, None]
+    for index in np.unique(owner[hit]):
+        take = np.flatnonzero(hit & (owner == index))
+        prep = _Volume(scene.volumes[index], False)
+        volume = prep.volume
+        g = prep.to_grid(prep.to_object(position[take]))
+        gradient = np.zeros((len(take), 3))
+        for axis in range(3):
+            step = np.zeros(3)
+            step[axis] = 1.0
+            gradient[:, axis] = _trilinear(volume.density, g + step) - _trilinear(volume.density, g - step)
+        n = -gradient @ prep.inv[:3, :3]                  # the covector goes back to world space with the inverse transpose
+        size = np.linalg.norm(n, axis=1)
+        flat = size < 1e-12
+        n = np.where(flat[:, None], -dirs[take], n / np.where(flat, 1.0, size)[:, None])
+        normal[take] = np.where((np.einsum("ij,ij->i", n, dirs[take]) > 0)[:, None], -n, n)
+        if volume.velocity is not None:
+            velocity[take] = _trilinear(volume.velocity, g) @ prep.m[:3, :3].T
+    shape = (height, width)
+    return dict(hit=hit.reshape(shape), depth=np.where(hit, t / length, np.inf).reshape(shape).astype(np.float32),
+                volume=np.where(hit, owner, -1).reshape(shape), position=position.reshape(shape + (3,)),
+                normal=normal.reshape(shape + (3,)), velocity=velocity.reshape(shape + (3,)))
+
+
+def write_data_pass(out, hits, output, volume_id_base):
+    """Write the smoke's samples of `first_hit_data` into a data pass image `out` (H, W, 4, in place) wherever `hits`
+    has one (they are already cut at the surface depth): `volume_id_base` plus the volume's index for `object_id`."""
+    hit = hits["hit"]
+    if output == "depth":
+        out[hit, :3] = hits["depth"][hit, None]
+    elif output == "normals":
+        out[hit, :3] = hits["normal"][hit]
+    elif output == "position":
+        out[hit, :3] = hits["position"][hit]
+    elif output == "uv":
+        out[hit, :3] = 0.0
+    else:
+        out[hit, :3] = 0.0
+        out[hit, 0] = volume_id_base + hits["volume"][hit]
+    out[hit, 3] = 1.0
 
 
 def first_hit_depth(scene, camera, width, height, mesh_depth, settings, cancel=None):

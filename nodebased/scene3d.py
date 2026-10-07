@@ -3968,18 +3968,19 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         # R7 of 7 finish: particles used to be invisible to every data output; now they occlude and are
         # occluded by meshes/splats/volumes exactly like the beauty draw, first-hit and unantialiased.
         _draw_particles_data(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel, output)
-    if scene.volumes and output in ("rgba", "depth"):
+    if scene.volumes and output in ("rgba", "depth", "normals", "position", "uv", "object_id"):
         from . import volumerender
         settings = volume if volume is not None else volumerender.VolumeSettings()
         if output == "rgba":
             volumerender.composite_beauty(scene, camera, width, height, out, depth, settings, ambient, cancel,
                                           _volume_occluders(scene, cancel) if shadows and shadow_count > 0 else None)
         else:
-            first = volumerender.first_hit_depth(scene, camera, width, height, depth, settings, cancel)
-            hit = first < depth
-            out[hit, :3] = first[hit, None]
-            out[hit, 3] = 1
-            depth[hit] = first[hit]
+            # the data passes see the smoke where its density first reaches `volume_depth_threshold` (the depth rule)
+            hits = volumerender.first_hit_data(scene, camera, width, height, depth, settings, cancel)
+            hit = hits["hit"] & (hits["depth"] < depth)
+            hits["hit"] = hit
+            volumerender.write_data_pass(out, hits, output, volume_id_base(scene))
+            depth[hit] = hits["depth"][hit]
     if output in _SPLAT_LAYERS and not scene.splats:
         out[:] = 0
     if output == "rgba":
@@ -4739,8 +4740,14 @@ def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth,
 # Object ids after every geometry (1..len(scene.geometries)) and every splat instance: one id per
 # particle, `id_base + particle_sprites`'s per-particle id (R7 of 7 finish, "particles in the data
 # outputs"). `cryptomatte3d._names` extends its manifest to match.
-def particle_id_base(scene):
+def volume_id_base(scene):
+    """The `object_id` of the scene's first volume: the ids go geometries, splats, one per volume, then one per particle (so
+    a volume's id does not depend on how many particles there are, nor on a tracer that leaves them out)."""
     return len(scene.geometries) + len(scene.splats) + 1
+
+
+def particle_id_base(scene):
+    return volume_id_base(scene) + len(scene.volumes)
 
 
 def _draw_particles_data(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel, output):

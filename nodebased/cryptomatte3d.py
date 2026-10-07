@@ -14,8 +14,9 @@ carries exactly one winning id, never a blend, so averaging IDs across subsample
 that hit nothing. Instead every subsample's id is kept and binned per output pixel into ranked
 (id, coverage) pairs, coverage = subsample count / total subsamples.
 
-Limits: volumes hold no id (the `object_id` pass never raymarches them; see the Render3D known
-limit in docs/PARITY_2D.md) and their coverage is not represented in any of the three sets. Splats
+Volumes hold one id each (`scene3d.volume_id_base`, after the splats): the `object_id` pass puts a volume where
+its density first reaches `volume_depth_threshold`, the depth pass's rule, so Cryptomatte isolates smoke by the name of its
+solver (`volume<n>` when it has none) in `CryptoObject` and `CryptoAsset` and `volume` in `CryptoMaterial`. Splats
 get a name from their ReadSplat3D node but share one `CryptoMaterial` entry ("splat"): a splat
 cloud carries no material name, only PBR scalars. `MergeGeo3D` collapses its inputs into one
 Geometry, so a merged object is one Cryptomatte id, not one per original input (the same limit
@@ -54,6 +55,9 @@ def _names(scene, kind):
             names.append(sp.name or f"splat{j}")
         else:
             names.append(sp.name or f"splat{j}")
+    # One entry per volume, in `scene3d.volume_id_base`'s order, named by its solver (`Volume.name`) when it has one.
+    for k, volume in enumerate(scene.volumes, 1):
+        names.append("volume" if kind == "material" else (volume.name or f"volume{k}"))
     # One entry per particle (R7 of 7 finish), in `scene3d.particle_id_base`'s own order: object gives
     # each particle its own id ("particle<n>", n the same 0-based id `particle_sprites` assigns it this
     # frame), asset groups every particle of one ParticleRender3D/emitter output under "particles<k>"

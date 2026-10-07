@@ -1051,6 +1051,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
     cls = np.full(n, -1, np.int32)             # the first scatter's lobe: 0 diffuse, 1 specular (liquid counts)
     prev_delta = np.ones(n, bool)              # the last scatter was a perfect mirror or refraction (no MIS)
     prev_shape = np.full(n, -1, np.int64)      # the shape of the last surface scatter (-1: none, or a liquid or smoke vertex)
+    smoke_run = np.zeros(n, np.int64)          # smoke vertices in a row so far (`volume_multi_scatter` acts at the second)
     capped = np.zeros(n, bool)                 # the last scatter reached its kind's cap: the next ray sees emitters only
     prev_pdf = np.zeros(n)
     medium = np.full(n, -1, np.int64)
@@ -1084,9 +1085,12 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
             t_end = np.minimum(t, np.where(vd >= 1, t_light, np.inf))
             t_event, glow, in_volume = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel)
             evented = t_event < t_end
+            smoke_run[rows[~evented]] = 0
             if glow.any():
                 g_idx = np.flatnonzero(glow.max(axis=1) > 0)
                 gathered = throughput[rows[g_idx]] * glow[g_idx]
+                # fire seen from a smoke vertex is the fire lighting the smoke: `volume_fire_light` is its gain
+                gathered = gathered * np.where(prev_shape[rows[g_idx]] <= -3, ps.volumes.settings.fire_light, 1.0)[:, None]
                 seen_first = vd[g_idx] == 0
                 acc.emission[rows[g_idx][seen_first]] += gathered[seen_first]
                 if (~seen_first).any():
@@ -1139,7 +1143,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
                 first["t"][fr], first["pos"][fr] = t_event[fresh], ro[fresh] + rd[fresh] * t_event[fresh][:, None]
             _medium_event(ps, keys, rows[e], (ro[e] + rd[e] * t_event[e][:, None]), rd[e], vd[e], o, d, throughput,
                           alive, counts, cls, prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim,
-                          cancel, skip, in_volume[e])
+                          cancel, skip, in_volume[e], smoke_run[rows[e]])
+            smoke_run[rows[e]] += 1
             prev_shape[rows[e]] = -3 - in_volume[e]     # a smoke vertex: `PathScene.reaches` reads its volume's link
         # rays that leave the scene see the ambient sky and the environments; a camera ray sees an
         # environment too when that environment's `visible_to_camera` is on, replacing the flat background
@@ -1283,9 +1288,11 @@ def _volume_reaches(ps, owner, bit):
 
 
 def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls, prev_delta, prev_pdf, capped,
-                  bounces, vertex_depth, acc, settings, dim, cancel, skip, owner):
+                  bounces, vertex_depth, acc, settings, dim, cancel, skip, owner, run):
     """A real collision at points `pos` of paths `r` (arriving along `wd`) in volumes `owner`: absorb, or scatter with
-    light sampling and a phase-sampled continuation."""
+    light sampling and a phase-sampled continuation. `run` is how many smoke vertices in a row each path has had before
+    this one: at the second (run 1) the path's throughput gains `1 + volume_multi_scatter`, once, so everything it gathers
+    after two scatterings in smoke (this vertex's light, the sky, a light, fire) is brightened and 0 changes nothing."""
     layer = ps.volumes
     n = len(r)
     key = keys[r]
@@ -1297,6 +1304,7 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
     if not len(keep):
         return
     r, pos, wd, vd, key, owner = r[keep], pos[keep], wd[keep], vd[keep], key[keep], owner[keep]
+    run = run[keep]
     n = len(r)
     none = np.full(n, -1)
     zero = np.zeros((n, 3))
@@ -1355,7 +1363,7 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
         weight = weight * _splat_light(ps, pos[idx], wi[idx], np.full(len(idx), np.inf), none[idx], zero[idx], cancel, bit)
         direct[idx] += (f * weight)[:, None] * radiance[idx]
     tint = layer.color
-    tp = throughput[r]
+    tp = throughput[r] * np.where(run == 1, 1.0 + layer.settings.multi_scatter, 1.0)[:, None]
     gathered = tp * tint * direct
     first_vertex = vd == 0
     if first_vertex.any():
@@ -1789,8 +1797,9 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         stats["backend"] = "cpu"
     if output in DATA_OUTPUTS:
         data = render_data(ps, camera, width, height, output, cancel)
-        if output == "depth" and ps.volumes is not None:
-            data = merge_volume_depth(scene, camera, width, height, data, ps.volumes.settings, cancel)
+        if ps.volumes is not None:
+            surface = data if output == "depth" else render_data(ps, camera, width, height, "depth", cancel)
+            data = merge_volume_data(scene, camera, width, height, data, output, ps.volumes.settings, surface, cancel)
         return data
     npix = width * height
     channel = _channels(output)
@@ -1945,16 +1954,25 @@ def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0
     return _read_only((total / count).astype(np.float32))
 
 
+def merge_volume_data(scene, camera, width, height, data, output, settings, surface, cancel=None):
+    """The data pass `output` (`data`, from `render_data` or the card) with the smoke put in where its first sample at
+    `settings.depth_threshold` is nearer than the surface (`surface`, the surfaces' depth pass, alpha 1 where covered):
+    the depth is that sample's view depth, `position` its world position, `normals` the density gradient pointing out of
+    the smoke (turned toward the eye), `object_id` `scene3d.volume_id_base` plus the volume's index, `uv` zero, alpha 1.
+    The raymarch finds the sample (one per pixel, never blurred), so both tracers agree on it exactly."""
+    from . import volumerender
+    covered = surface[..., 3] > 0
+    nearest = np.where(covered, surface[..., 0], np.inf)
+    hits = volumerender.first_hit_data(scene, camera, width, height, nearest, replace(settings, motion_blur=0.0), cancel)
+    hits["hit"] = hits["hit"] & (hits["depth"] < nearest)
+    merged = np.array(data)
+    volumerender.write_data_pass(merged, hits, output, s.volume_id_base(scene))
+    return _read_only(merged)
+
+
 def merge_volume_depth(scene, camera, width, height, data, settings, cancel=None):
     """The depth pass with the smoke's first sample at `depth_threshold` merged in, as the other renderers do."""
-    from . import volumerender
-    surface = np.where(data[..., 3] > 0, data[..., 0], np.inf)
-    through = volumerender.first_hit_depth(scene, camera, width, height, surface, settings, cancel)
-    nearer = np.isfinite(through) & (through < surface)
-    merged = np.array(data)
-    merged[nearer, 0], merged[nearer, 3] = through[nearer], 1.0
-    merged[nearer, 1:3] = through[nearer][:, None]
-    return _read_only(merged)
+    return merge_volume_data(scene, camera, width, height, data, "depth", settings, data, cancel)
 
 
 def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend="cpu", volume=None, stats=None):

@@ -1253,6 +1253,19 @@ reference; `Backend` `gpu` and `auto` compute the same passes with the same name
 reference's order; the parity tests hold 2e-3 of the pass maximum). The GPU takes the mesh depth from its own
 raster depth render, so a card cuts the smoke exactly as on the CPU.
 
+**Data passes.** The `depth`, `normals`, `position`, `uv` and `object_id` outputs (and the Cryptomatte sets, which are built from
+`object_id`) see the smoke where its scaled density first reaches `volume_depth_threshold`, the depth pass's rule, when that
+sample is nearer than the surfaces: `depth` is the sample's view depth, `position` its world position, `normals` the density
+gradient there pointing out of the smoke and turned toward the eye (a flat spot faces the camera), `uv` zero, `object_id`
+`scene3d.volume_id_base` plus the volume's index (the ids run geometries, splats, volumes, then particles), alpha 1,
+never antialiased and never blurred. `volumerender.first_hit_data` finds the sample and every renderer shares it, so the
+raster, ray-traced and path-traced modes, the card and the reference agree on it exactly. Cryptomatte names a volume by its
+solver's name (`volume<n>` when it has none) in `CryptoObject` and `CryptoAsset` and `volume` in `CryptoMaterial`.
+`motionblur.motion_vectors` (the `motion` output and pass) gives the smoke the vector of that same sample: the point moves
+along the velocity field there (`volume_fps` frames a second) and with the volume's matrix if the later scene changed it,
+and is projected by the later camera; a volume with no velocity moves only with its transform and the camera. Tests:
+`tests/test_volume_data_passes.py`.
+
 **GPU volume raymarch (`nodebased/gpuvolume.py`).** The GPU path is a line-by-line port of the CPU
 reference: the same knobs, the same lights (Directional, Point, Spot with cone and falloff through the shared
 `attenuation` function), the same per-segment integral, shadow rays through the same grid and the same
@@ -1637,8 +1650,13 @@ buffer is too big for it.
   every analytic light, the environment (CDF sampled) and the ambient sky through the phase sampling, MIS-weighted, with
   a shadow ray that meets meshes, splats and every volume (`exp(-tau)`, the raymarch's shadow optical depth with
   `volume_shadow_steps` and `volume_shadow_density`). Scattering continues up to the bounce limits, so smoke is lit by
-  the dome, by light bounced off meshes and splats, and by other smoke. `volume_multi_scatter` and `volume_fire_light`
-  are ignored: the tracer computes what they approximate. A scattering-only cloud in a uniform sky of 1 renders as 1
+  the dome, by light bounced off meshes and splats, and by other smoke. The tracer computes the multiple scattering and
+  the fire's light on the smoke that the raymarch approximates, and the two knobs are artist gains on them, zero and one
+  leaving the render as it was: `volume_multi_scatter` m multiplies the path's throughput by 1 + m once, at its second
+  smoke collision in a row, so everything gathered after two scatterings in smoke (light, the sky, fire, other smoke)
+  is that much brighter and a single scattering is untouched; `volume_fire_light` multiplies the fire a smoke vertex
+  collects (the emission its ray sees after a smoke collision), so 0 leaves the fire seen directly and what lights meshes
+  and splats alone and stops it lighting the smoke, and 3 triples its light on the smoke. A scattering-only cloud in a uniform sky of 1 renders as 1
   (tested), absorption darkens it, the colour tints it.
 - Units. The phase function is the physical one, the raymarch's is 1: one scattering event lit by a light of intensity
   `I` gives `I / 4` per unit optical depth here, and a thick cloud's brightness comes from real multiple scattering, so a
@@ -1680,9 +1698,12 @@ buffer is too big for it.
   cubed on the NVIDIA card, 256 cubed on the CPU). The NVIDIA column was taken at 5:23 to 5:25 AM, just before that card
   stopped answering Vulkan (a driver fault, Xid 62, at 5:25 AM) and could not be repeated; the CPU, AMD and llvmpipe columns
   were measured after it.
-- **Limits.** The data passes other than `depth` do not see volumes (`depth` takes the raymarch's first
-  sample at its density threshold, merged with the surfaces' depth); the smoke does not take `volume_multi_scatter` or
-  `volume_fire_light`.
+- **Limits.** Smoke has no surface, so its `uv` is zero and its normal is the density gradient at one sample (noisy where
+  the density is flat or grainy); the data passes find that sample with the CPU raymarch on both backends (one ray per
+  pixel, cut at the surface depth the backend itself produced), so a 256 cubed plume costs a raymarch pass per data output;
+  smoke blurs only through Render3D's shutter ("Motion blur"), `volume_motion_blur` is the raymarch's; the multiple
+  scattering and fire light knobs are gains at the points above, not a second approximation; a sparse volume under motion
+  blur is densified for the frame. Cryptomatte coverage of smoke is by its first sample, not by its opacity.
 
 **On the GPU** (`gpupathtrace.py`; the same integrator, the same random numbers, so the card and the reference agree
 statistically, not bit for bit).
@@ -1712,8 +1733,8 @@ statistically, not bit for bit).
   zero-padded trilinear in the `[ix, iy, iz]` order the raymarch uses, which a test pins with an oblong, turned cloud.
 - **Data passes.** `depth`, `normals`, `position`, `uv` and `object_id` take the first splat where the accumulated
   opacity reaches one half, found by peeling (a tree walk for the nearest splat after the previous one, up to 512
-  layers) rather than a sort; `depth` merges the raymarch's first sample in smoke exactly as the reference does
-  (`pathtrace.merge_volume_depth`). `albedo` is the first hit's, the smoke's colour where the first event is in smoke.
+  layers) rather than a sort; every one of them merges the raymarch's first sample in smoke exactly as the reference does
+  (`pathtrace.merge_volume_data`, "Data passes" under Volumes). `albedo` is the first hit's, the smoke's colour where the first event is in smoke.
 - **The denoiser gets its variance.** The GPU sums each pixel's luminance and its square already (for the adaptive
   tile stop); `stats["variance"]` now hands the filter the same estimate the reference gives it, instead of a guess from
   the picture. With splats and smoke the filtered beauty is 2.1 times closer to a 4,096-sample reference at 16 samples
@@ -1739,7 +1760,9 @@ statistically, not bit for bit).
   an eighth of the paths of a mesh-only one for scenes with splats or smoke (`SOFT_SLOWDOWN`, 65,000 paths) so a
   submission stays short; the smoke's
   majorant is the two-level grid above (header vec4 7 holds the fine grid's offset and cell edge, vec4 9 the coarse grid's
-  and its ratio); the volume knobs `volume_multi_scatter` and `volume_fire_light` are ignored as on the reference.
+  and its ratio); `volume_multi_scatter` and `volume_fire_light` reach the shader in `params.vp3` and act as on the reference
+  (a second smoke collision in a row gains 1 + the amount on the throughput, a fire seen from a smoke vertex is multiplied
+  by the fire light), and the volumes' data passes are the reference's, merged over the card's surface depth.
 - **Which adapters run splats and smoke on the GPU** (`soft_supported`, lane L4 step G). The 0.31.0 tag showed the
   splats-and-volumes shader variant giving wrong pictures on an AMD integrated GPU (a mis-shaded albedo and a beauty
   pass about ten times too dark where a splat cloud and smoke shared a scene) and on Microsoft's software driver
@@ -2874,3 +2897,21 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   and llvmpipe (via `run/force-adapter.py`). Inferred: PSNR is identical across the two hardware GPUs because the seeds
   and sample indices are the same; the repeat run showed fixed 64's wall time on X1 can move by 100 ms between runs, so the
   X1 ratio is 43% to 60%.
+- Rendering 8 step T3 of 3: volumes in the path tracer. (1) **Majorant grid**: the CPU reference gets the two-level grid the
+  GPU had one level of (`ptvolume.majorant_levels`; the GPU gains the coarse level, header vec4 9), an empty cell is exactly
+  zero (it was one denormal, so nothing could be skipped by stride), and both tracers count collisions (CPU
+  `VolumeLayer.counts`, GPU the `COUNT_COLLISIONS` shader variant); on a plume filling 10.1% of its cube the null
+  collisions per camera path fall from 113 to 4 (128 cubed) and 1 (256 cubed), and the time per sample to 12 to 17% of the
+  box's on the CPU, to 15% (256 cubed) on the RTX 3080 Ti, 7% on the AMD card and 12% on llvmpipe (table under "Splats and
+  smoke in the path tracer"). (2) **Volume motion blur**: smoke follows Render3D's shutter in path tracer mode, carried
+  by its velocity or mixed between two cache frames ("Motion blur"). (3) **Data passes**: `depth`, `normals`, `position`,
+  `uv`, `object_id`, Cryptomatte, the SceneState manifest and the `motion` pass read the smoke's first sample at
+  `volume_depth_threshold`; `volume_multi_scatter` and `volume_fire_light` are gains in both tracers; the ids now run
+  geometries, splats, volumes, particles (`particle_id_base` moved up by the number of volumes). (4) Docs as above, bundled
+  copy identical. (5) Tests: `test_volume_majorant_grid.py`, `test_volume_path_motion_blur.py`, `test_volume_data_passes.py`,
+  and the volume, motion, Cryptomatte, SceneState and light linking modules that touch the files, on the AMD card
+  and llvmpipe and the CPU reference. **The RTX 3080 Ti stopped answering Vulkan at 5:25 AM on October 7** (kernel
+  log: Xid 62, the card's PMU halted, then "GPU is probably locked", `nvidia-smi` shows ERR!), minutes after the NVIDIA
+  benchmark rows of the majorant table were taken and before any test of this step was run, so the card's test results
+  for parts 1 to 3 are missing (`gpu3d`'s default adapter has been the AMD Radeon 8060S since). Needs Gonzo: after the card is reset, run `tests/test_volume_majorant_grid.py`,
+  `tests/test_volume_path_motion_blur.py` and `tests/test_volume_data_passes.py` on it.

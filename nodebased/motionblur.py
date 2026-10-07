@@ -187,7 +187,9 @@ def next_scene(base, evaluated, frames=1.0):
     instances = tuple(
         later.instances[i] if base.instances[i].velocities is not None or len(evaluated.instances) != len(base.instances)
         else evaluated.instances[i] for i in range(len(base.instances)))
-    return replace(later, geometries=geometries, instances=instances)
+    volumes = (tuple(replace(b, matrix=e.matrix) for b, e in zip(later.volumes, evaluated.volumes))
+               if len(evaluated.volumes) == len(later.volumes) else later.volumes)       # a moving volume moves with its transform
+    return replace(later, geometries=geometries, instances=instances, volumes=volumes)
 
 
 def _world_points(ps, shape, prim, u, v):
@@ -203,24 +205,31 @@ def _world_points(ps, shape, prim, u, v):
     return out
 
 
-def motion_vectors(scene, camera, later_scene, later_camera, width, height, frames=1.0):
-    """Screen-space motion of the meshes in pixels per frame: (height, width, 4) float32 with x (right) in red, y
-    (down) in green, blue 0 and alpha 1 where a mesh is under the pixel centre. The vector of a pixel is where its
-    surface point is `frames` later, seen by `later_camera`, minus where it is now, over `frames`; so a moving object,
-    a deforming one and a moving camera all show, and the result feeds VectorBlur's `forward` method directly. Splats
-    and volumes have none (alpha 0). A mesh whose triangles no longer pair up in `later_scene` gets a zero vector."""
+def motion_vectors(scene, camera, later_scene, later_camera, width, height, frames=1.0, volume=None):
+    """Screen-space motion of the meshes and the smoke in pixels per frame: (height, width, 4) float32 with x (right) in
+    red, y (down) in green, blue 0 and alpha 1 where a mesh (or smoke) is under the pixel centre. The vector of a pixel is
+    where its surface point is `frames` later, seen by `later_camera`, minus where it is now, over `frames`; so a moving
+    object, a deforming one and a moving camera all show, and the result feeds VectorBlur's `forward` method directly.
+    Splats have none (alpha 0). A mesh whose triangles no longer pair up in `later_scene` gets a zero vector.
+
+    Smoke counts where its density first reaches `volume.depth_threshold` (the depth pass's rule, a `VolumeSettings`;
+    defaults when None), if that is nearer than the surfaces: the point there moves along the volume's velocity field
+    (per second in its own space, `volume.fps` frames a second) and with the volume's matrix, which `later_scene` may have
+    changed. A volume without a velocity field moves only with its matrix and the camera."""
     from . import pathtrace as pt, scene3d as s
     width, height = int(width), int(height)
     ps = pt.build_scene(scene)
     later = pt.build_scene(later_scene)
     n = width * height
     out = np.zeros((n, 4), np.float32)
+    surface = np.full(n, np.inf)
     pixel = np.arange(n)
     d, eye, cos, tmin, tmax = pt.camera_rays(camera, width, height, pixel % width + 0.5, pixel // width + 0.5)
     for start in range(0, n, pt._CHUNK):
         sl = slice(start, min(start + pt._CHUNK, n))
         o = np.broadcast_to(eye, (sl.stop - sl.start, 3))
-        _, shape, prim, u, v = pt.closest(ps, o, d[sl], tmin[sl], tmax[sl])
+        t, shape, prim, u, v = pt.closest(ps, o, d[sl], tmin[sl], tmax[sl])
+        surface[sl] = np.where(shape >= 0, t * cos[sl], np.inf)
         mesh = np.flatnonzero((shape >= 0) & ~ps.is_splat(shape))
         if not len(mesh):
             continue
@@ -247,8 +256,41 @@ def motion_vectors(scene, camera, later_scene, later_camera, width, height, fram
         block[mesh, 0:2] = vector
         block[mesh, 3] = 1.0
         out[sl] = block
+    if scene.volumes:
+        _smoke_vectors(out, surface.reshape(height, width), scene, camera, later_scene, later_camera, width, height,
+                       frames, volume)
     out.flags.writeable = False
     return out.reshape(height, width, 4)
+
+
+def _smoke_vectors(out, surface, scene, camera, later_scene, later_camera, width, height, frames, settings):
+    """Fill `out` (pixels, 4) with the motion of the smoke wherever its first sample is nearer than the first surface
+    (`surface`, view depth per pixel, inf for none)."""
+    from . import scene3d as s, volumerender
+    settings = settings or volumerender.VolumeSettings()
+    hits = volumerender.first_hit_data(scene, camera, width, height, surface.reshape(height, width),
+                                       replace(settings, motion_blur=0.0))
+    hit = np.flatnonzero(hits["hit"].reshape(-1))
+    if not len(hit):
+        return
+    position = hits["position"].reshape(-1, 3)[hit]
+    velocity = hits["velocity"].reshape(-1, 3)[hit]
+    owner = hits["volume"].reshape(-1)[hit]
+    ahead = position.copy()
+    for index in np.unique(owner):
+        take = owner == index
+        base = scene.volumes[index].matrix.astype(np.float64)
+        later_matrix = (later_scene.volumes[index].matrix.astype(np.float64)
+                        if len(later_scene.volumes) == len(scene.volumes) else base)
+        inverse = np.linalg.inv(base)
+        local = position[take] @ inverse[:3, :3].T + inverse[:3, 3]
+        local = local + (velocity[take] @ inverse[:3, :3].T) * (float(frames) / float(settings.fps))
+        ahead[take] = local @ later_matrix[:3, :3].T + later_matrix[:3, 3]
+    a, _ = s.project(camera, width, height, position)
+    b, _ = s.project(later_camera, width, height, ahead)
+    out[hit, 0:2] = (b - a) / float(frames)
+    out[hit, 2] = 0.0
+    out[hit, 3] = 1.0
 
 
 def averaged(images):

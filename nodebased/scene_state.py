@@ -119,6 +119,16 @@ def _object_manifest(scene):
         out.append({"id": f"{cryptomatte.name_to_bits(name):08x}", "name": name,
                     "type": "splat", "world_transform": np.asarray(_matrix(splat)).tolist(),
                     "world_bounding_box": None})
+    for i, volume in enumerate(resolved.volumes, 1):
+        name = volume.name or f"volume{i}"
+        matrix = np.asarray(volume.matrix, dtype=np.float64)
+        low = np.asarray(volume.origin, dtype=np.float64)
+        high = low + np.asarray(volume.density.shape[:3], dtype=np.float64) * float(volume.voxel_size)
+        corners = np.array([[x, y, z] for x in (low[0], high[0]) for y in (low[1], high[1]) for z in (low[2], high[2])])
+        world = corners @ matrix[:3, :3].T + matrix[:3, 3]
+        out.append({"id": f"{cryptomatte.name_to_bits(name):08x}", "name": name, "type": "volume",
+                    "world_transform": matrix.tolist(),
+                    "world_bounding_box": [world.min(axis=0).tolist(), world.max(axis=0).tolist()]})
     particle_index = 0
     for particle in scene.particles:
         matrix = np.asarray(particle.matrix, dtype=np.float64)

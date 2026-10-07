@@ -1522,7 +1522,8 @@ class Evaluator:
                         from . import motionblur
                         later_scene, later_camera = motion_later
                         value = Raster.of(motionblur.motion_vectors(scene, camera, later_scene, later_camera,
-                                                                    params["width"], params["height"]))
+                                                                    params["width"], params["height"],
+                                                                    volume=_volume_settings(params)))
                         self._store(digest, value)
                         values[key] = value
                         continue
@@ -1547,7 +1548,8 @@ class Evaluator:
                         if "motion" in scene3d.parse_passes(params.get("passes", scene3d.DEFAULT_PASSES)):
                             later_scene, later_camera = motion_later
                             motion_layer = motionblur.motion_vectors(scene, camera, later_scene, later_camera,
-                                                                     params["width"], params["height"])
+                                                                     params["width"], params["height"],
+                                                                     volume=_volume_settings(params))
                         if motion_moments:
                             beauty, extra = motionblur.multichannel(
                                 motion_moments, params["width"], params["height"], args[4],
