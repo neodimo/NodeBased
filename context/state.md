@@ -1,5 +1,48 @@
 ## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (8:25 AM on 2026-10-07 PDT)
+
+`main` moved `60e2841` -> `a178fc6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 134 tests in 73.889 s, OK. Full suite on
+the stacked tip `a178fc6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1007-0655.log`, started 6:55 AM): **Ran 4641 tests in 4863.157 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step T3 of 3: volumes in the path tracer: a majorant grid, motion blur, and the data passes.** Commits:
+  - `8846765` Data passes see volumes: normals as the density gradient, position, ids and Cryptomatte for the volume, motion from the velocity field, with the depth pass's threshold; smoke honours volume_multi_scatter and volume_fire_light in both path tracers; docs and SceneState manifest (Lane 4 Rendering 8 step T3, parts 3 and 4)
+  - `ee3132b` Volume motion blur in the path tracers: smoke carried along its velocity across Render3D's shutter, or mixed between two cache frames where it has none (Lane 4 Rendering 8 step T3, part 2)
+  - `20d40c2` Volumes in the path tracers: a two-level majorant grid on the CPU and GPU (empty coarse cells crossed in one stride, tight bounds in the fine cells), collision counters, benchmark and tests (Lane 4 Rendering 8 step T3, part 1)
+  Diff: 17 files changed, 1424 insertions(+), 183 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step N3 of 3: one production-sized scene that uses everything, and its numbers (finish 1).** Commits:
+  - `2cd5941` docs: outline Hot pour benchmark section
+  - `c9822b7` fix: the whitewater's neighbour list is evaluated in slices of particles that each fit the adapter's storage binding (at 256 cells it was 2.2 GB against 2 GiB and the error ended the bake); Lane 6 step N3, part 3
+  - `b26bb9c` perf: whitewater foam and bubbles find their nearest liquid particle with array operations, same indices (1.7 of the 2.1 seconds of a 256-cell whitewater frame); Lane 6 step N3, part 3
+  - `9c95379` perf: the whitewater's neighbour lists are built with array operations, same lists bit for bit (10 times faster at 60,000 particles; the whitewater was 296 of the 435 seconds of a 128-cell Hot pour bake); Lane 6 step N3, part 3
+  - `b175e72` fix: whitewater emits at fine resolutions: Energy per unit mass (kinetic_energy_per_mass) takes the kinetic-energy potential as 0.5 v^2 instead of 0.5 m v^2 with m the particle's volume, which fell with the cube of the resolution until no liquid at 128 cells or finer reached the knob's range (Hot pour's whitewater emitted nothing); off by default, so old documents are unchanged; Lane 6 step N3, part 3
+  - `42bac07` test: the resident liquid's maintenance counts (emitted, topped up, dropped) add up (Lane 6 step N3)
+  - `dc69444` Hot pour: the spout speed is metres a second converted to the source's per-frame unit (it was 1.4 a frame, 34 m/s, and the stream hit its own box); substeps follow the resolution so the fastest particle stays under about two cells a substep; the resident liquid reports what each substep emitted, topped up and dropped; Lane 6 step N3
+  - `aa8975f` docs: FluidSource3D's Grow by cells and Animated geometry in the node tables, with the bundled copies (Lane 6 step N3)
+  - `b8850a8` Hot pour: a wooden table top and a two-surface glass for the picture, tea-coloured liquid, thinner steam, a camera that frames the glass and the spout; the benchmark renders the stills through Render3D on the GPU path tracer; Lane 6 step N3, parts 1 and 4
+  - `5db1c9d` fix: the resident solvers re-uploaded a collider mask only when id(mask) changed, so a new mask that took a freed mask's id left the old box's solids on the card (adaptive Hot pour bakes differed run to run); add the Hot pour scene, preset, benchmark and tests (reduced 32-cell bake: deterministic, steam out of the liquid, liquid in the glass, restart); Lane 6 step N3, parts 1, 3 and 6
+  - `8f3cf79` perf: hashing the geometry of every frame in a fluid's range no longer builds it: evaluate_raster(digest_only) returns the digest the walk computes before the value (steam off a liquid surface re-meshed the whole range for every frame it solved); Lane 6 step N3, part 3
+  - `6f62cfd` fix: FluidSource3D gets Animated geometry, so steam off a liquid that does not exist at frame 1 comes out once it does (a surface source was sampled only at its start frame unless Inherit velocity was above zero); Lane 6 step N3, part 3
+  - `8b0c715` fix: the card's memory stays bounded over a long bake: resized grids are destroyed, a read state no longer pins its solver, and successive frames of one run reuse one solver (24 frames of a 128-cell liquid held 4.5 GB, one grid per frame); Lane 6 step N3, part 3
+  - `f216301` fix: steam off a liquid the smoke also collides with: FluidSource3D gets Grow by cells (src_dilate), a surface or volume footprint grown outside the colliders' cells (before, density emitted into collider cells was cleared and no steam appeared); Lane 6 step N3, part 3
+  - `ff7d49c` fix: a sparse smoke checkpoint's tile mask is shifted by whole tiles when the adaptive box moves (it was padded out as a cell field and the next substep failed with Invalid data_length); Lane 6 step N3, part 3
+  - `dbf4e20` feat: the GPU-resident liquid solver runs surface tension and an adaptive domain on the card (both used to push a scene back onto the slow transfer path); Lane 6 step N3, part 3
+  - `8915ef7` perf: voxelise a surface mesh in batches instead of one triangle at a time (a 78,000-triangle liquid surface: 14 s to 0.5 s; same cells, same mean velocities); steam collides with the liquid surface every frame (Lane 6 step N3, part 3)
+  - `41f681a` fix: a wide collider no longer widens an adaptive fluid domain to its own width: colliders count only within one padding band of the fluid (Lane 6 step N3, part 3)
+  - `fd78760` fix: a collider that runs past the fluid domain is solid right up to the edge (a clipped table was a one-cell sheet the liquid fell through); fluid Lane 6 step N3, part 3
+  Diff: 24 files changed, 2869 insertions(+), 115 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (5:15 AM on 2026-10-07 PDT)
 
 `main` moved `b5f2dda` -> `49c75f2` (lane commits cherry-picked onto main in lane order) and then to this
