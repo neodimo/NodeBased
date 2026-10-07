@@ -30,8 +30,13 @@ Transactions: the step writes only the work particle set; the committed set and 
 the substep has finished, so a cancel inside a substep leaves nothing behind (the next `step` of the same state
 repeats the substep from the committed particles).
 
-Not supported on the card (the stream falls back to the `gpu` backend with the reason): viscosity, surface
-tension, a narrow band, auto-resize.
+Surface tension (the continuum-surface-force of `Liquid3D._apply_surface_tension`, six passes over the grid) and
+auto-resize run on the card too (Lane 6 step N3). An adaptive domain reduces the live particles' bounding box on the
+card (one 24 KB read per substep), fits the box with the reference's own `Liquid3D._fit_box`, and reallocates the grid
+buffers when the box changes; the particles stay where they are, since they live in world space, and every grid field is
+rebuilt from them each substep.
+
+Not supported on the card (the stream falls back to the `gpu` backend with the reason): viscosity and a narrow band.
 """
 from __future__ import annotations
 
@@ -437,6 +442,88 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
 }
 """)
 
+# --- surface tension ----------------------------------------------------------------------------------
+# The continuum-surface-force of `Liquid3D._apply_surface_tension` on the card: the liquid/air occupancy smoothed by
+# three binomial passes (edges replicated), its normalised gradient as the normal, the divergence of the normal as the
+# curvature, applied inward on the cells that touch the other phase and averaged onto the faces between cells.
+
+_GRADIENT = """
+fn gr_BUF(c: u32, x: u32, y: u32, z: u32, ax: u32) -> f32 {
+    var n = P.a.x; var i = x; var stride = P.a.y * P.a.z;
+    if (ax == 1u) { n = P.a.y; i = y; stride = P.a.z; }
+    if (ax == 2u) { n = P.a.z; i = z; stride = 1u; }
+    if (i == 0u) { return BUF[c + stride] - BUF[c]; }
+    if (i + 1u >= n) { return BUF[c] - BUF[c - stride]; }
+    return 0.5 * (BUF[c + stride] - BUF[c - stride]);
+}
+"""
+
+_CELL_XYZ = """
+    let c = g.x + g.y * 4194240u;
+    if (c >= P.a.w) { return; }
+    let z = c % P.a.z; let y = (c / P.a.z) % P.a.y; let x = c / (P.a.z * P.a.y);
+"""
+
+_kernel("lq_st_smooth", [_c("src"), _c("dst", acc="rw")], """
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {""" + _CELL_XYZ + """
+    var cm = c; var cp = c;
+    let ax = P.b.x;
+    if (ax == 0u) { if (x > 0u) { cm = c - P.a.y * P.a.z; } if (x + 1u < P.a.x) { cp = c + P.a.y * P.a.z; } }
+    else if (ax == 1u) { if (y > 0u) { cm = c - P.a.z; } if (y + 1u < P.a.y) { cp = c + P.a.z; } }
+    else { if (z > 0u) { cm = c - 1u; } if (z + 1u < P.a.z) { cp = c + 1u; } }
+    dst[c] = (src[cm] + 2.0 * src[c] + src[cp]) * 0.25;
+}
+""")
+
+_kernel("lq_st_normal", [_c("s"), _c("n0", acc="rw"), _c("n1", acc="rw"), _c("n2", acc="rw")], """
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {""" + _CELL_XYZ + """
+    let gv = vec3<f32>(gr_s(c, x, y, z, 0u), gr_s(c, x, y, z, 1u), gr_s(c, x, y, z, 2u));
+    let m = max(length(gv), 1e-8);
+    n0[c] = gv.x / m; n1[c] = gv.y / m; n2[c] = gv.z / m;
+}
+""", lib=_GRADIENT.replace("BUF", "s"))
+
+_kernel("lq_st_force", [_c("n0"), _c("n1"), _c("n2"), _c("dens"), _c("f0", acc="rw"), _c("f1", acc="rw"),
+                        _c("f2", acc="rw")], """
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {""" + _CELL_XYZ + """
+    let curvature = gr_n0(c, x, y, z, 0u) + gr_n1(c, x, y, z, 1u) + gr_n2(c, x, y, z, 2u);
+    let me = dens[c] > 0.5;
+    var band = false;
+    if (x > 0u) { band = band || ((dens[c - P.a.y * P.a.z] > 0.5) != me); }
+    if (x + 1u < P.a.x) { band = band || ((dens[c + P.a.y * P.a.z] > 0.5) != me); }
+    if (y > 0u) { band = band || ((dens[c - P.a.z] > 0.5) != me); }
+    if (y + 1u < P.a.y) { band = band || ((dens[c + P.a.z] > 0.5) != me); }
+    if (z > 0u) { band = band || ((dens[c - 1u] > 0.5) != me); }
+    if (z + 1u < P.a.z) { band = band || ((dens[c + 1u] > 0.5) != me); }
+    let k = select(0.0, -P.c.x * curvature, band);
+    f0[c] = k * n0[c]; f1[c] = k * n1[c]; f2[c] = k * n2[c];
+}
+""", lib=_GRADIENT.replace("BUF", "n0").replace("gr_n0", "gr_n0")
+    + _GRADIENT.replace("BUF", "n1") + _GRADIENT.replace("BUF", "n2"))
+
+_kernel("lq_st_apply", [_c("f", acc="rw"), _c("force")], """
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+    let i = g.x + g.y * 4194240u;
+    if (i >= P.b.w) { return; }
+    let axis = P.b.x;
+    let nx = P.a.x; let ny = P.a.y; let nz = P.a.z;
+    var fy = ny; var fz = nz;
+    if (axis == 1u) { fy = ny + 1u; }
+    if (axis == 2u) { fz = nz + 1u; }
+    let z = i % fz; let y = (i / fz) % fy; let x = i / (fz * fy);
+    var pos = x; var n = nx; var stride = ny * nz;
+    if (axis == 1u) { pos = y; n = ny; stride = nz; }
+    if (axis == 2u) { pos = z; n = nz; stride = 1u; }
+    if (pos == 0u || pos >= n) { return; }
+    let hc = (x * ny + y) * nz + z;
+    f[i] = f[i] + 0.5 * (force[hc - stride] + force[hc]);
+}
+""")
+
 _kernel("lq_touched", [_c("blk", "u32"), _c("f", acc="rw"), _c("o", acc="rw"), _c("vo", "u32", "rw"),
                        _c("vt", "u32", "rw")], """
 @compute @workgroup_size(64)
@@ -518,6 +605,42 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
         workgroupBarrier();
     }
     if (lid.x == 0u) { out[wid.x] = wg[0]; }
+}
+""")
+
+BOUNDS_GROUPS = 64
+
+_kernel("lq_bounds", [_c("part", "part"), _c("out", acc="rw")], """
+var<workgroup> wg: array<f32, 1536>;
+@compute @workgroup_size(256)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+    let n = P.b.x;
+    var lo = vec3<f32>(3.0e38); var hi = vec3<f32>(-3.0e38);
+    var i = wid.x * 256u + lid.x;
+    loop {
+        if (i >= n) { break; }
+        let q = part[i];
+        if (q.id != 0xFFFFFFFFu) {
+            let p = vec3<f32>(q.px, q.py, q.pz);
+            lo = min(lo, p); hi = max(hi, p);
+        }
+        i = i + 64u * 256u;
+    }
+    let b = lid.x * 6u;
+    wg[b] = lo.x; wg[b + 1u] = lo.y; wg[b + 2u] = lo.z; wg[b + 3u] = hi.x; wg[b + 4u] = hi.y; wg[b + 5u] = hi.z;
+    workgroupBarrier();
+    for (var s = 128u; s > 0u; s = s >> 1u) {
+        if (lid.x < s) {
+            let a = lid.x * 6u; let o = (lid.x + s) * 6u;
+            wg[a] = min(wg[a], wg[o]); wg[a + 1u] = min(wg[a + 1u], wg[o + 1u]); wg[a + 2u] = min(wg[a + 2u], wg[o + 2u]);
+            wg[a + 3u] = max(wg[a + 3u], wg[o + 3u]); wg[a + 4u] = max(wg[a + 4u], wg[o + 4u]);
+            wg[a + 5u] = max(wg[a + 5u], wg[o + 5u]);
+        }
+        workgroupBarrier();
+    }
+    if (lid.x == 0u) {
+        for (var k = 0u; k < 6u; k++) { out[wid.x * 6u + k] = wg[k]; }
+    }
 }
 """)
 
@@ -702,6 +825,8 @@ class _Grid:
         self.gather_out = b(4 * 1024)
         self.gather_cap = 1024
         self.turb = None
+        self.tension = None             # six cell-sized scratch buffers, allocated when surface tension first runs
+        self.bounds_out = b(4 * 6 * BOUNDS_GROUPS)
 
 
 def estimate_bytes(shape, particles=0):
@@ -714,12 +839,8 @@ def unsupported_reason(params, forces=()):
     p = {**flip3d.DEFAULTS, **params}
     if float(p["viscosity"]) > 0.0:
         return "viscosity is not on the card yet"
-    if float(p.get("surface_tension", 0.0)) != 0.0:
-        return "surface tension is not on the card yet"
     if float(p.get("narrow_band", 0.0)) > 0.0:
         return "the narrow band is not on the card yet"
-    if int(p.get("auto_resize", 0)):
-        return "auto-resize is not on the card yet"
     for force in forces:
         if force.kind not in ("gravity", "wind", "drag", "buoyancy", "turbulence"):
             return f"the {force.kind} force is not on the card"
@@ -927,6 +1048,67 @@ class GpuLiquid3D(Liquid3D):
                      _u(b=(m,)), _lin(m))
         return ctx.read(g.gather_out, 4 * m).view(np.uint32).astype(np.int64)
 
+    # -- surface tension and the adaptive domain -----------------------------------------------------
+    def _surface_tension(self, g, amount):
+        """Add the free-surface curvature force (`amount` = tension x dt, in cells) to the face velocities."""
+        ctx, dims, ncells = self.ctx, self.shape, g.n
+        if g.tension is None:
+            g.tension = [ctx.buffer(4 * ncells) for _ in range(6)]
+        s1, s2, s3, n0, n1, n2 = g.tension
+        grid = _u(a=dims + (ncells,))
+        ctx.dispatch("lq_st_smooth", {"src": g.dens, "dst": s1}, _u(a=dims + (ncells,), b=(0,)), _lin(ncells))
+        ctx.dispatch("lq_st_smooth", {"src": s1, "dst": s2}, _u(a=dims + (ncells,), b=(1,)), _lin(ncells))
+        ctx.dispatch("lq_st_smooth", {"src": s2, "dst": s3}, _u(a=dims + (ncells,), b=(2,)), _lin(ncells))
+        ctx.dispatch("lq_st_normal", {"s": s3, "n0": n0, "n1": n1, "n2": n2}, grid, _lin(ncells))
+        ctx.dispatch("lq_st_force", {"n0": n0, "n1": n1, "n2": n2, "dens": g.dens, "f0": s1, "f1": s2, "f2": s3},
+                     _u(a=dims + (ncells,), c=(float(amount),)), _lin(ncells))
+        for axis, force in enumerate((s1, s2, s3)):
+            ctx.dispatch("lq_st_apply", {"f": g.f[axis], "force": force},
+                         _u(a=dims, b=(axis, 0, 0, g.face_n[axis])), _lin(g.face_n[axis]))
+
+    def _device_bounds(self):
+        """(lo, hi) in cells of the live particles on the card, or None without any."""
+        g, ctx = self._grid, self.ctx
+        if self._n_slots == 0 or g is None:
+            return None
+        ctx.dispatch("lq_bounds", {"part": self._sets[self._cur], "out": g.bounds_out}, _u(b=(self._n_slots,)),
+                     ("wg", (BOUNDS_GROUPS, 1, 1)))
+        out = ctx.read(g.bounds_out, 4 * 6 * BOUNDS_GROUPS).view(np.float32).reshape(BOUNDS_GROUPS, 6)
+        lo, hi = out[:, :3].min(axis=0).astype(np.float64), out[:, 3:].max(axis=0).astype(np.float64)
+        if lo[0] > 1.0e38:
+            return None
+        return (lo - self.origin) / self.voxel, (hi - self.origin) / self.voxel + 1.0
+
+    def _fit_domain(self, state, frame, resident):
+        """Resize the box before the substep: the particles' bounds (read from the card, or from a state that is not
+        on it), the sources and the colliders near them, through the reference's own `_fit_box`. The grid buffers are
+        reallocated for a new shape; particles are in world space and stay as they are."""
+        if resident:
+            bounds = self._device_bounds()
+        else:
+            positions = np.asarray(state.arrays["position"], np.float64).reshape(-1, 3)
+            bounds = None if not len(positions) else ((positions.min(axis=0) - self.origin) / self.voxel,
+                                                      (positions.max(axis=0) - self.origin) / self.voxel + 1.0)
+        box = self._fit_box(bounds, frame, include_sources=True)
+        if box is None:
+            return
+        start, _stop, new_shape = box
+        origin = self.origin + start * self.voxel
+        self._adopt(new_shape, origin)
+
+    def _adopt(self, shape, origin):
+        class _Meta:
+            meta = {"domain_shape": list(shape), "domain_origin": [float(v) for v in origin]}
+        self._sync_domain(_Meta)
+        self._release_grid()
+
+    def _release_grid(self):
+        """Drop the grid buffers when the box no longer matches them."""
+        if self._grid is not None and self._grid.shape != tuple(self.shape):
+            self._grid = None
+            self._bins = None
+            self.ctx._groups.clear()
+
     # -- forces ---------------------------------------------------------------------------------------
     def _force_ops(self, frame, substep, dt):
         import math
@@ -963,14 +1145,18 @@ class GpuLiquid3D(Liquid3D):
         if self._cancelled():
             raise Cancelled()
         self._sync_domain(state)
+        self._release_grid()
         flip3d.SOLVER_STATS["steps"] += 1
         ctx = self.ctx
-        g = self._alloc()
-        bins = self._bins
         p, dt = self.params, self.dt
         ctx.flush()                 # the committed substep's queued work finishes before this one can be abandoned
         self._mark_at = time.perf_counter()
         resident = getattr(state, "token", None) is not None and state.token == self._token
+        if int(p.get("auto_resize", 0)):
+            self._alloc()
+            self._fit_domain(state, frame, resident)
+        g = self._alloc()
+        bins = self._bins
         if not resident:
             self._upload(state)
         n_a = self._n_slots
@@ -1083,6 +1269,9 @@ class GpuLiquid3D(Liquid3D):
             elif kind == "turb":
                 cell("apply_cforce", {"u": u, "v": v, "w": w, "cx": g.turb[0], "cy": g.turb[1], "cz": g.turb[2],
                                       "solid": g.solid}, b=(0,), c=(1.0,))
+        tension = float(p.get("surface_tension", 0.0))
+        if tension != 0.0:
+            self._surface_tension(g, tension * dt)
         cell("constrain", {"u": u, "v": v, "w": w, "blk": g.blk, "svel": g.svel},
              b=(open_bits, 0, 0, 1 if g.has_solid else 0), c=(float(g.has_svel),))
         self._mark("forces and constraints")
@@ -1181,6 +1370,8 @@ class GpuLiquid3D(Liquid3D):
         meta["escaped_mass"] = float(meta.get("escaped_mass", 0.0)) + escaped / self.ppc * self.voxel ** 3
         meta.update(next_id=int(next_id), substep_count=int(meta.get("substep_count", 0)) + 1,
                     cg_iterations=int(done), cg_residual=float(res), mg_cycles=int(recorded))
+        if int(p.get("auto_resize", 0)):
+            meta.update(domain_shape=[int(v) for v in self.shape], domain_origin=[float(v) for v in self.origin])
         self.stats.update(cg_iterations=int(done), particles=int(self._n_live))
         return GpuLiquidState(self, self._token, meta)
 
@@ -1215,6 +1406,8 @@ class GpuLiquid3D(Liquid3D):
         self._token = (self._uid, self._serial)
         meta.update(next_id=int(next_id), substep_count=int(meta.get("substep_count", 0)) + 1,
                     cg_iterations=0, cg_residual=0.0)
+        if int(self.params.get("auto_resize", 0)):
+            meta.update(domain_shape=[int(v) for v in self.shape], domain_origin=[float(v) for v in self.origin])
         self.stats.update(cg_iterations=0, particles=0)
         return GpuLiquidState(self, self._token, meta)
 

@@ -373,14 +373,14 @@ class Liquid3D:
         if changed:
             self._systems.clear()
 
-    def _resize_domain(self, state, frame=None, include_sources=False):
-        """Tile-align the liquid free-surface/particle bounds, retaining world-space particles."""
+    def _fit_box(self, bounds, frame=None, include_sources=False):
+        """The tile-aligned (start, stop, new_shape) cell box that fits the liquid, or None when the current box
+        already is it. `bounds` is the particles' cell-space (lo, hi) in the current box, or None without particles;
+        the sources of `frame` and the colliders near the liquid widen it, and the lower world-space floor stays put."""
         padding = max(0, int(self.params.get("padding", 8)))
         cap = max(8, int(self.params.get("max_size", 256)) // 8 * 8)
-        positions = np.asarray(state.arrays.get("position", ()), np.float64).reshape(-1, 3)
-        if len(positions):
-            cell = (positions - self.origin) / self.voxel
-            lo, hi = cell.min(axis=0), cell.max(axis=0) + 1.0
+        if bounds is not None:
+            lo, hi = np.array(bounds[0], np.float64), np.array(bounds[1], np.float64)
             has_bounds = True
         else:
             center = np.asarray(self.shape, np.float64) * 0.5
@@ -428,7 +428,20 @@ class Liquid3D:
                 stop[1] = start[1] + cap
         new_shape = tuple(int(x) for x in stop - start)
         if new_shape == self.shape and not np.any(start):
+            return None
+        return start, stop, new_shape
+
+    def _resize_domain(self, state, frame=None, include_sources=False):
+        """Tile-align the liquid free-surface/particle bounds, retaining world-space particles."""
+        positions = np.asarray(state.arrays.get("position", ()), np.float64).reshape(-1, 3)
+        bounds = None
+        if len(positions):
+            cell = (positions - self.origin) / self.voxel
+            bounds = (cell.min(axis=0), cell.max(axis=0) + 1.0)
+        box = self._fit_box(bounds, frame, include_sources)
+        if box is None:
             return state
+        start, stop, new_shape = box
         spatial_axes = {"liquid_mask": None, "grid_u": 0, "grid_v": 1, "grid_w": 2}
         arrays = dict(state.arrays)
         for name, face_axis in spatial_axes.items():

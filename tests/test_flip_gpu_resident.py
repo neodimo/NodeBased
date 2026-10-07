@@ -250,12 +250,167 @@ class ReferenceAgreementTests(unittest.TestCase):
     def test_unsupported_features_are_named(self):
         from nodebased.flip_gpu_resident import create_solver, unsupported_reason
         self.assertIsNone(unsupported_reason({}))
-        for params, word in (({"viscosity": 0.1}, "viscosity"), ({"surface_tension": 0.1}, "surface tension"),
-                             ({"narrow_band": 2.0}, "narrow band"), ({"auto_resize": 1}, "auto-resize")):
+        for params, word in (({"viscosity": 0.1}, "viscosity"), ({"narrow_band": 2.0}, "narrow band")):
             self.assertIn(word, unsupported_reason(params))
             fallback = create_solver({"nx": 8, "ny": 8, "nz": 8, **params})
             self.assertIn(word, fallback.fallback_reason)
             self.assertIsInstance(fallback, flip3d.Liquid3D)
+
+
+def drop_state(cells, per_cell=8, seed=0):
+    rng = np.random.default_rng(seed)
+    points = np.concatenate([np.asarray(cell)[None, :] + rng.random((per_cell, 3)) for cell in cells]).astype(np.float32)
+    arrays = flip3d.empty_arrays()
+    arrays.update(position=points, velocity=np.zeros_like(points), id=np.arange(len(points), dtype=np.int64),
+                  age=np.zeros(len(points), np.int32), temperature=np.ones(len(points), np.float32))
+    return State(arrays, {"next_id": len(points), "substep_count": 0})
+
+
+def count_pieces(positions):
+    occupied = set(map(tuple, np.floor(positions).astype(np.int64)))
+    pieces = 0
+    while occupied:
+        pieces += 1
+        stack = [occupied.pop()]
+        while stack:
+            x, y, z = stack.pop()
+            for cell in ((x + 1, y, z), (x - 1, y, z), (x, y + 1, z), (x, y - 1, z), (x, y, z + 1), (x, y, z - 1)):
+                if cell in occupied:
+                    occupied.remove(cell)
+                    stack.append(cell)
+    return pieces
+
+
+@unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
+class SurfaceTensionTests(unittest.TestCase):
+    """Lane 6 step N3: surface tension on the card. The Hot pour liquid needs it and the resident solver used to
+    refuse it, so a scene with surface tension fell back to the slow transfer path."""
+
+    def test_the_resident_solver_accepts_surface_tension(self):
+        solver = resident({"nx": 8, "ny": 8, "nz": 8, "surface_tension": 0.3})
+        self.assertEqual(solver.backend, "resident")
+
+    def test_zero_tension_is_bit_identical_to_a_run_without_the_knob(self):
+        cells = [(x, y, z) for x in range(7, 17) for y in range(9, 14) for z in range(3, 5)]
+        base = {"nx": 24, "ny": 24, "nz": 8, "gravity": 0.0, "max_iterations": 60}
+        a, b = resident(base), resident({**base, "surface_tension": 0.0})
+        sa, sb = drop_state(cells), drop_state(cells)
+        for frame in range(1, 4):
+            sa, sb = a.step(sa, frame, 0, 0), b.step(sb, frame, 0, 0)
+        assert_states_equal(self, sa, sb)
+
+    def test_a_2d_drop_rounds_up_and_matches_the_reference(self):
+        cells = [(x, y, z) for x in range(7, 17) for y in range(9, 14) for z in range(3, 5)
+                 if ((x - 12) / 5) ** 2 + ((y - 11) / 2.5) ** 2 <= 1.0]
+        params = {"nx": 24, "ny": 24, "nz": 8, "gravity": 0.0, "surface_tension": 0.2, "max_iterations": 150}
+        cpu, gpu = flip3d.Liquid3D(params), resident(params)
+        a, b = drop_state(cells), drop_state(cells)
+        start = float(np.sqrt(np.var(a.arrays["position"][:, 0]) / np.var(a.arrays["position"][:, 1])))
+        for frame in range(1, 7):
+            a, b = cpu.step(a, frame, 0, 0), gpu.step(b, frame, 0, 0)
+
+        def aspect(state):
+            pos = state.arrays["position"]
+            return float(np.sqrt(np.var(pos[:, 0]) / max(np.var(pos[:, 1]), 1e-12)))
+        self.assertLess(abs(aspect(b) - 1.0), abs(start - 1.0))
+        self.assertAlmostEqual(aspect(b), aspect(a), delta=0.03)
+        np.testing.assert_allclose(sorted_arrays(b)["position"].mean(axis=0), sorted_arrays(a)["position"].mean(axis=0),
+                                   atol=0.03)
+
+    def test_a_thin_stream_breaks_into_drops_on_the_card(self):
+        cells = [(x, 7, z) for x in range(3, 17) for z in (3, 4)]
+        pieces = {}
+        for tension in (0.0, 20.0):
+            solver = resident({"nx": 20, "ny": 16, "nz": 8, "gravity": 0.0, "surface_tension": tension,
+                               "max_iterations": 100})
+            state = drop_state(cells, per_cell=4, seed=3)
+            for frame in range(1, 9):
+                state = solver.step(state, frame, 0, 0)
+            pieces[tension] = count_pieces(state.arrays["position"])
+        self.assertEqual(pieces[0.0], 1)
+        self.assertGreater(pieces[20.0], 1)
+
+    def test_the_force_field_matches_the_reference_cell_for_cell(self):
+        cells = [(x, y, z) for x in range(5, 12) for y in range(4, 10) for z in range(3, 8) if (x + y + z) % 5]
+        params = {"nx": 16, "ny": 16, "nz": 12, "gravity": 0.0}
+        cpu, gpu = flip3d.Liquid3D(params), resident(params)
+        state = drop_state(cells, per_cell=2, seed=9)
+        gpu.step(gpu.initial_state(0), 1, 0, 0)                        # allocate the grid
+        g = gpu._grid
+        liquid = cpu._classify(state.arrays["position"].astype(np.float64), None)
+        fields = {k: np.zeros(s) for k, s in zip("uvw", ((17, 16, 12), (16, 17, 12), (16, 16, 13)))}
+        cpu._apply_surface_tension(fields, liquid, 0.7)
+        gpu.ctx.write(g.dens, liquid.reshape(-1).astype(np.float32))
+        for buf in g.f:
+            gpu.ctx.clear(buf)
+        gpu._surface_tension(g, 0.7)
+        for axis, name in enumerate("uvw"):
+            got = gpu.ctx.read(g.f[axis], 4 * g.face_n[axis]).view(np.float32).reshape(g.face_shapes[axis])
+            np.testing.assert_allclose(got, fields[name], atol=2e-5, err_msg=name)
+
+
+@unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
+class AdaptiveDomainTests(unittest.TestCase):
+    """Lane 6 step N3: an adaptive domain on the card (the resident solver refused `auto_resize`)."""
+
+    PARAMS = {"nx": 16, "ny": 16, "nz": 16, "origin_x": -1.0, "origin_y": 0.0, "origin_z": -1.0, "voxel_size": 0.125,
+              "auto_resize": 1, "padding": 8, "max_size": 64, "particles_per_cell": 2, "substeps": 2, "gravity": 0.02,
+              "start_frame": 1, "max_iterations": 100}
+
+    def source(self):
+        return fluid3d_source()
+
+    def run_frames(self, solver, frames, state=None, first=1):
+        state = state or solver.initial_state()
+        for frame in range(first, first + frames):
+            state = solver.step(state, frame=frame)
+        return state
+
+    def test_the_resident_solver_accepts_auto_resize(self):
+        self.assertEqual(resident(self.PARAMS).backend, "resident")
+
+    def test_the_box_follows_the_liquid_in_whole_tiles_and_every_particle_stays_inside(self):
+        solver = resident(self.PARAMS, sources=[fluid3d_source()])
+        state = self.run_frames(solver, 24)
+        shape, origin = state.meta["domain_shape"], np.asarray(state.meta["domain_origin"])
+        self.assertTrue(all(n % 8 == 0 for n in shape), shape)
+        pos = state.arrays["position"]
+        top = origin + np.asarray(shape) * 0.125
+        self.assertTrue(np.all(pos >= origin - 1e-6) and np.all(pos <= top + 1e-6))
+        self.assertGreater(float(pos[:, 1].min()), -1.0e-4)
+        self.assertGreaterEqual(origin[1], solver.floor_y - 1e-8)             # the floor stays anchored
+
+    def test_the_adaptive_box_matches_the_reference_box_and_the_particles_agree(self):
+        cpu = flip3d.Liquid3D(self.PARAMS, sources=[fluid3d_source()])
+        gpu = resident(self.PARAMS, sources=[fluid3d_source()])
+        a, b = cpu.initial_state(), gpu.initial_state()
+        for frame in range(1, 10):
+            for sub in range(2):
+                a, b = cpu.step(a, frame, sub, 0), gpu.step(b, frame, sub, 0)
+        self.assertAlmostEqual(len(b.arrays["id"]), len(a.arrays["id"]), delta=0.03 * len(a.arrays["id"]))
+        self.assertAlmostEqual(float(b.arrays["position"][:, 1].mean()), float(a.arrays["position"][:, 1].mean()), delta=0.03)
+        self.assertLessEqual(abs(int(np.prod(b.meta["domain_shape"])) - int(np.prod(a.meta["domain_shape"]))),
+                             int(np.prod(a.meta["domain_shape"])) // 2)
+
+    def test_the_box_shrinks_back_around_a_small_blob(self):
+        solver = resident({**self.PARAMS, "nx": 48, "ny": 48, "nz": 48, "max_size": 96}, sources=[fluid3d_source()])
+        state = self.run_frames(solver, 4)
+        self.assertLess(int(np.prod(state.meta["domain_shape"])), 48 ** 3)
+
+    def test_a_checkpoint_restart_across_resizes_matches_the_uninterrupted_run(self):
+        whole = resident(self.PARAMS, sources=[fluid3d_source()])
+        full = self.run_frames(whole, 12)
+        first = resident(self.PARAMS, sources=[fluid3d_source()])
+        mid = self.run_frames(first, 6)
+        checkpoint = State({k: v.copy() for k, v in mid.arrays.items()}, dict(mid.meta))
+        second = resident(self.PARAMS, sources=[fluid3d_source()])
+        end = self.run_frames(second, 6, state=checkpoint, first=7)
+        assert_states_equal(self, full, end)
+
+
+def fluid3d_source():
+    from nodebased import fluid3d
+    return fluid3d.Source(center=(0.0, 1.0, 0.0), radius=0.45, fluid_type="liquid", end_frame=1)
 
 
 @unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
