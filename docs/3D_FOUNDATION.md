@@ -1270,7 +1270,9 @@ larger than the adapter memory budget (3 GiB discrete, 1 GiB integrated, 512 MiB
 integrated, 4e7 software) is split into row bands, and one that cannot fit 64 bands is refused with the
 knobs to lower. Temperature, velocity and vorticity are uploaded only when a pass or a shutter reads them
 (temperature and velocity are 4 and 16 bytes per voxel; the vorticity grid is derived on the CPU and cached with
-the velocity).
+the velocity). A `Volume` built from sparse tiles (`Volume.from_sparse`) uploads as a tile atlas per field plus a tile index
+instead of a dense grid, and the shader jumps over empty tiles at fine steps; the vorticity pass of a sparse volume stays on the
+CPU (docs/FLUIDS_SPIKE.md, "N2: sparse volumes straight to the GPU").
 
 Timing, RTX 3080 Ti, 1920 by 1080, `Plume3D`-style analytic plume, density scale 8, ambient 0.1, steady
 state (median of three), one Directional light or three (Directional, Point with quadratic falloff, Spot).

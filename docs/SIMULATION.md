@@ -250,10 +250,12 @@ scene or a `FluidSurface3D` generated from a liquid solve. `WriteVDB3D` exports 
 liquid surface to its own file. Its `Cache resolution` fraction applies a box filter to fluid channels;
 the output volume transform expands to cover the original domain, and the filter preserves integrated
 mass. For example, 0.5 produces half as many voxels per axis on even-sized domains.
-Sparse cached volumes stay tile-backed while CPU Render3D and viewport sampling march through them;
-sparse scenes currently use that CPU path because the GPU uploader still builds dense textures. At 128³
-and 256³, a one-tenth plume's measured resident field memory was 1.45 MiB and 9.15 MiB sparse, versus
-8.01 MiB and 63.98 MiB dense. Details and the reproducible command are in `docs/FLUIDS_SPIKE.md`.
+Sparse cached volumes stay tile-backed from the cache to the picture: CPU Render3D and viewport sampling march
+through the tiles, and the GPU viewport, GPU raster Render3D and GPU path tracer upload them as a tile atlas plus a
+tile index and never build a dense texture. At 128³ and 256³, a one-tenth plume's measured resident field memory on the CPU was
+1.45 MiB and 9.15 MiB sparse, versus 8.01 MiB and 63.98 MiB dense; its GPU volume memory is 13 to 19 percent of the dense texture
+and it draws no slower on the RTX 3080 Ti and Radeon 8060S. Details, per-adapter frame times and the reproducible command are in
+`docs/FLUIDS_SPIKE.md` ("N2: sparse volumes straight to the GPU").
 
 ## Why a simulation needs a different time model
 

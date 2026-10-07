@@ -1000,9 +1000,9 @@ volume or liquid surface in the scene. Its `cache_resolution` fraction box-filte
 0.5 halves each axis on even-sized domains and preserves integrated mass. Shared `FluidCollide3D`
 chains allow one rigid-body or liquid-surface collider to drive smoke solvers.
 
-**Still unverified or limited.** Sparse fields remain packed through the cache reader, CPU Render3D
-sampling and the viewport's CPU volume draw. Sparse scenes bypass the dense GPU texture uploader and
-use that CPU path; direct sparse GPU tile sampling remains open. A frustum or non-linear transform
+**Still unverified or limited.** Sparse fields stay packed through the cache reader, CPU Render3D sampling
+and the viewport's CPU volume draw, and the GPU viewport, GPU raster Render3D and GPU path tracer sample the
+tiles directly (step N2, "N2: sparse volumes straight to the GPU" below). A frustum or non-linear transform
 (the `Volume` member has none to give it).
 Grid-level metadata beyond `class`, `name`, `file_bbox_min/max` and `file_voxel_count` (real OpenVDB
 files often carry more, e.g. `is_local_space`, `is_saved_as_half_float`). The Windows build was not run.
@@ -1313,8 +1313,8 @@ directly in CPU Render3D and the viewport's CPU volume draw. The sparse `volume_
 with the dense mean within 1%, and the test forbids `SparseGrid.to_dense` during playback. On Linux,
 resident RSS added by a one-tenth-volume-density field measured 8.01 MiB dense versus 1.45 MiB sparse
 at 128³, and 63.98 MiB dense versus 9.15 MiB sparse at 256³ (18.0% and 14.3%). Reproduce with
-`tools/benchmark_sparse_playback_memory.py`. Sparse scenes currently bypass the dense GPU texture
-uploader and use CPU sampling; direct GPU tile upload remains open. The earlier up-res proof at
+`tools/benchmark_sparse_playback_memory.py`. Step N2 later added direct GPU tile upload and sampling
+("N2: sparse volumes straight to the GPU"). The earlier up-res proof at
 32³ → 128³ used 16.5% of dense density-plus-fuel storage and reproduced the dense mean density within 1%; the per-voxel difference was below 0.000002. GPU tile values were
 checked against CPU on the NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe.
 Two-frame guided transport was also compared on CPU and GPU on all three adapters. A guided
@@ -1381,6 +1381,79 @@ Tests cover old-top clipping, adaptive-versus-oversized parity, mass preservatio
 checkpoint restart across resize, cache restoration, liquid surface/whitewater bounds, and sparse GPU
 allocation. Blender 5.3 Alpha loaded a resized VDB and matched its dimensions, origin and density statistics.
 The targeted GPU suite passed on the RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe.
+
+### N2: sparse volumes straight to the GPU
+
+A sparse cache frame no longer meets a dense texture anywhere between the cache and the picture. `Volume.from_sparse` frames
+upload as **a tile atlas plus an indirection table**, and the GPU viewport, the GPU raster Render3D (beauty, the control
+passes and the raster mesh shadows of the smoke) and the GPU path tracer all read that layout; none of them calls
+`SparseGrid.to_dense` or converts a `SparseField` to an array (the tests forbid both while sparse scenes render).
+
+**Layout.** Each field (density, temperature, velocity) is one 3D atlas texture holding the stored 8-cubed tiles in the order of the
+tile list, laid out near-cubically (`SparseGrid.atlas_layout`, at most a layer of slack). One `rgba32float` index texture
+over the tile grid holds, for a stored tile, its atlas voxel origin and 1 and for an empty tile zeros (integers carried as float
+values, so a lookup is a shift and a mask, no division). A trilinear sample finds its tile with one index read when all eight
+voxels share a tile and eight when they straddle; an empty tile returns the rest value without touching the atlas. The path
+tracer packs the same tiles as plain floats behind a tile table in its `env` buffer and compiles the tile read only into scenes
+that hold a sparse volume; its coarse majorant cells are computed from the stored tiles and equal the dense bounds exactly
+(a test), so a sparse and a dense upload trace the same paths on the same seed.
+
+**Empty space.** At fine steps (a step under a third of a tile) the beauty march probes the tile under the ray once per tile; an
+empty tile lets it jump straight to the end of the safe region (the box in which every sample's eight voxels lie in that tile),
+which gives the same picture because those samples are zero. A sparse volume with no stored tile draws nothing: no draw call in the
+viewport, an early return in the passes, and a zero majorant in the path tracer. `gpuvolume.march_steps` reports the march
+iterations per pixel for the tests. Left on the CPU, by name: the vorticity pass of a sparse volume (it needs the dense velocity
+grid), a volume whose temperature or velocity is not stored in the same tiles, and a tile edge that is not a power of two
+(not 8 in the path tracer); the viewport and Render3D then say so and use the CPU reference, as before.
+
+**Memory** (`gpumemory` tracker, live bytes of one viewport frame with the volume less the same frame without it; the tenth-of-the-box
+plume of `tools/benchmark_sparse_gpu.py` is a solid block holding 9.3 percent of the voxels and 12.5 percent of the tiles, the column
+a rising, widening plume holding 10.3 percent of the voxels and 16.7 percent of the tiles; identical on all three adapters):
+
+| Plume | Grid | Dense | Sparse | Sparse / dense |
+|---|---|---|---|---|
+| Block | 128³ | 8,390,180 B | 1,115,684 B (512 tiles) | 13.3% |
+| Block | 256³ | 67,110,436 B | 8,914,468 B (4,096 tiles) | 13.3% |
+| Column | 128³ | 8,390,180 B | 1,560,100 B (685 tiles) | 18.6% |
+| Column | 256³ | 67,110,436 B | 9,403,940 B (4,248 tiles) | 14.0% |
+
+The GPU path tracer's volume buffer (the scene's `env` buffer less the same scene without the volume): block 8,390,800 B dense against
+1,067,152 B sparse at 128³ and 67,125,392 B against 8,536,208 B at 256³ (12.7%); column 1,421,456 B (16.9%) and 8,847,504 B (13.2%).
+
+**Viewport frame time**, median of five alternating rounds of twelve frames at 960 by 540 (320 by 180 on llvmpipe), dense to sparse
+in milliseconds, in the viewport's fast mode (48 march steps across the volume) and its quality mode (`V`, 192 steps):
+
+| Adapter | Plume, grid | Fast | Quality |
+|---|---|---|---|
+| RTX 3080 Ti | Block 128³ | 4.7 to 4.0 | 8.1 to 6.7 |
+| | Block 256³ | 5.6 to 5.2 | 7.2 to 5.3 |
+| | Column 128³ | 4.3 to 4.0 | 7.0 to 6.0 |
+| | Column 256³ | 8.1 to 6.9 | 7.9 to 6.0 |
+| Radeon 8060S | Block 128³ | 3.4 to 3.2 | 4.5 to 4.1 |
+| | Block 256³ | 3.5 to 3.2 | 5.0 to 4.2 |
+| | Column 128³ | 3.4 to 3.2 | 4.3 to 4.2 |
+| | Column 256³ | 3.5 to 3.2 | 5.0 to 4.2 |
+| llvmpipe | Block 128³ | 21.0 to 18.9 | 37.9 to 48.6 |
+| | Block 256³ | 33.4 to 21.9 | 71.0 to 50.1 |
+| | Column 128³ | 15.8 to 15.7 | 33.3 to 48.9 |
+| | Column 256³ | 24.6 to 17.9 | 58.5 to 46.0 |
+
+Sparse draws at or under the dense time on both GPUs in every case (0.74 to 0.97 of dense) and under a quarter of its memory (13 to 19
+percent). On llvmpipe the quality step at 128³ is slower sparse (1.28 and 1.47 times dense, 11 and 16 ms more at 320 by 180); every
+other llvmpipe case is faster. The first design read the eight corners through a loop of dependent index reads and ran up to twice as
+slow as dense; issuing the eight tile reads together and then the eight voxel reads made the GPUs faster than dense, and the software
+adapter keeps a single-index-read path for samples inside one tile.
+
+**Agreement.** A sparse upload renders within the existing volume tolerance of the dense upload of `SparseGrid.to_dense()` (2e-4 mean,
+2e-3 worst pixel; half-float targets 5e-3) in the viewport, in the raster Render3D (lit, unlit, three lights, supersampled, fire
+emission, motion blur from the velocity atlas, shadows on a floor, an odd-sized grid with a non-zero rest value) and in the path
+tracer (a lit turned blob, fire, a non-zero rest value, a sparse next to a dense volume), and the path tracer's picture of tiles agrees
+with the CPU reference of the same tiles. The sparse fire-light halo is not built for a sparse volume on either backend
+(`fire_light_grid` returns none for sparse frames), so compare fire with `fire_light` 0. Tests: `tests.test_sparse_gpu_volumes` and
+`tests.test_sparse_gpu_pathtrace` (sparse against dense renders, an all-empty tile set that draws nothing and marches zero steps, a tile
+count that grows frame to frame through four atlas layouts and back with no stale tile, tiles kept out of dense arrays, the memory
+bar), passing on the RTX 3080 Ti, the Radeon 8060S and llvmpipe. Reproduce the numbers with
+`python tools/benchmark_sparse_gpu.py --adapter default|integrated|cpu --pathtrace`. Not run: Windows.
 
 ## K2 rigid bodies — finish 1
 
