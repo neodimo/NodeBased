@@ -86,6 +86,7 @@ def check_capability(state):
     if "device" in state and "wgpu" in state:
         try:
             _pipeline(state)
+            _compact_pipelines(state)
         except Exception as exc:
             return f"GPU path tracing compute unavailable: {exc}"
     return None

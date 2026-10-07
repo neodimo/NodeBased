@@ -1,5 +1,5 @@
 """Fixed against adaptive sampling on the X1, Y1 and Z1 scenes: wall time, PSNR against a 1024-sample reference and the
-per-pixel sample-count image (docs/BENCHMARKS-v0.34-adaptive.md).
+per-pixel sample-count image (docs/BENCHMARKS-v0.35-adaptive.md, which replaces docs/BENCHMARKS-v0.34-adaptive.md).
 
     flock /tmp/nb-gpu.lock python tools/benchmark_adaptive.py [--adapter default|discrete|integrated|cpu]
                                                               [--size 640x360] [--backend gpu|cpu] [--images DIR]
@@ -11,7 +11,7 @@ an environment), Y1 (a PBR sphere on a floor under an environment with a hard su
 shadow). Each is rendered at the same seed `fixed` with 16, 32 and 64 samples (the first two are about the average
 budget the adaptive renders turn out to use), then `adaptive` at noise threshold 0.01 and 0.05 (Render3D's defaults: 16
 minimum samples, 256 maximum, passes of 8), and the reference, `fixed` 1024 samples with another seed. `--thresholds` sets
-the adaptive thresholds (default 0.05, 0.01, 0.003, 0.001 and 0.0003), `--pass-size` the adaptive pass size and
+the adaptive thresholds (default 0.05, 0.01, 0.006, 0.003, 0.001 and 0.0003), `--pass-size` the adaptive pass size and
 `--max-samples N` caps the adaptive renders (256 is Render3D's default; 64 gives them at most fixed's budget). After the
 table it prints, per scene, the quickest adaptive render that reaches fixed 64's PSNR and its time against fixed 64's. The time is the median of
 three renders after a warm-up render (it holds the scene build and upload on the GPU). PSNR is taken on what the viewer shows (values clipped to 0..1 and sRGB encoded, peak 1), over all pixels. With
@@ -41,7 +41,7 @@ CAMERA = s.Camera()
 FIXED = pt.PathSettings(samples=64, max_bounces=8, seed=1)
 ADAPTIVE = pt.PathSettings(sampling="adaptive", min_samples=16, max_samples=256, adaptive_pass_size=8, max_bounces=8, seed=1)
 REFERENCE = pt.PathSettings(samples=1024, max_bounces=8, seed=777)
-THRESHOLDS = (0.05, 0.01, 0.003, 0.001, 0.0003)
+THRESHOLDS = (0.05, 0.01, 0.006, 0.003, 0.001, 0.0003)
 SHEET_THRESHOLDS = (0.01, 0.001)      # the two adaptive renders a contact sheet shows
 
 
@@ -171,7 +171,7 @@ def _write_sheets(folder, sheets):
         for r, row in enumerate(grid):
             for c, cell in enumerate(row):
                 sheet[r * (h + 4):r * (h + 4) + h, c * (w + 4):c * (w + 4) + w] = cell
-        path = folder / f"adaptive_{name.lower()}.png"
+        path = folder / f"adaptive_v035_{name.lower()}.png"
         out = oiio.ImageOutput.create(str(path))
         out.open(str(path), oiio.ImageSpec(sheet.shape[1], sheet.shape[0], 3, oiio.UINT8))
         out.write_image(np.ascontiguousarray((sheet * 255 + .5).astype(np.uint8)))

@@ -1542,16 +1542,32 @@ about 100 samples, and 0.05 after about 20. The luminance is the sample's whole 
 `Output` is rendered, and the decision is taken only at pass boundaries, so the pass size changes nothing but when a pixel
 may stop: each pixel's samples are the same numbers whatever the pass size (same seed, same pixel, same sample index).
 
-A pixel is never revived once it stops, and a pass traces only pixels that are still active (CPU: the active pixel list;
-GPU: pixels are skipped in the shader and a tile is skipped once every pixel in it has stopped, the host reading one
-done flag per pixel after each pass and dispatching only the rows that still hold an active tile). The render ends early
-when every pixel has stopped, and reports each pass's share of converged pixels. The finished render's per-pixel sample
+A pixel is never revived once it stops, and a pass traces only pixels that are still active. On the CPU that is the
+active pixel list. On the GPU the running moments and each pixel's done flag stay in the accumulator on the card: after
+every pass a compaction step lists the pixels still open and writes the arguments of the next pass's indirect dispatches,
+one thread per open pixel, so a converged pixel costs nothing and the host reads nothing back before the finished image
+(a render asked for progress reads one 4-byte list length per pass, and `stats["readbacks"]` counts what came back and why:
+`mask` is the old per-pass read of a fixed render's tile retirement, 0 for adaptive). When at most 131072 pixels are still
+open, a pass runs its samples side by side, one thread per pixel and sample, and a reduce step adds them up: the same
+samples in another summing order, so the tail of a few noisy pixels no longer costs one dispatch per sample. A pass with
+no open pixel left dispatches nothing; the render still ends when every pixel has stopped, and `stats["passes"]` counts
+the passes that did work. The progress events report each pass's share of converged pixels. The finished render's per-pixel sample
 counts are `stats["samples"]`, the estimate `stats["noise"]` and the stopped mask `stats["converged"]`. The data passes
 (depth, normals, position, uv, object_id) take their one un-jittered sample as ever. With motion blur the CPU reference
 runs one adaptive render over all shutter times; the GPU runs one per time, each with its share of `Min samples` and
 `Max samples`, and averages them.
 
-Measured on the X1, Y1 and Z1 scenes against a 1024-sample reference: `docs/BENCHMARKS-v0.34-adaptive.md`.
+**Choosing a threshold.** The noise threshold trades wall time for quality along a curve that differs per scene, and 0.01,
+the figure above, stops at the noise of about fixed 16 on the scenes measured. For a render that should look like fixed
+64, **start at 0.001** (a pixel stops when its standard error is under about 3% of its brightness) and leave `Max samples`
+at its default; 0.003 is the faster, noisier step and 0.0003 the slower, cleaner one. On the three scenes below, 0.001
+scored higher than fixed 64 on two of them and 1.1 dB lower on the third, in under 90% of its time on all three (the
+RTX 3080 Ti, 1280 by 720). `Adaptive pass size` hardly changes the time: the passes cost the card almost nothing now, so
+leave it at 8.
+
+Measured on the X1, Y1 and Z1 scenes against a 1024-sample reference, on all three adapters:
+`docs/BENCHMARKS-v0.35-adaptive.md` (the v0.34 measurements, before the device-side mask, stay in
+`docs/BENCHMARKS-v0.34-adaptive.md`).
 
 ### Denoise on the final render
 
