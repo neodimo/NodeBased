@@ -5557,6 +5557,23 @@ def write_elapsed_text(seconds):
     return f"{minutes} min {rest:02d} s"
 
 
+def creation_slot(kind, produced="image"):
+    """The input of a new `kind` that takes a selected node producing `produced`, or None.
+
+    Nuke wires a node made from a selection into its main input: Merge takes it as B (its
+    first input) and Roto as its bg; everything else takes the first slot that accepts the
+    selection's output type. None means the kind has no such input (a generator).
+    """
+    from .core import INPUT_TYPES, OUTPUT_TYPES
+    preferred = {"Merge": "B", "Roto": "bg"}.get(kind)
+    if preferred in SPECS[kind]["inputs"] + SPECS[kind].get("optional_inputs", []):
+        return preferred if produced in INPUT_TYPES.get(preferred, ("image",)) else None
+    slots = list(SPECS[kind]["inputs"])
+    if OUTPUT_TYPES.get(kind, "image") != "image" or kind == "Render3D":
+        slots += list(SPECS[kind].get("optional_inputs", []))
+    return next((name for name in slots if produced in INPUT_TYPES.get(name, ("image",))), None)
+
+
 class Window(QMainWindow):
     VIEWER_MODES = ("2d", "3d")
     # One Write render's progress: (position 1..total, total, frame number, seconds elapsed).
@@ -9780,7 +9797,9 @@ class Window(QMainWindow):
         global_pos = self.graph.viewport().mapToGlobal(self.graph.mapFromScene(graph_pos))
         kind = NodeSearch.choose(self, SPECS, global_pos)
         if kind:
-            self.add_node(kind, position=graph_pos)
+            # With a node selected the new one follows the selection (wired or beside it), as
+            # the create shortcuts do; the click position only places a node on an empty graph.
+            self.add_node(kind, position=None if self.graph.selected_id() else graph_pos)
 
     def graph_center(self):
         """The scene point at the middle of the visible graph, where the NODES dock lands a node
@@ -9893,15 +9912,18 @@ class Window(QMainWindow):
         # creating a Render3D under a Grade makes a free node instead of a rejected command.
         from .core import INPUT_TYPES, OUTPUT_TYPES
         source, slot = self.graph.selected_id(), None
+        selection = source
         if source:
             produced = OUTPUT_TYPES.get(self.graph_nodes()[source]["type"], "image")
-            slots = list(SPECS[kind]["inputs"])
-            if OUTPUT_TYPES.get(kind, "image") != "image" or kind == "Render3D":
-                slots += list(SPECS[kind].get("optional_inputs", []))
-            slot = next((name for name in slots if produced in INPUT_TYPES.get(name, ("image",))), None)
+            slot = creation_slot(kind, produced)
         if slot is None:
             source = None
-        if source:
+        if source is None and selection and position is None and kind != "Backdrop":
+            # A node with no input that takes the selection (Read, Constant, a generator) goes
+            # beside it, unwired, rather than at some unrelated spot of the graph.
+            selected = self.graph.items_by_id[selection].sceneBoundingRect()
+            anchor = QPointF(selected.right() + NODE_GAP, selected.top())
+        elif source:
             # Directly underneath the selection, centred on it -- a Dot is far narrower than a
             # node, so centre on its bounds rather than aligning left edges.
             selected = self.graph.items_by_id[source].sceneBoundingRect()
@@ -9935,11 +9957,16 @@ class Window(QMainWindow):
             # output is rewired to read from the new node instead, so it's inserted inline
             # rather than just forking a new dead-end off the selection.
             nodes = self.graph_nodes()
-            # Only a node that outputs what the selection outputs can stand in for it downstream.
+            # Only a node that outputs what the selection outputs can stand in for it downstream
+            # (a Write is a sink: it hangs off the selection and leaves the branch alone).
             downstream = [(dest, name) for dest, node in nodes.items()
                           for name, src in node["inputs"].items() if src == source
-                          ] if OUTPUT_TYPES.get(kind, "image") == produced else []
+                          ] if OUTPUT_TYPES.get(kind, "image") == produced and kind != "Write" else []
             commands.extend({"op": "connect", "id": dest, "input": name, "source": key} for dest, name in downstream)
+            if (not self.graph_path and self.dispatcher.document.get("view") == source
+                    and OUTPUT_TYPES.get(kind, "image") == "image" and kind != "Write"):
+                # The artist was looking at the selection: keep looking at what replaced it.
+                commands.append({"op": "view", "id": key})
         if self.command({"op": "batch", "commands": commands}) is not None:
             self.graph.scene().clearSelection()
             self.graph.items_by_id[key].setSelected(True)
