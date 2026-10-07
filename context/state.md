@@ -1,5 +1,36 @@
 ## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (5:15 AM on 2026-10-07 PDT)
+
+`main` moved `b5f2dda` -> `49c75f2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 91 tests in 42.179 s, OK. Full suite on
+the stacked tip `49c75f2` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1007-0345.log`, started 3:45 AM): **Ran 4557 tests in 4923.245 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step T2 of 3: adaptive sampling that saves time on a real GPU (finish 1).** Commits:
+  - `5bb64ae` docs: adaptive sampling benchmarks on the RTX 3080 Ti, the AMD card and llvmpipe: the bar is met on all three scenes; the threshold advice and step notes corrected against the new runs (Lane 4 Rendering 8 step T2, finish 1)
+  - `c51028c` GPU adaptive passes: tidy the host loop (no unused returns, docstring names pixels)
+  - `31bce29` benchmark_adaptive: fixed 128 row, breakdown columns for the device-side passes; the adaptive render waits for the card before its final readback (Lane 4 Rendering 8 step T2, part 3)
+  - `ffff26c` Test: adaptive and fixed sampling agree on a converged scene on the GPU (Lane 4 Rendering 8 step T2, part 5)
+  - `63a7853` GPU path tracer capability check also builds the compaction shaders; Render3D docs describe the device-side mask and a recommended threshold (Lane 4 Rendering 8 step T2, part 2)
+  - `73bba50` Test: adaptive GPU sampling on splats and smoke, chunked into several submissions (Lane 4 Rendering 8 step T2, part 2)
+  - `53ef087` GPU adaptive sampling keeps its mask on the device: open pixels listed by a compaction pass, indirect dispatches sized on the card, a sample-parallel tail for the last open pixels, no readback until the image; zero-filled accumulator is not uploaded, float32 post-processing; benchmark takes a threshold list and prints the bar (Lane 4 Rendering 8 step T2, part 2)
+  - `42fa1ce` GPU path tracer reports a per-phase time breakdown (stats phases) and tools/benchmark_adaptive.py --breakdown prints it; step notes record where an adaptive render on the RTX 3080 Ti spends its time (Lane 4 Rendering 8 step T2, part 1)
+  Diff: 6 files changed, 1009 insertions(+), 157 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step Q2 of 2: HueCorrect's saturation threshold, and analysis regions measured on every frame.** Commits:
+  - `28cf59b` feat: measure animated analysis regions across ranges
+  - `aa07eb6` feat: add HueCorrect saturation threshold
+  Diff: 9 files changed, 177 insertions(+), 36 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (2:05 AM on 2026-10-07 PDT)
 
 `main` moved `fd6cdd7` -> `3988004` (lane commits cherry-picked onto main in lane order) and then to this
