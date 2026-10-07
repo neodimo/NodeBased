@@ -69,6 +69,10 @@ class RotoArtistPanelTests(unittest.TestCase):
         APP.processEvents()
         self.assertEqual(self.panel().findChild(QPushButton,"roto-shape-key-0").text(),"◇")
         self.assertIn(1,self.window.frame_slider.key_frames)
+        opacity=self.panel().findChild(QDoubleSpinBox,"roto-shape-opacity")
+        opacity.setValue(0.7); opacity.editingFinished.emit()
+        curve=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["opacity"]["curve"]
+        self.assertEqual(curve["keys"], [{"frame":1,"value":0.5},{"frame":2,"value":0.7}])
 
     def test_viewer_overlay_follows_the_same_named_tracker_as_the_render(self):
         self.window.command({"op":"create","id":"t","type":"Tracker"})

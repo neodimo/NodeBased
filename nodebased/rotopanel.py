@@ -104,6 +104,14 @@ def build_panel(window, key):
     def save(entries, select=None):
         window.command({"op": "set_shapes", "id": key, "shapes": entries})
         if select is not None: window.viewer.roto_selected_shape_index = select
+    def value_at_frame(old, replacement, field):
+        if not isinstance(old, dict) or not old.get("curve"):
+            return float(replacement)
+        curve = copy.deepcopy(old["curve"])
+        keys = [entry for entry in curve["keys"] if entry["frame"] != frame]
+        keys.append({"frame": frame, "value": float(replacement)})
+        keys.sort(key=lambda entry: entry["frame"])
+        return {"value": shape_model.resolve_scalar(old, frame, field), "curve": {**curve, "keys": keys}}
     def select(row):
         window.viewer.roto_selected_shape_index = row
         window.viewer.viewport().update()
@@ -131,7 +139,15 @@ def build_panel(window, key):
         shape=shapes[i]
         def edit(field,value):
             entries=current()
-            if i < len(entries): entries[i][field]=value; save(entries,i)
+            if i < len(entries):
+                old=entries[i].get(field)
+                if field == "color":
+                    old = old or [1.0,1.0,1.0,1.0]
+                    entries[i][field]=[value_at_frame(channel, replacement, "opacity")
+                                       for channel,replacement in zip(old,value)]
+                else:
+                    entries[i][field]=value_at_frame(old,value,field)
+                save(entries,i)
         name=QLineEdit(shape["name"]); name.setObjectName("roto-shape-name")
         name.editingFinished.connect(lambda: edit("name",name.text())); layout.addWidget(name)
         follow=QComboBox(); follow.setObjectName("roto-shape-track-link")
