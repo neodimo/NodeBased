@@ -1,5 +1,33 @@
 ## 2026-10-06 — Lane 4 Rendering 7 step S3: artist-facing mixed-scene render gate (4:33 PM PDT)
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (7:35 PM on 2026-10-06 PDT)
+
+`main` moved `dede973` -> `62ca9d4` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 73 tests in 39.185 s, OK. Full suite on
+the stacked tip `62ca9d4` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1006-1815.log`, started 6:15 PM): **Ran 4410 tests in 4436.486 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step N1 of 3: liquids on the GPU end to end: measure where the 1.5 seconds go, then move them (finish 1).** Commits:
+  - `0577728` docs: Lane 6 N1 status
+  - `7512b19` docs: resident liquid numbers from the recorded adapter runs
+  - `0131d63` test: resident liquid dispatches past one row of workgroups; guard the particle buffer size; 2-D dispatch for extrapolation
+  - `db34c6c` docs: resident liquid phase table, adapter numbers and fallbacks; benchmark --backend resident; staged particle readback
+  - `7a8467d` perf: keep FLIP liquid particles, MAC grid and surface field on the GPU between substeps (pressure = resident)
+  Diff: 15 files changed, 2036 insertions(+), 23 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step P1 of 2: PointsTo3D and Reconcile3D: tracked 2D points to 3D positions and back.** Commits:
+  - `cd33658` docs: record PointsTo3D and Reconcile3D parity
+  - `53d8e9c` feat: add 2D/3D point tracking nodes
+  Diff: 13 files changed, 381 insertions(+), 13 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (6:05 PM on 2026-10-06 PDT)
 
 `main` moved `7dc005d` -> `eac4a0a` (lane commits cherry-picked onto main in lane order) and then to this
