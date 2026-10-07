@@ -328,19 +328,25 @@ def resolve_shapes(payload, frame):
     """
     shapes = []
     for shape in (payload or {}).get("shapes", []):
+        def points_at(at_frame):
+            return [{field: resolve_scalar(point[field], at_frame, field) for field in POINT_FIELDS}
+                    for point in shape["points"]]
         resolved = {
             "name": shape["name"],
             "mode": shape["mode"],
             "opacity": resolve_scalar(shape["opacity"], frame, "opacity"),
             "feather": resolve_scalar(shape["feather"], frame, "feather"),
-            "points": [{field: resolve_scalar(point[field], frame, field) for field in POINT_FIELDS}
-                       for point in shape["points"]],
+            "points": points_at(frame),
         }
         for field, default in (("visible", True), ("locked", False), ("invert", False),
                                ("feather_falloff", "linear"), ("color", [1, 1, 1, 1]),
                                ("blend_mode", "over"), ("motion_blur", False)):
             resolved[field] = copy_value = shape.get(field, default)
             if field == "color": resolved[field] = list(copy_value)
+        if resolved["motion_blur"]:
+            # A compact one-frame shutter centered on the current frame. Static shapes naturally
+            # collapse to one sample; keyed shapes acquire temporal coverage in the same raster path.
+            resolved["_motion_samples"] = [points_at(int(frame) - 1), points_at(int(frame) + 1)]
         shapes.append(resolved)
     return shapes
 
