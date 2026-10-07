@@ -3010,6 +3010,18 @@ class Evaluator:
             # part of the answer. An ungated one is replaced outright and keeps only its own.
             gated = mask is not None or mix != 1.0
             out = filtered_box.union(source.data) if gated else filtered_box
+            if kind == "HSVTool":
+                range_masks = [None if item is None else item.fit(source.data)
+                               for item in inputs[1:5]]
+                for label, item in zip(("mask", "hue_mask", "sat_mask", "brt_mask"), inputs[1:5]):
+                    if item is not None and item.display != source.display:
+                        raise ValueError(f"HSVTool {label} display window {item.display} does not match "
+                                         f"source {source.display}")
+                filtered = Evaluator._hsv_tool(source.fit(out), p, range_masks)
+                # HSVTool's masks are part of its independent range weights; applying the general
+                # mask a second time here would square it and change legacy alpha output.
+                pixels = Evaluator._apply_mask_mix(source.fit(out), filtered, None, mix)
+                return Raster(pixels, out, source.display)
             if (cancel is not None and kind in _ROW_CHUNKED_MASK_MIX_KINDS
                     and out.height > _CANCEL_CHUNK_ROWS):
                 pixels = Evaluator._run_row_chunked(kind, p, source, mask, mix, out, frame, cancel, progress)
@@ -3164,7 +3176,10 @@ class Evaluator:
             if matte.display != source.display:
                 raise ValueError(f"Encryptomatte: matte {i} display window {matte.display} does not "
                                  f"match source {source.display}; no silent resampling is performed")
-            entries.append((name, matte.fit(source.data)[..., 3]))
+            cov = matte.fit(source.data)[..., 3]
+            if mask_pixels is not None:
+                cov = cov * mask_pixels[..., 3]
+            entries.append((name, cov * matte_mix))
         if not entries:
             return Raster(source.pixels, source.data, source.display, source.layers, source.meta)
         ids = np.array([cryptomatte.name_to_bits(name) for name, _ in entries], np.uint32)
@@ -4131,9 +4146,12 @@ class Evaluator:
                     filtered = Evaluator._godrays(inputs[0], p, origin,
                         inputs[1] if kind == "VolumeRays" and len(inputs) > 1 else None)
                 elif kind == "ScannedGrain": filtered = Evaluator._scanned_grain(inputs[0], inputs[1], p, frame)
-                else: filtered = getattr(Evaluator, {"Posterize": "_posterize", "SoftClip": "_softclip", "HSVTool": "_hsv_tool"}[kind])(inputs[0], p)
+                elif kind == "HSVTool":
+                    masks = [inputs[i] if len(inputs) > i else None for i in range(1, 5)]
+                    filtered = Evaluator._hsv_tool(inputs[0], p, masks)
+                else: filtered = getattr(Evaluator, {"Posterize": "_posterize", "SoftClip": "_softclip"}[kind])(inputs[0], p)
             mask_index = 2 if kind == "ScannedGrain" or kind == "VolumeRays" else 1
-            mask = inputs[mask_index] if len(inputs) > mask_index else None
+            mask = None if kind == "HSVTool" else (inputs[mask_index] if len(inputs) > mask_index else None)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=mask,
                                               mix=p.get("mix", 1.0))
         if kind == "AddMix":
@@ -5914,7 +5932,7 @@ class Evaluator:
         return hue, sat, peak
 
     @staticmethod
-    def _hsv_tool(image, p):
+    def _hsv_tool(image, p, range_masks=None):
         # HSVTool: RGB -> (hue in degrees, saturation, value), an adjustment weighted by how far
         # inside the hue, saturation and brightness ranges the pixel sits (product of the three
         # weights, each with its own linear rolloff), then back to RGB. Hue rotates by
@@ -5929,14 +5947,27 @@ class Evaluator:
         # still gate which pixels that reaches, unchanged.
         rgb = image[..., :3].astype(np.float64)
         hue, sat, val = Evaluator._rgb_to_hsv(rgb)
-        weight = (Evaluator._hsv_range_weight(hue, float(p.get("hue_range_min", 0.0)), float(p.get("hue_range_max", 360.0)),
+        hue_weight = Evaluator._hsv_range_weight(hue, float(p.get("hue_range_min", 0.0)), float(p.get("hue_range_max", 360.0)),
                                               float(p.get("hue_rolloff", 0.0)), cyclic=True)
-                  * Evaluator._hsv_range_weight(sat, float(p.get("saturation_range_min", 0.0)),
+        sat_weight = Evaluator._hsv_range_weight(sat, float(p.get("saturation_range_min", 0.0)),
                                                 float(p.get("saturation_range_max", 1.0)),
                                                 float(p.get("saturation_rolloff", 0.0)))
-                  * Evaluator._hsv_range_weight(val, float(p.get("brightness_range_min", 0.0)),
+        brt_weight = Evaluator._hsv_range_weight(val, float(p.get("brightness_range_min", 0.0)),
                                                 float(p.get("brightness_range_max", 1.0)),
-                                                float(p.get("brightness_rolloff", 0.0))))
+                                                float(p.get("brightness_rolloff", 0.0)))
+        def mask_alpha(value):
+            if value is None:
+                return 1.0
+            arr = np.asarray(value)
+            return arr[..., 3] if arr.ndim == 3 else arr
+        general, hm, sm, bm = (range_masks or (None, None, None, None))
+        shared = mask_alpha(general)
+        base_weights = (hue_weight, sat_weight, brt_weight)
+        independent_masks = any(mask is not None for mask in (hm, sm, bm))
+        hue_weight = base_weights[0] * shared * mask_alpha(hm)
+        sat_weight = base_weights[1] * shared * mask_alpha(sm)
+        brt_weight = base_weights[2] * shared * mask_alpha(bm)
+        weight = base_weights[0] * base_weights[1] * base_weights[2] * shared
         sat_adjust, brt_adjust = float(p.get("sat_adjust", 0.0)), float(p.get("brt_adjust", 0.0))
         rotation = float(p.get("hue_rotation", 0.0))
         set_saturation, set_brightness = bool(p.get("set_saturation")), bool(p.get("set_brightness"))
@@ -5948,11 +5979,15 @@ class Evaluator:
             rotation = ((float(dst_hue) - float(src_hue) + 180.0) % 360.0) - 180.0
             sat_adjust, brt_adjust = float(dst_sat), float(dst_val)
             set_saturation = set_brightness = True
-        new_hue = (hue + rotation * weight) % 360.0
+        hue_effect = hue_weight if independent_masks else weight
+        sat_effect = sat_weight if independent_masks else weight
+        brt_effect = brt_weight if independent_masks else weight
+        weight = weight * mask_alpha(hm) * mask_alpha(sm) * mask_alpha(bm)
+        new_hue = (hue + rotation * hue_effect) % 360.0
         sat_target = sat_adjust if set_saturation else sat * (1.0 + sat_adjust)
         val_target = brt_adjust if set_brightness else val * (1.0 + brt_adjust)
-        new_sat = np.clip(sat + (sat_target - sat) * weight, 0.0, 1.0)
-        new_val = np.maximum(val + (val_target - val) * weight, 0.0)
+        new_sat = np.clip(sat + (sat_target - sat) * sat_effect, 0.0, 1.0)
+        new_val = np.maximum(val + (val_target - val) * brt_effect, 0.0)
         out_rgb = np.stack([new_val - new_val * new_sat * np.clip(np.minimum((n + new_hue / 60.0) % 6.0,
                                                                             4.0 - (n + new_hue / 60.0) % 6.0), 0.0, 1.0)
                             for n in (5.0, 3.0, 1.0)], axis=-1)
@@ -5960,7 +5995,14 @@ class Evaluator:
                      and not set_saturation and not set_brightness)
         if untouched:
             out_rgb = rgb
-        alpha = weight[..., None] if p.get("output_alpha") else image[..., 3:4]
+        output_alpha = p.get("output_alpha", 0)
+        # 0/1 are legacy serialized bools: preserve / combined range weight.
+        output_alpha = {0: "preserve", 1: "combined_weight", False: "preserve", True: "combined_weight"}.get(output_alpha, output_alpha)
+        alpha_values = {"combined_weight": weight, "hue_weight": hue_weight,
+                        "saturation_weight": sat_weight, "brightness_weight": brt_weight,
+                        "hue": hue, "saturation": sat, "value": val}
+        alpha = (alpha_values[output_alpha][..., None] if output_alpha in alpha_values
+                 else image[..., 3:4])
         return np.concatenate([out_rgb, alpha], axis=2).astype(np.float32)
 
     @staticmethod

@@ -336,12 +336,12 @@ SPECS = {
     # hue_range_min/max, `satsrcs` is saturation_range_*, `brtsrcs` is brightness_range_*; Nuke's
     # `saturation`/`brightness` adjustments are sat_adjust/brt_adjust here because those names are
     # already other nodes' knobs. output_alpha writes the combined range weight into alpha.
-    "HSVTool": {"inputs": ["image"], "optional_inputs": ["mask"],
+    "HSVTool": {"inputs": ["image"], "optional_inputs": ["mask", "hue_mask", "sat_mask", "brt_mask"],
                 "params": {"hue_range_min": 0.0, "hue_range_max": 360.0, "hue_rolloff": 0.0, "hue_rotation": 0.0,
                            "saturation_range_min": 0.0, "saturation_range_max": 1.0, "saturation_rolloff": 0.0,
                            "sat_adjust": 0.0, "set_saturation": 0,
                            "brightness_range_min": 0.0, "brightness_range_max": 1.0, "brightness_rolloff": 0.0,
-                           "brt_adjust": 0.0, "set_brightness": 0, "output_alpha": 0,
+                           "brt_adjust": 0.0, "set_brightness": 0, "output_alpha": "preserve",
                            "color_replace": 0, "srccolor_r": 0.0, "srccolor_g": 0.0, "srccolor_b": 0.0,
                            "dstcolor_r": 0.0, "dstcolor_g": 0.0, "dstcolor_b": 0.0, "mix": 1.0}},
     # AddMix (step 5b): A is premultiplied, then merged `over` B (MERGE_LIKE_KINDS: bypass passes B).
@@ -1449,7 +1449,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "hue_rotation": (-360.0, 360.0), "saturation_range_min": (0.0, 1.0), "saturation_range_max": (0.0, 1.0),
           "saturation_rolloff": (0.0, 1.0), "sat_adjust": (-1.0, 10.0), "set_saturation": (0, 1),
           "brightness_range_min": (0.0, 1000.0), "brightness_range_max": (0.0, 1000.0), "brightness_rolloff": (0.0, 1000.0),
-          "brt_adjust": (-1.0, 100.0), "set_brightness": (0, 1), "output_alpha": (0, 1), "normalize": (0, 1),
+          "brt_adjust": (-1.0, 100.0), "set_brightness": (0, 1), "normalize": (0, 1),
           "color_replace": (0, 1),
           "dustbust_frame_start": (-1000000, 1000000), "dustbust_frame_end": (-1000000, 1000000),
           "dustbust_sensitivity": (0.0, 1.0), "dustbust_patch_blend": (0.0, 1.0),
@@ -1805,6 +1805,8 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"], "flow_on": ["luminance", "rgb"],
            "lookup_filter": ["none", "blend"],
+           "output_alpha": ["preserve", "combined_weight", "hue_weight", "saturation_weight",
+                            "brightness_weight", "hue", "saturation", "value"],
            "flow_backend": ["auto", "cpu", "gpu"],
            "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],

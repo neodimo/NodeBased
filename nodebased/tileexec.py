@@ -1175,7 +1175,9 @@ class TileExecutor:
             elif kind == "SoftClip":
                 filtered = imaging.Evaluator._softclip(image, params)
             elif kind == "HSVTool":
-                filtered = imaging.Evaluator._hsv_tool(image, params)
+                range_masks = [artifact.pixels if artifact is not None else None
+                               for artifact in inputs[1:5]]
+                filtered = imaging.Evaluator._hsv_tool(image, params, range_masks)
             elif kind == "Keyer":
                 filtered = imaging.Evaluator._keyer(image, params)
             elif kind == "ChromaKeyer":
@@ -1198,7 +1200,8 @@ class TileExecutor:
                 offset_y = max(0, mask_artifact.region.y - image_artifact.region.y)
                 image = image[offset_y:offset_y + mh, offset_x:offset_x + mw]
                 filtered = filtered[offset_y:offset_y + mh, offset_x:offset_x + mw]
-            mask = mask_artifact.pixels if mask_artifact is not None else None
+            mask = (None if kind == "HSVTool" else
+                    (mask_artifact.pixels if mask_artifact is not None else None))
             return imaging.Evaluator._apply_mask_mix(image, filtered, mask=mask,
                                                      mix=params.get("mix", 1.0))
         if kind == "LightWrap":

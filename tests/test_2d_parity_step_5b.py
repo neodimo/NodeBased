@@ -189,6 +189,37 @@ class HSVToolTests(unittest.TestCase):
         np.testing.assert_array_equal(out[0, :, :3], image[0, :, :3])
         np.testing.assert_array_equal(kernel("HSVTool", image, hue_rotation=90.0)[..., 3], image[..., 3])
 
+    def test_range_masks_gate_only_their_adjustment_and_alpha_choices_are_explicit(self):
+        image = self._pixels((0.8, 0.4, 0.4))
+        zero = np.zeros_like(image)
+        expected = kernel("HSVTool", image, hue_rotation=120.0, brt_adjust=0.5)
+        sat_limited = Evaluator._hsv_tool(image, dict(SPECS["HSVTool"]["params"],
+            hue_rotation=120.0, brt_adjust=0.5), (None, None, zero, None))
+        # The saturation mask suppresses saturation adjustment while hue and brightness still run.
+        np.testing.assert_allclose(sat_limited[..., :3], expected[..., :3], atol=1e-6)
+
+        masks = []
+        for alpha in (0.5, 0.25, 0.8):
+            mask = np.ones_like(image)
+            mask[..., 3] = alpha
+            masks.append(mask)
+        quantities = {"combined_weight": 0.1, "hue_weight": 0.5,
+                      "saturation_weight": 0.25, "brightness_weight": 0.8,
+                      "hue": 0.0, "saturation": 0.5, "value": 0.8}
+        for choice, expected_alpha in quantities.items():
+            out = Evaluator._hsv_tool(image, dict(SPECS["HSVTool"]["params"], output_alpha=choice),
+                                      (None, *masks))
+            self.assertAlmostEqual(float(out[0, 0, 3]), expected_alpha, places=6, msg=choice)
+        preserved = Evaluator._hsv_tool(image, dict(SPECS["HSVTool"]["params"]), (None, *masks))
+        self.assertAlmostEqual(float(preserved[0, 0, 3]), 1.0)
+
+    def test_old_boolean_output_alpha_values_keep_their_meaning(self):
+        image = self._pixels((1, 0, 0), (0, 0, 1))
+        preserved = kernel("HSVTool", image, output_alpha=0)
+        combined = kernel("HSVTool", image, hue_range_min=340.0, hue_range_max=20.0, output_alpha=1)
+        np.testing.assert_array_equal(preserved[..., 3], image[..., 3])
+        np.testing.assert_allclose(combined[0, :, 3], (1.0, 0.0))
+
 
 class AddMixTests(unittest.TestCase):
     def _pair(self):
@@ -332,6 +363,15 @@ class GraphTests(unittest.TestCase):
                     g.add("node", kind, params, **inputs)
                     self.assertIn(kind, SUPPORTED_TILED_KINDS)
                     np.testing.assert_allclose(tile_pixels(g.doc, "node"), evaluator_pixels(g.doc, "node"), atol=1e-6)
+
+    def test_hsv_tool_separate_range_masks_match_on_tiles(self):
+        g = Graph()
+        self._plate(g)
+        for name, alpha in (("hm", 1.0), ("sm", 0.0), ("bm", 0.5)):
+            g.add(name, "Constant", dict(width=257, height=193, alpha=alpha))
+        g.add("node", "HSVTool", dict(hue_rotation=120.0, sat_adjust=-0.5, brt_adjust=0.2),
+              image="plate", sat_mask="sm", hue_mask="hm", brt_mask="bm", mask="matte")
+        np.testing.assert_allclose(tile_pixels(g.doc, "node"), evaluator_pixels(g.doc, "node"), atol=1e-6)
 
     def test_grain_differs_between_frames_through_the_graph(self):
         g = Graph()

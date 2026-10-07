@@ -243,7 +243,7 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("brightness_rolloff",), label="Brightness rolloff", soft_range=(0, 1)),
         KnobGroup("float_slider", ("brt_adjust",), label="Brightness adjustment", soft_range=(-1, 2)),
         KnobGroup("bool", ("set_brightness",), label="Force brightness"),
-        KnobGroup("bool", ("output_alpha",), label="Output range to alpha"),
+        KnobGroup("enum", ("output_alpha",), label="Output to alpha"),
         KnobGroup("bool", ("color_replace",), label="Color replacement"),
         KnobGroup("color", ("srccolor_r", "srccolor_g", "srccolor_b"), label="Source color"),
         KnobGroup("color", ("dstcolor_r", "dstcolor_g", "dstcolor_b"), label="Destination color"),
