@@ -1,3 +1,7 @@
+## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
+
+Splat sets and instance sets with a light link now render in the GPU raster and ray-traced modes (a per-caster and per-instance light mask read by the shadow and shading passes); `gpu3d.render` no longer raises for them. Liquid glints (and the solids their rays hit), lit `pbr` particle sets (whitewater included) and smoke volumes read links too, with new `ParticleInstance.light_link` and `Volume.light_link` fields and `Lights` / `Light names or groups` knobs on `ParticleRender3D`, `Plume3D`, `ReadVDB3D` and `FluidCache3D` (not the solver nodes, whose params key the solve). Read by the CPU raster and ray-traced modes, the GPU modes, the viewport and both path tracers; a mesh that excludes a light no longer shadows smoke from it. Targeted: 1,671 tests OK on the branch; new modules clean on the RTX 3080 Ti, AMD Radeon 8060S and llvmpipe. Details: `docs/3D_FOUNDATION.md` "Light groups, light linking and the LightMixer" and the Lane 4 step notes.
+
 ## 2026-10-06 — Lane 4 Rendering 7 step S3: artist-facing mixed-scene render gate (4:33 PM PDT)
 
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (7:35 PM on 2026-10-06 PDT)

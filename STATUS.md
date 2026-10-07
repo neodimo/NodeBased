@@ -1,3 +1,11 @@
+# Lane 4 Rendering 8 step T1 — light linking everywhere
+
+Complete on `openclaw/nb-3d-astra-lane`: linked splat sets and instance sets render in the GPU raster and ray-traced modes with no
+CPU fallback, and liquid glints, lit particle sets (whitewater included) and smoke honour their links in the CPU, GPU and
+path-traced renderers and the viewport; an excluded light casts no shadow from any of them. Checked against the CPU reference on
+the RTX 3080 Ti, the AMD Radeon 8060S and llvmpipe (the GPU path tracer's smoke cases on NVIDIA only). Not run: Windows, CI.
+Integration is pending.
+
 # Lane 6 N1 — liquids on the GPU end to end
 
 # Lane 4 Rendering 7 step S3 — artist-facing mixed-scene render gate
