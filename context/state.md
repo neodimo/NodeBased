@@ -1,5 +1,32 @@
 ## 2026-10-06 — Lane 4 Rendering 7 step S3: artist-facing mixed-scene render gate (4:33 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (6:05 PM on 2026-10-06 PDT)
+
+`main` moved `7dc005d` -> `eac4a0a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 48 tests in 54.623 s, OK. Full suite on
+the stacked tip `eac4a0a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1006-1645.log`, started 4:45 PM): **Ran 4383 tests in 4430.878 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step X3 of 3: open the requested viewport in front.** Commits:
+  - `373781f` docs: Lane 2 step X3 completion note in TASKLOG and state
+  - `4d32c67` Toolbar 3D viewport: reopen, raise and widen the viewer, mark the active 2D/3D button, regression tests and usage note (Lane 2 step X3)
+  Diff: 8 files changed, 162 insertions(+), 3 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step S3 of 3: artist-facing mixed-scene render gate.** Commits:
+  - `8d57c35` docs: Lane 4 step S3 completion note with the exact-HEAD full suite result (4365 tests OK)
+  - `b7dfe6b` docs: record Lane 4 Rendering 7 step S3 (mixed-scene render gate) in TASKLOG, STATUS and state
+  - `0cce2fb` docs: Splats with meshes support table, mixed-scene example and gate measurements, multichannel position/object_id layers (Rendering 7 step S3), bundled copy
+  - `7d65c72` feat: mixed-scene example project, multichannel position and object_id layers, GPU beauty and data layers for multichannel Backend auto/gpu, project-relative splat paths, EXR gate tool and tests
+  Diff: 15 files changed, 1222 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 `examples/mixed_scene/mixed_scene.nbcomp` (opaque cube, sphere and backdrop; a transparent pane; a 4,000-splat generated cloud; camera; light) renders through the Write node into one float EXR with `R G B A depth.Z object_id.R position.X/Y/Z`; re-read, the layers match the CPU render of the same document (data layers identical with the pane transparent, 2 beauty/alpha pixels on the backdrop's bottom corners; with an opaque pane, 0 to 2 edge pixels over 2e-3 on each of the RTX 3080 Ti, AMD Radeon 8060S and llvmpipe). `Render3D` multichannel gained `position` and `object_id` and, with `Backend` `auto` or `gpu`, draws beauty, depth, position and object_id on the GPU (CPU per layer for `auto`); `ReadSplat3D` paths are saved relative to the project. Real display (Xwayland `:0`, 640 x 360): first frame 4,069 ms in the viewer, Write from the UI wrote the EXR. Evidence: `scratch/nb-qa/1006-s3/` in Gonzo's workspace, `tools/mixed_scene_gate.py`, `tests/test_3d_mixed_scene_gate.py`, `docs/3D_FOUNDATION.md` "Splats with meshes: what runs where". Unsupported on the GPU in this scene: depth, position and object_id while the pane is transparent (CPU, which is nearly all of the 3.2-3.5 s Write). Full suite on the exact code HEAD `b7dfe6b` (`scratch/nb-lanes/run/suite-L4-s3-b7dfe6b.log` in Gonzo's workspace, started 3:22 PM): **Ran 4365 tests in 4255.608 s, OK (skipped=9), exit 0**. Unverified: Windows, CI. Schema not bumped.
 
 ## 2026-10-06 — Lane 2 step X3: the 3D viewport button has a visible result (4:41 PM PDT)
