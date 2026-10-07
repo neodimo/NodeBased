@@ -2179,6 +2179,8 @@ class Viewer(PanZoomView):
         best = None
         best_distance = radius
         for shape_index, shape in enumerate(resolved):
+            if shape.get("locked", False):
+                continue
             for point_index, point in enumerate(shape["points"]):
                 scene_point = self._roto_scene_point(point, tier)
                 distance = math.hypot(scene_point.x() - scene_pos.x(), scene_point.y() - scene_pos.y())
@@ -2915,6 +2917,8 @@ class Viewer(PanZoomView):
             resolved = self._roto_resolved(context)
             hit = self._roto_hit_point(scene_pos, resolved, context[3])
             if hit is not None:
+                self.roto_selected_shape_index = hit[0]
+                self.window.rebuild_properties_dock()
                 self.roto_key = context[0]
                 self.roto_drag = {"point": hit, "scene": scene_pos, "start": scene_pos,
                                   "moved": False}
@@ -8186,10 +8190,8 @@ class Window(QMainWindow):
                 readout.setToolTip("Read-only: the bounds divided by the division size, rounded up")
                 form.addRow("Resolution", readout)
             if node["type"] == "Roto":
-                draw = QPushButton("Draw shape…")
-                draw.setToolTip("Click points in the Roto viewer; press Enter to close, Esc to cancel")
-                draw.clicked.connect(lambda checked=False, k=key: self.begin_roto_draw(k))
-                form.addRow(draw)
+                from .rotopanel import build_panel as build_roto_panel
+                form.addRow(build_roto_panel(self, key))
             if node["type"] == "SplineWarp":
                 for side in ("source", "destination"):
                     button = QPushButton(f"Draw {side} curve…")

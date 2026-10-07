@@ -111,14 +111,25 @@ def resolve_scalar(value, frame, name=None):
 
 
 def validate_shape(shape, where):
-    if not isinstance(shape, dict) or set(shape) != {"name", "mode", "opacity", "feather", "points"}:
-        raise ValueError(f"{where}: a shape defines exactly name, mode, opacity, feather and points")
+    required = {"name", "mode", "opacity", "feather", "points"}
+    optional = {"visible", "locked", "invert", "feather_falloff", "color", "blend_mode", "motion_blur"}
+    if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
+        raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
     if not isinstance(shape["name"], str) or not 1 <= len(shape["name"]) <= 128:
         raise ValueError(f"{where}.name must contain 1-128 characters")
     if shape["mode"] not in SHAPE_MODES:
         raise ValueError(f"{where}.mode must be one of {list(SHAPE_MODES)}")
     validate_scalar(shape["opacity"], "opacity", where)
     validate_scalar(shape["feather"], "feather", where)
+    if any(k in shape and type(shape[k]) is not bool for k in ("visible", "locked", "invert", "motion_blur")):
+        raise ValueError(f"{where}: visibility, lock, invert and motion blur flags must be booleans")
+    if shape.get("feather_falloff", "linear") not in ("linear", "smooth", "gaussian"):
+        raise ValueError(f"{where}.feather_falloff is unsupported")
+    if shape.get("blend_mode", "over") not in ("over", "plus", "minus", "multiply"):
+        raise ValueError(f"{where}.blend_mode is unsupported")
+    color = shape.get("color", [1.0, 1.0, 1.0, 1.0])
+    if not isinstance(color, list) or len(color) != 4 or any(not _is_number(c) or not 0 <= c <= 1 for c in color):
+        raise ValueError(f"{where}.color must be RGBA values between 0 and 1")
     points = shape["points"]
     if not isinstance(points, list) or not MINIMUM_SHAPE_POINTS <= len(points) <= MAXIMUM_SHAPE_POINTS:
         raise ValueError(f"{where}.points must hold between {MINIMUM_SHAPE_POINTS} and "
@@ -317,14 +328,20 @@ def resolve_shapes(payload, frame):
     """
     shapes = []
     for shape in (payload or {}).get("shapes", []):
-        shapes.append({
+        resolved = {
             "name": shape["name"],
             "mode": shape["mode"],
             "opacity": resolve_scalar(shape["opacity"], frame, "opacity"),
             "feather": resolve_scalar(shape["feather"], frame, "feather"),
             "points": [{field: resolve_scalar(point[field], frame, field) for field in POINT_FIELDS}
                        for point in shape["points"]],
-        })
+        }
+        for field, default in (("visible", True), ("locked", False), ("invert", False),
+                               ("feather_falloff", "linear"), ("color", [1, 1, 1, 1]),
+                               ("blend_mode", "over"), ("motion_blur", False)):
+            resolved[field] = copy_value = shape.get(field, default)
+            if field == "color": resolved[field] = list(copy_value)
+        shapes.append(resolved)
     return shapes
 
 
