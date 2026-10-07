@@ -368,5 +368,35 @@ class WhitewaterNeighbourListTests(unittest.TestCase):
         self.assertLess(arrays * 3.0, loop, f"loop {loop:.2f} s, arrays {arrays:.2f} s")
 
 
+class WhitewaterNearestParticleTests(unittest.TestCase):
+    """Foam and bubbles follow the nearest liquid particle. The search hashed every liquid particle in Python on each call:
+    1.7 of the 2.1 seconds of a whitewater frame at 256 cells."""
+
+    def test_the_array_search_returns_the_loops_indices_including_ties_and_empty_neighbourhoods(self):
+        from nodebased import whitewater
+        rng = np.random.default_rng(5)
+        cases = [(rng.uniform(-1, 1, (n, 3)), rng.uniform(-1.3, 1.3, (m, 3)))
+                 for n, m in ((10, 5), (500, 300), (5000, 2000))]
+        far = rng.uniform(-1, 1, (400, 3))
+        cases.append((far, np.vstack([far[:50] + 0.01, np.full((3, 3), 40.0)])))                  # queries far outside
+        cases.append((np.repeat(rng.uniform(0, 1, (100, 3)), 5, axis=0), rng.uniform(0, 1, (300, 3))))   # exact ties
+        for points, query in cases:
+            np.testing.assert_array_equal(whitewater._nearest_indices(query, points),
+                                          whitewater._nearest_indices_loop(query, points))
+
+    def test_it_is_much_faster_on_a_pool_sized_liquid(self):
+        import time
+        from nodebased import whitewater
+        rng = np.random.default_rng(6)
+        points, query = rng.uniform(0, 1, (100000, 3)), rng.uniform(0, 1, (10000, 3))
+        started = time.perf_counter()
+        whitewater._nearest_indices_loop(query, points)
+        loop = time.perf_counter() - started
+        started = time.perf_counter()
+        whitewater._nearest_indices(query, points)
+        arrays = time.perf_counter() - started
+        self.assertLess(arrays * 4.0, loop, f"loop {loop:.2f} s, arrays {arrays:.2f} s")
+
+
 if __name__ == "__main__":
     unittest.main()
