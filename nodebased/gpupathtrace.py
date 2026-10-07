@@ -2517,13 +2517,13 @@ def _tile_bits(tile_done):
 # --- rendering ------------------------------------------------------------------------------------------
 
 def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height, wg,
-                     heavy, settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap, phases,
-                     sparse_threads):
-    """Adaptive sampling on the device. Every sample is one indirect dispatch over the blocks the last `scan` listed; after
-    each pass `scan` and `finish` (`_COMPACT_SHADER`) rebuild that list from the shader's per-pixel done flags. The running
-    moments and the done flags stay in `accum`, so nothing is read back while the render runs: the host only waits for the
-    card now and then (a pass when it must report progress or honour a time limit, `ADAPTIVE_PACE` passes otherwise) and, when
-    `progress` is given, reads the list's length (one word) after each pass. Returns (samples taken per pixel, passes, open pixels last seen)."""
+                     heavy, settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap, sparse_threads):
+    """Adaptive sampling on the device. Every sample is one indirect dispatch over the pixels the last `scan` listed as open;
+    after each pass `scan` and `finish` (`_COMPACT_SHADER`) rebuild that list from the shader's per-pixel done flags. The
+    running moments and the done flags stay in `accum`, so nothing is read back while the render runs: the host only waits for
+    the card now and then (every pass when it must report progress, honour a time limit or a cancel, `ADAPTIVE_PACE` passes
+    otherwise) and, when `progress` is given, reads the list's length (one word) after each pass. The finished accumulator
+    holds the result: the caller reads it once."""
     scan, finish, reduce = _compact_pipelines(state)
     npix = width * height
     threads = wg * wg
@@ -2582,10 +2582,10 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
         lap("dispatch")
     encoder = device.create_command_encoder()
     compute = encoder.begin_compute_pass()
-    compaction(compute)                    # every block is open before the first pass
+    compaction(compute)                    # every pixel is open before the first pass
     compute.end()
     device.queue.submit([encoder.finish()])
-    sample_index, passes, pixels_open = 0, 0, width * height
+    sample_index, passes = 0, 0
     asked = progress is not None or bool(settings.time_limit) or cancel is not None
     while sample_index < total_samples:
         raytrace._cancel(cancel)
@@ -2639,7 +2639,6 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
         if settings.time_limit and time.perf_counter() - started >= settings.time_limit:
             break
     wait()                     # the card may still owe the last passes: the final readback then times the transfer alone
-    return sample_index, passes, pixels_open
 
 
 def render(scene, camera, width, height, background, ambient, output, settings, cancel=None, progress=None,
@@ -2716,14 +2715,13 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         per_pass = 1 if data_pass else max(1, settings.pass_samples or 1)
         total_samples = 1 if data_pass else (settings.max_samples if adaptive else settings.samples)
         sample_index, passes = 0, 0
-        pixels_open = npix
         tile_done = np.zeros(tiles_x * tiles_y, bool)
         tile_count = np.zeros(tiles_x * tiles_y, np.int64)
         tile_of = None
         if adaptive:
-            sample_index, passes, pixels_open = _adaptive_passes(
-                state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height, wg, heavy,
-                settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap, phases, sparse_threads)
+            _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height,
+                             wg, heavy, settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap,
+                             sparse_threads)
         else:
             tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
             blocks = upload(np.zeros(4, "u4"), storage)       # the adaptive list, unused here
