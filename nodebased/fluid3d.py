@@ -983,7 +983,19 @@ class Smoke3D:
         arrays = {}
         for name, source in state.arrays.items():
             if source.ndim < 3:
-                continue  # sparse-GPU tile masks are rebuilt for the resized allocation
+                continue
+            if name == "tile_mask":
+                # one value per 8-cell tile of the sparse GPU solver: shifted by whole tiles (the box moves in tiles),
+                # tiles that enter the box start inactive
+                tiles = tuple(n // 8 for n in new_shape)
+                target = np.zeros(tiles, dtype=source.dtype)
+                src_lo = np.maximum(0, start // 8)
+                dst_lo = np.maximum(0, -(start // 8))
+                lengths = np.maximum(0, np.minimum(np.array(source.shape[:3]) - src_lo, np.array(tiles) - dst_lo))
+                target[tuple(slice(int(dst_lo[a]), int(dst_lo[a] + lengths[a])) for a in range(3))] = \
+                    source[tuple(slice(int(src_lo[a]), int(src_lo[a] + lengths[a])) for a in range(3))]
+                arrays[name] = target
+                continue
             target_shape = list(new_shape)
             face_axis = {"u": 0, "v": 1, "w": 2}.get(name)
             if face_axis is not None:

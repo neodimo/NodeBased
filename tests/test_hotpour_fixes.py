@@ -138,5 +138,26 @@ class WideColliderDoesNotInflateTheDomainTests(unittest.TestCase):
         self.assertLessEqual(max(shape), 48, f"the box grew to {shape} to cover the table")
 
 
+class SparseTileMaskSurvivesAResizeTests(unittest.TestCase):
+    """A resident sparse smoke checkpoint carries `tile_mask`, one value per 8-cell tile. The adaptive resize treated it
+    as a cell field and padded it out to the cell grid, so resuming the next substep raised "Invalid data_length"."""
+
+    def test_the_tile_mask_follows_the_box_in_whole_tiles(self):
+        solver = fluid3d.Smoke3D({"nx": 32, "ny": 32, "nz": 32, "default_source": 0, "auto_resize": 1, "padding": 0,
+                                  "max_size": 128, "boundary_x": "open", "boundary_y": "open", "boundary_z": "open"})
+        state = solver.initial_state()
+        state.arrays["density"][16:24, 8:16, 8:16] = 1.0               # one tile, at tile index (2, 1, 1)
+        mask = np.zeros((4, 4, 4), np.uint8)
+        mask[2, 1, 1] = 1
+        state.arrays["tile_mask"] = mask
+        resized = solver._resize_active_domain(state, frame=1)
+        shape = tuple(resized.meta["domain_shape"])
+        start = np.round((np.asarray(resized.meta["domain_origin"]) - solver.origin) / solver.voxel).astype(int)
+        got = resized.arrays["tile_mask"]
+        self.assertEqual(got.shape, tuple(n // 8 for n in shape))
+        self.assertEqual(int(got.sum()), 1)
+        self.assertEqual(tuple(int(i) for i in np.argwhere(got)[0]), tuple(int(v) for v in (np.array((2, 1, 1)) - start // 8)))
+
+
 if __name__ == "__main__":
     unittest.main()
