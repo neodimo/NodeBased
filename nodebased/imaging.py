@@ -5176,6 +5176,14 @@ class Evaluator:
         hue, sat = Evaluator._rgb_to_hue_sat(rgb)
         hue = hue[..., 0].astype(np.float64) % 360.0
         sat = sat[..., 0]
+        threshold = max(0.0, float(p.get("sat_thrsh", 0.0)))
+        if threshold > 0.0:
+            # Nuke's threshold fades the correction in over the next threshold-width of
+            # saturation, avoiding a hard edge at the cutoff.
+            t = np.clip((sat - threshold) / threshold, 0.0, 1.0)
+            sat_weight = t * t * (3.0 - 2.0 * t)
+        else:
+            sat_weight = np.ones_like(sat, dtype=np.float32)
         default_curve = '{"interpolation":"linear","points":[[0,1],[360,1]]}'
         legacy_names = ("red", "yellow", "green", "cyan", "blue", "magenta")
         for prefix in ("sat", "lum"):
@@ -5191,17 +5199,17 @@ class Evaluator:
             return colorcurves.evaluate_array(colorcurves.decode(raw), hue)
         s_mult, l_mult = sample("sat"), sample("lum")
         luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
-        out = rgb + (s_mult[..., None] - 1.0) * (rgb - luma)
-        out = out * (1.0 + (l_mult[..., None] - 1.0) * np.clip(sat[..., None], 0.0, 1.0))
+        out = rgb + (s_mult[..., None] - 1.0) * (rgb - luma) * sat_weight[..., None]
+        out = out * (1.0 + (l_mult[..., None] - 1.0) * np.clip(sat[..., None], 0.0, 1.0) * sat_weight[..., None])
         for channel, name in enumerate(("red", "green", "blue")):
-            out[..., channel] *= sample(name)
+            out[..., channel] *= 1.0 + (sample(name) - 1.0) * sat_weight
         # Suppression is despill-style limiting, a separate output from the channel response above:
         # a channel is pulled toward the larger of the other two by the curve's value, so 1 limits
         # it to them and a channel already below them is left alone.
         pre = out.copy()
         for channel, name in enumerate("rgb"):
             others = np.maximum(pre[..., (channel + 1) % 3], pre[..., (channel + 2) % 3])
-            out[..., channel] -= sample(name + "_sup", 0.0) * np.maximum(pre[..., channel] - others, 0.0)
+            out[..., channel] -= sample(name + "_sup", 0.0) * np.maximum(pre[..., channel] - others, 0.0) * sat_weight
         shift = float(p.get("hue_shift", 0.0))
         if shift % 360.0 != 0.0:
             a = math.radians(shift); c, s = math.cos(a), math.sin(a); k = 1.0 / math.sqrt(3.0)

@@ -279,6 +279,7 @@ KNOB_LAYOUT = {
     "HueCorrect": _groups(
         KnobGroup("legacy", tuple(f"{prefix}_{band}" for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta"))),
         *[KnobGroup("curve", (f"curve_{name}",), label=name.replace("_", " ").title()) for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")],
+        KnobGroup("float_slider", ("sat_thrsh",), label="Saturation threshold", soft_range=(0, 1)),
         KnobGroup("float_slider", ("hue_shift",), label="Hue shift", soft_range=(-180, 180)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ColorLookup": _groups(*[KnobGroup("curve", (f"curve_{name}",), label=name.title()) for name in ("master", "red", "green", "blue", "alpha")], KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),

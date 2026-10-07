@@ -258,3 +258,22 @@ class SpecCoverageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class HueCorrectSaturationThresholdTests(unittest.TestCase):
+    def test_threshold_preserves_greys_and_fades_in_on_saturated_pixels(self):
+        image = np.array([[[0.4, 0.4, 0.4, 1.0], [0.0, 0.0, 1.0, 1.0]]], np.float32)
+        params = dict(SPECS["HueCorrect"]["params"])
+        params.update(sat_thrsh=0.2, curve_sat='{"interpolation":"linear","points":[[0,0],[360,0]]}')
+        result = Evaluator._kernel("HueCorrect", params, [image])
+        np.testing.assert_array_equal(result[0, 0], image[0, 0])
+        self.assertFalse(np.array_equal(result[0, 1, :3], image[0, 1, :3]))
+        self.assertEqual(float(result[0, 1, 3]), 1.0)
+
+    def test_default_threshold_keeps_legacy_render_and_tile_pixels(self):
+        graph = Graph()
+        graph.add("src", "Constant", {"width": 35, "height": 19, "red": .4, "green": .4, "blue": .4, "alpha": 1})
+        graph.add("fx", "HueCorrect", {"curve_sat": '{"interpolation":"linear","points":[[0,0],[360,0]]}'}, image="src")
+        old = dict(graph.doc)
+        old["nodes"] = {k: dict(v, params={key: value for key, value in v["params"].items() if key != "sat_thrsh"}) for k, v in graph.doc["nodes"].items()}
+        np.testing.assert_array_equal(evaluator_pixels(graph.doc, "fx"), evaluator_pixels(old, "fx"))
+        np.testing.assert_array_equal(tile_pixels(graph.doc, "fx"), evaluator_pixels(graph.doc, "fx"))

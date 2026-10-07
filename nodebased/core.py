@@ -221,7 +221,7 @@ SPECS = {
                  "params": {"exposure_mode": "stops", "blackpoint": 0.0, "gang": 1, "red": 0.0,
                             "green": 0.0, "blue": 0.0, "channels": "rgb", "mix": 1.0}},
     "HueCorrect": {"inputs": ["image"], "optional_inputs": ["mask"],
-                   "params": {**{f"curve_{name}": ('{"interpolation":"linear","points":[[0,0],[360,0]]}' if name.endswith("_sup") else '{"interpolation":"linear","points":[[0,1],[360,1]]}') for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "hue_shift": 0.0, "mix": 1.0}},
+                   "params": {**{f"curve_{name}": ('{"interpolation":"linear","points":[[0,0],[360,0]]}' if name.endswith("_sup") else '{"interpolation":"linear","points":[[0,1],[360,1]]}') for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "sat_thrsh": 0.0, "hue_shift": 0.0, "mix": 1.0}},
     "ColorLookup": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,0],[1,1]]}' for name in ("master", "red", "green", "blue", "alpha")}, "mix": 1.0}},
     # ColorMatrix (step 4a): a 3x3 RGB matrix as nine knobs, matrix_RC = row R, column C, so
@@ -1501,7 +1501,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # HueCorrect (step 4a): per-band multipliers and a hue rotation in degrees; ColorMatrix's
           # nine matrix entries are unbounded in practice, so the range is only a sanity fence.
           "sat_red": (0.0, 10.0), "lum_red": (0.0, 10.0), "sat_yellow": (0.0, 10.0), "lum_yellow": (0.0, 10.0), "sat_green": (0.0, 10.0), "lum_green": (0.0, 10.0), "sat_cyan": (0.0, 10.0), "lum_cyan": (0.0, 10.0), "sat_blue": (0.0, 10.0), "lum_blue": (0.0, 10.0), "sat_magenta": (0.0, 10.0), "lum_magenta": (0.0, 10.0),
-          "hue_shift": (-360.0, 360.0),
+          "hue_shift": (-360.0, 360.0), "sat_thrsh": (0.0, 1.0),
           "matrix_00": (-1000.0, 1000.0), "matrix_01": (-1000.0, 1000.0), "matrix_02": (-1000.0, 1000.0), "matrix_10": (-1000.0, 1000.0), "matrix_11": (-1000.0, 1000.0), "matrix_12": (-1000.0, 1000.0), "matrix_20": (-1000.0, 1000.0), "matrix_21": (-1000.0, 1000.0), "matrix_22": (-1000.0, 1000.0), "black": (-1023.0, 1023.0), "white": (-1023.0, 1023.0), "black_out": (-1023.0, 1023.0), "white_out": (-1023.0, 1023.0), "linear_reference": (0.000001, 1000.0), "log_reference": (-1000000.0, 1000000.0), "density_per_code_value": (0.0000001, 1.0), "negative_gamma": (0.001, 10.0), "toe": (0.000001, 0.999999), "toe_lift": (-1.0, 1.0),
 
           # ChromaKeyer and IBKColor/IBKGizmo (step K1).
