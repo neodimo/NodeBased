@@ -1341,8 +1341,8 @@ class KeyframeUiTests(unittest.TestCase):
 
     def key_button(self):
         """The keyframe button belonging to the first numeric knob."""
-        buttons = [b for b in self.window.properties.findChildren(QPushButton)
-                   if b.text() in ('○', '◇', '◆')]
+        buttons = [b for b in self.window.properties.findChildren(QPushButton, 'key-button')
+                   if b.property('keyState') in ('none', 'between', 'keyed')]
         self.assertTrue(buttons, 'no keyframe button on a numeric knob')
         return buttons[0]
 
@@ -1352,13 +1352,13 @@ class KeyframeUiTests(unittest.TestCase):
 
     def test_key_button_sets_a_key_at_the_playhead_and_toggles_it_off(self):
         w = self.window
-        self.assertEqual(self.key_button().text(), '○')
+        self.assertEqual(self.key_button().property('keyState'), 'none')
         self.editor().setValue(1.5)
         self.key_button().click()
         self.assertTrue(wait_until(lambda: self.curve() is not None))
         self.assertEqual([(k['frame'], k['value']) for k in self.curve()['keys']], [(1, 1.5)])
         # The panel is rebuilt from the document, so the button now reports the key it made.
-        self.assertTrue(wait_until(lambda: self.key_button().text() == '◆'))
+        self.assertTrue(wait_until(lambda: self.key_button().property('keyState') == 'keyed'))
         self.key_button().click()
         self.assertTrue(wait_until(lambda: self.curve() is None))
 
@@ -2426,8 +2426,7 @@ class KnobLayoutTests(unittest.TestCase):
                                    and self.window.dispatcher.document['nodes']['transform']['params']['translate_y'] == -7.25))
         for field in (x_field, y_field):
             row = field.parentWidget()
-            self.assertEqual(len([b for b in row.findChildren(QPushButton)
-                                  if b.text() in ('○', '◇', '◆', 'ƒ')]), 1)
+            self.assertEqual(len(row.findChildren(QPushButton, 'key-button')), 1)
 
     def test_color_knob_fields_stay_in_0_to_1_range_and_have_a_swatch(self):
         panel = self.select('wash')

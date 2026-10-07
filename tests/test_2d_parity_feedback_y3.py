@@ -9,7 +9,9 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from PySide6.QtWidgets import QLabel
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QDoubleSpinBox, QLabel, QLineEdit, QPushButton
 
 from nodebased.app import Window
 from tests.test_desktop import APP, release_window
@@ -141,6 +143,167 @@ class WriteRenderFeedbackTests(unittest.TestCase):
         w.render_write("writer", single=False)
         self.assertEqual(self.files(), ["render.0001.exr", "render.0002.exr", "render.0003.exr"])
         self.assertIn("already running", calls[0])
+
+
+class AnimatedKnobTests(unittest.TestCase):
+    """Finding 4 and 5: an animated knob is tinted, a key frame shows a diamond in the field, the key
+    button is a drawn diamond with a tooltip, and the right-click menu reaches every curve edit."""
+
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.addCleanup(close_window, self)
+        self.window.set_time(first=1, last=20, current=1)
+        self.select("grade")
+
+    def select(self, node_id):
+        self.window.graph.items_by_id[node_id].setSelected(True)
+        APP.processEvents()
+
+    def spin(self, index=0):
+        """The Grade panel's numeric fields in order: index 0 is Exposure, 1 the next knob."""
+        return self.window.properties.findChildren(QDoubleSpinBox)[index]
+
+    def button(self, param="exposure"):
+        return self.window.properties.findChild(QPushButton, "key-button")
+
+    def curve(self):
+        return ((self.window.dispatcher.document.get("animation") or {})
+                .get("curves", {}).get("grade", {}).get("exposure"))
+
+    def keys(self):
+        return [(k["frame"], k["value"]) for k in self.curve()["keys"]]
+
+    def key(self, frame, value):
+        self.window.command({"op": "set_key", "id": "grade", "param": "exposure", "frame": frame,
+                             "value": value}, render=False)
+        self.select("grade")
+
+    def goto(self, frame):
+        self.window.set_time(current=frame)
+        self.assertTrue(wait_until(lambda: self.spin().property("animated") is not None))
+        APP.processEvents()
+
+    @staticmethod
+    def glyphs(spin):
+        return [a for a in spin.lineEdit().actions() if a.objectName() == "key-glyph"]
+
+    @staticmethod
+    def corner_pixel(spin):
+        image = spin.grab().toImage()
+        return image.pixelColor(4, 4)
+
+    def test_a_static_knob_is_not_tinted_and_has_no_glyph(self):
+        spin = self.spin()
+        self.assertFalse(spin.property("animated"))
+        self.assertEqual(spin.styleSheet(), "")
+        self.assertEqual(self.glyphs(spin), [])
+        self.assertEqual(self.button().property("keyState"), "none")
+
+    def test_an_animated_knob_is_tinted_between_keys_and_shows_a_diamond_on_a_key_frame(self):
+        self.key(3, 0.5)
+        self.key(10, 2.0)
+        static_pixel = self.corner_pixel(self.spin(1))
+        self.goto(6)   # between the keys
+        spin = self.spin()
+        self.assertTrue(spin.property("animated"))
+        self.assertFalse(spin.property("keyedHere"))
+        self.assertEqual(self.glyphs(spin), [])
+        self.assertEqual(self.button().property("keyState"), "between")
+        between = self.corner_pixel(spin)
+        self.assertGreater(between.blue() - between.red(), static_pixel.blue() - static_pixel.red() + 15,
+                           "the animated field is not visibly tinted blue against a static one")
+        # The tint is the same on a key frame, which adds the diamond and a filled button.
+        self.goto(10)
+        spin = self.spin()
+        self.assertTrue(spin.property("keyedHere"))
+        self.assertEqual(len(self.glyphs(spin)), 1)
+        self.assertEqual(self.button().property("keyState"), "keyed")
+        self.assertEqual(self.corner_pixel(spin), between)
+        # The static knob next to it is untouched.
+        self.assertFalse(self.spin(1).property("animated"))
+        self.assertEqual(self.glyphs(self.spin(1)), [])
+
+    def test_the_key_button_icon_is_outlined_unkeyed_and_filled_when_keyed(self):
+        self.key(3, 0.5)
+        self.goto(6)
+        outline = self.button().icon().pixmap(14, 14).toImage()
+        self.goto(3)
+        filled = self.button().icon().pixmap(14, 14).toImage()
+        centre = lambda image: image.pixelColor(image.width() // 2, image.height() // 2).alpha()
+        self.assertEqual(centre(outline), 0)
+        self.assertGreater(centre(filled), 200)
+        self.assertEqual(self.button().text(), "")
+
+    def test_the_key_button_tooltip_names_the_action_and_the_shortcut(self):
+        self.assertIn("Set the first key at frame 1", self.button().toolTip())
+        self.assertIn("I with the field focused", self.button().toolTip())
+        self.key(1, 0.5)
+        self.assertIn("Delete the key at frame 1", self.button().toolTip())
+        self.goto(4)
+        self.assertIn("Set a key at frame 4", self.button().toolTip())
+        self.assertIn("I with the field focused", self.button().toolTip())
+
+    def test_i_with_the_field_focused_sets_a_key_at_the_playhead(self):
+        self.goto(1)
+        self.window.set_time(current=5)
+        APP.processEvents()
+        spin = self.spin()
+        spin.setValue(1.25)
+        spin.setFocus()
+        QTest.keyClick(spin, Qt.Key.Key_I)
+        self.assertTrue(wait_until(lambda: self.curve() is not None))
+        self.assertEqual(self.keys(), [(5, 1.25)])
+
+    def menu_actions(self):
+        menu = self.window.build_curve_menu("grade", "exposure", self.spin())
+        return {a.text().split(" (")[0]: a for a in menu.actions() if a.text()}
+
+    def test_the_knob_menu_offers_set_delete_previous_next_and_clear(self):
+        self.key(3, 0.5)
+        self.key(10, 2.0)
+        self.goto(6)
+        actions = self.menu_actions()
+        for name in ("Set key at frame 6", "Delete key at frame 6", "Previous key", "Next key", "Clear animation"):
+            self.assertIn(name, actions)
+        self.assertFalse(actions["Delete key at frame 6"].isEnabled())
+        self.assertIn("frame 3", [a.text() for a in actions.values() if a.text().startswith("Previous")][0])
+        self.assertIn("frame 10", [a.text() for a in actions.values() if a.text().startswith("Next")][0])
+
+    def test_previous_and_next_key_move_the_playhead_between_keys(self):
+        self.key(3, 0.5)
+        self.key(10, 2.0)
+        self.goto(6)
+        self.menu_actions()["Next key"].trigger()
+        self.assertEqual(self.window.dispatcher.document["time"]["current"], 10)
+        self.goto(10)
+        self.assertFalse(self.menu_actions()["Next key"].isEnabled())
+        self.menu_actions()["Previous key"].trigger()
+        self.assertEqual(self.window.dispatcher.document["time"]["current"], 3)
+        self.goto(3)
+        self.assertFalse(self.menu_actions()["Previous key"].isEnabled())
+
+    def test_set_delete_and_clear_edit_the_curve_and_each_undoes_in_one_step(self):
+        w = self.window
+        self.key(3, 0.5)
+        self.key(10, 2.0)
+        self.goto(6)
+        self.spin().setValue(1.0)
+        self.menu_actions()["Set key at frame 6"].trigger()
+        self.assertTrue(wait_until(lambda: len(self.curve()["keys"]) == 3))
+        self.assertEqual(self.keys(), [(3, 0.5), (6, 1.0), (10, 2.0)])
+        w.command({"op": "undo"})
+        self.assertEqual(self.keys(), [(3, 0.5), (10, 2.0)])
+        self.goto(10)
+        self.menu_actions()["Delete key at frame 10"].trigger()
+        self.assertTrue(wait_until(lambda: len(self.curve()["keys"]) == 1))
+        w.command({"op": "undo"})
+        self.assertEqual(self.keys(), [(3, 0.5), (10, 2.0)])
+        self.menu_actions()["Clear animation"].trigger()
+        self.assertTrue(wait_until(lambda: self.curve() is None))
+        w.command({"op": "undo"})
+        self.assertEqual(self.keys(), [(3, 0.5), (10, 2.0)])
 
 
 if __name__ == "__main__":

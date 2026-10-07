@@ -3414,6 +3414,28 @@ class BackdropGrip(QGraphicsRectItem):
         event.accept()
 
 
+KEY_SHORTCUT_TEXT = "I with the field focused"
+ANIMATED_TINT_ALPHA = 70
+
+
+def key_icon(filled, color, size=16):
+    """A keyframe diamond: filled when a key sits on the current frame, an outline otherwise."""
+    ratio = 2
+    pixmap = QPixmap(size * ratio, size * ratio)
+    pixmap.setDevicePixelRatio(ratio)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    middle, reach = size / 2.0, size / 2.0 - 2.0
+    diamond = QPolygonF([QPointF(middle, middle - reach), QPointF(middle + reach, middle),
+                         QPointF(middle, middle + reach), QPointF(middle - reach, middle)])
+    painter.setPen(QPen(QColor(color), 1.6))
+    painter.setBrush(QColor(color) if filled else Qt.BrushStyle.NoBrush)
+    painter.drawPolygon(diamond)
+    painter.end()
+    return QIcon(pixmap)
+
+
 ERROR_COLOR = "#e3b18d"  # the status bar's problem colour (command_error_label)
 
 
@@ -7815,40 +7837,7 @@ class Window(QMainWindow):
                 return control
 
             def add_animation_button(row, param, control):
-                button = QPushButton()
-                button.setFixedWidth(26)
-                button.setFlat(True)
-                button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-                curve = self.node_curve(key, param)
-                frame = self.dispatcher.document["time"]["current"]
-                keyed_here = curve is not None and any(k["frame"] == frame for k in curve["keys"])
-                expression = expressions.get(param)
-                if expression is not None:
-                    button.setText("ƒ")
-                    button.setEnabled(False)
-                    button.setStyleSheet("color: #c58cff; border: none; font-size: 14px")
-                    button.setToolTip("Expression-driven. Clear the expression before keying this knob.")
-                elif keyed_here:
-                    button.setText("◆")
-                    button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
-                    button.setToolTip(f"Key set at frame {frame}. Click to remove it.\nRight-click for "
-                                      f"curve options.")
-                elif curve is not None:
-                    button.setText("◇")
-                    button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
-                    button.setToolTip(f"Animated ({len(curve['keys'])} keys, {curve['interpolation']}). "
-                                      f"Click to key the current value at frame {frame}.\nRight-click for "
-                                      f"curve options.")
-                else:
-                    button.setText("○")
-                    button.setStyleSheet("color: #6d6d78; border: none; font-size: 14px")
-                    button.setToolTip(f"Not animated. Click to set the first key at frame {frame}.")
-                button.clicked.connect(
-                    lambda checked=False, k=key, p=param, w=control, on=keyed_here:
-                    self.toggle_key(k, p, w, on))
-                button.customContextMenuRequested.connect(
-                    lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
-                row.addWidget(button)
+                row.addWidget(self.make_key_button(key, param, control, expressions.get(param)))
 
             # RotoPaint: the paint tool, brush and layer controls come first. Its knobs are built into
             # two holding layouts and placed below (the Detect/patch group in a collapsed advanced
@@ -9536,40 +9525,76 @@ class Window(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         layout.addWidget(control, 1)
+        layout.addWidget(self.make_key_button(key, param, control, expression))
+        return row
+
+    def make_key_button(self, key, param, control, expression=None):
+        """The key button beside an animatable knob, and the animated look of the knob itself.
+
+        A drawn diamond rather than a text glyph: the font fallback on a plain Linux desktop
+        rendered the old circle/diamond characters as a bare colon (10/6 real-display QA, finding
+        5). Outlined when no key sits on this frame, filled when one does. The knob's field is
+        tinted while the parameter has any key, and shows the same diamond inside the field on
+        the frames that hold one."""
         button = QPushButton()
+        button.setObjectName("key-button")
+        button.setAccessibleName(f"{param} key")
         button.setFixedWidth(26)
         button.setFlat(True)
+        button.setIconSize(QSize(14, 14))
         button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         curve = self.node_curve(key, param)
-        frame = self.dispatcher.document["time"]["current"]
+        frame = int(self.dispatcher.document["time"]["current"])
         keyed_here = curve is not None and any(k["frame"] == frame for k in curve["keys"])
         if expression is not None:
+            button.setProperty("keyState", "expression")
             button.setText("ƒ")
             button.setEnabled(False)
             button.setStyleSheet("color: #c58cff; border: none; font-size: 14px")
             button.setToolTip("Expression-driven. Clear the expression before keying this knob.")
-        elif keyed_here:
-            button.setText("◆")
-            button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
-            button.setToolTip(f"Key set at frame {frame}. Click to remove it.\nRight-click for "
-                              f"curve options.")
-        elif curve is not None:
-            button.setText("◇")
-            button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
-            button.setToolTip(f"Animated ({len(curve['keys'])} keys, {curve['interpolation']}). "
-                              f"Click to key the current value at frame {frame}.\nRight-click for "
-                              f"curve options.")
         else:
-            button.setText("○")
-            button.setStyleSheet("color: #6d6d78; border: none; font-size: 14px")
-            button.setToolTip(f"Not animated. Click to set the first key at frame {frame}.")
+            state = "keyed" if keyed_here else ("between" if curve is not None else "none")
+            button.setProperty("keyState", state)
+            button.setIcon(key_icon(keyed_here, KEY_COLOR if curve is not None else QColor("#8b8b96")))
+            button.setStyleSheet("border: none")
+            if keyed_here:
+                button.setToolTip(f"Delete the key at frame {frame} (click). Right-click for the "
+                                  f"animation menu.")
+            elif curve is not None:
+                button.setToolTip(f"Set a key at frame {frame} (click, or {KEY_SHORTCUT_TEXT}). "
+                                  f"Animated: {len(curve['keys'])} keys, {curve['interpolation']}. "
+                                  f"Right-click for the animation menu.")
+            else:
+                button.setToolTip(f"Set the first key at frame {frame} (click, or {KEY_SHORTCUT_TEXT}). "
+                                  f"Right-click for the animation menu.")
+            self.style_animated_field(control, curve, keyed_here)
         button.clicked.connect(
             lambda checked=False, k=key, p=param, w=control, on=keyed_here:
                 self.toggle_key(k, p, w, on))
         button.customContextMenuRequested.connect(
             lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
-        layout.addWidget(button)
-        return row
+        return button
+
+    @staticmethod
+    def style_animated_field(control, curve, keyed_here):
+        """Tint an animated knob's field (one colour, the timeline's key blue) and put a diamond
+        inside it on the frames that hold a key; between keys it is tinted without the diamond."""
+        field = getattr(control, "spin", control)
+        if not isinstance(field, QAbstractSpinBox):
+            return
+        field.setProperty("animated", curve is not None)
+        field.setProperty("keyedHere", bool(keyed_here))
+        if curve is None:
+            return
+        tint = QColor(KEY_COLOR)
+        tint.setAlpha(ANIMATED_TINT_ALPHA)
+        field.setStyleSheet(f"QAbstractSpinBox {{ background-color: rgba({tint.red()}, {tint.green()}, "
+                            f"{tint.blue()}, {tint.alpha()}); }}")
+        if keyed_here:
+            glyph = QAction(key_icon(True, KEY_COLOR), "", field.lineEdit())
+            glyph.setObjectName("key-glyph")
+            glyph.setToolTip("A key sits on this frame")
+            field.lineEdit().addAction(glyph, QLineEdit.ActionPosition.LeadingPosition)
 
     def expression_row(self, key, param, expression=None):
         """Return the formula editor for one numeric knob.
@@ -9691,7 +9716,18 @@ class Window(QMainWindow):
             lambda: self.defer_command({"op": "delete_key", "id": key, "param": param,
                                         "frame": frame}))
         delete.setEnabled(curve is not None and any(k["frame"] == frame for k in curve["keys"]))
-        clear = menu.addAction("Remove animation",
+        frames = sorted(k["frame"] for k in curve["keys"]) if curve is not None else []
+        earlier = [f for f in frames if f < frame]
+        later = [f for f in frames if f > frame]
+        previous_key = menu.addAction(
+            f"Previous key (frame {earlier[-1]})" if earlier else "Previous key",
+            lambda: self.set_time(current=earlier[-1]))
+        previous_key.setEnabled(bool(earlier))
+        next_key = menu.addAction(
+            f"Next key (frame {later[0]})" if later else "Next key",
+            lambda: self.set_time(current=later[0]))
+        next_key.setEnabled(bool(later))
+        clear = menu.addAction("Clear animation",
                                lambda: self.defer_command({"op": "clear_curve", "id": key,
                                                            "param": param}))
         clear.setEnabled(curve is not None)
@@ -9766,6 +9802,15 @@ class Window(QMainWindow):
                 if collapse is not None:
                     collapse.setText("▾" if expanded else "▸")
             return True
+        if (event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_I
+                and not event.modifiers()):
+            target = getattr(watched, "_expression_target", None)
+            if target is not None:
+                key, param, control = target
+                self.defer_command({"op": "set_key", "id": key, "param": param,
+                                    "frame": int(self.dispatcher.document["time"]["current"]),
+                                    "value": float(control.value())})
+                return True
         if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Equal:
             target = getattr(watched, "_expression_target", None)
             if target is not None:
