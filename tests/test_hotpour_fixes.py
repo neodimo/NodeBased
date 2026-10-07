@@ -398,5 +398,40 @@ class WhitewaterNearestParticleTests(unittest.TestCase):
         self.assertLess(arrays * 4.0, loop, f"loop {loop:.2f} s, arrays {arrays:.2f} s")
 
 
+class WhitewaterPastTheBindingLimitTests(unittest.TestCase):
+    """At 256 cells the whitewater's neighbour list was 2.2 GB, over the adapter's 2 GiB storage binding, and the error
+    ended the bake at that frame. The list is now evaluated in slices of particles that each fit."""
+
+    def setUp(self):
+        from nodebased import fluid_gpu_solver as fgs
+        if not fgs.available():
+            self.skipTest("no wgpu compute adapter")
+        from nodebased.fluid_gpu_whitewater import GpuWhitewater3D
+        self.solver = GpuWhitewater3D()
+
+    def scene(self, n=3000):
+        rng = np.random.default_rng(11)
+        positions = rng.uniform(0.0, 0.3, (n, 3))
+        velocities = rng.normal(size=(n, 3))
+        normals = rng.normal(size=(n, 3))
+        return positions, velocities, normals
+
+    def test_slices_give_the_potentials_of_one_dispatch(self):
+        positions, velocities, normals = self.scene()
+        whole = self.solver.potentials(positions, velocities, normals, 0.04, 2.0)
+        real = self.solver.device.limits
+        # a binding limit of 64 KiB: the list of 3000 particles (hundreds of thousands of entries) needs many slices
+        self.solver.binding_limit = 64 * 1024
+        sliced = self.solver.potentials(positions, velocities, normals, 0.04, 2.0)
+        for a, b in zip(whole, sliced):
+            np.testing.assert_array_equal(a, b)
+
+    def test_one_particle_whose_list_cannot_fit_is_still_refused_with_the_size(self):
+        positions, velocities, normals = self.scene(200)
+        self.solver.binding_limit = 16
+        with self.assertRaisesRegex(ValueError, "neighbor list"):
+            self.solver.potentials(positions, velocities, normals, 0.5, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
