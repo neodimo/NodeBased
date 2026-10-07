@@ -481,5 +481,36 @@ class AdaptiveGpuDeviceTests(unittest.TestCase):
         self.assertAlmostEqual(float(fine[..., :3].mean()) / float(coarse[..., :3].mean()), 1.0, delta=0.02)
 
 
+def _soft_ready():
+    from nodebased import gpupathtrace
+    return gpu3d.available() and gpupathtrace.soft_supported(gpu3d._state())
+
+
+@unittest.skipUnless(_soft_ready(), "no wgpu adapter cleared for splats and smoke in the path tracer")
+class AdaptiveGpuHeavySceneTests(unittest.TestCase):
+    """Splats and smoke make a path much heavier, so their adaptive passes go out as short submissions, a chunk each."""
+
+    def _scene(self):
+        from tests.test_3d_pathtrace_gpu_soft import FLOOR, SUN, SMOKE, CAMERA, blob, sheet_on_floor
+        scene = s.Scene((FLOOR,), lights=(SUN,), splats=(sheet_on_floor(relight=0.6),), volumes=(blob(),))
+        return scene, CAMERA, SMOKE
+
+    def test_adaptive_on_splats_and_smoke_agrees_with_fixed_sampling_and_chunks_the_frame(self):
+        from unittest import mock
+        from nodebased import gpupathtrace
+        scene, camera, smoke = self._scene()
+        size = (24, 16)
+        fixed = pt.render(scene, camera, *size, ambient=0.05, volume=smoke, backend="gpu",
+                          settings=pt.PathSettings(samples=128, seed=5, max_bounces=4))
+        stats = {}
+        settings = pt.PathSettings(sampling="adaptive", noise_threshold=0.002, min_samples=16, max_samples=128, seed=5, max_bounces=4)
+        with mock.patch.object(gpupathtrace, "ADAPTIVE_MAX_GROUPS", 2):          # several chunks, each its own submission
+            image = pt.render(scene, camera, *size, ambient=0.05, volume=smoke, backend="gpu", settings=settings, stats=stats)
+        self.assertAlmostEqual(float(image[..., :3].mean()) / float(fixed[..., :3].mean()), 1.0, delta=0.05)
+        self.assertGreaterEqual(int(stats["samples"].min()), 16)
+        self.assertGreater(int(stats["samples"].max()), int(stats["samples"].min()))
+        self.assertEqual(stats["readbacks"]["mask"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
