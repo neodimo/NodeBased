@@ -841,8 +841,11 @@ class Smoke3D:
         result = State(a, meta, copy=False)
         return self._resize_active_domain(result, frame=frame) if int(p.get("auto_resize", 0)) else result
 
-    def _collider_cell_bounds(self, frame):
-        """Cell-space bounds covering every collider pose sampled by this frame."""
+    def _collider_cell_bounds(self, frame, near=None, margin=0):
+        """Cell-space bounds covering every collider pose sampled by this frame. With `near` (the fluid's own
+        cell-space (lo, hi)), each collider counts only where it comes within `margin` cells of the fluid: a table
+        a hundred cells wide under a ten-cell liquid pulled the adaptive box out to the table's whole width, and a
+        collider wholly out of reach contributes nothing."""
         bounds = []
         for collider in self.colliders:
             frames = (int(frame), int(frame) + 1) if collider.animated else (int(frame),)
@@ -851,8 +854,13 @@ class Smoke3D:
             if not points:
                 continue
             points = np.concatenate(points, axis=0)
-            bounds.append(((points.min(axis=0) - self.origin) / self.voxel,
-                           (points.max(axis=0) - self.origin) / self.voxel + 1.0))
+            clo = (points.min(axis=0) - self.origin) / self.voxel
+            chi = (points.max(axis=0) - self.origin) / self.voxel + 1.0
+            if near is not None:
+                clo, chi = np.maximum(clo, near[0] - margin), np.minimum(chi, near[1] + margin)
+                if np.any(chi <= clo):
+                    continue
+            bounds.append((clo, chi))
         return bounds
 
     def _sync_domain(self, state):
@@ -908,7 +916,7 @@ class Smoke3D:
                 lo, hi = np.minimum(lo, slo), np.maximum(hi, shi)
                 has_bounds = True
         if frame is not None:
-            for clo, chi in self._collider_cell_bounds(frame):
+            for clo, chi in self._collider_cell_bounds(frame, (lo, hi) if has_bounds else None, padding):
                 lo, hi = np.minimum(lo, clo), np.maximum(hi, chi)
                 has_bounds = True
         if has_bounds:

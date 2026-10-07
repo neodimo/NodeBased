@@ -404,7 +404,8 @@ class Liquid3D:
                 lo, hi = np.minimum(lo, source_lo), np.maximum(hi, source_hi)
                 has_bounds = True
         if frame is not None:
-            for collider_lo, collider_hi in Smoke3D._collider_cell_bounds(self, frame):
+            for collider_lo, collider_hi in Smoke3D._collider_cell_bounds(self, frame, (lo, hi) if has_bounds else None,
+                                                                          padding):
                 lo, hi = np.minimum(lo, collider_lo), np.maximum(hi, collider_hi)
                 has_bounds = True
         if has_bounds:
