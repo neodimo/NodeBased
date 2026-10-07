@@ -1455,6 +1455,14 @@ count that grows frame to frame through four atlas layouts and back with no stal
 bar), passing on the RTX 3080 Ti, the Radeon 8060S and llvmpipe. Reproduce the numbers with
 `python tools/benchmark_sparse_gpu.py --adapter default|integrated|cpu --pathtrace`. Not run: Windows.
 
+**With light linking** (finish 1, after Rendering's step T1 merged). A sparse plume carries its `light_link` like any volume: the
+mask sits in the same per-volume header row as before (the fourth value of the box maximum, one bit per light in the light table's
+numbering), and the tile parameters sit in rows of their own, so the viewport and raster shading passes, the raster mesh shadows and
+the path tracer's scatter and shadow rays each read the mask and the atlas side by side. A sparse plume excluded from one light and lit
+by another, on the GPU raster preview and the GPU path tracer, matches the CPU reference of the same tiles, the dense twin for every
+link, and the scene that never held the excluded light; excluded from the overhead light it throws no shadow on a floor. Test:
+`tests.test_sparse_light_links`, passing on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
