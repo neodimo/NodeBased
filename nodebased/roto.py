@@ -137,18 +137,43 @@ def feather(cover, radius):
 
 
 def rasterise(shapes, width, height, invert=False):
-    """Rasterise resolved shapes into a premultiplied HxWx4 float32 matte."""
-    matte = np.zeros((int(height), int(width)), dtype=np.float32)
+    """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
+    h, w = int(height), int(width)
+    matte = np.zeros((h, w), dtype=np.float32)
+    rgb = np.zeros((h, w, 3), dtype=np.float32)
     for shape in shapes:
-        cover = feather(coverage(shape["points"], int(width), int(height)), shape["feather"])
-        # Clip before combining: box-blur round-off can leave a coverage a hair outside [0, 1], and
-        # both combine operators only stay in range for inputs that are in range.
-        cover = np.clip(cover, 0.0, 1.0) * np.float32(shape["opacity"])
-        if shape["mode"] == "union":
-            matte = matte + cover - matte * cover
+        if not shape.get("visible", True):
+            continue
+        cover = np.clip(feather(coverage(shape["points"], w, h), shape["feather"]), 0.0, 1.0)
+        falloff = shape.get("feather_falloff", "linear")
+        if falloff == "smooth":
+            cover = cover * cover * (3.0 - 2.0 * cover)
+        elif falloff == "gaussian":
+            cover = np.exp(-4.0 * np.square(1.0 - cover)).astype(np.float32)
+        if shape.get("invert", False):
+            cover = 1.0 - cover
+        color = np.asarray(shape.get("color", [1, 1, 1, 1]), dtype=np.float32)
+        alpha = cover * np.float32(shape["opacity"]) * color[3]
+        source = color[:3] * alpha[..., None]
+        # The legacy shape operation remains the coverage combine; the Nuke blend knob controls
+        # colour/alpha compositing independently and defaults to over for old documents.
+        if shape["mode"] == "subtract":
+            matte *= 1.0 - alpha
+            rgb *= 1.0 - alpha[..., None]
+            continue
+        blend = shape.get("blend_mode", "over")
+        if blend == "plus":
+            rgb = np.clip(rgb + source, 0.0, 1.0)
+            matte = np.clip(matte + alpha, 0.0, 1.0)
+        elif blend == "minus":
+            rgb = np.clip(rgb - source, 0.0, 1.0)
+            matte = np.clip(matte - alpha, 0.0, 1.0)
+        elif blend == "multiply":
+            rgb *= 1.0 - alpha[..., None] + color[:3] * alpha[..., None]
+            matte = alpha + matte * (1.0 - alpha)
         else:
-            matte = matte * (1.0 - cover)
+            rgb = source + rgb * (1.0 - alpha[..., None])
+            matte = alpha + matte * (1.0 - alpha)
     if invert:
         matte = 1.0 - matte
-    # rgb == a == coverage: a premultiplied white matte.
-    return np.repeat(matte[..., None], 4, axis=2).astype(np.float32)
+    return np.concatenate((rgb, matte[..., None]), axis=2).astype(np.float32)
