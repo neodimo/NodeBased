@@ -114,7 +114,8 @@ SHORTCUT_SECTIONS = (
                     ("Right-click a node", "graph: What is this? · NODES dock: star it or What is this?"),
                     ("Period", "create Dot"), ("1", "view selected node (viewer input 1)"),
                     ("2-9", "connect selected node to viewer input 2-9 and show it"), ("D", "toggle bypass"),
-                    ("F", "frame"), ("Delete/Backspace", "delete selected"),
+                    ("F", "frame the selected nodes (all when none is selected)"), ("Home", "frame every node"),
+                    ("Delete/Backspace", "delete selected"),
                     ("Ctrl+A", "select all"), ("Ctrl+C/Ctrl+X/Ctrl+V", "copy/cut/paste"),
                     ("Alt+C", "duplicate"), ("Ctrl+G", "group the selected nodes"),
                     ("Ctrl+Shift+G", "ungroup the selected group"),
@@ -3254,6 +3255,9 @@ class Port(QGraphicsEllipseItem):
 
 
 NODE_WIDTH, NODE_HEIGHT = 190, 52
+NODE_GAP = 40  # standard clear space between nodes, below a parent and beside a sibling
+VIEW_MARGIN = 48  # screen pixels kept clear around nodes the graph brings into view
+FRAME_MAX_ZOOM = 1.25  # framing a few nodes never magnifies past this
 # A thumbnail band sits under the title. Nuke shows a postage stamp on the node itself; the band
 # keeps the title and sockets where they always were and simply makes the card taller.
 THUMB_WIDTH, THUMB_HEIGHT = 174, 72
@@ -4138,7 +4142,7 @@ class NodeToolbar(QWidget):
     def _add_clicked(self, item):
         kind = item.data(Qt.ItemDataRole.UserRole)
         if kind:
-            self.window.add_node(kind, position=self.window.graph_center())
+            self.window.add_node(kind)
 
 
 class NodeSearch(QDialog):
@@ -4872,6 +4876,66 @@ class Graph(PanZoomView):
             end = self.items_by_id[key].inputs[slot].scenePos()
             edge.set_curve(start, end)
 
+    def visible_scene_rect(self):
+        return self.mapToScene(self.viewport().rect()).boundingRect()
+
+    def _node_rects(self, keys):
+        return [self.items_by_id[key].sceneBoundingRect() for key in keys if key in self.items_by_id]
+
+    def frame_nodes(self, keys=None):
+        """F: fit the selected nodes in the panel, or every node when none is selected. Home: every
+        node. A single node is shown at a readable size rather than magnified to fill the panel."""
+        rects = self._node_rects(keys if keys is not None else self.items_by_id)
+        if not rects or self.viewport().width() <= 0 or self.viewport().height() <= 0:
+            return
+        target = rects[0]
+        for rect in rects[1:]:
+            target = target.united(rect)
+        self.fitInView(target.adjusted(-24, -24, 24, 24), Qt.AspectRatioMode.KeepAspectRatio)
+        if self.transform().m11() > FRAME_MAX_ZOOM:
+            factor = FRAME_MAX_ZOOM / self.transform().m11()
+            self.scale(factor, factor)
+            self.centerOn(target.center())
+
+    def reveal(self, keys):
+        """Bring the nodes `keys` and the node feeding the first of them fully into view, with a
+        margin. It pans (instantly: the graph view has no animated transitions) and zooms out only
+        when they cannot all fit at the current zoom."""
+        if self.viewport().width() <= 0 or self.viewport().height() <= 0:
+            return
+        wanted = [key for key in keys if key in self.items_by_id]
+        if not wanted:
+            return
+        node = self.window.graph_nodes().get(wanted[0]) or {}
+        upstream = next((src for src in (node.get("inputs") or {}).values()
+                         if isinstance(src, str) and src in self.items_by_id), None)
+        rects = self._node_rects(wanted + ([upstream] if upstream else []))
+        target = rects[0]
+        for rect in rects[1:]:
+            target = target.united(rect)
+        margin = VIEW_MARGIN / self.transform().m11()
+        target = target.adjusted(-margin, -margin, margin, margin)
+        view = self.visible_scene_rect()
+        if view.contains(target):
+            return
+        if target.width() > view.width() or target.height() > view.height():
+            self.fitInView(target, Qt.AspectRatioMode.KeepAspectRatio)
+            return
+        dx = (target.left() - view.left() if target.left() < view.left()
+              else target.right() - view.right() if target.right() > view.right() else 0)
+        dy = (target.top() - view.top() if target.top() < view.top()
+              else target.bottom() - view.bottom() if target.bottom() > view.bottom() else 0)
+        self.centerOn(view.center() + QPointF(dx, dy))
+
+    def event(self, event):
+        # Home frames the whole graph here; the Time menu's Home (first frame) still serves the
+        # viewer and every other widget.
+        if (event.type() == QEvent.Type.ShortcutOverride and event.key() == Qt.Key.Key_Home
+                and not event.modifiers()):
+            event.accept()
+            return True
+        return super().event(event)
+
     def selected_id(self):
         keys = [i.key for i in self.scene().selectedItems() if isinstance(i, NodeItem)]
         # A backdrop drag selects the nodes it carries too; the backdrop that was grabbed stays
@@ -5132,6 +5196,7 @@ class Graph(PanZoomView):
         self.scene().clearSelection()
         for key in pasted:
             self.items_by_id[key].setSelected(True)
+        self.reveal(pasted)
 
     def _clipboard_paste(self):
         try:
@@ -5177,7 +5242,9 @@ class Graph(PanZoomView):
         elif event.key() == Qt.Key.Key_Tab and not modifiers:
             self.window.node_search()
         elif event.key() == Qt.Key.Key_F and not modifiers:
-            self.fit()
+            self.frame_nodes(self.selected_ids() or None)
+        elif event.key() == Qt.Key.Key_Home and not modifiers:
+            self.frame_nodes()
         elif event.key() == Qt.Key.Key_Escape and not modifiers:
             self.cancel_wire()
             self.cancel_dot_insert()
@@ -9661,28 +9728,24 @@ class Window(QMainWindow):
         return super().eventFilter(watched, event)
 
     def node_position(self, desired, below=False, kind=None):
-        """Find a nearby vacant location; never drop a new node on an existing one.
+        """Find the nearest vacant spot at `desired`'s height; never drop a node on another one.
 
-        `below` searches straight down the column first, which is where a node added to a
-        selection belongs: the stream reads top to bottom, as in Nuke. The radial search is the
-        fallback only once the column is exhausted.
+        A node added under a selection already sits at the standard spacing below it; when
+        something else occupies that spot, the new node moves right past it (in steps of
+        NODE_GAP clear space) and keeps the row, so a second child of the same parent stands next
+        to the first. `below` is kept for old callers; the search is the same either way.
         """
-        desired = QPointF(round(desired.x()), round(desired.y()))
-        candidates = [QPointF(0, 0)]
-        if below:
-            candidates.extend(QPointF(0, step) for step in range(40, 1201, 40))
-        for radius in range(80, 801, 80):
-            candidates.extend(QPointF(x, y) for x, y in
-                              ((radius, 0), (-radius, 0), (0, radius), (0, -radius),
-                               (radius, radius), (-radius, radius), (radius, -radius), (-radius, -radius)))
+        pos = QPointF(round(desired.x()), round(desired.y()))
+        size = node_size({"type": kind or ""}, self.show_thumbnails)
         occupied = [item.sceneBoundingRect().adjusted(-12, -12, 12, 12)
                     for item in self.graph.items_by_id.values() if not item.is_backdrop]
-        for offset in candidates:
-            pos = desired + offset
-            rect = QRectF(pos.x(), pos.y(), *node_size({"type": kind or ""}, self.show_thumbnails))
-            if not any(rect.intersects(other) for other in occupied):
-                return pos
-        return desired + QPointF(0, 880)
+        for _ in range(len(occupied) + 1):
+            rect = QRectF(pos.x(), pos.y(), *size)
+            blocker = next((other for other in occupied if rect.intersects(other)), None)
+            if blocker is None:
+                break
+            pos = QPointF(round(blocker.right() - 12 + NODE_GAP), pos.y())
+        return pos
 
     def add_node(self, kind=None, params=None, position=None):
         if not kind:
@@ -9711,9 +9774,14 @@ class Window(QMainWindow):
             # node, so centre on its bounds rather than aligning left edges.
             selected = self.graph.items_by_id[source].sceneBoundingRect()
             anchor = QPointF(selected.center().x() - node_size({"type": kind}, self.show_thumbnails)[0] / 2,
-                             selected.bottom() + 40)
+                             selected.bottom() + NODE_GAP)
+        elif position is not None:
+            anchor = position
         else:
-            anchor = position if position is not None else self.graph.last_click_scene_pos
+            # Nothing selected and no chosen spot: the middle of what the artist is looking at.
+            width, height = node_size({"type": kind}, self.show_thumbnails)
+            centre = self.graph_center()
+            anchor = QPointF(centre.x() - width / 2, centre.y() - height / 2)
         pos = self.node_position(anchor, below=bool(source), kind=kind)
         if kind == "Backdrop":
             # Like Nuke: a backdrop made with nodes selected frames them, with room for its title.
@@ -9743,6 +9811,7 @@ class Window(QMainWindow):
         if self.command({"op": "batch", "commands": commands}) is not None:
             self.graph.scene().clearSelection()
             self.graph.items_by_id[key].setSelected(True)
+            self.graph.reveal([key])
             self.node_toolbar.note_added(kind)
             if kind == "Read" and not params:
                 self.browse_read(key)

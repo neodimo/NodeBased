@@ -146,7 +146,8 @@ class TimeRowTests(unittest.TestCase):
                 QTest.keyClick(target, Qt.Key.Key_End)
                 self.assertEqual(time_state(w)["current"], 40)
                 QTest.keyClick(target, Qt.Key.Key_Home)
-                self.assertEqual(time_state(w)["current"], 10)
+                # In the node graph Home frames every node (step Y2); elsewhere it is the first frame.
+                self.assertEqual(time_state(w)["current"], 40 if target is w.graph else 10)
 
     def test_arrow_keys_stay_in_a_text_field(self):
         w = self.open_window()
