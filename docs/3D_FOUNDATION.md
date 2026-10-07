@@ -1558,11 +1558,14 @@ runs one adaptive render over all shutter times; the GPU runs one per time, each
 `Max samples`, and averages them.
 
 **Choosing a threshold.** The noise threshold trades wall time for quality along a curve that differs per scene, and 0.01,
-the figure above, stops at the noise of about fixed 16 on the scenes measured. For a render that should look like fixed
+the figure above, stops at a noise between fixed 16 and fixed 32 on the scenes measured (X1 41.8 dB against fixed 16's 40.9
+dB, Y1 35.3 dB against fixed 32's 34.5 dB, Z1 44.4 dB between 42.8 dB and 45.7 dB). For a render that should look like fixed
 64, **start at 0.001** (a pixel stops when its standard error is under about 3% of its brightness) and leave `Max samples`
-at its default; 0.003 is the faster, noisier step and 0.0003 the slower, cleaner one. On the three scenes below, 0.001
-scored higher than fixed 64 on two of them and 1.1 dB lower on the third, in under 90% of its time on all three (the
-RTX 3080 Ti, 1280 by 720). `Adaptive pass size` hardly changes the time: the passes cost the card almost nothing now, so
+at its default. On the three scenes below, 0.001 scored higher than fixed 64 on two of them (X1 by 1.0 dB, Y1 by 4.8 dB) and
+1.1 dB lower on the third (Z1), in 43 to 60% of fixed 64's time on X1 and 56% on Z1 and at about twice its time on Y1, whose
+hard sun and glossy floor keep its mean at 125 samples (RTX 3080 Ti, 1280 by 720). A looser 0.006 matches fixed 64 on Y1 in
+about 80% of its time, and 0.003 is the faster, noisier step and 0.0003 the slower, cleaner one. `Adaptive pass size` changes the time
+little on Y1 and Z1 (4, 8, 16 and 32 are within 8% of one another) and 8 is the fastest on X1 (142 ms against 173 to 195 ms), so
 leave it at 8.
 
 Measured on the X1, Y1 and Z1 scenes against a 1024-sample reference, on all three adapters:
@@ -2812,3 +2815,19 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   covering every row that holds one. (4) The denoise filter is 8.3 to 8.9 seconds of CPU work per frame whatever the sampling,
   which makes it the largest phase by far and one that adaptive sampling cannot shorten; it is not part of the wall time the
   benchmark tables compare. Inferred: the shader's own noise estimate is inside the dispatch column and no timer separates it.
+  Parts 2 to 5 (finish pass, October 7, 2026 about 12:16 AM to 12:30 AM PDT): the device-side mask, compaction and
+  sample-parallel tail are described above; the measurement is `docs/BENCHMARKS-v0.35-adaptive.md` (X1, Y1 and Z1 against
+  fixed 16, 32, 64 and 128 and the 1024-sample reference, on the RTX 3080 Ti, the AMD Radeon 8060S and llvmpipe). **The bar is
+  met on the RTX 3080 Ti on all three scenes**: X1 adaptive 0.001 reaches 47.8 dB (fixed 64: 46.8 dB) in 141 ms against 230 to
+  326 ms, Y1 0.006 matches fixed 64's 37.3 dB in 180 ms against 220 to 236 ms, Z1 0.0003 reaches 50.8 dB (fixed 64: 48.7 dB)
+  in 79 ms against 114 to 126 ms; no single threshold does it on every scene, and at 0.001 Y1 costs about twice fixed 64's
+  time for 4.8 dB more. On the AMD card the win is 90 to 99% of fixed 64's time, on llvmpipe 59 to 91%. What now holds Y1 is
+  the card's own dispatch time (360 ms at 0.001 for 125 mean samples, about 2.9 ms a sample); the host's per-pass work that
+  ate the v0.34 saving is 4.5 to 7.4 ms and no readback. Corrections to the first draft of the Render3D text above: 0.001
+  was said to take under 90% of fixed 64's time on all three scenes (it is 43 to 60% on X1, 56% on Z1 and about 200% on
+  Y1), 0.01 was said to stop at the noise of about fixed 16 (between fixed 16 and fixed 32), and the pass size was said to
+  hardly change the time (8 is fastest on X1, 142 ms against 173 to 195 ms). Tests: `tests/test_3d_adaptive_sampling.py`, the
+  adaptive cases in `tests/test_3d_pathtrace.py` and `tests/test_3d_motion_time.py` pass on the RTX 3080 Ti, the AMD card
+  and llvmpipe (via `run/force-adapter.py`). Inferred: PSNR is identical across the two hardware GPUs because the seeds
+  and sample indices are the same; the repeat run showed fixed 64's wall time on X1 can move by 100 ms between runs, so the
+  X1 ratio is 43% to 60%.
