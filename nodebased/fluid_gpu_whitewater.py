@@ -78,6 +78,49 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 """
 
 
+def neighbor_lists(positions, h, chunk=20000):
+    """The CSR neighbour list of every particle: all particles in the 27 bins of side `h` around its own, as (starts (n + 1,)
+    uint32, members uint32). The order is fixed: bins in (dx, dy, dz) order, ascending particle index inside a bin, which
+    is the order the shader sums them in, so the potentials are the same bits however the list was built. Built with array
+    operations (the loop over particles and bins that this replaced took seconds a frame at 100,000 particles)."""
+    positions = np.asarray(positions, np.float64)
+    n = len(positions)
+    bins = np.floor(positions / h).astype(np.int64)
+    low = bins.min(axis=0) - 1
+    extent = bins.max(axis=0) - low + 2
+    shifted = bins - low
+    key = (shifted[:, 0] * extent[1] + shifted[:, 1]) * extent[2] + shifted[:, 2]
+    order = np.argsort(key, kind="stable")                      # ascending index inside a bin
+    sorted_key = key[order]
+    unique, first, count = np.unique(sorted_key, return_index=True, return_counts=True)
+    offsets = np.array([(dx * extent[1] + dy) * extent[2] + dz
+                        for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)], np.int64)
+    counts = np.zeros((n, 27), np.int64)
+    firsts = np.zeros((n, 27), np.int64)
+    for o, offset in enumerate(offsets):
+        wanted = key + offset
+        where = np.minimum(np.searchsorted(unique, wanted), len(unique) - 1)
+        hit = unique[where] == wanted
+        counts[:, o] = np.where(hit, count[where], 0)
+        firsts[:, o] = np.where(hit, first[where], 0)
+    per_particle = counts.sum(axis=1)
+    starts = np.zeros(n + 1, np.uint32)
+    starts[1:] = np.cumsum(per_particle)
+    members = np.zeros(max(int(per_particle.sum()), 1), np.uint32)
+    written = 0
+    for lo in range(0, n, chunk):
+        c = counts[lo:lo + chunk].reshape(-1)
+        f = firsts[lo:lo + chunk].reshape(-1)
+        total = int(c.sum())
+        if not total:
+            continue
+        run_start = np.cumsum(c) - c
+        position = np.repeat(f - run_start, c) + np.arange(total)
+        members[written:written + total] = order[position]
+        written += total
+    return starts, members
+
+
 class GpuWhitewater3D:
     def __init__(self):
         from . import gpu3d
@@ -128,19 +171,7 @@ class GpuWhitewater3D:
             empty = np.zeros(0, np.float64)
             return empty, empty, empty
         h = max(float(support), 1e-8)
-        bins = np.floor(positions / h).astype(np.int64)
-        table = {}
-        for i, key in enumerate(map(tuple, bins)):
-            table.setdefault(key, []).append(i)
-        starts = np.zeros(n + 1, np.uint32)
-        members = []
-        for i, base in enumerate(bins):
-            for dx in (-1, 0, 1):
-                for dy in (-1, 0, 1):
-                    for dz in (-1, 0, 1):
-                        members.extend(table.get((base[0] + dx, base[1] + dy, base[2] + dz), ()))
-            starts[i + 1] = len(members)
-        neighbors = np.asarray(members or [0], np.uint32)
+        starts, neighbors = neighbor_lists(positions, h)
         limit = self.device.limits['max-storage-buffer-binding-size']
         if neighbors.nbytes > limit:
             raise ValueError(f'whitewater neighbor list requires {neighbors.nbytes} bytes; adapter supports {limit}')

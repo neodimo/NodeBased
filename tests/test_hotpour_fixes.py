@@ -324,5 +324,49 @@ class WhitewaterAtFineResolutionTests(unittest.TestCase):
         self.assertEqual(self.impact(0.15), self.impact(0.15, kinetic_energy_per_mass=0))
 
 
+def reference_neighbour_lists(positions, h):
+    """The loop over particles and bins that built the whitewater's neighbour lists before this step."""
+    n = len(positions)
+    bins = np.floor(positions / h).astype(np.int64)
+    table = {}
+    for i, key in enumerate(map(tuple, bins)):
+        table.setdefault(key, []).append(i)
+    starts = np.zeros(n + 1, np.uint32)
+    members = []
+    for i, base in enumerate(bins):
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    members.extend(table.get((base[0] + dx, base[1] + dy, base[2] + dz), ()))
+        starts[i + 1] = len(members)
+    return starts, np.asarray(members or [0], np.uint32)
+
+
+class WhitewaterNeighbourListTests(unittest.TestCase):
+    """The whitewater's neighbour search ran in Python at one pass per particle and bin: seconds a frame at 100,000
+    particles, and the largest cost of the Hot pour bake (296 of 435 seconds at 128 cells)."""
+
+    def test_the_array_build_is_the_loop_build_bit_for_bit(self):
+        from nodebased.fluid_gpu_whitewater import neighbor_lists
+        rng = np.random.default_rng(3)
+        for n, h in ((1, 0.1), (2, 0.5), (50, 0.2), (3000, 0.05), (4000, 0.5)):
+            points = rng.uniform(-0.3, 0.3, (n, 3))
+            want, got = reference_neighbour_lists(points, h), neighbor_lists(points, h)
+            np.testing.assert_array_equal(got[0], want[0], err_msg=f"starts, n={n}")
+            np.testing.assert_array_equal(got[1], want[1], err_msg=f"members, n={n}")
+
+    def test_it_is_several_times_faster_on_a_pool_sized_set(self):
+        import time
+        from nodebased.fluid_gpu_whitewater import neighbor_lists
+        points = np.random.default_rng(4).uniform(0.0, 0.2, (30000, 3))
+        started = time.perf_counter()
+        reference_neighbour_lists(points, 0.02)
+        loop = time.perf_counter() - started
+        started = time.perf_counter()
+        neighbor_lists(points, 0.02)
+        arrays = time.perf_counter() - started
+        self.assertLess(arrays * 3.0, loop, f"loop {loop:.2f} s, arrays {arrays:.2f} s")
+
+
 if __name__ == "__main__":
     unittest.main()
