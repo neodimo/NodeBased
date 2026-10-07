@@ -3,17 +3,20 @@ per-pixel sample-count image (docs/BENCHMARKS-v0.34-adaptive.md).
 
     flock /tmp/nb-gpu.lock python tools/benchmark_adaptive.py [--adapter default|discrete|integrated|cpu]
                                                               [--size 640x360] [--backend gpu|cpu] [--images DIR]
-                                                              [--max-samples 256] [--breakdown]
+                                                              [--max-samples 256] [--thresholds 0.05,0.01,...] [--pass-size 8]
+                                                              [--breakdown]
 
 The scenes are the comparison scenes `tests/test_3d_gpu.py` names X1 (PBR texture maps lit by a Rect and a Point light and
 an environment), Y1 (a PBR sphere on a floor under an environment with a hard sun) and Z1 (a cube casting an area-light
 shadow). Each is rendered at the same seed `fixed` with 16, 32 and 64 samples (the first two are about the average
 budget the adaptive renders turn out to use), then `adaptive` at noise threshold 0.01 and 0.05 (Render3D's defaults: 16
-minimum samples, 256 maximum, passes of 8), and the reference, `fixed` 1024 samples with another seed. `--max-samples N`
-caps the adaptive renders (256 is Render3D's default; 64 gives them at most fixed's budget). The time is the median of
+minimum samples, 256 maximum, passes of 8), and the reference, `fixed` 1024 samples with another seed. `--thresholds` sets
+the adaptive thresholds (default 0.05, 0.01, 0.003, 0.001 and 0.0003), `--pass-size` the adaptive pass size and
+`--max-samples N` caps the adaptive renders (256 is Render3D's default; 64 gives them at most fixed's budget). After the
+table it prints, per scene, the quickest adaptive render that reaches fixed 64's PSNR and its time against fixed 64's. The time is the median of
 three renders after a warm-up render (it holds the scene build and upload on the GPU). PSNR is taken on what the viewer shows (values clipped to 0..1 and sRGB encoded, peak 1), over all pixels. With
 `--images DIR` it also writes one contact sheet per scene (2 rows by 3 columns): the reference over fixed 64, adaptive at
-0.01 over 0.05, and the two adaptive renders' per-pixel sample counts (black = the minimum, white = the largest count).
+0.01 over 0.001, and the two adaptive renders' per-pixel sample counts (black = the minimum, white = the largest count).
 
 `--breakdown` instead prints, per scene, where the wall time of fixed 64 and of each adaptive render goes on the GPU backend
 (`stats["phases"]`, the median of three renders): scene build, pack, upload, the host's mask update (which tiles still
@@ -38,7 +41,8 @@ CAMERA = s.Camera()
 FIXED = pt.PathSettings(samples=64, max_bounces=8, seed=1)
 ADAPTIVE = pt.PathSettings(sampling="adaptive", min_samples=16, max_samples=256, adaptive_pass_size=8, max_bounces=8, seed=1)
 REFERENCE = pt.PathSettings(samples=1024, max_bounces=8, seed=777)
-THRESHOLDS = (0.01, 0.05)
+THRESHOLDS = (0.05, 0.01, 0.003, 0.001, 0.0003)
+SHEET_THRESHOLDS = (0.01, 0.001)      # the two adaptive renders a contact sheet shows
 
 
 def _env(rgb, **kw):
@@ -110,7 +114,7 @@ def count_image(samples, low, high):
     return np.repeat(gray[..., None], 3, axis=2)
 
 
-def run(width, height, backend, images=None, max_samples=256):
+def run(width, height, backend, images=None, max_samples=256, thresholds=THRESHOLDS, pass_size=8):
     rows, sheets = [], {}
     for name, (scene, ambient) in scenes().items():
         def render(settings):
@@ -120,18 +124,35 @@ def run(width, height, backend, images=None, max_samples=256):
             return image, stats
         reference, _ = render(REFERENCE)
         # fixed 16 and 32 are the adaptive renders' own average budgets: PSNR at the same cost, spread evenly
-        entries = [("fixed 16", replace(FIXED, samples=16)), ("fixed 32", replace(FIXED, samples=32)), ("fixed 64", FIXED)] + [(f"adaptive {t}", replace(ADAPTIVE, noise_threshold=t, max_samples=max_samples)) for t in THRESHOLDS]
+        entries = [("fixed 16", replace(FIXED, samples=16)), ("fixed 32", replace(FIXED, samples=32)), ("fixed 64", FIXED)] + [(f"adaptive {t}", replace(ADAPTIVE, noise_threshold=t, max_samples=max_samples, adaptive_pass_size=pass_size)) for t in thresholds]
         pictures = [("reference 1024", _display(reference), None)]
         for label, settings in entries:
             seconds, (image, stats) = timed(lambda: render(settings))
             samples = stats["samples"]
             rows.append((name, label, seconds, psnr(image, reference), float(samples.mean()), int(samples.min()), int(samples.max())))
-            if label not in ("fixed 16", "fixed 32"):
+            if label == "fixed 64" or (label.startswith("adaptive") and float(label.split()[1]) in SHEET_THRESHOLDS):
                 pictures.append((label, _display(image), samples))
         sheets[name] = pictures
     if images:
         _write_sheets(Path(images), sheets)
     return rows
+
+
+def bar(rows):
+    """Per scene, the quickest adaptive render that reaches fixed 64's PSNR, against fixed 64's time."""
+    lines = []
+    for name in dict.fromkeys(r[0] for r in rows):
+        scene = [r for r in rows if r[0] == name]
+        fixed = next(r for r in scene if r[1] == "fixed 64")
+        reaching = [r for r in scene if r[1].startswith("adaptive") and r[3] >= fixed[3]]
+        if reaching:
+            best = min(reaching, key=lambda r: r[2])
+            lines.append(f"{name}: {best[1]} reaches {best[3]:.1f} dB (fixed 64: {fixed[3]:.1f} dB) in {best[2] * 1000:.0f} ms against "
+                         f"{fixed[2] * 1000:.0f} ms, {100 * best[2] / fixed[2]:.0f}% of fixed 64's time")
+        else:
+            closest = max((r for r in scene if r[1].startswith("adaptive")), key=lambda r: r[3])
+            lines.append(f"{name}: no adaptive render reaches fixed 64's {fixed[3]:.1f} dB; the best is {closest[1]} at {closest[3]:.1f} dB")
+    return lines
 
 
 def _write_sheets(folder, sheets):
@@ -141,9 +162,10 @@ def _write_sheets(folder, sheets):
     folder.mkdir(parents=True, exist_ok=True)
     for name, pictures in sheets.items():
         by_label = {label: (rgb, samples) for label, rgb, samples in pictures}
-        high = max(int(by_label[l][1].max()) for l in ("adaptive 0.01", "adaptive 0.05"))
-        grid = [[by_label["reference 1024"][0], by_label["adaptive 0.01"][0], count_image(by_label["adaptive 0.01"][1], 16, high)],
-                [by_label["fixed 64"][0], by_label["adaptive 0.05"][0], count_image(by_label["adaptive 0.05"][1], 16, high)]]
+        loose, tight = (f"adaptive {t}" for t in SHEET_THRESHOLDS)
+        high = max(int(by_label[l][1].max()) for l in (loose, tight))
+        grid = [[by_label["reference 1024"][0], by_label[loose][0], count_image(by_label[loose][1], 16, high)],
+                [by_label["fixed 64"][0], by_label[tight][0], count_image(by_label[tight][1], 16, high)]]
         h, w = grid[0][0].shape[:2]
         sheet = np.ones((2 * h + 4, 3 * w + 8, 3))
         for r, row in enumerate(grid):
@@ -156,7 +178,7 @@ def _write_sheets(folder, sheets):
         out.close()
 
 
-def breakdown(width, height, max_samples, repeats=3):
+def breakdown(width, height, max_samples, repeats=3, denoise=True):
     """Per scene and per render, the median seconds of each phase of the GPU path tracer plus the denoise filter."""
     from nodebased import ptdenoise
     rows = []
@@ -171,9 +193,9 @@ def breakdown(width, height, max_samples, repeats=3):
                 wall = time.perf_counter() - started
                 if i:
                     samples.append((wall, stats))
-            guides = pt.guide_aovs(scene, CAMERA, width, height, settings, None, "gpu", None, stats)
             times = []
-            for _ in range(repeats):
+            guides = pt.guide_aovs(scene, CAMERA, width, height, settings, None, "gpu", None, stats) if denoise else None
+            for _ in range(repeats if denoise else 0):
                 started = time.perf_counter()
                 ptdenoise.denoise(image, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0], stats.get("variance"))
                 times.append(time.perf_counter() - started)
@@ -182,7 +204,7 @@ def breakdown(width, height, max_samples, repeats=3):
                 for key, value in st["phases"].items():
                     phases.setdefault(key, []).append(value)
             median = {key: statistics.median(values) for key, values in phases.items()}
-            median["denoise"] = statistics.median(times)
+            median["denoise"] = statistics.median(times) if times else 0.0
             rows.append((name, label, statistics.median(w for w, _ in samples), samples[-1][1]["passes"], median))
     return rows
 
@@ -204,7 +226,10 @@ def main():
     parser.add_argument("--backend", default="gpu")
     parser.add_argument("--images", default=None)
     parser.add_argument("--max-samples", type=int, default=256)
+    parser.add_argument("--thresholds", default=",".join(str(v) for v in THRESHOLDS))
+    parser.add_argument("--pass-size", type=int, default=8)
     parser.add_argument("--breakdown", action="store_true")
+    parser.add_argument("--no-denoise", action="store_true", help="with --breakdown: skip the (slow, CPU) denoise filter column")
     args = parser.parse_args()
     if args.adapter:
         gpu3d._states.setdefault("default", gpu3d._state(args.adapter))
@@ -213,14 +238,18 @@ def main():
     width, height = (int(v) for v in args.size.split("x"))
     if args.breakdown:
         print(f"\n{width}x{height}, GPU path tracer phases, adaptive max samples {args.max_samples}\n")
-        print_breakdown(breakdown(width, height, args.max_samples))
+        print_breakdown(breakdown(width, height, args.max_samples, denoise=not args.no_denoise))
         return
-    rows = run(width, height, args.backend, args.images, args.max_samples)
-    print(f"\n{width}x{height}, backend {args.backend}, adaptive max samples {args.max_samples}\n")
+    rows = run(width, height, args.backend, args.images, args.max_samples,
+               tuple(float(v) for v in args.thresholds.split(",")), args.pass_size)
+    print(f"\n{width}x{height}, backend {args.backend}, adaptive max samples {args.max_samples}, pass size {args.pass_size}\n")
     print("| scene | sampling | wall time | PSNR | mean samples | min | max |")
     print("| --- | --- | ---: | ---: | ---: | ---: | ---: |")
     for name, label, seconds, db, mean, low, high in rows:
         print(f"| {name} | {label} | {seconds * 1000:.0f} ms | {db:.1f} dB | {mean:.1f} | {low} | {high} |")
+    print()
+    for line in bar(rows):
+        print(line)
 
 
 if __name__ == "__main__":

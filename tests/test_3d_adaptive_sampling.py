@@ -368,5 +368,118 @@ class AdaptiveGpuTests(unittest.TestCase):
         np.testing.assert_allclose(a, b, atol=1e-4)
 
 
+class _Reads:
+    """Counts what the GPU path tracer reads back from the card: (bytes, buffer size) per `queue.read_buffer` call."""
+
+    def __init__(self):
+        from unittest import mock
+        self.calls = []
+        self.queue = gpu3d._state()["device"].queue
+        original = self.queue.read_buffer
+
+        def counting(buffer, offset=0, size=None):
+            self.calls.append((int(size if size is not None else buffer.size - offset), int(buffer.size), int(offset)))
+            return original(buffer, offset, size)
+        self._patch = mock.patch.object(self.queue, "read_buffer", counting)
+
+    def __enter__(self):
+        self._patch.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._patch.stop()
+
+    def waits(self):
+        return [c for c in self.calls if c[0] <= 16]
+
+    def large(self):
+        return [c for c in self.calls if c[0] > 16]
+
+
+@unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
+class AdaptiveGpuDeviceTests(unittest.TestCase):
+    """Rendering 8, step T2: the convergence mask and the running moments stay on the device."""
+
+    def test_a_tight_threshold_is_within_the_documented_psnr_of_the_fixed_reference_on_the_gpu(self):
+        scene = shadow_scene()
+        reference, _ = render(scene, SHADOW_CAMERA, pt.PathSettings(samples=1024, max_bounces=2, seed=5), backend="gpu")
+        image, stats = render(scene, SHADOW_CAMERA, adaptive(0.0003, max_samples=512, seed=9), backend="gpu")
+        fixed, _ = render(scene, SHADOW_CAMERA, pt.PathSettings(samples=64, max_bounces=2, seed=9), backend="gpu")
+        self.assertGreaterEqual(psnr(image, reference), TIGHT_PSNR_DB)
+        self.assertGreaterEqual(psnr(image, reference), psnr(fixed, reference) - 3.0)     # no worse than fixed 64 within noise
+        self.assertLess(float(stats["samples"].mean()), 64)
+
+    def test_a_flat_region_stops_at_min_samples_and_dispatches_nothing_after_it(self):
+        _, stats = render(flat_scene(), FLAT_CAMERA, adaptive(0.05, min_samples=8, max_samples=64, max_bounces=1), backend="gpu")
+        self.assertTrue(np.all(stats["samples"] == 8), np.unique(stats["samples"]))
+        self.assertTrue(stats["converged"].all())
+        self.assertEqual(stats["passes"], 1)
+
+    def test_the_gpu_mask_never_reads_back_mid_render(self):
+        with _Reads() as reads:
+            image, stats = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.02, max_samples=64), backend="gpu")
+        accumulator = SIZE[0] * SIZE[1] * 32
+        # the one large read is the finished image; every other read is a 16-byte wait on the accumulator
+        self.assertEqual([c[0] for c in reads.large()], [accumulator])
+        self.assertTrue(all(c[0] == 16 and c[2] == 0 for c in reads.waits()), reads.calls)
+        self.assertEqual((stats["readbacks"]["mask"], stats["readbacks"]["counter"], stats["readbacks"]["image"]), (0, 0, 1))
+        self.assertGreater(int(stats["samples"].max()), int(stats["samples"].min()))     # and the mask did its work
+
+    def test_progress_reads_only_the_list_length_each_pass(self):
+        events = []
+        stats = {}
+        with _Reads() as reads:
+            pt.render(shadow_scene(), SHADOW_CAMERA, SIZE[0], SIZE[1], BACKGROUND, 0.0, "rgba", adaptive(0.02, max_samples=64),
+                      progress=lambda stage, fraction, info: events.append((fraction, info)), stats=stats, backend="gpu")
+        counters = [c for c in reads.calls if c[0] == 4]                           # the list length, once per pass
+        self.assertEqual(len(counters), len(events))
+        self.assertEqual(len(reads.large()), 1)                                    # and the one image read
+        self.assertEqual({c[1] for c in counters}, {counters[0][1]})               # all from the same (list) buffer
+        self.assertEqual(stats["readbacks"]["mask"], 0)
+        self.assertEqual(stats["readbacks"]["counter"], len(events))
+        self.assertTrue(events)
+        converged = [info["converged"] for _, info in events]
+        self.assertEqual(converged, sorted(converged))                           # a pixel that is done stays done
+        self.assertTrue(all(0.0 <= v <= 1.0 for v in converged))
+
+    def test_the_legacy_fixed_render_with_a_noise_threshold_is_unchanged(self):
+        scene = shadow_scene()
+        retire = pt.PathSettings(samples=32, pass_samples=8, noise_threshold=0.02, max_bounces=2)
+        _, stats = render(scene, SHADOW_CAMERA, retire, backend="gpu")
+        self.assertEqual(stats["readbacks"]["mask"], stats["passes"])             # the old tile retirement still reads each pass
+        a, _ = render(scene, SHADOW_CAMERA, pt.PathSettings(samples=16, max_bounces=2), backend="gpu")
+        b, _ = render(scene, SHADOW_CAMERA, pt.PathSettings(samples=16, max_bounces=2), backend="gpu")
+        np.testing.assert_array_equal(a, b)
+
+    def test_cutting_the_frame_into_several_indirect_dispatches_gives_the_same_image(self):
+        from unittest import mock
+        from nodebased import gpupathtrace
+        settings = adaptive(0.02, max_samples=48, seed=3)
+        with mock.patch.object(gpupathtrace, "ADAPTIVE_SPARSE_PIXELS", 0):          # dense passes only
+            whole, whole_stats = render(shadow_scene(), SHADOW_CAMERA, settings, backend="gpu")
+            with mock.patch.object(gpupathtrace, "ADAPTIVE_MAX_GROUPS", 3):
+                cut, cut_stats = render(shadow_scene(), SHADOW_CAMERA, settings, backend="gpu")
+        np.testing.assert_array_equal(whole, cut)
+        np.testing.assert_array_equal(whole_stats["samples"], cut_stats["samples"])
+
+    def test_sample_parallel_passes_for_the_last_open_pixels_agree_with_dense_passes(self):
+        from unittest import mock
+        from nodebased import gpupathtrace
+        settings = adaptive(0.02, max_samples=64, seed=4)
+        with mock.patch.object(gpupathtrace, "ADAPTIVE_SPARSE_PIXELS", 0):
+            dense, dense_stats = render(shadow_scene(), SHADOW_CAMERA, settings, backend="gpu")
+        sparse, sparse_stats = render(shadow_scene(), SHADOW_CAMERA, settings, backend="gpu")   # this small frame is all sparse
+        np.testing.assert_allclose(sparse, dense, rtol=1e-4, atol=1e-5)         # the same samples, summed in another order
+        self.assertGreater(float((dense_stats["samples"] == sparse_stats["samples"]).mean()), 0.99)
+        self.assertEqual(dense_stats["passes"], sparse_stats["passes"])
+
+    def test_the_pass_size_only_moves_where_a_pixel_may_stop(self):
+        fine, fine_stats = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.02, adaptive_pass_size=2, max_samples=64), backend="gpu")
+        coarse, coarse_stats = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.02, adaptive_pass_size=16, max_samples=64), backend="gpu")
+        self.assertTrue(np.all((fine_stats["samples"] - 8) % 2 == 0))
+        self.assertTrue(np.all((coarse_stats["samples"][coarse_stats["samples"] < 64] - 8) % 16 == 0))
+        self.assertAlmostEqual(float(fine[..., :3].mean()) / float(coarse[..., :3].mean()), 1.0, delta=0.02)
+
+
 if __name__ == "__main__":
     unittest.main()

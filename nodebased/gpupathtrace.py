@@ -29,7 +29,11 @@ import numpy as np
 from . import gpu3d, gpurt, gpuvolume, lens, pathtrace as pt, raytrace, scene3d as s
 
 GPU_PATHS_PER_SUBMISSION = 1 << 19
-ADAPTIVE_SPARSE = 0.2      # adaptive sampling: below this share of active tiles a pass is one looping dispatch per band
+ADAPTIVE_PATHS_PER_DISPATCH = 1 << 20   # adaptive sampling: paths one indirect dispatch may cover (a heavy scene gets SOFT_SLOWDOWN times fewer)
+ADAPTIVE_MAX_GROUPS = 32768              # and work-groups, well under the 65535 a dispatch dimension allows
+ADAPTIVE_SPARSE_PIXELS = 1 << 17         # at most this many open pixels get their pass's samples run side by side (sample-parallel tail)
+ADAPTIVE_SPARSE_THREADS = 1 << 21        # and at most this many (pixel, sample) threads: 64 MiB of per-sample sums after the image
+ADAPTIVE_PACE = 4                        # passes the host lets the card run ahead before it waits (it waits every pass when asked for progress)
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
 ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
 VOLUME_MAJORANT_TILE = 16
@@ -74,7 +78,7 @@ def soft_supported(state):
 
 
 def check_capability(state):
-    for name, minimum in [("max-storage-buffers-per-shader-stage", 7), ("max-storage-buffer-binding-size", 64),
+    for name, minimum in [("max-storage-buffers-per-shader-stage", 8), ("max-storage-buffer-binding-size", 64),
                           ("max-buffer-size", 64), ("max-compute-invocations-per-workgroup", 64),
                           ("max-compute-workgroup-size-x", 8), ("max-compute-workgroups-per-dimension", 1)]:
         if gpurt._limits(state).get(name, 0) < minimum:
@@ -99,8 +103,8 @@ struct Shape { i0: vec4<f32>, i1: vec4<f32>, i2: vec4<f32>, base: vec4<f32>, mat
                // pack as width<<16 | height. pbr0/pbr1 = (normal_scale, occlusion_strength, emissive_color).
                tex0: vec4<u32>, tex1: vec4<u32>, tex2: vec4<u32>, pbr0: vec4<f32>, pbr1: vec4<f32> };
 struct Params {
-  a: vec4<u32>,        // width, height, row0, row1
-  b: vec4<u32>,        // sample_base, spp, seed, max_bounces
+  a: vec4<u32>,        // width, height, row0, row1 (an adaptive render: the word where `open_pixels` lists its first pixel, the word that holds the list's length)
+  b: vec4<u32>,        // sample_base (an adaptive render: this dispatch's first slot in the list), spp, seed, max_bounces
   c: vec4<u32>,        // diffuse cap, specular cap, transmission cap, light count
   d: vec4<u32>,        // env width, env height (0 = no environment), output code, tiles per row
   e: vec4<u32>,        // shape count (0 = empty scene), env cdf base (in vec4s), env visible_to_camera, linked lights (bit mask)
@@ -117,8 +121,8 @@ struct Params {
   vp2: vec4<f32>,      // temperature scale, fire threshold, fire intensity, shadow steps
   m0: vec4<f32>, m1: vec4<f32>, m2: vec4<f32>,   // world -> map rotation rows
   lens: vec4<f32>,     // aperture radius (0 = pinhole), focus distance, blades, blade rotation (radians)
-  lens2: vec4<f32>,    // 1 / anamorphic squeeze
-  ad: vec4<f32>,       // adaptive sampling: noise threshold, min samples, 1 when adaptive (0 = every pixel takes every sample), 1 on the last sample of a pass (the only dispatch that decides)
+  lens2: vec4<f32>,    // 1 / anamorphic squeeze, max samples (adaptive)
+  ad: vec4<f32>,       // adaptive sampling: noise threshold, min samples, 2 when adaptive (0 = every pixel takes every sample), pass size
   tiles: array<vec4<u32>, 512>,                   // active tile bits
 };
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
@@ -129,6 +133,9 @@ struct Params {
 @group(0) @binding(5) var<storage, read> env: array<vec4<f32>>;
 @group(0) @binding(6) var<storage, read_write> accum: array<vec4<f32>>;
 @group(0) @binding(7) var<uniform> params: Params;
+// adaptive sampling: the pixels that are not done yet, listed on the device by `_COMPACT_SHADER` (a.z = first word of the
+// list, a.w = the word holding its length)
+@group(0) @binding(8) var<storage, read> open_pixels: array<u32>;
 
 const PI: f32 = 3.14159265358979;
 const INF: f32 = 3.0e38;
@@ -1749,18 +1756,47 @@ fn channel_of(a: Acc, code: u32) -> vec3<f32> {
 }
 
 @compute @workgroup_size(WG_SIZE, WG_SIZE, 1)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(workgroup_id) wid: vec3<u32>,
+        @builtin(local_invocation_id) lid: vec3<u32>) {
   let width = params.a.x;
-  let x = gid.x;
-  let y = gid.y + params.a.z;
-  if (x >= width || y >= params.a.w) { return; }
-  let tile = (y / 16u) * params.d.w + (x / 16u);
-  let word = params.tiles[tile >> 7u][(tile >> 5u) & 3u];
-  if (((word >> (tile & 31u)) & 1u) == 0u) { return; }
+  let adaptive = params.ad.z > 1.5;
+  let sparse = params.ad.z > 2.5;
+  var x = gid.x;
+  var y = gid.y + params.a.z;
+  var lane = 0u;
+  var thread = 0u;
+  if (adaptive) {
+    // an adaptive render dispatches one thread per pixel in `open_pixels`, through an indirect dispatch the device sized
+    // itself: a pixel that is done costs nothing, no warp holds one, and nothing came back to the host to say so.
+    // When few pixels are open (the sparse dispatch, ad.z = 3) one thread takes one sample of one pixel, so the samples of
+    // a pass run side by side instead of one dispatch after another, and `reduce` adds them up afterwards.
+    thread = params.b.x + wid.x * (WG_SIZE * WG_SIZE) + lid.y * WG_SIZE + lid.x;
+    var slot = thread;
+    if (sparse) {
+      let lanes = open_pixels[params.a.w + 1u];
+      slot = thread / lanes;
+      lane = thread % lanes;
+    }
+    if (slot >= open_pixels[params.a.w]) { return; }
+    let listed = open_pixels[params.a.z + slot];
+    x = listed % width;
+    y = listed / width;
+  } else {
+    if (x >= width || y >= params.a.w) { return; }
+    let tile = (y / 16u) * params.d.w + (x / 16u);
+    let word = params.tiles[tile >> 7u][(tile >> 5u) & 3u];
+    if (((word >> (tile & 31u)) & 1u) == 0u) { return; }
+  }
   let pixel = y * width + x;
   let code = params.d.z;
-  // adaptive sampling: a pixel whose noise estimate went under the threshold set its done flag (stats.w) and takes no more samples
-  if (params.ad.z > 0.5 && code < 7u && accum[pixel * 2u + 1u].w > 0.5) { return; }
+  // adaptive sampling: a pixel whose noise estimate went under the threshold set its done flag (stats.w) and takes no more
+  // samples; its next sample is its own count so far, which is the sample index the CPU reference gives it too
+  var sample_base = params.b.x;
+  if (adaptive && code < 7u) {
+    let before = accum[pixel * 2u + 1u];
+    if (before.w > 0.5) { return; }
+    sample_base = u32(before.z + 0.5) + lane;
+  }
   var rgb = vec3<f32>(0.0);
   var alpha = 0.0;
   var lum_sum = 0.0;
@@ -1771,7 +1807,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var no_acc: Acc;
   var no_first: First;
   for (var s = 0u; s < count; s++) {
-    let key = path_key(pixel, params.b.x + s, params.b.z);
+    let key = path_key(pixel, sample_base + s, params.b.z);
     var jx = 0.5;
     var jy = 0.5;
     if (code < 7u) { jx = rnd(key, 0u); jy = rnd(key, 1u); }
@@ -1817,6 +1853,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     lum_sum += lum;
     lum_sq += lum * lum;
   }
+  if (sparse) {
+    let scratch = params.a.x * params.a.y * 2u + thread * 2u;
+    accum[scratch] = vec4<f32>(rgb, alpha);
+    accum[scratch + 1u] = vec4<f32>(lum_sum, lum_sq, 0.0, 0.0);
+    return;
+  }
   let previous = accum[pixel * 2u];
   accum[pixel * 2u] = previous + vec4<f32>(rgb, alpha);
   let stats = accum[pixel * 2u + 1u];
@@ -1824,26 +1866,155 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let sum = stats.x + lum_sum;
   let sq = stats.y + lum_sq;
   var done = stats.w;
-  if (params.ad.z > 0.5 && params.ad.w > 0.5 && params.ad.x > 0.0 && n >= params.ad.y) {
-    // the same estimate as pathtrace.pixel_noise: variance of the mean luminance over (mean + 0.02)^2
-    let mean = sum / n;
-    let var_of_mean = max(sq / n - mean * mean, 0.0) * n / max(n - 1.0, 1.0) / n;
-    let m = mean + 0.02;
-    if (var_of_mean / (m * m) < params.ad.x) { done = 1.0; }
-  }
-  accum[pixel * 2u + 1u] = vec4<f32>(sum, sq, n, done);
-  if (done > 0.5 && stats.w < 0.5) {
-    // the host reads these one-float-per-pixel flags after every pass instead of the whole accumulator
-    let slot = params.a.x * params.a.y * 2u + (pixel >> 2u);
-    switch (pixel & 3u) {
-      case 0u: { accum[slot].x = 1.0; }
-      case 1u: { accum[slot].y = 1.0; }
-      case 2u: { accum[slot].z = 1.0; }
-      default: { accum[slot].w = 1.0; }
+  if (adaptive && params.ad.x > 0.0 && n >= params.ad.y) {
+    // a pixel decides at the end of a pass: when it has its minimum plus a whole number of passes, or its last sample
+    let taken = u32(n + 0.5);
+    let minimum = u32(params.ad.y + 0.5);
+    let pass_size = max(u32(params.ad.w + 0.5), 1u);
+    if ((taken - minimum) % pass_size == 0u || taken >= u32(params.lens2.y + 0.5)) {
+      // the same estimate as pathtrace.pixel_noise: variance of the mean luminance over (mean + 0.02)^2
+      let mean = sum / n;
+      let var_of_mean = max(sq / n - mean * mean, 0.0) * n / max(n - 1.0, 1.0) / n;
+      let m = mean + 0.02;
+      if (var_of_mean / (m * m) < params.ad.x) { done = 1.0; }
     }
   }
+  accum[pixel * 2u + 1u] = vec4<f32>(sum, sq, n, done);
 }
 '''
+
+
+# Adaptive sampling keeps its convergence mask on the device. After each pass `scan` looks at the done flags the render
+# shader wrote and lists every pixel that is still open; `finish` turns the list length into the arguments of the indirect
+# dispatches the next pass runs (one thread per listed pixel), so converged pixels cost nothing and the host never reads the
+# mask. When only a few pixels are open `finish` instead sizes the sparse dispatch, in which every thread takes one sample
+# of one pixel (the samples of a pass run side by side, a card with few pixels left being otherwise idle), and `reduce` adds
+# the pass's samples up. `ctl` holds, in words: the indirect arguments (x, 1, 1, 0) of each chunk of the dense dispatch, of
+# the sparse dispatch and of `reduce` live in their own buffer (a buffer cannot be both written by a shader and the source of
+# an indirect dispatch that shader's pass runs); `ctl` holds a header (running length, 0, the next pass's list length, its
+# samples per pixel), then the list of pixel indices.
+_COMPACT_SHADER = r'''
+struct CParams {
+  a: vec4<u32>,      // width, height, 0, 0
+  b: vec4<u32>,      // chunks, groups per chunk, list base, threads per group
+  c: vec4<u32>,      // sparse pixel limit, sparse thread limit, min samples, max samples
+  d: vec4<f32>,      // noise threshold, pass size, 0, 0
+};
+@group(0) @binding(0) var<storage, read_write> accum: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read_write> ctl: array<atomic<u32>>;
+@group(0) @binding(2) var<uniform> cp: CParams;
+@group(0) @binding(3) var<storage, read_write> args: array<atomic<u32>>;    // the indirect dispatch arguments, written by `finish` only
+var<workgroup> found: atomic<u32>;
+var<workgroup> reserved: u32;
+
+// One 8 by 8 block of pixels per work-group: its open pixels are numbered inside the group, the group reserves that many
+// places in the list with one atomic add, and each writes its pixel there. Neighbouring pixels stay neighbours in the list.
+@compute @workgroup_size(8, 8, 1)
+fn scan(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_index) index: u32) {
+  let header = 0u;
+  if (index == 0u) { atomicStore(&found, 0u); }
+  workgroupBarrier();
+  let inside = gid.x < cp.a.x && gid.y < cp.a.y;
+  let pixel = gid.y * cp.a.x + gid.x;
+  var mine = 0u;
+  var open = false;
+  if (inside) { open = accum[pixel * 2u + 1u].w < 0.5; }
+  if (open) { mine = atomicAdd(&found, 1u); }
+  workgroupBarrier();
+  let total = atomicLoad(&found);
+  if (index == 0u && total > 0u) { reserved = atomicAdd(&ctl[header], total); }
+  workgroupBarrier();
+  if (open) { atomicStore(&ctl[cp.b.z + reserved + mine], pixel); }
+}
+
+// The next pass: every open pixel has the same count n (a pixel only ever stops at a pass boundary), so its length is
+// the minimum for the first pass and `pass size` after, up to the maximum.
+@compute @workgroup_size(1)
+fn finish() {
+  let header = 0u;
+  let count = atomicLoad(&ctl[header]);
+  var lanes = 0u;
+  var sparse = false;
+  if (count > 0u) {
+    let first = atomicLoad(&ctl[cp.b.z]);
+    let taken = u32(accum[first * 2u + 1u].z + 0.5);
+    let pass_size = max(u32(cp.d.y + 0.5), 1u);
+    var end = cp.c.z;
+    if (taken >= cp.c.z) { end = cp.c.z + ((taken - cp.c.z) / pass_size + 1u) * pass_size; }
+    end = min(end, cp.c.w);
+    if (end > taken) { lanes = end - taken; }
+    sparse = lanes > 1u && count <= cp.c.x && count * lanes <= cp.c.y && count * lanes <= cp.b.y * cp.b.w;
+  }
+  let dense = select(count, 0u, sparse);
+  let groups = (dense + cp.b.w - 1u) / cp.b.w;
+  for (var i = 0u; i < cp.b.x; i++) {
+    let before = min(groups, i * cp.b.y);
+    atomicStore(&args[i * 4u], min(groups - before, cp.b.y));
+    atomicStore(&args[i * 4u + 1u], 1u);
+    atomicStore(&args[i * 4u + 2u], 1u);
+  }
+  let sparse_at = cp.b.x * 4u;
+  atomicStore(&args[sparse_at], select(0u, (count * lanes + cp.b.w - 1u) / cp.b.w, sparse));
+  atomicStore(&args[sparse_at + 1u], 1u);
+  atomicStore(&args[sparse_at + 2u], 1u);
+  atomicStore(&args[sparse_at + 4u], select(0u, (count + 63u) / 64u, sparse));
+  atomicStore(&args[sparse_at + 5u], 1u);
+  atomicStore(&args[sparse_at + 6u], 1u);
+  atomicStore(&ctl[header + 2u], count);      // the list's length for the render shader and for the host's progress counter
+  atomicStore(&ctl[header + 3u], lanes);
+  atomicStore(&ctl[header], 0u);
+  atomicStore(&ctl[header + 1u], 0u);
+}
+
+// After a sparse pass: add each open pixel's samples (written by the render shader at the end of the accumulator) to its
+// totals and let it decide, the same estimate as `pathtrace.pixel_noise` and the render shader's own.
+@compute @workgroup_size(64)
+fn reduce(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let header = 0u;
+  let count = atomicLoad(&ctl[header + 2u]);
+  let lanes = atomicLoad(&ctl[header + 3u]);
+  let slot = gid.x;
+  if (slot >= count) { return; }
+  let pixel = atomicLoad(&ctl[cp.b.z + slot]);
+  let scratch = cp.a.x * cp.a.y * 2u + slot * lanes * 2u;
+  var rgb = vec4<f32>(0.0);
+  var lum_sum = 0.0;
+  var lum_sq = 0.0;
+  for (var j = 0u; j < lanes; j++) {
+    rgb += accum[scratch + j * 2u];
+    let moments = accum[scratch + j * 2u + 1u];
+    lum_sum += moments.x;
+    lum_sq += moments.y;
+  }
+  accum[pixel * 2u] = accum[pixel * 2u] + rgb;
+  let stats = accum[pixel * 2u + 1u];
+  let n = stats.z + f32(lanes);
+  let sum = stats.x + lum_sum;
+  let sq = stats.y + lum_sq;
+  var done = stats.w;
+  if (cp.d.x > 0.0 && n >= f32(cp.c.z)) {
+    let taken = u32(n + 0.5);
+    let pass_size = max(u32(cp.d.y + 0.5), 1u);
+    if ((taken - cp.c.z) % pass_size == 0u || taken >= cp.c.w) {
+      let mean = sum / n;
+      let var_of_mean = max(sq / n - mean * mean, 0.0) * n / max(n - 1.0, 1.0) / n;
+      let m = mean + 0.02;
+      if (var_of_mean / (m * m) < cp.d.x) { done = 1.0; }
+    }
+  }
+  accum[pixel * 2u + 1u] = vec4<f32>(sum, sq, n, done);
+}
+'''
+
+
+def _compact_pipelines(state):
+    cache = state.setdefault("_gpupt_compact", {})
+    if "pipelines" not in cache:
+        device = state["device"]
+        module = device.create_shader_module(code=_COMPACT_SHADER)
+        cache["pipelines"] = tuple(device.create_compute_pipeline(layout="auto", compute={"module": module, "entry_point": name})
+                                   for name in ("scan", "finish", "reduce"))
+    return cache["pipelines"]
 
 
 def _preprocess(code, flags):
@@ -2291,7 +2462,7 @@ def _pack_textures(packed, ps):
 
 
 def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, settings, code, tile_bits, tiles_x,
-             decide=True):
+             mode=2.0):
     eye, view = s._view_basis(camera)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
     a = np.array([width, height, row0, row1], "u4")
@@ -2319,7 +2490,8 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
         f32[12] = (radius, focus, blades, blade_rotation)
         f32[13, 0] = inverse_squeeze
     if settings.adaptive and code < 7:
-        f32[14] = (settings.noise_threshold, settings.min_samples, 1.0, 1.0 if decide else 0.0)
+        f32[14] = (settings.noise_threshold, settings.min_samples, mode, settings.adaptive_pass_size)
+        f32[13, 1] = settings.max_samples
     tiles = np.zeros((512, 4), "u4")
     tiles.reshape(-1)[:len(tile_bits)] = tile_bits
     return b"".join((a.tobytes(), b.tobytes(), c.tobytes(), d.tobytes(), e.tobytes(), g.tobytes(), h.tobytes(),
@@ -2342,6 +2514,131 @@ def _tile_bits(tile_done):
 
 
 # --- rendering ------------------------------------------------------------------------------------------
+
+def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height, wg,
+                     heavy, settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap, phases,
+                     sparse_threads):
+    """Adaptive sampling on the device. Every sample is one indirect dispatch over the blocks the last `scan` listed; after
+    each pass `scan` and `finish` (`_COMPACT_SHADER`) rebuild that list from the shader's per-pixel done flags. The running
+    moments and the done flags stay in `accum`, so nothing is read back while the render runs: the host only waits for the
+    card now and then (a pass when it must report progress or honour a time limit, `ADAPTIVE_PACE` passes otherwise) and, when
+    `progress` is given, reads the list's length (one word) after each pass. Returns (samples taken per pixel, passes, open pixels last seen)."""
+    scan, finish, reduce = _compact_pipelines(state)
+    npix = width * height
+    threads = wg * wg
+    budget = ADAPTIVE_PATHS_PER_DISPATCH // (SOFT_SLOWDOWN if heavy else 1)
+    chunk_groups = int(max(1, min(ADAPTIVE_MAX_GROUPS, budget // threads)))
+    chunks = -(-npix // (chunk_groups * threads))
+    sparse_args, reduce_args = chunks * 16, chunks * 16 + 16      # byte offsets of the other two indirect arguments
+    header = 0
+    list_base = header + 4
+    ctl = device.create_buffer(size=4 * (list_base + npix), usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
+    args = device.create_buffer(size=16 * (chunks + 2), usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.INDIRECT)
+    resources.extend((ctl, args))
+    sparse_pixels = min(ADAPTIVE_SPARSE_PIXELS, sparse_threads)
+    compact = np.zeros(16, "u4")
+    compact[:12] = (width, height, 0, 0, chunks, chunk_groups, list_base, threads, sparse_pixels, sparse_threads,
+                    settings.min_samples, settings.max_samples)
+    compact.view("f4")[12:14] = (settings.noise_threshold, settings.adaptive_pass_size)
+    compact = upload(compact, wgpu.BufferUsage.UNIFORM)
+
+    def group(pipe, entries):
+        return device.create_bind_group(layout=pipe.get_bind_group_layout(0), entries=[
+            {"binding": i, "resource": {"buffer": b}} for i, b in enumerate(entries)])
+    scan_group, reduce_group = (group(pipe, [accum, ctl, compact]) for pipe in (scan, reduce))
+    finish_group = group(finish, [accum, ctl, compact, args])
+    none = np.zeros(0, "u4")
+    groups = []
+    for c in range(chunks):
+        uniform = upload(_uniform(packed, ps, camera, width, height, list_base, header + 2, c * chunk_groups * threads, 1,
+                                  settings, code, none, tiles_x), wgpu.BufferUsage.UNIFORM)
+        groups.append(group(pipeline, [*buffers, accum, uniform, ctl]))
+    uniform = upload(_uniform(packed, ps, camera, width, height, list_base, header + 2, 0, 1, settings, code, none, tiles_x,
+                              mode=3.0), wgpu.BufferUsage.UNIFORM)
+    sparse_group = group(pipeline, [*buffers, accum, uniform, ctl])
+
+    def sparse(compute):
+        # the pass's samples side by side for the few pixels still open (zero groups when the pass was dense), then their sum
+        compute.set_pipeline(pipeline)
+        compute.set_bind_group(0, sparse_group)
+        compute.dispatch_workgroups_indirect(args, sparse_args)
+        compute.set_pipeline(reduce)
+        compute.set_bind_group(0, reduce_group)
+        compute.dispatch_workgroups_indirect(args, reduce_args)
+
+    def compaction(compute):
+        compute.set_pipeline(scan)
+        compute.set_bind_group(0, scan_group)
+        compute.dispatch_workgroups(-(-width // 8), -(-height // 8), 1)
+        compute.set_pipeline(finish)
+        compute.set_bind_group(0, finish_group)
+        compute.dispatch_workgroups(1, 1, 1)
+
+    def wait():
+        lap("encode")
+        device.queue.read_buffer(accum, 0, 16)      # `on_submitted_work_done_sync` fails to build its callback in wgpu-py 0.32
+        readbacks["waits"] += 1
+        lap("dispatch")
+    encoder = device.create_command_encoder()
+    compute = encoder.begin_compute_pass()
+    compaction(compute)                    # every block is open before the first pass
+    compute.end()
+    device.queue.submit([encoder.finish()])
+    sample_index, passes, pixels_open = 0, 0, width * height
+    asked = progress is not None or bool(settings.time_limit) or cancel is not None
+    while sample_index < total_samples:
+        raytrace._cancel(cancel)
+        take = min(settings.min_samples if sample_index == 0 else settings.adaptive_pass_size, total_samples - sample_index)
+        if heavy:
+            # a heavy sample takes long enough that each chunk is its own short submission
+            for _ in range(take):
+                for c in range(chunks):
+                    raytrace._cancel(cancel)
+                    encoder = device.create_command_encoder()
+                    compute = encoder.begin_compute_pass()
+                    compute.set_pipeline(pipeline)
+                    compute.set_bind_group(0, groups[c])
+                    compute.dispatch_workgroups_indirect(args, c * 16)
+                    compute.end()
+                    device.queue.submit([encoder.finish()])
+                    wait()
+            encoder = device.create_command_encoder()
+            compute = encoder.begin_compute_pass()
+            sparse(compute)
+            compaction(compute)
+        else:
+            encoder = device.create_command_encoder()
+            compute = encoder.begin_compute_pass()
+            compute.set_pipeline(pipeline)
+            for _ in range(take):
+                for c in range(chunks):
+                    compute.set_bind_group(0, groups[c])
+                    compute.dispatch_workgroups_indirect(args, c * 16)
+            sparse(compute)
+            compaction(compute)
+        compute.end()
+        device.queue.submit([encoder.finish()])
+        sample_index += take
+        passes += 1
+        if asked or heavy or passes % ADAPTIVE_PACE == 0:
+            wait()
+        else:
+            lap("encode")
+        if progress is not None:
+            pixels_open = int(np.frombuffer(device.queue.read_buffer(ctl, (header + 2) * 4, 4), "u4")[0])
+            readbacks["counter"] += 1
+            lap("flag readback")
+            elapsed = time.perf_counter() - started
+            converged = 1.0 - pixels_open / (width * height)
+            progress("pathtrace", max(sample_index / total_samples, converged),
+                     dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=-(-pixels_open // threads),
+                          converged=converged, pixels_active=pixels_open))
+            if not pixels_open:
+                break
+        if settings.time_limit and time.perf_counter() - started >= settings.time_limit:
+            break
+    return sample_index, passes, pixels_open
+
 
 def render(scene, camera, width, height, background, ambient, output, settings, cancel=None, progress=None,
            stats=None, volume=None):
@@ -2380,8 +2677,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     limits = gpurt._limits(state)
     cap = min(limits.get("max-buffer-size", 0), limits.get("max-storage-buffer-binding-size", 0))
     npix = width * height
-    flag_vec4 = (npix + 3) // 4           # adaptive sampling's done flags, one float per pixel after the accumulator
-    accum_bytes = npix * 32 + flag_vec4 * 16
+    accum_bytes = npix * 32
     for name, data in (("nodes", packed.nodes), ("triangles", packed.triangles), ("env", packed.env)):
         if data.nbytes > cap:
             raise ValueError(f"GPU path tracing needs a {data.nbytes / 2**20:.1f} MiB {name} buffer; the adapter allows {cap / 2**20:.1f} MiB")
@@ -2397,76 +2693,45 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     data_pass = output in pt.DATA_OUTPUTS
     code = _OUTPUT_CODES[output]
     storage = wgpu.BufferUsage.STORAGE
+    adaptive = settings.adaptive and not data_pass
+    readbacks = {"waits": 0, "mask": 0, "counter": 0, "image": 0}     # stats["readbacks"]: what came back from the card, and why
+    heavy = ps.splats is not None or ps.volumes is not None
     try:
         buffers = [upload(packed.nodes, storage), upload(packed.order, storage), upload(packed.triangles, storage),
                    upload(packed.shapes, storage), upload(packed.lights, storage), upload(packed.env, storage)]
-        accum = upload(np.zeros((npix * 2 + flag_vec4, 4), "f4"), storage | wgpu.BufferUsage.COPY_SRC)
+        # the sparse passes' per-sample sums sit after the image: as many (pixel, sample) slots as a pass can use, the constant
+        # allows and the adapter has room for (none: every pass is dense)
+        sparse_threads = 0
+        if adaptive:
+            lanes = min(max(settings.min_samples, settings.adaptive_pass_size), 1024)
+            sparse_threads = int(max(0, min(ADAPTIVE_SPARSE_THREADS, npix * lanes, (cap - accum_bytes) // 32)))
+        accum = device.create_buffer(size=npix * 32 + sparse_threads * 32, usage=storage | wgpu.BufferUsage.COPY_SRC)   # a new buffer is zeroed
+        resources.append(accum)
         links = bool(ps.linked_bits)
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
         lap("upload")
-        tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
-        tile_done = np.zeros(tiles_x * tiles_y, bool)
-        tile_count = np.zeros(tiles_x * tiles_y, np.int64)
-        adaptive = settings.adaptive and not data_pass
-        pixel_done = np.zeros(width * height, bool)    # adaptive: read back from the shader's per-pixel done flags
         per_pass = 1 if data_pass else max(1, settings.pass_samples or 1)
         total_samples = 1 if data_pass else (settings.max_samples if adaptive else settings.samples)
-        heavy = ps.splats is not None or ps.volumes is not None
         sample_index, passes = 0, 0
-        group = None          # adaptive: the one bind group (its uniform buffer is rewritten per dispatch)
-        while sample_index < total_samples:
-            raytrace._cancel(cancel)
-            if adaptive:
-                take = min(settings.min_samples if sample_index == 0 else settings.adaptive_pass_size,
-                           total_samples - sample_index)
-            else:
+        pixels_open = npix
+        tile_done = np.zeros(tiles_x * tiles_y, bool)
+        tile_count = np.zeros(tiles_x * tiles_y, np.int64)
+        tile_of = None
+        if adaptive:
+            sample_index, passes, pixels_open = _adaptive_passes(
+                state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height, wg, heavy,
+                settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap, phases, sparse_threads)
+        else:
+            tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
+            blocks = upload(np.zeros(4, "u4"), storage)       # the adaptive list, unused here
+            while sample_index < total_samples:
+                raytrace._cancel(cancel)
                 take = min(per_pass, total_samples - sample_index)
-            bits = _tile_bits(tile_done)
-            if not len(np.flatnonzero(~tile_done)):
-                break
-            lap("mask update")
-            if adaptive:
-                # An adaptive pass is `take` one-sample dispatches (a thread looping over several samples runs about four
-                # times slower per sample, its bands being too small to fill the card), over only the rows that still hold an
-                # active tile, through one uniform buffer rewritten between submissions. Only the last dispatch of the pass
-                # decides which pixels are done, so the CPU reference's pass boundaries hold.
-                if group is None:
-                    first = _uniform(packed, ps, camera, width, height, 0, height, 0, 1, settings, code, bits, tiles_x)
-                    uniform = device.create_buffer(size=len(first), usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
-                    resources.append(uniform)
-                    group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
-                        {"binding": i, "resource": {"buffer": b}} for i, b in enumerate([*buffers, accum, uniform])])
-                active_pixels = width * height - int(pixel_done.sum())
-                active_rows = np.flatnonzero(~tile_done.reshape(tiles_y, tiles_x).all(axis=1))
-                row_lo, row_hi = int(active_rows[0]) * pt.TILE, min(height, (int(active_rows[-1]) + 1) * pt.TILE)
-                # With few active tiles the threads are few whichever way the samples are cut, so then one dispatch per band
-                # loops over the whole pass and the host stops paying a submission per sample.
-                sparse = float((~tile_done).mean()) < ADAPTIVE_SPARSE
-                steps, spp = (1, take) if sparse else (take, 1)
-                # a band's cost is its active pixels, not its rows: size bands by those, or a sparse pass pays a submission
-                # and a wait for every few rows of mostly idle threads
-                per_row = max(1.0, active_pixels / max(row_hi - row_lo, 1))
-                rows_per_band = max(1, int((GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // (per_row * spp)))
-                for j in range(steps):
-                    for y0 in range(row_lo, row_hi, rows_per_band):
-                        raytrace._cancel(cancel)
-                        y1 = min(row_hi, y0 + rows_per_band)
-                        device.queue.write_buffer(uniform, 0, _uniform(
-                            packed, ps, camera, width, height, y0, y1, sample_index + j, spp, settings, code, bits, tiles_x,
-                            decide=j == steps - 1))
-                        lap("uniform write")
-                        encoder = device.create_command_encoder()
-                        compute = encoder.begin_compute_pass()
-                        compute.set_pipeline(pipeline)
-                        compute.set_bind_group(0, group)
-                        compute.dispatch_workgroups(-(-width // wg), -(-(y1 - y0) // wg), 1)
-                        compute.end()
-                        device.queue.submit([encoder.finish()])
-                        device.queue.read_buffer(accum, 0, 16)     # wait: keeps submissions short and cancellation prompt
-                        lap("dispatch")
-                        phases["dispatches"] = phases.get("dispatches", 0) + 1
-            else:
+                bits = _tile_bits(tile_done)
+                if not len(np.flatnonzero(~tile_done)):
+                    break
+                lap("mask update")
                 rows_per_band = max(1, (GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // max(width * take, 1))
                 for y0 in range(0, height, rows_per_band):
                     raytrace._cancel(cancel)
@@ -2474,7 +2739,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                     uniform = upload(_uniform(packed, ps, camera, width, height, y0, y1, sample_index, take, settings,
                                               code, bits, tiles_x), wgpu.BufferUsage.UNIFORM)
                     group_once = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
-                        {"binding": i, "resource": {"buffer": b}} for i, b in enumerate([*buffers, accum, uniform])])
+                        {"binding": i, "resource": {"buffer": b}} for i, b in enumerate([*buffers, accum, uniform, blocks])])
                     encoder = device.create_command_encoder()
                     compute = encoder.begin_compute_pass()
                     compute.set_pipeline(pipeline)
@@ -2483,73 +2748,64 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                     compute.end()
                     device.queue.submit([encoder.finish()])
                     device.queue.read_buffer(accum, 0, 16)     # wait for this band: keeps submissions short and cancellation prompt
+                    readbacks["waits"] += 1
                     resources.pop().destroy()
                     lap("dispatch")
-            tile_count[~tile_done] += take
-            sample_index += take
-            passes += 1
-            if adaptive:
-                # the shader flags each pixel that went under the threshold; a tile is skipped once all its pixels have
-                # only the rows that were dispatched can have changed, and a pixel that is done stays done
-                first, last = (row_lo * width) // 4, -(-(row_hi * width) // 4)
-                flags = np.frombuffer(device.queue.read_buffer(accum, npix * 32 + first * 16, (last - first) * 16), "f4")
-                lap("flag readback")
-                phases["flag readbacks"] = phases.get("flag readbacks", 0) + 1
-                lo = first * 4
-                span = flags[:min(len(flags), npix - lo)] > 0.5
-                pixel_done[lo:lo + len(span)] |= span
-                tile_done = _tiles_done(pixel_done, width, height, tiles_x, tiles_y)
-                lap("mask update")
-            elif settings.noise_threshold > 0 and not data_pass:
-                raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(-1, 2, 4)
-                lum_sum, lum_sq = raw[:, 1, 0].astype(np.float64), raw[:, 1, 1].astype(np.float64)
-                count = tile_count[tile_of]
-                pt._retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles_x * tiles_y, settings.noise_threshold)
-            elapsed = time.perf_counter() - started
-            if progress is not None:
-                if adaptive:
-                    remaining = npix - int(pixel_done.sum())
-                    converged = 1.0 - remaining / npix
-                    progress("pathtrace", max(sample_index / total_samples, converged),
-                             dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),
-                                  converged=converged, pixels_active=remaining))
-                else:
+                tile_count[~tile_done] += take
+                sample_index += take
+                passes += 1
+                if settings.noise_threshold > 0 and not data_pass:
+                    raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(-1, 2, 4)
+                    readbacks["mask"] += 1
+                    lum_sum, lum_sq = raw[:, 1, 0].astype(np.float64), raw[:, 1, 1].astype(np.float64)
+                    count = tile_count[tile_of]
+                    pt._retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles_x * tiles_y, settings.noise_threshold)
+                    lap("mask update")
+                elapsed = time.perf_counter() - started
+                if progress is not None:
                     progress("pathtrace", sample_index / total_samples,
                              dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),
                                   converged=float(tile_done[tile_of].mean())))
-            if settings.time_limit and elapsed >= settings.time_limit:
-                break
+                if settings.time_limit and elapsed >= settings.time_limit:
+                    break
         raytrace._cancel(cancel)
-        raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(npix, 2, 4).astype(np.float64)
+        raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(npix, 2, 4)
+        readbacks["image"] += 1
         lap("final readback")
     finally:
         for resource in reversed(resources):
             resource.destroy()
+    pixel_done = raw[:, 1, 3] > 0.5 if adaptive else None       # adaptive: the shader's own per-pixel done flags
     pixel_samples = raw[:, 1, 2].astype(np.int64) if adaptive else tile_count[tile_of]
-    count = np.maximum(pixel_samples, 1).astype(np.float64)
+    if adaptive:
+        # passes that did any work: the first takes the minimum, each later one `adaptive_pass_size` more for the pixels left
+        # (passes after every pixel is done are encoded but dispatch nothing, and the host never read how many there were)
+        passes = 1 + -(-max(int(pixel_samples.max()) - settings.min_samples, 0) // settings.adaptive_pass_size)
+    count = np.maximum(pixel_samples, 1).astype(np.float32)
     if data_pass:
         image = raw[:, 0, :]
         image = np.where(image[:, 3:4] > 0, image, 0.0)
     else:
-        image = np.zeros((width * height, 4))
-        image[:, :3] = raw[:, 0, :3] / count[:, None]
-        image[:, 3] = raw[:, 0, 3] / count
+        image = raw[:, 0, :] / count[:, None]                 # float32 throughout: the accumulator is float32 already
         if output == "rgba":
             bg = np.asarray(background, np.float64).copy()
             bg[3] = np.clip(bg[3], 0, 1)
             bg[:3] *= bg[3]
-            image = image + bg * (1 - image[:, 3:4])
+            image = image + bg.astype(np.float32) * (np.float32(1) - image[:, 3:4])
     if stats is not None:
         stats.update(backend="gpu", sampling=settings.sampling, samples=pixel_samples.reshape(height, width).copy(),
                      passes=passes, seconds=time.perf_counter() - started, adapter=gpu3d.describe(), phases=phases,
+                     readbacks=readbacks,
                      converged=(pixel_done if adaptive else tile_done[tile_of]).reshape(height, width).copy())
         if not data_pass:
             # the variance of each pixel's mean luminance from the moments the shader summed, as the CPU reference has it
-            mean_lum = raw[:, 1, 0] / count
-            variance = np.maximum(raw[:, 1, 1] / count - mean_lum * mean_lum, 0.0) * count / np.maximum(count - 1, 1) / count
+            n = count.astype(np.float64)
+            lum_sum, lum_sq = raw[:, 1, 0].astype(np.float64), raw[:, 1, 1].astype(np.float64)
+            mean_lum = lum_sum / n
+            variance = np.maximum(lum_sq / n - mean_lum * mean_lum, 0.0) * n / np.maximum(n - 1, 1) / n
             stats["variance"] = variance.reshape(height, width)
-            stats["noise"] = pt.pixel_noise(raw[:, 1, 0], raw[:, 1, 1], count).reshape(height, width)
-    result = image.reshape(height, width, 4).astype(np.float32)
+            stats["noise"] = pt.pixel_noise(lum_sum, lum_sq, n).reshape(height, width)
+    result = np.ascontiguousarray(image, np.float32).reshape(height, width, 4)
     if output == "depth" and ps.volumes is not None:
         result = pt.merge_volume_depth(scene, camera, width, height, result, ps.volumes.settings, cancel)
     result.flags.writeable = False
