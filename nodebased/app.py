@@ -1047,6 +1047,7 @@ class Viewer(PanZoomView):
         self.analysis_drag = None
         self.flare_drag = None
         self.tracker_picking = False
+        self.track3d_picking = None
         self.tracker_drag = None
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
         self.zdefocus_picking = None
@@ -2295,11 +2296,13 @@ class Viewer(PanZoomView):
         return True
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and (self.crypto_picking or self.zdefocus_picking or self.focus_picking):
-            what = "Focus" if self.focus_picking else "Cryptomatte"
+        if event.key() == Qt.Key.Key_Escape and (self.crypto_picking or self.zdefocus_picking or self.focus_picking or self.track3d_picking):
+            what = ("PointsTo3D" if self.track3d_picking else "Focus" if self.focus_picking
+                    else "ZDefocus" if self.zdefocus_picking else "Cryptomatte")
             self.zdefocus_picking = None
             self.crypto_picking = None
             self.focus_picking = None
+            self.track3d_picking = None
             self.unsetCursor()
             self.window.statusBar().showMessage(f"{what} picking finished")
             event.accept()
@@ -2866,6 +2869,13 @@ class Viewer(PanZoomView):
             return
         if event.button() == Qt.MouseButton.LeftButton and self.focus_picking:
             self.window.focus_pick(self.focus_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.track3d_picking:
+            self.window.points_to_3d_pick(self.track3d_picking,
+                                          math.floor(scene_pos.x()), math.floor(scene_pos.y()))
+            self.track3d_picking = None
+            self.unsetCursor()
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self.crypto_picking:
@@ -8426,6 +8436,11 @@ class Window(QMainWindow):
                 crypto_pick.setToolTip("Click objects in the viewer to add their names to the matte list · Esc ends")
                 crypto_pick.clicked.connect(lambda checked=False, k=key: self.begin_crypto_pick(k))
                 form.addRow(crypto_pick)
+            if node["type"] == "PointsTo3D":
+                pick_track_point = QPushButton("Pick point at current frame…")
+                pick_track_point.setToolTip("Set the matching frame's image point by clicking in the viewer")
+                pick_track_point.clicked.connect(lambda checked=False, k=key: self.begin_points_to_3d_pick(k))
+                form.addRow(pick_track_point)
             if node["type"] in ("ViewMetaData", "CompareMetaData"):
                 self.add_metadata_view(form, key, node["type"])
             if node["type"] == "Profile":
@@ -9062,6 +9077,40 @@ class Window(QMainWindow):
         prompt = "Tracker: click a point in the reference frame · Esc cancels"
         self.statusBar().showMessage(prompt)
         self.viewer.show_prompt(prompt)
+        return True
+
+    def begin_points_to_3d_pick(self, key):
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "PointsTo3D":
+            return False
+        current = int(self.dispatcher.document["time"]["current"])
+        count = int(node["params"].get("track_count", 3))
+        slot = next((i for i in range(count) if int(node["params"][f"frame{i}"]) == current), None)
+        if slot is None:
+            self._show_command_error(ValueError("Set the current frame to one of the PointsTo3D track frames first"))
+            return False
+        self.viewer.track3d_picking = key
+        self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+        self.statusBar().showMessage(f"PointsTo3D: click frame {current} point in the viewer · Esc cancels")
+        return True
+
+    def points_to_3d_pick(self, key, x, y):
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "PointsTo3D":
+            return False
+        current = int(self.dispatcher.document["time"]["current"])
+        count = int(node["params"].get("track_count", 3))
+        slot = next((i for i in range(count) if int(node["params"][f"frame{i}"]) == current), None)
+        if slot is None:
+            self._show_command_error(ValueError("Current frame no longer matches a PointsTo3D sample"))
+            return False
+        rect = self.viewer.format_rect
+        ox = rect.left() if rect is not None else 0
+        oy = rect.top() if rect is not None else 0
+        self.command({"op": "batch", "commands": [
+            {"op": "set", "id": key, "param": f"track_x{slot}", "value": float(x - ox)},
+            {"op": "set", "id": key, "param": f"track_y{slot}", "value": float(y - oy)}]})
+        self.statusBar().showMessage(f"PointsTo3D: sample {slot + 1} set at frame {current}")
         return True
 
     def add_tracker_point(self, point):

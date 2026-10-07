@@ -911,6 +911,12 @@ class Evaluator:
                 # Tracked geometry is merged into params rather than carried beside
                 # them, so every later stage — window, kernel, region rule, digest — sees an
                 # ordinary Transform and cannot treat the two differently by accident.
+                linked_track_id = node.get("inputs", {}).get("track") if kind == "Tracker" else None
+                if linked_track_id is not None:
+                    linked_track = values[linked_track_id]
+                    if not isinstance(linked_track, dict) or linked_track.get("kind") != "TrackerTrack":
+                        raise ValueError("Tracker: track input must come from Reconcile3D")
+                    payload = tiers.scale_node_data("Tracker", {"tracks": [linked_track["track"]]}, tier)
                 params = {**params, **tracker.solve(payload, frame, params,
                                                       force_stabilise=(kind == "Stabilize"))}
             # Only required slots (those listed in SPECS[kind]["inputs"]) must be wired; optional
@@ -1436,7 +1442,12 @@ class Evaluator:
                             if carried_point is None and geometries and len(geometries[0].vertices):
                                 geo = geometries[0]
                                 matrix = geo.world_matrix().astype(np.float64)
-                                point = (matrix @ np.r_[np.mean(geo.vertices, axis=0), 1.0])[:3]
+                                vertex_index = int(params.get("vertex_index", -1))
+                                if vertex_index >= len(geo.vertices):
+                                    raise ValueError(f"Reconcile3D: mesh vertex index {vertex_index} is out of range")
+                                local_point = (geo.vertices[vertex_index] if vertex_index >= 0
+                                               else np.mean(geo.vertices, axis=0))
+                                point = (matrix @ np.r_[local_point, 1.0])[:3]
                         frames = range(int(params["frame_start"]), int(params["frame_end"]) + 1)
                         samples = []
                         for f in frames:

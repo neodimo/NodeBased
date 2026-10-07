@@ -104,3 +104,25 @@ class Track3DNodeTests(unittest.TestCase):
             np.testing.assert_allclose((actual["x"], actual["y"]), expected, atol=1e-3)
         self.assertTrue(all(not p["behind_camera"] for p in result["points"][:3]))
         self.assertTrue(result["points"][3]["behind_camera"])
+
+    def test_reconcile_track_can_drive_tracker_image_node(self):
+        from nodebased.core import Dispatcher
+        from nodebased.imaging import Evaluator
+
+        dispatch = Dispatcher()
+        for key, kind in (("cam", "Camera3D"), ("rec", "Reconcile3D"),
+                          ("plate", "Constant"), ("tracker", "Tracker")):
+            dispatch.execute({"op": "create", "id": key, "type": kind, "name": key})
+        dispatch.execute({"op": "connect", "id": "rec", "input": "camera", "source": "cam"})
+        dispatch.execute({"op": "connect", "id": "tracker", "input": "image", "source": "plate"})
+        dispatch.execute({"op": "connect", "id": "tracker", "input": "track", "source": "rec"})
+        dispatch.execute({"op": "set", "id": "rec", "param": "frame_end", "value": 3})
+        dispatch.execute({"op": "set", "id": "rec", "param": "image_width", "value": 64})
+        dispatch.execute({"op": "set", "id": "rec", "param": "image_height", "value": 48})
+        dispatch.execute({"op": "set", "id": "plate", "param": "width", "value": 64})
+        dispatch.execute({"op": "set", "id": "plate", "param": "height", "value": 48})
+        evaluator = Evaluator()
+        result = evaluator.evaluate_raster(dispatch.document, "tracker", frame=2, tier=1)
+        source = evaluator.evaluate_raster(dispatch.document, "plate", frame=2, tier=1)
+        self.assertEqual(result.pixels.shape, (source.pixels.shape[0] + 2, source.pixels.shape[1] + 2, 4))
+        np.testing.assert_allclose(result.pixels[1:-1, 1:-1], source.pixels, atol=1e-6)

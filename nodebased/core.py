@@ -579,7 +579,7 @@ SPECS = {
                        "mix": 1.0}},
     # Tracker is a Transform whose transform is solved from tracks in node_data instead of typed
     # in. It honours the same optional-mask + mix contract as the image filters.
-    "Tracker": {"inputs": ["image"], "optional_inputs": ["mask"],
+    "Tracker": {"inputs": ["image"], "optional_inputs": ["mask", "track"],
                 "params": {"reference_frame": 1, "mode": "match_move", "apply_translate": 1,
                            "apply_rotate": 1, "apply_scale": 1, "smoothing": 0,
                            "pattern_radius": 8, "search_radius": 24,
@@ -830,7 +830,8 @@ SPECS = {
         **_XFORM}},
     "Reconcile3D": {"inputs": ["camera"], "optional_inputs": ["point"], "params": {
         "point_x": 0.0, "point_y": 0.0, "point_z": 0.0,
-        "frame_start": 1, "frame_end": 100, "image_width": 1920, "image_height": 1080}},
+        "frame_start": 1, "frame_end": 100, "image_width": 1920, "image_height": 1080,
+        "vertex_index": -1}},
     # TransformGeo3D bakes its transform directly into the incoming geometry's own vertices and
     # normals (nodebased.scene3d.transform_geometry), unlike Axis3D which only ever adds another
     # parent matrix. This lets a modeling chain flatten a transform before further edits.
@@ -1370,7 +1371,7 @@ OUTPUT_TYPES.update({"PointsTo3D": "scene", "Reconcile3D": "track"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
-               "point": ("geometry", "scene"),
+               "point": ("geometry", "scene"), "track": ("track",),
                "geometry": ("geometry", "scene"),
                # Axis3D's single slot accepts the same members a Scene3D object slot does.
                "object": ("geometry", "light", "scene", "particles", "volume"),
@@ -1733,7 +1734,7 @@ NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000
                               **{f"track_{axis}{i}": (-1000000.0, 1000000.0)
                                  for axis in ("x", "y") for i in range(3)}},
                "Reconcile3D": {"frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000),
-                               "image_width": (1, 32768), "image_height": (1, 32768),
+                               "image_width": (1, 32768), "image_height": (1, 32768), "vertex_index": (-1, 100000000),
                                **{f"point_{axis}": (-1000000.0, 1000000.0) for axis in "xyz"}},
                "VectorBlur": {"samples": (0, 64)},
                "MotionBlur": {"samples": (1, 64)},
