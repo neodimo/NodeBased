@@ -19,7 +19,7 @@ import uuid
 from PySide6.QtCore import Qt, QLineF, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
-                           QShortcut, QTextCursor, QTextFormat)
+                           QShortcut, QTextCursor, QTextFormat, QValidator)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -671,6 +671,34 @@ def apply_theme(name, accent=None):
     return name
 
 
+class FrameSpinBox(QSpinBox):
+    """The current-frame field: a plain number goes to that frame, "+10" / "-5" moves relative to
+    the frame it shows (Nuke's viewer frame box does the same). Commits on Enter or focus-out."""
+
+    def __init__(self):
+        super().__init__()
+        self.setKeyboardTracking(False)
+
+    @staticmethod
+    def _relative(text):
+        text = text.strip()
+        return text[:1] in ("+", "-") and text[1:].isdigit()
+
+    def validate(self, text, pos):
+        stripped = text.strip()
+        if stripped in ("", "+", "-") or stripped.isdigit() or self._relative(stripped):
+            state = (QValidator.State.Acceptable if stripped.isdigit() or self._relative(stripped)
+                     else QValidator.State.Intermediate)
+            return state, text, pos
+        return QValidator.State.Invalid, text, pos
+
+    def valueFromText(self, text):
+        stripped = text.strip()
+        if self._relative(stripped):
+            return self.value() + int(stripped)
+        return int(stripped) if stripped.isdigit() else self.value()
+
+
 class ElidedLabel(QLabel):
     """A status label whose text can never widen the layout it sits in.
 
@@ -705,6 +733,17 @@ class ElidedLabel(QLabel):
             self.text(), Qt.TextElideMode.ElideRight, self.width())
         painter.drawText(self.rect(), int(self.alignment()) | int(Qt.AlignmentFlag.AlignVCenter),
                          elided)
+
+
+class ShrinkableLabel(ElidedLabel):
+    """Shows its whole text when there is room and elides it when the row is tight: the time row's
+    "48 frames · 2.00 s" gives way before the timeline or any field is squeezed."""
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+
+    def sizeHint(self):
+        return QLabel.sizeHint(self)
 
 
 # The default workspace: what a first launch gets, and what Workspace → Default workspace restores.
@@ -5860,7 +5899,7 @@ class Window(QMainWindow):
         self.view_stack.addWidget(self.viewer)
         self.view_stack.addWidget(self.viewport)
         vl.addWidget(self.view_stack)
-        vl.addLayout(self._timeline())
+        vl.addWidget(self._timeline())
         self.viewer_panel = viewer_panel
         viewer_panel.setMinimumSize(0, 0)
         viewer_panel.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
@@ -6073,40 +6112,65 @@ class Window(QMainWindow):
         self.curve_editor_dock.show()
 
     def _timeline(self):
-        """Playhead strip under the viewer. Scrubbing is a document edit, so it undoes like one."""
-        row = QHBoxLayout()
+        """Playhead strip under the viewer. Scrubbing is a document edit, so it undoes like one.
+
+        Reads the way compositors read it (QA 10/6, finding 1): current frame first and largest,
+        then the timeline, then the range as In and Out, then the rate. Every numeric field
+        commits on Enter or focus-out, so typing "24" is one edit and not a 2 followed by a 24."""
+        container = QWidget()
+        container.setObjectName("time-row")
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.time_row = container
+
+        def caption(text, tip):
+            label = QLabel(text)
+            label.setObjectName("time-label")
+            label.setToolTip(tip)
+            row.addWidget(label)
+            return label
+
         row.addWidget(QLabel("  TIME"))
         self.play_button = QPushButton("▶")
-        self.play_button.setFixedWidth(34)
+        self.play_button.setFixedWidth(40)
         self.play_button.setToolTip("Play / stop (Space)")
         self.play_button.clicked.connect(lambda: self.toggle_playback())
         row.addWidget(self.play_button)
-        self.frame_first = QSpinBox()
-        self.frame_first.setRange(*TIME_LIMITS["first"])
-        self.frame_first.setToolTip("First frame of the comp's range")
-        row.addWidget(self.frame_first)
+        self.frame_current_label = caption("Frame", "The frame on screen")
+        self.frame_current = FrameSpinBox()
+        self.frame_current.setRange(*TIME_LIMITS["current"])
+        self.frame_current.setMinimumWidth(150)
+        emphasis = self.frame_current.font()
+        emphasis.setBold(True)
+        emphasis.setPointSizeF(emphasis.pointSizeF() + 2)
+        self.frame_current.setFont(emphasis)
+        self.frame_current.setToolTip("Current frame. Type a number to go there, or +10 / -5 to move "
+                                      "relative to it. Press Enter to apply.")
+        row.addWidget(self.frame_current)
         # TimelineBar keeps the QSlider surface this row was built against (setRange/setValue/
         # value/valueChanged), and adds the tick marks, frame numbers, and the cached/keyed
         # underlines. Everything below wires to it unchanged.
         self.frame_slider = TimelineBar()
+        self.frame_slider.setMinimumWidth(140)
         row.addWidget(self.frame_slider, 1)
+        self.frame_first_label = caption("In", "First frame of the comp's range")
+        self.frame_first = QSpinBox()
+        self.frame_first.setRange(*TIME_LIMITS["first"])
+        self.frame_first.setMinimumWidth(76)
+        self.frame_first.setToolTip("In: first frame of the comp's range. It cannot pass Out.")
+        row.addWidget(self.frame_first)
+        self.frame_last_label = caption("Out", "Last frame of the comp's range")
         self.frame_last = QSpinBox()
         self.frame_last.setRange(*TIME_LIMITS["last"])
-        self.frame_last.setToolTip("Last frame of the comp's range")
+        self.frame_last.setMinimumWidth(76)
+        self.frame_last.setToolTip("Out: last frame of the comp's range. It cannot precede In.")
         row.addWidget(self.frame_last)
-        self.frame_current = QSpinBox()
-        self.frame_current.setRange(*TIME_LIMITS["current"])
-        self.frame_current.setToolTip("Current frame")
-        row.addWidget(self.frame_current)
         # Playback rate is a property of the comp, so it is an undoable document edit through the
         # same boundary as the range — an agent setting fps and an artist typing it share one path.
         self.frame_fps = QDoubleSpinBox()
         self.frame_fps.setRange(*TIME_LIMITS["fps"])
         self.frame_fps.setDecimals(3)
         self.frame_fps.setSingleStep(1.0)
-        # Commit on enter/focus-out rather than per keystroke, so typing "29.97" is one undoable
-        # edit instead of four intermediate rates.
-        self.frame_fps.setKeyboardTracking(False)
         self.frame_fps.setSuffix(" fps")
         self.frame_fps.setToolTip("Playback rate. New comps start at 24 fps; the transport and the "
                                   "dropped-frame counter both follow this value.")
@@ -6118,16 +6182,36 @@ class Window(QMainWindow):
             self.fps_presets.addItem(label, value)
         self.fps_presets.currentIndexChanged.connect(self.apply_fps_preset)
         row.addWidget(self.fps_presets)
-        self.frame_info = QLabel("")
+        self.frame_info = ShrinkableLabel("")
         self.frame_info.setObjectName("muted")
         row.addWidget(self.frame_info)
-        for widget, name in ((self.frame_first, "first"), (self.frame_last, "last"),
-                             (self.frame_current, "current")):
-            widget.valueChanged.connect(lambda value, key=name: self.set_time(**{key: value}))
+        # Commit on Enter or focus-out rather than per keystroke: one undoable edit per typed value.
+        for spin in (self.frame_first, self.frame_last, self.frame_current, self.frame_fps):
+            spin.setKeyboardTracking(False)
+        # Frame numbers are typed or scrubbed, as in Nuke; the step arrows only cost row width.
+        for spin in (self.frame_first, self.frame_last, self.frame_current):
+            spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.frame_current.valueChanged.connect(lambda value: self.set_time(current=value))
+        self.frame_first.valueChanged.connect(lambda value: self.commit_range("first", value))
+        self.frame_last.valueChanged.connect(lambda value: self.commit_range("last", value))
         self.frame_fps.valueChanged.connect(lambda value: self.set_time(fps=float(value)))
         self.frame_slider.valueChanged.connect(lambda value: self.set_time(current=value))
         self.sync_timeline()
-        return row
+        return container
+
+    def commit_range(self, name, value):
+        """An In or Out typed by hand. An inverted range is refused and the field goes back to the
+        comp's value; it never collapses the comp to one frame (QA 10/6, finding 1)."""
+        current = self.dispatcher.document["time"]
+        if (name == "first" and value > current["last"]) or (name == "last" and value < current["first"]):
+            label, bound = ("In", "Out") if name == "first" else ("Out", "In")
+            relation = "after" if name == "first" else "before"
+            self.statusBar().showMessage(
+                f"{label} {value} would fall {relation} {bound} {current['last' if name == 'first' else 'first']}; "
+                f"the range is unchanged", 5000)
+            self.sync_timeline()
+            return
+        self.set_time(**{name: value})
 
     def sync_timeline(self):
         """Push document time into the widgets without re-emitting edits back into the dispatcher."""
