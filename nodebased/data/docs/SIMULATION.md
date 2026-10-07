@@ -161,30 +161,31 @@ five substeps after two warm-up substeps, and the last column the same mean thir
 
 | Adapter | Substep | At substep 30 |
 | --- | ---: | ---: |
-| NVIDIA GeForce RTX 3080 Ti | 30.8 ms | 33.1 ms |
-| AMD Radeon 8060S Graphics (RADV STRIX_HALO) | 59.4 ms | 66.9 ms |
-| llvmpipe (LLVM 22.1.8, 256 bits) | 428.6 ms | 566.2 ms |
+| NVIDIA GeForce RTX 3080 Ti | 31.0 ms | 35.4 ms |
+| AMD Radeon 8060S Graphics (RADV STRIX_HALO) | 55.7 ms | 68.2 ms |
+| llvmpipe (LLVM 22.1.8, 256 bits) | 429.4 ms | 569.4 ms |
 
-The RTX step is under the 100 ms N1 bar by 69 ms and under the 40 ms goal by 9 ms; the AMD adapter meets the bar, the
-software rasterizer does not. Phase table of one profiled RTX substep (each phase ends in a synchronisation, so the rows add
-to 32.1 ms against the 30.8 ms mean), with the post-step stages measured on the same state:
+The RTX step is under the 100 ms N1 bar by 69 ms and under the 40 ms goal by 9 ms (35.4 ms at substep 30); the AMD adapter
+meets the bar, the software rasterizer does not. These runs were taken with no other process using the GPU (utilisation 0%
+before each run). Phase table of one profiled RTX substep (each phase ends in a synchronisation, so the rows add to 35.3 ms
+against the 31.0 ms mean), with the post-step stages measured on the same state:
 
 | Phase | RTX 3080 Ti |
 | --- | ---: |
-| Pressure (multigrid, 10 cycles) | 14.0 ms |
-| Particle to grid | 9.0 ms |
-| Binning, sort and maintenance totals | 3.1 ms |
-| Extrapolation (24 passes over six fields) | 2.4 ms |
-| Grid to particle and advection | 1.4 ms |
-| Maintenance (compaction and top-up) | 1.0 ms |
+| Pressure (multigrid, 10 cycles) | 14.5 ms |
+| Particle to grid | 9.8 ms |
+| Binning, sort and maintenance totals | 3.6 ms |
+| Extrapolation (24 passes over six fields) | 2.9 ms |
+| Grid to particle and advection | 1.5 ms |
+| Maintenance (compaction and top-up) | 1.2 ms |
 | Pressure gradient subtraction | 0.6 ms |
-| Forces and constraints | 0.6 ms |
+| Forces and constraints | 1.2 ms |
 | Surface level set on the card (post-step) | 10.4 ms |
 | Surface level set read back for the viewport (post-step) | 4.1 ms |
-| Surface mesh, CPU (post-step) | 193.4 ms |
-| Particle readback for a checkpoint (post-step) | 93 ms |
+| Surface mesh, CPU (post-step) | 192.1 ms |
+| Particle readback for a checkpoint (post-step) | 78.2 ms |
 
-Pressure holds the largest share at 14.0 ms of the step. The multigrid over-correction that smoke uses (1.8) diverges on
+Pressure holds the largest share at 14.5 ms of the step. The multigrid over-correction that smoke uses (1.8) diverges on
 the free-surface operator; the liquid solver uses 1.3 (10 cycles at tolerance 1e-3, against 60 without convergence at 1.8)
 and restarts a diverging solve from zero with the plain cycle. The level set that took 6,857.3 ms on the CPU takes 10.4 ms on
 the card and agrees with `liquid_surface.level_set` to 3e-6. Agreement with the CPU reference on the dam-break preset:

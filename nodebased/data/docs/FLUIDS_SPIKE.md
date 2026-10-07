@@ -1235,8 +1235,8 @@ masks, extrapolation and the surface field stay on the card between substeps. Bi
 per-cell sort by id (a fixed order, so sums and runs are reproducible); maintenance, the pressure solve (the smoke
 multigrid's operator with air as the free-surface kind of blocked cell, over-correction 1.3), extrapolation, FLIP/PIC
 transfer and advection are compute passes; emission stays on the host with the reference's seeded draws, and interior-gap
-top-ups use a counter-based hash. The warmed 128³ substep measured 30.8 ms on the RTX 3080 Ti (the 100 ms bar and the 40 ms
-goal both met), 59.4 ms on the AMD Radeon 8060S and 428.6 ms on llvmpipe; pressure is the largest phase at 14.0 ms on the RTX.
+top-ups use a counter-based hash. The warmed 128³ substep measured 31.0 ms on the RTX 3080 Ti (the 100 ms bar and the 40 ms
+goal both met), 55.7 ms on the AMD Radeon 8060S and 429.4 ms on llvmpipe; pressure is the largest phase at 14.5 ms on the RTX.
 The surface level set runs on the card in 10.4 ms (6,857.3 ms on the CPU). Tests cover agreement with the CPU reference,
 bit-identical checkpoint and restart (including a pouring source), cancel inside a substep leaving the committed state and
 the cache untouched, the scan, sort and top-up kernels, and the GPU level set, on all three adapters. Viscosity, surface
