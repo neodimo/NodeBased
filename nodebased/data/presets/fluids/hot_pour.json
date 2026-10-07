@@ -171,7 +171,7 @@
         "src_center_y": 0.62,
         "src_center_z": 0.0,
         "src_radius": 0.02,
-        "src_vel_y": -1.4,
+        "src_vel_y": -0.03333333333333333,
         "src_density": 1.0,
         "src_temperature": 1.0
       }
@@ -283,7 +283,7 @@
         "auto_resize": 1,
         "padding": 8,
         "max_size": 256,
-        "substeps": 2,
+        "substeps": 8,
         "particles_per_cell": 4,
         "surface_tension": 0.5,
         "pressure": "resident",

@@ -904,6 +904,7 @@ class GpuLiquid3D(Liquid3D):
         self._cur = 0
         self._n_slots = 0
         self._n_live = 0
+        self.maintenance = {}
         self._uid = uuid.uuid4().hex
         self._serial = 0
         self._token = None
@@ -1225,6 +1226,8 @@ class GpuLiquid3D(Liquid3D):
         ctx.dispatch("lq_totals", {"offsets": bins.offsets, "needoff": g.needoff, "newoff": g.newoff,
                                    "totals": g.totals}, _u(a=self.shape + (ncells,)), ("wg", (1, 1, 1)))
         need_total, n_final, live = (int(v) for v in ctx.read(g.totals, 12).view(np.uint32))
+        self.maintenance = {"before": int(n), "emitted": int(m), "topped_up": int(need_total),
+                            "dropped": int(n - (n_final - need_total))}
         self._mark("binning and maintenance totals")
         if self._cancelled():
             raise Cancelled()

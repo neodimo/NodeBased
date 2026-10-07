@@ -17,6 +17,7 @@ import math
 FULL_LIQUID_CELLS = 256      # the liquid's grid is at most this many cells along any axis
 FULL_SMOKE_CELLS = 192       # and the steam's
 FULL_FRAMES = 120
+FPS = 24.0                   # the document's frame rate: fluid nodes take velocities in world units per frame
 
 GLASS_RADIUS = 0.12
 GLASS_HEIGHT = 0.30
@@ -28,11 +29,18 @@ SMOKE_EXTENT = 0.86          # the steam rises about half a metre above the rim
 
 
 def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, frames=FULL_FRAMES,
-                 spout_height=0.62, spout_speed=1.4, particles_per_cell=4, pressure="resident", smoke_pressure="resident_sparse",
+                 spout_height=0.62, spout_speed=0.8, particles_per_cell=4, substeps=None, pressure="resident", smoke_pressure="resident_sparse",
                  surface_tension=0.5, render_size=(96, 64)):
     """The preset's ops. `liquid_cells` and `smoke_cells` are the effective resolutions (the most cells the adaptive
-    domain may grow to along one axis); `frames` is the length of the pour, which spans the keyed spout path."""
+    domain may grow to along one axis); `frames` is the length of the pour, which spans the keyed spout path.
+    `spout_speed` is metres a second (the source's own knob is per frame: Hot pour's first version put 1.4 there, a
+    stream of 34 metres a second that hit the walls of its own box)."""
     d_liquid = LIQUID_EXTENT / liquid_cells
+    if substeps is None:
+        # the liquid falls onto the pool at 2 to 3 metres a second: a FLIP substep wants the fastest particle under about
+        # two cells, and a pile of particles that moved further than that is cut back by the per-cell cap (at 128 cells
+        # and 2 substeps a frame, 60 percent of what was poured was deleted; at 4 substeps, 16 percent)
+        substeps = max(2, round(liquid_cells / 32))
     d_smoke = SMOKE_EXTENT / smoke_cells
     spout_radius = max(0.02, 1.6 * d_liquid)
     ops = []
@@ -81,7 +89,8 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
     # ---- the liquid: a moving spout, the glass and the table as colliders, an adaptive FLIP domain
     create("spout", "FluidSource3D", {"fluid_type": "liquid", "fluid_emit_from": "sphere", "src_center_x": 0.0,
                                       "src_center_y": spout_height, "src_center_z": 0.0, "src_radius": spout_radius,
-                                      "src_vel_y": -abs(spout_speed), "src_density": 1.0, "src_temperature": 1.0})
+                                      "src_vel_y": -abs(spout_speed) / FPS, "src_density": 1.0,
+                                      "src_temperature": 1.0})
     for name, frame_fraction, x, z in (("a", 0.0, -0.035, 0.0), ("b", 0.35, 0.03, 0.025), ("c", 0.7, 0.035, -0.025),
                                        ("d", 1.0, -0.02, 0.0)):
         frame = 1 + round((frames - 1) * frame_fraction)
@@ -97,7 +106,8 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
     create("liquid", "FluidLiquidSolver3D", {
         "division_size": d_liquid, "bounds_min_x": -half, "bounds_min_y": -TABLE_THICKNESS * 0.5,
         "bounds_min_z": -half, "bounds_max_x": half, "bounds_max_y": 0.45, "bounds_max_z": half,
-        "auto_resize": 1, "padding": 8, "max_size": liquid_cells, "substeps": 2, "particles_per_cell": particles_per_cell,
+        "auto_resize": 1, "padding": 8, "max_size": liquid_cells, "substeps": int(substeps),
+        "particles_per_cell": particles_per_cell,
         "surface_tension": surface_tension, "pressure": pressure, "max_iterations": 40, "tolerance": 0.001,
         "boundary_y_max": "open", "liquid_sdf": 1})
     connect("liquid", "fluid", "liquid_table")
