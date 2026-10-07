@@ -716,7 +716,7 @@ def _grow(ctx, buf, old_bytes, new_bytes):
         ctx.device.queue.submit([encoder.finish()])
     ctx.live_bytes -= old_bytes
     if buf is not None:
-        buf.destroy()           # queued work that reads it finishes first; the card gets the bytes back now
+        ctx.defer_destroy(buf)  # freed at the next readback, once the copy above has run
     return new
 
 
@@ -731,7 +731,7 @@ def read_staged(ctx, buf, size):
     staging = _STAGING.get(id(ctx.device))
     if staging is None or staging.size < size:
         if staging is not None:
-            staging.destroy()
+            ctx.defer_destroy(staging)
         staging = ctx.device.create_buffer(size=max(int(size), 1 << 20) + 4095 & ~4095,
                                            usage=wgpu.BufferUsage.MAP_READ | wgpu.BufferUsage.COPY_DST)
         _STAGING[id(ctx.device)] = staging
@@ -961,8 +961,8 @@ class GpuLiquid3D(Liquid3D):
         return self.cancel is not None and self.cancel.is_set()
 
     def _put_solid(self, g, solid, velocity):
-        key = (id(solid), id(velocity))
-        if g.solid_key == key:
+        key = (solid, velocity)             # the arrays themselves: their ids are reused once one is freed
+        if isinstance(g.solid_key, tuple) and g.solid_key[0] is solid and g.solid_key[1] is velocity:
             return
         ctx = self.ctx
         ctx.write(g.solid, np.zeros(g.n, np.uint32) if solid is None

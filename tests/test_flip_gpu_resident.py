@@ -409,6 +409,32 @@ class AdaptiveDomainTests(unittest.TestCase):
 
 
 @unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
+class SolidMaskUploadTests(unittest.TestCase):
+    """The collider mask was uploaded only when `id(mask)` changed. A new mask for a moved box could take the id of the
+    freed old one, so the card kept the old box's solids: bakes of an adaptive scene with a collider differed run to run."""
+
+    def test_a_new_mask_that_takes_the_freed_masks_id_is_still_uploaded(self):
+        # Python reuses the id of a freed array for the next one; to make that certain the modules' `id` says every object
+        # is the same object, which is what an id collision looks like to the upload check
+        from nodebased import flip_gpu_resident as resident_module
+        for module, solver in ((resident_module, resident({"nx": 8, "ny": 8, "nz": 8})),
+                               (fgs, fgs.GpuSmoke3D({"nx": 8, "ny": 8, "nz": 8, "default_source": 0}))):
+            module.id = lambda obj: 1
+            try:
+                g = solver._alloc()
+                first = np.zeros((8, 8, 8), bool)
+                first[:2] = True
+                solver._put_solid(g, first, None)
+                second = np.zeros((8, 8, 8), bool)
+                second[4:] = True
+                solver._put_solid(g, second, None)
+                on_card = solver.ctx.read(g.solid, 4 * g.n).view(np.uint32).reshape(8, 8, 8)
+                np.testing.assert_array_equal(on_card.astype(bool), second, err_msg=type(solver).__name__)
+            finally:
+                del module.id
+
+
+@unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
 class CardMemoryTests(unittest.TestCase):
     """Lane 6 step N3: the card's memory stays bounded over a long bake (24 frames of a 128-cell liquid took 4.5 GB: every
     resize left the old grid on the card, and every frame's solver was kept alive by its cached state)."""
@@ -426,6 +452,7 @@ class CardMemoryTests(unittest.TestCase):
         for shape in ((24, 24, 24), (16, 16, 16), (24, 24, 24), (16, 16, 16), (32, 24, 24)) * 3:
             solver._adopt(shape, (0.0, 0.0, 0.0))
             solver._alloc()
+        solver.ctx.read(solver._grid.dummy, 4)                  # the next readback frees what was dropped
         self.assertLess(tracker.current, after_first + 6 * 2 ** 20)
 
     def test_a_read_state_does_not_keep_the_solver_alive(self):
@@ -451,7 +478,8 @@ class CardMemoryTests(unittest.TestCase):
             {"op": "create", "id": "cache", "type": "ParticleCache3D", "params": {}},
             {"op": "connect", "id": "cache", "input": "particles", "source": "liq"}]})
         evaluator = Evaluator()
-        before = len(fluid3d._SOLVERS)
+        gc.collect()
+        before = sum(1 for o in gc.get_objects() if type(o).__name__ == "GpuLiquid3D")
         solvers = set()
         for frame in range(1, 9):
             value = evaluator.evaluate_raster(d.document, "cache", frame=frame, typed=True)
@@ -459,7 +487,7 @@ class CardMemoryTests(unittest.TestCase):
         self.assertEqual(len(solvers), 1, "every frame built its own solver, and its own grid on the card")
         gc.collect()
         live = sum(1 for o in gc.get_objects() if type(o).__name__ == "GpuLiquid3D")
-        self.assertLessEqual(live, fluid3d.MAX_SOLVERS)
+        self.assertLessEqual(live - before, 1, "the frames' cached states kept their solvers alive")
 
 
 def fluid3d_source():

@@ -26,9 +26,11 @@ class FluidArtistPresetTests(unittest.TestCase):
     def test_shipped_fluid_presets_solve_five_frames_and_render_pixels(self):
         expected = {"Candle", "Campfire", "Explosion", "Smoke Column", "Dust Hit",
                     "Dam break", "Pour into a glass", "Honey drip", "Ocean splash",
-                    "Floating Block", "Moving Rigid Collider"}
+                    "Floating Block", "Moving Rigid Collider", "Hot pour"}
         self.assertEqual({preset.name for preset in self.fluids}, expected)
         for preset in self.fluids:
+            if preset.name == "Hot pour":
+                continue            # two solvers at 256 and 192 cells: tests/test_hot_pour.py builds and bakes it
             with self.subTest(preset=preset.name):
                 ops = presets.build_ops(preset, [], {}, _Pos())
                 dispatcher = Dispatcher()

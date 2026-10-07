@@ -836,7 +836,7 @@ def destroy_buffers(obj, _seen=None):
     seen.add(id(obj))
     kind = type(obj).__name__
     if kind == "GPUBuffer":
-        obj.destroy()
+        _ctx().defer_destroy(obj)
         return 1
     if kind in _NOT_OURS:
         return 0
@@ -933,6 +933,7 @@ class _Ctx:
         self._pipes = {}
         self._groups = {}
         self.ops = []
+        self._graveyard = []
         self.live_bytes = 0
 
     def pipe(self, name):
@@ -1004,7 +1005,16 @@ class _Ctx:
     def read(self, buf, size, offset=0):
         self.flush()
         STATS["readbacks"] += 1
-        return np.frombuffer(self.device.queue.read_buffer(buf, offset, size), np.uint8)
+        dead, self._graveyard = self._graveyard, []
+        data = np.frombuffer(self.device.queue.read_buffer(buf, offset, size), np.uint8)
+        for old in dead:                # the read waited for every submission before it: nothing reads these any more
+            old.destroy()
+        return data
+
+    def defer_destroy(self, buf):
+        """Free `buf` at the next readback, which waits for every submission before it, so no queued copy or kernel can
+        still be reading the buffer when its memory goes back to the card."""
+        self._graveyard.append(buf)
 
 
 def _cdiv(a, b):
@@ -1562,8 +1572,8 @@ class GpuSmoke3D(Smoke3D):
         return np.moveaxis(field, -1, 0).astype(np.float32) * np.float32(float(p[kind]) * dt)
 
     def _put_solid(self, g, solid, velocity):
-        key = (id(solid), id(velocity))
-        if g.solid_key == key:
+        key = (solid, velocity)             # the arrays themselves: their ids are reused once one is freed
+        if isinstance(g.solid_key, tuple) and g.solid_key[0] is solid and g.solid_key[1] is velocity:
             return
         ctx = self.ctx
         ctx.write(g.solid, np.zeros(g.n, np.uint32) if solid is None else np.ascontiguousarray(solid.reshape(-1), np.uint32))
