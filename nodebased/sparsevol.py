@@ -202,6 +202,10 @@ class SparseField:
         return int(np.prod(self.shape, dtype=np.int64)) * self.dtype.itemsize
 
     @property
+    def size(self):
+        return int(np.prod(self.shape, dtype=np.int64))
+
+    @property
     def storage_nbytes(self):
         """Bytes retained for this field's packed tile blocks."""
         return self.grid.data[self.name].nbytes

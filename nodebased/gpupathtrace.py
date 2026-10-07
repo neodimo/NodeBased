@@ -26,7 +26,7 @@ import time
 
 import numpy as np
 
-from . import gpu3d, gpurt, lens, pathtrace as pt, raytrace, scene3d as s
+from . import gpu3d, gpurt, gpuvolume, lens, pathtrace as pt, raytrace, scene3d as s
 
 GPU_PATHS_PER_SUBMISSION = 1 << 19
 ADAPTIVE_SPARSE = 0.2      # adaptive sampling: below this share of active tiles a pass is one looping dispatch per band
@@ -43,7 +43,7 @@ _OUTPUT_CODES = {"rgba": 0, "diffuse": 1, "specular": 2, "emission": 3, "albedo"
 _KIND_CODES = {"Directional": 0, "Point": 1, "Spot": 2, "Rect": 3, "Disc": 4, "Sphere": 5}
 LIGHT_VECS = 6
 SPLAT_VECS = 9
-VOL_VECS = 8
+VOL_VECS = 9
 SHAPE_VECS = 13
 TRI_VECS = 8
 
@@ -869,12 +869,13 @@ fn splat_shape(i: u32) -> Shape {
 //#endif
 //#if VOLUMES
 // ------------------------------------------------------------------------------------------------ smoke and fire
-// Volumes are delta tracked (see ptvolume.py). Headers (8 vec4 each) and grids live in the `env` buffer:
+// Volumes are delta tracked (see ptvolume.py). Headers (9 vec4 each) and grids live in the `env` buffer:
 // 0 box min + voxel size, 1 box max + majorant, 2..4 world-to-object rows, 5 grid size, 6 the grid offsets as
 // ordinary float values (density low 24 bits, temperature low 24 bits or -1 for none, density high bits,
-// temperature high bits), 7 coarse-majorant offset low/high and tile edge; see splat_info for why
+// temperature high bits), 7 coarse-majorant offset low/high and tile edge, 8 a sparse volume's tile index offset
+// low/high, 1 when the grids are tile atlases, and the value of an empty tile; see splat_info for why
 // integer offsets are not raw bit patterns.
-const VOL_VECS: u32 = 8u;
+const VOL_VECS: u32 = 9u;
 const MAX_COLLISIONS: u32 = 4096u;
 const VOL_ABSORB_DIM: u32 = 54u;
 const FIRE_KNOTS: f32 = 64.0;
@@ -895,13 +896,24 @@ fn vol_bases(vi: u32) -> vec4<u32> {
   return vec4<u32>(u32(r.x) + (u32(r.z) << 24u), temperature, 0u, 0u);
 }
 
-fn grid_at(base: u32, dims: vec3<i32>, x: i32, y: i32, z: i32) -> f32 {
+// `sp` is the volume's sparse header (vh(vi, 8)): a sparse grid is stored as 8-cubed tiles one after another (the
+// SparseGrid blocks as they are) behind a table of slot + 1 per tile, 0 for an empty tile, which reads `sp.w`.
+fn grid_at(base: u32, dims: vec3<i32>, sp: vec4<f32>, x: i32, y: i32, z: i32) -> f32 {
   if (x < 0 || y < 0 || z < 0 || x >= dims.x || y >= dims.y || z >= dims.z) { return 0.0; }
+//#if SPARSE
+  if (sp.z > 0.5) {
+    let nty = (dims.y + 7) >> 3u;
+    let ntz = (dims.z + 7) >> 3u;
+    let slot = fenv(u32(sp.x) + (u32(sp.y) << 24u) + u32(((x >> 3u) * nty + (y >> 3u)) * ntz + (z >> 3u)));
+    if (slot <= 0.0) { return sp.w; }
+    return fenv(base + (u32(slot) - 1u) * 512u + u32((((x & 7) * 8 + (y & 7)) * 8) + (z & 7)));
+  }
+//#endif
   return fenv(base + u32((x * dims.y + y) * dims.z + z));
 }
 
 // zero-padded trilinear sample of a cell-centred grid at index-space point `g`
-fn trilinear(base: u32, dims: vec3<i32>, g: vec3<f32>) -> f32 {
+fn trilinear(base: u32, dims: vec3<i32>, sp: vec4<f32>, g: vec3<f32>) -> f32 {
   let fl = floor(g);
   let i = vec3<i32>(fl);
   let f = g - fl;
@@ -911,7 +923,7 @@ fn trilinear(base: u32, dims: vec3<i32>, g: vec3<f32>) -> f32 {
     let dy = i32((k >> 1u) & 1u);
     let dz = i32((k >> 2u) & 1u);
     let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
-    out += w * grid_at(base, dims, i.x + dx, i.y + dy, i.z + dz);
+    out += w * grid_at(base, dims, sp, i.x + dx, i.y + dy, i.z + dz);
   }
   return out;
 }
@@ -991,6 +1003,7 @@ fn fire_radiance(kelvin: f32) -> vec3<f32> {
 fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u32, want_glow: bool,
               glow: ptr<function, vec3<f32>>) -> f32 {
   let head = vh(vi, 1u);
+  if (head.w <= 1e-8) { return INF; }      // a volume with no density (an empty tile set) holds no collision
   let clip = vol_clip(vi, o, d);
   let t1 = min(clip.y, tcap);
   if (!(t1 > clip.x)) { return INF; }
@@ -999,6 +1012,7 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
   let voxel = vh(vi, 0u).w;
   let dims = vec3<i32>(vh(vi, 5u).xyz);
   let bases = vol_bases(vi);
+  let sp = vh(vi, 8u);
   let has_temp = bases.y != 0xFFFFFFFFu;
   let oo = vol_object(vi, o);
   let dd = vol_object_dir(vi, d);
@@ -1020,9 +1034,9 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
     position = candidate;
     if (position >= t1) { break; }
     let g = (oo + dd * position - bmin) / voxel - vec3<f32>(0.5);
-    let sigma = params.vp0.w * trilinear(bases.x, dims, g);
+    let sigma = params.vp0.w * trilinear(bases.x, dims, sp, g);
     if (want_glow && has_temp) {
-      let kelvin = params.vp2.x * trilinear(bases.y, dims, g);
+      let kelvin = params.vp2.x * trilinear(bases.y, dims, sp, g);
       if (kelvin > params.vp2.y && sigma > 0.0) {
         *glow += fire_radiance(kelvin) * (params.vp2.z * sigma / mu);
       }
@@ -1060,6 +1074,7 @@ fn vol_transmittance(o: vec3<f32>, d: vec3<f32>, dist: f32) -> f32 {
 //#if LINKS
     if (excl_bit(u32(vh(vi, 7u).w), shadow_bit)) { continue; }
 //#endif
+    if (vh(vi, 1u).w <= 1e-8) { continue; }
     let clip = vol_clip(vi, o, d);
     let len = max(min(clip.y, dist) - clip.x, 0.0);
     if (len <= 0.0) { continue; }
@@ -1067,12 +1082,13 @@ fn vol_transmittance(o: vec3<f32>, d: vec3<f32>, dist: f32) -> f32 {
     let voxel = vh(vi, 0u).w;
     let dims = vec3<i32>(vh(vi, 5u).xyz);
     let base = vol_bases(vi).x;
+    let sp = vh(vi, 8u);
     let oo = vol_object(vi, o);
     let dd = vol_object_dir(vi, d);
     var total = 0.0;
     for (var j = 0u; j < steps; j++) {
       let t = clip.x + (f32(j) + 0.5) / f32(steps) * len;
-      total += trilinear(base, dims, (oo + dd * t - bmin) / voxel - vec3<f32>(0.5));
+      total += trilinear(base, dims, sp, (oo + dd * t - bmin) / voxel - vec3<f32>(0.5));
     }
     let tau = params.vp1.w * params.vp0.x * params.vp0.w * total * (len / f32(steps));
     out = out * exp(-tau);
@@ -1851,19 +1867,19 @@ def _preprocess(code, flags):
     return "\n".join(out)
 
 
-def shader_source(splats=False, volumes=False, links=False):
+def shader_source(splats=False, volumes=False, links=False, sparse=False):
     """The WGSL for a scene kind: the splat and smoke code costs registers whether it runs or not, so a mesh-only scene
     is compiled without any of it. The splats-and-volumes variant also compiles with a smaller workgroup
     (`_wg_size`): the same code at 8x8 miscompiles on AMD."""
     code = _preprocess(_SHADER, {"SPLATS": bool(splats), "VOLUMES": bool(volumes), "SOFT": bool(splats or volumes),
-                                 "LINKS": bool(links)})
+                                 "LINKS": bool(links), "SPARSE": bool(sparse and volumes)})
     code = code.replace("SPLAT_ID", "splat_id" if splats else "-1")
     return code.replace("WG_SIZE", str(_wg_size(splats, volumes, links)))
 
 
-def _pipeline(state, splats=False, volumes=False, links=False):
+def _pipeline(state, splats=False, volumes=False, links=False, sparse=False):
     cache = state.setdefault("_gpupt_pipelines", {})
-    key = (bool(splats), bool(volumes), bool(links))
+    key = (bool(splats), bool(volumes), bool(links), bool(sparse and volumes))
     if key not in cache:
         device = state["device"]
         cache[key] = device.create_compute_pipeline(layout="auto", compute={
@@ -2049,6 +2065,60 @@ def _coarse_volume_majorants(density, global_mu, tile=VOLUME_MAJORANT_TILE):
     return np.nextafter(out, np.float32(np.inf))
 
 
+def _coarse_volume_majorants_sparse(grid, name, global_mu, tile=VOLUME_MAJORANT_TILE):
+    """`_coarse_volume_majorants` of a sparse field, from its stored tiles alone: the same bound per coarse cell (the cell
+    grown by trilinear's one-voxel halo), with the rest value counted wherever the halo window reaches an empty tile."""
+    shape = grid.shape
+    edge = grid.tile
+    coarse = tuple((n + tile - 1) // tile for n in shape)
+    peak = max(grid.max(name), 1e-20)
+    best = np.full(coarse, -np.inf)
+    covered = np.zeros(coarse, np.int64)
+    window = np.ones(coarse, np.int64)
+    for axis, n in enumerate(shape):       # the voxels each cell's window holds along one axis
+        starts = np.arange(coarse[axis]) * tile
+        length = np.minimum(n, starts + tile + 1) - np.maximum(0, starts - 1)
+        window = window * length.reshape([-1 if a == axis else 1 for a in range(3)])
+    block = grid.data[name]
+    for index, coord in enumerate(grid.coords):
+        lo = coord.astype(np.int64) * edge
+        reach = []
+        for axis in range(3):
+            first = max(0, int(np.ceil((lo[axis] - tile - 1) / tile)))        # cells whose window can touch this tile
+            last = min(coarse[axis] - 1, int((lo[axis] + edge) // tile))
+            reach.append(range(first, last + 1))
+        for kx in reach[0]:
+            for ky in reach[1]:
+                for kz in reach[2]:
+                    k = (kx, ky, kz)
+                    w_lo = [max(0, c * tile - 1) for c in k]
+                    w_hi = [min(shape[a], c * tile + tile + 1) for a, c in enumerate(k)]
+                    a_lo = [max(int(lo[a]), w_lo[a]) for a in range(3)]
+                    a_hi = [min(int(lo[a]) + edge, w_hi[a]) for a in range(3)]
+                    if any(h <= l for l, h in zip(a_lo, a_hi)):
+                        continue
+                    part = block[index, a_lo[0] - lo[0]:a_hi[0] - lo[0], a_lo[1] - lo[1]:a_hi[1] - lo[1],
+                                 a_lo[2] - lo[2]:a_hi[2] - lo[2]]
+                    best[k] = max(best[k], float(np.max(part)))
+                    covered[k] += part.size
+    best = np.where(covered < window, np.maximum(best, grid.rest[name]), best)
+    out = (global_mu * best / peak).astype(np.float32)
+    return np.nextafter(out, np.float32(np.inf))
+
+
+def _sparse_volume_grid(volume):
+    """The tile grid a sparse volume's density and temperature are read from; Unsupported when the shader cannot index it."""
+    grid = volume.sparse
+    if grid.tile != 8:
+        raise gpu3d.Unsupported(f"the GPU path tracer reads 8-voxel tiles, not {grid.tile}")
+    temperature = volume.temperature
+    if temperature is not None and getattr(temperature, "grid", None) is not grid:
+        raise gpu3d.Unsupported("a sparse volume whose temperature is not stored in the same tiles stays on the CPU")
+    if temperature is not None and grid.rest["temperature"] != 0.0:
+        raise gpu3d.Unsupported("the GPU path tracer needs a zero rest temperature in a sparse volume")
+    return grid
+
+
 def _pack_aux(packed, ps):
     """Splat records, their spherical harmonics, volume headers, grids and the fire table go after the environment in
     the same buffer (the shader reads them as vec4s at the offsets the uniform carries)."""
@@ -2070,6 +2140,7 @@ def _pack_aux(packed, ps):
 
     packed.splat_count, packed.splat_base = 0, 0
     packed.volume_count, packed.volume_base, packed.fire_base, packed.flags = 0, 0, 0, 0
+    packed.sparse_volumes = False
     packed.smoke = np.zeros((3, 4), "f4")
     layer = ps.splats
     if layer is not None:
@@ -2126,9 +2197,22 @@ def _pack_aux(packed, ps):
             for r in range(3):
                 headers[vi, 2 + r, :3], headers[vi, 2 + r, 3] = prep.inv[r, :3], prep.inv[r, 3]
             headers[vi, 5, :3] = volume.density.shape[:3]
-            density = add_floats(np.ascontiguousarray(volume.density, "f4"))
+            sparse = gpuvolume.is_sparse(volume)
+            if sparse:
+                grid = _sparse_volume_grid(volume)
+                packed.sparse_volumes = True
+                # A float value holds a tile slot exactly; the table is indexed (x * ny + y) * nz + z over tiles.
+                table = np.zeros(tuple(-(-n // grid.tile) for n in grid.shape), "f4")
+                if len(grid.coords):
+                    table[grid.coords[:, 0], grid.coords[:, 1], grid.coords[:, 2]] = np.arange(1, len(grid.coords) + 1)
+                tiles = add_floats(table)
+                headers[vi, 8] = (tiles & 0xFFFFFF, tiles >> 24, 1.0, grid.rest["density"])
+                density = add_floats(np.ascontiguousarray(grid.data["density"], "f4"))
+            else:
+                density = add_floats(np.ascontiguousarray(volume.density, "f4"))
             if ENABLE_VOLUME_SKIP:
-                coarse = _coarse_volume_majorants(volume.density, smoke.majorant[vi])
+                coarse = (_coarse_volume_majorants_sparse(grid, "density", smoke.majorant[vi]) if sparse else
+                          _coarse_volume_majorants(volume.density, smoke.majorant[vi]))
                 coarse_base = add_floats(coarse)
                 headers[vi, 7] = (coarse_base & 0xFFFFFF, coarse_base >> 24, VOLUME_MAJORANT_TILE, 0)
             else:
@@ -2139,7 +2223,8 @@ def _pack_aux(packed, ps):
                 headers[vi, 7, 3] = mask
                 packed.linked |= mask
             glow = smoke.fire_table is not None and volume.temperature is not None
-            temperature = add_floats(np.ascontiguousarray(volume.temperature, "f4")) if glow else None
+            temperature = add_floats(np.ascontiguousarray(grid.data["temperature"] if sparse else volume.temperature,
+                                                          "f4")) if glow else None
             headers[vi, 6] = (density & 0xFFFFFF, -1.0 if temperature is None else temperature & 0xFFFFFF,
                               density >> 24, 0 if temperature is None else temperature >> 24)
         packed.volume_count, packed.volume_base = len(smoke), add(headers)
@@ -2307,7 +2392,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                    upload(packed.shapes, storage), upload(packed.lights, storage), upload(packed.env, storage)]
         accum = upload(np.zeros((npix * 2 + flag_vec4, 4), "f4"), storage | wgpu.BufferUsage.COPY_SRC)
         links = bool(ps.linked_bits)
-        pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links)
+        pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
         tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
         tile_done = np.zeros(tiles_x * tiles_y, bool)
