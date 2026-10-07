@@ -285,7 +285,7 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 # coordinate-dependent tiling pattern); GenerateLUT is an explicit export tap.
 
 SUPPORTED_TILED_KINDS = frozenset({
-    "Read", "ReadBundle", "ConditionedRead", "Render3D", "Constant", "Checker", # raster sources; Render3D renders one frame then serves tile consumers
+    "Read", "ReadBundle", "ConditionedRead", "Render3D", "Constant", "Checker", "Roto", # raster sources; Roto resolves once then serves exact tiles
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
     "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace", # pointwise OCIO, halo = (0, 0)
     "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",  # pointwise, halo = (0, 0)
@@ -415,6 +415,7 @@ TILE_KIND_BEHAVIOR = {
     "Inpaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "TVIScale": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "RotoPaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
+    "Roto": {"source": False, "bypass_self_resolves": True, "reads_files": False},
 }
 
 _TILE_KIND_BEHAVIOR_DEFAULT = {"source": False, "bypass_self_resolves": False, "reads_files": False}

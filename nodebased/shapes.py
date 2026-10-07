@@ -112,7 +112,7 @@ def resolve_scalar(value, frame, name=None):
 
 def validate_shape(shape, where):
     required = {"name", "mode", "opacity", "feather", "points"}
-    optional = {"visible", "locked", "invert", "feather_falloff", "color", "blend_mode", "motion_blur"}
+    optional = {"visible", "locked", "invert", "feather_falloff", "color", "blend_mode", "motion_blur", "track_link"}
     if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
         raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
     if not isinstance(shape["name"], str) or not 1 <= len(shape["name"]) <= 128:
@@ -127,6 +127,11 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.feather_falloff is unsupported")
     if shape.get("blend_mode", "over") not in ("over", "plus", "minus", "multiply"):
         raise ValueError(f"{where}.blend_mode is unsupported")
+    link = shape.get("track_link")
+    if link is not None and (not isinstance(link, dict) or set(link) != {"tracker_id", "track_name"}
+                             or not isinstance(link["tracker_id"], str) or not link["tracker_id"]
+                             or not isinstance(link["track_name"], str) or not link["track_name"]):
+        raise ValueError(f"{where}.track_link must identify a Tracker and track name")
     color = shape.get("color", [1.0, 1.0, 1.0, 1.0])
     if not isinstance(color, list) or len(color) != 4:
         raise ValueError(f"{where}.color must be RGBA values between 0 and 1")
@@ -304,6 +309,16 @@ def validate_node_data(node_data, nodes):
                     tracks = node_data.get(tracker_id, {}).get("tracks", [])
                     if follow["track_index"] >= len(tracks):
                         raise ValueError(f"node_data[{key!r}].items[{index}]: track index is out of range")
+        if nodes[key]["type"] == "Roto":
+            for index, shape in enumerate(payload["shapes"]):
+                link = shape.get("track_link")
+                if link is None: continue
+                tracker_id = link["tracker_id"]
+                if tracker_id not in nodes or nodes[tracker_id]["type"] not in ("Tracker", "Stabilize"):
+                    raise ValueError(f"node_data[{key!r}].shapes[{index}]: track_link must name a Tracker")
+                tracks = node_data.get(tracker_id, {}).get("tracks", [])
+                if not any(track["name"] == link["track_name"] for track in tracks):
+                    raise ValueError(f"node_data[{key!r}].shapes[{index}]: track name is missing")
         if nodes[key]["type"] == "GridWarp":
             rows, cols = nodes[key]["params"].get("rows", 5), nodes[key]["params"].get("columns", 5)
             if len(payload["source"]) != rows or len(payload["source"][0]) != cols:

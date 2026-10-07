@@ -188,7 +188,7 @@ def _compute_node_digests(document, tier, frame, solve=None):
                 fingerprint = [str(Path(params["path"]).expanduser().resolve()), stat.st_size, stat.st_mtime_ns]
             except OSError:
                 fingerprint = [params["path"], "missing"]
-        if kind == "RotoPaint" and not node["disabled"] and solve is not None:
+        if kind in ("RotoPaint", "Roto") and not node["disabled"] and solve is not None:
             fingerprint = solve(key)
         hashes[key] = _node_content_digest(node, params, [hashes.get(s) for s in sources],
                                            frame, tier, fingerprint)
@@ -570,7 +570,9 @@ class TileExecutor:
         paint_nodes = set(_all_ancestors(resolved, target))
         node_digests = _compute_node_digests(
             resolved, tier, frame,
-            solve=lambda key: self._solve_paint(key, frame, tier) if key in paint_nodes else None)
+            solve=lambda key: (self._solve_paint(key, frame, tier)
+                               if resolved["nodes"][key]["type"] == "RotoPaint"
+                               else self._solve_roto(key, frame, tier)) if key in paint_nodes else None)
 
         target_bounds = self.canvas_region(resolved, target, frame, tier)
         width, height = target_bounds.width, target_bounds.height
@@ -745,7 +747,7 @@ class TileExecutor:
         if is_tile_source_kind(kind):
             return [self._generator_tile(document, node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
-        if kind in ("TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint"):
+        if kind in ("TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint", "Roto"):
             return [self._temporal_tile(node_id, kind, node, params, frame, tier,
                                         buffered_region, node_digests)]
         # Disabled filter: passthrough to the first wired input (only). The legacy evaluator
@@ -916,6 +918,19 @@ class TileExecutor:
             self._source_cache[cache_key] = solved
         return solved[1]
 
+    def _solve_roto(self, node_id, frame, tier):
+        """Resolve one animated Roto generator once; its content digest includes linked tracks."""
+        cache_key = (node_id, int(frame), int(tier))
+        solved = self._source_cache.get(cache_key)
+        if solved is None:
+            raster, digest = self.evaluator.evaluate_raster(
+                self._unbaked_document, node_id, frame=frame, tier=tier, return_digest=True)
+            solved = raster.pixels
+            self._source_cache[cache_key] = solved
+            self._roto_digests = getattr(self, "_roto_digests", {})
+            self._roto_digests[cache_key] = digest
+        return getattr(self, "_roto_digests", {}).get(cache_key, "")
+
     def _temporal_tile(self, node_id, kind, node, params, frame, tier, buffered_region,
                        node_digests) -> TileArtifact:
         """Render a buffered tile of a TimeBlur/TimeEcho, solved whole and sliced per tile.
@@ -956,7 +971,12 @@ class TileExecutor:
         # `cache_fractional` and docs/TIME_MODEL.md.
         full = self._source_cache.get(cache_key)
         if full is None:
-            full = self.evaluator.evaluate(self._unbaked_document, node_id, frame=frame, tier=tier)
+            if kind == "Roto":
+                raster, real_digest = self.evaluator.evaluate_raster(
+                    self._unbaked_document, node_id, frame=frame, tier=tier, return_digest=True)
+                full = raster.pixels
+            else:
+                full = self.evaluator.evaluate(self._unbaked_document, node_id, frame=frame, tier=tier)
             self._source_cache[cache_key] = full
         if isinstance(full, tuple):
             full = full[0]   # a RotoPaint solved with its digest by `_solve_paint`
@@ -1498,7 +1518,7 @@ def _canvas_size_for_chain(document, target, frame, tier):
         seen.add(cursor)
         chain.append(cursor)
         node = nodes[cursor]
-        if node["type"] in ("Constant", "Checker") or node["type"] in DRAW_KINDS:
+        if node["type"] in ("Constant", "Checker", "Roto") or node["type"] in DRAW_KINDS:
             # A Draw node states its own format exactly like Constant/Checker, regardless of
             # whether its optional "image" input is wired -- the wired image is required to
             # already match it (M0), never the other way around.
@@ -1633,7 +1653,7 @@ def _first_generator(document, target, frame=1):
         seen.add(cursor)
         last = cursor
         node = nodes[cursor]
-        if is_tile_source_kind(node["type"]) or node["type"] == "Reformat" or node["type"] in DRAW_KINDS:
+        if is_tile_source_kind(node["type"]) or node["type"] in ("Reformat", "Roto") or node["type"] in DRAW_KINDS:
             return cursor
         if node["disabled"]:
             # The branch that is actually evaluated: a bypassed Merge never looks at A.

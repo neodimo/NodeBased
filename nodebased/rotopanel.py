@@ -134,6 +134,23 @@ def build_panel(window, key):
             if i < len(entries): entries[i][field]=value; save(entries,i)
         name=QLineEdit(shape["name"]); name.setObjectName("roto-shape-name")
         name.editingFinished.connect(lambda: edit("name",name.text())); layout.addWidget(name)
+        follow=QComboBox(); follow.setObjectName("roto-shape-track-link")
+        follow.addItem("No Tracker link", None)
+        trackers=window.dispatcher.document["nodes"]
+        for tracker_id, tracker_node in trackers.items():
+            if tracker_node["type"] not in ("Tracker", "Stabilize"): continue
+            for track in window.dispatcher.document.get("node_data", {}).get(tracker_id, {}).get("tracks", []):
+                follow.addItem(f"{tracker_node['name']} · {track['name']}",
+                               {"tracker_id": tracker_id, "track_name": track["name"]})
+        link=shape.get("track_link")
+        follow.setCurrentIndex(next((j for j in range(follow.count()) if follow.itemData(j)==link),0))
+        def set_follow(index):
+            entries=current()
+            if i < len(entries):
+                if follow.itemData(index) is None: entries[i].pop("track_link",None)
+                else: entries[i]["track_link"]=follow.itemData(index)
+                save(entries,i)
+        follow.currentIndexChanged.connect(set_follow); layout.addWidget(QLabel("Transform follows")); layout.addWidget(follow)
         for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
             cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
         for field,label,lo,hi,step in (("feather","Feather",0,500,0.5),("opacity","Opacity",0,1,0.05)):

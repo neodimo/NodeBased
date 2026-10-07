@@ -873,6 +873,21 @@ class Evaluator:
                 params["position_y"] += delta_y / tier
             if kind == "Roto":
                 data = shapes.resolve_shapes(payload, frame)
+                for shape_index, shape in enumerate(data):
+                    link = (payload or {}).get("shapes", [])[shape_index].get("track_link")
+                    if not link: continue
+                    tracker_node = nodes.get(link["tracker_id"])
+                    track_data = doc.get("node_data", {}).get(link["tracker_id"], {}).get("tracks", [])
+                    track = next((item for item in track_data if item["name"] == link["track_name"]), None)
+                    if tracker_node is None or track is None: continue  # validation normally prevents this
+                    reference = int(tracker_node["params"].get("reference_frame", 1))
+                    dx = (shapes.resolve_scalar(track["x"], frame, "x")
+                          - shapes.resolve_scalar(track["x"], reference, "x")) / tier
+                    dy = (shapes.resolve_scalar(track["y"], frame, "y")
+                          - shapes.resolve_scalar(track["y"], reference, "y")) / tier
+                    for point in shape["points"]:
+                        point["x"] += dx
+                        point["y"] += dy
             elif kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
                 if kind == "GridWarpTracker":
                     tracker_id = params.get("tracker_id", "")

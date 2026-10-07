@@ -10,6 +10,7 @@ import unittest
 import numpy as np
 
 from nodebased import roto, shapes, tiers, tiles, tracker
+from nodebased.tileexec import TileExecutor
 from nodebased.core import SCHEMA_VERSION, Dispatcher, empty_document, upgrade_document, validate
 from nodebased.imaging import Evaluator
 
@@ -299,19 +300,8 @@ class PayloadProxyScalingTests(unittest.TestCase):
 
 
 class TilePathTests(unittest.TestCase):
-    def test_payload_carrying_kinds_stay_off_the_tiled_path(self):
-        """The tile digest has no node_data term, so a payload kind must not tile.
-
-        This guard is the thing that fails the day someone adds Roto to the tiled set: the tile
-        cache key would then be blind to the shapes, and a scrub would serve the previous frame's
-        matte. Whoever makes that change has to fold the payload into the digest first.
-
-        RotoPaint (2D parity plan 19, step W1) has done that: `tileexec._solve_paint` folds the
-        Evaluator's digest, which carries the strokes, into the tile digest, and
-        tests/test_roto_paint_w1.py asserts an edited stroke does not serve stale tiles.
-        """
-        overlap = sorted((set(shapes.NODE_DATA_SCHEMA) & set(tiles.SUPPORTED_TILED_KINDS)) - {"RotoPaint"})
-        self.assertEqual(overlap, [], f"tiled kinds carrying node_data: {overlap}")
+    def test_roto_is_tile_sliced_with_payload_in_digest(self):
+        self.assertIn("Roto", tiles.SUPPORTED_TILED_KINDS)
 
 
 class RenderTests(unittest.TestCase):
@@ -357,6 +347,25 @@ class RenderTests(unittest.TestCase):
         # Smoothstep is exactly 0.5 at the midpoint: the hand-computed square is [19,35]^2.
         alpha = self.render(d.document, "r", 12).pixels[19, 19, 3]
         self.assertAlmostEqual(float(alpha), 1.0, delta=1e-3)
+
+    def test_track_link_moves_shape_by_named_track_and_matches_tile_path(self):
+        d = Dispatcher(empty_document())
+        moving = square(10, 10, 20, 20, track_link={"tracker_id": "t", "track_name": "feature"})
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "r", "type": "Roto"},
+            *sets("r", width=64, height=64),
+            {"op": "create", "id": "t", "type": "Tracker"},
+            {"op": "set_tracks", "id": "t", "tracks": [track("feature",
+                keyed(10.0, [(1, 10.0), (24, 30.0)]),
+                keyed(10.0, [(1, 10.0), (24, 25.0)]))]},
+            {"op": "set_shapes", "id": "r", "shapes": [moving]}]})
+        full = Evaluator().evaluate_raster(d.document, "r", frame=24).pixels
+        self.assertAlmostEqual(float(full[30, 35, 3]), 1.0, delta=1e-3)
+        executor = TileExecutor(tile_edge=16)
+        self.assertTrue(executor.supports_tiled(d.document, "r"))
+        tiled = executor.compose(d.document, "r", frame=24)
+        self.assertTrue(tiled.tiled)
+        np.testing.assert_allclose(tiled.pixels, full, atol=1e-6)
 
     def test_channel_shuffle_routes_an_alpha_from_b_into_a(self):
         d = Dispatcher(empty_document())
