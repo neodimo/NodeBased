@@ -409,6 +409,31 @@ class AdaptiveDomainTests(unittest.TestCase):
 
 
 @unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
+class MaintenanceStatsTests(unittest.TestCase):
+    """What a substep emitted, topped up and deleted (Hot pour lost 60 percent of a pour to the per-cell cap before anyone
+    could see it: the particle count just stopped growing)."""
+
+    def test_the_counts_add_up_to_the_particles_that_are_left(self):
+        source = BoxSource((4, 9, 3), (7, 11, 5), velocity=(0.0, -0.4, 0.0))
+        solver = resident({"nx": 12, "ny": 12, "nz": 8, "gravity": 0.05}, sources=[source])
+        state = solver.initial_state()
+        for frame in range(1, 6):
+            state = solver.step(state, frame, 0, 0)
+            m = solver.maintenance
+            self.assertEqual(m["before"] + m["topped_up"] - m["dropped"], len(state.arrays["id"]), (frame, m))     # before: emitted included
+        self.assertGreater(m["emitted"], 0)
+
+    def test_a_pile_above_the_cap_is_counted_as_dropped(self):
+        arrays = flip3d.empty_arrays()
+        pile = np.tile((3.5, 3.5, 3.5), (30, 1)).astype(np.float32)
+        arrays.update(position=pile, velocity=np.zeros_like(pile), id=np.arange(30, dtype=np.int64),
+                      age=np.zeros(30, np.int32), temperature=np.ones(30, np.float32))
+        solver = resident({"nx": 8, "ny": 8, "nz": 8, "gravity": 0.0})
+        solver.step(State(arrays, {"next_id": 30, "substep_count": 0}), 1, 0, 0)
+        self.assertEqual(solver.maintenance["dropped"], 30 - solver.max_per_cell)
+
+
+@unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
 class SolidMaskUploadTests(unittest.TestCase):
     """The collider mask was uploaded only when `id(mask)` changed. A new mask for a moved box could take the id of the
     freed old one, so the card kept the old box's solids: bakes of an adaptive scene with a collider differed run to run."""

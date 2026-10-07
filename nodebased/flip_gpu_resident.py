@@ -1226,6 +1226,7 @@ class GpuLiquid3D(Liquid3D):
         ctx.dispatch("lq_totals", {"offsets": bins.offsets, "needoff": g.needoff, "newoff": g.newoff,
                                    "totals": g.totals}, _u(a=self.shape + (ncells,)), ("wg", (1, 1, 1)))
         need_total, n_final, live = (int(v) for v in ctx.read(g.totals, 12).view(np.uint32))
+        # before: particles in the grid as maintenance starts, this substep's emission included
         self.maintenance = {"before": int(n), "emitted": int(m), "topped_up": int(need_total),
                             "dropped": int(n - (n_final - need_total))}
         self._mark("binning and maintenance totals")
