@@ -351,3 +351,59 @@ class ParityDocCountTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ScreenKeyerArtistControlsTests(unittest.TestCase):
+    def test_preblur_reduces_noisy_screen_matte_without_shifting_the_edge(self):
+        rng = np.random.default_rng(812)
+        h, w = 48, 64
+        screen = np.array([0.1, 0.8, 0.2], np.float32)
+        foreground = np.array([0.4, 0.4, 0.4], np.float32)
+        rgb = np.broadcast_to(screen, (h, w, 3)).copy()
+        rgb[:, 32:] = foreground
+        rgb += rng.normal(0, 0.018, rgb.shape).astype(np.float32)
+        image = np.concatenate([rgb, np.ones((h, w, 1), np.float32)], axis=2)
+        raw = matte(image)
+        smooth = matte(image, screen_preblur=2.0)
+        self.assertLess(float(np.std(smooth[:, 4:28])), float(np.std(raw[:, 4:28])) * 0.65)
+        def crossing(row):
+            i = int(np.flatnonzero(row >= 0.5)[0])
+            lo, hi = row[i - 1], row[i]
+            return (i - 1) + (0.5 - lo) / (hi - lo + 1e-8)
+        shifts = [abs(crossing(a) - crossing(b)) for a, b in zip(raw[8:-8], smooth[8:-8])]
+        self.assertLessEqual(float(np.median(shifts)), 0.5)
+
+    def test_edge_grade_changes_only_partial_matte_pixels(self):
+        image, _ = disc_frame()
+        plain = key(image)
+        graded = key(image, edge_grade_gain=1.8, edge_grade_gamma=0.7,
+                     edge_grade_saturation=0.2, edge_width=3.0)
+        alpha = plain[..., 3]
+        np.testing.assert_array_equal(graded[alpha == 0.0], plain[alpha == 0.0])
+        np.testing.assert_array_equal(graded[alpha == 1.0], plain[alpha == 1.0])
+        self.assertGreater(float(np.max(np.abs(graded[(alpha > 0) & (alpha < 1), :3] -
+                                        plain[(alpha > 0) & (alpha < 1), :3]))), 1e-3)
+
+    def test_core_inside_mask_and_new_controls_match_across_tile_seams(self):
+        image, _ = disc_frame(96, 72)
+        core = np.zeros_like(image)
+        core[:, :24, :] = 1.0
+        mask = np.zeros_like(image)
+        mask[:, 12:84, :] = 0.7
+        g = Graph()
+        g.add("plate", "Constant", dict(width=96, height=72, red=0.0, green=0.8, blue=0.0, alpha=1.0))
+        g.add("core", "Constant", dict(width=96, height=72, red=1.0, green=1.0, blue=1.0, alpha=1.0))
+        g.add("mask", "Constant", dict(width=96, height=72, red=0.7, green=0.7, blue=0.7, alpha=0.7))
+        g.add("key", "ScreenKeyer", dict(screen_preblur=2.0, screen_softness=1.0,
+                                           edge_grade_gain=1.2, edge_width=2.0),
+              image="plate", inside="core", mask="mask")
+        np.testing.assert_allclose(tile_pixels(g.doc, "key"), evaluator_pixels(g.doc, "key"), atol=1e-6)
+
+    def test_preblur_is_in_tile_padding_and_inside_forces_screen_foreground(self):
+        image = np.broadcast_to(np.array([0.1, 0.8, 0.2, 1.0], np.float32), (12, 20, 4)).copy()
+        forced = np.zeros_like(image)
+        forced[:, 4:8, 3] = 1.0
+        out = matte(image, inside=forced, screen_preblur=2.2)
+        np.testing.assert_array_equal(out[:, 4:8], 1.0)
+        from nodebased.tiers import _screen_keyer_support
+        self.assertEqual(_screen_keyer_support(dict(screen_preblur=2.2, screen_shrink=1.0,
+                                                     screen_softness=1.0, edge_width=1.0)), 6)

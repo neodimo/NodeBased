@@ -4726,7 +4726,13 @@ class Evaluator:
         mid-grey for every pixel the matte leaves neither), screen_matte (the matte as grey and
         alpha) or intermediate (the despilled colour with the input's alpha, no matte)."""
         rgb = image[..., :3]
-        matte = Evaluator._screen_matte_final(rgb, p, clean, inside, outside)
+        key_rgb = rgb
+        preblur = abs(float(p.get("screen_preblur", 0.0)))
+        if preblur >= 0.5:
+            radius, sigma = int(math.ceil(preblur)), preblur / 3.0
+            key_rgb = Evaluator._gaussian_axis(Evaluator._gaussian_axis(rgb, radius, sigma, axis=1),
+                                               radius, sigma, axis=0)
+        matte = Evaluator._screen_matte_final(key_rgb, p, clean, inside, outside)
         view = p.get("keyer_view", "final")
         if view == "screen_matte":
             return np.concatenate([matte, matte, matte, matte], axis=2).astype(np.float32)
@@ -4740,6 +4746,23 @@ class Evaluator:
         if p.get("bias_colours"):
             bias = Evaluator._bias_weight(Evaluator._bias_colour(p, "despill_bias"), int(np.argmax(key)), bias)
         despilled = Evaluator._despill(rgb, key, bias)
+        gain = float(p.get("edge_grade_gain", 1.0))
+        gamma = float(p.get("edge_grade_gamma", 1.0))
+        saturation = float(p.get("edge_grade_saturation", 1.0))
+        width = max(0.1, float(p.get("edge_width", 1.0)))
+        local_high = Evaluator._box_extreme(matte, width, use_max=True)
+        local_low = Evaluator._box_extreme(matte, width, use_max=False)
+        edge = np.clip(local_high - local_low, 0.0, 1.0)
+        edge = np.where((matte > float(p.get("clip_black", 0.0))) &
+                        (matte < float(p.get("clip_white", 1.0))) &
+                        (matte > 0.0) & (matte < 1.0), edge, 0.0)
+        graded = despilled * gain
+        if gamma != 1.0:
+            graded = np.sign(graded) * np.abs(graded) ** np.float32(1.0 / max(gamma, 1e-6))
+        if saturation != 1.0:
+            luma = np.sum(graded * np.array([0.2126, 0.7152, 0.0722], np.float32), axis=2, keepdims=True)
+            graded = luma + (graded - luma) * saturation
+        despilled = despilled * (1.0 - edge) + graded * edge
         if view == "intermediate":
             return np.concatenate([despilled, image[..., 3:4]], axis=2).astype(np.float32)
         return np.concatenate([despilled * matte, matte], axis=2).astype(np.float32)

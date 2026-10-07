@@ -587,6 +587,11 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("clip_rollback",), label="Clip rollback", soft_range=(0, 1)),
         KnobGroup("float_slider", ("screen_shrink",), label="Screen shrink/grow", soft_range=(-10, 10)),
         KnobGroup("float_slider", ("screen_softness",), label="Screen softness", soft_range=(0, 10)),
+        KnobGroup("float_slider", ("screen_preblur",), label="Screen pre-blur", soft_range=(0, 10)),
+        KnobGroup("float_slider", ("edge_grade_gain",), label="Edge grade gain", soft_range=(0, 4)),
+        KnobGroup("float_slider", ("edge_grade_gamma",), label="Edge grade gamma", soft_range=(0.1, 4)),
+        KnobGroup("float_slider", ("edge_grade_saturation",), label="Edge grade saturation", soft_range=(0, 2)),
+        KnobGroup("float_slider", ("edge_width",), label="Edge width", soft_range=(0.1, 20)),
         KnobGroup("enum", ("keyer_view",), label="View"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Cryptomatte": _groups(

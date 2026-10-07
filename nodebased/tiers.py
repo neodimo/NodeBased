@@ -253,12 +253,13 @@ def _ibk_color_rule(params, region, arity):
 
 
 def _screen_keyer_support(params):
-    # The matte is grown or shrunk by a box of `ceil(|screen_shrink|)` pixels and then softened by a
-    # Gaussian of `ceil(screen_softness)` pixels (each below the 0.5 cut-off is skipped).
+    # Screen pre-blur, matte shrink/softness and the local edge-grade window all read their own
+    # pixel radius around the output. Values below the 0.5 cut-off are skipped.
     def reach(name):
         size = abs(float(params.get(name, 0.0)))
         return 0 if size < 0.5 else int(math.ceil(size))
-    return reach("screen_shrink") + reach("screen_softness")
+    return (reach("screen_preblur") + reach("screen_shrink") + reach("screen_softness")
+            + reach("edge_width"))
 
 
 def _screen_keyer_rule(params, region, arity):
