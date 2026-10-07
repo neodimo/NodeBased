@@ -562,11 +562,13 @@ class DesktopTests(unittest.TestCase):
 
         blur = add_below('grade', 'Blur')
         above, below = rect('grade'), rect(blur)
-        self.assertAlmostEqual(below.center().x(), above.center().x(), delta=1)
-        self.assertGreater(below.top(), above.bottom())
+        # Standard spacing under the parent; the demo's Merge already stands in that spot, so the
+        # new node moves right past it, on the same row (step Y2).
+        self.assertAlmostEqual(below.top() - above.bottom(), 40, delta=1)
+        self.assertGreater(below.left(), rect('merge').right())
         others = [rect(key) for key in w.graph.items_by_id if key != blur]
         self.assertFalse(any(below.intersects(other) for other in others))
-        # Adding again stacks further down the same column instead of stepping sideways.
+        # Adding under that node has a free column, so it stacks straight down.
         second = add_below(blur, 'Grade')
         self.assertAlmostEqual(rect(second).center().x(), rect(blur).center().x(), delta=1)
         self.assertGreater(rect(second).top(), rect(blur).bottom())
@@ -3119,12 +3121,12 @@ class NodeToolbarTests(unittest.TestCase):
                 self_.accepted = True
 
         before = set(self.window.dispatcher.document['nodes'])
+        expected = self.window.graph.mapToScene(drop_point.toPoint())  # before the graph follows the node
         self.window.graph.dropEvent(FakeDrop())
         added = set(self.window.dispatcher.document['nodes']) - before
         self.assertEqual(len(added), 1)
         node = self.window.dispatcher.document['nodes'][added.pop()]
         self.assertEqual(node['type'], 'Blur')
-        expected = self.window.graph.mapToScene(drop_point.toPoint())
         self.assertAlmostEqual(node['pos'][0], expected.x(), delta=1.0)
         self.assertAlmostEqual(node['pos'][1], expected.y(), delta=1.0)
 
