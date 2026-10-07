@@ -3154,6 +3154,9 @@ class Evaluator:
         source = inputs[0]
         layer_name = str(p.get("layer_name") or "crypto_object")
         entries = []
+        matte_mask = inputs[9] if len(inputs) > 9 else None
+        mask_pixels = None if matte_mask is None else matte_mask.fit(source.data)
+        matte_mix = float(np.clip(p.get("mix", 1.0), 0.0, 1.0))
         for i, matte in enumerate(inputs[1:9]):
             name = str(p.get(f"id{i}") or "").strip()
             if matte is None or not name:

@@ -728,9 +728,9 @@ SPECS = {
     # passes through unchanged; only its layers and header metadata gain the crypto set, so bypass
     # (core.bypass_slot's default first-input rule) already does the right thing. Whole-image path
     # only, like the Cryptomatte reader: it writes named layers, which the tile path does not carry.
-    "Encryptomatte": {"inputs": ["image"], "optional_inputs": [*[f"matte{i}" for i in range(8)]],
+    "Encryptomatte": {"inputs": ["image"], "optional_inputs": [*[f"matte{i}" for i in range(8)], "mask"],
                       "params": {"layer_name": "crypto_object",
-                                 **{f"id{i}": "" for i in range(8)}}},
+                                 **{f"id{i}": "" for i in range(8)}, "mix": 1.0}},
     # Image metadata (step S3; docs/PARITY_2D.md). ModifyMetaData's `edits` is one edit per line: `set <key> <value>`
     # (the value may hold [frame] and [metadata key]), `remove <key>`, `rename <old> <new>`. CopyMetaData lays the
     # listed keys (all when `keys` is empty) of its `meta` input over the image's own. CompareMetaData passes the

@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from nodebased.core import Dispatcher, empty_document
+from nodebased import cryptomatte
 from nodebased.imaging import Evaluator
 from nodebased.media import raster_layer_arrays, write_exr
 from nodebased.tileexec import TileExecutor
@@ -395,10 +396,38 @@ class EncryptomatteTests(unittest.TestCase):
             _matte(_build_encryptomatte(mattes), ",".join(n for n, _ in mattes)),
             min(1.0, sum(a for _, a in mattes)), atol=1e-6)
 
+    def test_overlapping_mattes_are_coverage_sorted_and_tile_layers_match(self):
+        d = _build_encryptomatte([("low", 0.25), ("high", 0.75)])
+        raster = Evaluator().evaluate_raster(d.document, "enc")
+        low_id = np.asarray([cryptomatte.name_to_bits("low")], np.uint32).view(np.float32)[0]
+        high_id = np.asarray([cryptomatte.name_to_bits("high")], np.uint32).view(np.float32)[0]
+        rank = raster.layers["crypto_object00"].pixels[0, 0]
+        self.assertEqual(rank[0], high_id)
+        self.assertAlmostEqual(float(rank[1]), 0.75)
+        self.assertEqual(rank[2], low_id)
+        self.assertAlmostEqual(float(rank[3]), 0.25)
+
+        tiles = TileExecutor(evaluator=Evaluator(), tile_edge=3)
+        self.assertTrue(tiles.supports_tiled(d.document, "enc"))
+        tiled = tiles.compose(d.document, "enc", frame=1, tier=1)
+        self.assertIsNotNone(tiled.layers)
+        for name, layer in raster.layers.items():
+            np.testing.assert_array_equal(tiled.layers[name], layer.pixels)
+
+    def test_mask_and_mix_scale_coverage_without_changing_the_image(self):
+        d = _build_encryptomatte([("item", 0.8)])
+        d.execute({"op": "create", "id": "mask", "type": "Constant", "params": {
+            "width": 8, "height": 6, "red": 1, "green": 1, "blue": 1, "alpha": 0.5}})
+        d.execute({"op": "connect", "id": "enc", "input": "mask", "source": "mask"})
+        d.execute({"op": "set", "id": "enc", "param": "mix", "value": 0.5})
+        raster = Evaluator().evaluate_raster(d.document, "enc")
+        np.testing.assert_allclose(raster.layers["crypto_object00"].pixels[..., 1], 0.2, atol=1e-6)
+        np.testing.assert_allclose(_matte(d, "item"), 0.2, atol=1e-6)
+
 
 class EncryptomatteFileRoundTripTests(unittest.TestCase):
     def test_a_written_exr_is_read_back_by_a_fresh_read_and_cryptomatte_graph(self):
-        d = _build_encryptomatte([("sphere", 0.25), ("cube", 0.75)])
+        d = _build_encryptomatte([("sphere", 0.3333), ("cube", 0.6667)])
         raster = Evaluator().evaluate_raster(d.document, "enc")
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "enc.exr"
@@ -408,5 +437,7 @@ class EncryptomatteFileRoundTripTests(unittest.TestCase):
             fresh.execute({"op": "create", "id": "src", "type": "Read", "params": {"path": str(path)}})
             sphere = _matte(fresh, "sphere", source="src")
             cube = _matte(fresh, "cube", source="src")
-        np.testing.assert_allclose(sphere, 0.25, atol=1e-5)
-        np.testing.assert_allclose(cube, 0.75, atol=1e-5)
+        # Coverage written as float EXR is at least as precise as the half-float tolerance;
+        # Cryptomatte ids themselves must remain 32-bit float bit patterns.
+        np.testing.assert_allclose(sphere, 0.3333, atol=1 / 2048)
+        np.testing.assert_allclose(cube, 0.6667, atol=1 / 2048)

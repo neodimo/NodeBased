@@ -992,6 +992,8 @@ class TileExecutor:
             return inputs[0].pixels.copy()
         if kind == "Remove":
             return inputs[0].pixels.copy()
+        if kind == "Encryptomatte":
+            return inputs[0].pixels.copy()
         if kind == "Shuffle" and params.get("layer") not in ("", "rgba"):
             source = inputs[0]
             layer = source.layers.get(params["layer"])
@@ -1335,6 +1337,40 @@ def _tile_layers(kind, params, inputs, pixels, region, disabled=False):
             arr = a if source == "in1" else b
             channels.append(arr[..., "rgba".index(component):"rgba".index(component)+1])
         layers["out2"] = np.concatenate(channels, axis=-1).astype(np.float32)
+    elif kind == "Encryptomatte" and not disabled:
+        from . import cryptomatte
+        entries = []
+        for i, artifact in enumerate(inputs[1:9]):
+            name = str(params.get(f"id{i}") or "").strip()
+            if artifact is None or not name:
+                continue
+            matte = _align_artifact_to(artifact, region).astype(np.float32, copy=False)
+            coverage = matte[..., 3]
+            entries.append((cryptomatte.name_to_bits(name), coverage))
+        if entries:
+            coverage = np.stack([entry[1] for entry in entries], axis=-1)
+            mask_artifact = inputs[9] if len(inputs) > 9 else None
+            if mask_artifact is not None:
+                mask = _align_artifact_to(mask_artifact, region)[..., 3]
+                coverage *= mask[..., None]
+            coverage *= float(np.clip(params.get("mix", 1.0), 0.0, 1.0))
+            order = np.argsort(-coverage, axis=-1, kind="stable")
+            ranked_ids = np.broadcast_to(np.asarray([entry[0] for entry in entries], np.uint32),
+                                         coverage.shape)
+            ranked_ids = np.take_along_axis(ranked_ids, order, axis=-1)
+            ranked_cov = np.take_along_axis(coverage, order, axis=-1)
+            padded = ((len(entries) + 1) // 2) * 2
+            if padded > len(entries):
+                ranked_ids = np.pad(ranked_ids, ((0, 0), (0, 0), (0, padded-len(entries))))
+                ranked_cov = np.pad(ranked_cov, ((0, 0), (0, 0), (0, padded-len(entries))))
+            layer_name = str(params.get("layer_name") or "crypto_object")
+            for group in range(padded // 2):
+                arr = np.zeros((*ranked_cov.shape[:2], 4), np.float32)
+                arr[..., 0] = np.ascontiguousarray(ranked_ids[..., 2*group]).view(np.float32)
+                arr[..., 1] = ranked_cov[..., 2*group]
+                arr[..., 2] = np.ascontiguousarray(ranked_ids[..., 2*group+1]).view(np.float32)
+                arr[..., 3] = ranked_cov[..., 2*group+1]
+                layers[f"{layer_name}{group:02d}"] = arr
     elif kind == "ZMerge":
         first, second = inputs[0], inputs[1]
         layers = {**second.layers, **first.layers}

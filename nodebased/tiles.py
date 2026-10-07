@@ -303,7 +303,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     # Flare / Glint / Sparkles / GodRays / VolumeRays / ScannedGrain deliberately stay outside
     # this whitelist: their placement, long radial reads or frame-offset plate sampling need the
     # full source window, so TileExecutor routes those graphs to the full-frame evaluator.
-    "Posterize", "SoftClip", "HSVTool",     # pointwise, halo = (0, 0)
+    "Posterize", "SoftClip", "HSVTool", "Encryptomatte",     # pointwise, halo = (0, 0)
     "AddMix", "Blend", "CopyRectangle", "CopyBBox",     # halo = (0, 0); Merge-family (CopyBBox samples A in B's output window)
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference",  # halo = (0, 0); Merge-family
