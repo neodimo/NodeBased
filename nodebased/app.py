@@ -2712,7 +2712,17 @@ class Viewer(PanZoomView):
                                  self._roto_scene_point({"x": end["x"] + end["in_x"],
                                                          "y": end["y"] + end["in_y"]}, tier),
                                  self._roto_scene_point(end, tier))
-                pen = QPen(QColor("#ff986f" if shape["mode"] == "subtract" else "#58d7ff"), 2)
+                frame = int(self.window.dispatcher.document["time"]["current"])
+                is_keyed = any(isinstance(value, dict) and value.get("curve") and
+                               any(item["frame"] == frame for item in value["curve"]["keys"])
+                               for point in context[2].get("shapes", [])[shape_index]["points"]
+                               for value in point.values())
+                is_animated = any(isinstance(value, dict) and value.get("curve")
+                                  for point in context[2].get("shapes", [])[shape_index]["points"]
+                                  for value in point.values())
+                color = ("#9de7ff" if is_keyed else "#b08cff" if is_animated else
+                         "#ff986f" if shape["mode"] == "subtract" else "#58d7ff")
+                pen = QPen(QColor(color), 2)
                 pen.setCosmetic(True)
                 painter.setPen(pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -6446,8 +6456,17 @@ class Window(QMainWindow):
         if self.playing or getattr(self, "graph", None) is None:
             return
         key = self.graph.selected_id()
-        if key and ((self.graph_document().get("animation") or {}).get("curves", {}).get(key)
-                    or (self.graph_document().get("expressions") or {}).get(key)):
+        document = self.graph_document()
+        payload = document.get("node_data", {}).get(key, {}) if key else {}
+        def contains_curve(value):
+            if isinstance(value, dict):
+                return bool(value.get("curve")) or any(contains_curve(v) for v in value.values())
+            if isinstance(value, list):
+                return any(contains_curve(v) for v in value)
+            return False
+        if key and ((document.get("animation") or {}).get("curves", {}).get(key)
+                    or (document.get("expressions") or {}).get(key)
+                    or contains_curve(payload.get("shapes", []))):
             self.inspect(key)
 
     def refresh_timeline_marks(self):
@@ -6490,6 +6509,21 @@ class Window(QMainWindow):
                 for curve_key in curve["keys"]:
                     labels.setdefault(curve_key["frame"], []).append(
                         f"{node_name} · {param.replace('_', ' ')}")
+        if selected and (nodes.get(selected) or {}).get("type") == "Roto":
+            payload = document.get("node_data", {}).get(selected, {})
+            for shape in payload.get("shapes", []):
+                def add_shape_keys(value):
+                    if isinstance(value, dict):
+                        curve = value.get("curve")
+                        if curve:
+                            for item in curve["keys"]:
+                                labels.setdefault(item["frame"], []).append(
+                                    f"{nodes[selected]['name']} · {shape['name']}")
+                        else:
+                            for child in value.values(): add_shape_keys(child)
+                    elif isinstance(value, list):
+                        for child in value: add_shape_keys(child)
+                add_shape_keys(shape)
         keyed = set(labels)
         self.frame_slider.set_marks(cached, keyed, labels)
 

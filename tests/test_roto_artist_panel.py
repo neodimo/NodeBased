@@ -57,6 +57,19 @@ class RotoArtistPanelTests(unittest.TestCase):
         np.testing.assert_allclose(actual,expected,atol=1e-6)
         np.testing.assert_allclose(actual[20,20],[.5,0,0,.5],atol=1e-6)
 
+    def test_shape_key_button_keys_all_scalars_and_marks_the_selected_timeline(self):
+        self.panel().findChild(QPushButton,"roto-shape-key-0").click()
+        shape=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
+        self.assertEqual(shape["points"][0]["x"]["curve"]["keys"], [{"frame":1,"value":10.0}])
+        self.assertEqual(shape["opacity"]["curve"]["interpolation"], "smooth")
+        self.window.refresh_timeline_marks()
+        self.assertIn(1,self.window.frame_slider.key_frames)
+        self.assertEqual(self.panel().findChild(QPushButton,"roto-shape-key-0").text(),"◆")
+        self.window.set_time(current=2)
+        APP.processEvents()
+        self.assertEqual(self.panel().findChild(QPushButton,"roto-shape-key-0").text(),"◇")
+        self.assertIn(1,self.window.frame_slider.key_frames)
+
     def test_visibility_reorder_and_panel_viewer_selection(self):
         listing=self.panel().findChild(QListWidget,"roto-shape-list")
         listing.setCurrentRow(1); APP.processEvents()

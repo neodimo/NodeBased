@@ -12,6 +12,17 @@ def build_panel(window, key):
     root = QWidget(); root.setObjectName("roto-shapes-panel")
     layout = QVBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0)
     shapes = copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("shapes", []))
+    frame = int(window.dispatcher.document["time"]["current"])
+    def key_state(value):
+        if isinstance(value, dict):
+            curve = value.get("curve")
+            if curve:
+                return True, any(item["frame"] == frame for item in curve["keys"])
+            return (False, False) if not value else tuple(any(result[i] for result in (key_state(v) for v in value.values())) for i in range(2))
+        if isinstance(value, list):
+            results = [key_state(v) for v in value]
+            return any(r[0] for r in results), any(r[1] for r in results)
+        return False, False
     selected = getattr(window.viewer, "roto_selected_shape_index", -1)
     if selected < 0 and shapes:
         selected = window.viewer.roto_selected_shape_index = 0
@@ -23,7 +34,9 @@ def build_panel(window, key):
         label.setFrame(False); label.editingFinished.connect(
             lambda idx=index, field=label: row_edit(idx, "name", field.text()))
         row_layout.addWidget(label, 1)
-        key_button = QPushButton("◇"); key_button.setObjectName(f"roto-shape-key-{index}")
+        animated, keyed_here = key_state(shape)
+        key_button = QPushButton("◆" if keyed_here else "◇"); key_button.setObjectName(f"roto-shape-key-{index}")
+        key_button.setStyleSheet("color: #58bfff" if animated else "")
         key_button.setToolTip("Key the whole shape at the current frame")
         key_button.clicked.connect(lambda _=False, idx=index: key_shape(idx))
         row_layout.addWidget(key_button)
