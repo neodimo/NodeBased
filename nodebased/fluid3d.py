@@ -323,30 +323,76 @@ def _triangle_box_overlap(tri, centres):
     return alive
 
 
+PAIR_CHUNK = 600_000     # (triangle, cell) candidate pairs tested at once
+
+
+def _overlap_pairs(tri, centres, owner):
+    """`_triangle_box_overlap` for many (triangle, cell) pairs at once: pair `p` tests triangle `owner[p]` against
+    the unit box at `centres[p]`. The same separating axes and tolerances, evaluated over arrays."""
+    v = tri[owner] - centres[:, None, :]                          # (P, 3 vertices, 3)
+    alive = np.ones(len(centres), bool)
+    for a in range(3):
+        alive &= ~((v[:, :, a].min(axis=1) > 0.5) | (v[:, :, a].max(axis=1) < -0.5))
+    edges = (tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 1], tri[:, 0] - tri[:, 2])
+    n = np.cross(edges[0], edges[1])[owner]
+    d = np.einsum("pj,pj->p", v[:, 0, :], n)
+    alive &= np.abs(d) <= 0.5 * np.abs(n).sum(axis=1) + 1e-12
+    eye = np.eye(3)
+    for edge in edges:
+        edge = edge[owner]
+        for a in range(3):
+            axis = np.cross(edge, eye[a])
+            radius = 0.5 * np.abs(axis).sum(axis=1)
+            proj = np.einsum("pvj,pj->pv", v, axis)
+            miss = (proj.min(axis=1) > radius + 1e-12) | (proj.max(axis=1) < -radius - 1e-12)
+            alive &= ~(miss & axis.any(axis=1))
+    return alive
+
+
 def voxelize_surface(triangles, shape, values=None):
     """Conservative surface voxelisation: every cell a triangle touches (triangles in cell coordinates, cell
     (i, j, k) spans [i, i + 1]). Returns a bool mask, and with `values` (T, 3 per triangle) also the
-    per-cell mean of the values of the triangles that touch it as (nx, ny, nz, 3)."""
+    per-cell mean of the values of the triangles that touch it as (nx, ny, nz, 3).
+
+    The triangles are tested against their bounding-box cells in batches (the loop that tested one triangle at a
+    time took 23 s for the liquid surface mesh of a 96-cell Hot pour frame)."""
+    shape = tuple(int(n) for n in shape)
     mask = np.zeros(shape, bool)
-    total = None if values is None else np.zeros(tuple(shape) + (3,), np.float64)
+    total = None if values is None else np.zeros(shape + (3,), np.float64)
     count = None if values is None else np.zeros(shape, np.int32)
-    hi_limit = np.array(shape) - 1
-    for t, tri in enumerate(np.asarray(triangles, np.float64)):
-        lo = np.maximum(np.floor(tri.min(axis=0)).astype(int), 0)
-        hi = np.minimum(np.floor(tri.max(axis=0)).astype(int), hi_limit)
-        if np.any(hi < lo):
-            continue
-        ii, jj, kk = np.meshgrid(np.arange(lo[0], hi[0] + 1), np.arange(lo[1], hi[1] + 1),
-                                 np.arange(lo[2], hi[2] + 1), indexing="ij")
-        cells = np.stack((ii.ravel(), jj.ravel(), kk.ravel()), axis=1)
-        keep = _triangle_box_overlap(tri, cells + 0.5)
-        cells = cells[keep]
-        if not len(cells):
-            continue
-        mask[cells[:, 0], cells[:, 1], cells[:, 2]] = True
-        if total is not None:
-            total[cells[:, 0], cells[:, 1], cells[:, 2]] += values[t]
-            count[cells[:, 0], cells[:, 1], cells[:, 2]] += 1
+    tris = np.asarray(triangles, np.float64).reshape(-1, 3, 3)
+    if len(tris):
+        hi_limit = np.array(shape) - 1
+        lo = np.maximum(np.floor(tris.min(axis=1)).astype(np.int64), 0)
+        hi = np.minimum(np.floor(tris.max(axis=1)).astype(np.int64), hi_limit)
+        extent = hi - lo + 1
+        keep = np.all(extent > 0, axis=1)
+        order = np.flatnonzero(keep)
+        sizes = np.where(keep, np.prod(np.maximum(extent, 0), axis=1), 0)
+        start = 0
+        while start < len(order):
+            # a run of triangles whose bounding boxes hold about PAIR_CHUNK cells (a single large one may exceed it)
+            cumulative = np.cumsum(sizes[order[start:]])
+            stop = start + max(1, int(np.searchsorted(cumulative, PAIR_CHUNK, side="right")))
+            chunk = order[start:stop]
+            start = stop
+            counts = sizes[chunk]
+            owner_local = np.repeat(np.arange(len(chunk)), counts)
+            first = np.cumsum(counts) - counts
+            flat = np.arange(int(counts.sum())) - first[owner_local]
+            dims = extent[chunk][owner_local]
+            k = flat % dims[:, 2]
+            j = (flat // dims[:, 2]) % dims[:, 1]
+            i = flat // (dims[:, 2] * dims[:, 1])
+            cells = lo[chunk][owner_local] + np.stack((i, j, k), axis=1)
+            alive = _overlap_pairs(tris[chunk], cells + 0.5, owner_local)
+            cells = cells[alive]
+            if not len(cells):
+                continue
+            mask[cells[:, 0], cells[:, 1], cells[:, 2]] = True
+            if total is not None:
+                np.add.at(total, (cells[:, 0], cells[:, 1], cells[:, 2]), np.asarray(values)[chunk][owner_local[alive]])
+                np.add.at(count, (cells[:, 0], cells[:, 1], cells[:, 2]), 1)
     if total is None:
         return mask
     return mask, total / np.maximum(count, 1)[..., None]

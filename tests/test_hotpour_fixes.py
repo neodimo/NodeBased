@@ -12,6 +12,81 @@ def stub(shape, origin=(0.0, 0.0, 0.0), voxel=1.0):
     return types.SimpleNamespace(shape=tuple(shape), origin=np.asarray(origin, float), voxel=float(voxel))
 
 
+def reference_voxelize(triangles, shape, values=None):
+    """The one-triangle-at-a-time voxeliser this step replaced, kept as the oracle for the batched one."""
+    mask = np.zeros(shape, bool)
+    total = None if values is None else np.zeros(tuple(shape) + (3,), np.float64)
+    count = None if values is None else np.zeros(shape, np.int32)
+    hi_limit = np.array(shape) - 1
+    for t, tri in enumerate(np.asarray(triangles, np.float64)):
+        lo = np.maximum(np.floor(tri.min(axis=0)).astype(int), 0)
+        hi = np.minimum(np.floor(tri.max(axis=0)).astype(int), hi_limit)
+        if np.any(hi < lo):
+            continue
+        ii, jj, kk = np.meshgrid(np.arange(lo[0], hi[0] + 1), np.arange(lo[1], hi[1] + 1),
+                                 np.arange(lo[2], hi[2] + 1), indexing="ij")
+        cells = np.stack((ii.ravel(), jj.ravel(), kk.ravel()), axis=1)
+        keep = fluid3d._triangle_box_overlap(tri, cells + 0.5)
+        cells = cells[keep]
+        if not len(cells):
+            continue
+        mask[cells[:, 0], cells[:, 1], cells[:, 2]] = True
+        if total is not None:
+            total[cells[:, 0], cells[:, 1], cells[:, 2]] += values[t]
+            count[cells[:, 0], cells[:, 1], cells[:, 2]] += 1
+    if total is None:
+        return mask
+    return mask, total / np.maximum(count, 1)[..., None]
+
+
+def sphere_triangles(centre, radius, rings=14, segments=20):
+    pts = []
+    for r in range(rings + 1):
+        phi = np.pi * r / rings
+        pts.append([(centre[0] + radius * np.sin(phi) * np.cos(2 * np.pi * s / segments), centre[1] + radius * np.cos(phi),
+                     centre[2] + radius * np.sin(phi) * np.sin(2 * np.pi * s / segments)) for s in range(segments)])
+    tri = []
+    for r in range(rings):
+        for s in range(segments):
+            a, b = pts[r][s], pts[r][(s + 1) % segments]
+            c, d = pts[r + 1][s], pts[r + 1][(s + 1) % segments]
+            tri += [[a, c, b], [b, c, d]]
+    return np.array(tri, float)
+
+
+class BatchedVoxeliserTests(unittest.TestCase):
+    def test_the_batched_voxeliser_matches_the_one_triangle_loop_on_a_sphere_and_on_random_triangles(self):
+        rng = np.random.default_rng(7)
+        cases = [sphere_triangles((9.3, 8.1, 10.6), 6.4), box_triangles((2.2, 3.7, 4.1), (11.3, 9.9, 12.5)),
+                 rng.uniform(-3.0, 21.0, size=(300, 3, 3)), np.repeat(rng.uniform(0, 16, size=(40, 1, 3)), 3, axis=1)]
+        for tri in cases:
+            motion = rng.normal(size=(len(tri), 3))
+            self.assertTrue(np.array_equal(fluid3d.voxelize_surface(tri, (18, 18, 18)),
+                                           reference_voxelize(tri, (18, 18, 18))))
+            got_mask, got = fluid3d.voxelize_surface(tri, (18, 18, 18), motion)
+            want_mask, want = reference_voxelize(tri, (18, 18, 18), motion)
+            self.assertTrue(np.array_equal(got_mask, want_mask))
+            self.assertTrue(np.array_equal(got, want))
+
+    def test_chunks_do_not_change_the_result(self):
+        tri = sphere_triangles((20.0, 20.0, 20.0), 15.0, 30, 40)
+        whole = fluid3d.voxelize_surface(tri, (40, 40, 40))
+        old = fluid3d.PAIR_CHUNK
+        try:
+            fluid3d.PAIR_CHUNK = 500
+            self.assertTrue(np.array_equal(fluid3d.voxelize_surface(tri, (40, 40, 40)), whole))
+        finally:
+            fluid3d.PAIR_CHUNK = old
+
+    def test_a_dense_liquid_sized_mesh_voxelises_in_a_second_or_two(self):
+        import time
+        tri = sphere_triangles((60.0, 60.0, 60.0), 50.0, 140, 280)          # 78,000 triangles
+        started = time.perf_counter()
+        surface = fluid3d.voxelize_surface(tri, (120, 120, 120))
+        self.assertLess(time.perf_counter() - started, 4.0)
+        self.assertGreater(int(surface.sum()), 20000)
+
+
 class ColliderCrossingTheDomainTests(unittest.TestCase):
     def test_a_table_that_runs_off_the_bottom_of_the_domain_is_solid_down_to_the_floor(self):
         # a slab whose top is at y = 6.5 and whose underside is below the domain: before the fix only its top
