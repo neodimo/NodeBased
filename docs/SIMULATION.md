@@ -282,7 +282,7 @@ baked cache at 960 × 540.
 | Adapter / workload | Liquid solver | Surface | Whitewater | Steam solver | Peak host / GPU | Steam cache (sparse / dense) | Playback |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | RTX 3080 Ti, 256 / 192 cells, 120 frames | pending the card's reset | pending | pending | pending | pending | pending | pending |
-| Radeon 8060S, 256 / 192 cells, 120 frames | running | running | running | running | running | running | running |
+| Radeon 8060S, 256 / 192 cells, 120 frames | completed; report lost | completed; report lost | completed; report lost | completed; report lost | pending | pending |
 | Radeon 8060S, reduced | pending | pending | pending | pending | pending | pending | pending |
 | llvmpipe, reduced | pending | pending | pending | pending | pending | pending | pending |
 
@@ -295,7 +295,11 @@ GPU path-traced showcase stills at 1920 × 1080:
 
 ![Hot pour, frame 120](images/hot_pour_frame_120.png)
 
-Render times: frame 60 pending; frame 120 pending. RTX 3080 Ti numbers: pending the card's reset.
+The Radeon 8060S full-size bake completed all 120 frames for liquid, surface extraction,
+whitewater and steam, and passed the former frame-60 stall. The benchmark was stopped during
+its long cached-playback measurement before it wrote its results file, so those stage timings,
+memory and cache metrics were lost. RTX 3080 Ti numbers: pending the card's reset.
+Render times: frame 60 pending; frame 120 pending.
 Reproduce with
 `python tools/benchmark_hot_pour.py --adapter default --liquid-cells 256 --smoke-cells 192 --frames 120 --playback --stills docs/images --still-size 1920x1080`.
 
