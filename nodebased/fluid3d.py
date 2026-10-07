@@ -382,6 +382,46 @@ def fill_interior(surface):
     return result
 
 
+MAX_FILL_CELLS = 24_000_000      # the most cells a solid's own bounding box may add to the domain when it is filled
+
+
+def voxelize_solid(triangles, shape, values=None):
+    """(surface, filled, velocity) of a closed mesh on a (nx, ny, nz) grid: `surface` is `voxelize_surface`'s mask,
+    `filled` also holds every cell the mesh encloses, and `velocity` is the per-cell mean of `values` (or None).
+
+    A mesh that runs past the grid (a table wider than the domain, a floor under it) is filled in a grid grown to
+    the mesh's own bounding box, then cropped back: the old fill flooded in through the cut and left only the
+    surface layer solid, so liquid fell straight through the thickness of a clipped table. A mesh inside the grid
+    takes the original path unchanged. A mesh whose bounding box is more than `MAX_FILL_CELLS` cells keeps the
+    grid it was given plus a margin of 16 cells (a floor plane a kilometre wide stays a thin sheet)."""
+    tri = np.asarray(triangles, np.float64)
+    shape = tuple(int(n) for n in shape)
+    if not len(tri):
+        empty = np.zeros(shape, bool)
+        return empty, empty.copy(), None if values is None else np.zeros(shape + (3,), np.float64)
+    lo = np.floor(tri.reshape(-1, 3).min(axis=0)).astype(np.int64) - 1
+    hi = np.floor(tri.reshape(-1, 3).max(axis=0)).astype(np.int64) + 2
+    low = np.minimum(lo, 0)
+    high = np.maximum(hi, np.array(shape))
+    if np.all(low == 0) and np.all(high == np.array(shape)):
+        grown, base = shape, np.zeros(3, np.int64)
+        moved = tri
+    else:
+        if int(np.prod(high - low, dtype=np.float64)) > MAX_FILL_CELLS:
+            low = np.maximum(low, -16)
+            high = np.minimum(high, np.array(shape) + 16)
+        grown, base = tuple(int(v) for v in high - low), low
+        moved = tri - base
+    result = voxelize_surface(moved, grown, values)
+    surface, velocity = result if values is not None else (result, None)
+    filled = fill_interior(surface)
+    if grown != shape:
+        window = tuple(slice(int(-base[a]), int(-base[a]) + shape[a]) for a in range(3))
+        surface, filled = surface[window], filled[window]
+        velocity = None if velocity is None else velocity[window]
+    return surface, filled, velocity
+
+
 # --- sources, colliders and forces (solver-side objects; the node layer builds them) -----------------
 
 class GeometryTrack:
@@ -469,11 +509,14 @@ class Source:
                     result = (np.zeros(0, np.intp), np.zeros(0), None)
                 else:
                     motion = self.track.motion(frame) / solver.voxel if self.inherit_velocity else None
-                    if motion is not None:
+                    if self.emit_from == "volume":
+                        surface, mask, velocity = voxelize_solid(tri, shape, motion)
+                    elif motion is not None:
                         surface, velocity = voxelize_surface(tri, shape, motion)
+                        mask = surface
                     else:
                         surface, velocity = voxelize_surface(tri, shape), None
-                    mask = fill_interior(surface) if self.emit_from == "volume" else surface
+                        mask = surface
                     if velocity is not None:
                         mean = velocity[surface].mean(axis=0) if surface.any() else np.zeros(3)
                         velocity = np.where(surface[..., None], velocity, mean)
@@ -571,7 +614,7 @@ class Collider:
         if not self.animated:
             tri = (self.track.at(frame) - solver.origin) / solver.voxel
             result = ((np.zeros(solver.shape, bool), None) if not len(tri)
-                      else (fill_interior(voxelize_surface(tri, solver.shape)), None))
+                      else (voxelize_solid(tri, solver.shape)[1], None))
         else:
             now, nxt = self.track.at(frame), self.track.at(int(frame) + 1)
             if now.shape != nxt.shape:
@@ -584,8 +627,7 @@ class Collider:
             if not len(tri):
                 result = (np.zeros(solver.shape, bool), None)
             else:
-                surface, velocity = voxelize_surface(tri, solver.shape, motion_cells)
-                solid = fill_interior(surface)
+                surface, solid, velocity = voxelize_solid(tri, solver.shape, motion_cells)
                 mean = motion_cells.mean(axis=0) if len(motion_cells) else np.zeros(3)
                 result = (solid, np.where(surface[..., None], velocity, mean).astype(np.float32))
         if len(self._cache) > 8:
