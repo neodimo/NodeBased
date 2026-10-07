@@ -1,5 +1,40 @@
 ## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (12:05 AM on 2026-10-07 PDT)
+
+`main` moved `e48cd6b` -> `cc59adc` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 332 tests in 209.547 s, OK. Full suite on
+the stacked tip `cc59adc` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1006-2236.log`, started 10:36 PM): **Ran 4521 tests in 4716.927 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step Y2 of 3: new nodes land where the artist is looking.** Commits:
+  - `3cc279c` Desktop tests follow the new placement: under the parent at standard spacing, right past an occupied spot (Lane 2 step Y2 of 3)
+  - `91c5fb5` New nodes land where the artist is looking: below the selection (right past a sibling), at the visible centre with nothing selected, graph pans to show them; F frames the selection, Home frames every node (Lane 2 step Y2 of 3)
+  Diff: 6 files changed, 359 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step N2 of 3: sparse volumes straight to the GPU in the viewport and the GPU renderers (finish 1).** Commits:
+  - `1c49a1a` test: a sparse smoke plume excluded from one light and lit by another renders alike on the GPU raster, the GPU path tracer and the CPU reference; docs for sparse volumes with light linking
+  - `a83599e` test: sparse frames through Render3D on the GPU and the path tracer; fix the CPU sample of a vector field in an empty tile
+  - `8a243e9` docs: sparse volumes on the GPU: what is built, the memory and frame-time numbers on three adapters
+  - `3c2f9e8` perf: a tile-index shortcut for the software adapter's volume samples; benchmark the path tracer's volume buffer too
+  - `1dcafb4` perf: the GPU path tracer reads sparse volumes from their tiles
+  - `b921389` perf: sample sparse volumes straight from a tile atlas in the viewport and the GPU raster renders
+  Diff: 15 files changed, 1608 insertions(+), 88 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step P2 of 2: Encryptomatte, and HSVTool's per-range masks and alpha choice.** Commits:
+  - `898dab4` docs: record Lane 8 P2 parity coverage
+  - `f5fef06` feat: add HSVTool range masks and alpha outputs
+  - `f72f8bf` feat: add tile-native Encryptomatte coverage masks
+  Diff: 9 files changed, 193 insertions(+), 29 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (9:05 PM on 2026-10-06 PDT)
 
 `main` moved `0236e8f` -> `d8161bb` (lane commits cherry-picked onto main in lane order) and then to this
