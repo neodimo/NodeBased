@@ -1538,7 +1538,7 @@ def chain_for(evaluator, doc, key, node, incoming, cancel=None):
         track = None
         if emit_from in ("surface", "volume") and node["inputs"].get("geo") is not None:
             track, digest = _geo_track(evaluator, doc, node["inputs"]["geo"], cancel, int(params["start_frame"]),
-                                       bool(params["src_inherit_velocity"]))
+                                       bool(params["src_inherit_velocity"]) or bool(params.get("animated", 0)))
             identity["geo"] = digest
 
         def params_at(frame):

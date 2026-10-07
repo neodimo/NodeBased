@@ -189,5 +189,39 @@ class SteamFromAColliderSurfaceTests(unittest.TestCase):
         self.assertEqual(float(state.arrays["density"][solid].max()), 0.0)
 
 
+class SourceGeometryThatAppearsLaterTests(unittest.TestCase):
+    """A surface source was sampled once, at its start frame, unless Inherit velocity was above zero: steam off a liquid
+    that did not exist yet at frame 1 never came out. `animated` samples the geometry every frame."""
+
+    def graph(self, animated):
+        from nodebased.core import Dispatcher
+        d = Dispatcher()
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "ball", "type": "Cylinder3D", "params": {"cyl_radius": 0.3, "cyl_height": 0.3, "ty": 9.0}},
+            {"op": "create", "id": "src", "type": "FluidSource3D", "params": {"fluid_emit_from": "surface",
+                                                                              "animated": animated, "src_density": 1.0}},
+            {"op": "connect", "id": "src", "input": "geo", "source": "ball"},
+            {"op": "create", "id": "smoke", "type": "FluidSolver3D", "params": {
+                "division_size": 0.1, "bounds_min_x": -1.0, "bounds_max_x": 1.0, "bounds_min_z": -1.0, "bounds_max_z": 1.0,
+                "bounds_min_y": 0.0, "bounds_max_y": 2.0, "pressure": "cpu", "max_iterations": 30}},
+            {"op": "connect", "id": "smoke", "input": "fluid", "source": "src"},
+            {"op": "set_key", "id": "ball", "param": "ty", "frame": 1, "value": 9.0},
+            {"op": "set_key", "id": "ball", "param": "ty", "frame": 3, "value": 0.5}]})
+        d.execute({"op": "time", "first": 1, "last": 6})
+        return d
+
+    def smoke_at(self, animated, frame=6):
+        from nodebased.imaging import Evaluator
+        d = self.graph(animated)
+        volume = Evaluator().evaluate_raster(d.document, "smoke", frame=frame, typed=True)
+        return float(np.asarray(volume.density).sum())
+
+    def test_an_animated_source_emits_once_its_geometry_arrives(self):
+        self.assertGreater(self.smoke_at(1), 1.0)
+
+    def test_a_static_source_keeps_its_start_frame_footprint(self):
+        self.assertEqual(self.smoke_at(0), 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

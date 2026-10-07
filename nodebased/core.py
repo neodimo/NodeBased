@@ -1058,7 +1058,7 @@ SPECS["FluidSource3D"] = {"inputs": [], "optional_inputs": ["geo"], "params": {
     "fluid_emit_from": "sphere", "src_center_x": 0.0, "src_center_y": 0.3, "src_center_z": 0.0,
     "src_radius": 0.25, "src_falloff": 0.5, "src_density": 1.0, "src_temperature": 1.0, "src_fuel": 0.0,
     "src_vel_x": 0.0, "src_vel_y": 0.0, "src_vel_z": 0.0, "src_inherit_velocity": 0.0,
-    "src_noise_amount": 0.0, "src_noise_scale": 0.5, "src_dilate": 0, "start_frame": 1, "end_frame": 1000000,
+    "src_noise_amount": 0.0, "src_noise_scale": 0.5, "src_dilate": 0, "animated": 0, "start_frame": 1, "end_frame": 1000000,
     "fluid_type": "smoke", **_XFORM}}
 SPECS["FluidForce3D"] = {"inputs": ["fluid"], "params": {
     "force_kind": "buoyancy", "buoyancy_lift": 0.08, "buoyancy_settle": 0.005, "ambient_temperature": 0.0,

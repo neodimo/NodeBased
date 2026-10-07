@@ -101,7 +101,7 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
     # ---- the steam: heat and a little smoke from the liquid's surface; the liquid, glass and table are its colliders
     create("steam_source", "FluidSource3D", {"fluid_type": "smoke", "fluid_emit_from": "surface",
                                              "src_density": 0.9, "src_temperature": 1.0, "src_vel_y": 0.1,
-                                             "src_inherit_velocity": 0.0, "src_dilate": 1})
+                                             "src_inherit_velocity": 0.0, "src_dilate": 1, "animated": 1})
     connect("steam_source", "geo", "surface")
     create("steam_lift", "FluidForce3D", {"force_kind": "buoyancy", "buoyancy_lift": 0.08, "strength": 0.015,
                                           "turbulence_scale": 0.3})

@@ -944,6 +944,7 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("src_noise_amount",), label="Noise amount"),
         KnobGroup("float", ("src_noise_scale",), label="Noise scale"),
         KnobGroup("int", ("src_dilate",), label="Grow by cells"),
+        KnobGroup("bool", ("animated",), label="Animated geometry"),
         KnobGroup("int", ("start_frame",), label="Start at"),
         KnobGroup("int", ("end_frame",), label="End at"),
         KnobGroup("enum", ("fluid_type",), label="Fluid type"), *_XFORM_KNOBS),
