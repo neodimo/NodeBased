@@ -9,7 +9,8 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtGui import QHelpEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDoubleSpinBox, QLabel, QLineEdit, QPushButton
 
@@ -304,6 +305,53 @@ class AnimatedKnobTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: self.curve() is None))
         w.command({"op": "undo"})
         self.assertEqual(self.keys(), [(3, 0.5), (10, 2.0)])
+
+
+class TimelineKeyMarkTests(unittest.TestCase):
+    """The key marks under the timeline show the selected node's keys and say what they are."""
+
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.addCleanup(close_window, self)
+        self.window.set_time(first=1, last=20, current=1)
+        for param, frame in (("exposure", 3), ("exposure", 12), ("offset", 12)):
+            self.window.command({"op": "set_key", "id": "grade", "param": param, "frame": frame,
+                                 "value": 0.5}, render=False)
+        self.select("grade")
+
+    def select(self, node_id):
+        self.window.graph.scene().clearSelection()
+        self.window.graph.items_by_id[node_id].setSelected(True)
+        APP.processEvents()
+
+    def test_the_marks_follow_the_selected_node(self):
+        w = self.window
+        self.assertTrue(wait_until(lambda: w.frame_slider.key_frames == {3, 12}))
+        self.select("wash")
+        self.assertTrue(wait_until(lambda: w.frame_slider.key_frames == set()))
+        self.select("grade")
+        self.assertTrue(wait_until(lambda: w.frame_slider.key_frames == {3, 12}))
+
+    def test_the_tooltip_over_a_key_mark_names_the_node_and_knobs(self):
+        w = self.window
+        self.assertTrue(wait_until(lambda: w.frame_slider.key_frames == {3, 12}))
+        bar = w.frame_slider
+        self.assertEqual(bar.key_tooltip(3), "Frame 3: key on Grade · exposure")
+        self.assertEqual(bar.key_tooltip(12), "Frame 12: key on Grade · exposure, Grade · offset")
+        self.assertIsNone(bar.key_tooltip(5))
+        # The hover itself: a tooltip event over frame 12's cell shows that text; over an
+        # unkeyed frame the bar's general tooltip applies instead.
+        with unittest.mock.patch("nodebased.timeline.QToolTip.showText") as shown:
+            x = int(bar.frame_x(12) + bar.frame_width() / 2)
+            handled = bar.event(QHelpEvent(QEvent.Type.ToolTip, QPoint(x, 10), bar.mapToGlobal(QPoint(x, 10))))
+        self.assertTrue(handled)
+        self.assertIn("Frame 12: key on Grade", shown.call_args.args[1])
+        with unittest.mock.patch("nodebased.timeline.QToolTip.showText") as shown:
+            x = int(bar.frame_x(5) + bar.frame_width() / 2)
+            bar.event(QHelpEvent(QEvent.Type.ToolTip, QPoint(x, 10), bar.mapToGlobal(QPoint(x, 10))))
+        self.assertNotIn("key on", str(shown.call_args))
 
 
 if __name__ == "__main__":

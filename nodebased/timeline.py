@@ -20,9 +20,9 @@ the one source of truth for "is frame N cached?" inside the cache itself.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QSizePolicy, QWidget
+from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 
 # A frame is cached when its post-view-transform image is resident; it is keyed when some curve
@@ -73,12 +73,14 @@ class TimelineBar(QWidget):
         self._value = 1
         self.cached_frames: set[int] = set()
         self.key_frames: set[int] = set()
+        # frame -> ["Grade · exposure", ...]: what the key marks are keys of, for the hover tooltip.
+        self.key_labels: dict[int, list[str]] = {}
         self.setMinimumHeight(34)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.SizeHorCursor)
         self.setToolTip("Scrub the playhead. ← → step, Home/End jump to the range ends.\n"
                         "Orange underline: frame is cached and will replay instantly.\n"
-                        "Blue underline: frame carries an animation key.")
+                        "Blue underline: frame carries an animation key; hover it to see which knobs.")
 
     # -- QSlider-compatible surface -------------------------------------------------------
 
@@ -107,16 +109,37 @@ class TimelineBar(QWidget):
 
     # -- State pushed in by the window ----------------------------------------------------
 
-    def set_marks(self, cached_frames, key_frames):
+    def set_marks(self, cached_frames, key_frames, key_labels=None):
         """Replace both underline sets. Repaints only when something actually moved, so the
-        per-frame refresh during playback does not cost a repaint per tick on a static graph."""
+        per-frame refresh during playback does not cost a repaint per tick on a static graph.
+        `key_labels` maps a keyed frame to the names of the knobs keyed there."""
         cached = set(cached_frames)
         keys = set(key_frames)
-        if cached == self.cached_frames and keys == self.key_frames:
+        labels = {frame: list(names) for frame, names in (key_labels or {}).items()}
+        if cached == self.cached_frames and keys == self.key_frames and labels == self.key_labels:
             return
         self.cached_frames = cached
         self.key_frames = keys
+        self.key_labels = labels
         self.update()
+
+    def key_tooltip(self, frame):
+        """Hover text for a keyed frame, or None: the frame and the knobs keyed on it."""
+        names = self.key_labels.get(frame)
+        if frame not in self.key_frames:
+            return None
+        if not names:
+            return f"Frame {frame}: animation key"
+        shown = ", ".join(names[:6]) + (f" and {len(names) - 6} more" if len(names) > 6 else "")
+        return f"Frame {frame}: key on {shown}"
+
+    def event(self, event):
+        if event.type() == QEvent.Type.ToolTip:
+            text = self.key_tooltip(self.frame_at(event.pos().x()))
+            if text is not None:
+                QToolTip.showText(event.globalPos(), text, self)
+                return True
+        return super().event(event)
 
     # -- Geometry --------------------------------------------------------------------------
 

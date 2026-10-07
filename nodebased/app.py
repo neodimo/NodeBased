@@ -6451,9 +6451,16 @@ class Window(QMainWindow):
         # _timeline() syncs itself while it is being built, which is before the graph view exists.
         selected = self.graph.selected_id() if getattr(self, "graph", None) is not None else None
         scope = {selected: curves[selected]} if selected in curves else ({} if selected else curves)
-        keyed = {key["frame"] for node_curves in scope.values()
-                 for curve in node_curves.values() for key in curve["keys"]}
-        self.frame_slider.set_marks(cached, keyed)
+        nodes = self.graph_nodes()
+        labels = {}
+        for node_key, node_curves in scope.items():
+            node_name = (nodes.get(node_key) or {}).get("name", node_key)
+            for param, curve in node_curves.items():
+                for curve_key in curve["keys"]:
+                    labels.setdefault(curve_key["frame"], []).append(
+                        f"{node_name} · {param.replace('_', ' ')}")
+        keyed = set(labels)
+        self.frame_slider.set_marks(cached, keyed, labels)
 
     def apply_fps_preset(self, index):
         rate = self.fps_presets.itemData(index)
