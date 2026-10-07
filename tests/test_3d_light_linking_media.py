@@ -251,6 +251,34 @@ class ViewportSmokeTests(unittest.TestCase):
         self.assertLessEqual(int(np.abs(linked - key_only).max()), 1)
 
 
+SIDE = s.Light("Directional", position=s.Vec3(5, 1.5, 0.0), target=s.Vec3(0, .5, 0), shadows=True, name="side")
+
+
+class MeshShadowOnSmokeTests(unittest.TestCase):
+    """A mesh that excludes a light casts no shadow from it on smoke either (the CPU and the GPU raymarch)."""
+    gpu = False
+
+    def render(self, scene):
+        return smoke(scene, self.gpu, ambient=.1)
+
+    def test_a_card_excluded_from_the_side_light_does_not_shadow_the_plume(self):
+        from tests.test_volume_shadow_exchange import wall
+        plume = s.analytic_plume(24, 0)
+        draw = lambda link: self.render(s.Scene((replace(wall(), light_link=link),), (SIDE,), volumes=(plume,)))
+        open_ = self.render(s.Scene((), (SIDE,), volumes=(plume,)))
+        in_smoke = open_[..., 3] > .05
+        self.assertGreater(int(in_smoke.sum()), 300)
+        shadowed = draw(s.LIGHT_LINK_ALL)
+        self.assertLess(float(shadowed[in_smoke][:, :3].sum()), .35 * float(open_[in_smoke][:, :3].sum()))
+        for link in (("exclude", ("side",)), NOBODY):
+            np.testing.assert_allclose(draw(link)[in_smoke][:, :3], open_[in_smoke][:, :3], atol=SMOKE_TOLERANCE, rtol=0)
+
+
+@unittest.skipUnless(gpu3d.available(), "no GPU adapter")
+class GpuMeshShadowOnSmokeTests(MeshShadowOnSmokeTests):
+    gpu = True
+
+
 # --- smoke in the path tracers ------------------------------------------------------------------------------------------
 
 from nodebased import gpupathtrace, pathtrace as pt           # noqa: E402

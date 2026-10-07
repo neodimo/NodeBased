@@ -220,7 +220,7 @@ fn shadow_tau(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
 }
 // Meshes between a smoke sample and a light (scene3d._volume_occluders): hard shadows, two-sided
 // Moller-Trumbore over every mesh triangle, material alpha only; `direction.w` is the light's Shadows switch.
-fn scene_shadow(p: vec3<f32>, light: Light) -> f32 {
+fn scene_shadow(p: vec3<f32>, light: Light, bit: u32) -> f32 {
     let count = u32(params.scene.y);
     if (light.direction.w <= 0.0 || count == 0u) { return 1.0; }
     let near_bias = params.scene.x * light.shadow.x * 0.01;
@@ -234,6 +234,7 @@ fn scene_shadow(p: vec3<f32>, light: Light) -> f32 {
     var transmission = 1.0;
     for (var j = 0u; j < count; j += 1u) {
         let tri = triangles[j];
+        if (excl_bit(u32(tri.e1.w), bit)) { continue; }   // light linking: a mesh that excludes the light casts no shadow from it
         let h = cross(ray, tri.e2.xyz);
         let det = dot(h, tri.e1.xyz);
         if (abs(det) > 1e-10) {
@@ -320,7 +321,7 @@ fn scene_shadow(p: vec3<f32>, light: Light) -> f32 {
                     var travel = light.direction.xyz;
                     if (light.position.w > 0.0) { travel = (p_world - light.position.xyz) / max(length(p_world - light.position.xyz), 1e-12); }
                     let weight = light_weight(shadow_tau(p_world, light, sigma_t_unit), -dot(dir, travel));
-                    incident += light.colour.rgb * (attn * weight * scene_shadow(p_world, light));
+                    incident += light.colour.rgb * (attn * weight * scene_shadow(p_world, light, u32(i)));
                 }
             }
             source = params.colour.rgb * (incident + fire_light);

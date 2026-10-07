@@ -4079,14 +4079,15 @@ def _volume_occluders(scene, cancel=None):
     the plume. None when nothing can cast (no shadowed light, or no meshes and no casting splats)."""
     if not any(light.shadows and light.intensity > 0 for light in scene.lights):
         return None
-    corners, alphas = [], []
-    for geometry in scene.geometries:
+    corners, alphas, owners = [], [], []
+    for index, geometry in enumerate(scene.geometries):
         if not len(geometry.triangles):
             continue
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
         corners.append(world[geometry.triangles])
         alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), np.float32))
+        owners.append(np.full(len(geometry.triangles), index, np.int64))
     casting = [i for i in scene.splats if getattr(i, "cast_shadows", True)]
     if not corners and not casting:
         return None
@@ -4097,13 +4098,19 @@ def _volume_occluders(scene, cancel=None):
     bvh = Bvh.build(*primitives.aabbs(), cancel=cancel) if len(triangles) > _SHADOW_BRUTE_THRESHOLD else None
     bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max())) if len(triangles) else .001
     splat_shadows = _SplatShadows(scene.splats, scene.lights, None, None, bias, cancel) if casting else None
+    # light linking: per shadowing light that some mesh excludes, the triangles of the meshes that light reaches
+    link_sets = (_link_caster_sets(scene, primitives, np.concatenate(owners), cancel, build_bvh=bvh is not None)
+                 if len(triangles) and any(g.light_link[0] != "all" for g in scene.geometries) else {})
 
     def occluders(points, light):
         position, direction = light.world()
         points = np.asarray(points, np.float64)
+        subset, tree = primitives, bvh
+        if id(light) in link_sets:
+            subset, tree, _ = link_sets[id(light)]
         return _shadow_visibility(points, np.zeros_like(points), replace(light, shadow_blur=0.0), position, direction,
-                                  v0, e1, e2, primitives.alpha, bias, cancel, triangles=primitives, bvh=bvh,
-                                  splat_shadows=splat_shadows)
+                                  subset.v0, subset.e1, subset.e2, subset.alpha, bias, cancel, triangles=subset,
+                                  bvh=tree, splat_shadows=splat_shadows)
     return occluders
 
 
