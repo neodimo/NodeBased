@@ -716,7 +716,7 @@ class Evaluator:
 
     def evaluate_raster(self, doc, target=None, cancel: threading.Event | None = None,
                         frame=None, tier=1, typed=False, return_digest=False,
-                        cache_fractional=False):
+                        cache_fractional=False, digest_only=False):
         """Evaluate `target` at one timeline frame, optionally at a proxy tier.
 
         `frame` is an argument rather than ambient state on purpose: a clip-based timeline maps one
@@ -732,6 +732,12 @@ class Evaluator:
         tile, so the very same subframe positions repeat within one compose and across a second one
         at that frame. Only TimeBlur's own nested call (`kind == "TimeBlur"` below) passes this
         true; see docs/TIME_MODEL.md.
+
+        `digest_only` (with `return_digest`, for a 3D target) stops short of building the target's value and returns
+        `(None, digest)`: the digest is what the walk computes before it builds the value, and a solved liquid's
+        particle cache reads only its run, not its frame. A fluid node that hashes the geometry of every frame in the
+        document's range (`fluid3d._geo_track`) used to mesh the liquid for each of them, again for every frame it was
+        asked to solve.
 
         `tier` is an argument for the same reason, and additionally because export must be able to
         ask for tier 1 while the viewer is showing tier 4 (contract clause C3). It is deliberately
@@ -1014,6 +1020,9 @@ class Evaluator:
                                                      [hashes[s] if s is not None else None for s in sources],
                                                      fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
                 hashes[key] = digest
+                if digest_only and key == target:
+                    values[key] = None
+                    continue
                 if kind in GEOMETRY_TYPES:
                     # A disabled geometry node contributes nothing rather than passing its texture on.
                     texture = values[sources[0]] if sources and sources[0] is not None else None
@@ -1213,6 +1222,8 @@ class Evaluator:
                     incoming = values[node["inputs"]["particles"]]
                     if node["disabled"] or stream is None:
                         value = incoming
+                    elif digest_only:
+                        value = particles.placeholder_instance(stream, frame)       # only the run is read
                     else:
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         state = particles.solve_frame(stream, frame, store, cancel)

@@ -1506,7 +1506,8 @@ def _geo_track(evaluator, doc, source_key, cancel, start, animated):
         geometry = evaluator.evaluate_raster(doc, source_key, cancel, frame=int(frame), typed=True)
         return collider_triangles(geometry)
     if not animated:
-        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=start, typed=True, return_digest=True)
+        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=start, typed=True, return_digest=True,
+                                              digest_only=True)
         return GeometryTrack(provider, False, start, digest), digest
     import hashlib
     time = doc.get("time", {})
@@ -1514,7 +1515,8 @@ def _geo_track(evaluator, doc, source_key, cancel, start, animated):
     last = min(int(time.get("last", first)), first + MAX_TRACK_FRAMES)
     h = hashlib.sha256()
     for frame in range(first, last + 1):
-        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=frame, typed=True, return_digest=True)
+        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=frame, typed=True, return_digest=True,
+                                              digest_only=True)
         h.update(str(digest).encode())
     digest = h.hexdigest()
     return GeometryTrack(provider, True, start, digest), digest

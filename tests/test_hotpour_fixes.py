@@ -223,5 +223,71 @@ class SourceGeometryThatAppearsLaterTests(unittest.TestCase):
         self.assertEqual(self.smoke_at(0), 0.0)
 
 
+class DigestOnlyTests(unittest.TestCase):
+    """Smoke that collides with, or is emitted from, a liquid's surface hashes the surface of every frame in the
+    document's range. It used to build that surface (a solve, a level set and a mesh) once per frame in the range, for
+    every frame it was asked to solve: the cost of a bake grew with the square of its length."""
+
+    def graph(self):
+        from nodebased.core import Dispatcher
+        d = Dispatcher()
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "src", "type": "FluidSource3D", "params": {
+                "fluid_type": "liquid", "src_center_y": 0.7, "src_radius": 0.3, "src_vel_y": -0.5}},
+            {"op": "create", "id": "liq", "type": "FluidLiquidSolver3D", "params": {
+                "division_size": 0.1, "bounds_min_x": -0.5, "bounds_max_x": 0.5, "bounds_min_z": -0.5, "bounds_max_z": 0.5,
+                "bounds_max_y": 1.2, "pressure": "cpu", "particles_per_cell": 2, "substeps": 1, "max_iterations": 30}},
+            {"op": "connect", "id": "liq", "input": "fluid", "source": "src"},
+            {"op": "create", "id": "cache", "type": "ParticleCache3D", "params": {}},
+            {"op": "connect", "id": "cache", "input": "particles", "source": "liq"},
+            {"op": "create", "id": "surface", "type": "FluidSurface3D", "params": {}},
+            {"op": "connect", "id": "surface", "input": "particles", "source": "cache"}]})
+        d.execute({"op": "time", "first": 1, "last": 12})
+        return d
+
+    def test_the_digest_alone_equals_the_digest_of_the_built_surface_and_builds_nothing(self):
+        from nodebased.imaging import Evaluator
+        from nodebased import flip3d
+        d = self.graph()
+        evaluator = Evaluator()
+        for frame in (3, 7):
+            before = flip3d.SOLVER_STATS["steps"]
+            none, quick = evaluator.evaluate_raster(d.document, "surface", frame=frame, typed=True, return_digest=True,
+                                                    digest_only=True)
+            self.assertIsNone(none)
+            self.assertEqual(flip3d.SOLVER_STATS["steps"], before, "the digest solved the liquid")
+            geometry, full = evaluator.evaluate_raster(d.document, "surface", frame=frame, typed=True, return_digest=True)
+            self.assertEqual(quick, full)
+            self.assertGreater(flip3d.SOLVER_STATS["steps"], before)
+
+    def test_a_smoke_that_collides_with_the_surface_does_not_mesh_the_range_to_solve_a_frame(self):
+        from nodebased.imaging import Evaluator
+        from nodebased import liquid_surface
+        d = self.graph()
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "gsrc", "type": "FluidSource3D", "params": {"src_center_y": 0.2, "src_radius": 0.1}},
+            {"op": "create", "id": "col", "type": "FluidCollide3D", "params": {"animated": 1}},
+            {"op": "connect", "id": "col", "input": "fluid", "source": "gsrc"},
+            {"op": "connect", "id": "col", "input": "geometry", "source": "surface"},
+            {"op": "create", "id": "gas", "type": "FluidSolver3D", "params": {
+                "division_size": 0.1, "bounds_min_x": -0.5, "bounds_max_x": 0.5, "bounds_min_z": -0.5, "bounds_max_z": 0.5,
+                "pressure": "cpu", "max_iterations": 20, "bounds_max_y": 1.2}},
+            {"op": "connect", "id": "gas", "input": "fluid", "source": "col"}]})
+        calls = {"n": 0}
+        original = liquid_surface.marching_tetrahedra
+
+        def counting(*args, **kwargs):
+            calls["n"] += 1
+            return original(*args, **kwargs)
+        liquid_surface.marching_tetrahedra = counting
+        try:
+            Evaluator().evaluate_raster(d.document, "gas", frame=2, typed=True)
+        finally:
+            liquid_surface.marching_tetrahedra = original
+        # the collider samples the surface at frames 2 and 3 (and the solves of 1 and 2 sample theirs): a handful, not
+        # one per frame of the 12-frame range for every solve
+        self.assertLessEqual(calls["n"], 8)
+
+
 if __name__ == "__main__":
     unittest.main()
