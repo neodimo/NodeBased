@@ -1,5 +1,37 @@
 ## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (9:05 PM on 2026-10-06 PDT)
+
+`main` moved `0236e8f` -> `d8161bb` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 101 tests in 70.375 s, OK. Full suite on
+the stacked tip `d8161bb` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1006-1945.log`, started 7:45 PM): **Ran 4460 tests in 4546.907 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step Y1 of 3: a time row an artist reads at a glance.** Commits:
+  - `a14b90c` docs: Lane 2 step Y1 note (time row)
+  - `bd28d04` Time row reads like a compositor's: Frame first and largest, labelled In and Out, one edit per typed value; inverted range refused
+  Diff: 4 files changed, 300 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step T1 of 3: light linking everywhere: splats, instances, liquids, particles and smoke on the GPU.** Commits:
+  - `53245fd` docs: record Lane 4 Rendering 8 step T1 (light linking everywhere) in TASKLOG, STATUS and state
+  - `1388ee4` Light links: meshes that exclude a light stop shadowing smoke from it (CPU and GPU raymarch); docs list every object kind as covered, with the bundled copy (Lane 4 Rendering 8 step T1, part 3)
+  - `a89cd0d` Light links on smoke in the CPU and GPU path tracers (volume owner of each collision, shadow rays skip excluding volumes), lit particles through the path tracer, viewport smoke test (Lane 4 Rendering 8 step T1, part 2)
+  - `073fdec` Light links on liquid glints, lit particle sets (whitewater included), and smoke volumes: link fields and knobs, CPU and GPU raster, ray-traced and viewport renderers read them, excluded lights cast no shadow from them (Lane 4 Rendering 8 step T1, part 2)
+  - `6006fa9` GPU raster and ray-traced modes honour light links on splat sets and instance sets: per-caster and per-instance light masks read by the shadow and shading passes, no CPU fallback (Lane 4 Rendering 8 step T1, part 1)
+  Diff: 22 files changed, 970 insertions(+), 166 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step P1 of 2: PointsTo3D and Reconcile3D: tracked 2D points to 3D positions and back (finish 1).** Commits:
+  - `a39c12d` feat: finish PointsTo3D and Reconcile3D workflow
+  Diff: 7 files changed, 98 insertions(+), 14 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Splat sets and instance sets with a light link now render in the GPU raster and ray-traced modes (a per-caster and per-instance light mask read by the shadow and shading passes); `gpu3d.render` no longer raises for them. Liquid glints (and the solids their rays hit), lit `pbr` particle sets (whitewater included) and smoke volumes read links too, with new `ParticleInstance.light_link` and `Volume.light_link` fields and `Lights` / `Light names or groups` knobs on `ParticleRender3D`, `Plume3D`, `ReadVDB3D` and `FluidCache3D` (not the solver nodes, whose params key the solve). Read by the CPU raster and ray-traced modes, the GPU modes, the viewport and both path tracers; a mesh that excludes a light no longer shadows smoke from it. Targeted: 1,671 tests OK on the branch; new modules clean on the RTX 3080 Ti, AMD Radeon 8060S and llvmpipe. Details: `docs/3D_FOUNDATION.md` "Light groups, light linking and the LightMixer" and the Lane 4 step notes.
 
 ## 2026-10-06 — Lane 4 Rendering 7 step S3: artist-facing mixed-scene render gate (4:33 PM PDT)
