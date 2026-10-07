@@ -6,12 +6,15 @@ kernel disagree about the sign of the inverse map still renders *something*. Eac
 asserted numerically rather than by eyeball.
 """
 import unittest
+import tempfile
+from pathlib import Path
 
 import numpy as np
 
 from nodebased import roto, shapes, tiers, tiles, tracker
 from nodebased.tileexec import TileExecutor
-from nodebased.core import SCHEMA_VERSION, Dispatcher, empty_document, upgrade_document, validate
+from nodebased.core import (SCHEMA_VERSION, Dispatcher, atomic_save, empty_document,
+                            load_document, upgrade_document, validate)
 from nodebased.imaging import Evaluator
 
 
@@ -244,6 +247,27 @@ class NodeDataSchemaTests(unittest.TestCase):
         validate(d.document)
         d.execute({"op": "undo"})
         self.assertNotIn("r", d.document["node_data"])
+
+    def test_save_and_load_round_trip_every_shape_and_tracker_key(self):
+        d = Dispatcher(empty_document())
+        shape = square(4, 5, 30, 35, opacity=keyed(0.5, [(1, 0.5), (24, 0.8)], "smooth"),
+                       feather=keyed(1.0, [(1, 1.0), (24, 3.0)]),
+                       color=[keyed(1.0, [(1, 1.0), (24, 0.2)]), 0.25, 0.5, 1.0],
+                       track_link={"tracker_id": "t", "track_name": "feature"})
+        for point in shape["points"]:
+            point["x"] = keyed(point["x"], [(1, point["x"]), (24, point["x"] + 5)])
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "r", "type": "Roto"},
+            {"op": "create", "id": "t", "type": "Tracker"},
+            {"op": "set_tracks", "id": "t", "tracks": [track("feature",
+                keyed(10.0, [(1, 10.0), (24, 20.0)]), keyed(11.0, [(1, 11.0), (24, 15.0)]))]},
+            {"op": "set_shapes", "id": "r", "shapes": [shape]}]})
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "roto.nodebased"
+            atomic_save(path, d.document)
+            restored = load_document(path)
+        self.assertEqual(restored["node_data"], d.document["node_data"])
+        self.assertEqual(restored["version"], SCHEMA_VERSION)
 
     def test_an_empty_list_clears_the_entry_rather_than_storing_a_husk(self):
         d = Dispatcher(empty_document())
