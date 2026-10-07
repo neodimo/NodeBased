@@ -1,3 +1,5 @@
+# Lane 6 N1 — liquids on the GPU end to end
+
 # Lane 4 Rendering 7 step S3 — artist-facing mixed-scene render gate
 
 Complete on `openclaw/nb-3d-astra-lane`: `examples/mixed_scene` renders through the application's Write node into one float EXR
@@ -7,7 +9,12 @@ there and run on the GPU with an opaque pane. Not run: Windows, CI. Integration 
 
 # Lane 6 N1 — measuring the warmed liquid step
 
-The profiling flag and phase/copy counters are present in the worktree. The RTX 3080 Ti and shared GPU lock are free, so I am running the baseline now, then I will prioritize the measured bottleneck and implement the resident path. No timing is claimed yet.
+Complete on `openclaw/nb-fluids-spike`: `FluidLiquidSolver3D` with `pressure = resident` keeps particles, the MAC grid, the
+extrapolation and the surface field on the card between substeps. A warmed 128-cubed substep measures 31.0 ms on the RTX 3080 Ti
+(the 100 ms bar and the 40 ms goal both met), 55.7 ms on the AMD Radeon 8060S and 429.4 ms on llvmpipe; the surface level set
+takes 10.4 ms on the card against 6,857.3 ms on the CPU. Tests (CPU agreement, bit-identical restart, cancel inside a substep,
+kernels, level set) passed on all three adapters. Opt-in; viscosity, surface tension, a narrow band and auto-resize fall back to
+`gpu` with a stated reason. Not run: Windows, the full suite. Integration is pending.
 
 # Lane 4 Rendering 7 step S2 — transparent meshes with splats on the GPU
 
