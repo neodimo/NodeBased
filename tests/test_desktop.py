@@ -417,7 +417,7 @@ class DesktopTests(unittest.TestCase):
         identity = DisplayCache.identity(document, document['view'], 2)
         w.display_cache.put((identity, frame), np.zeros((4, 4, 4), dtype=np.float32))
         seen = {}
-        w.frame_slider.set_marks = lambda cached, keyed: seen.update(cached=set(cached))
+        w.frame_slider.set_marks = lambda cached, keyed, *rest, **kw: seen.update(cached=set(cached))
         w.refresh_timeline_marks()
         self.assertIn(frame, seen['cached'])
 
