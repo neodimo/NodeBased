@@ -1650,10 +1650,39 @@ buffer is too big for it.
   so fire lights meshes, splats and smoke (tested: a flame above a floor and above a splat sheet, warm coloured, falling
   with distance). Smoke is a medium a ray can be refracted into, so it is seen through glass (tested at
   `(1 - F) / (1 + F)`) and in mirrors.
-- **Limits.** A box is the whole majorant, so a large box around a small plume costs many null collisions (a
-  hierarchical majorant grid is the fix, not built); no motion blur; the data passes other than `depth` do not see
-  volumes (`depth` takes the raymarch's first sample at its density threshold, merged with the surfaces' depth); the
-  smoke does not take `volume_multi_scatter` or `volume_fire_light`.
+- **Majorant grid** (`ptvolume.majorant_levels`, lane 4 step T3 part 1). The bound a tentative collision is drawn
+  against is the local one, from two levels built once per volume and shared by both tracers: a fine grid of 16-voxel
+  cells whose value is the largest density in the cell grown by trilinear's one-voxel halo (so it bounds every sample
+  inside the cell), and a coarse grid of 4 by 4 by 4 fine cells above it. A ray in a coarse cell with nothing in it
+  crosses it in one stride; otherwise it steps cell by cell and draws its collisions against the fine cell's bound, and
+  a candidate that falls past the end of its cell moves the ray to the cell edge and draws again (the process is
+  memoryless, so the estimate is unchanged). A sparse volume's grid is built from its stored tiles. An empty cell is
+  exactly zero. Fire's track-length estimator divides by the same local bound. `ptvolume.ENABLE_SKIP` (and
+  `gpupathtrace.ENABLE_VOLUME_SKIP`) switches back to the whole box. **Measured** (`tools/benchmark_volume_majorant.py`,
+  2026-10-07): a smooth plume whose density fills 10.1% of its cube, 128 and 256 cubed, camera paths of four bounces,
+  collisions per camera path (the GPU counts them in a debug variant of the shader, `COUNT_COLLISIONS`, and agrees with the
+  CPU reference to the table's rounding):
+
+  | Grid | Majorant | Tentative | Real | Null | Hops | CPU ms/sample | RTX 3080 Ti | AMD Radeon 8060S | llvmpipe |
+  |---|---|---|---|---|---|---|---|---|---|
+  | 128 cubed | box | 112.8 | 0.19 | 112.6 | 0 | 34.5 | 1.32 | 2.28 | 11.4 |
+  | 128 cubed | fine grid | 3.9 | 0.19 | 3.8 | 2.9 | 5.7 | 0.83 | 0.66 | 2.2 |
+  | 128 cubed | two levels | 3.9 | 0.19 | 3.8 | 2.9 | 5.7 | 0.92 | 0.64 | 2.2 |
+  | 256 cubed | box | 112.9 | 0.19 | 112.7 | 0 | 36.0 | 2.67 | 9.5 | 13.8 |
+  | 256 cubed | fine grid | 1.3 | 0.19 | 1.1 | 5.9 | 3.8 | 0.86 | 0.62 | 1.9 |
+  | 256 cubed | two levels | 1.2 | 0.18 | 1.1 | 2.3 | 4.4 | 0.40 | 0.62 | 1.6 |
+
+  The null collisions fall from 113 to 4 (128 cubed) and about 1 (256 cubed) per path. The time per sample with the two
+  levels is, against the box's: 17% (128 cubed) and 12% (256 cubed) on the CPU; 70% and 15% on the RTX 3080 Ti; 28% and 7%
+  on the AMD card; 19% and 12% on llvmpipe (CPU: 24 by 24 pixels; GPU: 256 by 256 pixels, quietest of four runs, warmed).
+  The coarse level halves the hops at 256 cubed. Over the fine grid alone it gains 0.46 ms on the NVIDIA card and 0.3 ms on
+  llvmpipe at 256 cubed, is the same within noise on the AMD card, and costs a little where there is nothing to skip (128
+  cubed on the NVIDIA card, 256 cubed on the CPU). The NVIDIA column was taken at 5:23 to 5:25 AM, just before that card
+  stopped answering Vulkan (a driver fault, Xid 62, at 5:25 AM) and could not be repeated; the CPU, AMD and llvmpipe columns
+  were measured after it.
+- **Limits.** No motion blur; the data passes other than `depth` do not see volumes (`depth` takes the raymarch's first
+  sample at its density threshold, merged with the surfaces' depth); the smoke does not take `volume_multi_scatter` or
+  `volume_fire_light`.
 
 **On the GPU** (`gpupathtrace.py`; the same integrator, the same random numbers, so the card and the reference agree
 statistically, not bit for bit).
@@ -1709,8 +1738,8 @@ statistically, not bit for bit).
   buffer over the adapter's binding limit is an error that `auto` also answers with the reference; a band is
   an eighth of the paths of a mesh-only one for scenes with splats or smoke (`SOFT_SLOWDOWN`, 65,000 paths) so a
   submission stays short; the smoke's
-  majorant is still the whole box (a hierarchical grid is the fix); the volume knobs `volume_multi_scatter` and
-  `volume_fire_light` are ignored as on the reference.
+  majorant is the two-level grid above (header vec4 7 holds the fine grid's offset and cell edge, vec4 9 the coarse grid's
+  and its ratio); the volume knobs `volume_multi_scatter` and `volume_fire_light` are ignored as on the reference.
 - **Which adapters run splats and smoke on the GPU** (`soft_supported`, lane L4 step G). The 0.31.0 tag showed the
   splats-and-volumes shader variant giving wrong pictures on an AMD integrated GPU (a mis-shaded albedo and a beauty
   pass about ten times too dark where a splat cloud and smoke shared a scene) and on Microsoft's software driver

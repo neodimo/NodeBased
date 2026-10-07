@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from nodebased import gpu3d, gpupathtrace, pathtrace as pt, scene3d as s, volumerender as vr
+from nodebased import gpu3d, gpupathtrace, pathtrace as pt, ptvolume, scene3d as s, volumerender as vr
 from nodebased.sparsevol import SparseField, SparseGrid
 from tests.test_3d_pathtrace_gpu_soft import READY, FLOOR, SUN, CAMERA
 from tools import benchmark_sparse_gpu as bench
@@ -68,8 +68,8 @@ class Majorants(unittest.TestCase):
                 density[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]] = rng.random([h - l for l, h in zip(lo, hi)]) + 0.1
             grid = SparseGrid.from_dense({"density": density}, rest={"density": rest})
             np.testing.assert_array_equal(
-                gpupathtrace._coarse_volume_majorants_sparse(grid, "density", 3.5),
-                gpupathtrace._coarse_volume_majorants(grid.to_dense()["density"], 3.5), err_msg=str(shape))
+                ptvolume.coarse_majorants_sparse(grid, "density", 3.5),
+                ptvolume.coarse_majorants(grid.to_dense()["density"], 3.5), err_msg=str(shape))
 
 
 @unittest.skipUnless(READY, "no wgpu adapter cleared for splats and smoke in the path tracer")

@@ -35,8 +35,8 @@ ADAPTIVE_SPARSE_PIXELS = 1 << 17         # at most this many open pixels get the
 ADAPTIVE_SPARSE_THREADS = 1 << 21        # and at most this many (pixel, sample) threads: 64 MiB of per-sample sums after the image
 ADAPTIVE_PACE = 4                        # passes the host lets the card run ahead before it waits (it waits every pass when asked for progress)
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
+COUNT_COLLISIONS = False   # compile the volume counting variant: a render's rgb is the mean (tentative, real, region hops) per path
 ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
-VOLUME_MAJORANT_TILE = 16
 STACK = 64
 TLAS_STACK = 32
 WG_SIZE = 8
@@ -47,7 +47,7 @@ _OUTPUT_CODES = {"rgba": 0, "diffuse": 1, "specular": 2, "emission": 3, "albedo"
 _KIND_CODES = {"Directional": 0, "Point": 1, "Spot": 2, "Rect": 3, "Disc": 4, "Sphere": 5}
 LIGHT_VECS = 6
 SPLAT_VECS = 9
-VOL_VECS = 9
+VOL_VECS = 10
 SHAPE_VECS = 13
 TRI_VECS = 8
 
@@ -877,13 +877,14 @@ fn splat_shape(i: u32) -> Shape {
 //#endif
 //#if VOLUMES
 // ------------------------------------------------------------------------------------------------ smoke and fire
-// Volumes are delta tracked (see ptvolume.py). Headers (9 vec4 each) and grids live in the `env` buffer:
+// Volumes are delta tracked (see ptvolume.py). Headers (10 vec4 each) and grids live in the `env` buffer:
 // 0 box min + voxel size, 1 box max + majorant, 2..4 world-to-object rows, 5 grid size, 6 the grid offsets as
 // ordinary float values (density low 24 bits, temperature low 24 bits or -1 for none, density high bits,
 // temperature high bits), 7 coarse-majorant offset low/high and tile edge, 8 a sparse volume's tile index offset
-// low/high, 1 when the grids are tile atlases, and the value of an empty tile; see splat_info for why
+// low/high, 1 when the grids are tile atlases, and the value of an empty tile, 9 the coarse majorant offset low/high and the
+// number of fine cells along a coarse cell; see splat_info for why
 // integer offsets are not raw bit patterns.
-const VOL_VECS: u32 = 9u;
+const VOL_VECS: u32 = 10u;
 const MAX_COLLISIONS: u32 = 4096u;
 const VOL_ABSORB_DIM: u32 = 54u;
 const FIRE_KNOTS: f32 = 64.0;
@@ -892,6 +893,11 @@ fn vh(vi: u32, k: u32) -> vec4<f32> { return env[params.h.y + vi * VOL_VECS + k]
 // The volume the last real collision of `vol_flight_all` happened in. Light linking: header vec4 7's `.w` is the bit mask of
 // the lights that volume excludes (the packed light numbering): they do not scatter in it and it casts no shadow from them.
 var<private> hit_volume: u32 = 0u;
+//#if COUNT
+// Debug variant (`COUNT_COLLISIONS`): the tentative collisions, real collisions and region hops of a path, summed into
+// the pixel instead of its colour (tools/benchmark_volume_majorant.py).
+var<private> vol_counts: vec3<f32> = vec3<f32>(0.0);
+//#endif
 //#if LINKS
 fn vol_reaches(bit: u32) -> bool { return !excl_bit(u32(vh(hit_volume, 7u).w), bit); }
 //#else
@@ -971,29 +977,46 @@ fn vol_uniform(key: u32, turn: u32, vi: u32, k: u32, slot: u32) -> f32 {
   return rnd(pcg(key + (turn * 7919u + vi * 104729u + 12345u)), k * 4u + slot);
 }
 
+// The grid-space world distance at which a ray leaves the cell `cell` of `size` voxels it is in at `position`
+// (a face already behind the ray, or within 1e-6 of it, is ignored); `t1` is the cap.
+fn vol_leave(cell: vec3<i32>, size: i32, bmin: vec3<f32>, voxel: f32, oo: vec3<f32>, dd: vec3<f32>, position: f32,
+             t1: f32) -> f32 {
+  var exit = t1;
+  for (var axis = 0u; axis < 3u; axis++) {
+    if (abs(dd[axis]) > 1e-12) {
+      let side = select(cell[axis], cell[axis] + 1, dd[axis] > 0.0);
+      let boundary = bmin[axis] + f32(side * size) * voxel;
+      let next = (boundary - oo[axis]) / dd[axis];
+      if (next > position + 1e-6) { exit = min(exit, next); }
+    }
+  }
+  return exit;
+}
+
+// The extinction bound of the region the ray is in at `position` and the distance at which it leaves that region: two
+// levels (header vec4 7 holds the fine grid and its cell edge, vec4 9 the coarse grid over blocks of fine cells); an
+// empty coarse cell is crossed in one stride, otherwise the fine cell sets both.
 fn vol_majorant(vi: u32, oo: vec3<f32>, dd: vec3<f32>, position: f32, t1: f32)
     -> vec2<f32> {
   let h = vh(vi, 7u);
   if (h.x < 0.0) { return vec2<f32>(vh(vi, 1u).w, t1); }
   let edge = i32(h.z);
   let dims = vec3<i32>(vh(vi, 5u).xyz);
-  let coarse = (dims + vec3<i32>(edge - 1)) / edge;
+  let fine_dims = (dims + vec3<i32>(edge - 1)) / edge;
   let bmin = vh(vi, 0u).xyz;
   let voxel = vh(vi, 0u).w;
   let q = (oo + dd * position - bmin) / voxel;
-  let cell = clamp(vec3<i32>(floor(q / f32(edge))), vec3<i32>(0), coarse - vec3<i32>(1));
-  let base = u32(h.x) + (u32(h.y) << 24u);
-  let mu = fenv(base + u32((cell.x * coarse.y + cell.y) * coarse.z + cell.z));
-  var exit = t1;
-  for (var axis = 0u; axis < 3u; axis++) {
-    if (abs(dd[axis]) > 1e-12) {
-      let side = select(cell[axis], cell[axis] + 1, dd[axis] > 0.0);
-      let boundary = bmin[axis] + f32(side * edge) * voxel;
-      let next = (boundary - oo[axis]) / dd[axis];
-      if (next > position + 1e-6) { exit = min(exit, next); }
-    }
+  let cell = clamp(vec3<i32>(floor(q / f32(edge))), vec3<i32>(0), fine_dims - vec3<i32>(1));
+  let hs = vh(vi, 9u);
+  let ratio = i32(hs.z);
+  let sup_dims = (fine_dims + vec3<i32>(ratio - 1)) / ratio;
+  let sup = cell / vec3<i32>(ratio);
+  let sup_mu = fenv(u32(hs.x) + (u32(hs.y) << 24u) + u32((sup.x * sup_dims.y + sup.y) * sup_dims.z + sup.z));
+  if (sup_mu <= 0.0) {
+    return vec2<f32>(0.0, vol_leave(sup, edge * ratio, bmin, voxel, oo, dd, position, t1));
   }
-  return vec2<f32>(mu, exit);
+  let mu = fenv(u32(h.x) + (u32(h.y) << 24u) + u32((cell.x * fine_dims.y + cell.y) * fine_dims.z + cell.z));
+  return vec2<f32>(mu, vol_leave(cell, edge, bmin, voxel, oo, dd, position, t1));
 }
 
 fn fire_radiance(kelvin: f32) -> vec3<f32> {
@@ -1028,6 +1051,9 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
     let local = vol_majorant(vi, oo, dd, position, t1);
     let mu = local.x;
     if (mu <= 0.0) {
+//#if COUNT
+      vol_counts.z += 1.0;
+//#endif
       position = local.y + 1e-5;
       if (position >= t1) { break; }
       continue;
@@ -1035,12 +1061,18 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
     let u_step = vol_uniform(key, turn, vi, k, 0u);
     let candidate = position - log(1.0 - min(u_step, 1.0 - 1e-7)) / mu;
     if (candidate >= local.y) {
+//#if COUNT
+      vol_counts.z += 1.0;
+//#endif
       position = local.y + 1e-5;
       if (position >= t1) { break; }
       continue;
     }
     position = candidate;
     if (position >= t1) { break; }
+//#if COUNT
+    vol_counts.x += 1.0;
+//#endif
     let g = (oo + dd * position - bmin) / voxel - vec3<f32>(0.5);
     let sigma = params.vp0.w * trilinear(bases.x, dims, sp, g);
     if (want_glow && has_temp) {
@@ -1049,7 +1081,12 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
         *glow += fire_radiance(kelvin) * (params.vp2.z * sigma / mu);
       }
     }
-    if (vol_uniform(key, turn, vi, k, 1u) < params.vp0.x * sigma / mu) { return position; }
+    if (vol_uniform(key, turn, vi, k, 1u) < params.vp0.x * sigma / mu) {
+//#if COUNT
+      vol_counts.y += 1.0;
+//#endif
+      return position;
+    }
   }
   return INF;
 }
@@ -1830,6 +1867,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(workgroup_id) wi
     var acc = no_acc;
     var first = no_first;
     first.shape = -1;
+//#if COUNT
+    vol_counts = vec3<f32>(0.0);
+//#endif
     trace(key, origin, dv / c, c, &acc, &first);
     if (code >= 7u) {
       var value = vec3<f32>(0.0);
@@ -1848,7 +1888,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(workgroup_id) wi
       return;
     }
     let total = total_of(acc);
+//#if COUNT
+    rgb += vol_counts;
+//#else
     rgb += channel_of(acc, code);
+//#endif
     alpha += acc.alpha;
     let lum = dot(total, vec3<f32>(0.2126, 0.7152, 0.0722));
     lum_sum += lum;
@@ -2039,19 +2083,20 @@ def _preprocess(code, flags):
     return "\n".join(out)
 
 
-def shader_source(splats=False, volumes=False, links=False, sparse=False):
+def shader_source(splats=False, volumes=False, links=False, sparse=False, count=False):
     """The WGSL for a scene kind: the splat and smoke code costs registers whether it runs or not, so a mesh-only scene
     is compiled without any of it. The splats-and-volumes variant also compiles with a smaller workgroup
     (`_wg_size`): the same code at 8x8 miscompiles on AMD."""
     code = _preprocess(_SHADER, {"SPLATS": bool(splats), "VOLUMES": bool(volumes), "SOFT": bool(splats or volumes),
-                                 "LINKS": bool(links), "SPARSE": bool(sparse and volumes)})
+                                 "LINKS": bool(links), "SPARSE": bool(sparse and volumes),
+                                 "COUNT": bool(count and volumes)})
     code = code.replace("SPLAT_ID", "splat_id" if splats else "-1")
     return code.replace("WG_SIZE", str(_wg_size(splats, volumes, links)))
 
 
 def _pipeline(state, splats=False, volumes=False, links=False, sparse=False):
     cache = state.setdefault("_gpupt_pipelines", {})
-    key = (bool(splats), bool(volumes), bool(links), bool(sparse and volumes))
+    key = (bool(splats), bool(volumes), bool(links), bool(sparse and volumes), bool(COUNT_COLLISIONS and volumes))
     if key not in cache:
         device = state["device"]
         cache[key] = device.create_compute_pipeline(layout="auto", compute={
@@ -2222,62 +2267,6 @@ def _u4_as_f4(*values):
     return np.array(values, "u4").view("f4")
 
 
-def _coarse_volume_majorants(density, global_mu, tile=VOLUME_MAJORANT_TILE):
-    """Conservative extinction bound per coarse cell, with trilinear's one-voxel halo."""
-    shape = density.shape
-    coarse = tuple((n + tile - 1) // tile for n in shape)
-    peak = max(float(np.max(density)), 1e-20)
-    out = np.zeros(coarse, np.float32)
-    for x, y, z in np.ndindex(coarse):
-        starts = (x * tile, y * tile, z * tile)
-        slices = tuple(slice(max(0, start - 1), min(shape[i], start + tile + 1))
-                       for i, start in enumerate(starts))
-        out[x, y, z] = np.float32(global_mu * float(np.max(density[slices])) / peak)
-    # Round upward so float32 packing cannot underbound the source's peak.
-    return np.nextafter(out, np.float32(np.inf))
-
-
-def _coarse_volume_majorants_sparse(grid, name, global_mu, tile=VOLUME_MAJORANT_TILE):
-    """`_coarse_volume_majorants` of a sparse field, from its stored tiles alone: the same bound per coarse cell (the cell
-    grown by trilinear's one-voxel halo), with the rest value counted wherever the halo window reaches an empty tile."""
-    shape = grid.shape
-    edge = grid.tile
-    coarse = tuple((n + tile - 1) // tile for n in shape)
-    peak = max(grid.max(name), 1e-20)
-    best = np.full(coarse, -np.inf)
-    covered = np.zeros(coarse, np.int64)
-    window = np.ones(coarse, np.int64)
-    for axis, n in enumerate(shape):       # the voxels each cell's window holds along one axis
-        starts = np.arange(coarse[axis]) * tile
-        length = np.minimum(n, starts + tile + 1) - np.maximum(0, starts - 1)
-        window = window * length.reshape([-1 if a == axis else 1 for a in range(3)])
-    block = grid.data[name]
-    for index, coord in enumerate(grid.coords):
-        lo = coord.astype(np.int64) * edge
-        reach = []
-        for axis in range(3):
-            first = max(0, int(np.ceil((lo[axis] - tile - 1) / tile)))        # cells whose window can touch this tile
-            last = min(coarse[axis] - 1, int((lo[axis] + edge) // tile))
-            reach.append(range(first, last + 1))
-        for kx in reach[0]:
-            for ky in reach[1]:
-                for kz in reach[2]:
-                    k = (kx, ky, kz)
-                    w_lo = [max(0, c * tile - 1) for c in k]
-                    w_hi = [min(shape[a], c * tile + tile + 1) for a, c in enumerate(k)]
-                    a_lo = [max(int(lo[a]), w_lo[a]) for a in range(3)]
-                    a_hi = [min(int(lo[a]) + edge, w_hi[a]) for a in range(3)]
-                    if any(h <= l for l, h in zip(a_lo, a_hi)):
-                        continue
-                    part = block[index, a_lo[0] - lo[0]:a_hi[0] - lo[0], a_lo[1] - lo[1]:a_hi[1] - lo[1],
-                                 a_lo[2] - lo[2]:a_hi[2] - lo[2]]
-                    best[k] = max(best[k], float(np.max(part)))
-                    covered[k] += part.size
-    best = np.where(covered < window, np.maximum(best, grid.rest[name]), best)
-    out = (global_mu * best / peak).astype(np.float32)
-    return np.nextafter(out, np.float32(np.inf))
-
-
 def _sparse_volume_grid(volume):
     """The tile grid a sparse volume's density and temperature are read from; Unsupported when the shader cannot index it."""
     grid = volume.sparse
@@ -2382,11 +2371,11 @@ def _pack_aux(packed, ps):
                 density = add_floats(np.ascontiguousarray(grid.data["density"], "f4"))
             else:
                 density = add_floats(np.ascontiguousarray(volume.density, "f4"))
-            if ENABLE_VOLUME_SKIP:
-                coarse = (_coarse_volume_majorants_sparse(grid, "density", smoke.majorant[vi]) if sparse else
-                          _coarse_volume_majorants(volume.density, smoke.majorant[vi]))
-                coarse_base = add_floats(coarse)
-                headers[vi, 7] = (coarse_base & 0xFFFFFF, coarse_base >> 24, VOLUME_MAJORANT_TILE, 0)
+            levels = smoke.levels(vi) if ENABLE_VOLUME_SKIP else None
+            if levels is not None:
+                fine_base, coarse_base = add_floats(levels.fine), add_floats(levels.coarse)
+                headers[vi, 7] = (fine_base & 0xFFFFFF, fine_base >> 24, levels.tile, 0)
+                headers[vi, 9] = (coarse_base & 0xFFFFFF, coarse_base >> 24, levels.ratio, 0)
             else:
                 headers[vi, 7, 0] = -1.0
             if smoke.excl is not None:

@@ -32,14 +32,13 @@ single scattering event lit by a light of intensity `I` gives `I / 4` per unit o
 of a thick cloud's brightness comes from real multiple scattering. A scattering-only cloud of any shape in a
 uniform sky of radiance 1 renders as 1.
 
-Limits, stated: a volume box is the whole majorant, so a large box holding a small plume costs many null
-collisions; motion blur, the fire-light knob and the multiple-scattering knobs are not used; smoke does not
+Limits, stated: motion blur, the fire-light knob and the multiple-scattering knobs are not used; smoke does not
 light itself through `volume_multi_scatter` but through the tracer's real bounces, so it needs `max_bounces`
 above 1 to show more than single scattering; the data passes other than `depth` do not see volumes, and `depth` is the
 raymarch's first sample whose scaled density reaches `VolumeSettings.depth_threshold` (the rule `scene3d` merges).
 """
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -48,6 +47,9 @@ from .volumerender import _trilinear
 
 PI = math.pi
 MAX_COLLISIONS = 4096       # tentative collisions one ray may take through one volume before it is let through
+ENABLE_SKIP = True          # False keeps the box as the whole majorant (the baseline the measurements compare against)
+MAJORANT_TILE = 16          # voxels along one edge of a cell of the fine majorant grid
+MAJORANT_RATIO = 4          # fine cells along one edge of a cell of the coarse level above it
 
 
 @dataclass
@@ -63,9 +65,19 @@ class VolumeLayer:
     lo: np.ndarray             # world bounds of every box
     hi: np.ndarray
     excl: object = None        # light linking: per volume, the bit mask of the lights it excludes (None: no volume excludes any)
+    counts: dict = field(default_factory=lambda: {"tentative": 0, "real": 0, "hops": 0})   # free flight's tallies
+    _levels: dict = field(default_factory=dict)
 
     def __len__(self):
         return len(self.preps)
+
+    def levels(self, vi):
+        """The `MajorantLevels` of volume `vi` (built on first use), or None when skipping is off or the volume is empty."""
+        if not ENABLE_SKIP or self.max_density[vi] <= 0:
+            return None
+        if vi not in self._levels:
+            self._levels[vi] = majorant_levels(self.preps[vi].volume, self.majorant[vi])
+        return self._levels[vi]
 
 
 def build(scene, settings=None):
@@ -107,6 +119,130 @@ def _clip(prep, o, d):
     return np.maximum(near, 0.0), far
 
 
+def _window_max(a, axis, tile):
+    """Max over each coarse cell's window along `axis`: the cell's `tile` voxels and one more voxel on each side."""
+    n = a.shape[axis]
+    cells = -(-n // tile)
+    first = np.arange(cells) * tile
+    bounds = np.empty(2 * cells, np.intp)
+    bounds[0::2], bounds[1::2] = np.maximum(first - 1, 0), np.minimum(first + tile + 1, n)
+    pad = list(a.shape)
+    pad[axis] = 1
+    padded = np.concatenate((a, np.zeros(pad, a.dtype)), axis=axis)       # reduceat wants every index below the length
+    return np.take(np.maximum.reduceat(padded, bounds, axis=axis), np.arange(0, 2 * cells, 2), axis=axis)
+
+
+def coarse_majorants(density, global_mu, tile=None):
+    """Conservative extinction bound per coarse cell of `tile` voxels (default `MAJORANT_TILE`): the global bound
+    `global_mu` scaled by the largest density in the cell grown by trilinear's one-voxel halo, over the peak."""
+    tile = tile or MAJORANT_TILE
+    density = np.asarray(density)
+    peak = max(float(np.max(density)), 1e-20)
+    best = density
+    for axis in range(3):
+        best = _window_max(best, axis, tile)
+    out = (global_mu * best.astype(np.float64) / peak).astype(np.float32)
+    # Round upward so float32 packing cannot underbound the source's peak.
+    return np.where(out > 0, np.nextafter(out, np.float32(np.inf)), out)      # an empty cell stays exactly zero
+
+
+def coarse_majorants_sparse(grid, name, global_mu, tile=None):
+    """`_coarse_volume_majorants` of a sparse field, from its stored tiles alone: the same bound per coarse cell (the cell
+    grown by trilinear's one-voxel halo), with the rest value counted wherever the halo window reaches an empty tile."""
+    tile = tile or MAJORANT_TILE
+    shape = grid.shape
+    edge = grid.tile
+    coarse = tuple((n + tile - 1) // tile for n in shape)
+    peak = max(grid.max(name), 1e-20)
+    best = np.full(coarse, -np.inf)
+    covered = np.zeros(coarse, np.int64)
+    window = np.ones(coarse, np.int64)
+    for axis, n in enumerate(shape):       # the voxels each cell's window holds along one axis
+        starts = np.arange(coarse[axis]) * tile
+        length = np.minimum(n, starts + tile + 1) - np.maximum(0, starts - 1)
+        window = window * length.reshape([-1 if a == axis else 1 for a in range(3)])
+    block = grid.data[name]
+    for index, coord in enumerate(grid.coords):
+        lo = coord.astype(np.int64) * edge
+        reach = []
+        for axis in range(3):
+            first = max(0, int(np.ceil((lo[axis] - tile - 1) / tile)))        # cells whose window can touch this tile
+            last = min(coarse[axis] - 1, int((lo[axis] + edge) // tile))
+            reach.append(range(first, last + 1))
+        for kx in reach[0]:
+            for ky in reach[1]:
+                for kz in reach[2]:
+                    k = (kx, ky, kz)
+                    w_lo = [max(0, c * tile - 1) for c in k]
+                    w_hi = [min(shape[a], c * tile + tile + 1) for a, c in enumerate(k)]
+                    a_lo = [max(int(lo[a]), w_lo[a]) for a in range(3)]
+                    a_hi = [min(int(lo[a]) + edge, w_hi[a]) for a in range(3)]
+                    if any(h <= l for l, h in zip(a_lo, a_hi)):
+                        continue
+                    part = block[index, a_lo[0] - lo[0]:a_hi[0] - lo[0], a_lo[1] - lo[1]:a_hi[1] - lo[1],
+                                 a_lo[2] - lo[2]:a_hi[2] - lo[2]]
+                    best[k] = max(best[k], float(np.max(part)))
+                    covered[k] += part.size
+    best = np.where(covered < window, np.maximum(best, grid.rest[name]), best)
+    out = (global_mu * best / peak).astype(np.float32)
+    return np.where(out > 0, np.nextafter(out, np.float32(np.inf)), out)      # an empty cell stays exactly zero
+
+
+@dataclass
+class MajorantLevels:
+    """A two-level bound on a volume's extinction. `fine[i, j, k]` bounds every trilinear sample whose point lies in the
+    cube of `tile` voxels at cell (i, j, k) (the cube grown by the one-voxel halo); `coarse` bounds the `ratio` cubed
+    fine cells each of its cells holds, so a ray crosses empty space in strides of `tile * ratio` voxels and thin or
+    patchy space in the tight steps of the fine grid. Both are exact upper bounds (rounded up in float32)."""
+    fine: np.ndarray
+    tile: int
+    coarse: np.ndarray
+    ratio: int
+
+
+def majorant_levels(volume, global_mu, tile=None, ratio=None):
+    """The `MajorantLevels` of `volume`, built from its stored tiles when it is sparse (the dense field is not
+    materialised)."""
+    tile, ratio = tile or MAJORANT_TILE, ratio or MAJORANT_RATIO
+    if getattr(volume, "sparse", None) is not None and hasattr(volume.density, "sparse_sample"):
+        fine = coarse_majorants_sparse(volume.sparse, "density", global_mu, tile)
+    else:
+        fine = coarse_majorants(volume.density, global_mu, tile)
+    cells = tuple(-(-n // ratio) for n in fine.shape)
+    padded = np.zeros(tuple(c * ratio for c in cells), np.float32)
+    padded[:fine.shape[0], :fine.shape[1], :fine.shape[2]] = fine
+    coarse = padded.reshape(cells[0], ratio, cells[1], ratio, cells[2], ratio).max(axis=(1, 3, 5))
+    return MajorantLevels(fine, tile, np.ascontiguousarray(coarse), ratio)
+
+
+def _boundary_exit(cell, edge, q, dq, position):
+    """World distance at which each ray leaves its cell of `edge` voxels: `q` is the grid-space point (voxels from the
+    box minimum) it is at, `dq` the grid-space step per world unit. The same rule as the shader (a face already
+    behind the ray, or within 1e-6 of it, is ignored)."""
+    out = np.full(len(q), np.inf)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for axis in range(3):
+            moving = np.abs(dq[:, axis]) > 1e-12
+            side = np.where(dq[:, axis] > 0, cell[:, axis] + 1, cell[:, axis])
+            reach = position + (side * edge - q[:, axis]) / dq[:, axis]
+            out = np.where(moving & (reach > position + 1e-6), np.minimum(out, reach), out)
+    return out
+
+
+def local_majorant(levels, q, dq, position):
+    """`(mu, exit)` for rays at grid-space points `q` heading along `dq` (per world unit) at world distance `position`:
+    the bound of the cell they are in (0 for an empty one) and the distance at which they leave the region it holds.
+    An empty coarse cell is crossed in one stride; otherwise the fine cell sets both."""
+    cells = np.asarray(levels.fine.shape)
+    cell = np.clip(np.floor(q / levels.tile).astype(np.int64), 0, cells - 1)
+    mu = levels.fine[cell[:, 0], cell[:, 1], cell[:, 2]].astype(np.float64)
+    big = levels.tile * levels.ratio
+    sup = cell // levels.ratio
+    empty = levels.coarse[sup[:, 0], sup[:, 1], sup[:, 2]] <= 0
+    exit_ = np.where(empty, _boundary_exit(sup, big, q, dq, position), _boundary_exit(cell, levels.tile, q, dq, position))
+    return mu, exit_
+
+
 # --- free flight ---------------------------------------------------------------------------------------------
 
 def _uniform(keys, turn, volume, step, slot, pcg, rand):
@@ -130,38 +266,57 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None):
         return t_event, emission, owner
     settings = layer.settings
     glow_points = []          # (ray, t, weight) of every emission sample, filtered against the final events
+    counts = layer.counts
     for vi, prep in enumerate(layer.preps):
         raytrace._cancel(cancel)
-        mu = layer.majorant[vi]
+        levels = layer.levels(vi)
         t0, t1 = _clip(prep, o, d)
         t1 = np.minimum(np.minimum(t1, t_end), t_event)
         alive = np.flatnonzero(t1 > t0)
         position = t0.copy()
         volume = prep.volume
         glows = layer.fire_table is not None and volume.temperature is not None
+        if levels is not None:
+            o_cells = (prep.to_object(o) - prep.box_min) / volume.voxel_size      # grid-space origin and step per world unit
+            d_cells = (d @ prep.inv[:3, :3].T) / volume.voxel_size
         for step in range(MAX_COLLISIONS):
             if not len(alive):
                 break
+            here = position[alive]
+            if levels is None:
+                mu, leave = np.full(len(alive), layer.majorant[vi]), t1[alive]
+            else:
+                mu, leave = local_majorant(levels, o_cells[alive] + d_cells[alive] * here[:, None], d_cells[alive], here)
+                leave = np.minimum(leave, t1[alive])
             u_step = _uniform(keys[alive], turn, vi, step, 0, pcg, rand)
-            position[alive] += -np.log1p(-np.minimum(u_step, 1 - 1e-12)) / mu
-            inside = position[alive] < t1[alive]
-            alive = alive[inside]
-            if not len(alive):
-                break
-            p = o[alive] + d[alive] * position[alive][:, None]
-            g = prep.to_grid(prep.to_object(p))
-            sigma = settings.density_scale * _trilinear(volume.density, g)
-            if glows:
-                kelvin = settings.temperature_scale * _trilinear(volume.temperature, g)
-                glow = (kelvin > settings.fire_threshold) & (sigma > 0)
-                if glow.any():
-                    weight = vr.fire_radiance(layer.fire_table, kelvin[glow]) * (settings.fire_intensity * sigma[glow] / mu)[:, None]
-                    glow_points.append((alive[glow], position[alive][glow], weight))
-            real = _uniform(keys[alive], turn, vi, step, 1, pcg, rand) < layer.sigma_t_unit * sigma / mu
-            hit = alive[real]
-            owner[hit[position[hit] < t_event[hit]]] = vi
-            t_event[hit] = np.minimum(t_event[hit], position[hit])
-            alive = alive[~real]
+            candidate = here - np.log1p(-np.minimum(u_step, 1 - 1e-12)) / np.where(mu > 0, mu, 1.0)
+            tentative = (mu > 0) & (candidate < leave)
+            hop = ~tentative
+            # a ray that reaches the end of its region (or sits in empty space) goes on from just past it
+            position[alive[hop]] = leave[hop] + 1e-5
+            carry = np.zeros(len(alive), bool)
+            carry[hop] = position[alive[hop]] < t1[alive[hop]]
+            counts["hops"] += int(hop.sum()) if levels is not None else 0
+            ray = alive[tentative]
+            counts["tentative"] += len(ray)
+            if len(ray):
+                position[ray] = candidate[tentative]
+                g = prep.to_grid(prep.to_object(o[ray] + d[ray] * position[ray][:, None]))
+                sigma = settings.density_scale * _trilinear(volume.density, g)
+                mu_here = mu[tentative]
+                if glows:
+                    kelvin = settings.temperature_scale * _trilinear(volume.temperature, g)
+                    glow = (kelvin > settings.fire_threshold) & (sigma > 0)
+                    if glow.any():
+                        weight = vr.fire_radiance(layer.fire_table, kelvin[glow]) * (settings.fire_intensity * sigma[glow] / mu_here[glow])[:, None]
+                        glow_points.append((ray[glow], position[ray][glow], weight))
+                real = _uniform(keys[ray], turn, vi, step, 1, pcg, rand) < layer.sigma_t_unit * sigma / mu_here
+                counts["real"] += int(real.sum())
+                hit = ray[real]
+                owner[hit[position[hit] < t_event[hit]]] = vi
+                t_event[hit] = np.minimum(t_event[hit], position[hit])
+                carry[tentative] = ~real
+            alive = alive[carry]
     for ray, t, weight in glow_points:
         keep = t <= t_event[ray]
         np.add.at(emission, ray[keep], weight[keep])

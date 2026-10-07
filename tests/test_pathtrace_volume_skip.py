@@ -5,7 +5,7 @@ from unittest import mock
 
 import numpy as np
 
-from nodebased import fluid_gpu_solver, gpupathtrace, pathtrace, scene3d, volumerender
+from nodebased import fluid_gpu_solver, gpupathtrace, pathtrace, ptvolume, scene3d, volumerender
 
 
 def plume(n=256):
@@ -26,7 +26,7 @@ class MajorantTests(unittest.TestCase):
     def test_each_cell_bounds_its_trilinear_halo(self):
         scene, _, _ = plume(64)
         density = scene.volumes[0].density
-        bounds = gpupathtrace._coarse_volume_majorants(density, 42.0)
+        bounds = ptvolume.coarse_majorants(density, 42.0)
         scale = 42.0 / float(density.max())
         for x, y, z in np.ndindex(bounds.shape):
             slices = tuple(slice(max(0, c * 16 - 1), min(64, (c + 1) * 16 + 1))
