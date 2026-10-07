@@ -91,6 +91,77 @@
     },
     {
       "op": "create",
+      "id": "$new:table_top",
+      "type": "Cube3D",
+      "params": {
+        "cube_size": 1.0,
+        "sx": 0.6,
+        "sy": 0.06,
+        "sz": 0.6,
+        "ty": -0.03,
+        "red": 0.36,
+        "green": 0.22,
+        "blue": 0.12,
+        "spec_amount": 0.15
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:glass_view_wall",
+      "type": "Cylinder3D",
+      "params": {
+        "cyl_radius": 0.1215,
+        "cyl_height": 0.3,
+        "ty": 0.15,
+        "cyl_caps": "open",
+        "material": "standard",
+        "alpha": 0.16,
+        "red": 0.8,
+        "green": 0.9,
+        "blue": 0.95,
+        "spec_amount": 1.0,
+        "spec_shininess": 200.0,
+        "columns": 64
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:glass_view_base",
+      "type": "Cylinder3D",
+      "params": {
+        "cyl_radius": 0.1215,
+        "cyl_height": 0.02,
+        "ty": 0.01,
+        "material": "standard",
+        "alpha": 0.16,
+        "red": 0.8,
+        "green": 0.9,
+        "blue": 0.95,
+        "spec_amount": 1.0,
+        "spec_shininess": 200.0,
+        "columns": 64
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:glass_view",
+      "type": "Scene3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:glass_view",
+      "input": "object0",
+      "source": "$new:glass_view_wall"
+    },
+    {
+      "op": "connect",
+      "id": "$new:glass_view",
+      "input": "object1",
+      "source": "$new:glass_view_base"
+    },
+    {
+      "op": "create",
       "id": "$new:spout",
       "type": "FluidSource3D",
       "params": {
@@ -251,9 +322,10 @@
         "surface_resolution": 1,
         "smoothing": 1,
         "thin_sheet_preservation": 1,
-        "absorption_red": 0.55,
-        "absorption_green": 0.75,
-        "absorption_blue": 0.95
+        "absorption_red": 0.85,
+        "absorption_green": 0.5,
+        "absorption_blue": 0.15,
+        "absorption_distance": 0.08
       }
     },
     {
@@ -302,7 +374,7 @@
       "params": {
         "fluid_type": "smoke",
         "fluid_emit_from": "surface",
-        "src_density": 0.9,
+        "src_density": 0.3,
         "src_temperature": 1.0,
         "src_vel_y": 0.1,
         "src_inherit_velocity": 0.0,
@@ -406,8 +478,8 @@
         "max_size": 192,
         "pressure": "resident_sparse",
         "max_iterations": 60,
-        "cooling_rate": 0.05,
-        "dissipation": 0.04,
+        "cooling_rate": 0.12,
+        "dissipation": 0.1,
         "vorticity": 0.4
       }
     },
@@ -438,10 +510,10 @@
       "type": "Camera3D",
       "params": {
         "tx": 0.0,
-        "ty": 0.38,
-        "tz": 1.35,
-        "target_y": 0.28,
-        "focal": 50.0
+        "ty": 0.42,
+        "tz": 1.55,
+        "target_y": 0.4,
+        "focal": 45.0
       }
     },
     {
@@ -496,13 +568,13 @@
       "op": "connect",
       "id": "$new:scene",
       "input": "object3",
-      "source": "$new:glass"
+      "source": "$new:glass_view"
     },
     {
       "op": "connect",
       "id": "$new:scene",
       "input": "object4",
-      "source": "$new:table"
+      "source": "$new:table_top"
     },
     {
       "op": "connect",
@@ -523,7 +595,10 @@
       "params": {
         "width": 96,
         "height": 64,
-        "samples": 1
+        "samples": 1,
+        "ambient": 0.35,
+        "volume_density_scale": 1.0,
+        "volume_absorption": 0.05
       }
     },
     {

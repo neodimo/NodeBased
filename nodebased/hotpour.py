@@ -63,6 +63,20 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
                                          "dynamic": 0})
     create("table", "RigidSolver3D", {"gravity_y": 0.0, "floor": "off"})
     connect("table", "body0", "table_body")
+    # What the camera sees of them: a wooden top, and a glass drawn as two thin surfaces (the colliders above are one
+    # voxel-thin shell, which a path tracer reads as a solid glass cylinder)
+    create("table_top", "Cube3D", {"cube_size": 1.0, "sx": 2 * TABLE_HALF, "sy": TABLE_THICKNESS, "sz": 2 * TABLE_HALF,
+                                   "ty": -TABLE_THICKNESS / 2, "red": 0.36, "green": 0.22, "blue": 0.12,
+                                   "spec_amount": 0.15})
+    glass_look = {"material": "standard", "alpha": 0.16, "red": 0.8, "green": 0.9, "blue": 0.95, "spec_amount": 1.0,
+                  "spec_shininess": 200.0, "columns": 64}
+    create("glass_view_wall", "Cylinder3D", {"cyl_radius": GLASS_RADIUS + 0.0015, "cyl_height": GLASS_HEIGHT,
+                                             "ty": GLASS_HEIGHT / 2, "cyl_caps": "open", **glass_look})
+    create("glass_view_base", "Cylinder3D", {"cyl_radius": GLASS_RADIUS + 0.0015, "cyl_height": GLASS_BASE,
+                                             "ty": GLASS_BASE / 2, **glass_look})
+    create("glass_view", "Scene3D")
+    connect("glass_view", "object0", "glass_view_wall")
+    connect("glass_view", "object1", "glass_view_base")
 
     # ---- the liquid: a moving spout, the glass and the table as colliders, an adaptive FLIP domain
     create("spout", "FluidSource3D", {"fluid_type": "liquid", "fluid_emit_from": "sphere", "src_center_x": 0.0,
@@ -90,7 +104,8 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
     create("liquid_cache", "ParticleCache3D", {"cache_memory_mb": 1024, "cache_disk_mb": 8192})
     connect("liquid_cache", "particles", "liquid")
     create("surface", "FluidSurface3D", {"surface_resolution": 1, "smoothing": 1, "thin_sheet_preservation": 1,
-                                         "absorption_red": 0.55, "absorption_green": 0.75, "absorption_blue": 0.95})
+                                         "absorption_red": 0.85, "absorption_green": 0.5, "absorption_blue": 0.15,
+                                         "absorption_distance": 0.08})
     connect("surface", "particles", "liquid_cache")
     create("whitewater", "FluidWhitewater3D", {"max_particles": 60000, "foam_lifespan": 4.0, "particle_lifespan": 2.0,
                                                "cache_memory_mb": 256, "cache_disk_mb": 2048})
@@ -100,7 +115,7 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
 
     # ---- the steam: heat and a little smoke from the liquid's surface; the liquid, glass and table are its colliders
     create("steam_source", "FluidSource3D", {"fluid_type": "smoke", "fluid_emit_from": "surface",
-                                             "src_density": 0.9, "src_temperature": 1.0, "src_vel_y": 0.1,
+                                             "src_density": 0.3, "src_temperature": 1.0, "src_vel_y": 0.1,
                                              "src_inherit_velocity": 0.0, "src_dilate": 1, "animated": 1})
     connect("steam_source", "geo", "surface")
     create("steam_lift", "FluidForce3D", {"force_kind": "buoyancy", "buoyancy_lift": 0.08, "strength": 0.015,
@@ -120,19 +135,20 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
         "division_size": d_smoke, "bounds_min_x": -smoke_half, "bounds_min_y": 0.0, "bounds_min_z": -smoke_half,
         "bounds_max_x": smoke_half, "bounds_max_y": 0.7, "bounds_max_z": smoke_half,
         "auto_resize": 1, "padding": 8, "max_size": smoke_cells, "pressure": smoke_pressure,
-        "max_iterations": 60, "cooling_rate": 0.05, "dissipation": 0.04, "vorticity": 0.4})
+        "max_iterations": 60, "cooling_rate": 0.12, "dissipation": 0.1, "vorticity": 0.4})
     connect("steam", "fluid", "steam_table")
     create("steam_cache", "FluidCache3D", {"cache_memory_mb": 1024, "cache_disk_mb": 8192})
     connect("steam_cache", "volume", "steam")
 
     # ---- the picture
-    create("camera", "Camera3D", {"tx": 0.0, "ty": 0.38, "tz": 1.35, "target_y": 0.28, "focal": 50.0})
+    create("camera", "Camera3D", {"tx": 0.0, "ty": 0.42, "tz": 1.55, "target_y": 0.4, "focal": 45.0})
     create("key_light", "Light3D", {"light_type": "Point", "tx": 0.9, "ty": 1.4, "tz": 1.2, "intensity": 3.0})
     create("rim_light", "Light3D", {"light_type": "Point", "tx": -1.0, "ty": 0.9, "tz": -0.8, "intensity": 1.6})
     create("scene", "Scene3D")
-    for slot, name in enumerate(("surface", "foam", "steam_cache", "glass", "table", "key_light", "rim_light")):
+    for slot, name in enumerate(("surface", "foam", "steam_cache", "glass_view", "table_top", "key_light", "rim_light")):
         connect("scene", f"object{slot}", name)
-    create("render", "Render3D", {"width": int(render_size[0]), "height": int(render_size[1]), "samples": 1})
+    create("render", "Render3D", {"width": int(render_size[0]), "height": int(render_size[1]), "samples": 1,
+                                  "ambient": 0.35, "volume_density_scale": 1.0, "volume_absorption": 0.05})
     connect("render", "scene", "scene")
     connect("render", "camera", "camera")
     return ops

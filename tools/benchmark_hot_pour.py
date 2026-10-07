@@ -27,6 +27,8 @@ import threading
 import time
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -54,30 +56,53 @@ def rss_now_mb():
     return 0.0
 
 
-class DriverGpuSampler(threading.Thread):
-    """Peak of the NVIDIA driver's per-process memory figure (None where there is no such driver)."""
+def amd_memory_mb():
+    """VRAM plus GTT in use on the AMD card(s), from sysfs (None without one)."""
+    total, found = 0, False
+    for card in sorted(Path("/sys/class/drm").glob("card[0-9]")):
+        device = card / "device"
+        try:
+            if (device / "vendor").read_text().strip() != "0x1002":
+                continue
+            total += int((device / "mem_info_vram_used").read_text()) + int((device / "mem_info_gtt_used").read_text())
+            found = True
+        except (OSError, ValueError):
+            continue
+    return total / 2 ** 20 if found else None
 
-    def __init__(self):
+
+class DriverGpuSampler(threading.Thread):
+    """Peak of what the driver says is in use: the NVIDIA driver's per-process figure, or the AMD card's VRAM and GTT less
+    what was in use when the run began (None where there is neither)."""
+
+    def __init__(self, adapter="default"):
         super().__init__(daemon=True)
         self.peak = None
-        self._stop = threading.Event()
+        self._halt = threading.Event()
         self.pid = os.getpid()
+        self.adapter = adapter
+        self.baseline = amd_memory_mb() if adapter == "integrated" else None
 
     def run(self):
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             try:
-                out = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
-                                     capture_output=True, text=True, timeout=5).stdout
-                for line in out.splitlines():
-                    pid, used = (v.strip() for v in line.split(","))
-                    if int(pid) == self.pid:
-                        self.peak = max(self.peak or 0, int(used))
+                if self.adapter == "integrated":
+                    now = amd_memory_mb()
+                    if now is not None and self.baseline is not None:
+                        self.peak = max(self.peak or 0, now - self.baseline)
+                elif self.adapter == "default":
+                    out = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+                                         capture_output=True, text=True, timeout=5).stdout
+                    for line in out.splitlines():
+                        pid, used = (v.strip() for v in line.split(","))
+                        if int(pid) == self.pid:
+                            self.peak = max(self.peak or 0, int(used))
             except (OSError, ValueError, subprocess.SubprocessError):
                 return
-            self._stop.wait(0.5)
+            self._halt.wait(0.25)
 
     def stop(self):
-        self._stop.set()
+        self._halt.set()
 
 
 def build_document(args):
@@ -244,25 +269,40 @@ def add_playback_scene(d):
         {"op": "connect", "id": "steam_volume_scene", "input": "object1", "source": "key_light"}]})
 
 
-def render_stills(args, document, evaluator):
-    from nodebased import pathtrace as pt
-    from nodebased.imaging import linear_to_srgb
+def save_png(pixels, path):
+    """Linear RGBA float pixels over a dark slate, sRGB encoded, to a PNG through Qt (no other imaging library needed)."""
     import numpy as np
+    from PySide6.QtGui import QImage
+    rgb, alpha = np.clip(pixels[..., :3], 0.0, 1.0), pixels[..., 3:4] if pixels.shape[-1] > 3 else 1.0
+    srgb = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * rgb ** (1 / 2.4) - 0.055)
+    out = srgb + np.array([0.04, 0.045, 0.055]) * (1.0 - alpha)
+    rgb8 = np.ascontiguousarray((np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8))
+    height, width = rgb8.shape[:2]
+    QImage(rgb8.data, width, height, 3 * width, QImage.Format.Format_RGB888).copy().save(str(path))
+
+
+def render_stills(args, dispatcher, evaluator):
+    """The frames in `--still-frames` through the real Render3D node on the GPU path tracer."""
     out = Path(args.stills)
     out.mkdir(parents=True, exist_ok=True)
     width, height = (int(v) for v in args.still_size.split("x"))
-    document["nodes"]["render"]["params"].update(width=width, height=height)
+    for name, value in {"width": width, "height": height, "render_mode": "pathtrace", "render_backend": "gpu",
+                        "pt_samples": args.still_samples, "max_bounces": 8, "ambient": 0.45, "samples": 1}.items():
+        dispatcher.execute({"op": "set", "id": "render", "param": name, "value": value})
+    document = dispatcher.document
     results = {}
     for frame in (int(v) for v in args.still_frames.split(",")):
+        # warm: the first render also builds the scene and compiles the shaders; the recorded time is the second
         started = time.perf_counter()
-        image = evaluator.evaluate_raster(document, "render_pt", frame=frame, typed=False)
-        seconds = time.perf_counter() - started
-        results[str(frame)] = {"seconds": round(seconds, 1)}
+        image = evaluator.evaluate_raster(document, "render", frame=frame)
+        first = time.perf_counter() - started
         path = out / f"hot_pour_frame_{frame:03d}.png"
-        from PIL import Image
-        pixels = np.clip(linear_to_srgb(np.asarray(image.pixels)[..., :3]), 0, 1)
-        Image.fromarray((pixels * 255 + 0.5).astype("uint8")).save(path)
-        results[str(frame)]["file"] = str(path)
+        save_png(np.asarray(image.pixels), path)
+        evaluator.clear()
+        started = time.perf_counter()
+        evaluator.evaluate_raster(document, "render", frame=frame)
+        results[str(frame)] = {"first_render_s": round(first, 1), "second_render_s": round(time.perf_counter() - started, 1),
+                               "size": [width, height], "samples": args.still_samples, "file": str(path)}
     return results
 
 
@@ -285,6 +325,7 @@ def main(argv=None):
     parser.add_argument("--stills", default=None)
     parser.add_argument("--still-frames", default="60,120")
     parser.add_argument("--still-size", default="1920x1080")
+    parser.add_argument("--still-samples", type=int, default=64)
     parser.add_argument("--progress", action="store_true")
     args = parser.parse_args(argv)
     workdir = Path(args.workdir or f"/tmp/hot-pour-{args.adapter}-{args.liquid_cells}-{args.smoke_cells}")
@@ -301,7 +342,7 @@ def main(argv=None):
     evaluator = Evaluator(sim=store)
     dispatcher = build_document(args)
     document = dispatcher.document
-    sampler = DriverGpuSampler()
+    sampler = DriverGpuSampler(args.adapter)
     sampler.start()
     started = time.perf_counter()
     rows, peaks = bake(args, document, evaluator, gpu)
@@ -326,7 +367,7 @@ def main(argv=None):
         evaluator = Evaluator(sim=simcache.SimCache(root=sim_root, memory_budget=2 << 30, disk_budget=400_000 << 20))
         result["playback"] = playback(args, document, evaluator, gpu)
     if args.stills:
-        result["stills"] = render_stills(args, document, evaluator)
+        result["stills"] = render_stills(args, dispatcher, evaluator)
     text = json.dumps(result, indent=1, default=str)
     if args.json:
         Path(args.json).write_text(text)
