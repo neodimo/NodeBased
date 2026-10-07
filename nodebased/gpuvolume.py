@@ -70,6 +70,8 @@ struct Vol {
     fwd1: vec4<f32>,
     fwd2: vec4<f32>,
     fire_dims: vec4<f32>,  // coarse fire-light grid size, cell edge (object units); 0 when the volume casts no fire light
+    sparse: vec4<f32>,     // tile edge (0: dense textures), log2 of the edge, 0, stored tile count
+    rest: vec4<f32>,       // what an empty tile holds: density, temperature, velocity
 };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
@@ -82,6 +84,8 @@ struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(1) @binding(3) var temperature_tex: texture_3d<f32>;
 @group(1) @binding(4) var vorticity_tex: texture_3d<f32>;
 @group(1) @binding(5) var fire_tex: texture_3d<f32>;
+@group(1) @binding(6) var tile_index: texture_3d<f32>;   // sparse volumes: per tile its atlas voxel origin (xyz) and 1 in w, zeros when empty
+var<private> steps_taken: u32;
 
 fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
 fn to_object(p: vec3<f32>) -> vec3<f32> {
@@ -108,6 +112,32 @@ fn attenuation(lp: vec4<f32>, ld: vec4<f32>, cone: vec4<f32>, power: f32, point:
         result = result * k;
     }
     return result;
+}
+// Sparse volumes keep their tiles in an atlas (one 3D texture per field) and find them through `tile_index`; the
+// tile edge is a power of two, so a voxel's tile and its place in the tile are a shift and a mask.
+fn tile_of(idx: vec3<i32>) -> vec3<i32> { return idx >> vec3<u32>(u32(vol.sparse.y)); }
+fn in_tile(idx: vec3<i32>) -> vec3<i32> { return idx & vec3<i32>(i32(vol.sparse.x) - 1); }
+fn tile_info(tile: vec3<i32>) -> vec4<f32> { return textureLoad(tile_index, tile, 0); }
+fn atlas_voxel(info: vec4<f32>, idx: vec3<i32>) -> vec3<i32> { return vec3<i32>(info.xyz) + in_tile(idx); }
+// (until, empty) for the tile a sample at object-space point p falls in. A sample at index-space point g reads the voxels
+// floor(g) and floor(g) + 1, which all lie in tile t while g stays inside [t * edge, (t + 1) * edge - 1) on every axis;
+// `until` is the ray parameter where the ray leaves that box and `empty` is 1 when the tile is empty (and rests at 0), so
+// every sample up to `until` is provably zero. (-1, 0) when p is outside the box of its tile (nothing is known).
+fn tile_run(p: vec3<f32>, o: vec3<f32>, d: vec3<f32>) -> vec2<f32> {
+    let edge = vol.sparse.x;
+    let g = (p - vol.box_min.xyz) / vol.box_min.w - vec3<f32>(0.5);
+    let lo = floor(g / edge) * edge;
+    let hi = lo + vec3<f32>(edge - 1.0);
+    if (any(g < lo) || any(g >= hi) || any(lo < vec3<f32>(0.0))) { return vec2<f32>(-1.0, 0.0); }
+    var until = 3.0e38;
+    for (var axis = 0; axis < 3; axis += 1) {
+        if (abs(d[axis]) > 1e-12) {
+            let bound = select(lo[axis], hi[axis], d[axis] > 0.0);
+            until = min(until, ((bound + 0.5) * vol.box_min.w + vol.box_min[axis] - o[axis]) / d[axis]);
+        }
+    }
+    let empty = select(0.0, 1.0, vol.rest.x == 0.0 && tile_info(vec3<i32>(lo / edge)).w <= 0.0);
+    return vec2<f32>(until, empty);
 }
 // Zero-padded trilinear sample of a cell-centred grid at object-space point p (volumerender._trilinear).
 %(SAMPLERS)s
@@ -256,7 +286,9 @@ fn scene_shadow(p: vec3<f32>, light: Light, bit: u32) -> f32 {
     let y = f32(i & 2u);
     return vec4<f32>(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
 }
-@fragment fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
+@fragment fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> { return march_beauty(frag); }
+// One pixel's march: the count of march iterations that read the grid is left in `steps_taken` (fs_steps reports it).
+fn march_beauty(frag: vec4<f32>) -> vec4<f32> {
     // The beauty march never reads the temperature or vorticity grids; naming them keeps them in the shared
     // bind group layout that `layout='auto'` would otherwise shrink.
     if (params.extra.z < -1.0 && textureDimensions(temperature_tex).x + textureDimensions(vorticity_tex).x
@@ -286,8 +318,15 @@ fn scene_shadow(p: vec3<f32>, light: Light, bit: u32) -> f32 {
     let t0 = max(max(max(sx.x, sy.x), sz.x), 0.0);
     let t1 = min(min(min(sx.y, sy.y), sz.y), t_mesh);
     if (!(t1 > t0)) { return vec4<f32>(0.0); }
+    // A sparse volume with no stored tile holds nothing: no march at all.
+    if (vol.sparse.x > 0.0 && vol.sparse.w <= 0.0 && vol.rest.x == 0.0) { return vec4<f32>(0.0); }
     let seg_len = params.march.x;
     let count = i32(ceil((t1 - t0) / seg_len - 1e-9));
+    // Empty tiles are jumped over when no shutter blurs the density (a blurred sample reads shifted positions).
+    // It only pays when a tile holds several steps: a coarser march samples each tile about once and the probe is wasted.
+    let skip_empty = vol.sparse.x > 0.0 && (params.extra.x <= 0.0 || (i32(vol.dims.w) & 1) == 0)
+        && length(d) * seg_len * 3.0 < vol.sparse.x * vol.box_min.w;
+    var probe_at = -1.0;     // an occupied tile is probed once, not at every sample inside it
     let scattering = params.medium.x;
     let absorption = params.medium.y;
     let sigma_t_unit = scattering + absorption;
@@ -301,6 +340,17 @@ fn scene_shadow(p: vec3<f32>, light: Light, bit: u32) -> f32 {
         let tm = t0 + f32(k) * seg_len + ds * 0.5;
         let p_world = eye + dir * tm;
         let p_obj = to_object(p_world);
+        steps_taken += 1u;
+        if (skip_empty && tm >= probe_at) {
+            let run = tile_run(p_obj, o, d);
+            let until = min(run.x, t1);
+            if (run.y > 0.5 && until > tm) {
+                // The first segment whose midpoint reaches `until` (a hair early, so the jump never overshoots).
+                k = max(k, i32(floor((until - t0) / seg_len - 0.5 - 1e-3)));
+                continue;
+            }
+            probe_at = run.x;
+        }
         let sigma = params.march.y * sample_density(p_obj);
         if (sigma <= 0.0) { continue; }
         let st = sigma_t_unit * sigma;
@@ -372,6 +422,8 @@ fn march_sums(frag: vec4<f32>) -> PassSums {
     let seg_len = params.march.x;
     let count = i32(ceil((t1 - t0) / seg_len - 1e-9));
     let flags = u32(params.extra.z);
+    // An empty sparse volume adds nothing to any sum (the depth pass can still take its first sample, vorticity ignores density).
+    if (vol.sparse.x > 0.0 && vol.sparse.w <= 0.0 && vol.rest.x == 0.0 && (flags & 10u) == 0u) { return out; }
     var velocity_obj = vec3<f32>(0.0);
     for (var k = 0; k < count; k += 1) {
         let ds = clamp(t1 - (t0 + f32(k) * seg_len), 0.0, seg_len);
@@ -393,6 +445,12 @@ fn march_sums(frag: vec4<f32>) -> PassSums {
     }
     out.velocity = vec3<f32>(dot(vol.fwd0.xyz, velocity_obj), dot(vol.fwd1.xyz, velocity_obj), dot(vol.fwd2.xyz, velocity_obj));
     return out;
+}
+// The march iterations that read the grid, per pixel (the empty-tile jumps cost one each): a diagnostic for the tests.
+@fragment fn fs_steps(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
+    steps_taken = 0u;
+    let colour = march_beauty(frag);
+    return vec4<f32>(f32(steps_taken), colour.a, 0.0, 1.0);
 }
 @fragment fn fs_sums(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     let s = march_sums(frag);
@@ -422,18 +480,47 @@ _DEPTH_MULTI = ('texture_depth_multisampled_2d',
 
 def _samplers():
     pieces = []
-    for name, suffix, texture, ret, zero, swizzle in (
-            ('density', '_sharp', 'density', 'f32', '0.0', '.r'),
-            ('temperature', '_sharp', 'temperature_tex', 'f32', '0.0', '.r'),
-            ('vorticity', '_sharp', 'vorticity_tex', 'f32', '0.0', '.r'),
-            ('velocity', '', 'velocity_tex', 'vec3<f32>', 'vec3<f32>(0.0)', '.xyz')):
+    for name, suffix, texture, ret, zero, swizzle, rest in (
+            ('density', '_sharp', 'density', 'f32', '0.0', '.r', 'vol.rest.x'),
+            ('temperature', '_sharp', 'temperature_tex', 'f32', '0.0', '.r', 'vol.rest.y'),
+            ('vorticity', '_sharp', 'vorticity_tex', 'f32', '0.0', '.r', None),
+            ('velocity', '', 'velocity_tex', 'vec3<f32>', 'vec3<f32>(0.0)', '.xyz', 'vec3<f32>(vol.rest.z)')):
+        if rest is None:       # computed from the dense velocity grid, so never sparse
+            pieces.append(f'''fn load_{name}(idx: vec3<i32>) -> {ret} {{ return textureLoad({texture}, idx, 0){swizzle}; }}
+''')
+        else:
+            pieces.append(f'''fn load_{name}(idx: vec3<i32>) -> {ret} {{
+    if (vol.sparse.x <= 0.0) {{ return textureLoad({texture}, idx, 0){swizzle}; }}
+    let info = tile_info(tile_of(idx));
+    if (info.w <= 0.0) {{ return {rest}; }}
+    return textureLoad({texture}, atlas_voxel(info, idx), 0){swizzle};
+}}
+''')
+        fast = ''
+        if rest is not None:
+            # Interior samples of a sparse volume: the eight corner tile lookups and then the eight voxel reads are each
+            # issued together (a loop of dependent lookups ran twice as slow); an empty tile reads its rest value.
+            corners = []
+            for k in range(8):
+                dx, dy, dz = k & 1, (k >> 1) & 1, (k >> 2) & 1
+                corners.append(f'        let idx{k} = i0 + vec3<i32>({dx}, {dy}, {dz});\n'
+                               f'        let info{k} = tile_info(tile_of(idx{k}));')
+            reads = [f'        let v{k} = select({rest}, textureLoad({texture}, atlas_voxel(info{k}, idx{k}), 0){swizzle}, '
+                     f'info{k}.w > 0.0);' for k in range(8)]
+            weights = [f'        let w{k} = ' + ' * '.join(
+                f'select(1.0 - f.{a}, f.{a}, {bit} == 1)' for a, bit in zip('xyz', (k & 1, (k >> 1) & 1, (k >> 2) & 1))) + ';'
+                       for k in range(8)]
+            total = ' + '.join([zero] + [f'w{k} * v{k}' for k in range(8)])
+            fast = (f"    if (vol.sparse.x > 0.0 && all(i0 >= vec3<i32>(0)) && all(i0 + vec3<i32>(1) < dims)) {{\n"
+                    + '\n'.join(corners) + '\n' + '\n'.join(reads) + '\n' + '\n'.join(weights)
+                    + f'\n        return {total};\n    }}\n')
         pieces.append(f'''fn sample_{name}{suffix}(p: vec3<f32>) -> {ret} {{
     let g = (p - vol.box_min.xyz) / vol.box_min.w - vec3<f32>(0.5);
     let base = floor(g);
     let f = g - base;
     let i0 = vec3<i32>(base);
     let dims = vec3<i32>(vol.dims.xyz);
-    var total = {zero};
+{fast}    var total = {zero};
     for (var c = 0; c < 8; c += 1) {{
         let dx = c & 1;
         let dy = (c >> 1) & 1;
@@ -441,7 +528,7 @@ def _samplers():
         let idx = i0 + vec3<i32>(dx, dy, dz);
         if (idx.x < 0 || idx.y < 0 || idx.z < 0 || idx.x >= dims.x || idx.y >= dims.y || idx.z >= dims.z) {{ continue; }}
         let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
-        total += w * textureLoad({texture}, idx, 0){swizzle};
+        total += w * load_{name}(idx);
     }}
     return total;
 }}
@@ -466,9 +553,46 @@ def adapter_kind(state):
     return {'discretegpu': 'discrete', 'integratedgpu': 'integrated', 'cpu': 'cpu'}.get(normalized, 'other')
 
 
+def is_sparse(volume):
+    """True when `volume` was built from a `sparsevol.SparseGrid` and uploads as a tile atlas instead of a dense grid."""
+    return getattr(volume, 'sparse', None) is not None and hasattr(volume.density, 'sparse_sample')
+
+
+def _sparse_fields(volume):
+    """The fields of a sparse volume the shader can read from its atlas; Unsupported when one is not a view of the same
+    tile grid (a dense array next to a sparse density would need both layouts in one draw)."""
+    from .gpu3d import Unsupported
+    if volume.sparse.tile & (volume.sparse.tile - 1):
+        raise Unsupported(f'a sparse volume with {volume.sparse.tile}-voxel tiles stays on the CPU (the GPU wants a power of two)')
+    for name in ('temperature', 'velocity'):
+        field = getattr(volume, name)
+        if field is not None and getattr(field, 'grid', None) is not volume.sparse:
+            raise Unsupported(f'a sparse volume whose {name} is not stored in the same tiles stays on the CPU')
+    return volume.sparse
+
+
+def _atlas_bytes(grid, channels=1):
+    ax, ay, az = grid.atlas_layout()
+    return ax * ay * az * grid.tile ** 3 * 4 * channels
+
+
+def _index_bytes(grid):
+    nx, ny, nz = (-(-n // grid.tile) for n in grid.shape)
+    return nx * ny * nz * 16
+
+
 def _bytes(volume, settings, temperature=False, vorticity=False):
     """Texture bytes the shader reads for `volume`: density, plus the velocity (motion blur, motion and
-    vorticity passes), temperature and vorticity grids when wanted."""
+    vorticity passes), temperature and vorticity grids when wanted. A sparse volume counts its atlases and
+    its tile index, which is what it uploads."""
+    if is_sparse(volume):
+        grid = _sparse_fields(volume)
+        total = _atlas_bytes(grid) + _index_bytes(grid)
+        if volume.velocity is not None and settings.blurred(volume):
+            total += _atlas_bytes(grid, 4)
+        if (temperature or settings.glows(volume)) and volume.temperature is not None:
+            total += _atlas_bytes(grid)
+        return total
     total = volume.density.nbytes
     if volume.velocity is not None and (settings.blurred(volume) or vorticity):
         total += volume.density.nbytes * 4 + (volume.density.nbytes if vorticity else 0)
@@ -485,7 +609,14 @@ def check(state, scene, settings, temperature=False, vorticity=False):
     top = int(limits.get('max-texture-dimension-3d', 256))
     total = 0
     for volume in _volumes(scene):
-        if max(volume.shape) > top:
+        if is_sparse(volume):
+            grid = _sparse_fields(volume)
+            if vorticity and volume.velocity is not None:
+                raise Unsupported('the vorticity pass of a sparse volume stays on the CPU (it needs the dense velocity grid)')
+            if max(grid.atlas_layout()) * grid.tile > top:
+                raise Unsupported(f'the {grid.tile_count} stored tiles of volume grid {volume.shape} need an atlas past the '
+                                  f'adapter 3D texture limit of {top} voxels per side')
+        elif max(volume.shape) > top:
             raise Unsupported(f'volume grid {volume.shape} exceeds the adapter 3D texture limit of {top} voxels per side')
         total += _bytes(volume, settings, temperature, vorticity)
     budget = VOLUME_MEMORY_BUDGETS[adapter_kind(state)]
@@ -510,11 +641,19 @@ def _digest(volume, name='density'):
     keys = _digests.setdefault(volume, {})
     key = keys.get(name)
     if key is None:
-        array = getattr(volume, name)
         h = hashlib.blake2b(digest_size=16)
         h.update(name.encode())
-        h.update(str(array.shape).encode())
-        h.update(memoryview(np.ascontiguousarray(array)).cast('B'))
+        if is_sparse(volume):       # the stored tiles only: hashing the field would expand it
+            grid = volume.sparse
+            h.update(repr(grid.shape).encode())
+            h.update(grid.coords.tobytes())
+            if name != 'tiles':      # 'tiles' keys the tile list and the indirection table alone
+                h.update(memoryview(np.ascontiguousarray(grid.data[name])).cast('B'))
+                h.update(repr(grid.rest[name]).encode())
+        else:
+            array = getattr(volume, name)
+            h.update(str(array.shape).encode())
+            h.update(memoryview(np.ascontiguousarray(array)).cast('B'))
         key = keys[name] = h.hexdigest()
     return key
 
@@ -548,8 +687,28 @@ def _field(state, key, make, used):
 _ONE = {'r32float': np.zeros((1, 1, 1), np.float32), 'rgba32float': np.zeros((1, 1, 1, 4), np.float32)}
 
 
+def _atlas(state, volume, name, used, fmt='r32float'):
+    """The cached atlas texture view of a sparse volume's field `name` (`sparsevol.SparseGrid.gpu_atlas`)."""
+    channels = 4 if fmt == 'rgba32float' else None
+    return _field(state, ('atlas', _digest(volume, name), fmt), lambda: (volume.sparse.gpu_atlas(name, channels), fmt), used)
+
+
+def tile_index(state, volume, used):
+    """The view of the tile indirection texture (rgba32float: a stored tile's atlas voxel origin and 1, an empty tile's
+    zeros) of a sparse volume; a one-texel dummy for a dense volume or a sparse one that stores no tile."""
+    if is_sparse(volume) and volume.sparse.tile_count:
+        return _field(state, ('tiles', _digest(volume, 'tiles')), lambda: (volume.sparse.gpu_index(), 'rgba32float'), used)
+    return _field(state, ('dummy', 'rgba32float'), lambda: (_ONE['rgba32float'], 'rgba32float'), used)
+
+
 def texture(state, volume, used):
-    """The cached `r32float` 3D density texture view of `volume`; uploads only on a content miss."""
+    """The cached `r32float` 3D density texture view of `volume` (a dense grid, or the tile atlas of a sparse one);
+    uploads only on a content miss."""
+    if is_sparse(volume):
+        _sparse_fields(volume)
+        if not volume.sparse.tile_count:
+            return _field(state, ('dummy', 'r32float'), lambda: (_ONE['r32float'], 'r32float'), used)
+        return _atlas(state, volume, 'density', used)
     # [ix, iy, iz] C order has iz fastest; the texture wants x fastest.
     return _field(state, _digest(volume), lambda: (
         np.ascontiguousarray(volume.density.transpose(2, 1, 0), np.float32), 'r32float'), used)
@@ -557,23 +716,31 @@ def texture(state, volume, used):
 
 def extra_textures(state, volume, used, velocity, temperature, vorticity):
     """Views of the velocity (rgba32float), temperature and vorticity (r32float) textures; a field that is not
-    needed, or that the volume lacks, binds a one-texel dummy so every draw has the same layout."""
+    needed, or that the volume lacks, binds a one-texel dummy so every draw has the same layout. A sparse volume's
+    velocity and temperature are atlases; its vorticity is never uploaded (`check` refuses that pass)."""
     def dummy(fmt):
         return _field(state, ('dummy', fmt), lambda: (_ONE[fmt], fmt), used)
-    if velocity and volume.velocity is not None:
-        def make_velocity():
-            data = np.zeros(volume.shape[::-1] + (4,), np.float32)
-            data[..., :3] = volume.velocity.transpose(2, 1, 0, 3)
-            return data, 'rgba32float'
-        vel = _field(state, _digest(volume, 'velocity'), make_velocity, used)
+    sparse = is_sparse(volume) and volume.sparse.tile_count > 0
+    if velocity and volume.velocity is not None and (sparse or not is_sparse(volume)):
+        if sparse:
+            vel = _atlas(state, volume, 'velocity', used, 'rgba32float')
+        else:
+            def make_velocity():
+                data = np.zeros(volume.shape[::-1] + (4,), np.float32)
+                data[..., :3] = volume.velocity.transpose(2, 1, 0, 3)
+                return data, 'rgba32float'
+            vel = _field(state, _digest(volume, 'velocity'), make_velocity, used)
     else:
         vel = dummy('rgba32float')
-    if temperature and volume.temperature is not None:
-        temp = _field(state, _digest(volume, 'temperature'), lambda: (
-            np.ascontiguousarray(volume.temperature.transpose(2, 1, 0), np.float32), 'r32float'), used)
+    if temperature and volume.temperature is not None and (sparse or not is_sparse(volume)):
+        if sparse:
+            temp = _atlas(state, volume, 'temperature', used)
+        else:
+            temp = _field(state, _digest(volume, 'temperature'), lambda: (
+                np.ascontiguousarray(volume.temperature.transpose(2, 1, 0), np.float32), 'r32float'), used)
     else:
         temp = dummy('r32float')
-    if vorticity and volume.velocity is not None:
+    if vorticity and volume.velocity is not None and not is_sparse(volume):
         from . import volumerender
         vort = _field(state, ('vorticity', _digest(volume, 'velocity'), volume.voxel_size), lambda: (
             np.ascontiguousarray(volumerender.vorticity_magnitude(volume).transpose(2, 1, 0), np.float32),
@@ -590,7 +757,8 @@ def fire_light_view(state, volume, settings, used):
     from . import volumerender
     key = ('firelight', _digest(volume), _digest(volume, 'temperature'), volume.voxel_size, volume.shape,
            settings.fire_intensity, settings.temperature_scale, settings.fire_threshold, settings.fire_light,
-           settings.density_scale, settings.fire_ramp) if settings.glows(volume) and settings.fire_light > 0 else None
+           settings.density_scale, settings.fire_ramp) if (
+        settings.glows(volume) and settings.fire_light > 0 and not is_sparse(volume)) else None
     if key is not None:
         cached = state.setdefault('fire_light_grids', {})
         if key not in cached:
@@ -668,13 +836,16 @@ def band_plan(state, work, height):
 class Prepared:
     """Everything a frame's volume draw needs; `record(render_pass)` issues one draw per volume."""
 
-    def __init__(self, pipeline_, group0, groups1):
+    def __init__(self, pipeline_, group0, groups1, empty=()):
         self.pipeline, self.group0, self.groups1 = pipeline_, group0, groups1
+        self.empty = tuple(empty) or (False,) * len(groups1)     # per group: a sparse volume with no stored tile
 
     def record(self, render_pass):
         render_pass.set_pipeline(self.pipeline)
         render_pass.set_bind_group(0, self.group0)
-        for group in self.groups1:
+        for group, empty in zip(self.groups1, self.empty):
+            if empty:       # nothing to march, nothing to draw
+                continue
             render_pass.set_bind_group(1, group)
             render_pass.draw(3)
 
@@ -725,10 +896,10 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     order = sorted(volumes, key=lambda v: -float(np.linalg.norm(
         (np.asarray(v.matrix, np.float64) @ np.append((np.array(v.origin) + np.array(v.shape) * v.voxel_size / 2), 1.0))[:3]
         - eye64)))
-    groups1 = []
+    groups1, empty = [], []
     for volume in order:
         inverse = np.linalg.inv(np.asarray(volume.matrix, np.float64))
-        block = np.zeros((10, 4), 'f4')
+        block = np.zeros((12, 4), 'f4')
         block[0:3] = inverse[:3, :]
         block[6:9] = np.asarray(volume.matrix, np.float64)[:3, :]
         box_min = np.array(volume.origin, np.float64)
@@ -740,6 +911,11 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
         fire_view, fire_dims = fire_light_view(state, volume, settings, used)
         if fire_dims is not None:
             block[9] = fire_dims
+        if is_sparse(volume):
+            grid = _sparse_fields(volume)
+            block[10] = grid.tile, int(grid.tile).bit_length() - 1, 0, grid.tile_count
+            block[11, :3] = [grid.rest.get(name, 0.0) for name in ('density', 'temperature', 'velocity')]
+        empty.append(is_sparse(volume) and volume.sparse.tile_count == 0 and block[11, 0] == 0.0)
         uniform = keep(device.create_buffer_with_data(data=block, usage=wgpu.BufferUsage.UNIFORM))
         groups1.append(device.create_bind_group(layout=pipe.get_bind_group_layout(1), entries=[
             {'binding': 0, 'resource': {'buffer': uniform}},
@@ -747,8 +923,9 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
                 {'binding': 2 + i, 'resource': view} for i, view in enumerate(extra_textures(
                     state, volume, used, settings.blurred(volume) or bool(pass_flags & 6),
                     bool(pass_flags & 1) or settings.glows(volume), bool(pass_flags & 2)))] + [
-                {'binding': 5, 'resource': fire_view}]))
-    return Prepared(pipe, group0, groups1)
+                {'binding': 5, 'resource': fire_view},
+                {'binding': 6, 'resource': tile_index(state, volume, used)}]))
+    return Prepared(pipe, group0, groups1, empty)
 
 
 def _pass_pipeline(state, entry, targets):
@@ -856,6 +1033,58 @@ def render_passes(state, scene, camera, width, height, mesh_depth, settings, nam
             resource.destroy()
 
 
+def march_steps(state, scene, camera, width, height, settings):
+    """A diagnostic: (height, width) float32 of the beauty march iterations that read the volume grid per pixel, summed
+    over the scene's volumes (an empty-tile jump costs one iteration, the segments it skips none). Unlit, one band, no
+    meshes: for the tests and the benchmark, not a render path."""
+    from .gpu3d import _cancel
+    wgpu, device = state['wgpu'], state['device']
+    settings = settings.validated().resolved(_volumes(scene))
+    check(state, scene, settings)
+    resources = []
+
+    def keep(resource):
+        resources.append(resource)
+        return resource
+    try:
+        depth_texture = keep(device.create_texture(
+            size=(width, height, 1), format='r32float', usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+        device.queue.write_texture({'texture': depth_texture}, np.full((height, width), 3.0e38, np.float32),
+                                   {'bytes_per_row': width * 4, 'rows_per_image': height}, (width, height, 1))
+        light_buffer = keep(device.create_buffer_with_data(data=np.zeros((1, 20), 'f4'), usage=wgpu.BufferUsage.STORAGE))
+        pipe = _pass_pipeline(state, 'fs_steps', 1)
+        prepared = prepare(state, scene, camera, width, height, 0.0, settings, light_buffer, 0, False,
+                           depth_texture.create_view(), keep, target='rgba32float', used=set(), pipe=pipe)
+        total = np.zeros((height, width), np.float32)
+        stride = ((width * 16 + 255) // 256) * 256
+        staging = keep(device.create_buffer(size=stride * height, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
+        for group in prepared.groups1:
+            target = keep(device.create_texture(size=(width, height, 1), format='rgba32float',
+                                                usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
+            encoder = device.create_command_encoder()
+            rp = encoder.begin_render_pass(color_attachments=[{
+                'view': target.create_view(), 'resolve_target': None, 'clear_value': (0, 0, 0, 0),
+                'load_op': 'clear', 'store_op': 'store'}])
+            rp.set_pipeline(prepared.pipeline)
+            rp.set_bind_group(0, prepared.group0)
+            rp.set_bind_group(1, group)
+            rp.draw(3)
+            rp.end()
+            encoder.copy_texture_to_buffer({'texture': target}, {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': height},
+                                           (width, height, 1))
+            device.queue.submit([encoder.finish()])
+            staging.map_sync(wgpu.MapMode.READ)
+            try:
+                raw = np.frombuffer(staging.read_mapped(), 'f4', count=height * stride // 4)
+                total += raw.reshape(height, stride // 4)[:, :width * 4].reshape(height, width, 4)[..., 0]
+            finally:
+                staging.unmap()
+        return total
+    finally:
+        for resource in reversed(resources):
+            resource.destroy()
+
+
 def prepared_order(scene, camera):
     """Original scene.volumes indices in the order `prepare` draws them (far to near by box centre)."""
     eye = scene3d._view_basis(camera)[0].astype(np.float64)
@@ -875,20 +1104,40 @@ MESH_SHADOW_VOLUMES = 4   # volumes the raster shader can read for the smoke's s
 # of up to four volumes from a shaded point toward a light (volumerender.ShadowCasters). Group 1: the volume table
 # and one r32float density texture per slot (a one-texel dummy in unused slots).
 MESH_SHADOW_WGSL = '''
-struct VolShadow { row0: vec4<f32>, row1: vec4<f32>, row2: vec4<f32>, box_min: vec4<f32>, box_max: vec4<f32> };
+struct VolShadow { row0: vec4<f32>, row1: vec4<f32>, row2: vec4<f32>, box_min: vec4<f32>, box_max: vec4<f32>,
+                   sparse: vec4<f32> };   // sparse: tile edge (0: dense texture), atlas tiles along x and y, stored tiles, rest density
 struct VolShadowSet { count: vec4<f32>, march: vec4<f32>, vols: array<VolShadow, 4> };   // march: k, steps
 @group(1) @binding(0) var<uniform> vs_set: VolShadowSet;
 @group(1) @binding(1) var vs_tex0: texture_3d<f32>;
 @group(1) @binding(2) var vs_tex1: texture_3d<f32>;
 @group(1) @binding(3) var vs_tex2: texture_3d<f32>;
 @group(1) @binding(4) var vs_tex3: texture_3d<f32>;
-fn vs_load(i: u32, idx: vec3<i32>) -> f32 {
+@group(1) @binding(5) var vs_tiles0: texture_3d<f32>;
+@group(1) @binding(6) var vs_tiles1: texture_3d<f32>;
+@group(1) @binding(7) var vs_tiles2: texture_3d<f32>;
+@group(1) @binding(8) var vs_tiles3: texture_3d<f32>;
+fn vs_texel(i: u32, idx: vec3<i32>) -> f32 {
     switch i {
         case 0u: { return textureLoad(vs_tex0, idx, 0).r; }
         case 1u: { return textureLoad(vs_tex1, idx, 0).r; }
         case 2u: { return textureLoad(vs_tex2, idx, 0).r; }
         default: { return textureLoad(vs_tex3, idx, 0).r; }
     }
+}
+fn vs_tile(i: u32, tile: vec3<i32>) -> vec4<f32> {
+    switch i {
+        case 0u: { return textureLoad(vs_tiles0, tile, 0); }
+        case 1u: { return textureLoad(vs_tiles1, tile, 0); }
+        case 2u: { return textureLoad(vs_tiles2, tile, 0); }
+        default: { return textureLoad(vs_tiles3, tile, 0); }
+    }
+}
+fn vs_load(i: u32, idx: vec3<i32>) -> f32 {
+    let sparse = vs_set.vols[i].sparse;
+    if (sparse.x <= 0.0) { return vs_texel(i, idx); }
+    let info = vs_tile(i, idx >> vec3<u32>(u32(sparse.y)));
+    if (info.w <= 0.0) { return sparse.w; }
+    return vs_texel(i, vec3<i32>(info.xyz) + (idx & vec3<i32>(i32(sparse.x) - 1)));
 }
 // volumerender._trilinear: zero-padded trilinear sample of volume i at its object-space point p.
 fn vs_density(i: u32, p: vec3<f32>) -> f32 {
@@ -973,24 +1222,30 @@ def mesh_shadow_group(state, pipeline, scene, settings, used, keep, light_order=
     wgpu, device = state['wgpu'], state['device']
     volumes = _volumes(scene)
     settings = settings.resolved(volumes)
-    table = np.zeros((2 + 5 * MESH_SHADOW_VOLUMES, 4), 'f4')
+    table = np.zeros((2 + 6 * MESH_SHADOW_VOLUMES, 4), 'f4')
     table[0, 0] = len(volumes)
     table[1] = (settings.shadow_density * (settings.scattering + settings.absorption) * settings.density_scale,
                 settings.shadow_steps, 0, 0)
-    views = []
+    views, tiles = [], []
     for slot in range(MESH_SHADOW_VOLUMES):
         if slot < len(volumes):
             volume = volumes[slot]
             inverse = np.linalg.inv(np.asarray(volume.matrix, np.float64))
             box_min = np.array(volume.origin, np.float64)
             box_max = box_min + np.array(volume.shape, np.float64) * volume.voxel_size
-            row = 2 + 5 * slot
+            row = 2 + 6 * slot
             table[row:row + 3] = inverse[:3, :]
             table[row + 3, :3], table[row + 3, 3] = box_min, volume.voxel_size
             table[row + 4, :3], table[row + 4, 3] = box_max, link_mask(volume, light_order)
+            if is_sparse(volume):
+                grid = _sparse_fields(volume)
+                table[row + 5] = grid.tile, int(grid.tile).bit_length() - 1, 0, grid.rest['density']
             views.append(texture(state, volume, used))
+            tiles.append(tile_index(state, volume, used))
         else:
             views.append(_field(state, ('dummy', 'r32float'), lambda: (_ONE['r32float'], 'r32float'), used))
+            tiles.append(tile_index(state, None, used))
     uniform = keep(device.create_buffer_with_data(data=table, usage=wgpu.BufferUsage.UNIFORM))
     return device.create_bind_group(layout=pipeline.get_bind_group_layout(1), entries=[
-        {'binding': 0, 'resource': {'buffer': uniform}}] + [{'binding': 1 + i, 'resource': v} for i, v in enumerate(views)])
+        {'binding': 0, 'resource': {'buffer': uniform}}] + [{'binding': 1 + i, 'resource': v} for i, v in enumerate(views)]
+        + [{'binding': 5 + i, 'resource': v} for i, v in enumerate(tiles)])

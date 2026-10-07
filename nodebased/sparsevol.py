@@ -90,6 +90,61 @@ class SparseGrid:
             out[name] = np.ascontiguousarray(dense[:self.shape[0], :self.shape[1], :self.shape[2]])
         return out
 
+    # -- GPU layout ---------------------------------------------------------------------------------
+    def atlas_layout(self):
+        """(ax, ay, az): how many tiles the GPU atlas holds along each axis; slot i of the tile list sits at
+        (i % ax, (i // ax) % ay, i // (ax * ay)). Near-cubic, with the last layer partly empty."""
+        count = max(self.tile_count, 1)
+        side = max(1, int(np.ceil(np.cbrt(count) - 1e-9)))
+        return side, side, -(-count // (side * side))
+
+    def gpu_index(self):
+        """The indirection table as float32 (ntz, nty, ntx, 4), x fastest as a 3D texture wants it: for a stored tile the
+        voxel origin of its atlas slot in xyz and 1 in w, for an empty tile zeros. Integers travel as float values
+        (exact below 2^24), so the shader needs no division to find a tile."""
+        nt = tuple(-(-n // self.tile) for n in self.shape)
+        out = np.zeros((nt[2], nt[1], nt[0], 4), np.float32)
+        if len(self.coords):
+            ax, ay, _az = self.atlas_layout()
+            slot = np.arange(len(self.coords))
+            origin = np.stack((slot % ax, (slot // ax) % ay, slot // (ax * ay)), axis=1) * self.tile
+            out[self.coords[:, 2], self.coords[:, 1], self.coords[:, 0], :3] = origin
+            out[self.coords[:, 2], self.coords[:, 1], self.coords[:, 0], 3] = 1.0
+        return out
+
+    def gpu_atlas(self, name, channels=None):
+        """Field `name`'s stored tiles as one float32 array (az*tile, ay*tile, ax*tile[, channels]) laid out as
+        `atlas_layout` says, x fastest; no tile is expanded and the empty region is never built. A vector field is
+        padded to `channels` (4 for an rgba32float texture)."""
+        ax, ay, az = self.atlas_layout()
+        t = self.tile
+        block = self.data[name]
+        extra = block.shape[4:]
+        width = (channels or extra[0],) if extra else ()
+        slots = np.zeros((ax * ay * az, t, t, t) + width, np.float32)
+        if extra:
+            slots[:len(block), ..., :extra[0]] = block
+        else:
+            slots[:len(block)] = block
+        order = (0, 3, 2, 1) + tuple(range(4, slots.ndim))
+        slots = slots.transpose(order).reshape((az, ay, ax, t, t, t) + slots.shape[4:])
+        axes = (0, 3, 1, 4, 2, 5) + tuple(range(6, slots.ndim))
+        return np.ascontiguousarray(slots.transpose(axes).reshape((az * t, ay * t, ax * t) + slots.shape[6:]))
+
+    def max(self, name):
+        """The largest value of field `name` over the grid (the rest value counts where a tile is absent)."""
+        block = self.data[name]
+        nt = -(-np.asarray(self.shape) // self.tile)
+        peak = -np.inf
+        if len(self.coords):
+            t = self.tile
+            for index, coord in enumerate(self.coords):
+                limit = [min(t, n - int(c) * t) for c, n in zip(coord, self.shape)]
+                peak = max(peak, float(np.max(block[index, :limit[0], :limit[1], :limit[2]])))
+        if len(self.coords) < int(np.prod(nt)) or self.tile_count == 0:
+            peak = max(peak, self.rest[name])
+        return peak
+
     def arrays(self):
         """The grid as plain arrays for a cache: `coords` plus one block array per field."""
         return {"coords": self.coords, **self.data}
@@ -174,6 +229,10 @@ class SparseField:
 
     def sparse_sample(self, points):
         return self.grid.sample_trilinear(self.name, points)
+
+    def max(self):
+        """The largest value, from the stored tiles and the rest value, without building the dense array."""
+        return self.grid.max(self.name)
 
     def __array__(self, dtype=None, copy=None):
         array = self.grid.to_dense()[self.name]

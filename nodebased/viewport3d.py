@@ -555,8 +555,7 @@ class Viewport3D(QWidget):
         if self.render_mode and self._paint_progressive(painter, scene, camera, authored):
             backend = "Render (progressive)"
         else:
-            sparse_volumes = any(getattr(volume, "sparse", None) is not None for volume in scene.volumes)
-            gpu = viewportgpu.renderer() if self.backend != "cpu" and not sparse_volumes else None
+            gpu = viewportgpu.renderer() if self.backend != "cpu" else None
             if gpu is not None and self._paint_gpu(painter, gpu, scene, camera, authored):
                 backend = "GPU"
             else:
@@ -980,6 +979,9 @@ class Viewport3D(QWidget):
             return False
         if frame is not None:  # None: a Render3D job holds the device, keep showing the last frame
             self.splat_note = self._splat_note(scene, gpu.splat_stride, "discs")
+            if gpu.volume_note.startswith("volumes hidden") and any(
+                    getattr(volume, "sparse", None) is not None for volume in scene.volumes):
+                return False       # the atlas cannot hold these tiles on this adapter: the CPU reference draws them
             self.volume_note = self._volume_note(scene, gpu)
             self.shadow_note = gpu.shadow_note
             self._last_frame = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0],
