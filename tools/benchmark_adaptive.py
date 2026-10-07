@@ -8,8 +8,8 @@ per-pixel sample-count image (docs/BENCHMARKS-v0.35-adaptive.md, which replaces 
 
 The scenes are the comparison scenes `tests/test_3d_gpu.py` names X1 (PBR texture maps lit by a Rect and a Point light and
 an environment), Y1 (a PBR sphere on a floor under an environment with a hard sun) and Z1 (a cube casting an area-light
-shadow). Each is rendered at the same seed `fixed` with 16, 32 and 64 samples (the first two are about the average
-budget the adaptive renders turn out to use), then `adaptive` at noise threshold 0.01 and 0.05 (Render3D's defaults: 16
+shadow). Each is rendered at the same seed `fixed` with 16, 32, 64 and 128 samples (the first two are about the average
+budget the adaptive renders turn out to use), then `adaptive` at a list of noise thresholds (Render3D's defaults otherwise: 16
 minimum samples, 256 maximum, passes of 8), and the reference, `fixed` 1024 samples with another seed. `--thresholds` sets
 the adaptive thresholds (default 0.05, 0.01, 0.006, 0.003, 0.001 and 0.0003), `--pass-size` the adaptive pass size and
 `--max-samples N` caps the adaptive renders (256 is Render3D's default; 64 gives them at most fixed's budget). After the
@@ -123,8 +123,10 @@ def run(width, height, backend, images=None, max_samples=256, thresholds=THRESHO
                               stats=stats, backend=backend)
             return image, stats
         reference, _ = render(REFERENCE)
-        # fixed 16 and 32 are the adaptive renders' own average budgets: PSNR at the same cost, spread evenly
-        entries = [("fixed 16", replace(FIXED, samples=16)), ("fixed 32", replace(FIXED, samples=32)), ("fixed 64", FIXED)] + [(f"adaptive {t}", replace(ADAPTIVE, noise_threshold=t, max_samples=max_samples, adaptive_pass_size=pass_size)) for t in thresholds]
+        # fixed 16 and 32 are the adaptive renders' own average budgets: PSNR at the same cost, spread evenly; fixed 128 is what a
+        # fixed render costs once it is asked for the quality of the tighter adaptive thresholds
+        entries = [("fixed 16", replace(FIXED, samples=16)), ("fixed 32", replace(FIXED, samples=32)), ("fixed 64", FIXED),
+                   ("fixed 128", replace(FIXED, samples=128))] + [(f"adaptive {t}", replace(ADAPTIVE, noise_threshold=t, max_samples=max_samples, adaptive_pass_size=pass_size)) for t in thresholds]
         pictures = [("reference 1024", _display(reference), None)]
         for label, settings in entries:
             seconds, (image, stats) = timed(lambda: render(settings))
@@ -210,13 +212,14 @@ def breakdown(width, height, max_samples, repeats=3, denoise=True):
 
 
 def print_breakdown(rows):
-    keys = ["scene build", "pack", "upload", "mask update", "uniform write", "dispatch", "flag readback", "final readback", "postprocess", "denoise"]
-    print("| scene | sampling | wall time | passes | dispatches | flag readbacks | " + " | ".join(keys) + " |")
-    print("| --- | --- | ---: | ---: | ---: | ---: | " + " | ".join("---:" for _ in keys) + " |")
+    keys = ["scene build", "pack", "upload", "mask update", "encode", "dispatch", "final readback", "postprocess", "denoise"]
+    print("| scene | sampling | wall time | passes | " + " | ".join(keys) + " |")
+    print("| --- | --- | ---: | ---: | " + " | ".join("---:" for _ in keys) + " |")
     for name, label, wall, passes, ph in rows:
         cells = " | ".join(f"{ph.get(k, 0.0) * 1000:.1f}" for k in keys)
-        print(f"| {name} | {label} | {wall * 1000:.0f} ms | {passes} | {int(ph.get('dispatches', 0))} | {int(ph.get('flag readbacks', 0))} | {cells} |")
-    print("\nPhase columns are milliseconds.")
+        print(f"| {name} | {label} | {wall * 1000:.0f} ms | {passes} | {cells} |")
+    print("\nPhase columns are milliseconds: `mask update` is the host's per-pass tile list of a fixed render, `encode` the host"
+          " recording and submitting an adaptive render's passes, `dispatch` the card's own time (the host waiting on it).")
 
 
 def main():

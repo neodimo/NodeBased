@@ -2638,6 +2638,7 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
                 break
         if settings.time_limit and time.perf_counter() - started >= settings.time_limit:
             break
+    wait()                     # the card may still owe the last passes: the final readback then times the transfer alone
     return sample_index, passes, pixels_open
 
 
