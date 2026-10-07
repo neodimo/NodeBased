@@ -2209,7 +2209,25 @@ class Viewer(PanZoomView):
 
     def _roto_resolved(self, context):
         key, _, payload, _ = context
-        return shape_model.resolve_shapes(payload, self.window.dispatcher.document["time"]["current"])
+        document = self.window.dispatcher.document
+        frame = int(document["time"]["current"])
+        resolved = shape_model.resolve_shapes(payload, frame)
+        for index, shape in enumerate(resolved):
+            link = payload.get("shapes", [])[index].get("track_link")
+            if not link: continue
+            tracker_node = document["nodes"].get(link["tracker_id"])
+            tracks = document.get("node_data", {}).get(link["tracker_id"], {}).get("tracks", [])
+            track = next((item for item in tracks if item["name"] == link["track_name"]), None)
+            if tracker_node is None or track is None: continue
+            reference = int(tracker_node["params"].get("reference_frame", 1))
+            dx = (shape_model.resolve_scalar(track["x"], frame, "x")
+                  - shape_model.resolve_scalar(track["x"], reference, "x")) / context[3]
+            dy = (shape_model.resolve_scalar(track["y"], frame, "y")
+                  - shape_model.resolve_scalar(track["y"], reference, "y")) / context[3]
+            for point in shape["points"]:
+                point["x"] += dx
+                point["y"] += dy
+        return resolved
 
     def begin_roto_draw(self, key=None):
         context = self._roto_context()

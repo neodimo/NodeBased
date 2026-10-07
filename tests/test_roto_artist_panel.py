@@ -70,6 +70,21 @@ class RotoArtistPanelTests(unittest.TestCase):
         self.assertEqual(self.panel().findChild(QPushButton,"roto-shape-key-0").text(),"◇")
         self.assertIn(1,self.window.frame_slider.key_frames)
 
+    def test_viewer_overlay_follows_the_same_named_tracker_as_the_render(self):
+        self.window.command({"op":"create","id":"t","type":"Tracker"})
+        self.window.command({"op":"set_tracks","id":"t","tracks":[{
+            "name":"feature","enabled":1.0,
+            "x":{"value":10.0,"curve":{"interpolation":"linear","keys":[{"frame":1,"value":10.0},{"frame":2,"value":30.0}]}},
+            "y":{"value":10.0,"curve":{"interpolation":"linear","keys":[{"frame":1,"value":10.0},{"frame":2,"value":25.0}]}}}]})
+        shapes_for_node=copy.deepcopy(self.window.dispatcher.document["node_data"]["r"]["shapes"])
+        shapes_for_node[0]["track_link"]={"tracker_id":"t","track_name":"feature"}
+        self.window.command({"op":"set_shapes","id":"r","shapes":shapes_for_node})
+        self.window.set_time(current=2); APP.processEvents()
+        context=self.window.viewer._roto_context()
+        resolved=self.window.viewer._roto_resolved(context)
+        self.assertAlmostEqual(resolved[0]["points"][0]["x"],30.0)
+        self.assertAlmostEqual(resolved[0]["points"][0]["y"],25.0)
+
     def test_visibility_reorder_and_panel_viewer_selection(self):
         listing=self.panel().findChild(QListWidget,"roto-shape-list")
         listing.setCurrentRow(1); APP.processEvents()
