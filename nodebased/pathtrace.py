@@ -359,17 +359,18 @@ class PathScene:
         (light linking) is sampled by next-event estimation alone, whose shadow rays skip the excluding shapes: a
         BSDF ray that hits such a shape could not be told to see through it, so the two strategies would no longer
         estimate one integral. Weight 1 for the light sample, 0 for the BSDF hit (a perfect mirror still reads it)."""
-        if self.excl is not None and self.linked_bits >> bit & 1:
+        if self.linked_bits >> bit & 1:
             return np.ones_like(np.asarray(pa, np.float64))
         return _mis(pa, pb)
 
     @property
     def linked_bits(self):
         """The lights some shape excludes, as a bit mask (0 without light linking)."""
-        if self.excl is None:
-            return 0
         if "_linked_bits" not in self.__dict__:
-            self.__dict__["_linked_bits"] = int(np.bitwise_or.reduce(self.excl))
+            bits = int(np.bitwise_or.reduce(self.excl)) if self.excl is not None else 0
+            if self.volumes is not None and self.volumes.excl is not None:
+                bits |= int(np.bitwise_or.reduce(self.volumes.excl))
+            self.__dict__["_linked_bits"] = bits
         return self.__dict__["_linked_bits"]
 
     def hit_weight(self, bit, prev_delta, prev_pdf, pdf_light):
@@ -380,11 +381,17 @@ class PathScene:
         return np.where(prev_delta, 1.0, _mis(prev_pdf, pdf_light))
 
     def reaches(self, shape, bit):
-        """Per entry of `shape` (-1: no surface, so every light reaches), whether light `bit` lights that shape."""
-        if self.excl is None:
-            return np.ones(len(shape), bool)
+        """Per entry of `shape` (-1: no surface, so every light reaches), whether light `bit` lights that shape. A smoke
+        vertex in volume `v` is shape `-3 - v`."""
         shape = np.asarray(shape)
-        return (shape < 0) | (((self.excl[np.maximum(shape, 0)] >> bit) & 1) == 0)
+        out = np.ones(len(shape), bool)
+        if self.excl is not None:
+            out &= (shape < 0) | (((self.excl[np.maximum(shape, 0)] >> bit) & 1) == 0)
+        if self.volumes is not None and self.volumes.excl is not None:
+            inside = shape <= -3
+            index = np.clip(-3 - shape, 0, len(self.volumes.excl) - 1)
+            out &= ~inside | (((self.volumes.excl[index] >> bit) & 1) == 0)
+        return out
 
     def is_splat(self, shape):
         return np.asarray(shape) >= self.shapes
@@ -508,6 +515,9 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
     excl = np.array([mask_of(entry[3]) for entry in entries], np.int64)
     layer = ptsplats.build(scene, eye) if getattr(scene, "splats", ()) else None
     smoke = ptvolume.build(scene, volume) if getattr(scene, "volumes", ()) else None
+    if smoke is not None:
+        volume_excl = np.array([mask_of(getattr(v, "light_link", s.LIGHT_LINK_ALL)) for v in scene.volumes], np.int64)
+        smoke.excl = volume_excl if volume_excl.any() else None
     all_lo = world_lo.min(0) if n else np.full(3, np.inf)
     all_hi = world_hi.max(0) if n else np.full(3, -np.inf)
     for extra in (layer, smoke):
@@ -786,7 +796,7 @@ def _splat_light(ps, origin, wi, dist, shape, ns, cancel=None, bit=None):
         thickness = np.where(on_splat, layer.scale_min[index], -1e30)
         out = ptsplats.transmittance(layer, origin, wi, tmin, dist, exclude, (ns, thickness), cancel, bit)
     if ps.volumes is not None:
-        out = out * ptvolume.transmittance(ps.volumes, origin, wi, dist)
+        out = out * ptvolume.transmittance(ps.volumes, origin, wi, dist, bit)
     return out
 
 
@@ -1072,7 +1082,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         if ps.volumes is not None:
             # smoke: the next real collision along each ray, and the fire the ray sees on the way to it
             t_end = np.minimum(t, np.where(vd >= 1, t_light, np.inf))
-            t_event, glow = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel)
+            t_event, glow, in_volume = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel)
             evented = t_event < t_end
             if glow.any():
                 g_idx = np.flatnonzero(glow.max(axis=1) > 0)
@@ -1129,8 +1139,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
                 first["t"][fr], first["pos"][fr] = t_event[fresh], ro[fresh] + rd[fresh] * t_event[fresh][:, None]
             _medium_event(ps, keys, rows[e], (ro[e] + rd[e] * t_event[e][:, None]), rd[e], vd[e], o, d, throughput,
                           alive, counts, cls, prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim,
-                          cancel, skip)
-            prev_shape[rows[e]] = -1
+                          cancel, skip, in_volume[e])
+            prev_shape[rows[e]] = -3 - in_volume[e]     # a smoke vertex: `PathScene.reaches` reads its volume's link
         # rays that leave the scene see the ambient sky and the environments; a camera ray sees an
         # environment too when that environment's `visible_to_camera` is on, replacing the flat background
         miss = (shape < 0) & ~gone
@@ -1267,10 +1277,15 @@ def _liquid_event(ps, keys, r, sh, ns, wd, pos, o, d, medium, alive, counts, cls
 _VOL_ABSORB_DIM = _BSDF_DIM + 4
 
 
+def _volume_reaches(ps, owner, bit):
+    """Per smoke vertex (`owner` is its volume), whether light `bit` lights it (light linking)."""
+    return ps.reaches(-3 - owner, bit)
+
+
 def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls, prev_delta, prev_pdf, capped,
-                  bounces, vertex_depth, acc, settings, dim, cancel, skip):
-    """A real collision at points `pos` of paths `r` (arriving along `wd`): absorb, or scatter with light sampling
-    and a phase-sampled continuation."""
+                  bounces, vertex_depth, acc, settings, dim, cancel, skip, owner):
+    """A real collision at points `pos` of paths `r` (arriving along `wd`) in volumes `owner`: absorb, or scatter with
+    light sampling and a phase-sampled continuation."""
     layer = ps.volumes
     n = len(r)
     key = keys[r]
@@ -1281,7 +1296,7 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
     keep = np.flatnonzero(can)
     if not len(keep):
         return
-    r, pos, wd, vd, key = r[keep], pos[keep], wd[keep], vd[keep], key[keep]
+    r, pos, wd, vd, key, owner = r[keep], pos[keep], wd[keep], vd[keep], key[keep], owner[keep]
     n = len(r)
     none = np.full(n, -1)
     zero = np.zeros((n, 3))
@@ -1289,7 +1304,7 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
     slot = 0
     for bit, light in enumerate(ps.point_lights):
         wi, dist, irr = _point_wi(light, pos)
-        front = irr.max(axis=1) > 0
+        front = (irr.max(axis=1) > 0) & _volume_reaches(ps, owner, bit)
         if not front.any():
             continue
         idx = np.flatnonzero(front)
@@ -1309,7 +1324,7 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
         wi = to / np.maximum(dist, 1e-12)[:, None]
         cos_l = _dot(-wi, nq)
         cos_l = np.abs(cos_l) if light.two_sided else np.maximum(cos_l, 0)
-        front = (cos_l > 1e-9) & (dist > 1e-9)
+        front = (cos_l > 1e-9) & (dist > 1e-9) & _volume_reaches(ps, owner, bit)
         if not front.any():
             continue
         idx = np.flatnonzero(front)
@@ -1327,7 +1342,7 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
         u1, u2 = rand(key, dim + 2 + slot), rand(key, dim + 3 + slot)
         slot += 2
         wi, pdf_l, radiance = env_sample(env, u1, u2)
-        front = pdf_l > 0
+        front = (pdf_l > 0) & _volume_reaches(ps, owner, bit)
         if not front.any():
             continue
         idx = np.flatnonzero(front)

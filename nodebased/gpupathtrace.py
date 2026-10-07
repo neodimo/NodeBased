@@ -880,6 +880,14 @@ const VOL_ABSORB_DIM: u32 = 54u;
 const FIRE_KNOTS: f32 = 64.0;
 
 fn vh(vi: u32, k: u32) -> vec4<f32> { return env[params.h.y + vi * VOL_VECS + k]; }
+// The volume the last real collision of `vol_flight_all` happened in. Light linking: header vec4 7's `.w` is the bit mask of
+// the lights that volume excludes (the packed light numbering): they do not scatter in it and it casts no shadow from them.
+var<private> hit_volume: u32 = 0u;
+//#if LINKS
+fn vol_reaches(bit: u32) -> bool { return !excl_bit(u32(vh(hit_volume, 7u).w), bit); }
+//#else
+fn vol_reaches(bit: u32) -> bool { return true; }
+//#endif
 fn vol_bases(vi: u32) -> vec4<u32> {
   let r = vh(vi, 6u);
   var temperature = 0xFFFFFFFFu;
@@ -1028,10 +1036,12 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
 fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, glow: ptr<function, vec3<f32>>) -> f32 {
   let n = params.h.x;
   let fire = (params.h.w & 2u) != 0u;
+  hit_volume = 0u;
   if (n == 1u) { return vol_flight(0u, o, d, t_end, key, turn, fire, glow); }
   var t_event = INF;
   for (var vi = 0u; vi < n; vi++) {
-    t_event = min(t_event, vol_flight(vi, o, d, min(t_end, t_event), key, turn, false, glow));
+    let te = vol_flight(vi, o, d, min(t_end, t_event), key, turn, false, glow);
+    if (te < t_event) { t_event = te; hit_volume = vi; }
   }
   if (fire) {
     var limit = t_end;
@@ -1047,6 +1057,9 @@ fn vol_transmittance(o: vec3<f32>, d: vec3<f32>, dist: f32) -> f32 {
   let steps = u32(params.vp2.w);
   var out = 1.0;
   for (var vi = 0u; vi < params.h.x; vi++) {
+//#if LINKS
+    if (excl_bit(u32(vh(vi, 7u).w), shadow_bit)) { continue; }
+//#endif
     let clip = vol_clip(vi, o, d);
     let len = max(min(clip.y, dist) - clip.x, 0.0);
     if (len <= 0.0) { continue; }
@@ -1277,7 +1290,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
             wi = to / max(dist, 1e-12);
             irr = irr * light_atten(li, pos);
           }
-          if (max(irr.x, max(irr.y, irr.z)) > 0.0) {
+          if (max(irr.x, max(irr.y, irr.z)) > 0.0 && vol_reaches(li)) {
 //#if LINKS
             shadow_bit = li;
 //#endif
@@ -1298,7 +1311,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
           let cosr = dot(-wi, nq);
           var cos_l = max(cosr, 0.0);
           if (l0.y > 0.5) { cos_l = abs(cosr); }
-          if (cos_l > 1e-9 && dist > 1e-9) {
+          if (cos_l > 1e-9 && dist > 1e-9 && vol_reaches(li)) {
             let reach = dist * (1.0 - 1e-4);
 //#if LINKS
             shadow_bit = li;
@@ -1321,7 +1334,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         let u2 = rnd(key, dim + 3u + slot);
         slot += 2u;
         let es = env_sample(u1, u2);
-        if (es.pdf > 0.0) {
+        if (es.pdf > 0.0 && vol_reaches(lc)) {
 //#if LINKS
           shadow_bit = lc;
 //#endif
@@ -1349,7 +1362,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       prev_delta = false;
       prev_pdf = ps.pdf;
 //#if LINKS
-      prev_excl = 0u;
+      prev_excl = u32(vh(hit_volume, 7u).w);      // the smoke vertex's own link: the lights its volume excludes
 //#endif
       bounces++;
       vdepth++;
@@ -1983,10 +1996,11 @@ def pack(ps, environment_size=None, cancel=None):
     packed_of[len(lights)] = len(lights)                                    # the environment follows the lights
     packed.bit_map = packed_of
     lights = [lights[k] for k in ranked]      # the order does not matter to the maths
-    packed.linked = 0       # the lights some shape or splat instance excludes, in packed numbering (`params.e.w`)
-    if ps.excl is not None:
+    packed.linked = 0       # the lights some shape, splat instance or volume excludes, in packed numbering (`params.e.w`)
+    if ps.linked_bits:
         if len(lights) + (1 if ps.envs else 0) > 24:
             raise gpu3d.Unsupported("light linking on the GPU takes at most 24 lights and environments together")
+    if ps.excl is not None:
         for i in range(n_shapes):
             mask = int(ps.excl[i])
             packed.shapes[i, 27] = float(sum(1 << packed_of[b] for b in range(len(lights) + 1) if (mask >> b) & 1))
@@ -2119,6 +2133,11 @@ def _pack_aux(packed, ps):
                 headers[vi, 7] = (coarse_base & 0xFFFFFF, coarse_base >> 24, VOLUME_MAJORANT_TILE, 0)
             else:
                 headers[vi, 7, 0] = -1.0
+            if smoke.excl is not None:
+                # light linking: the volume's excluded lights, in the packed light numbering (a float, exact below 2^24)
+                mask = sum(((int(smoke.excl[vi]) >> bit) & 1) << target for bit, target in packed.bit_map.items())
+                headers[vi, 7, 3] = mask
+                packed.linked |= mask
             glow = smoke.fire_table is not None and volume.temperature is not None
             temperature = add_floats(np.ascontiguousarray(volume.temperature, "f4")) if glow else None
             headers[vi, 6] = (density & 0xFFFFFF, -1.0 if temperature is None else temperature & 0xFFFFFF,
@@ -2287,7 +2306,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         buffers = [upload(packed.nodes, storage), upload(packed.order, storage), upload(packed.triangles, storage),
                    upload(packed.shapes, storage), upload(packed.lights, storage), upload(packed.env, storage)]
         accum = upload(np.zeros((npix * 2 + flag_vec4, 4), "f4"), storage | wgpu.BufferUsage.COPY_SRC)
-        links = ps.excl is not None
+        links = bool(ps.linked_bits)
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
         tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE

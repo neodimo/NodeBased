@@ -62,6 +62,7 @@ class VolumeLayer:
     color: np.ndarray
     lo: np.ndarray             # world bounds of every box
     hi: np.ndarray
+    excl: object = None        # light linking: per volume, the bit mask of the lights it excludes (None: no volume excludes any)
 
     def __len__(self):
         return len(self.preps)
@@ -117,15 +118,16 @@ def _uniform(keys, turn, volume, step, slot, pcg, rand):
 def free_flight(layer, o, d, t_end, keys, turn, cancel=None):
     """Delta tracking of unit-direction rays from `o` up to distance `t_end` (per ray; may be inf).
 
-    Returns `(t_event, emission)`: the distance of each ray's first real collision (inf for none) and the fire's
-    contribution along the ray up to it, (N, 3), before the path throughput multiplies it. Absorption and
-    scattering are the caller's."""
+    Returns `(t_event, emission, owner)`: the distance of each ray's first real collision (inf for none), the fire's
+    contribution along the ray up to it, (N, 3), before the path throughput multiplies it, and the index of the volume
+    that collision happened in (-1 for none). Absorption and scattering are the caller's."""
     from .pathtrace import pcg, rand
     n = len(o)
     t_event = np.full(n, np.inf)
     emission = np.zeros((n, 3))
+    owner = np.full(n, -1, np.int64)
     if not n:
-        return t_event, emission
+        return t_event, emission, owner
     settings = layer.settings
     glow_points = []          # (ray, t, weight) of every emission sample, filtered against the final events
     for vi, prep in enumerate(layer.preps):
@@ -157,18 +159,20 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None):
                     glow_points.append((alive[glow], position[alive][glow], weight))
             real = _uniform(keys[alive], turn, vi, step, 1, pcg, rand) < layer.sigma_t_unit * sigma / mu
             hit = alive[real]
+            owner[hit[position[hit] < t_event[hit]]] = vi
             t_event[hit] = np.minimum(t_event[hit], position[hit])
             alive = alive[~real]
     for ray, t, weight in glow_points:
         keep = t <= t_event[ray]
         np.add.at(emission, ray[keep], weight[keep])
-    return t_event, emission
+    return t_event, emission, owner
 
 
 # --- shadow rays ---------------------------------------------------------------------------------------------
 
-def transmittance(layer, origin, direction, dist):
-    """`exp(-tau)` through every volume along shadow rays (unit `direction`, up to `dist`, which may be inf)."""
+def transmittance(layer, origin, direction, dist, bit=None):
+    """`exp(-tau)` through every volume along shadow rays (unit `direction`, up to `dist`, which may be inf). A shadow ray
+    to light `bit` skips a volume that excludes it (light linking)."""
     n = len(origin)
     out = np.ones(n)
     settings = layer.settings
@@ -176,7 +180,9 @@ def transmittance(layer, origin, direction, dist):
         return out
     steps = int(settings.shadow_steps)
     dist = np.broadcast_to(np.asarray(dist, np.float64), (n,))
-    for prep in layer.preps:
+    for vi, prep in enumerate(layer.preps):
+        if bit is not None and layer.excl is not None and int(layer.excl[vi]) >> bit & 1:
+            continue
         near, far = _clip(prep, origin, direction)
         length = np.clip(np.minimum(far, dist) - near, 0.0, None)
         start = np.where(length > 0, near, 0.0)

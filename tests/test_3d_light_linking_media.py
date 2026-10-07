@@ -150,6 +150,16 @@ class ParticleTests(unittest.TestCase):
         listed, _ = self.shadowed_plane(("include", ("sky",)))                           # lit by another light only
         np.testing.assert_allclose(listed[beside], bare[beside], atol=1e-6)
 
+    def test_the_path_tracer_composites_lit_particles_with_the_link(self):
+        from nodebased import pathtrace as pt
+        path = pt.PathSettings(samples=4, max_bounces=1, diffuse_bounces=1)
+        draw_pt = lambda scene: pt.render(scene, s.Camera(), 48, 48, (0, 0, 0, 0), 0.05, "rgba", path)
+        both = draw_pt(s.Scene(particles=(sphere_particle(),), lights=(KEY, FILL)))
+        excluded = draw_pt(s.Scene(particles=(sphere_particle(LINKED),), lights=(KEY, FILL)))
+        key_only = draw_pt(s.Scene(particles=(sphere_particle(),), lights=(KEY,)))
+        self.assertGreater(float(np.abs(both - excluded).max()), .03)
+        np.testing.assert_allclose(excluded, key_only, atol=1e-6)
+
     def test_an_old_particle_set_has_no_link_and_links_every_light(self):
         self.assertEqual(sphere_particle().light_link, s.LIGHT_LINK_ALL)
         self.assertEqual(s.apply_particle_look(sphere_particle(), {}).light_link, s.LIGHT_LINK_ALL)
@@ -217,6 +227,98 @@ class GpuSmokeTests(SmokeTests):
                 cpu, gpu = smoke(smoke_scene(link)), smoke(smoke_scene(link), True)
                 self.assertLess(float(np.abs(cpu - gpu).max()), 2e-3)
                 self.assertLess(float(np.abs(cpu - gpu).mean()), 2e-4)
+
+
+@unittest.skipUnless(gpu3d.available(), "no GPU adapter")
+class ViewportSmokeTests(unittest.TestCase):
+    """The viewport draws smoke with the same shader; its light table lists every light, not just the point-like ones."""
+    BACKGROUND = (0.02, 0.02, 0.03, 1.0)
+    VIEW = s.Camera(s.Transform3D(s.Vec3(0.3, 0.6, 3.2)), s.Vec3(0, 0.5, 0), 45.0, 0.07, 1000.0)
+
+    def setUp(self):
+        from nodebased import viewportgpu
+        self.gpu = viewportgpu.renderer()
+        self.assertIsNotNone(self.gpu, viewportgpu.failure())
+
+    def draw(self, link, lights=(KEY_SUN, FILL_LAMP)):
+        scene = s.Scene((), lights, volumes=(replace(s.analytic_plume(40), light_link=link),))
+        return self.gpu.render(scene, self.VIEW, 160, 120, self.BACKGROUND, headlight=False, ambient=.1).astype(int)
+
+    def test_a_plume_excluded_from_a_light_shows_no_in_scattering_from_it_in_the_viewport(self):
+        plain, linked = self.draw(s.LIGHT_LINK_ALL), self.draw(LINKED)
+        key_only = self.draw(s.LIGHT_LINK_ALL, lights=(KEY_SUN,))
+        self.assertGreater(int(np.abs(plain - linked).max()), 20)
+        self.assertLessEqual(int(np.abs(linked - key_only).max()), 1)
+
+
+# --- smoke in the path tracers ------------------------------------------------------------------------------------------
+
+from nodebased import gpupathtrace, pathtrace as pt           # noqa: E402
+from tests.test_volume_scene import box as smoke_box           # noqa: E402
+
+PT_CAMERA = s.Camera()                                         # at (0, 0, 5) looking at the origin
+PT_SMOKE = volumerender.VolumeSettings(absorption=0.4, scattering=0.6, step_size=0.05, shadow_steps=16)
+PT_KEY = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(), s.Vec3(0.3, -0.2, -1.0), name="key")
+PT_FILL = s.Light("Point", (1, .5, .3), 4.0, s.Vec3(-2.0, 1.5, 3.0), name="fill")
+PT_OVERHEAD = s.Light("Directional", (1, 1, 1), 1.5, s.Vec3(), s.Vec3(0, -1, 0.01), name="overhead")
+
+
+def traced(scene, backend="cpu", size=12, samples=96, volume=PT_SMOKE, **settings):
+    settings.setdefault("max_bounces", 6)
+    settings.setdefault("diffuse_bounces", 6)
+    return pt.render(scene, PT_CAMERA, size, size, (0, 0, 0, 0), 0.0, "rgba", pt.PathSettings(samples=samples, **settings),
+                     volume=volume, backend=backend)
+
+
+def pt_plume(link, lights=(PT_KEY, PT_FILL), geometries=()):
+    return s.Scene(geometries, lights, volumes=(replace(smoke_box(24, 2.0), light_link=link),))
+
+
+class PathTracedSmokeTests(unittest.TestCase):
+    backend = "cpu"
+
+    def test_a_volume_excluded_from_a_light_is_not_lit_by_it(self):
+        plain = traced(pt_plume(s.LIGHT_LINK_ALL), self.backend)
+        excluded = traced(pt_plume(LINKED), self.backend)
+        key_only = traced(s.Scene((), (PT_KEY,), volumes=(smoke_box(24, 2.0),)), self.backend)
+        self.assertGreater(float(np.abs(plain - excluded).max()), .05)               # the point light lit it
+        np.testing.assert_allclose(excluded, key_only, atol=2e-3, rtol=0)             # and now it is lit by the key alone
+
+    def test_a_volume_excluded_from_every_light_is_dark(self):
+        dark = traced(pt_plume(NOBODY), self.backend)
+        self.assertLess(float(dark[..., :3].max()), 1e-6)
+        self.assertGreater(float(dark[6, 6, 3]), .1)                                  # still there: it still absorbs
+
+    def test_a_volume_excluded_from_the_overhead_light_casts_no_shadow_on_the_floor(self):
+        floor_card = s._card(8, 8, (.8, .8, .8, 1), s.Transform3D(s.Vec3(0, -1.2, 0), s.Vec3(-90, 0, 0)))
+        camera = s.Camera(s.Transform3D(s.Vec3(0, 3, 6)), s.Vec3(0, -.6, 0))
+        draw = lambda scene, **kw: pt.render(scene, camera, 12, 12, (0, 0, 0, 0), 0.0, "rgba",
+                                             pt.PathSettings(samples=96, max_bounces=1, diffuse_bounces=1),
+                                             volume=kw.get("volume", PT_SMOKE), backend=self.backend)
+        scene = lambda link: pt_plume(link, (PT_OVERHEAD,), (floor_card,))
+        shadowed = draw(scene(s.LIGHT_LINK_ALL))
+        linked = draw(scene(("exclude", ("overhead",))))
+        clear = draw(scene(("exclude", ("overhead",))), volume=replace(PT_SMOKE, shadow_density=0.0))
+        floor = draw(s.Scene((floor_card,), (PT_OVERHEAD,)))[..., 3] > .99
+        pixels = floor & (draw(s.Scene(volumes=(smoke_box(24, 2.0),)))[..., 3] < .01)
+        self.assertGreater(int(pixels.sum()), 10)
+        self.assertGreater(float(np.abs(shadowed - clear)[pixels].max()), .05)        # unlinked smoke shadows the floor
+        np.testing.assert_allclose(linked[pixels], clear[pixels], atol=2e-3, rtol=0)
+
+
+@unittest.skipUnless(gpu3d.available(), "no GPU adapter")
+class GpuPathTracedSmokeTests(PathTracedSmokeTests):
+    backend = "gpu"
+
+    def setUp(self):
+        if not gpupathtrace.soft_supported(gpu3d._state()):
+            self.skipTest("this adapter does not support GPU smoke path tracing")
+
+    def test_the_gpu_agrees_with_the_cpu_reference(self):
+        for link in (s.LIGHT_LINK_ALL, LINKED):
+            with self.subTest(link=link):
+                cpu, gpu = traced(pt_plume(link), "cpu", samples=256), traced(pt_plume(link), "gpu", samples=256)
+                self.assertLess(float(np.abs(cpu - gpu).mean()), .02)
 
 
 # --- the knobs ---------------------------------------------------------------------------------------------------------
