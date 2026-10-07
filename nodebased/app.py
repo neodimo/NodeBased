@@ -36,6 +36,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
+from .knobfit import ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow
 from . import analysisregion
 from . import presets as preset_model
 from . import fluidshelf
@@ -291,7 +292,7 @@ class FloatSliderControl(QWidget):
 
     def __init__(self, hard_range, soft_range, value, parent=None):
         super().__init__(parent)
-        self.spin = QDoubleSpinBox()
+        self.spin = FittedDoubleSpinBox()
         self.spin.setRange(*hard_range)
         self.spin.setDecimals(3)
         self.spin.setSingleStep(0.1)
@@ -7571,6 +7572,7 @@ class Window(QMainWindow):
         panel_layout.setSpacing(4)
         form = QFormLayout()
         form.setContentsMargins(16, 16, 16, 16)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         if key not in self.graph_nodes():
             label = QLabel("Select a node to edit its controls.\n\nLinear ACEScg · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n2D compositing, 3D scenes and\nGPU rendering are all available today.")
             label.setObjectName("muted")
@@ -7698,7 +7700,7 @@ class Window(QMainWindow):
                         choices = []
                     if value and value not in choices:
                         choices.append(value)
-                    control = QComboBox()
+                    control = ElidingComboBox()
                     control.setObjectName(f"ocio-{param}-choice")
                     control.setEditable(True)
                     control.addItems(choices)
@@ -7714,7 +7716,7 @@ class Window(QMainWindow):
                     form.addRow(label or param.replace("_", " ").title(), control)
                     return
                 if param in CHOICES:
-                    control = QComboBox()
+                    control = ElidingComboBox()
                     control.addItems(CHOICES[param])
                     control.setCurrentText(value)
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
@@ -7725,7 +7727,7 @@ class Window(QMainWindow):
                     # The grid names come from the file itself; "auto" and "none" are always offered, and
                     # a name typed by hand is kept (a sequence whose first frame lacks a grid stays usable).
                     from . import vdbio
-                    control = QComboBox()
+                    control = ElidingComboBox()
                     control.setEditable(True)
                     control.addItems(vdbio.grid_choices(node["params"]["vdb_path"]))
                     control.setCurrentText(value)
@@ -7796,7 +7798,7 @@ class Window(QMainWindow):
                         control.setPlaceholderText("RGBA, or e.g. beauty / diffuse / Z")
                         control.setToolTip("Leave empty for root RGB; choose a named EXR layer or scalar channel")
                 else:
-                    control = QSpinBox() if type(value) is int else QDoubleSpinBox()
+                    control = FittedSpinBox() if type(value) is int else FittedDoubleSpinBox()
                     control.setObjectName(f"{param}-field")
                     control.setRange(*( (2, 15) if node["type"] in ("GridWarp", "GridWarpTracker") and param in ("rows", "columns")
                                         else parameter_limits(node["type"], param)))
@@ -7820,7 +7822,7 @@ class Window(QMainWindow):
                         key, param, control, expression=expressions.get(param)))
 
             def numeric_field(param):
-                control = QDoubleSpinBox()
+                control = FittedDoubleSpinBox()
                 control.setObjectName(f"{param}-field")
                 control.setProperty("nodebased_node_id", key)
                 control.setProperty("nodebased_param", param)
@@ -7865,45 +7867,39 @@ class Window(QMainWindow):
                 if group.kind == "xyz":
                     # One row, three typed fields, as in Nuke. Each axis keys on its own, so every
                     # field carries its own diamond instead of the row sharing one.
-                    row = QWidget()
-                    row_layout = QHBoxLayout(row)
-                    row_layout.setContentsMargins(0, 0, 0, 0)
-                    row_layout.setSpacing(3)
+                    units = []
                     for axis, param in zip("xyz", group.params):
                         field = numeric_field(param)
                         field.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-                        row_layout.addWidget(QLabel(axis))
-                        row_layout.addWidget(field, 1)
-                        add_animation_button(row_layout, param, field)
-                        # Three diamonds share the row with three fields: keep them slim so the
-                        # digits keep their room in a narrow dock. The theme's button padding is
-                        # wider than a slim button, and clipped the glyph to nothing on a real display.
-                        diamond = row_layout.itemAt(row_layout.count() - 1).widget()
+                        unit = QWidget()
+                        unit_layout = QHBoxLayout(unit)
+                        unit_layout.setContentsMargins(0, 0, 0, 0)
+                        unit_layout.setSpacing(3)
+                        unit_layout.addWidget(QLabel(axis))
+                        unit_layout.addWidget(field, 1)
+                        add_animation_button(unit_layout, param, field)
+                        # Slim diamonds keep the digits their room; the row wraps to a second line
+                        # before a field is squeezed below the width its number needs.
+                        diamond = unit_layout.itemAt(unit_layout.count() - 1).widget()
                         diamond.setFixedWidth(18)
                         diamond.setStyleSheet(diamond.styleSheet() + "; padding: 0")
-                    form.addRow(group.label, row)
+                        units.append(unit)
+                    form.addRow(group.label, WrappingRow(units, spacing=3))
                     continue
                 if group.kind in ("xy", "xyz"):
-                    fields = QWidget()
-                    layout = QHBoxLayout(fields)
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setSpacing(4)
                     axis_fields = [numeric_field(param) for param in group.params]
+                    units = []
                     for axis, param, field in zip("xyz", group.params, axis_fields):
-                        layout.addWidget(QLabel(axis))
-                        layout.addWidget(self.animatable_row(key, param, field), 1)
-                    row = QWidget()
-                    row_layout = QHBoxLayout(row)
-                    row_layout.setContentsMargins(0, 0, 0, 0)
-                    row_layout.setSpacing(4)
-                    row_layout.addWidget(fields, 1)
-                    form.addRow(group.label, row)
+                        unit = QWidget()
+                        unit_layout = QHBoxLayout(unit)
+                        unit_layout.setContentsMargins(0, 0, 0, 0)
+                        unit_layout.setSpacing(4)
+                        unit_layout.addWidget(QLabel(axis))
+                        unit_layout.addWidget(self.animatable_row(key, param, field), 1)
+                        units.append(unit)
+                    form.addRow(group.label, WrappingRow(units))
                     continue
                 if group.kind == "color":
-                    fields = QWidget()
-                    layout = QHBoxLayout(fields)
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setSpacing(4)
                     color_fields = [numeric_field(param) for param in group.params]
                     for field in color_fields:
                         # Four stepper columns cost the digits their room in a narrow dock, and
@@ -7934,10 +7930,7 @@ class Window(QMainWindow):
 
                     swatch.clicked.connect(pick_color)
                     set_swatch()
-                    layout.addWidget(swatch)
-                    for field in color_fields:
-                        layout.addWidget(field, 1)
-                    form.addRow(group.label, fields)
+                    form.addRow(group.label, WrappingRow([swatch, *color_fields]))
                     continue
                 param = group.params[0]
                 value = node["params"][param]
@@ -7977,6 +7970,7 @@ class Window(QMainWindow):
                     curve = curves.get(param)
                     shown = resolved[param] if (curve or param in expressions) else value
                     control = FloatSliderControl(parameter_limits(node["type"], param), group.soft_range, shown)
+                    control.spin.setObjectName(f"{param}-field")
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")
@@ -8214,7 +8208,7 @@ class Window(QMainWindow):
                 draw_shape.setToolTip("Click polygon points in the viewer, then Enter to commit · Esc cancels")
                 draw_shape.clicked.connect(lambda checked=False, k=key: self.begin_roto_draw(k))
                 form.addRow(draw_shape)
-                tool = QComboBox()
+                tool = ElidingComboBox()
                 for label, value in (("Paint", "paint"), ("Eraser", "eraser"), ("Clone", "clone"),
                                      ("Reveal input 2", "reveal"), ("Blur", "blur"),
                                      ("Sharpen", "sharpen"), ("Smear", "smear"),
@@ -8227,7 +8221,7 @@ class Window(QMainWindow):
                 brush_size = QDoubleSpinBox(); brush_size.setRange(0.1, 4096); brush_size.setValue(self.viewer.paint_size)
                 brush_size.valueChanged.connect(lambda value: setattr(self.viewer, "paint_size", float(value)))
                 form.addRow("Brush size", brush_size)
-                lifetime = QComboBox()
+                lifetime = ElidingComboBox()
                 lifetime.addItem("Single frame", "single"); lifetime.addItem("All frames", "all")
                 lifetime.addItem("Frame range", "range"); lifetime.addItem("From current frame", "from_current")
                 lifetime.setCurrentIndex(lifetime.findData(self.viewer.paint_lifetime))
@@ -8248,7 +8242,7 @@ class Window(QMainWindow):
                     field.setValue(float(getattr(self.viewer, attr)))
                     field.valueChanged.connect(lambda value, name=attr: setattr(self.viewer, name, float(value)))
                     form.addRow(title, field)
-                blend = QComboBox()
+                blend = ElidingComboBox()
                 for value in ("over", "add", "multiply", "screen"): blend.addItem(value.title(), value)
                 blend.setCurrentIndex(blend.findData(self.viewer.paint_blend))
                 blend.currentIndexChanged.connect(lambda index, box=blend: setattr(self.viewer, "paint_blend", box.itemData(index)))
@@ -8266,7 +8260,7 @@ class Window(QMainWindow):
                     field.valueChanged.connect(lambda value, i=axis: self.viewer.paint_source_offset.__setitem__(i, float(value)))
                     offsets.addWidget(field)
                 form.addRow("Clone source offset", offsets)
-                source_frame = QComboBox(); source_frame.addItem("Previous frame", "relative"); source_frame.addItem("Absolute frame", "absolute")
+                source_frame = ElidingComboBox(); source_frame.addItem("Previous frame", "relative"); source_frame.addItem("Absolute frame", "absolute")
                 source_frame.currentIndexChanged.connect(lambda index, box=source_frame: setattr(self.viewer, "paint_source_frame", "relative" if box.itemData(index) == "relative" else int(self.viewer.absolute_source_frame)))
                 source_frame.setCurrentIndex(0 if self.viewer.paint_source_frame == "relative" else 1)
                 form.addRow("Clone source frame", source_frame)
@@ -8274,7 +8268,7 @@ class Window(QMainWindow):
                 absolute_frame.setValue(int(self.viewer.absolute_source_frame if isinstance(self.viewer.paint_source_frame, int) else 1))
                 absolute_frame.valueChanged.connect(lambda value: setattr(self.viewer, "absolute_source_frame", int(value)))
                 form.addRow("Absolute source frame", absolute_frame)
-                follow = QComboBox(); follow.addItem("No tracking", None)
+                follow = ElidingComboBox(); follow.addItem("No tracking", None)
                 for tracker_id, tracker_node in self.dispatcher.document["nodes"].items():
                     if tracker_node["type"] != "Tracker": continue
                     tracks = self.dispatcher.document.get("node_data", {}).get(tracker_id, {}).get("tracks", [])
@@ -8467,7 +8461,7 @@ class Window(QMainWindow):
                     visible_field.setChecked(edit_item["visible"])
                     visible_field.toggled.connect(lambda value: update_layer(("visible",), bool(value)))
                     form.addRow(visible_field)
-                    layer_blend = QComboBox()
+                    layer_blend = ElidingComboBox()
                     layer_blend.setObjectName("rotopaint-layer-blend")
                     for value in ("over", "add", "multiply", "screen"): layer_blend.addItem(value.title(), value)
                     layer_blend.setCurrentIndex(layer_blend.findData(edit_item["blend"]))
@@ -8481,7 +8475,7 @@ class Window(QMainWindow):
                     layer_opacity_field.valueChanged.connect(lambda value: update_layer(("opacity",), float(value)))
                     form.addRow("Opacity", layer_opacity_field)
                     if edit_item["kind"] == "shape":
-                        mode_field = QComboBox()
+                        mode_field = ElidingComboBox()
                         mode_field.setObjectName("rotopaint-layer-mode")
                         for value in shape_model.SHAPE_MODES: mode_field.addItem(value.title(), value)
                         mode_field.setCurrentIndex(mode_field.findData(edit_item["mode"]))
@@ -8519,7 +8513,7 @@ class Window(QMainWindow):
                             color_button.setObjectName("rotopaint-layer-color")
                             color_button.clicked.connect(lambda: choose_layer_color())
                             form.addRow(color_button)
-                        layer_lifetime = QComboBox()
+                        layer_lifetime = ElidingComboBox()
                         layer_lifetime.setObjectName("rotopaint-layer-lifetime")
                         for label2, value in (("Single frame", "single"), ("All frames", "all"),
                                               ("Frame range", "range"), ("From current frame", "from_current")):
@@ -8543,7 +8537,7 @@ class Window(QMainWindow):
                 mix_body.setLayout(rotopaint_holds["mix"])
                 form.addRow(mix_body)
             if node["type"] == "Flare":
-                link = QComboBox()
+                link = ElidingComboBox()
                 link.setObjectName("flare-tracker-link")
                 link.setToolTip("Follow a Tracker point's motion from its reference frame")
                 link.addItem("No Tracker link", ("", -1))
@@ -9619,6 +9613,7 @@ class Window(QMainWindow):
             glyph.setObjectName("key-glyph")
             glyph.setToolTip("A key sits on this frame")
             field.lineEdit().addAction(glyph, QLineEdit.ActionPosition.LeadingPosition)
+            field.updateGeometry()
 
     def expression_row(self, key, param, expression=None):
         """Return the formula editor for one numeric knob.
