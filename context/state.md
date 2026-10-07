@@ -1,5 +1,31 @@
 ## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (12:25 PM on 2026-10-07 PDT)
+
+`main` moved `4f7928d` -> `c2432b8` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 33 tests in 44.620 s, OK. Full suite on
+the stacked tip `c2432b8` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1007-1055.log`, started 10:55 AM): **Ran 4658 tests in 5212.731 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step Z1 of 2: knob values are never cut off.** Commits:
+  - `0aed994` Properties panel: numeric knobs show their full value
+  Diff: 3 files changed, 549 insertions(+), 47 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step R1 of 2: Roto shapes an artist can see and edit in the panel.** Commits:
+  - `126c39b` test: cover Roto artist panel and rendering controls
+  - `06a94c5` feat: render animated Roto motion blur samples
+  - `d3c801c` feat: composite Roto shape feather and opacity controls
+  - `5df6b5f` feat: add editable Roto shape list and controls
+  Diff: 5 files changed, 274 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (8:25 AM on 2026-10-07 PDT)
 
 `main` moved `60e2841` -> `a178fc6` (lane commits cherry-picked onto main in lane order) and then to this
