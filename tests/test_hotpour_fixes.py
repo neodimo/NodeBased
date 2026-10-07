@@ -289,5 +289,40 @@ class DigestOnlyTests(unittest.TestCase):
         self.assertLessEqual(calls["n"], 8)
 
 
+class WhitewaterAtFineResolutionTests(unittest.TestCase):
+    """The kinetic-energy potential was 0.5 * m * v^2 with m the particle's volume, so it shrank with the cube of the
+    resolution: at 128 cells and finer no liquid, however violent, reached the knob's range (its smallest allowed
+    maximum is 1e-6), and Hot pour's whitewater never emitted a particle."""
+
+    def impact(self, spacing, **params):
+        from types import SimpleNamespace
+        from nodebased import whitewater
+        from tests.test_whitewater import liquid
+        angle = np.linspace(-.5, .5, 12)
+        points = np.column_stack((.2 + .15 * np.cos(angle), .3 + .15 * np.sin(angle), np.full(12, .1)))
+        axes = [np.arange(12, dtype=np.float32) * .1 - .1 for _ in range(3)]
+        x, y, z = np.meshgrid(*axes, indexing="ij")
+        phi = np.sqrt((x - .2) ** 2 + (y - .3) ** 2 + (z - .1) ** 2) - .15
+        normals = points - np.array([.2, .3, .1])
+        normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+        velocity = normals * 3.0
+        velocity[:, 2] += np.where(np.arange(12) % 2, -1.0, 1.0)
+        source = liquid(points, velocity, phi)
+        from dataclasses import replace
+        source = replace(source, stream=SimpleNamespace(spacing=spacing))
+        solver = whitewater.FluidWhitewater3D({"max_particles": 60, "spray_threshold": .01, "foam_threshold": .01,
+                                               "spray_emission": 1., "foam_emission": 1., "wave_crest_min": 0.0,
+                                               "wave_crest_max": .2, "kinetic_energy_min": 1e-4,
+                                               "kinetic_energy_max": 3e-3, "whitewater_backend": "cpu", **params})
+        return len(solver.step(solver.initial_state(), source, 1).ids)
+
+    def test_a_fine_liquid_emits_nothing_by_default_and_emits_with_the_energy_per_unit_mass(self):
+        self.assertEqual(self.impact(0.003), 0)
+        self.assertGreater(self.impact(0.003, kinetic_energy_per_mass=1), 0)
+
+    def test_the_default_leaves_a_coarse_liquid_exactly_as_it_was(self):
+        self.assertEqual(self.impact(0.15), self.impact(0.15, kinetic_energy_per_mass=0))
+
+
 if __name__ == "__main__":
     unittest.main()

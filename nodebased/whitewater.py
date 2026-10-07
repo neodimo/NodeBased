@@ -236,6 +236,8 @@ class FluidWhitewater3D:
                         getattr(liquid.surface, "voxel_size", 1.0) / max(len(liquid_pos), 1) ** (1.0 / 3.0))
         support = max(3.0 * spacing, 2.0 * float(getattr(liquid.surface, "voxel_size", spacing)))
         particle_mass = float(liquid.stream.spacing) ** 3 if liquid.stream is not None else 1.0
+        if int(p.get("kinetic_energy_per_mass", 0)):
+            particle_mass = 1.0            # 0.5 v^2: the same range means the same thing at every resolution
         potential_solver = self._gpu.potentials if self._gpu is not None else _emission_potentials
         trapped_raw, crest_raw, energy_raw = potential_solver(liquid_pos, liquid_vel, normals, support,
                                                                particle_mass)
@@ -402,6 +404,7 @@ def whitewater_defaults():
             "foam_size": 0.04, "spray_size": 0.025, "bubbles_size": 0.025,
             "surface_band": 0.08, "surface_offset": 0.02, "spray_lift": 0.5,
             "gravity": 9.8, "spray_drag": 0.15, "bubble_buoyancy": 1.5, "bubble_drag": 2.0,
+            "kinetic_energy_per_mass": 0,
             "seed": 0, "whitewater_backend": "auto", "cache_memory_mb": 256, "cache_disk_mb": 2048}
 
 

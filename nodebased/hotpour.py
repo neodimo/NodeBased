@@ -118,6 +118,7 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
                                          "absorption_distance": 0.08})
     connect("surface", "particles", "liquid_cache")
     create("whitewater", "FluidWhitewater3D", {"max_particles": 60000, "foam_lifespan": 4.0, "particle_lifespan": 2.0,
+                                               "kinetic_energy_per_mass": 1,
                                                "cache_memory_mb": 256, "cache_disk_mb": 2048})
     connect("whitewater", "particles", "liquid_cache")
     create("foam", "ParticleRender3D", {"representation": "foam", "size_scale": 0.7})
