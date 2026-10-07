@@ -317,6 +317,7 @@ def main(argv=None):
     parser.add_argument("--smoke-pressure", default="resident_sparse")
     parser.add_argument("--workdir", default=None)
     parser.add_argument("--json", default=None)
+    parser.add_argument("--reuse-cache", action="store_true", help="skip simulation and use the cache already under --workdir")
     parser.add_argument("--no-steam", action="store_true")
     parser.add_argument("--no-whitewater", action="store_true")
     parser.add_argument("--playback", action="store_true")
@@ -342,14 +343,28 @@ def main(argv=None):
     evaluator = Evaluator(sim=store)
     dispatcher = build_document(args)
     document = dispatcher.document
-    sampler = DriverGpuSampler(args.adapter)
-    sampler.start()
-    started = time.perf_counter()
-    rows, peaks = bake(args, document, evaluator, gpu)
-    wall = time.perf_counter() - started
-    sampler.stop()
-    result = {"adapter": adapter, "liquid_cells": args.liquid_cells, "smoke_cells": args.smoke_cells, "frames": args.frames,
-              "bake_wall_s": round(wall, 1), "stages": peaks, "driver_gpu_peak_mb": sampler.peak,
+    result = {"adapter": str(gpu["info"].get("device")), "adapter_request": args.adapter,
+              "liquid_cells": args.liquid_cells, "smoke_cells": args.smoke_cells, "frames": args.frames,
+              "passes": {}}
+
+    def checkpoint(pass_name):
+        """Persist each completed pass immediately so an interrupted later pass keeps its evidence."""
+        if args.json:
+            result["completed_pass"] = pass_name
+            target = Path(args.json)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(result, indent=1, default=str))
+
+    if args.reuse_cache:
+        result["passes"]["bake"] = "reused existing cache; bake metrics unavailable"
+    else:
+        sampler = DriverGpuSampler(args.adapter)
+        sampler.start()
+        started = time.perf_counter()
+        rows, peaks = bake(args, document, evaluator, gpu)
+        wall = time.perf_counter() - started
+        sampler.stop()
+        result.update({"bake_wall_s": round(wall, 1), "stages": peaks, "driver_gpu_peak_mb": sampler.peak,
               "liquid": percentile_row([r["liquid_s"] for r in rows.values()]),
               "surface": percentile_row([r["surface_s"] for r in rows.values()]),
               "whitewater": percentile_row([r["whitewater_s"] for r in rows.values() if "whitewater_s" in r]),
@@ -359,15 +374,22 @@ def main(argv=None):
               "liquid_backend": rows[1].get("liquid_backend"), "liquid_fallback": rows[1].get("liquid_fallback"),
               "steam_backend": rows[1].get("steam_backend"),
               "peak_steam_tiles": max((r.get("steam_tiles", 0) for r in rows.values()), default=0),
-              "per_frame": {str(f): rows[f] for f in rows}}
+              "per_frame": {str(f): rows[f] for f in rows}})
     result["cache"] = cache_report(sim_root, args)
+    if not args.reuse_cache:
+        result["passes"]["bake"] = "complete"
+        checkpoint("bake")
     if args.playback and not args.no_steam:
         add_playback_scene(dispatcher)
         document = dispatcher.document
         evaluator = Evaluator(sim=simcache.SimCache(root=sim_root, memory_budget=2 << 30, disk_budget=400_000 << 20))
         result["playback"] = playback(args, document, evaluator, gpu)
+        result["passes"]["playback"] = "complete"
+        checkpoint("playback")
     if args.stills:
         result["stills"] = render_stills(args, dispatcher, evaluator)
+        result["passes"]["stills"] = "complete"
+        checkpoint("stills")
     text = json.dumps(result, indent=1, default=str)
     if args.json:
         Path(args.json).write_text(text)
