@@ -20,7 +20,6 @@ never omitted and never a pass. `discrete` (the RTX) is not in the default adapt
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import os
 import statistics
@@ -28,6 +27,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 import numpy as np
 
@@ -244,6 +248,25 @@ def run_case(case, adapter, size, out):
 
 # ---------------------------------------------------------------------------------------------------------- the matrix
 
+def _try_lock(fd):
+    if os.name == "nt":
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            raise BlockingIOError(str(exc)) from exc
+    else:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock(fd):
+    if os.name == "nt":
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
 class GpuTurn:
     """One short exclusive turn on the shared lock; times out instead of waiting for ever."""
 
@@ -255,16 +278,16 @@ class GpuTurn:
         deadline = time.monotonic() + self.wait
         while True:
             try:
-                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _try_lock(self.fd)
                 return self
-            except BlockingIOError:
+            except (BlockingIOError, PermissionError):
                 if time.monotonic() > deadline:
                     os.close(self.fd)
                     raise TimeoutError(f"GPU lock {LOCK} still held after {self.wait} s")
                 time.sleep(2)
 
     def __exit__(self, *exc):
-        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        _unlock(self.fd)
         os.close(self.fd)
 
 

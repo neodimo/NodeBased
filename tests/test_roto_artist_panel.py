@@ -129,6 +129,9 @@ class RotoArtistPanelTests(unittest.TestCase):
 
     def test_properties_scroll_and_focus_survive_roto_and_transform_edits(self):
         w = self.window
+        # The test needs a panel taller than its viewport. Whether a Transform panel overflows the default
+        # dock depends on the platform's font and screen (10/8 CI Ubuntu: it did not), so make the viewport short.
+        w.properties.setMaximumHeight(200)
         settle_layout(w, w.properties.widget())
         for node_id, field_name, value in (("r", "roto-shape-feather", 8.0),
                                            ("t", "mix-field", 0.9)):
@@ -143,7 +146,7 @@ class RotoArtistPanelTests(unittest.TestCase):
             bar = w.properties.verticalScrollBar()
             bar.setValue(bar.maximum())
             settle_layout(w, w.properties.widget())
-            self.assertGreater(bar.maximum(), 0, f"{node_id} panel should scroll at the default dock size")
+            self.assertGreater(bar.maximum(), 0, f"{node_id} panel should scroll in a short dock")
             field = w.properties.widget().findChild(QDoubleSpinBox, field_name)
             self.assertIsNotNone(field, f"missing {field_name} on {node_id}")
             w.properties.ensureWidgetVisible(field)
