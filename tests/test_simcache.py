@@ -129,6 +129,21 @@ class SimCacheTests(unittest.TestCase):
             self.assertTrue(old._path((run, frame)).is_file())
             self.assertEqual(scoped.frames(run), [frame])
 
+    def test_scoped_cache_uses_legacy_frames_as_solve_anchors(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = "f" * 64
+            old = simcache.SimCache(root)
+            expected = simcache.State({"x": np.array([2.0])}, {"frame": 2})
+            old.put(run, 2, expected)
+            scoped = simcache.SimCache(Path(root) / "stores" / "256-2048",
+                                       legacy_root=root)
+
+            anchor = scoped.latest_at_or_before(run, 4)
+
+            self.assertIsNotNone(anchor)
+            self.assertEqual(anchor[0], 2)
+            self.assertEqual(anchor[1], expected)
+
     def test_cancellation(self):
         cancel = threading.Event()
         calls = [0]

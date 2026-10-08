@@ -357,6 +357,16 @@ class SimCache:
             if self.enabled and self.root is not None:
                 self._scan()
                 candidates.update(number for (name, number) in self._index if name == run and number <= frame)
+                if self.legacy_root is not None:
+                    legacy_dir = self.legacy_root / run[:2] / run
+                    for suffix in (".npz", ".nbc"):
+                        for path in legacy_dir.glob(f"*{suffix}"):
+                            try:
+                                number = int(path.stem)
+                            except ValueError:
+                                continue
+                            if number <= frame:
+                                candidates.add(number)
         for number in sorted(candidates, reverse=True):
             state = self.get(run, number)
             if state is not None:
