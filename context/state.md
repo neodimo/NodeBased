@@ -1,5 +1,36 @@
 ## 2026-10-07 — Lane 4 P1 portable rendering benchmark, PARTIAL (9:19 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (5:56 AM on 2026-10-08 PDT)
+
+`main` moved `84f1a8c` -> `7666387` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 230 tests in 185.869 s, OK. Full suite on
+the stacked tip `7666387` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1008-0345.log`, started 3:45 AM): **Ran 4703 tests in 6509.807 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step AA2 of 2: new nodes land in the stream the way Nuke places them.** Commits:
+  - `c87c577` New nodes land in the stream below the selection and push downstream nodes down; the view pans without zooming
+  - `974301a` Timeline: key ticks stand at least half the track tall and 3 px wide
+  Diff: 5 files changed, 224 insertions(+), 20 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step N3 of 3: one production-sized scene that uses everything, and its numbers (finish 1).** Commits:
+  - `f558ed5` Record N3 measurement blocker and cache state
+  - `a1197ca` Refresh full-size Hot pour bake measurements
+  Diff: 4 files changed, 516 insertions(+), 516 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step R4 of 2: Roto shows the plate before you draw, and the Tracker lists its points.** Commits:
+  - `638d513` docs: clarify Roto inversion with a plate
+  - `44d8052` feat: list Tracker points and expose empty Roto cue
+  - `bcb7330` fix: pass Roto plate through with Nuke premultiply defaults
+  Diff: 10 files changed, 324 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (12:55 AM on 2026-10-08 PDT)
 
 `main` moved `0284e2f` -> `73ac3eb` (lane commits cherry-picked onto main in lane order) and then to this
