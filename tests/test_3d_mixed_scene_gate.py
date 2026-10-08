@@ -68,7 +68,15 @@ class ExampleProject(unittest.TestCase):
         from nodebased import splats
         with tempfile.TemporaryDirectory() as folder:
             splats.write_ply(spiral_cloud(), str(Path(folder) / "cloud.ply"))
-            self.assertEqual((Path(folder) / "cloud.ply").read_bytes(), (gate.PROJECT.parent / "cloud.ply").read_bytes())
+            made = (Path(folder) / "cloud.ply").read_bytes()
+            committed = (gate.PROJECT.parent / "cloud.ply").read_bytes()
+            # sin/cos differ by one ulp between platform math libraries (Windows CI flipped one float32), so the
+            # header must match exactly and the float32 body to well under a visible difference.
+            marker = b"end_header\n"
+            self.assertEqual(made[:made.index(marker) + len(marker)], committed[:committed.index(marker) + len(marker)])
+            body = lambda data: np.frombuffer(data[data.index(marker) + len(marker):], dtype="<f4")
+            self.assertEqual(body(made).shape, body(committed).shape)
+            np.testing.assert_allclose(body(made), body(committed), rtol=1e-5, atol=1e-6)
 
 
 class NewPasses(unittest.TestCase):

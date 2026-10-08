@@ -2,6 +2,7 @@
 10/6 real-display QA). A Write render shows frame N of M with elapsed time in the status bar, can be
 cancelled there, ends with a message and a "Show in folder" button, and a failing frame stops the
 render with its number."""
+import os
 import tests.isolation  # noqa: F401  (keeps the window's layout out of the real Qt settings)
 
 import tempfile
@@ -81,7 +82,7 @@ class WriteRenderFeedbackTests(unittest.TestCase):
         self.assertFalse(w.show_in_folder.isHidden())
         with unittest.mock.patch("nodebased.app.QDesktopServices.openUrl") as opened:
             w.show_in_folder.click()
-        self.assertEqual(opened.call_args.args[0].toLocalFile(), str(self.dir))
+        self.assertEqual(os.path.normpath(opened.call_args.args[0].toLocalFile()), os.path.normpath(str(self.dir)))
         # The next render clears the button until it finishes again.
         w.render_write("writer", single=True)
         self.assertEqual(w.statusBar().currentMessage().split(" to ")[0], "Rendered 1 frame")

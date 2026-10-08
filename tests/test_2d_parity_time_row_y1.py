@@ -66,7 +66,8 @@ class TimeRowTests(unittest.TestCase):
             self.assertTrue(label.isVisible())
         spins = (w.frame_first, w.frame_last, w.frame_fps)
         self.assertTrue(all(w.frame_current.width() > spin.width() for spin in spins),
-                        "the current frame is the largest field")
+                        "the current frame is the largest field: frame, in, out, fps = "
+                        f"{[s.width() for s in (w.frame_current, *spins)]}")
         for spin in (w.frame_current, w.frame_first, w.frame_last, w.frame_fps):
             self.assertFalse(spin.keyboardTracking())
 

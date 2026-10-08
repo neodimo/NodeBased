@@ -135,6 +135,9 @@ class RotoArtistPanelTests(unittest.TestCase):
             if node_id == "t":
                 w.command({"op": "create", "id": "t", "type": "Transform", "pos": [100, 0]},
                           render=False)
+                # Select only t: with r also selected, which panel Qt's unordered selectedItems()
+                # puts first differs by platform, and the rebuild then showed the Roto panel.
+                w.graph.scene().clearSelection()
                 w.graph.items_by_id["t"].setSelected(True)
                 w.inspect("t")
             bar = w.properties.verticalScrollBar()

@@ -673,6 +673,21 @@ def apply_theme(name, accent=None):
     return name
 
 
+class _FittedKnobRow(QWidget):
+    """A numeric knob and its key button. The row reports the width the number needs as its minimum,
+    so a form row wraps the field under its label on a narrow panel instead of squeezing the number
+    into an ellipsis (10/7 CI: a 1024x768 window cut -12345.678 to '-1234…')."""
+
+    def __init__(self, control):
+        super().__init__()
+        self._control = control
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        spacing = self.layout().spacing() if self.layout() is not None else 4
+        return QSize(max(hint.width(), self._control.sizeHint().width() + spacing + 26), hint.height())
+
+
 class FrameSpinBox(QSpinBox):
     """The current-frame field: a plain number goes to that frame, "+10" / "-5" moves relative to
     the frame it shows (Nuke's viewer frame box does the same). Commits on Enter or focus-out."""
@@ -680,6 +695,21 @@ class FrameSpinBox(QSpinBox):
     def __init__(self):
         super().__init__()
         self.setKeyboardTracking(False)
+        # The other time-row fields; the frame box stays wider than each of them. Their fitted width
+        # follows their text and font, and "24.000 fps" in Windows' font outgrew a fixed 150 px
+        # (10/8 CI: the current frame stopped being the largest field at 1440x920).
+        self.peers = ()
+
+    def _peer_floor(self):
+        return max((peer.sizeHint().width() + 12 for peer in self.peers), default=0)
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        return QSize(max(hint.width(), self.minimumWidth(), self._peer_floor()), hint.height())
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        return QSize(max(hint.width(), self._peer_floor()), hint.height())
 
     @staticmethod
     def _relative(text):
@@ -6372,20 +6402,20 @@ class Window(QMainWindow):
         self.frame_slider.setMinimumWidth(140)
         row.addWidget(self.frame_slider, 1)
         self.frame_first_label = caption("In", "First frame of the comp's range")
-        self.frame_first = QSpinBox()
+        self.frame_first = FittedSpinBox()
         self.frame_first.setRange(*TIME_LIMITS["first"])
         self.frame_first.setMinimumWidth(76)
         self.frame_first.setToolTip("In: first frame of the comp's range. It cannot pass Out.")
         row.addWidget(self.frame_first)
         self.frame_last_label = caption("Out", "Last frame of the comp's range")
-        self.frame_last = QSpinBox()
+        self.frame_last = FittedSpinBox()
         self.frame_last.setRange(*TIME_LIMITS["last"])
         self.frame_last.setMinimumWidth(76)
         self.frame_last.setToolTip("Out: last frame of the comp's range. It cannot precede In.")
         row.addWidget(self.frame_last)
         # Playback rate is a property of the comp, so it is an undoable document edit through the
         # same boundary as the range — an agent setting fps and an artist typing it share one path.
-        self.frame_fps = QDoubleSpinBox()
+        self.frame_fps = FittedDoubleSpinBox()
         self.frame_fps.setRange(*TIME_LIMITS["fps"])
         self.frame_fps.setDecimals(3)
         self.frame_fps.setSingleStep(1.0)
@@ -6393,6 +6423,9 @@ class Window(QMainWindow):
         self.frame_fps.setToolTip("Playback rate. New comps start at 24 fps; the transport and the "
                                   "dropped-frame counter both follow this value.")
         row.addWidget(self.frame_fps)
+        self.frame_current.peers = (self.frame_first, self.frame_last, self.frame_fps)
+        for peer in self.frame_current.peers:
+            peer.lineEdit().textChanged.connect(lambda _text: self.frame_current.updateGeometry())
         self.fps_presets = QComboBox()
         self.fps_presets.setToolTip("Common delivery rates")
         self.fps_presets.addItem("rate", None)
@@ -9011,15 +9044,32 @@ class Window(QMainWindow):
         self.properties.setWidget(panel)
         for child in [panel, *panel.findChildren(QWidget)]:
             child.installEventFilter(self)
-        def restore_panel_state():
-            self.properties.verticalScrollBar().setValue(scroll_position[0])
-            self.properties.horizontalScrollBar().setValue(scroll_position[1])
-            for name in focus_path:
-                candidate = self.properties.findChild(QWidget, name)
-                if candidate is not None and candidate.isEnabled() and candidate.isVisible():
-                    candidate.setFocus(Qt.FocusReason.OtherFocusReason)
-                    break
-        QTimer.singleShot(0, restore_panel_state)
+        scroll_area = self.properties
+        restored = {"scroll": False, "focus": not focus_path}
+        def restore_panel_state(attempts_left=40):
+            # A queued restore can outlive the window, and the panel's tabs fill in lazily, so the
+            # field and the full scroll range may not exist yet: retry briefly instead of giving up.
+            if scroll_area.widget() is not panel:
+                return
+            if not restored["scroll"]:
+                vbar, hbar = scroll_area.verticalScrollBar(), scroll_area.horizontalScrollBar()
+                vbar.setValue(scroll_position[0])
+                hbar.setValue(scroll_position[1])
+                restored["scroll"] = (vbar.value(), hbar.value()) == tuple(scroll_position)
+            if not restored["focus"]:
+                current = self.focusWidget()
+                if current is not None and not scroll_area.isAncestorOf(current):
+                    restored["focus"] = True  # the user moved on; do not pull focus back
+                # The exact control first; an enclosing container only once the retries run out.
+                for name in (focus_path if attempts_left == 0 else focus_path[:1]):
+                    candidate = scroll_area.findChild(QWidget, name)
+                    if candidate is not None and candidate.isEnabled() and candidate.isVisible():
+                        candidate.setFocus(Qt.FocusReason.OtherFocusReason)
+                        restored["focus"] = True
+                        break
+            if not (restored["scroll"] and restored["focus"]) and attempts_left > 0:
+                QTimer.singleShot(25, scroll_area, lambda: restore_panel_state(attempts_left - 1))
+        QTimer.singleShot(0, scroll_area, restore_panel_state)
 
     def _properties_focus_path(self, focused):
         path = []
@@ -9659,7 +9709,7 @@ class Window(QMainWindow):
 
     def animatable_row(self, key, param, control, expression=None):
         """Pack a numeric control next to its keyframe button."""
-        row = QWidget()
+        row = _FittedKnobRow(control)
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -10950,7 +11000,7 @@ class Window(QMainWindow):
         self._write_folder = folder
         self.show_in_folder.show()
         token = self._write_folder_token = getattr(self, "_write_folder_token", 0) + 1
-        QTimer.singleShot(60000, lambda: token == self._write_folder_token and self._hide_write_folder_button())
+        QTimer.singleShot(60000, self.show_in_folder, lambda: token == self._write_folder_token and self._hide_write_folder_button())
 
     def _hide_write_folder_button(self):
         self._write_folder_token = getattr(self, "_write_folder_token", 0) + 1
