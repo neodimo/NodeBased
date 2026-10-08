@@ -13,7 +13,7 @@ class HotPourBenchmarkCacheReportTests(unittest.TestCase):
     def test_report_counts_packed_sparse_frames_and_dense_equivalent(self):
         with tempfile.TemporaryDirectory() as root:
             run = "d" * 64
-            cache = SimCache(root)
+            cache = SimCache(Path(root) / "stores" / "256-2048")
             cache.put(run, 3, State({
                 "coords": np.array([[0, 0, 0], [1, 0, 0]], dtype=np.int32),
                 "density": np.ones((2, 8, 8, 8), dtype=np.float32),
