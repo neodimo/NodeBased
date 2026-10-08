@@ -306,6 +306,9 @@ The GPU texture upload was not isolated in this baseline: the adapter was reserv
 integrator's full-suite run. The measured disk phases are far below the whole-scene
 benchmark's 15,421.7 ms median fetch, so cache file reading alone cannot explain that
 number; evaluator work outside these two cache hits and the GPU upload remain to be timed.
+The disk loader now retains the arrays owned by NumPy's archive reader instead of making
+two additional copies. The existing `.npz` layout remains readable and writable; a Radeon
+before/after playback comparison is pending the adapter lock.
 
 GPU path-traced showcase stills at 1920 × 1080:
 
