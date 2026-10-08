@@ -278,6 +278,28 @@ def node_description(kind):
     return NODE_CATEGORIES[category][kind] if category else ""
 
 
+# The thirteen colour families of the new look (UI-SPEC.md) are the catalog's categories. "Other" is
+# the plumbing (Dot, Group, Backdrop ...), which has no family of its own: each of its kinds is filed
+# here under the family whose colour suits it. Neutral Metadata for routing and bookkeeping nodes,
+# Image for the two that carry pictures. This is the one table; a test fails on any registered node
+# type that resolves to nothing.
+OTHER_KIND_FAMILY = {
+    "ContactSheet": "Image", "PostageStamp": "Image",
+    "Dot": "Metadata", "NoOp": "Metadata", "Profile": "Metadata", "Backdrop": "Metadata",
+    "Group": "Metadata", "Input": "Metadata", "Output": "Metadata", "Precomp": "Metadata",
+    "Assert": "Metadata",
+}
+FAMILY_NAMES = tuple(name for name in NODE_CATEGORIES if name != "Other")
+
+
+def node_family(kind):
+    """The colour family (one of `FAMILY_NAMES`) of a node type; an unknown type is Metadata."""
+    category = NODE_CATEGORY_OF.get(kind)
+    if category is None or category == "Other":
+        return OTHER_KIND_FAMILY.get(kind, "Metadata")
+    return category
+
+
 # Which bundled doc's node table a kind's "What is this?" row lives in: 3D_FOUNDATION.md's single
 # "Nodes" table carries the 3D, Particles and Fluids categories together; everything else is
 # judged against the 2D parity audit.

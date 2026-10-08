@@ -113,16 +113,21 @@ class NodeShapeTests(unittest.TestCase):
         self.assertGreaterEqual(bounds.left(), 0)
         self.assertLessEqual(bounds.right(), CIRCLE_DIAMETER)
 
-    def test_other_3d_nodes_are_rounded_and_2d_nodes_keep_square_corners(self):
+    def test_other_3d_nodes_are_pills_and_2d_nodes_are_rounded_cards(self):
+        # New look (NL2): a 2D card has a 10 px corner like the mockup's nodes instead of a square one,
+        # but a 3D node's pill (a 26 px corner) is still unmistakably rounder.
         sphere_key, grade_key = self.create("Sphere3D"), self.create("Grade")
         sphere, grade = self.window.graph.items_by_id[sphere_key], self.window.graph.items_by_id[grade_key]
         self.assertEqual((sphere.rect().width(), sphere.rect().height()), (NODE_WIDTH, NODE_HEIGHT))
         round_alpha, card_alpha = self.painted(sphere), self.painted(grade)
         self.assertEqual(round_alpha(2, 2), 0)
+        self.assertEqual(round_alpha(6, 6), 0)
         self.assertFalse(sphere.shape().contains(QPointF(2, 2)))
         self.assertGreater(round_alpha(NODE_WIDTH / 2, NODE_HEIGHT / 2), 200)
-        self.assertGreater(card_alpha(2, 2), 200)
-        self.assertTrue(grade.shape().contains(QPointF(2, 2)))
+        self.assertLess(card_alpha(2, 2), 40)  # only antialiasing at the curve
+        self.assertGreater(card_alpha(6, 6), 200)
+        self.assertFalse(grade.shape().contains(QPointF(2, 2)))
+        self.assertTrue(grade.shape().contains(QPointF(6, 6)))
 
 
 if __name__ == "__main__":

@@ -324,11 +324,14 @@ class DesktopTests(unittest.TestCase):
         created = next(item for key, item in w.graph.items_by_id.items() if key not in {'plate', 'wash', 'grade', 'merge', 'viewer'})
         self.assertFalse(created.sceneBoundingRect().intersects(merge_rect))
 
-    def test_node_titles_are_large_and_centred(self):
+    def test_node_titles_follow_the_family_icon_and_stay_inside_the_card(self):
+        # New look (NL2): the name is 13 px semibold set after the family icon, left aligned like the
+        # mockup, no longer 14 pt and centred; a long name is cut with an ellipsis to fit the card.
         node = self.window.graph.items_by_id['grade']
         title = next(item for item in node.childItems() if isinstance(item, QGraphicsSimpleTextItem))
-        self.assertGreaterEqual(title.font().pointSize(), 14)
-        self.assertAlmostEqual(title.pos().x() + title.boundingRect().width() / 2, 95, places=3)
+        self.assertGreaterEqual(title.font().pixelSize(), 13)
+        self.assertAlmostEqual(title.pos().x(), node.icon_rect.right() + 7, places=3)
+        self.assertLessEqual(title.pos().x() + title.boundingRect().width(), node.rect().width())
 
     def test_disabled_nodes_are_dimmed_and_keep_merge_b_input_visible(self):
         w = self.window
@@ -2279,7 +2282,8 @@ class ViewerNodeGraphTests(unittest.TestCase):
         self.assertTrue(viewer_edges, 'viewing a node must draw the Viewer connection')
         self.assertTrue(other_edges, 'the comp itself must still have ordinary noodles to compare')
         for edge in viewer_edges:
-            self.assertEqual(edge.pen().style(), Qt.PenStyle.DashLine)
+            # New look (NL2): the mockup's dash pattern is a custom one (4 on, 5 off), no longer Qt's stock DashLine.
+            self.assertNotEqual(edge.pen().style(), Qt.PenStyle.SolidLine)
             self.assertFalse(edge.arrow, 'a view tap must not claim a processing direction')
             self.assertLess(edge.pen().widthF(), other_edges[0].pen().widthF())
             self.assertLess(edge.zValue(), other_edges[0].zValue())

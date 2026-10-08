@@ -20,7 +20,7 @@ import uuid
 from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
-                           QShortcut, QTextCursor, QTextFormat, QValidator)
+                           QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -35,8 +35,10 @@ from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES)
-from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
+from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
+from . import graphlook
+from .graphcorner import GraphCorner
 from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow, hide_spin_buttons,
                       with_hidden_buttons)
 from . import analysisregion
@@ -58,7 +60,7 @@ class GenerateSignals(QObject):
 
 from .topbar import TopBar
 from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, grid_color,
-                    valid_accent)
+                    valid_accent, TOKENS, FAMILY_COLORS, TYPE)
 from .color import VIEWS
 from . import gpudisplay
 from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE, VIEWER_INPUT_COUNT,
@@ -379,6 +381,7 @@ class Preferences:
     DISPLAY_CACHE_FLOAT32 = "interface/display_cache_float32"
     LAST_PROJECT_DIRECTORY = "interface/last_project_directory"
     VIEWER_AUTO_3D = "interface/viewer_auto_3d"
+    WIRE_MODE = "interface/wire_mode"
     WORKSPACE = "workspace"
 
     def __init__(self):
@@ -391,6 +394,16 @@ class Preferences:
     def set_theme(self, name):
         if name in THEMES:
             self._store.setValue(self.THEME, name)
+            self._store.sync()
+
+    def wire_mode(self):
+        """How the node graph draws its wires: curved (the default) or right angle."""
+        value = self._store.value(self.WIRE_MODE, graphlook.CURVED)
+        return value if value in graphlook.WIRE_MODES else graphlook.CURVED
+
+    def set_wire_mode(self, mode):
+        if mode in graphlook.WIRE_MODES:
+            self._store.setValue(self.WIRE_MODE, mode)
             self._store.sync()
 
     def thumbnails(self):
@@ -3245,20 +3258,28 @@ def dot_grab_radius(graph):
 
 
 class Port(QGraphicsEllipseItem):
-    def __init__(self, node, slot, x, y, label_text=None, label_center=None, output_name="rgba"):
+    def __init__(self, node, slot, x, y, label_text=None, label_center=None, output_name="rgba", facing=None):
         # The hit target is intentionally much larger than the visible socket.
         # A 12 px drawn port was too easy to miss while the label/noodle occupied
         # nearby pixels, making wiring feel randomly broken.
         radius = 8 if node.is_dot else 13
         super().__init__(-radius, -radius, radius * 2, radius * 2, node)
         self.node, self.slot, self.output_name = node, slot, output_name
+        # The direction the socket faces: a wire leaves (outputs) or enters (inputs) along it.
+        self.facing = facing if facing is not None else (graphlook.DOWN if slot is None else graphlook.UP)
         self.setPos(x, y)
         self.setBrush(Qt.BrushStyle.NoBrush)
         self.setPen(QPen(Qt.PenStyle.NoPen))
         self.setZValue(3)
-        visible = QGraphicsEllipseItem(-6, -6, 12, 12, self)
-        visible.setBrush(QColor("#1b1b1d"))
-        visible.setPen(QPen(QColor("#a4a4ae"), 1.5))
+        # A socket is a small dot in the node's family colour with a faint glow round it.
+        accent = getattr(node, "accent", QColor(TOKENS["tx2"]))
+        glow = QGraphicsEllipseItem(-8, -8, 16, 16, self)
+        glow.setBrush(graphlook.with_alpha(accent, 60))
+        glow.setPen(QPen(Qt.PenStyle.NoPen))
+        glow.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        visible = QGraphicsEllipseItem(-4.5, -4.5, 9, 9, self)
+        visible.setBrush(accent)
+        visible.setPen(QPen(QColor(TOKENS["bg0"]), 1.2))
         visible.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self._press_scene = None
         self._dragging = False
@@ -3267,7 +3288,7 @@ class Port(QGraphicsEllipseItem):
                          f"Input {slot}: drag to an output; drag an output here; click to pick up and rewire; right-click disconnects")
         if (slot or label_text) and not node.is_dot:
             label = QGraphicsSimpleTextItem(label_text or slot, node)
-            label.setBrush(QColor("#b4b4bd"))
+            label.setBrush(QColor(TOKENS["tx1"]))
             if label_center is None:
                 label.setPos(x + 9, y - 18)
             else:
@@ -3338,6 +3359,12 @@ class Port(QGraphicsEllipseItem):
 
 
 NODE_WIDTH, NODE_HEIGHT = 190, 52
+NODE_OUTLINE = 2.0      # the family-coloured outline of a node
+NODE_RADIUS = 10.0      # corner radius of a card
+NODE_HALO = 30          # how far the glow round a node reaches
+NODE_PAD = 10           # inner margin of a card
+ICON_SIZE = 14          # the family glyph beside the name
+TITLE_ROW = 30          # height of the row holding the icon and the name; the hairline sits under it
 NODE_GAP = 40  # standard clear space between nodes, below a parent and beside a sibling
 VIEW_MARGIN = 48  # screen pixels kept clear around nodes the graph brings into view
 FRAME_MAX_ZOOM = 1.25  # framing a few nodes never magnifies past this
@@ -3522,6 +3549,43 @@ def key_icon(filled, color, size=16):
 ERROR_COLOR = "#e3b18d"  # the status bar's problem colour (command_error_label)
 
 
+class NodeHalo(QGraphicsItem):
+    """The soft glow round a node. It is a child that stacks behind the node and reaches past its
+    rectangle, but it is not part of the node's own bounds, so placement and framing maths (which
+    read `sceneBoundingRect`) see the card alone. It takes no clicks."""
+
+    def __init__(self, node):
+        super().__init__(node)
+        self.node = node
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemStacksBehindParent)
+        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+
+    def boundingRect(self):
+        return self.node.rect().adjusted(-NODE_HALO, -NODE_HALO, NODE_HALO, NODE_HALO)
+
+    def shape(self):
+        return QPainterPath()
+
+    def paint(self, painter, option, widget=None):
+        if option.levelOfDetailFromTransform(painter.worldTransform()) < 0.3:
+            return  # zoomed far out the glow is invisible and costs a stroke per layer
+        selected = self.node.isSelected()
+        reach, layers, strength = (NODE_HALO - 2, 10, 0.45) if selected else (14, 7, 0.22)
+        outline = self.node.outline()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        for layer in range(layers, 0, -1):
+            pen = QPen(graphlook.with_alpha(self.node.accent, 255 * strength / layers), 2 * reach * layer / layers)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.drawPath(outline)
+        if selected:
+            ring = QPen(graphlook.with_alpha(self.node.accent, 255 * 0.14), 10)
+            ring.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(ring)
+            painter.drawPath(outline)
+
+
 class NodeItem(QGraphicsRectItem):
     def __init__(self, graph, key, node):
         self.form = node_form(node)
@@ -3533,8 +3597,11 @@ class NodeItem(QGraphicsRectItem):
         self.graph, self.key = graph, key
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.setPos(*node["pos"])
-        self.setBrush(QColor("#303033" if not self.is_dot else "#23242a"))
-        self.setPen(QPen(QColor(COLORS[node["type"]]), 1.5))
+        self.family = node_family(node["type"])
+        # The Viewer is the one node that wears the interface accent: it is where you look, not a process.
+        self.accent = QColor(TOKENS["acc"] if node["type"] == "Viewer" else FAMILY_COLORS[self.family])
+        self.setBrush(graphlook.mix(QColor(graphlook.BODY_DARK), self.accent, 0.10))
+        self.setPen(QPen(graphlook.mix(self.accent, QColor("#000000"), 0.15), NODE_OUTLINE))
         self.disabled = bool(node.get("disabled", False))
         self.error = getattr(graph.window, "node_errors", {}).get(key)
         if self.error:
@@ -3567,15 +3634,17 @@ class NodeItem(QGraphicsRectItem):
             self.outputs = {"rgba": self.output}
             return
         title = QGraphicsSimpleTextItem(node["name"][:26], self)
-        title.setBrush(QColor("#eeeef2"))
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title.setBrush(QColor(TOKENS["tx0"]))
+        # Sizes come from the font's own metrics, so a card reads the same where the UI font differs.
+        title_font = graphlook.css_font(TYPE["family"], TYPE["base"], QFont.Weight.DemiBold)
         title.setFont(title_font)
+        self.icon_rect = None
         if self.form == "circle":
             # The name has to fit the chord it sits on, so it shrinks rather than spilling past the rim.
-            while title.boundingRect().width() > width - 14 and title_font.pointSize() > 9:
-                title_font.setPointSize(title_font.pointSize() - 1)
+            title_font.setPixelSize(TYPE["title"])
+            title.setFont(title_font)
+            while title.boundingRect().width() > width - 14 and title_font.pixelSize() > 11:
+                title_font.setPixelSize(title_font.pixelSize() - 1)
                 title.setFont(title_font)
             text = title.text()
             while title.boundingRect().width() > width - 14 and len(text) > 4:
@@ -3585,26 +3654,42 @@ class NodeItem(QGraphicsRectItem):
                 title.setText(text[:len(text) - 2] + "…" + node["name"][-2:])
             title.setPos((width - title.boundingRect().width()) / 2,
                          height / 2 - title.boundingRect().height() + 4)
+            side = ICON_SIZE
+            self.icon_rect = QRectF((width - side) / 2, title.pos().y() - side - 2, side, side)
         else:
-            title.setPos((width - title.boundingRect().width()) / 2, 5)
+            # Icon, then the name, left aligned; a name too long for the card is cut short with an ellipsis.
+            side = ICON_SIZE
+            title_h = QFontMetrics(title_font).height()
+            pad = NODE_PAD + (8 if self.form == "round" else 0)   # a pill's rounded ends take more room
+            self.icon_rect = QRectF(pad, (TITLE_ROW - side) / 2, side, side)
+            left = pad + side + 7
+            title.setText(QFontMetrics(title_font).elidedText(node["name"], Qt.TextElideMode.ElideRight,
+                                                              int(width - left - pad)))
+            title.setPos(left, (TITLE_ROW - title_h) / 2)
         # A Node-tab label draws under the name, as in Nuke. Only the first line fits the card;
         # the full text stays in the tooltip.
         label = node_label(node)
-        # No type line: a node's name already says what it is, and repeating it underneath was
-        # noise. The line carries only a label and state.
+        # No type line: a node's name already says what it is. The details line carries a label and
+        # state when there are any, and otherwise the knobs that differ from the defaults.
         caption = label.splitlines()[0][:30] if label else ""
         parts = [part for part in ("BYPASSED" if node["disabled"] else "", caption,
                                    "viewing" if graph.window.dispatcher.document["view"] == key else "")
                  if part]
-        subtitle = QGraphicsSimpleTextItem("  ·  ".join(parts), self)
+        details = "  ·  ".join(parts) or graphlook.param_summary(node, SPECS[node["type"]]["params"])
+        subtitle = QGraphicsSimpleTextItem(details, self)
         self.setToolTip(f"{node['name']} ({node['type']})" + (f"\n{label}" if label else ""))
-        subtitle.setBrush(QColor("#a6a6b0"))
+        subtitle.setBrush(graphlook.mix(QColor(TOKENS["tx2"]), self.accent, 0.35))
+        details_font = graphlook.css_font(TYPE["mono"], TYPE["caption"], mono=True)
+        subtitle.setFont(details_font)
         if self.form == "circle":
             if subtitle.boundingRect().width() > width - 24:
                 subtitle.setText("  ·  ".join(part[:12] for part in parts[:2]))
             subtitle.setPos((width - subtitle.boundingRect().width()) / 2, height / 2 + 6)
         else:
-            subtitle.setPos((width - subtitle.boundingRect().width()) / 2, 32)
+            subtitle.setText(QFontMetrics(details_font).elidedText(subtitle.text(), Qt.TextElideMode.ElideRight,
+                                                                  int(width - 2 * pad)))
+            subtitle.setPos(pad, TITLE_ROW + 3)
+            self.rule = (pad - 2, TITLE_ROW, width - pad + 2)
         # Inputs default to the top edge, which is where B lives: in Nuke the B stream is the
         # trunk flowing straight down through a Merge. Semantic side ports follow compositor
         # convention: A joins from the left and an optional mask from the right. Keep every
@@ -3627,18 +3712,21 @@ class NodeItem(QGraphicsRectItem):
                 center = (width / 2 + reach * math.sin(math.radians(angle)),
                           height / 2 - reach * math.cos(math.radians(angle)))
                 short = slot[len("object"):] if slot.startswith("object") and slot[6:].isdigit() else slot
-                self.inputs[slot] = Port(self, slot, x, y, label_text=short, label_center=center)
+                outward = QPointF(math.sin(math.radians(angle)), -math.cos(math.radians(angle)))
+                self.inputs[slot] = Port(self, slot, x, y, label_text=short, label_center=center, facing=outward)
                 continue
             else:
                 top_i = top_slots.index(slot)
                 x, y = width / 2 + (top_i - (len(top_slots) - 1) / 2) * spacing, 0
-            self.inputs[slot] = Port(self, slot, x, y)
+            # A faces left and a mask faces right, so their wires come in sideways; the rest face up.
+            self.inputs[slot] = Port(self, slot, x, y, facing={"A": graphlook.LEFT, "mask": graphlook.RIGHT}.get(slot, graphlook.UP))
         if self.form != "circle" and height > NODE_HEIGHT:
             self.thumbnail = QGraphicsPixmapItem(self)
             self.thumbnail.setPos((NODE_WIDTH - THUMB_WIDTH) / 2, NODE_HEIGHT)
             cached = graph.window.thumbnails.get(key)
             if cached is not None:
                 self.set_thumbnail(cached[1])
+        self.halo = NodeHalo(self)
         if node["type"] == "ShuffleCopy":
             self.outputs = {"out1": Port(self, None, width / 2 - 18, height, "out1", output_name="out1"),
                             "out2": Port(self, None, width / 2 + 18, height, "out2", output_name="out2")}
@@ -3647,10 +3735,28 @@ class NodeItem(QGraphicsRectItem):
             self.output = Port(self, None, width / 2, height)
             self.outputs = {"rgba": self.output}
 
+    def rounded_stamp(self, pixmap):
+        """The postage stamp with rounded corners and a hairline in the family colour, as in the mockup."""
+        out = QPixmap(pixmap.size())
+        out.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(out)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        frame = QRectF(out.rect())
+        clip = QPainterPath()
+        clip.addRoundedRect(frame, 6, 6)
+        painter.setClipPath(clip)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.setClipping(False)
+        painter.setPen(QPen(graphlook.mix(QColor("#000000"), self.accent, 0.35), 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(frame.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
+        painter.end()
+        return out
+
     def set_thumbnail(self, image):
         if self.thumbnail is None:
             return
-        pixmap = QPixmap.fromImage(image)
+        pixmap = self.rounded_stamp(QPixmap.fromImage(image))
         # Centre the picture in its band; the band is fixed so cards never resize as stamps land.
         self.thumbnail.setPixmap(pixmap)
         self.thumbnail.setPos((NODE_WIDTH - pixmap.width()) / 2,
@@ -3659,17 +3765,21 @@ class NodeItem(QGraphicsRectItem):
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and hasattr(self, "output"):
             self.graph.update_edges()
+        elif change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged and getattr(self, "halo", None):
+            self.halo.update()
         return super().itemChange(change, value)
 
-    def outline(self):
-        """The node's silhouette: what is painted, and what a click has to land inside."""
+    def outline(self, inset=0.0):
+        """The node's silhouette: what is painted, and what a click has to land inside. `inset`
+        shrinks it evenly, for the strokes drawn inside the edge."""
         path = QPainterPath()
+        rect = self.rect().adjusted(inset, inset, -inset, -inset)
         if self.form in ("dot", "circle"):
-            path.addEllipse(self.rect())
+            path.addEllipse(rect)
         elif self.form == "round":
-            path.addRoundedRect(self.rect(), NODE_HEIGHT / 2, NODE_HEIGHT / 2)
+            path.addRoundedRect(rect, NODE_HEIGHT / 2 - inset, NODE_HEIGHT / 2 - inset)
         else:
-            path.addRect(self.rect())
+            path.addRoundedRect(rect, NODE_RADIUS - inset, NODE_RADIUS - inset)
         return path
 
     def set_error(self, message):
@@ -3685,7 +3795,7 @@ class NodeItem(QGraphicsRectItem):
             path.addRect(QRectF(0, 0, self.rect().width(), BACKDROP_TITLE_HEIGHT))
             path.addRect(self.grip.mapRectToParent(self.grip.rect()))
             return path
-        if self.form in ("circle", "round"):
+        if self.form in ("circle", "round", "card"):
             # Without this the empty corners of the bounding box would still grab clicks and drags.
             return self.outline()
         return super().shape()
@@ -3754,30 +3864,58 @@ class NodeItem(QGraphicsRectItem):
                                                        int(rect.width() - 20)))
         painter.restore()
 
+    def paint_family_body(self, painter, option):
+        """A node as in the mockup: a dark interior tinted with the family colour, a 2 px outline in
+        the colour, a faint inner glow, a highlight along the top edge, the family icon and a hairline
+        above the details line."""
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        detailed = option.levelOfDetailFromTransform(painter.worldTransform()) >= 0.35
+        color, rect = self.accent, self.rect()
+        outline = self.outline()
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        fill = QLinearGradient(0, 0, 0, rect.height())
+        fill.setColorAt(0, graphlook.mix(QColor(graphlook.BODY_DARK), color, 0.15))
+        fill.setColorAt(1, graphlook.mix(QColor(graphlook.BODY_DARKER), color, 0.07))
+        painter.fillPath(outline, fill)
+        painter.setClipPath(outline)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        if detailed:
+            glow = 0.16 if selected else 0.10
+            for width, share in ((18, 0.2), (13, 0.25), (9, 0.25), (5, 0.3)):
+                painter.setPen(QPen(graphlook.with_alpha(color, 255 * glow * share), width))
+                painter.drawPath(outline)
+            if self.form != "circle":
+                shine = QLinearGradient(NODE_PAD, 0, rect.width() - NODE_PAD, 0)
+                bright = graphlook.with_alpha(graphlook.mix(color, QColor("#ffffff"), 0.4), 180)
+                shine.setColorAt(0, graphlook.with_alpha(bright, 0))
+                shine.setColorAt(0.5, bright)
+                shine.setColorAt(1, graphlook.with_alpha(bright, 0))
+                painter.fillRect(QRectF(NODE_PAD, 0, rect.width() - 2 * NODE_PAD, 2), shine)
+            rule = getattr(self, "rule", None)
+            if rule:
+                painter.setPen(QPen(graphlook.with_alpha(color, 255 * 0.22), 1))
+                painter.drawLine(QPointF(rule[0], rule[1]), QPointF(rule[2], rule[1]))
+        painter.setClipping(False)
+        edge = graphlook.mix(color, QColor("#ffffff"), 0.4) if selected else graphlook.mix(color, QColor("#000000"), 0.15)
+        painter.setPen(QPen(edge, NODE_OUTLINE))
+        painter.drawPath(self.outline(NODE_OUTLINE / 2))
+        if self.icon_rect is not None:
+            graphlook.draw_icon(painter, self.family, color.name(), self.icon_rect, glow=detailed)
+        painter.restore()
+
     def paint(self, painter, option, widget=None):
         if self.is_backdrop:
             self.paint_backdrop(painter)
             return
         if not self.is_dot:
-            if self.form == "card":
-                super().paint(painter, option, widget)
-            else:
-                painter.save()
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-                pen = QPen(self.pen())
-                if option.state & QStyle.StateFlag.State_Selected:
-                    pen.setWidthF(3)
-                    pen.setColor(pen.color().lighter(135))
-                painter.setPen(pen)
-                painter.setBrush(self.brush())
-                painter.drawPath(self.outline())
-                painter.restore()
+            self.paint_family_body(painter, option)
             if self.error:
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                 painter.setPen(QPen(QColor(ERROR_COLOR), 2.5))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawRoundedRect(self.rect().adjusted(-1, -1, 1, 1), 6, 6)
+                painter.drawRoundedRect(self.rect().adjusted(-1, -1, 1, 1), NODE_RADIUS + 1, NODE_RADIUS + 1)
                 badge = QRectF(self.rect().right() - 12, self.rect().top() - 8, 20, 20)
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QColor(ERROR_COLOR))
@@ -3809,36 +3947,53 @@ class NodeItem(QGraphicsRectItem):
 
 
 class Edge(QGraphicsPathItem):
-    """A readable noodle with a small arrow showing output -> input direction."""
-    def __init__(self, color="#898995", dashed=False, arrow=True, width=3.25):
+    """A wire: coloured by its source node's family with a faint glow, in the graph's wire mode
+    (curved or right angle), with a small arrow showing output -> input direction."""
+    GLOW = 6  # how far the glow reaches past the stroke on each side
+
+    def __init__(self, color="#898995", dashed=False, arrow=True, width=2.2, glow=True, mode=graphlook.CURVED,
+                 opacity=0.85):
         super().__init__()
-        self.color = QColor(color)
-        self.setPen(QPen(self.color, width, Qt.PenStyle.DashLine if dashed else Qt.PenStyle.SolidLine,
-                         Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        self.color = graphlook.with_alpha(QColor(color), 255 * opacity)
+        self.glow = glow
+        self.mode = mode
+        pen = QPen(self.color, width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        if dashed:
+            pen.setDashPattern([2, 2.5])  # in units of the pen width: a mask wire is a row of short dashes
+        self.setPen(pen)
         self.setBrush(Qt.BrushStyle.NoBrush)
         self.arrow = arrow
         self.arrowhead = QPolygonF()
 
-    def set_curve(self, start, end):
-        distance = max(40, abs(end.y() - start.y()) * 0.5)
-        control = end - QPointF(0, distance)
-        path = QPainterPath(start)
-        path.cubicTo(start + QPointF(0, distance), control, end)
-        tangent = end - control
-        length = math.hypot(tangent.x(), tangent.y()) or 1.0
-        unit = QPointF(tangent.x() / length, tangent.y() / length)
+    def boundingRect(self):
+        return super().boundingRect().adjusted(-self.GLOW, -self.GLOW, self.GLOW, self.GLOW)
+
+    def set_route(self, start, end, end_dir=graphlook.UP, start_dir=graphlook.DOWN):
+        """Route the wire from `start` (an output facing `start_dir`) to `end` (an input facing `end_dir`)."""
+        self.prepareGeometryChange()
+        path = graphlook.wire_path(start, end, self.mode, start_dir, end_dir)
+        unit = graphlook.end_heading(path, end)
         normal = QPointF(-unit.y(), unit.x())
         base = end - unit * 10
         self.arrowhead = QPolygonF([end, base + normal * 4, base - normal * 4])
         self.setPath(path)
         self.handle = path.pointAtPercent(0.5)
 
+    def set_curve(self, start, end):
+        self.set_route(start, end)
+
     def paint(self, painter, option, widget=None):
-        # Keep the curve stroked. Combining a closed arrow polygon with the curve
+        # Keep the wire stroked. Combining a closed arrow polygon with the curve
         # in one path causes Qt to fill the implied region as a ribbon.
         painter.save()
-        painter.setPen(self.pen())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(Qt.BrushStyle.NoBrush)
+        if self.glow:
+            halo = QPen(graphlook.with_alpha(self.color, 40), self.pen().widthF() + 5, Qt.PenStyle.SolidLine,
+                        Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(halo)
+            painter.drawPath(self.path())
+        painter.setPen(self.pen())
         painter.drawPath(self.path())
         if self.arrow and not self.arrowhead.isEmpty():
             painter.setPen(Qt.PenStyle.NoPen)
@@ -4836,6 +4991,8 @@ class Graph(PanZoomView):
     def __init__(self, window):
         self.window = window
         super().__init__(QGraphicsScene())
+        self.setBackgroundBrush(QColor(TOKENS["bg0"]))
+        self.wire_mode = window.preferences.wire_mode()
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setAcceptDrops(True)
         self.setSceneRect(-5000, -5000, 10000, 10000)
@@ -4860,9 +5017,30 @@ class Graph(PanZoomView):
         self._radial_context = "empty"
         self._radial_node_type = None
         self.scene().selectionChanged.connect(self.selection_changed)
+        self.corner = GraphCorner(self)
+
+    def zoom_by(self, factor):
+        """Zoom about the middle of the view (the corner buttons), within the same limits as the wheel."""
+        if 0.05 < self.transform().m11() * factor < 20:
+            anchor = self.transformationAnchor()
+            self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+            self.scale(factor, factor)
+            self.setTransformationAnchor(anchor)
+
+    def zoom_to(self, level=1.0):
+        """Set the zoom to `level` (1.0 is 100%), keeping the middle of the view where it is."""
+        self.zoom_by(level / self.transform().m11())
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        self.corner.sync()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.corner.reposition()
 
     def _new_pending_edge(self):
-        edge = Edge("#e3b18d", dashed=True, arrow=False)
+        edge = Edge(TOKENS["tx1"], dashed=True, arrow=False, mode=self.wire_mode)
         edge.setZValue(10)
         self.scene().addItem(edge)
         return edge
@@ -4917,10 +5095,12 @@ class Graph(PanZoomView):
         if self.pending_edge is None:
             return
         if self.wire_source in self.items_by_id:
-            self.pending_edge.set_curve(self.items_by_id[self.wire_source].outputs[self.wire_output].scenePos(), scene_pos)
+            port = self.items_by_id[self.wire_source].outputs[self.wire_output]
+            self.pending_edge.set_route(port.scenePos(), scene_pos, graphlook.UP, port.facing)
         elif self.wire_input and self.wire_input[0] in self.items_by_id:
             key, slot = self.wire_input
-            self.pending_edge.set_curve(scene_pos, self.items_by_id[key].inputs[slot].scenePos())
+            port = self.items_by_id[key].inputs[slot]
+            self.pending_edge.set_route(scene_pos, port.scenePos(), port.facing)
 
     def nearest_port(self, scene_pos, input_port):
         ports = [port for node in self.items_by_id.values() if not node.is_backdrop
@@ -5000,8 +5180,16 @@ class Graph(PanZoomView):
                     # the comp. Drawing it like any other noodle makes the Viewer look like a
                     # consumer whose pixels matter downstream; it has none. Faint, dashed and
                     # arrowless says "this is a tap" without hiding where the view is pointed.
-                    edge = (Edge(color=VIEW_EDGE_COLOR, dashed=True, arrow=False, width=1.6)
-                            if node["type"] == "Viewer" else Edge())
+                    # The wire wears its source node's family colour. A Viewer tap and a mask wire are
+                    # dashed (the tap faint and thin); a mask wire also has no glow, as in the mockup.
+                    tint = self.items_by_id[source].accent.name()
+                    if node["type"] == "Viewer":
+                        edge = Edge(color=tint, dashed=True, arrow=False, width=1.6, glow=False, opacity=0.55,
+                                    mode=self.wire_mode)
+                    elif slot == "mask":
+                        edge = Edge(color=tint, dashed=True, glow=False, opacity=0.55, mode=self.wire_mode)
+                    else:
+                        edge = Edge(color=tint, mode=self.wire_mode)
                     edge.setZValue(-2 if node["type"] == "Viewer" else -1)
                     self.scene().addItem(edge)
                     out_name = node.get("input_outputs", {}).get(slot, "out1" if doc["nodes"][source]["type"] == "ShuffleCopy" else "rgba")
@@ -5019,9 +5207,24 @@ class Graph(PanZoomView):
 
     def update_edges(self):
         for edge, source, key, slot, out_name in self.edges:
-            start = self.items_by_id[source].outputs[out_name].scenePos()
-            end = self.items_by_id[key].inputs[slot].scenePos()
-            edge.set_curve(start, end)
+            output, port = self.items_by_id[source].outputs[out_name], self.items_by_id[key].inputs[slot]
+            edge.set_route(output.scenePos(), port.scenePos(), port.facing, output.facing)
+
+    def set_wire_mode(self, mode, save=True):
+        """Switch every wire between curved and right angle; the choice is kept in the settings."""
+        if mode not in graphlook.WIRE_MODES:
+            return
+        self.wire_mode = mode
+        for edge, *_ in self.edges:
+            edge.mode = mode
+        if self.pending_edge is not None:
+            self.pending_edge.mode = mode
+        self.update_edges()
+        if save:
+            self.window.preferences.set_wire_mode(mode)
+        corner = getattr(self, "corner", None)
+        if corner is not None:
+            corner.sync()
 
     def visible_scene_rect(self):
         return self.mapToScene(self.viewport().rect()).boundingRect()

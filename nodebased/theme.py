@@ -114,6 +114,8 @@ TOKENS = {
     "mark_b": "#56c2ff", "mark_c": "#9aa8ff",                                   # logo rim colours
     "bar_top": "#12161a", "bar_bottom": "#0f1215",                              # top bar gradient
     "danger": "#ff6b6b", "shadow": "rgba(0, 0, 0, 0.4)",
+    "glass": "rgba(17, 20, 24, 0.85)",                                          # panels floating over the graph
+    "acc_ring": "rgba(94, 224, 181, 0.35)",                                     # accent outline on a checked chip
 }
 
 # The thirteen node families (UI-SPEC.md). No yellow: dark yellow reads brown and dirty.
@@ -123,6 +125,12 @@ FAMILY_COLORS = {
     "Transform": "#a681f2", "3D": "#e8585f", "Particles": "#e676d6", "Fluids": "#3fd0d0",
     "Metadata": "#6c7682",
 }
+
+def family_color(kind):
+    """The colour of a node type's family (a type's name, not a family name)."""
+    from .nodecatalog import node_family
+    return FAMILY_COLORS[node_family(kind)]
+
 
 # Corner radii in pixels. Panels and the larger controls sit between 9 and 12; small chips and
 # keycaps are tighter, the status pill is a full capsule.
@@ -239,6 +247,12 @@ QCheckBox::indicator {{ width: 13px; height: 13px; background: {c['field']}; bor
 QCheckBox::indicator:checked {{ background: {c['accent']}; border: 1px solid {c['accent']}; border-radius: 3px; }}
 QTabBar::tab {{ background: {c['panel']}; padding: 6px {sp['lg']}px; border-bottom: 2px solid transparent; }}
 QTabBar::tab:selected {{ color: {c['accent']}; border-bottom: 2px solid {c['accent']}; }}
+
+/* ---- node graph corner: wire mode toggle, zoom control ---- */
+QFrame#graph-panel {{ background: {TOKENS['glass']}; border: 1px solid {TOKENS['line2']}; border-radius: {r['control']}px; }}
+QFrame#graph-panel QToolButton {{ background: transparent; border: 1px solid transparent; border-radius: {r['chip']}px; padding: 3px {sp['md'] - 1}px; color: {TOKENS['tx2']}; font-size: {t['small']}px; }}
+QFrame#graph-panel QToolButton:hover {{ color: {TOKENS['tx0']}; }}
+QFrame#graph-panel QToolButton:checked {{ background: {TOKENS['bg3']}; color: {TOKENS['tx0']}; border: 1px solid {TOKENS['acc_ring']}; }}
 
 /* ---- top bar: logo, project, workspace tabs, search, GPU pill, menu, update ---- */
 QToolBar#workspace-toolbar {{ background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 {TOKENS['bar_top']}, stop: 1 {TOKENS['bar_bottom']}); border: 0; border-bottom: 1px solid {c['border']}; padding: 0; spacing: 0; }}
