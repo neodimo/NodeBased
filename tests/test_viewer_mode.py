@@ -85,7 +85,7 @@ class ViewerModeTests(unittest.TestCase):
 
     def test_the_3d_viewport_toolbar_button_switches_the_shared_panel(self):
         w = self.window
-        action = next(a for a in w.workspace_toolbar.actions() if a.text() == "3D viewport")
+        action = w.topbar_actions["3D viewport"]
         action.trigger()
         APP.processEvents()
         self.assertEqual(w.viewer_mode(), "3d")
@@ -210,7 +210,7 @@ class ViewportButtonTests(unittest.TestCase):
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
         w = self.window
-        self.action = next(a for a in w.workspace_toolbar.actions() if a.text() == "3D viewport")
+        self.action = w.topbar_actions["3D viewport"]
 
     def tearDown(self):
         self.addCleanup(release_window, self)
@@ -238,6 +238,7 @@ class ViewportButtonTests(unittest.TestCase):
 
     def test_the_viewport_comes_forward_from_behind_another_dock(self):
         w = self.window
+        w.nodes_dock.show()    # the category bar starts it hidden
         w.tabifyDockWidget(w.nodes_dock, w.viewer_dock)
         w.nodes_dock.raise_()
         APP.processEvents()
@@ -327,7 +328,9 @@ class OldWorkspaceTests(unittest.TestCase):
         w = self._open()
         self.assertTrue(w.viewer_dock.isVisible())
         self.assertTrue(w.graph_dock.isVisible())
-        self.assertTrue(w.nodes_dock.isVisible(), "NODES was tabbed with the old dock and must survive")
+        # The category bar replaced the always-open NODES dock (it starts hidden); the dock itself
+        # must still exist so Ctrl+F, presets and the Workspace menu keep working.
+        self.assertIn(w.nodes_dock, w.workspace_docks, "NODES was tabbed with the old dock and must survive")
         self.assertTrue(w.properties_dock.isVisible())
         self.assertFalse(hasattr(w, "viewport_dock"))
         w.set_viewer_mode("3d")
@@ -349,7 +352,7 @@ class OldWorkspaceTests(unittest.TestCase):
             w.restore_default_workspace()
             APP.processEvents()
             self.assertTrue(w.viewer_dock.isVisible())
-            self.assertTrue(w.nodes_dock.isVisible())
+            self.assertIn(w.nodes_dock, w.workspace_docks)
         finally:
             store.remove("workspaces/default")
 

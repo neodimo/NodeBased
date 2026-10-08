@@ -241,6 +241,27 @@ def status():
     return 'CPU'
 
 
+_GL_RENDERER = 0x1F01
+
+
+def _clean_renderer(text):
+    """A short adapter name from a GL_RENDERER string: 'AMD Radeon Graphics (radeonsi, gfx1151,
+    LLVM 20)' -> 'AMD Radeon Graphics', 'NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2' -> 'NVIDIA GeForce
+    RTX 3080 Ti'."""
+    text = (text or '').strip()
+    for cut in (' (', '/'):
+        text = text.split(cut, 1)[0]
+    for noise in ('Mesa ', '(R)', '(TM)'):
+        text = text.replace(noise, '')
+    return ' '.join(text.split())
+
+
+def adapter_name():
+    """The display adapter's short name once the GL display exists, else ''."""
+    instance = _instance
+    return getattr(instance, 'renderer', '') if instance is not None else ''
+
+
 def get_display(force=False):
     """Return the process-wide `GpuDisplay`, building it lazily on the calling thread.
 
@@ -353,6 +374,7 @@ class GpuDisplay:
             self._context = context
             self._functions = context.extraFunctions()
             self._functions.initializeOpenGLFunctions()
+            self.renderer = _clean_renderer(self._gl_string(_GL_RENDERER))
             self._programs = {}      # view -> (program, program_id, input_loc, lut bindings)
             self._input_texture = None
             self._input_size = None
@@ -363,6 +385,16 @@ class GpuDisplay:
             self._init_vao()
         finally:
             context.doneCurrent()
+
+    def _gl_string(self, name):
+        """glGetString as text; '' when the binding returns nothing usable."""
+        try:
+            value = self._functions.glGetString(name)
+        except Exception:
+            return ''
+        if isinstance(value, (bytes, bytearray)):
+            return bytes(value).decode('utf-8', 'replace')
+        return str(value) if value else ''
 
     def _check_thread(self):
         if threading.current_thread() is not self._thread:

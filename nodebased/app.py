@@ -9,6 +9,7 @@ import json
 import math
 import numpy as np
 import os
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -54,6 +55,7 @@ class GenerateSignals(QObject):
     message = Signal(object, object)
     finished = Signal(object, object)
 
+from .topbar import TopBar
 from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, grid_color,
                     valid_accent)
 from .color import VIEWS
@@ -5704,12 +5706,79 @@ class Window(QMainWindow):
             button.setChecked(name == mode)
         if changed:
             self.statusBar().showMessage(f"Viewer: {mode.upper()} (Tab over the viewer switches)", 2500)
+        self._follow_viewer_mode_in_tabs(mode)
         if focus:
             target = self.viewport if mode == "3d" else self.viewer
             target.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def toggle_viewer_mode(self):
         self.set_viewer_mode("2d" if self.viewer_mode() == "3d" else "3d")
+
+    # Workspace tabs. Each one is a viewer page plus the panels that belong with it; the tabs
+    # never close a panel the artist opened.
+    WORKSPACE_TAB_VIEW = {"Composite": "2d", "3D": "3d", "Simulate": "3d", "Render": "2d"}
+
+    def select_workspace_tab(self, name):
+        if name not in self.WORKSPACE_TAB_VIEW:
+            raise ValueError(f"workspace tab must be one of {tuple(self.WORKSPACE_TAB_VIEW)}")
+        self.workspace_tab = name
+        self.topbar.tabs.set_current(name)
+        if name == "3D" or name == "Simulate":
+            self.show_viewport_3d()
+        else:
+            self.set_viewer_mode("2d")
+        if name == "Simulate":
+            self.slice_dock.show()
+            self.cache_inspector_dock.show()
+        elif name == "Render":
+            self.queue_dock.show()
+
+    def _follow_viewer_mode_in_tabs(self, mode):
+        """The viewer mode can also change from the viewer's own 2D / 3D buttons or Tab; keep the
+        highlighted tab honest without reopening any panel."""
+        if not hasattr(self, "topbar"):
+            return
+        if mode == "3d" and self.workspace_tab in ("Composite", "Render"):
+            self.workspace_tab = "3D"
+        elif mode == "2d" and self.workspace_tab in ("3D", "Simulate"):
+            self.workspace_tab = "Composite"
+        self.topbar.tabs.set_current(self.workspace_tab)
+
+    def node_search_from_topbar(self):
+        """The top bar's search box opens the same search as Tab, under the box."""
+        bar = self.topbar.search
+        graph_pos = self.graph.last_click_scene_pos
+        kind = NodeSearch.choose(self, SPECS, bar.mapToGlobal(bar.rect().bottomLeft()))
+        if kind:
+            self.add_node(kind, position=None if self.graph.selected_id() else graph_pos)
+
+    def _build_topbar_menu(self):
+        """The compact menu button: the quick actions the old toolbar carried, then every menu of
+        the (now hidden) menu bar as a submenu, so nothing became unreachable. The menu bar's
+        actions are also added to the window so their shortcuts keep working while it is hidden."""
+        menu = QMenu(self.topbar.menu_button)
+        menu.setObjectName("topbar-menu-popup")
+        for name in ("Open image", "Add node", "Save project", "Export image", "3D viewport",
+                     "Slice viewer", "Cache inspector"):
+            menu.addAction(self.topbar_actions[name])
+        menu.addSeparator()
+        for action in self.menuBar().actions():
+            if action.menu() is not None:
+                menu.addMenu(action.menu())
+        self.topbar.menu_button.setMenu(menu)
+        self.top_menu = menu
+        seen = set()
+        def expose(source):
+            for action in source.actions():
+                if action.menu() is not None:
+                    expose(action.menu())
+                elif id(action) not in seen:
+                    seen.add(id(action))
+                    self.addAction(action)
+        for action in self.menuBar().actions():
+            if action.menu() is not None:
+                expose(action.menu())
+        self.menuBar().setVisible(False)
 
     def show_viewport_3d(self):
         """The "3D viewport" toolbar button. The viewport is the VIEWER panel's second page, never
@@ -5811,25 +5880,8 @@ class Window(QMainWindow):
             action.triggered.connect(lambda checked=False, node_kind=kind:
                                      self.add_node(node_kind))
 
-    def _fit_workspace_toolbar(self):
-        toolbar = getattr(self, "workspace_toolbar", None)
-        if toolbar is None or not hasattr(self, "_toolbar_overflow"):
-            return
-        for action in self._toolbar_overflow:
-            action.setVisible(True)
-        self._toolbar_more_action.setVisible(False)
-        if toolbar.sizeHint().width() <= toolbar.width():
-            return
-        self._toolbar_more_action.setVisible(True)
-        for action in self._toolbar_overflow:
-            action.setVisible(False)
-            if toolbar.sizeHint().width() <= toolbar.width():
-                break
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, "_toolbar_reflow_timer"):
-            self._toolbar_reflow_timer.start(0)
         # With a zero-width central widget Qt gives window growth to the right dock. Preserve
         # its previous width and give the extra room to the Viewer/Graph column instead.
         if hasattr(self, "properties_dock") and event.oldSize().width() > 0 \
@@ -5971,7 +6023,6 @@ class Window(QMainWindow):
         toolbar = QToolBar("Workspace")
         # saveState() identifies toolbars and docks by objectName; an unnamed one is skipped.
         toolbar.setObjectName("workspace-toolbar")
-        toolbar.setMovable(True)
         self.addToolBar(toolbar)
         self.workspace_toolbar = toolbar
         # The node families live in a single, icon-only row.  Each icon opens its family's
@@ -5983,55 +6034,39 @@ class Window(QMainWindow):
         self.node_category_toolbar.setIconSize(QSize(24, 24))
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.node_category_toolbar)
         self._build_node_category_toolbar()
-        brand = QLabel("◈  NODEBASED")
-        brand.setObjectName("brand")
-        toolbar.addWidget(brand)
-        toolbar.addSeparator()
-        primary_actions = []
-        for name, callback in [("Open image", self.read_file), ("Add node", self.add_node),
-                               ("Save project", self.save_project), ("Export image", self.export)]:
-            action = toolbar.addAction(name)
-            action.triggered.connect(lambda checked=False, fn=callback: fn())
-            primary_actions.append(action)
-        viewport_action = toolbar.addAction("3D viewport")
-        viewport_action.setToolTip("Switch the viewer panel to the navigable 3D editor viewport "
-                                   "(Tab over the viewer switches between 2D and 3D)")
-        viewport_action.triggered.connect(lambda checked=False: self.show_viewport_3d())
-        slice_action = toolbar.addAction("Slice viewer")
-        slice_action.setToolTip("Show an axis-aligned slice through the selected fluid node's volume")
-        slice_action.triggered.connect(lambda: self.slice_dock.setVisible(not self.slice_dock.isVisible()))
-        cache_action = toolbar.addAction("Cache inspector")
-        cache_action.setToolTip("Show the frame list and stats behind the selected cache node")
-        cache_action.triggered.connect(lambda: self.cache_inspector_dock.setVisible(not self.cache_inspector_dock.isVisible()))
-        self.toolbar_more = QToolButton()
-        self.toolbar_more.setText("More")
-        self.toolbar_more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.toolbar_more_menu = QMenu(self.toolbar_more)
-        self.toolbar_more.setMenu(self.toolbar_more_menu)
-        self._toolbar_more_action = toolbar.addWidget(self.toolbar_more)
-        self._toolbar_overflow = [cache_action, slice_action, viewport_action,
-                                  primary_actions[3], primary_actions[1], primary_actions[0]]
-        for candidate in self._toolbar_overflow:
-            menu_action = self.toolbar_more_menu.addAction(candidate.text())
-            menu_action.triggered.connect(candidate.trigger)
-        self._toolbar_more_action.setVisible(False)
-        toolbar.addSeparator()
-        info = QLabel("  2D WORKSPACE")
-        info.setObjectName("muted")
-        toolbar.addWidget(info)
-        # An expanding spacer is how a QToolBar right-justifies: everything added after it is
-        # pushed to the trailing edge and stays there as the window is resized.
-        spacer = QWidget()
-        spacer.setObjectName("toolbarSpacer")
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        toolbar.addWidget(spacer)
+        # The top bar is one widget: logo, project / shot, workspace tabs, search, GPU pill, a
+        # compact menu button and the Check for updates button. The quick actions the old toolbar
+        # carried live in that menu button (see `_build_topbar_menu`).
+        toolbar.setMovable(False)
+        toolbar.setFloatable(False)
         self.update_button = QPushButton("Check for updates")
         self.update_button.setObjectName("update")
         self.update_button.setToolTip(f"NodeBased {__version__}")
-        toolbar.addWidget(self.update_button)
-        self._toolbar_reflow_timer = QTimer(self)
-        self._toolbar_reflow_timer.setSingleShot(True)
-        self._toolbar_reflow_timer.timeout.connect(self._fit_workspace_toolbar)
+        self.topbar = TopBar(self.update_button)
+        self.topbar.search_requested.connect(self.node_search_from_topbar)
+        self.topbar.workspace_selected.connect(self.select_workspace_tab)
+        toolbar.addWidget(self.topbar)
+        self.topbar_actions = {}
+        for name, callback in [("Open image", self.read_file), ("Add node", self.add_node),
+                               ("Save project", self.save_project), ("Export image", self.export)]:
+            action = QAction(name, self)
+            action.triggered.connect(lambda checked=False, fn=callback: fn())
+            self.topbar_actions[name] = action
+        viewport_action = QAction("3D viewport", self)
+        viewport_action.setToolTip("Switch the viewer panel to the navigable 3D editor viewport "
+                                   "(Tab over the viewer switches between 2D and 3D)")
+        viewport_action.triggered.connect(lambda checked=False: self.show_viewport_3d())
+        self.topbar_actions["3D viewport"] = viewport_action
+        slice_action = QAction("Slice viewer", self)
+        slice_action.setToolTip("Show an axis-aligned slice through the selected fluid node's volume")
+        slice_action.triggered.connect(lambda: self.slice_dock.setVisible(not self.slice_dock.isVisible()))
+        self.topbar_actions["Slice viewer"] = slice_action
+        cache_action = QAction("Cache inspector", self)
+        cache_action.setToolTip("Show the frame list and stats behind the selected cache node")
+        cache_action.triggered.connect(lambda: self.cache_inspector_dock.setVisible(not self.cache_inspector_dock.isVisible()))
+        self.topbar_actions["Cache inspector"] = cache_action
+        self.workspace_tab = "Composite"
+        self.last_frame_ms = None
         self.updater = Updater(self)
         self.updater.changed.connect(self.update_status)
         self.update_button.clicked.connect(self.update_clicked)
@@ -6383,6 +6418,7 @@ class Window(QMainWindow):
         # 2D/3D viewer the largest share of the default workspace; artists can resize afterwards.
         self.resizeDocks([self.viewer_dock, self.graph_dock], [560, 300], Qt.Orientation.Vertical)
         self._menus()
+        self._build_topbar_menu()
 
         # The layout as built above *is* the default workspace; keep it before anything saved
         # replaces it, so Workspace → Default workspace has something exact to return to.
@@ -7746,6 +7782,13 @@ class Window(QMainWindow):
     def update_title(self):
         dirty = self.dispatcher.document != self.saved_document
         self.setWindowTitle(f"NodeBased {__version__} · {Path(self.project_path).name if self.project_path else 'Untitled'}{' *' if dirty else ''}")
+        if not hasattr(self, "topbar"):
+            return
+        if self.project_path:
+            path = Path(self.project_path)
+            self.topbar.set_project(path.parent.name or path.stem, path.stem, saved=not dirty)
+        else:
+            self.topbar.set_project("Untitled", saved=not dirty)
 
     def node_tab(self, key, node):
         page = QWidget()
@@ -10771,6 +10814,12 @@ class Window(QMainWindow):
         # sustained rate instead of one frame per tick-that-happened-to-find-us-idle.
         if self.playing and len(self.preview_queue):
             self.timer.start(0)
+        if frame is not None and request.display:
+            timing = re.search(r"(\d+) ms", status)
+            if timing:
+                self.last_frame_ms = int(timing.group(1))
+                self.topbar.set_gpu(gpudisplay.adapter_name(), self.last_frame_ms,
+                                    gpu=gpudisplay.status() == "GPU")
         current = self.dispatcher.document["time"]["current"]
         # Outside playback the rule stays strict: a result is displayable only if it is still the
         # playhead and still the newest request (docs/PLAYBACK.md criterion 4). During playback

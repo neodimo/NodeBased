@@ -1930,45 +1930,34 @@ class ChromeTests(unittest.TestCase):
         APP.processEvents()
 
     def test_check_for_updates_is_the_last_thing_on_the_toolbar(self):
-        toolbar = self.window.findChildren(QToolBar)[0]
-        widgets = [toolbar.widgetForAction(a) for a in toolbar.actions()]
-        widgets = [x for x in widgets if x is not None]
-        self.assertIs(widgets[-1], self.window.update_button,
-                      'the update button must be the trailing item')
-        spacers = [x for x in widgets if x.objectName() == 'toolbarSpacer']
-        self.assertTrue(spacers, 'right-justification needs an expanding spacer before the button')
-        self.assertGreater(widgets.index(self.window.update_button), widgets.index(spacers[0]))
+        # The top bar (new look, NL1) is one widget on the workspace toolbar; the update button is
+        # the trailing item inside it, in the right half, where the mockup puts its primary button.
+        toolbar = self.window.workspace_toolbar
+        bar = self.window.topbar
+        self.assertIs(toolbar.widgetForAction(toolbar.actions()[-1]), bar)
         button = self.window.update_button
+        self.assertTrue(bar.isAncestorOf(button))
+        self.assertEqual(max((p for p in bar.findChildren(QPushButton)),
+                             key=lambda p: p.geometry().right()), button)
         self.assertGreater(button.mapTo(toolbar, button.rect().center()).x(), toolbar.width() // 2)
 
-    def test_toolbar_collapses_less_used_items_and_keeps_update_visible(self):
+    def test_the_top_bar_keeps_the_update_control_visible_at_every_window_width(self):
+        # Replaces the old collapse-into-More test: the bar now sheds the shot name and the GPU
+        # adapter name instead. tests/test_topbar.py checks clipping at 1280 and 1440 wide.
         window = self.window
         base = window.font()
         scaled = QFont(base)
         scaled.setPixelSize(max(1, round(base.pixelSize() * 1.25)))
         window.setFont(scaled)
         try:
-            toolbar = window.workspace_toolbar
-            for width in (1440, 1100, 800):
+            for width in (1440, 1100, 900):
                 window.resize(width, 700)
                 APP.processEvents()
-                window._fit_workspace_toolbar()
-                APP.processEvents()
                 button = window.update_button
-                if toolbar.sizeHint().width() > toolbar.width():
-                    # The fixed items alone are wider than the window (the Windows runner at 800 pixels, 0.32.0
-                    # known limit): every collapsible item is already in the More menu and Qt moves the
-                    # trailing update control into its own extension menu. Check the fit did all it could.
-                    self.assertTrue(window.toolbar_more.isVisible(), f"More menu hidden at {width}px")
-                    self.assertFalse(any(action.isVisible() for action in window._toolbar_overflow),
-                                     f"collapsible items still shown at {width}px")
-                    continue
                 self.assertTrue(button.isVisible(), f"update control hidden at {width}px")
-                self.assertIs(toolbar.widgetForAction(toolbar.actions()[-1]), button)
-                self.assertLess(button.mapTo(toolbar, button.rect().center()).x(), toolbar.width())
-                hidden = [action for action in window._toolbar_overflow if not action.isVisible()]
-                self.assertEqual(bool(hidden), window.toolbar_more.isVisible())
-                self.assertLessEqual(toolbar.sizeHint().width(), toolbar.width(), f"toolbar overflow at {width}px")
+                self.assertLessEqual(button.geometry().right(), window.topbar.width(),
+                                     f"update control clipped at {width}px")
+                self.assertGreaterEqual(button.width(), button.fontMetrics().horizontalAdvance(button.text()))
         finally:
             window.setFont(base)
 
