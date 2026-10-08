@@ -79,6 +79,19 @@ class SimCacheTests(unittest.TestCase):
             simcache.solve_to_frame(second_cache, "run", 40, 1, 2, 4, initial, step)
             self.assertEqual(calls[0], 20)
 
+    def test_disk_frame_load_preserves_fields(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = "b" * 64
+            expected = simcache.State({
+                "coords": np.arange(30, dtype=np.int32).reshape(10, 3),
+                "density": np.linspace(0, 1, 64, dtype=np.float32).reshape(4, 4, 4),
+            }, {"frame": 7, "shape": [4, 4, 4]})
+            simcache.SimCache(root).put(run, 7, expected)
+
+            loaded = simcache.SimCache(root).get(run, 7)
+
+            self.assertEqual(expected, loaded)
+
     def test_cancellation(self):
         cancel = threading.Event()
         calls = [0]

@@ -177,9 +177,12 @@ class SimCache:
                 meta = json.loads(str(archive["__meta__"]))
                 if not isinstance(meta, dict):
                     raise ValueError("metadata is not a dict")
-                arrays = {name: np.asarray(archive[name]).copy()
+                # Each `archive[name]` is already a newly allocated, independently owned
+                # ndarray. Keep it directly: copying here and again in State used to make
+                # two full copies of every cache frame on a disk hit.
+                arrays = {name: np.asarray(archive[name])
                           for name in archive.files if name != "__meta__"}
-            return State(arrays, meta)
+            return State(arrays, meta, copy=False)
         except (OSError, ValueError, EOFError, KeyError, TypeError):
             return None
 
