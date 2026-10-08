@@ -18,7 +18,7 @@ PYTHONPATH=$PWD QT_QPA_PLATFORM=offscreen python tools/benchmark_portable_render
 
 ## Measurements and next recommendation
 
-The six X1, Y1 and Z1 case pairs were re-measured on October 8 in step Q1 (renderer commit `a6c04e2`); the smoke rows are the P1 measurements. Median of three timed renders after one warm-up. "Passes" is the number of render passes the adaptive loop or fixed loop ran; "mean spp" is the mean samples per pixel. PSNR and max error compare each adapter with the CPU path tracer at the same settings and seed (clipped sRGB RGB). Two of the 24 rows carry noticeable GPU-to-CPU differences: X1 (54 to 55 dB, max error 0.014 to 0.064, the same on all three adapters, so it comes from the scene and not one driver) and the smoke grid cases (74 to 75 dB). Everything else is above 97 dB.
+The six X1, Y1 and Z1 case pairs were re-measured on October 8 in step Q1 (renderer commit `a6c04e2`); the smoke rows were re-measured in step Q2 (renderer commit `c94b4eb`; the P1 smoke times are in the Q2 section). Median of three timed renders after one warm-up. "Passes" is the number of render passes the adaptive loop or fixed loop ran; "mean spp" is the mean samples per pixel. PSNR and max error compare each adapter with the CPU path tracer at the same settings and seed (clipped sRGB RGB). Two of the 24 rows carry noticeable GPU-to-CPU differences: X1 (54 to 55 dB, max error 0.014 to 0.064, the same on all three adapters, so it comes from the scene and not one driver) and the smoke grid cases (74 to 75 dB). Everything else is above 97 dB.
 
 | adapter | backend | case | status | median | passes | mean spp | PSNR vs CPU | max error |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -28,36 +28,36 @@ The six X1, Y1 and Z1 case pairs were re-measured on October 8 in step Q1 (rende
 | llvmpipe | Vulkan | Y1-fixed64 | ok | 1251 ms | 64 | 64.0 | 104.6 dB | 0.002 |
 | llvmpipe | Vulkan | Z1-adaptive0.003 | ok | 147 ms | 7 | 18.3 | 159.2 dB | 0.000 |
 | llvmpipe | Vulkan | Z1-fixed64 | ok | 374 ms | 64 | 64.0 | 122.6 dB | 0.000 |
-| llvmpipe | Vulkan | smoke-box | ok | 1031 ms | 32 | 32.0 | 84.8 dB | 0.028 |
-| llvmpipe | Vulkan | smoke-grid | ok | 515 ms | 32 | 32.0 | 75.2 dB | 0.053 |
+| llvmpipe | Vulkan | smoke-box | ok | 1025 ms | 32 | 32.0 | 84.8 dB | 0.028 |
+| llvmpipe | Vulkan | smoke-grid | ok | 367 ms | 32 | 32.0 | 75.2 dB | 0.053 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-adaptive0.003 | ok | 43 ms | 7 | 19.0 | 54.6 dB | 0.064 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-fixed64 | ok | 97 ms | 64 | 64.0 | 55.2 dB | 0.014 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | Y1-adaptive0.003 | ok | 53 ms | 7 | 38.0 | 97.4 dB | 0.006 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | Y1-fixed64 | ok | 90 ms | 64 | 64.0 | 97.6 dB | 0.006 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | Z1-adaptive0.003 | ok | 20 ms | 7 | 18.3 | 156.2 dB | 0.000 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | Z1-fixed64 | ok | 44 ms | 64 | 64.0 | 127.4 dB | 0.000 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-box | ok | 144 ms | 32 | 32.0 | 84.8 dB | 0.028 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-grid | ok | 143 ms | 32 | 32.0 | 73.6 dB | 0.053 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-box | ok | 71 ms | 32 | 32.0 | 84.8 dB | 0.028 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-grid | ok | 59 ms | 32 | 32.0 | 73.6 dB | 0.053 |
 | AMD Radeon 8060S | Vulkan | X1-adaptive0.003 | ok | 53 ms | 7 | 19.0 | 54.6 dB | 0.064 |
 | AMD Radeon 8060S | Vulkan | X1-fixed64 | ok | 104 ms | 64 | 64.0 | 55.2 dB | 0.014 |
 | AMD Radeon 8060S | Vulkan | Y1-adaptive0.003 | ok | 90 ms | 7 | 38.0 | 101.9 dB | 0.003 |
 | AMD Radeon 8060S | Vulkan | Y1-fixed64 | ok | 115 ms | 64 | 64.0 | 102.2 dB | 0.003 |
 | AMD Radeon 8060S | Vulkan | Z1-adaptive0.003 | ok | 17 ms | 7 | 18.3 | 151.5 dB | 0.000 |
 | AMD Radeon 8060S | Vulkan | Z1-fixed64 | ok | 39 ms | 64 | 64.0 | 127.4 dB | 0.000 |
-| AMD Radeon 8060S | Vulkan | smoke-box | ok | 157 ms | 32 | 32.0 | 84.8 dB | 0.028 |
-| AMD Radeon 8060S | Vulkan | smoke-grid | ok | 113 ms | 32 | 32.0 | 73.9 dB | 0.053 |
+| AMD Radeon 8060S | Vulkan | smoke-box | ok | 102 ms | 32 | 32.0 | 84.8 dB | 0.028 |
+| AMD Radeon 8060S | Vulkan | smoke-grid | ok | 61 ms | 32 | 32.0 | 73.9 dB | 0.053 |
 
 What the numbers show (measured):
 
 - **Y1 adaptive is faster than Y1 fixed 64 on all three adapters after step Q1** (AMD 90 against 115 ms, llvmpipe 763 against 1251 ms, RTX 53 against 90 ms). In P1 it was slower on AMD (183 against 117 ms) and llvmpipe (1548 against 1187 ms) and level on RTX, because it averaged 72.7 samples per pixel; the Q1 section below has the cause and the change. Y1 adaptive now averages 38.0 samples per pixel.
 - X1 and Z1 adaptive are faster than fixed on every adapter (mean 19.0 and 18.3 spp after Q1; 19.6 and 20.3 in P1): X1 53 against 104 ms on AMD, Z1 20 against 44 ms on RTX.
-- **Smoke majorant grid:** collisions fall from 112.6 tentative per path (single box) to 14.9 (grid), 7.6 times fewer, with real collisions unchanged at 0.19. Wall time improves 1.39 times on AMD (157 to 113 ms), 2.0 times on llvmpipe (1031 to 515 ms) and not at all on RTX (144 against 143 ms), where about 125 ms of dispatch time remains in both. The RTX smoke cost is therefore not collision work.
-- The RTX is 1.2 to 1.3 times faster than the Radeon on X1 and Y1 fixed, level on Z1 fixed (42 against 44 ms), slower on Z1 adaptive (24 against 20 ms) and slower on the smoke grid (143 against 113 ms).
+- **Smoke majorant grid:** collisions fall from 112.6 tentative per path (single box) to 15.4 (grid), 7.3 times fewer, with real collisions unchanged at 0.19. After step Q2 the grid case is faster than the box case on every adapter: 1.7 times on AMD (102 to 61 ms), 2.8 times on llvmpipe (1025 to 367 ms) and 1.2 times on the RTX (71 to 59 ms). In P1 the RTX was level (144 against 143 ms); step Q2 found the cause in the dispatch size, not the collision loop.
+- The RTX is 1.2 to 1.3 times faster than the Radeon on X1 and Y1 fixed, level on Z1 fixed (42 against 44 ms), slower on Z1 adaptive (24 against 20 ms) and level on the smoke grid after Q2 (59 against 61 ms).
 
 Ranked recommendation for the next rendering brief (evidence above; no optimization started here):
 
 1. **Y1 adaptive sampling.** Done in step Q1 (below): adaptive is faster than fixed on every adapter and scene. It was the only scene where adaptive lost on two adapters; it averaged more samples than fixed.
-2. **Smoke on the RTX.** The grid removes 7.6 times the collision work but the RTX does not get faster, so something other than the collision loop (dispatch occupancy or memory access for the grid) bounds it there. Needs a phase-level profile on the RTX before any change.
+2. **Smoke on the RTX.** Done in step Q2 (below): the render no longer leaves the card idle (143 to 59 ms) and the grid is 17 percent faster than the single box. The collision loop is a small part of the remaining RTX time; what is left is per-path shader cost.
 3. X1 quality: 54 to 55 dB on all adapters points at a scene or reference difference worth one look before it is used for a visual claim.
 
 Known limits: one resolution (640 by 360), one seed per scene, three timed frames, so differences under about 10 percent are not established. Lock contention with other lanes was heavy; the timings were taken inside short exclusive lock turns, but a lane holding only the shared side of the lock cannot overlap them. RTX validation covers these eight cases on one boot only. No speed target is claimed.
@@ -147,3 +147,26 @@ Batching the waits barely helps (127 to 108 ms), so the round trips are not the 
 Reading the table: the collision loop is the difference between the box and the grid, 4 to 7 ms of a 40 to 48 ms dispatch, even though the grid does 7.6 times fewer tentative collisions. On this card the 112 collisions per path of the single box are cheap; the cost sits in the rest of the path (12.7 ms of fixed shader cost, about 14 ms for the camera flight into the plume and its first scatter vertex, 6 to 8 ms per further bounce). That part is the same in both cases, so it caps what the grid can win on the RTX. Alongside it the host-side phases (upload 2.4, readback 2.8, post-processing 4.7 ms) are about 12 ms that the grid cannot touch.
 
 Measured above: dispatch shape, the floor, bounce, shadow-step and work-group effects. Inference: that the remaining plume cost is per-path shader work (register pressure and divergence of the smoke code) rather than memory traffic; no in-shader timer exists to separate those.
+
+### Step Q2: the change and the numbers after it
+
+**The change.** A smoke or splat render takes its rows in bands whose size follows the measured time of the last dispatch. It starts at the old size (65 000 paths, so a slow adapter begins as short as before), and after each wait the band grows to about 8 ms of work (`BAND_TARGET_SECONDS`), at most four times larger per step, never smaller than the start and never more than 4 million paths (`BAND_MAX_PATHS`). Surface-only renders and adaptive renders are unchanged. Nothing in the shaders changed; the sample sums do not depend on how the rows are cut, and `tests/test_gpu_band_growth.py` renders the same image with fixed and grown bands and requires them to be identical, with fewer than half the waits.
+
+**Rerun** (`tools/benchmark_portable_render.py --matrix`, the two smoke cases on each adapter, own bounded lock turn each, CPU references from P1 reused; three timed renders in brackets):
+
+| adapter | case | P1 | after Q2 | timed renders after | PSNR vs CPU, P1 to after |
+| --- | --- | ---: | ---: | --- | --- |
+| RTX 3080 Ti | smoke-box | 144 ms | 71 ms | 70, 78, 71 | 84.8 to 84.8 dB |
+| RTX 3080 Ti | smoke-grid | 143 ms | 59 ms | 59, 60, 58 | 73.6 to 73.6 dB |
+| AMD Radeon 8060S | smoke-box | 157 ms | 102 ms | 102, 99, 103 | 84.8 to 84.8 dB |
+| AMD Radeon 8060S | smoke-grid | 113 ms | 61 ms | 62, 59, 61 | 73.9 to 73.9 dB |
+| llvmpipe | smoke-box | 1031 ms | 1025 ms | 1025, 1031, 1005 | 84.8 to 84.8 dB |
+| llvmpipe | smoke-grid | 515 ms | 367 ms | 367, 368, 366 | 75.2 to 75.2 dB |
+
+On the RTX the grid case is 17 percent faster than the box case (59 against 71 ms, every grid run under every box run). The AMD gain is kept and grows (the grid case 1.9 times faster than P1, the box case 1.5 times); llvmpipe keeps its grid gain and the grid case is 1.4 times faster than P1. The llvmpipe box case did not change: its dispatches already take longer than 8 ms, so its bands stay at the start size. The images are the same to the digit of the table (PSNR against the CPU, mean and maximum error unchanged). The collision counters are unchanged (15.4 tentative per path with the grid, 112.6 with the box).
+
+Same-session before and after, from `tools/profile_smoke_phases.py` (`fixed` is the old shape, `grow` the new one; median of five renders, two repeats; `benchmarks/smoke_phases/prof9.jsonl`): RTX grid 127 and 126 to 56 and 58 ms, RTX box 129 and 147 to 61 and 66 ms; AMD grid 112 and 115 to 57 and 61 ms, AMD box 152 and 163 to 102 and 102 ms; llvmpipe grid 496 and 498 to 361 and 359 ms.
+
+**What bounds the RTX now** (measured in the profile above, with the inference named there): about 12 ms of every 59 ms render is host-side (upload, image readback and post-processing, none of which the grid changes), 12.7 ms of the dispatch is the shader's fixed cost per path, and the rest is the smoke vertices' own work. The collision loop is the 4 to 7 ms the box adds, which is why the grid wins 17 percent and not the 7 times its collision count suggests. A bigger win on the RTX would need a cheaper smoke vertex (light sampling and the phase-function continuation after each real collision) or a leaner fixed path; both are shader changes with the AMD work-group limits behind them (`WG_SIZE_SPLATS_AND_VOLUMES`), left for a later step.
+
+Unverified or limited: one resolution (640 by 360), one scene and seed, three timed renders; the RTX gain was measured on one boot with no watchdog or device-lost error seen in the case outputs (the kernel log is not readable from the worker); llvmpipe timings share the CPU with other lanes; no Windows or real-display run; surface-only renders were not changed and not re-measured (their bands are the same as in P1).
