@@ -122,3 +122,28 @@ So the cap costs Y1 2.9 dB against the old adaptive render (which bought that qu
 Raw rows of the overhead tool: `benchmarks/adaptive_overhead/<code>-<adapter>-<scene>.json`, `base` on the P1 code (`515b6f8`) and `new` on `a6c04e2`. The Y1 llvmpipe row of `new` was taken while other lanes were using the CPU, so its wall times carry more noise than the rest.
 
 Unverified or limited: one resolution, one seed, three timed renders, so margins under about 10 percent (none among the nine pairs) would not be established; llvmpipe timings share the CPU with the other lanes' work; the real-display and Windows checks are not part of this step; the quality-against-1024 rows come from the overhead tool, one scene run per adapter (Y1 on all three, X1 and Z1 on the Radeon and the RTX).
+
+## Step Q2: smoke on the RTX
+
+Lane 4, step Q2, October 8, 2026. Profile written from measurements taken before any renderer change. Tool: `tools/profile_smoke_phases.py` (one JSON line per variant in `benchmarks/smoke_phases/`, each run in a GPU lock turn on the RTX 3080 Ti, 640 by 360, fixed 32 samples, 4 bounces, median of three renders after a warm-up). The timestamp-query feature is not enabled on the device (it lists `float32-blendable` only), so phases come from the renderer's own laps plus dispatch-shape experiments.
+
+**Phase profile of the render as shipped (P1 code).** Grid case, then the single-box case: scene build 0.3 and 0.3 ms, pack (host-side grid build) 0.8 and 0.2 ms, upload 2.4 ms, dispatch 106 and 125 ms, readback of the image 2.8 ms, post-processing on the host 4.7 ms; totals 130 and 137 ms. The renderer takes bands of about 65 000 paths (`GPU_PATHS_PER_SUBMISSION` divided by `SOFT_SLOWDOWN` 8), one sample per pass, so a 640 by 360 sample is 4 dispatches and the render is 128 dispatches, each followed by a wait on the card (0.83 ms per band in the grid case). There is no mesh in the scene, so there is no surface traversal phase; the grid is built on the host, not on the card.
+
+**What the dispatch shape does** (median ms of the whole render, grid then box):
+
+| dispatch shape | dispatches and waits | grid | box |
+| --- | ---: | ---: | ---: |
+| shipped: 4 bands per sample | 128 | 127 | 140 |
+| 2 bands per sample | 64 | 85 | 94 |
+| 1 band per sample (the whole image) | 32 | 57 | 70 |
+| shipped bands, the waits batched (one per about 11 ms of work) | 7 | 108 | 118 |
+| 4 samples per thread, shipped bands | 120 | 225 | 239 |
+| 8 samples per thread, shipped bands | 120 | 378 | 378 |
+
+Batching the waits barely helps (127 to 108 ms), so the round trips are not the cost. Bigger dispatches are: a band of 65 000 paths leaves most of the card idle (the 3080 Ti keeps about 120 000 threads resident), and the same work as one dispatch over the whole image takes 2.2 times less. Giving each thread several samples makes it worse, because the threads of a pass then run one sample after another.
+
+**Where the dispatch time goes after the dispatch fix** (the same render with bands grown to the image, grid then box; one variable changed at a time): camera aimed away from the plume, every ray leaving the box: 12.7 ms of dispatch, the fixed cost of the shader per path. With the plume in view: 42 and 48 ms. Bounces 0, 1, 2, 4: 27, 35, 41, 45 ms in the grid case and 32, 40, 45, 48 in the box case. Shadow steps 1, 4, 16, 64: 47, 47, 39, 45 ms (grid), no measurable effect. Work-group edge 4, 8, 16, 32: 50, 41, 44, 72 ms (grid), 70, 55, 51, 86 (box), so 8 stays. Ambient light off: slower, not faster.
+
+Reading the table: the collision loop is the difference between the box and the grid, 4 to 7 ms of a 40 to 48 ms dispatch, even though the grid does 7.6 times fewer tentative collisions. On this card the 112 collisions per path of the single box are cheap; the cost sits in the rest of the path (12.7 ms of fixed shader cost, about 14 ms for the camera flight into the plume and its first scatter vertex, 6 to 8 ms per further bounce). That part is the same in both cases, so it caps what the grid can win on the RTX. Alongside it the host-side phases (upload 2.4, readback 2.8, post-processing 4.7 ms) are about 12 ms that the grid cannot touch.
+
+Measured above: dispatch shape, the floor, bounce, shadow-step and work-group effects. Inference: that the remaining plume cost is per-path shader work (register pressure and divergence of the smoke code) rather than memory traffic; no in-shader timer exists to separate those.
