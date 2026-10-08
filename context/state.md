@@ -1,3 +1,14 @@
+## 2026-10-07 — Node category shelf branch (9:47 PM PDT)
+
+DiMo's layout request is implemented on local branch `ui/node-category-bar` at `7aa1037` in
+`scratch/nb-node-bar`. The default NODES dock is hidden, its node families are in an icon-only
+top toolbar with menus, and the Viewer/Graph fill the area beside Properties. The full browser
+is still reachable from search/Ctrl+F. Offscreen capture: `scratch/nb-qa/1007-nodebar/default.png`.
+Focused offscreen checks passed: 12 workspace-layout tests and 31 desktop toolbar/layout/workspace
+tests. This branch is not merged or pushed; the current exact-tip integration suite is still
+running in another checkout. The pinned 0.34.0 AppImage still needs a replacement build before
+DiMo can see the change on the desktop. Next: resolve the suite/merge gate, integrate this branch,
+run the required exact-HEAD validation, build and smoke-test locally, then verify on the KDE display.
 ## 2026-10-08 — Lane 4 P1 finish 1: portable benchmark measured (6:10 AM PDT)
 
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (10:36 AM on 2026-10-08 PDT)
