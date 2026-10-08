@@ -101,11 +101,55 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "ConditionedRead": "#d9b87
           "FluidWhitewater3D": "#a9d8d0",
           "RigidBody3D": "#b7a1e8", "RigidSolver3D": "#9a83d1"}
 
+# ---- Design tokens of the new look (approved 10/8; values from the main-window mockup's :root) ----
+# Everything the stylesheet and the chrome widgets paint with comes from here, so a colour, a
+# radius or a type size changes in exactly one place. Widget code reads TOKENS / FAMILY_COLORS /
+# RADIUS / TYPE and never carries a colour literal of its own.
+TOKENS = {
+    "bg0": "#0b0d10", "bg1": "#111418", "bg2": "#161a1f", "bg3": "#1c2127",     # surfaces, deepest first
+    "line": "#232930", "line2": "#2c333b",                                      # 1 px hairlines
+    "tx0": "#e9edf1", "tx1": "#b4bcc6", "tx2": "#7d8793", "tx3": "#56606b",     # text, strongest first
+    "acc": "#5ee0b5", "acc2": "#3fb894", "acc_ink": "#05231a",                  # accent, deeper accent, text on it
+    "accbg": "rgba(94, 224, 181, 0.10)",                                        # accent wash (hover, selection)
+    "mark_b": "#56c2ff", "mark_c": "#9aa8ff",                                   # logo rim colours
+    "bar_top": "#12161a", "bar_bottom": "#0f1215",                              # top bar gradient
+    "danger": "#ff6b6b", "shadow": "rgba(0, 0, 0, 0.4)",
+}
+
+# The thirteen node families (UI-SPEC.md). No yellow: dark yellow reads brown and dirty.
+FAMILY_COLORS = {
+    "Image": "#a3acb7", "Draw": "#7cc8f2", "Time": "#ff8a65", "Channel": "#f2849e",
+    "Color": "#34d399", "Filter": "#f39a4c", "Keyer": "#79d36b", "Merge": "#5b86f0",
+    "Transform": "#a681f2", "3D": "#e8585f", "Particles": "#e676d6", "Fluids": "#3fd0d0",
+    "Metadata": "#6c7682",
+}
+
+# Corner radii in pixels. Panels and the larger controls sit between 9 and 12; small chips and
+# keycaps are tighter, the status pill is a full capsule.
+RADIUS = {"control": 9, "field": 8, "panel": 12, "popup": 12, "chip": 6, "kbd": 5, "pill": 14}
+
+# Type scale. Sizes are pixels at 100% scaling and every widget sizes itself from font metrics,
+# never from a pixel width that only fits one platform's fonts.
+TYPE = {
+    "family": "'Noto Sans', 'Segoe UI', 'Inter', system-ui, sans-serif",
+    "mono": "'Noto Sans Mono', 'Cascadia Mono', 'DejaVu Sans Mono', monospace",
+    "base": 13, "small": 12, "caption": 11, "title": 16, "value": 12,
+}
+
+# Padding, in pixels, that every control shares.
+SPACING = {"hair": 1, "xs": 3, "sm": 6, "md": 10, "lg": 14}
+
 # Interface themes. Only surface and accent values vary -- the node-family colours above stay
 # fixed, because they carry meaning an artist learns once and should not have to relearn per
 # theme. A theme is a *user* preference, stored per machine (see app.Preferences) rather than in
 # the document: a comp handed to another artist must not drag this one's colour scheme with it.
 THEMES = {
+    "NodeBased": {"window": TOKENS["bg1"], "panel": TOKENS["bg1"], "title": TOKENS["bg2"],
+                  "field": TOKENS["bg0"], "border": TOKENS["line"], "button": TOKENS["bg2"],
+                  "button_border": TOKENS["line2"], "hover": TOKENS["bg3"], "text": TOKENS["tx0"],
+                  "muted": TOKENS["tx2"], "accent": TOKENS["acc"], "grid": "#171b20",
+                  "status": TOKENS["bg1"], "raised": TOKENS["bg3"], "faint": TOKENS["tx3"],
+                  "accent_ink": TOKENS["acc_ink"]},
     "Charcoal": {"window": "#242426", "panel": "#29292c", "title": "#2e2e31", "field": "#1b1b1d",
                  "border": "#414146", "button": "#343438", "button_border": "#49494f",
                  "hover": "#414146", "text": "#e4e4e7", "muted": "#a1a1aa",
@@ -123,7 +167,7 @@ THEMES = {
             "hover": "#4e4e5b", "text": "#ececef", "muted": "#b0b0bb",
             "accent": "#e0b06a", "grid": "#40404a", "status": "#28282e"},
 }
-DEFAULT_THEME = "Charcoal"
+DEFAULT_THEME = "NodeBased"
 
 # Accent choices layered over any theme. "Theme default" (None) keeps the theme's own accent.
 ACCENTS = {"Theme default": None, "Teal": "#83cbb7", "Sky": "#7fc4d9", "Blue": "#89aff0",
@@ -144,6 +188,11 @@ def valid_accent(value):
 
 def theme_colors(theme=DEFAULT_THEME, accent=None):
     colors = dict(THEMES.get(theme) or THEMES[DEFAULT_THEME])
+    # Roles the older themes predate: a raised surface, the faintest text, and the ink that sits
+    # on an accent-filled button.
+    colors.setdefault("raised", colors["hover"])
+    colors.setdefault("faint", colors["muted"])
+    colors.setdefault("accent_ink", TOKENS["acc_ink"])
     if valid_accent(accent):
         colors["accent"] = valid_accent(accent)
     return colors
@@ -152,36 +201,62 @@ def theme_colors(theme=DEFAULT_THEME, accent=None):
 def build_style(theme=DEFAULT_THEME, accent=None):
     """The application stylesheet for one named theme and optional accent override. Unknown names
     fall back to the default rather than raising: a preferences file from a newer build must not
-    stop the app opening."""
+    stop the app opening. This is the one stylesheet for the whole application; widgets name
+    themselves with an objectName here and carry no colours of their own."""
     c = theme_colors(theme, accent)
+    r, t, sp = RADIUS, TYPE, SPACING
     return f"""
-QMainWindow, QWidget {{ background: {c['window']}; color: {c['text']}; font: 12px 'Inter', 'Segoe UI', sans-serif; }}
+QMainWindow, QWidget {{ background: {c['window']}; color: {c['text']}; font: {t['base']}px {t['family']}; }}
 QMenuBar, QMenu, QToolBar {{ background: {c['panel']}; border: 0; }}
-QMenu {{ border: 1px solid {c['border']}; padding: 4px; }}
-QMenu::item {{ padding: 5px 24px 5px 20px; }}
+QMenu {{ border: 1px solid {c['button_border']}; border-radius: {r['popup']}px; padding: {sp['xs'] + 1}px; }}
+QMenu::item {{ padding: 6px 24px 6px 20px; border-radius: {r['chip'] + 1}px; }}
 QMenu::item:selected {{ background: {c['hover']}; }}
 QMenu::separator {{ height: 1px; background: {c['border']}; margin: 4px 8px; }}
+QToolTip {{ background: {c['title']}; color: {c['text']}; border: 1px solid {c['button_border']}; border-radius: {r['chip']}px; padding: 4px 8px; }}
 QDockWidget {{ font-weight: 600; }}
-QDockWidget::title {{ background: {c['title']}; padding: 9px; }}
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {c['field']}; border: 1px solid {c['border']}; border-radius: 5px; padding: 5px; selection-background-color: {c['accent']}; selection-color: {c['field']}; }}
+QDockWidget::title {{ background: {c['title']}; padding: 9px; border-bottom: 1px solid {c['border']}; }}
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {c['field']}; border: 1px solid {c['border']}; border-radius: {r['field']}px; padding: 5px {sp['sm'] + 2}px; selection-background-color: {c['accent']}; selection-color: {c['accent_ink']}; }}
+QSpinBox, QDoubleSpinBox {{ font-family: {t['mono']}; font-size: {t['value']}px; }}
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border: 1px solid {c['accent']}; }}
-QPushButton {{ background: {c['button']}; border: 1px solid {c['button_border']}; border-radius: 5px; padding: 6px 12px; }}
-QPushButton:hover {{ background: {c['hover']}; border-color: #777780; }}
+QPushButton {{ background: {c['button']}; border: 1px solid {c['button_border']}; border-radius: {r['control']}px; padding: 6px {sp['lg']}px; }}
+QPushButton:hover {{ background: {c['hover']}; border-color: {c['faint']}; }}
 QPushButton:pressed {{ background: {c['field']}; }}
 QPushButton:disabled {{ color: {c['muted']}; }}
-QPushButton#update {{ color: {c['accent']}; border-color: {c['border']}; background: {c['title']}; }}
-QPushButton#update:hover {{ background: {c['hover']}; }}
-QToolButton {{ padding: 7px; }}
+QPushButton#update {{ background: {c['accent']}; color: {c['accent_ink']}; border: 1px solid {c['accent']}; font-weight: 600; font-size: {t['base']}px; }}
+QPushButton#update:hover {{ background: {c['accent']}; border-color: {c['text']}; }}
+QPushButton#update:pressed {{ background: {c['panel']}; color: {c['accent']}; }}
+QPushButton#update:disabled {{ background: {c['raised']}; color: {c['muted']}; border-color: {c['border']}; }}
+QToolButton {{ padding: 7px; border-radius: {r['field']}px; }}
 QToolButton:hover {{ background: {c['hover']}; }}
-QToolButton#viewer-mode-2d:checked, QToolButton#viewer-mode-3d:checked {{ background: {c['title']}; color: {c['accent']}; border: 1px solid {c['accent']}; border-radius: 4px; }}
-QSplitter::handle {{ background: {c['border']}; height: 4px; width: 4px; }}
-QStatusBar {{ background: {c['status']}; color: {c['muted']}; }}
+QToolButton#viewer-mode-2d:checked, QToolButton#viewer-mode-3d:checked {{ background: {c['title']}; color: {c['accent']}; border: 1px solid {c['accent']}; border-radius: {r['chip'] - 2}px; }}
+QSplitter::handle {{ background: {c['border']}; height: {sp['hair'] + 3}px; width: {sp['hair'] + 3}px; }}
+QStatusBar {{ background: {c['status']}; color: {c['muted']}; border-top: 1px solid {c['border']}; }}
 QLabel#muted {{ color: {c['muted']}; }}
-QLabel#brand {{ color: {c['accent']}; font-size: 16px; font-weight: 700; padding: 6px; }}
+QLabel#brand {{ color: {c['accent']}; font-size: {t['title']}px; font-weight: 700; padding: 6px; }}
 QCheckBox::indicator {{ width: 13px; height: 13px; background: {c['field']}; border: 1px solid {c['button_border']}; border-radius: 3px; }}
 QCheckBox::indicator:checked {{ background: {c['accent']}; border: 1px solid {c['accent']}; border-radius: 3px; }}
-QTabBar::tab {{ background: {c['panel']}; padding: 6px 14px; border-bottom: 2px solid transparent; }}
+QTabBar::tab {{ background: {c['panel']}; padding: 6px {sp['lg']}px; border-bottom: 2px solid transparent; }}
 QTabBar::tab:selected {{ color: {c['accent']}; border-bottom: 2px solid {c['accent']}; }}
+
+/* ---- top bar: logo, project, workspace tabs, search, GPU pill, menu, update ---- */
+QToolBar#workspace-toolbar {{ background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 {TOKENS['bar_top']}, stop: 1 {TOKENS['bar_bottom']}); border: 0; border-bottom: 1px solid {c['border']}; padding: 0; spacing: 0; }}
+QWidget#topbar, QWidget#topbar QLabel, QWidget#topbar-brand {{ background: transparent; }}
+QLabel#topbar-project {{ color: {TOKENS['tx1']}; font-size: {t['base']}px; }}
+QLabel#topbar-project-name {{ color: {c['text']}; font-weight: 600; }}
+QFrame#segmented {{ background: {c['title']}; border: 1px solid {c['border']}; border-radius: {r['control']}px; }}
+QPushButton#workspace-tab {{ background: transparent; border: 0; border-radius: {r['chip']}px; color: {c['muted']}; padding: 4px {sp['lg']}px; font-size: {t['base']}px; }}
+QPushButton#workspace-tab:hover {{ color: {c['text']}; background: transparent; }}
+QPushButton#workspace-tab:checked {{ background: {c['raised']}; color: {c['text']}; }}
+QPushButton#topbar-search {{ background: {c['title']}; border: 1px solid {c['border']}; border-radius: {r['control']}px; padding: 0; }}
+QPushButton#topbar-search:hover {{ border-color: {c['button_border']}; background: {c['title']}; }}
+QLabel#topbar-search-text {{ color: {c['faint']}; }}
+QPushButton#topbar-search:hover QLabel#topbar-search-text {{ color: {c['muted']}; }}
+QLabel#topbar-kbd {{ color: {c['muted']}; font-size: {t['caption']}px; background: {c['panel']}; border: 1px solid {c['button_border']}; border-radius: {r['kbd']}px; padding: 0 {sp['sm'] - 1}px; }}
+QFrame#gpu-pill {{ background: {c['title']}; border: 1px solid {c['border']}; border-radius: {r['pill']}px; }}
+QLabel#gpu-pill-text {{ color: {TOKENS['tx1']}; font-size: {t['small']}px; }}
+QToolButton#topbar-menu {{ color: {c['muted']}; border: 0; border-radius: {r['field']}px; padding: 5px; }}
+QToolButton#topbar-menu::menu-indicator {{ image: none; width: 0px; }}
+QToolButton#topbar-menu:hover, QToolButton#topbar-menu:checked {{ background: {c['hover']}; color: {c['text']}; }}
 QScrollBar:vertical {{ background: {c['status']}; width: 10px; }}
 QScrollBar::handle:vertical {{ background: {c['button_border']}; min-height: 25px; }}
 /* Styling QScrollBar:vertical's background switches Qt to fully custom rendering: an
