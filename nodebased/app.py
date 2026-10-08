@@ -105,7 +105,7 @@ SHORTCUT_SECTIONS = (
     ("File", (("Ctrl+I", "Read image"), ("Ctrl+O", "Open project"),
               ("Ctrl+S", "Save"), ("Ctrl+Shift+S", "Save as"),
               ("Ctrl+E", "Export image"))),
-    ("Edit", (("Ctrl+Z", "Undo"), ("Ctrl+Shift+Z", "Redo"), ("S", "Settings"))),
+    ("Edit", (("Ctrl+Z", "Undo"), ("Ctrl+Shift+Z", "Redo"), ("Ctrl+,", "Settings"))),
     ("Time", (("Left", "previous frame"), ("Right", "next frame"),
                ("Home", "first frame"), ("End", "last frame"), ("Space", "play/stop"))),
     ("Node graph", (("Tab", "node search"), ("R/G/M/T/B/C/S/O/P/U/W", "create node (Read/Grade/Merge/Transform/Blur/ColorCorrect/Shuffle/Roto/Premult/Unpremult/Write)"),
