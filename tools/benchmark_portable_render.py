@@ -12,7 +12,7 @@ warm-up and timed frame counts, the median wall time, the renderer's phase times
 collision counters and PSNR / error against the CPU path tracer rendered with the same settings and seed (cached beside the
 results, so it is rendered once per case and size).
 
-Every case is its own subprocess under a short exclusive GPU-lock turn (`/tmp/nb-gpu.lock`, hardware adapters only), with a
+Every case is its own subprocess under a short exclusive GPU-lock turn (`/tmp/nb-gpu.lock`, all adapters), with a
 timeout. Its JSON is written the moment it finishes, so an interrupted run keeps the earlier cases; a case whose file exists
 is skipped unless `--force`. An adapter that is missing or hangs gives a record with status `unavailable` or `timeout`: it is
 never omitted and never a pass. `discrete` (the RTX) is not in the default adapters while its eGPU is in the NVRM lock.
@@ -280,7 +280,11 @@ def run_matrix(adapters, cases, size, out, timeout, lock_wait, force):
             env = dict(os.environ, PYTHONPATH=str(ROOT), QT_QPA_PLATFORM="offscreen")
             started = time.perf_counter()
             try:
-                turn = GpuTurn(lock_wait) if adapter in HARDWARE else None
+                if not (Path(out) / "reference" / f"{case}_{size[0]}x{size[1]}.npy").exists():
+                    subprocess.run([sys.executable, str(Path(__file__).resolve()), "--prepare-reference", case,
+                                    "--size", f"{size[0]}x{size[1]}", "--out", str(out)],
+                                   cwd=ROOT, env=env, timeout=timeout, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                turn = GpuTurn(lock_wait)
                 if turn:
                     turn.__enter__()
                 try:
@@ -291,6 +295,8 @@ def run_matrix(adapters, cases, size, out, timeout, lock_wait, force):
                         turn.__exit__()
                 if not path.exists():
                     save_case(out, _record(case, adapter, size, "error", reason="worker exited without writing a result"))
+            except subprocess.CalledProcessError as exc:
+                save_case(out, _record(case, adapter, size, "error", reason=f"CPU reference preparation failed with exit {exc.returncode}"))
             except subprocess.TimeoutExpired:
                 save_case(out, _record(case, adapter, size, "timeout", reason=f"no result within {timeout} s"))
             except TimeoutError as exc:
@@ -316,6 +322,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--matrix", action="store_true")
     parser.add_argument("--case")
+    parser.add_argument("--prepare-reference")
     parser.add_argument("--adapter", default="cpu")
     parser.add_argument("--adapters", default=",".join(DEFAULT_ADAPTERS))
     parser.add_argument("--cases", default=",".join(CASES))
@@ -329,6 +336,8 @@ def main():
     size = tuple(int(v) for v in args.size.split("x"))
     if args.report:
         print(report(args.report))
+    elif args.prepare_reference:
+        reference_image(args.prepare_reference, size, args.out)
     elif args.case:
         print(run_case(args.case, args.adapter, size, args.out))
     elif args.matrix:
