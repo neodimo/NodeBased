@@ -178,8 +178,9 @@ saved before the slot existed gain it unwired on load and render the matte as be
 With no `bg`, output remains a **matte artifact**: float32, scene-linear, premultiplied, with
 `rgb == a == coverage`. That is a premultiplied white matte, so it composites
 correctly through every existing kernel with no special case, and reads as a
-sensible greyscale image in the viewer. `invert` produces `1 - coverage` in all
-four channels.
+sensible greyscale image in the viewer. With no `bg`, `invert` produces `1 -
+coverage` in all four channels; with a plate it inverts the shape alpha while
+leaving the pass-through RGB unchanged.
 
 `docs/EVALUATION_TIERS.md` clause C6 requires cache entries to carry a declared
 artifact type. The type registry (`nodebased.core.ARTIFACT_TYPES`) is declared
