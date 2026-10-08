@@ -1,5 +1,33 @@
 ## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (11:01 PM on 2026-10-07 PDT)
+
+`main` moved `6807d16` -> `446ae02` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 50 tests in 96.345 s, OK. Full suite on
+the stacked tip `446ae02` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1007-1935-retry.log`, started 9:16 PM): **Ran 4684 tests in 6322.780 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step AA1 of 2: S makes a Shuffle, Merge passes B through, numbers keep all their digits.** Commits:
+  - `aff51af` docs: Lane 2 step AA1 note (S makes a Shuffle, Merge passes B through, numbers keep their digits)
+  - `c36d4d8` Numeric fields accept every typed digit (out-of-range values clamp on commit, exponents allowed); translate range widened to a million
+  - `d5bb9b4` Merge with nothing in A outputs B unchanged and an empty B is transparent black, on the evaluator and the tile path
+  - `1109deb` Settings moves to Ctrl+, so S creates a Shuffle in the graph; test that no menu shortcut shadows a graph letter key
+  Diff: 11 files changed, 317 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step R3 of 2: the Roto panel shows what is keyed and stays where you are.** Commits:
+  - `b79339e` docs: record Lane 8 Roto panel findings
+  - `66056b4` fix: preserve Properties state on panel rebuild
+  - `ec5b5ac` feat: show Roto knob key state in Properties
+  Diff: 5 files changed, 233 insertions(+), 25 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (7:05 PM on 2026-10-07 PDT)
 
 `main` moved `cf9d54f` -> `30961b2` (lane commits cherry-picked onto main in lane order) and then to this
