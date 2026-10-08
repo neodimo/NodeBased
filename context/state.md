@@ -1,3 +1,7 @@
+## 2026-10-08 — Lane 4 Q1 finish 1: adaptive sampling capped at Path samples (worktree, not yet merged)
+
+Branch `openclaw/nb-3d-astra-lane` at the commit that carries this note; code commit `a6c04e2`, results commit `f7c4c06`. An adaptive render now takes at most `Path samples` per pixel (`PathSettings.clamped`) and the GPU loop ends when no pixel is open. Adaptive is faster than fixed 64 on all nine adapter and scene pairs (Radeon, llvmpipe, RTX; X1, Y1, Z1). Quality against the CPU path tracer: X1 within 0.1 dB, Y1 RTX -1.5 dB (outside the 0.5 dB allowed), the rest up. Limits: Linux only, one resolution and seed, no real-display or Windows check. Details: TASKLOG.md and `docs/BENCHMARKS-v0.35-portable-render.md`, section "Step Q1".
+
 ## 2026-10-07 — Node category shelf branch (9:47 PM PDT)
 
 DiMo's layout request is implemented on local branch `ui/node-category-bar` at `7aa1037` in
