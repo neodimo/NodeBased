@@ -144,6 +144,23 @@ class SimCacheTests(unittest.TestCase):
             self.assertEqual(anchor[0], 2)
             self.assertEqual(anchor[1], expected)
 
+    def test_evaluator_budget_pairs_have_independent_disk_namespaces(self):
+        from nodebased.imaging import Evaluator
+
+        with tempfile.TemporaryDirectory() as root:
+            evaluator = Evaluator(sim=simcache.SimCache(root))
+            roomy = evaluator.sim_store(1, 4)
+            tiny = evaluator.sim_store(1, 1)
+            run = "9" * 64
+            expected = simcache.State({"x": np.arange(4, dtype=np.float32)})
+            roomy.put(run, 3, expected)
+            # This entry exceeds the tiny scope's one-MiB budget and is evicted there.
+            tiny.put(run, 4, simcache.State({"x": np.arange(300_000, dtype=np.float32)}))
+
+            self.assertNotEqual(roomy.root, tiny.root)
+            self.assertTrue(roomy._path((run, 3)).is_file())
+            self.assertEqual(simcache.SimCache(roomy.root).get(run, 3), expected)
+
     def test_cancellation(self):
         cancel = threading.Event()
         calls = [0]
