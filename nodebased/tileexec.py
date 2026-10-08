@@ -1311,6 +1311,11 @@ class TileExecutor:
             b_pixels = _align_artifact_to(inputs[1], target_region) if inputs[1] is not None else None
             mask_pixels = (_align_artifact_to(inputs[2], target_region)
                            if len(inputs) > 2 and inputs[2] is not None else None)
+            if kind == "Merge" and (a_pixels is None or b_pixels is None):
+                # Nuke's Merge: an empty A passes B through; an empty B is transparent black.
+                if a_pixels is None:
+                    return b_pixels.astype(np.float32)
+                b_pixels = np.zeros_like(a_pixels)
             if kind == "Merge":
                 return imaging.Evaluator._merge_gated(params.get("operation", "over"), a_pixels,
                                                       b_pixels, params["mix"],

@@ -956,6 +956,9 @@ class Evaluator:
             if kind == "Generate" and active_inputs.get("image") is None:
                 raise ValueError("Generate: connect a source plate image")
             missing = [slot for slot, source in active_inputs.items() if source is None and slot in required]
+            if kind == "Merge" and not node["disabled"] and len(missing) == 1:
+                # Nuke's Merge: an empty A passes B through; an empty B is transparent black.
+                missing = []
             if missing:
                 raise ValueError(f"{node['name']}: connect required input(s). Nothing is connected to its "
                                  f"{', '.join(missing)} input; connect a source image to it.")
@@ -2786,6 +2789,11 @@ class Evaluator:
             if a.display != b.display:
                 raise ValueError("CopyBBox inputs must have matching display windows")
             return Raster(a.fit(b.data), b.data, a.display, a.layers, a.meta)
+        if kind == "Merge" and (inputs[0] is None or inputs[1] is None):
+            if inputs[0] is None:
+                return inputs[1]
+            a = inputs[0]
+            inputs = [a, Raster(np.zeros_like(a.pixels), a.data, a.display)] + list(inputs[2:])
         if kind in MERGE_LIKE_KINDS and kind != "ZMerge":
             a, b = inputs[0], inputs[1]
             if a.display != b.display:
