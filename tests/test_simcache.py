@@ -126,7 +126,7 @@ class SimCacheTests(unittest.TestCase):
 
             self.assertEqual(scoped.get(run, frame), expected)
             self.assertTrue(scoped._path((run, frame)).is_file())
-            self.assertFalse(old._path((run, frame)).exists())
+            self.assertTrue(old._path((run, frame)).is_file())
             self.assertEqual(scoped.frames(run), [frame])
 
     def test_cancellation(self):

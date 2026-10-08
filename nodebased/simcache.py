@@ -208,10 +208,13 @@ class SimCache:
                     stream.write(memoryview(array).cast("B"))
             os.replace(temporary, path)
             temporary = None
-            self._legacy_path(key).unlink(missing_ok=True)
-            legacy_packed = self._legacy_packed_path(key)
-            if legacy_packed is not None:
-                legacy_packed.unlink(missing_ok=True)
+            # Direct-layout entries can be shared by more than one budget scope.
+            # Keep the source until each scope has had a chance to migrate its own copy.
+            if self.legacy_root is None:
+                self._legacy_path(key).unlink(missing_ok=True)
+                legacy_packed = self._legacy_packed_path(key)
+                if legacy_packed is not None:
+                    legacy_packed.unlink(missing_ok=True)
             self._scan()
             size = path.stat().st_size
             self._index[key] = size
