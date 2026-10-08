@@ -61,3 +61,30 @@ Ranked recommendation for the next rendering brief (evidence above; no optimizat
 3. X1 quality: 54 to 55 dB on all adapters points at a scene or reference difference worth one look before it is used for a visual claim.
 
 Known limits: one resolution (640 by 360), one seed per scene, three timed frames, so differences under about 10 percent are not established. Lock contention with other lanes was heavy; the timings were taken inside short exclusive lock turns, but a lane holding only the shared side of the lock cannot overlap them. RTX validation covers these eight cases on one boot only. No speed target is claimed.
+
+## Step Q1: why Y1 adaptive loses to fixed 64
+
+Lane 4, step Q1, October 8, 2026. This section was written from measurements taken before any renderer change (the commit that adds it changes no renderer file). Tool: `tools/benchmark_adaptive_overhead.py`, Y1 at 640 by 360, median of three renders after a warm-up, in a GPU lock turn, on the code of `515b6f8`.
+
+**Stopping rule** (`pathtrace.pixel_noise`, the same estimate in the render shader, the sparse `reduce` shader and the CPU loop): every pixel takes 16 samples, then 8 more per pass, and stops at the first pass boundary where the variance of its mean luminance over (mean + 0.02) squared is under the threshold, or at `Max samples` (256). The decision is per pixel, never per tile. `Path samples` (the fixed 64 the benchmark compares with) is **ignored** by an adaptive render, so nothing ties its spend to the fixed render it replaces.
+
+**Why the mean is 72.7 samples.** The sample counts of Y1 at threshold 0.003 (CPU path tracer; the GPU gives the same mean, 72.7):
+
+- 52.3 percent of the pixels (the sky and the unlit floor) stop at the 16-sample minimum.
+- 43.4 percent want more than 64 samples (the sphere and the floor under the hard sun; the bulk stops between 104 and 152), and 3.3 percent reach the 256 cap.
+- Those 43.4 percent hold 86 percent of all the samples, and the part of their counts above 64 is 34.7 samples per pixel of the 72.7 mean. A fixed render gives every pixel 64.
+
+So at 0.003 the rule asks for more than 64 samples on average because the threshold is tighter than fixed 64 delivers on the hard-sun pixels (fixed 64 reads 37.3 dB against a 1024-sample render; the uncapped adaptive render reads 39.9 dB). The rule is doing what it says, and the compaction is correct.
+
+**Per-pass cost by phase** (adaptive at a threshold no pixel reaches, 16 minimum and 64 maximum samples, so every row runs the same shader work in 2 to 25 passes; sky pixels still stop at 16 because their noise reads exactly 0; slope of wall time against pass count):
+
+| adapter | fixed 64 | cost per added pass | passes 2 to 25 span | what the phases say |
+| --- | ---: | ---: | ---: | --- |
+| AMD Radeon 8060S | 113.0 ms | -0.3 ms (noise) | 92.7 to 103.8 ms | `encode` 1.5 ms at 7 passes, 3.8 ms at 25; the waits (`dispatch`) are 2 to 8 |
+| llvmpipe | 1232 ms | +0.2 ms | 837 to 868 ms | `encode` 649 ms at 7 passes and 653 ms at 25 |
+
+The per-pass overhead is a small share: the full 31-pass adaptive render spends 5.3 ms of 177 ms in `encode` on the Radeon (3 percent). The llvmpipe `encode` phase that the P1 table reads as per-pass host cost is the shader work itself, because llvmpipe executes a submitted pass on the submitting thread; it does not grow with the number of passes (649 ms at 7 passes, 653 ms at 25). The compaction, the convergence test and the one-word waits are not what makes Y1 slow.
+
+**What does make it slow.** The pixels left open are the expensive ones. Seven passes at 40.2 samples on average (sky stopped, the rest at 64) take 92.7 ms on the Radeon, 2.3 ms per mean sample, against 113 ms for fixed 64 (1.8 ms per sample): sky pixels are almost free to sample, the sphere and the sunlit floor are not. The uncapped adaptive render takes 72.7 samples on average and 177 ms. A trial that stopped the whole render once the average reached 64 (a global sample count, tried and dropped) still took 142.7 ms at a mean of 62.8 samples on the Radeon, because that average is spent on those pixels. A cap on every pixel cannot cost more than fixed 64 at any pixel, so the fix is that: `Path samples` becomes the most any pixel of an adaptive render may take.
+
+Also seen while measuring: after the last open pixel has stopped, the host loop still encodes and submits every remaining pass of the 31 (each a compaction over the whole image plus empty dispatches). It waits on the card every fourth pass by reading 16 bytes of the accumulator, which says nothing about whether any pixel is left. The change reads the list's length (one word) at that same wait and ends the loop when it is zero.
