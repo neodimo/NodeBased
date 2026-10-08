@@ -158,7 +158,7 @@ def build_panel(window, key):
                 save(entries,i)
         name=QLineEdit(shape["name"]); name.setObjectName("roto-shape-name")
         name.editingFinished.connect(lambda: edit("name",name.text())); layout.addWidget(name)
-        follow=QComboBox(); follow.setObjectName("roto-shape-track-link")
+        follow=QComboBox(); follow.setObjectName(f"roto-shape-track-link-{i}")
         follow.addItem("No Tracker link", None)
         trackers=window.dispatcher.document["nodes"]
         for tracker_id, tracker_node in trackers.items():

@@ -1120,6 +1120,7 @@ class Viewer(PanZoomView):
             "QLabel#viewer-prompt-banner { background: rgba(25, 25, 27, 220); color: #e8e8eb; "
             "border: 1px solid #5f5f6b; border-radius: 3px; padding: 4px 10px; font-weight: 600; }")
         self.prompt_banner.hide()
+        self._tool_prompt_text = None
         self._pixel_readout_active = False
         self._handling_mouse_move = False
         self.viewport().setMouseTracking(True)
@@ -1195,6 +1196,7 @@ class Viewer(PanZoomView):
     def show_prompt(self, text):
         """Put a tool prompt over the picture itself, not only the status bar (finding 22,
         2026-09-30: a render-progress status message was overwriting it within the second)."""
+        self._tool_prompt_text = text
         self.prompt_banner.setText(text)
         self.prompt_banner.adjustSize()
         self.prompt_banner.show()
@@ -1202,6 +1204,7 @@ class Viewer(PanZoomView):
         self._place_prompt_banner()
 
     def hide_prompt(self):
+        self._tool_prompt_text = None
         self.prompt_banner.hide()
 
     def _place_prompt_banner(self):
@@ -1295,6 +1298,15 @@ class Viewer(PanZoomView):
 
     def sync_inputs(self):
         document = self.window.dispatcher.document
+        view = document.get("view")
+        node = document.get("nodes", {}).get(view)
+        is_empty_roto = bool(node and node.get("type") == "Roto"
+                             and not document.get("node_data", {}).get(view, {}).get("shapes"))
+        hint = "Draw shape… or press the draw tool to start"
+        if self._tool_prompt_text is None and is_empty_roto:
+            self.show_prompt(hint)
+        elif self._tool_prompt_text == hint and not is_empty_roto:
+            self.hide_prompt()
         names = {key: node["name"] for key, node in document["nodes"].items()}
         self.input_strip.refresh(self.input_state(), names)
         self.viewport().update()
@@ -2084,6 +2096,7 @@ class Viewer(PanZoomView):
         last = int(self.window.dispatcher.document["time"]["last"])
         zoom = max(abs(self.transform().m11()), 0.05)
         marker = 4.0 / zoom
+        selected_index = self.window._tracker_selected_index
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         for index, raw in enumerate(payload.get("tracks", [])):
@@ -2109,7 +2122,9 @@ class Viewer(PanZoomView):
                 pen = QPen(QColor(color), 1); pen.setCosmetic(True); pen.setStyle(Qt.PenStyle.DashLine)
                 painter.setPen(pen); painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawRect(QRectF(center.x()-radius, center.y()-radius, side, side))
-            painter.setPen(QPen(QColor("#ff625c"), 2)); painter.setBrush(QColor("#202127"))
+            selected = index == selected_index
+            painter.setPen(QPen(QColor("#fff18a" if selected else "#ff625c"), 3 if selected else 2))
+            painter.setBrush(QColor("#fff18a" if selected else "#202127"))
             painter.drawEllipse(center, marker, marker)
         seed = self.window._tracker_seed
         # The seed is only a pending pick -- it joins `payload["tracks"]` once "Analyze forward"
@@ -8712,6 +8727,8 @@ class Window(QMainWindow):
                 hint_label.setWordWrap(True)
                 form.addRow(hint_label)
             if node["type"] in ("Tracker", "Stabilize"):
+                from .trackerpanel import build_panel as build_tracker_panel
+                form.addRow(build_tracker_panel(self, key))
                 pick = QPushButton("Add track point at reference…")
                 pick.setToolTip(f"View this {node['type']}, then click the reference point in the viewer")
                 pick.clicked.connect(lambda checked=False, k=key: self.begin_tracker_pick(k))

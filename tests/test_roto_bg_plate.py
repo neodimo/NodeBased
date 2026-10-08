@@ -3,7 +3,11 @@ import os
 import unittest
 
 import numpy as np
-from tests.test_roto_ui import triangle
+from PySide6.QtCore import QSettings
+import tests.isolation
+from tests.test_roto_ui import APP, roto_document, triangle
+from tests.waiting import wait_until
+from nodebased.app import Window
 from nodebased.core import Dispatcher, empty_document
 from nodebased.imaging import Evaluator
 
@@ -52,6 +56,17 @@ class RotoPlateTests(unittest.TestCase):
         coverage = result[..., 3:4]
         plate = Evaluator().evaluate_raster(document, target="plate").pixels
         np.testing.assert_allclose(result[..., :3], plate[..., :3] * coverage, atol=1e-7)
+
+    def test_empty_view_shows_hint_and_hides_it_after_a_shape_is_added(self):
+        QSettings("NodeBased", "NodeBased").clear()
+        window = Window(roto_document())
+        self.addCleanup(lambda: (setattr(window, "saved_document", window.dispatcher.document),
+                                 window.close(), APP.processEvents()))
+        window.show()
+        self.assertTrue(wait_until(lambda: window.viewer.prompt_banner.isVisible()))
+        self.assertEqual(window.viewer.prompt_banner.text(), "Draw shape… or press the draw tool to start")
+        window.command({"op": "set_shapes", "id": "r", "shapes": [triangle()]})
+        self.assertTrue(wait_until(lambda: not window.viewer.prompt_banner.isVisible()))
 
 if __name__ == "__main__":
     unittest.main()
