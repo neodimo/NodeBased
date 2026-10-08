@@ -1,0 +1,74 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "615.71.09",
+  "format": "rgba32float",
+  "name": "NVIDIA GeForce RTX 3080 Ti",
+  "type": "DiscreteGPU"
+ },
+ "adapter_request": "discrete",
+ "case": "smoke-box",
+ "commit": "7bae83e",
+ "counters": {
+  "cpu_per_path": {
+   "hops": 0.0,
+   "null": 112.01041666666667,
+   "real": 0.1857638888888889,
+   "tentative": 112.19618055555556
+  },
+  "gpu_per_path": {
+   "hops": 0.421142578125,
+   "null": 112.4072265625,
+   "real": 0.188140869140625,
+   "tentative": 112.59536743164062
+  }
+ },
+ "label": "fixed 32, single-box majorant",
+ "median_s": 0.14413297399732983,
+ "quality": {
+  "max_abs": 0.027505673920666995,
+  "mean_abs": 1.1991712365638814e-07,
+  "psnr_db": 84.836,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 32,
+  "phases_ms": {
+   "dispatch": 125.696,
+   "final readback": 2.843,
+   "mask update": 1.726,
+   "pack": 0.213,
+   "postprocess": 4.655,
+   "scene build": 0.27,
+   "upload": 2.366
+  },
+  "samples": {
+   "max": 32,
+   "mean": 32.0,
+   "min": 32
+  }
+ },
+ "scene": "smoke plume 64",
+ "schema": 1,
+ "seed": 4,
+ "settings": {
+  "max_bounces": 4,
+  "samples": 32,
+  "sampling": "fixed",
+  "seed": 4
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.157342,
+  0.144133,
+  0.138372
+ ],
+ "timestamp": "2026-10-08 06:06:40",
+ "warmup": 1
+}

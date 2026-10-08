@@ -1,3 +1,7 @@
+## 2026-10-08 — Lane 4 P1 finish 1: portable benchmark measured (6:10 AM PDT)
+
+Full matrix recorded on AMD, llvmpipe and RTX (`benchmarks/portable_render/`); report in `docs/BENCHMARKS-v0.35-portable-render.md`. Top recommendation: Y1 adaptive sampling; second: RTX smoke dispatch profile. RTX validated for these eight cases on one boot.
+
 ## 2026-10-07 — Lane 4 P1 portable rendering benchmark, PARTIAL (9:19 PM PDT)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (5:56 AM on 2026-10-08 PDT)

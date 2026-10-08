@@ -1,0 +1,64 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "615.71.09",
+  "format": "rgba32float",
+  "name": "NVIDIA GeForce RTX 3080 Ti",
+  "type": "DiscreteGPU"
+ },
+ "adapter_request": "discrete",
+ "case": "Y1-adaptive0.003",
+ "commit": "7bae83e",
+ "counters": {},
+ "label": "adaptive 0.003",
+ "median_s": 0.08276948899947456,
+ "quality": {
+  "max_abs": 0.004759587962284595,
+  "mean_abs": 8.982910189162112e-08,
+  "psnr_db": 98.875,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 31,
+  "phases_ms": {
+   "dispatch": 54.806,
+   "encode": 6.11,
+   "final readback": 2.696,
+   "pack": 4.336,
+   "postprocess": 4.982,
+   "scene build": 4.811,
+   "upload": 0.874
+  },
+  "samples": {
+   "max": 256,
+   "mean": 72.68892361111111,
+   "min": 16
+  }
+ },
+ "scene": "Y1",
+ "schema": 1,
+ "seed": 1,
+ "settings": {
+  "adaptive_pass_size": 8,
+  "max_bounces": 8,
+  "max_samples": 256,
+  "min_samples": 16,
+  "noise_threshold": 0.003,
+  "sampling": "adaptive",
+  "seed": 1
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.086586,
+  0.082769,
+  0.08006
+ ],
+ "timestamp": "2026-10-08 06:06:30",
+ "warmup": 1
+}
