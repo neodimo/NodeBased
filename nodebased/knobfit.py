@@ -25,6 +25,27 @@ ELLIPSIS = "…"
 TEXT_MARGIN = 4
 
 
+# Qt 6.12 gives a spin box whose button symbols are NoButtons a one pixel wide editor once the application
+# style sheet pads it (PySide6 6.12.0, 10/8 CI: every colour field and the time row showed "…"); 6.11
+# drew it correctly. A button column with no width draws the same and works in both.
+HIDE_BUTTONS_QSS = ("QAbstractSpinBox::up-button, QAbstractSpinBox::down-button "
+                    "{ width: 0px; border: none; }")
+
+
+def with_hidden_buttons(sheet):
+    """``sheet`` (a widget style sheet, bare declarations or rules) plus the rule that hides the buttons."""
+    sheet = (sheet or "").strip()
+    if sheet and "{" not in sheet:
+        sheet = f"QAbstractSpinBox {{ {sheet} }}"
+    return f"{sheet} {HIDE_BUTTONS_QSS}".strip()
+
+
+def hide_spin_buttons(spin):
+    """No step arrows on ``spin`` (a number that is typed or scrubbed). Keys and the wheel still step."""
+    spin.setProperty("hideButtons", True)
+    spin.setStyleSheet(with_hidden_buttons(spin.styleSheet()))
+
+
 def _text_area(line_edit):
     """Pixels of the editor that are free for text: its width less margins and side icons."""
     icons = sum(button.width() for button in line_edit.findChildren(QToolButton) if button.isVisibleTo(line_edit))

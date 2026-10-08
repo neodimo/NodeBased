@@ -36,7 +36,8 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
-from .knobfit import ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow
+from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow, hide_spin_buttons,
+                      with_hidden_buttons)
 from . import analysisregion
 from . import presets as preset_model
 from . import fluidshelf
@@ -6452,7 +6453,7 @@ class Window(QMainWindow):
             spin.setKeyboardTracking(False)
         # Frame numbers are typed or scrubbed, as in Nuke; the step arrows only cost row width.
         for spin in (self.frame_first, self.frame_last, self.frame_current):
-            spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            hide_spin_buttons(spin)
         self.frame_current.valueChanged.connect(lambda value: self.set_time(current=value))
         self.frame_first.valueChanged.connect(lambda value: self.commit_range("first", value))
         self.frame_last.valueChanged.connect(lambda value: self.commit_range("last", value))
@@ -8000,7 +8001,7 @@ class Window(QMainWindow):
                     units = []
                     for axis, param in zip("xyz", group.params):
                         field = numeric_field(param)
-                        field.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+                        hide_spin_buttons(field)
                         unit = QWidget()
                         unit_layout = QHBoxLayout(unit)
                         unit_layout.setContentsMargins(0, 0, 0, 0)
@@ -8034,7 +8035,7 @@ class Window(QMainWindow):
                     for field in color_fields:
                         # Four stepper columns cost the digits their room in a narrow dock, and
                         # a colour is typed, scrubbed or picked from the swatch, never stepped.
-                        field.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+                        hide_spin_buttons(field)
                     swatch = ClickableColorSwatch()
                     swatch.setObjectName("color-swatch")
                     swatch.setFixedSize(24, 24)
@@ -9794,8 +9795,9 @@ class Window(QMainWindow):
             return
         tint = QColor(KEY_COLOR)
         tint.setAlpha(ANIMATED_TINT_ALPHA)
-        field.setStyleSheet(f"QAbstractSpinBox {{ background-color: rgba({tint.red()}, {tint.green()}, "
-                            f"{tint.blue()}, {tint.alpha()}); }}")
+        sheet = (f"QAbstractSpinBox {{ background-color: rgba({tint.red()}, {tint.green()}, "
+                 f"{tint.blue()}, {tint.alpha()}); }}")
+        field.setStyleSheet(with_hidden_buttons(sheet) if field.property("hideButtons") else sheet)
         if keyed_here:
             glyph = QAction(key_icon(True, KEY_COLOR), "", field.lineEdit())
             glyph.setObjectName("key-glyph")
