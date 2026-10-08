@@ -1,6 +1,6 @@
 """The controls in the corner of the node graph (new look, step 2): the Curved / Right angle wire
 toggle, the zoom control and the minimap, as in the mockup. Sizes come from font metrics."""
-from PySide6.QtCore import QByteArray, QPointF, QRectF, QSize, Qt
+from PySide6.QtCore import QByteArray, QPoint, QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QToolButton, QWidget
@@ -199,12 +199,17 @@ class GraphCorner:
         viewport = self.graph.viewport()
         right = viewport.width() - MARGIN
         for widget in reversed(self.widgets):
-            widget.adjustSize()
+            if widget.sizeHint().isValid() and widget.size() != widget.sizeHint():
+                widget.adjustSize()
             right -= widget.width()
-            widget.move(right, viewport.height() - MARGIN - widget.height())
+            where = QPoint(right, viewport.height() - MARGIN - widget.height())
+            if widget.pos() != where:
+                widget.move(where)
             right -= GAP
-            widget.raise_()
-            widget.show()
+        for widget in self.widgets:
+            if not widget.isVisible():
+                widget.show()
+                widget.raise_()
 
     def sync(self):
         """Called whenever the graph repaints: the zoom label and the minimap follow the view."""

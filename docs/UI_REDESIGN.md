@@ -68,3 +68,9 @@ each stage of the restyle changed in the real Qt app. Stages: 1 colours, spacing
   corner, so the square-corner assertion became "rounded card, 3D pill rounder still".
   `test_desktop` title test: the name is 13 px, left aligned after the icon, not 14 pt centred; the
   Viewer-tap test accepts the mockup's custom dash pattern.
+- **Screenshot.** `docs/images/ui-redesign/nl2.png` (curved wires) and `nl2-right-angle.png` (the same
+  comp with the toggle on Right angle): the real app, offscreen at 1920 x 1080, with a viewer image and a
+  dozen nodes of several families, a Roto mask wire into the Grade's right-hand socket, postage stamps
+  on the Checker and the Constant. The graph panel is given more height for the picture only.
+- **Speed.** The halo is drawn once per shape, colour and selection state and reused (a pixmap cache),
+  so panning and dragging in a large graph repaint a picture per node instead of a dozen strokes.

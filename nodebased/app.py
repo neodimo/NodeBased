@@ -3566,10 +3566,28 @@ class NodeHalo(QGraphicsItem):
     def shape(self):
         return QPainterPath()
 
-    def paint(self, painter, option, widget=None):
-        if option.levelOfDetailFromTransform(painter.worldTransform()) < 0.3:
-            return  # zoomed far out the glow is invisible and costs a stroke per layer
-        selected = self.node.isSelected()
+    _cache = {}
+
+    def pixmap(self):
+        """The glow drawn once per node shape, colour and selection state: it is the same every repaint,
+        and a graph of hundreds of nodes repaints it on every pan and drag."""
+        node, selected = self.node, self.node.isSelected()
+        key = (node.form, node.rect().size().toTuple(), node.accent.rgb(), selected)
+        cached = NodeHalo._cache.get(key)
+        if cached is None:
+            if len(NodeHalo._cache) > 96:
+                NodeHalo._cache.clear()
+            bounds = self.boundingRect()
+            cached = QPixmap(int(bounds.width()), int(bounds.height()))
+            cached.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(cached)
+            painter.translate(-bounds.topLeft())
+            self.draw_glow(painter, selected)
+            painter.end()
+            NodeHalo._cache[key] = cached
+        return cached
+
+    def draw_glow(self, painter, selected):
         reach, layers, strength = (NODE_HALO - 2, 10, 0.45) if selected else (14, 7, 0.22)
         outline = self.node.outline()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -3584,6 +3602,11 @@ class NodeHalo(QGraphicsItem):
             ring.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             painter.setPen(ring)
             painter.drawPath(outline)
+
+    def paint(self, painter, option, widget=None):
+        if option.levelOfDetailFromTransform(painter.worldTransform()) < 0.3:
+            return  # zoomed far out the glow is invisible and costs a drawing per node
+        painter.drawPixmap(self.boundingRect().topLeft(), self.pixmap())
 
 
 class NodeItem(QGraphicsRectItem):
