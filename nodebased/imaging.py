@@ -2640,8 +2640,16 @@ class Evaluator:
             out = plate.display
             plate_pixels = plate.fit(out)
             coverage = Evaluator._kernel(kind, {**p, "width": out.width, "height": out.height}, [], frame, data)[..., 3]
+            if not data:
+                # An empty Roto is still a useful plate viewer while the artist is setting up.
+                # Once shapes exist, their matte owns alpha as in Nuke's default output=alpha.
+                return Raster(plate_pixels.copy(), out, out, plate.layers, plate.meta)
             pixels = plate_pixels.copy()
             pixels[..., 3] = coverage
+            if p.get("premultiply_mode", "none") in ("rgb", "rgba"):
+                pixels[..., :3] *= coverage[..., None]
+            if p.get("premultiply_mode", "none") == "rgba":
+                pixels[..., 3] *= coverage
             return Raster(pixels, out, out, plate.layers, plate.meta)
         if kind in DRAW_KINDS:
             # A fourth kind of generator: still states its own format like Roto, but also takes an

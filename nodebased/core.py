@@ -469,8 +469,9 @@ SPECS = {
     # Roto is a generator: it states its own format rather than inheriting one from an image input
     # and then quietly disagreeing with it. Shapes live in document["node_data"], not in params —
     # see docs/ROTO_TRACKING.md. A wired optional "bg" is Nuke's Roto input: the plate passes
-    # through and the shape's coverage becomes its alpha, at the plate's own format.
-    "Roto": {"inputs": [], "optional_inputs": ["bg"], "params": {"width": 960, "height": 540, "invert": 0}},
+    # through and the shape's coverage becomes its alpha, at the plate's own format. Nuke's
+    # premultiply control defaults to none.
+    "Roto": {"inputs": [], "optional_inputs": ["bg"], "params": {"width": 960, "height": 540, "invert": 0, "premultiply_mode": "none"}},
     # RotoPaint filters a plate and stores ordered shapes/strokes in node_data. The optional
     # second image is the reveal source; clone samples from the plate at a source frame.
     # D1: "Detect specks..." samples dustbust_frame_start..dustbust_frame_end and proposes clone
@@ -1813,6 +1814,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"], "flow_on": ["luminance", "rgb"],
            "lookup_filter": ["none", "blend"],
+           "premultiply_mode": ["none", "rgb", "rgba"],
            "output_alpha": ["preserve", "combined_weight", "hue_weight", "saturation_weight",
                             "brightness_weight", "hue", "saturation", "value"],
            "flow_backend": ["auto", "cpu", "gpu"],

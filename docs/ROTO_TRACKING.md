@@ -159,7 +159,7 @@ conversion nobody remembers to apply.
 ## Roto
 
 ```
-Roto  inputs: []   optional: bg   params: width, height, invert
+Roto  inputs: []   optional: bg   params: width, height, invert, premultiply_mode
 ```
 
 A generator, not a filter. With nothing wired it has no image input, so it cannot
@@ -168,12 +168,14 @@ the format. Combining the matte with a plate of a different size hits the existi
 shape-mismatch rule and raises rather than resampling.
 
 The optional `bg` input is Nuke's Roto input. Wired, the node passes the plate's
-colour through and the shape's coverage becomes its alpha, at the plate's own format
+RGB through and the shape's coverage becomes its alpha, at the plate's own format
 (`width` and `height` are then ignored), so the shape is drawn over the plate it is
-traced against. `O` with a node selected wires the selection to `bg`. Documents
+traced against. An empty Roto passes the plate through unchanged so it remains visible
+while drawing begins. Nuke documents its Premultiply control with a default of `none`;
+`rgb` and `rgba` multiply the corresponding input channels by shape coverage. `O` with a node selected wires the selection to `bg`. Documents
 saved before the slot existed gain it unwired on load and render the matte as before.
 
-Output is a **matte artifact**: float32, scene-linear, premultiplied, with
+With no `bg`, output remains a **matte artifact**: float32, scene-linear, premultiplied, with
 `rgb == a == coverage`. That is a premultiplied white matte, so it composites
 correctly through every existing kernel with no special case, and reads as a
 sensible greyscale image in the viewer. `invert` produces `1 - coverage` in all

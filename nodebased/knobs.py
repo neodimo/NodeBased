@@ -419,7 +419,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("out_blue",)), KnobGroup("enum", ("out_alpha",))),
     "Roto": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
-        KnobGroup("bool", ("invert",))),
+        KnobGroup("bool", ("invert",)),
+        KnobGroup("enum", ("premultiply_mode",), label="Premultiply")),
     "RotoPaint": _groups(
         KnobGroup("int", ("dustbust_frame_start",), label="Detect from frame"),
         KnobGroup("int", ("dustbust_frame_end",), label="Detect to frame"),
