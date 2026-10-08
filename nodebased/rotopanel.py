@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
                                QPushButton, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit,
-                               QColorDialog, QLabel)
+                               QColorDialog, QLabel, QToolButton)
 
 
 def build_panel(window, key):
@@ -31,17 +31,24 @@ def build_panel(window, key):
         row = QListWidgetItem(); listing.addItem(row)
         widget = QWidget(); row_layout = QHBoxLayout(widget); row_layout.setContentsMargins(2, 0, 2, 0)
         label = QLineEdit(shape["name"]); label.setObjectName(f"roto-shape-row-name-{index}")
+        label.setToolTip("Shape name")
         label.setFrame(False); label.editingFinished.connect(
             lambda idx=index, field=label: row_edit(idx, "name", field.text()))
+        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(shape["name"]) + 10)
         row_layout.addWidget(label, 1)
         animated, keyed_here = key_state(shape)
-        key_button = QPushButton("◆" if keyed_here else "◇"); key_button.setObjectName(f"roto-shape-key-{index}")
-        key_button.setStyleSheet("color: #58bfff" if animated else "")
-        key_button.setToolTip("Key the whole shape at the current frame")
-        key_button.clicked.connect(lambda _=False, idx=index: key_shape(idx))
+        shape_curve = {"interpolation": "smooth",
+                       "keys": [{"frame": frame}] if keyed_here else ([{"frame": -1}] if animated else [])}
+        key_button = window.make_key_button(
+            key, f"shape-{index}", label, curve_override=shape_curve,
+            on_toggle=lambda idx=index: key_shape(idx), object_name=f"roto-shape-key-{index}")
+        key_button.setAccessibleName("Shape key")
+        key_button.setToolTip("Key all shape points and controls at the current frame")
         row_layout.addWidget(key_button)
-        for field, caption in (("visible", "V"), ("locked", "L"), ("invert", "I")):
-            toggle = QCheckBox(caption); toggle.setToolTip({"visible":"Shape visibility", "locked":"Lock shape points", "invert":"Invert shape matte"}[field])
+        for field, caption, tip in (("visible", "Visible", "Show or hide this shape"),
+                                    ("locked", "Lock", "Lock this shape's points"),
+                                    ("invert", "Invert", "Invert this shape's matte")):
+            toggle = QCheckBox(caption); toggle.setToolTip(tip)
             toggle.setObjectName(f"roto-shape-row-{field}-{index}")
             toggle.setChecked(shape.get(field, field == "visible"))
             toggle.toggled.connect(lambda value, idx=index, f=field: row_edit(idx, f, bool(value)))
@@ -118,14 +125,15 @@ def build_panel(window, key):
         window.rebuild_properties_dock()
     listing.currentRowChanged.connect(select)
     buttons = QHBoxLayout()
-    for label, delta in (("↑", -1), ("↓", 1)):
-        b = QPushButton(label); b.setToolTip("Move shape"); b.setObjectName("roto-shape-up" if delta < 0 else "roto-shape-down")
+    for label, delta in (("Move up", -1), ("Move down", 1)):
+        b = QPushButton(label); b.setToolTip("Move the selected shape up" if delta < 0 else "Move the selected shape down"); b.setObjectName("roto-shape-up" if delta < 0 else "roto-shape-down")
         def move(_=False, d=delta):
             entries=current(); i=listing.currentRow(); j=i+d
             if 0 <= i < len(entries) and 0 <= j < len(entries): entries[i],entries[j]=entries[j],entries[i]; save(entries,j)
         b.clicked.connect(move); buttons.addWidget(b)
     for label, action in (("Duplicate", "duplicate"), ("Delete", "delete")):
         b=QPushButton(label); b.setObjectName("roto-shape-"+action)
+        b.setToolTip(f"{label} the selected shape")
         def mutate(_=False, act=action):
             entries=current(); i=listing.currentRow()
             if not 0 <= i < len(entries): return
@@ -169,18 +177,61 @@ def build_panel(window, key):
         follow.currentIndexChanged.connect(set_follow); layout.addWidget(QLabel("Transform follows")); layout.addWidget(follow)
         for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
             cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
-        for field,label,lo,hi,step in (("feather","Feather",0,500,0.5),("opacity","Opacity",0,1,0.05)):
-            spin=QDoubleSpinBox(); spin.setObjectName("roto-shape-"+field); spin.setRange(lo,hi); spin.setSingleStep(step); spin.setValue(float(shape_model.resolve_scalar(shape.get(field,0 if field=="feather" else 1), window.dispatcher.document["time"]["current"], field))); spin.setKeyboardTracking(False); spin.editingFinished.connect(lambda f=field,w=spin:edit(f,float(w.value()))); layout.addWidget(QLabel(label)); row=QHBoxLayout(); row.addWidget(spin); diamond=QPushButton("◇"); diamond.setObjectName("roto-shape-key-"+field); diamond.setToolTip("Set a key at the current frame"); diamond.clicked.connect(lambda _=False,f=field:key_field(i,f)); row.addWidget(diamond); layout.addLayout(row)
+        for field, label, lo, hi, step in (("feather", "Feather", 0, 500, 0.5),
+                                          ("opacity", "Opacity", 0, 1, 0.05)):
+            spin = QDoubleSpinBox()
+            spin.setObjectName("roto-shape-" + field)
+            spin.setRange(lo, hi)
+            spin.setSingleStep(step)
+            spin.setValue(float(shape_model.resolve_scalar(
+                shape.get(field, 0 if field == "feather" else 1), frame, field)))
+            spin.setKeyboardTracking(False)
+            spin.editingFinished.connect(lambda f=field, w=spin: edit(f, float(w.value())))
+            spin.setToolTip(f"Set the shape {label.lower()}")
+            layout.addWidget(QLabel(label))
+            row = QHBoxLayout()
+            row.addWidget(spin, 1)
+            field_value = shape.get(field)
+            field_curve = field_value.get("curve") if isinstance(field_value, dict) else None
+            key_button = window.make_key_button(
+                key, f"shape-{i}-{field}", spin, curve_override=field_curve,
+                on_toggle=lambda f=field: key_field(i, f),
+                object_name="roto-shape-key-" + field)
+            key_button.setAccessibleName(f"{label} key")
+            row.addWidget(key_button)
+            layout.addLayout(row)
         for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",("over","plus","minus","multiply"))):
             combo=QComboBox(); combo.setObjectName("roto-shape-"+field)
             for val in values: combo.addItem(val.title(),val)
             combo.setCurrentIndex(combo.findData(shape.get(field,"linear" if field=="feather_falloff" else "over")))
             combo.currentIndexChanged.connect(lambda idx,f=field,c=combo:edit(f,c.itemData(idx))); layout.addWidget(QLabel(field.replace("_"," ").title())); layout.addWidget(combo)
+        color_row = QHBoxLayout()
         color=QPushButton("Choose colour…"); color.setObjectName("roto-shape-color")
+        color.setToolTip("Choose the shape colour")
+        swatch = QLabel(); swatch.setObjectName("roto-shape-color-swatch")
+        swatch.setFixedSize(18, 18)
+        swatch.setToolTip("Current shape colour")
+        def resolved_color(value):
+            return [shape_model.resolve_scalar(channel, frame, "opacity") for channel in value]
+        def paint_swatch(value):
+            rgba = resolved_color(value or [1, 1, 1, 1])
+            qcolor = QColor.fromRgbF(*rgba)
+            swatch.setStyleSheet(f"background-color: {qcolor.name(QColor.NameFormat.HexArgb)}; border: 1px solid #666")
+            swatch.setProperty("rgba", rgba)
+        paint_swatch(shape.get("color", [1, 1, 1, 1]))
         def choose():
-            rgba=shape.get("color",[1,1,1,1]); picked=QColorDialog.getColor(QColor.fromRgbF(*rgba),window,"Roto colour",QColorDialog.ColorDialogOption.ShowAlphaChannel)
+            rgba=resolved_color(shape.get("color",[1,1,1,1])); picked=QColorDialog.getColor(QColor.fromRgbF(*rgba),window,"Roto colour",QColorDialog.ColorDialogOption.ShowAlphaChannel)
             if picked.isValid(): edit("color",[picked.redF(),picked.greenF(),picked.blueF(),picked.alphaF()])
-        color.clicked.connect(choose); layout.addWidget(color)
-        color_key=QPushButton("◇"); color_key.setObjectName("roto-shape-key-color"); color_key.setToolTip("Set colour keys at the current frame"); color_key.clicked.connect(lambda: key_field(i,"color")); layout.addWidget(color_key)
+        color.clicked.connect(choose); color_row.addWidget(color); color_row.addWidget(swatch)
+        color_curve = shape.get("color", [])
+        animated_color, keyed_color = key_state(color_curve)
+        color_proxy = {"interpolation": "smooth",
+                       "keys": [{"frame": frame}] if keyed_color else ([{"frame": -1}] if animated_color else [])}
+        color_key=window.make_key_button(key, "shape-color", color, curve_override=color_proxy,
+                                         on_toggle=lambda: key_field(i,"color"),
+                                         object_name="roto-shape-key-color")
+        color_key.setAccessibleName("Colour key")
+        color_key.setToolTip("Set colour keys at the current frame")
+        color_row.addWidget(color_key); layout.addLayout(color_row)
     draw=QPushButton("Draw shape…"); draw.setObjectName("roto-draw-shape"); draw.clicked.connect(lambda:window.begin_roto_draw(key)); layout.addWidget(draw)
     return root

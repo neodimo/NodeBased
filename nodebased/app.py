@@ -7282,6 +7282,10 @@ class Window(QMainWindow):
                 self.sync_timeline()
                 self.sync_project_settings()
                 self.update_title()
+                if cmd.get("op") == "time":
+                    # Key buttons and resolved values are playhead-dependent. Refresh through the
+                    # same shared panel path used for document edits so every node stays in sync.
+                    self.inspect(self.graph.selected_id())
                 if render:
                     self.request_preview()
             else:
@@ -8986,6 +8990,15 @@ class Window(QMainWindow):
 
     def set_properties_widget(self, panel):
         """Swap the dock's contents, sized to the dock rather than to the panel's own wishes."""
+        scroll_position = (self.properties.verticalScrollBar().value(),
+                           self.properties.horizontalScrollBar().value())
+        focused = self.focusWidget()
+        focus_path = []
+        while focused is not None and focused is not self.properties:
+            name = focused.objectName()
+            if name:
+                focus_path.append(name)
+            focused = focused.parentWidget()
         old = self.properties.takeWidget()
         if old:
             old.deleteLater()
@@ -8997,6 +9010,15 @@ class Window(QMainWindow):
             box.addWidget(panel)
             panel = root
         self.properties.setWidget(panel)
+        def restore_panel_state():
+            self.properties.verticalScrollBar().setValue(scroll_position[0])
+            self.properties.horizontalScrollBar().setValue(scroll_position[1])
+            for name in focus_path:
+                candidate = self.properties.findChild(QWidget, name)
+                if candidate is not None and candidate.isEnabled() and candidate.isVisible():
+                    candidate.setFocus(Qt.FocusReason.OtherFocusReason)
+                    break
+        QTimer.singleShot(0, restore_panel_state)
 
     def preview_knobs(self, key, values):
         """Reflect a viewer drag in its open numeric controls without dispatching edits."""
@@ -9626,7 +9648,8 @@ class Window(QMainWindow):
         layout.addWidget(self.make_key_button(key, param, control, expression))
         return row
 
-    def make_key_button(self, key, param, control, expression=None):
+    def make_key_button(self, key, param, control, expression=None, *, curve_override=None,
+                        on_toggle=None, object_name="key-button"):
         """The key button beside an animatable knob, and the animated look of the knob itself.
 
         A drawn diamond rather than a text glyph: the font fallback on a plain Linux desktop
@@ -9635,13 +9658,13 @@ class Window(QMainWindow):
         tinted while the parameter has any key, and shows the same diamond inside the field on
         the frames that hold one."""
         button = QPushButton()
-        button.setObjectName("key-button")
+        button.setObjectName(object_name)
         button.setAccessibleName(f"{param} key")
         button.setFixedWidth(26)
         button.setFlat(True)
         button.setIconSize(QSize(14, 14))
         button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        curve = self.node_curve(key, param)
+        curve = self.node_curve(key, param) if curve_override is None else curve_override
         frame = int(self.dispatcher.document["time"]["current"])
         keyed_here = curve is not None and any(k["frame"] == frame for k in curve["keys"])
         if expression is not None:
@@ -9666,11 +9689,14 @@ class Window(QMainWindow):
                 button.setToolTip(f"Set the first key at frame {frame} (click, or {KEY_SHORTCUT_TEXT}). "
                                   f"Right-click for the animation menu.")
             self.style_animated_field(control, curve, keyed_here)
-        button.clicked.connect(
-            lambda checked=False, k=key, p=param, w=control, on=keyed_here:
-                self.toggle_key(k, p, w, on))
-        button.customContextMenuRequested.connect(
-            lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
+        if on_toggle is None:
+            button.clicked.connect(
+                lambda checked=False, k=key, p=param, w=control, on=keyed_here:
+                    self.toggle_key(k, p, w, on))
+            button.customContextMenuRequested.connect(
+                lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
+        else:
+            button.clicked.connect(lambda checked=False: on_toggle())
         return button
 
     @staticmethod

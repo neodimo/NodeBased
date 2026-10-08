@@ -5,9 +5,11 @@ import unittest
 
 import numpy as np
 from PySide6.QtCore import QSettings, Qt, QPointF
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QListWidget, QDoubleSpinBox, QWidget, QPushButton
+from PySide6.QtWidgets import QApplication, QCheckBox, QListWidget, QDoubleSpinBox, QWidget, QPushButton, QLabel
 
+import tests.isolation
 from tests.waiting import wait_until, settle_layout
 from tests.test_roto_ui import APP, roto_document, triangle
 from nodebased.app import Window
@@ -57,6 +59,74 @@ class RotoArtistPanelTests(unittest.TestCase):
         np.testing.assert_allclose(actual,expected,atol=1e-6)
         np.testing.assert_allclose(actual[20,20],[.5,0,0,.5],atol=1e-6)
 
+    def test_feather_key_states_use_the_transform_key_button_and_field_style(self):
+        w = self.window
+        w.set_time(first=1, last=20, current=1)
+        w.command({"op": "create", "id": "t", "type": "Transform", "pos": [100, 0]}, render=False)
+        animated = box("animated", 10, 10, 60, 60, feather={"value": 2.0, "curve": {
+            "interpolation": "linear", "keys": [{"frame": 1, "value": 2.0},
+                                                    {"frame": 11, "value": 12.0}]}})
+        w.command({"op": "set_shapes", "id": "r", "shapes": [animated]}, render=False)
+        for frame, value in ((1, 2.0), (11, 12.0)):
+            w.command({"op": "set_key", "id": "t", "param": "translate_x", "frame": frame,
+                       "value": value, "interpolation": "linear"}, render=False)
+        w.graph.items_by_id["r"].setSelected(True)
+        for frame, expected in ((1, "keyed"), (6, "between")):
+            w.set_time(current=frame)
+            self.assertTrue(wait_until(lambda: self.panel() is not None
+                                       and self.panel().findChild(QPushButton, "roto-shape-key-feather")
+                                       .property("keyState") == expected))
+            roto_panel = self.panel()
+            roto_key = roto_panel.findChild(QPushButton, "roto-shape-key-feather")
+            roto_field = roto_panel.findChild(QDoubleSpinBox, "roto-shape-feather")
+            transform_panel = w.build_node_panel("t")
+            transform_key = next(button for button in transform_panel.findChildren(QPushButton, "key-button")
+                                 if button.accessibleName() == "translate_x key")
+            transform_field = transform_panel.findChild(QDoubleSpinBox, "translate_x-field")
+            self.assertEqual(roto_key.property("keyState"), expected)
+            self.assertEqual(roto_key.property("keyState"), transform_key.property("keyState"))
+            for property_name in ("animated", "keyedHere"):
+                self.assertEqual(roto_field.property(property_name), transform_field.property(property_name))
+            self.assertEqual(roto_field.styleSheet(), transform_field.styleSheet())
+        w.command({"op": "set_shapes", "id": "r", "shapes": [box("plain", 10, 10, 60, 60)]},
+                  render=False)
+        plain_panel = self.panel()
+        plain_key = plain_panel.findChild(QPushButton, "roto-shape-key-feather")
+        plain_field = plain_panel.findChild(QDoubleSpinBox, "roto-shape-feather")
+        transform_panel = w.build_node_panel("t")
+        transform_key = next(button for button in transform_panel.findChildren(QPushButton, "key-button")
+                             if button.accessibleName() == "translate_y key")
+        transform_field = transform_panel.findChild(QDoubleSpinBox, "translate_y-field")
+        self.assertEqual(plain_key.property("keyState"), "none")
+        self.assertEqual(plain_key.property("keyState"), transform_key.property("keyState"))
+        self.assertEqual(plain_field.styleSheet(), transform_field.styleSheet())
+
+    def test_shape_list_names_fit_and_controls_are_labeled_and_described(self):
+        listing = self.panel().findChild(QListWidget, "roto-shape-list")
+        settle_layout(self.window, listing)
+        row = listing.itemWidget(listing.item(0))
+        name = row.findChild(QWidget, "roto-shape-row-name-0")
+        self.assertGreaterEqual(name.width(), name.fontMetrics().horizontalAdvance(name.text()))
+        for object_name in ("roto-shape-key-0", "roto-shape-row-visible-0",
+                            "roto-shape-row-locked-0", "roto-shape-row-invert-0"):
+            control = row.findChild(QWidget, object_name)
+            self.assertIsNotNone(control)
+            self.assertTrue(control.toolTip().strip(), object_name)
+        self.assertEqual([row.findChild(QCheckBox, f"roto-shape-row-{field}-0").text()
+                          for field in ("visible", "locked", "invert")],
+                         ["Visible", "Lock", "Invert"])
+
+    def test_colour_swatch_tracks_the_shape_colour_after_a_change(self):
+        from unittest.mock import patch
+        chooser = self.panel().findChild(QPushButton, "roto-shape-color")
+        with patch("nodebased.rotopanel.QColorDialog.getColor", return_value=QColor(32, 96, 160, 255)):
+            chooser.click()
+        expected = [32 / 255, 96 / 255, 160 / 255, 1.0]
+        self.assertTrue(wait_until(lambda: np.allclose(
+            self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["color"], expected)))
+        swatch = self.panel().findChild(QLabel, "roto-shape-color-swatch")
+        self.assertTrue(np.allclose(swatch.property("rgba"), expected))
+
     def test_shape_key_button_keys_all_scalars_and_marks_the_selected_timeline(self):
         self.panel().findChild(QPushButton,"roto-shape-key-0").click()
         shape=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
@@ -64,10 +134,10 @@ class RotoArtistPanelTests(unittest.TestCase):
         self.assertEqual(shape["opacity"]["curve"]["interpolation"], "smooth")
         self.window.refresh_timeline_marks()
         self.assertIn(1,self.window.frame_slider.key_frames)
-        self.assertEqual(self.panel().findChild(QPushButton,"roto-shape-key-0").text(),"◆")
+        self.assertEqual(self.panel().findChild(QPushButton,"roto-shape-key-0").property("keyState"),"keyed")
         self.window.set_time(current=2)
         APP.processEvents()
-        self.assertEqual(self.panel().findChild(QPushButton,"roto-shape-key-0").text(),"◇")
+        self.assertEqual(self.panel().findChild(QPushButton,"roto-shape-key-0").property("keyState"),"between")
         self.assertIn(1,self.window.frame_slider.key_frames)
         opacity=self.panel().findChild(QDoubleSpinBox,"roto-shape-opacity")
         opacity.setValue(0.7); opacity.editingFinished.emit()
