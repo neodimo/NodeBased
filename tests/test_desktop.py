@@ -2114,14 +2114,12 @@ class RealDisplayQALayoutTests(unittest.TestCase):
         wait_until(lambda: abs(w.graph_dock.height() - bottom) <= slack, timeout=5.0)
         self.assertLessEqual(abs(w.graph_dock.height() - bottom), slack,
                              f"the bottom row got {w.graph_dock.height()}px, the plan says {bottom}px")
-        self.assertEqual(w.nodes_dock.height(), w.graph_dock.height(),
-                         "NODES and the Node Graph share one row")
+        self.assertFalse(w.nodes_dock.isVisible(), "the top category bar replaces the dock")
         self.assertGreaterEqual(w.viewer_dock.height(), viewer - slack,
                                 f"viewer only got {w.viewer_dock.height()}px of {column}px, "
                                 f"the split promises {viewer}px")
         self.assertGreaterEqual(w.graph_dock.height() / column, 0.35 - slack / column,
                                 "the Node Graph keeps the 35% of the column it was promised")
-        self._assert_three_rows(w)
         return column, viewer, bottom
 
     def _assert_three_rows(self, w):
@@ -2139,8 +2137,8 @@ class RealDisplayQALayoutTests(unittest.TestCase):
         self.assertGreater(w.viewer_dock.width(), w.properties_dock.width() * 2)
         self.assertGreaterEqual(w.properties_dock.width(), 280)
         self.assertEqual(w.dockWidgetArea(w.viewer_dock), w.dockWidgetArea(w.graph_dock))
-        self.assertEqual(w.viewer_dock.width(), w.graph_dock.width() + w.nodes_dock.width() + 6,
-                         "the Node Graph and NODES together span the viewer's width")
+        self.assertEqual(w.viewer_dock.width(), w.graph_dock.width(),
+                         "the Node Graph spans the viewer's width")
 
     def test_the_default_layout_has_no_separate_3d_dock(self):
         w = self._open_window((1440, 920))
@@ -3022,13 +3020,13 @@ class WorkspaceTests(unittest.TestCase):
         menu = next(action.menu() for action in window.menuBar().actions() if action.text() == 'Workspace')
         return next(action for action in menu.actions() if action.text() == 'Show Nodes panel')
 
-    def test_nodes_dock_is_visible_by_default_and_survives_a_restart(self):
+    def test_nodes_dock_is_hidden_by_default_and_can_be_reopened_after_a_restart(self):
         first = self.open_window()
-        self.assertTrue(first.nodes_dock.isVisible())
+        self.assertFalse(first.nodes_dock.isVisible())
         toggle = self._nodes_panel_toggle(first)
-        self.assertTrue(toggle.isChecked())
-        first.resizeDocks([first.nodes_dock], [260], Qt.Orientation.Horizontal)
-        dock_width = first.nodes_dock.width()
+        self.assertFalse(toggle.isChecked())
+        toggle.trigger()
+        self.assertTrue(first.nodes_dock.isVisible())
         toggle.trigger()
         self.assertFalse(first.nodes_dock.isVisible())
         self.close_window(first)

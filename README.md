@@ -105,8 +105,10 @@ independent of them.
 
 ### Adding nodes
 
-The NODES dock (left side by default, Workspace → Show Nodes panel) lists every node kind by
-category, or search across names and one-line descriptions with the box at the top. Click a row
+The icon bar at the top groups node kinds by category. Click a category icon to reveal its nodes,
+then choose one to add it to the graph. The ★ and ↻ icons show Favourites and Recent kinds.
+The full NODES browser is available from the search icon or Workspace → Show Nodes panel. It lists
+every node kind by category, or searches names and one-line descriptions. Click a row
 to add it centred in the visible graph, or drag it to drop it at an exact spot. Ctrl+F jumps
 straight to the search box from anywhere; type, then Down/Up move through the results and Return
 adds the selected one (or the first, if you have not moved). Tab still opens the same search as a
@@ -116,33 +118,23 @@ Right-click a row for "Add to Favourites" (or "Remove from Favourites") and "Wha
 which opens the node's row in `docs/PARITY_2D.md` or `docs/3D_FOUNDATION.md`. Favourites and the
 Recent category (your last ten node kinds added) sit pinned above the regular categories and
 persist across restarts, the same way the theme does. Right-clicking a node on the graph itself
-offers "What is this?" too. On a small screen, the Compact checkbox shrinks the category column
-to icons only; hover it to see the names again.
+offers "What is this?" too. In the full browser, the Compact checkbox shrinks its category
+column to icons only; hover it to see the names again.
 
 ### Workspace layout
 
-A first launch (and Workspace → Default workspace) puts the VIEWER across the whole left column,
-the NODE GRAPH and NODES side by side under it, and PROPERTIES on the right. PROPERTIES gets 28% of
-the window width, between 360 and 480 px (400 px at 1440×920); the viewer takes every other pixel,
-so nothing blank sits between the two. The Node Graph and NODES together get about 36% of the
-column's height, with NODES' three-row floor and the Node Graph's own minimum first when the window
-is short (1280×720). At 1440×920 that is a viewer of about 1,030×505 px with the 960×540 plate fitted
-at about 330 px tall.
+A first launch (and Workspace → Default workspace) puts the VIEWER over a full-width NODE GRAPH,
+with PROPERTIES on the right and the node-category icon bar above. The NODES browser starts hidden.
+PROPERTIES gets 28% of the window width, between 360 and 480 px (400 px at 1440×920); the
+viewer and graph take every other pixel. The graph gets about 36% of the column's height. At
+1440×920 the viewer is about 1,025×495 px, with no empty middle panel.
 
-The placeholder in the middle of the window owns no width. When the window grows, the viewer takes
+The placeholder in the middle of the window is fixed at zero width. When the window grows, the viewer takes
 the new width; when it shrinks, PROPERTIES keeps at least 280 px and the viewer gives way.
 
-Your saved layout is reopened as you left it, with two exceptions, both limited to layouts saved
-before layout revision 3 (the 10/2 to 10/5/2026 builds, which left about 440 px of blank space and a
-150 px picture at 1440×920):
-
-- Blank width is always handed to the viewer, in any saved layout, because nobody can choose it.
-- A layout whose viewer, NODE GRAPH and NODES are still one plain stack on the left, with the viewer
-  under 45% of the stack's height, has that left column rebuilt as the new default. A taller viewer,
-  a floating or tabbed panel, a moved panel, and every panel outside the left column are kept.
-
-Layouts saved by this build carry revision 3 and are never rebuilt; an older version of the whole
-workspace format is still dropped for the default as before.
+This layout changes the dock topology, so the first launch of this version replaces an older
+saved arrangement with the new default. Layouts saved by this version reopen as arranged; use
+Workspace → Default workspace to return to the icon-bar layout.
 
 ## Color
 

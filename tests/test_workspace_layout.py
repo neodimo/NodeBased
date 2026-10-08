@@ -21,6 +21,7 @@ from tests.waiting import wait_until
 import nodebased.app as nodebased_app_module
 from nodebased.app import (DEAD_CENTRAL_SLACK, DEFAULT_PROPERTIES_RANGE, LEGACY_CRAMPED_VIEWER_SHARE,
                            PROPERTIES_USABLE_WIDTH, Preferences, Window, default_properties_width)
+from nodebased.nodecatalog import NODE_CATEGORIES
 
 APP = QApplication.instance() or QApplication([])
 REAL_WORKSPACE = getattr(Preferences.workspace, "real_workspace", Preferences.workspace)
@@ -122,12 +123,31 @@ class WorkspaceLayoutTests(unittest.TestCase):
         self.assertGreater(window.viewer_dock.width(), 2 * window.properties_dock.width())
         self.assertGreaterEqual(window.properties_dock.width(), PROPERTIES_USABLE_WIDTH)
 
-    def test_graph_and_nodes_sit_side_by_side_under_the_viewer(self):
+    def test_graph_fills_the_row_below_viewer_and_nodes_live_in_the_top_bar(self):
         window = self.open_window()
-        self.assertFalse(self.is_stacked(window))
-        self.assertEqual(window.graph_dock.y(), window.nodes_dock.y())
+        self.assertFalse(window.nodes_dock.isVisible())
         self.assertGreater(window.graph_dock.y(), window.viewer_dock.y())
-        self.assertGreater(window.graph_dock.width(), window.nodes_dock.width())
+        self.assertEqual(window.graph_dock.width(), window.viewer_dock.width())
+        self.assertEqual(len(window.node_category_buttons), 16)
+
+    def test_category_icon_reveals_its_nodes_and_creates_the_selected_kind(self):
+        window = self.open_window()
+        for category, kinds in NODE_CATEGORIES.items():
+            menu = window.node_category_buttons[category].menu()
+            window._fill_node_category_menu(category, menu)
+            self.assertEqual([action.text() for action in menu.actions()], list(kinds))
+        color_menu = window.node_category_buttons["Color"].menu()
+        before = set(window.dispatcher.document["nodes"])
+        next(action for action in color_menu.actions() if action.text() == "Grade").trigger()
+        added = set(window.dispatcher.document["nodes"]) - before
+        self.assertEqual(len(added), 1)
+        self.assertEqual(window.dispatcher.document["nodes"][added.pop()]["type"], "Grade")
+
+    def test_search_opens_the_full_browser_without_restoring_a_permanent_nodes_panel(self):
+        window = self.open_window()
+        self.assertFalse(window.nodes_dock.isVisible())
+        window.focus_node_search()
+        self.assertTrue(window.nodes_dock.isVisible())
 
     # -- the window changing size ----------------------------------------------------------
 
@@ -136,7 +156,7 @@ class WorkspaceLayoutTests(unittest.TestCase):
         self.settle(window)
         before = window.viewer_dock.width()
         window.resize(1800, 900)
-        self.settle(window, lambda: window.viewer_dock.width() > before + 300)
+        self.assertTrue(wait_until(lambda: window.viewer_dock.width() > before + 300))
         self.assertLessEqual(window._central_gap(), DEAD_CENTRAL_SLACK)
         self.assertGreater(window.viewer_dock.width(), before + 400)
 
@@ -150,19 +170,17 @@ class WorkspaceLayoutTests(unittest.TestCase):
 
     # -- saved layouts ---------------------------------------------------------------------
 
-    def test_the_cramped_layout_the_old_default_saved_is_rebuilt(self):
+    def test_the_old_workspace_version_is_replaced_with_the_new_shelf_layout(self):
         first = self.open_window()
-        self.stack_the_left_column(first, viewer_share=0.3)
-        self.assertGreater(first._central_gap(), 200, "the setup should reproduce the dead strip")
-        self.assertLess(first.viewer_dock.height(), LEGACY_CRAMPED_VIEWER_SHARE * 800)
-        self.close_as_legacy(first)
+        first.save_workspace()
+        self.close_window(first)
+        store = QSettings("NodeBased", "NodeBased")
+        store.setValue("workspace/version", Preferences.WORKSPACE_VERSION - 1)
+        store.sync()
 
         second = self.open_window()
-        self.settle(second, lambda: not self.is_stacked(second))
+        self.assertFalse(second.nodes_dock.isVisible())
         self.assertLessEqual(second._central_gap(), DEAD_CENTRAL_SLACK)
-        self.assertGreater(second.viewer_dock.width(), 2 * second.properties_dock.width())
-        self.assertFalse(self.is_stacked(second), "the stacked column becomes viewer over graph|nodes")
-        self.assertGreater(second.viewer_dock.height(), second.graph_dock.height())
 
     def test_a_tall_viewer_keeps_its_arrangement_under_the_repair_rule(self):
         # The rule itself, on a live window: the end-to-end path reshuffles the saved heights
@@ -173,13 +191,6 @@ class WorkspaceLayoutTests(unittest.TestCase):
             window.viewer_dock.height() + window.graph_dock.height() + window.nodes_dock.height()))
         self.assertFalse(window._repair_legacy_layout())
         self.assertTrue(self.is_stacked(window))
-
-    def test_a_short_viewer_in_a_plain_stack_is_rebuilt_by_the_repair_rule(self):
-        window = self.open_window()
-        self.stack_the_left_column(window, viewer_share=0.3)
-        self.assertTrue(window._repair_legacy_layout())
-        self.assertFalse(self.is_stacked(window))
-        self.assertGreater(window.viewer_dock.height(), window.graph_dock.height())
 
     def test_the_repair_rule_leaves_a_floating_dock_alone(self):
         window = self.open_window()

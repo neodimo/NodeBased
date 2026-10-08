@@ -454,14 +454,13 @@ class Preferences:
 
     # Bump when the window's dock/toolbar layout changes shape, so an older saved layout is
     # dropped for the default instead of restored into widgets it no longer describes.
-    WORKSPACE_VERSION = 2
+    WORKSPACE_VERSION = 3
     # The default arrangement's revision, stored next to a saved layout. It does not discard the
     # layout the way WORKSPACE_VERSION does; it tells restore_workspace which layouts were written
     # by a build whose defaults are known to be cramped (see Window._repair_legacy_layout).
-    #   absent/2: viewer 600px wide with ~440px of dead central area, viewer, Node Graph and NODES
-    #             stacked in one column (10/2 to 10/5/2026); 3: viewer fills the row, NODES beside
-    #             the Node Graph under it.
-    WORKSPACE_LAYOUT = 3
+    #   absent/2: cramped three-high stack; 3: viewer over graph|NODES; 4: icon category bar
+    #   above a full-width graph, with the empty central widget fixed to zero width.
+    WORKSPACE_LAYOUT = 4
 
     def workspace(self):
         """The window layout saved at the last close, or None when there isn't a usable one."""
@@ -3902,6 +3901,24 @@ def _glyph_icon(glyph, color="#e6c15c"):
     return QIcon(pixmap)
 
 
+def _category_icon(glyph, color):
+    """Legible shelf icon at normal and high-DPI toolbar sizes."""
+    pixmap = QPixmap(24, 24)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QPen(QColor(color), 1))
+    painter.setBrush(QColor("#30343d"))
+    painter.drawRoundedRect(1, 1, 22, 22, 4, 4)
+    font = painter.font()
+    font.setBold(True)
+    font.setPointSize(11)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class NodeToolbar(QWidget):
     """The NODES dock: every `nodecatalog.NODE_CATEGORIES` type, browsable by category or by a
     search across names and descriptions -- so an artist can find a node without already knowing
@@ -5751,6 +5768,49 @@ class Window(QMainWindow):
         if kind.endswith("3D") or OUTPUT_TYPES.get(kind, "image") not in ("image", "none"):
             self.set_viewer_mode("3d", focus=False)
 
+    def _build_node_category_toolbar(self):
+        """A compact category shelf; opening an icon reveals every kind in that family."""
+        glyphs = {"Image": "I", "Draw": "D", "Time": "T", "Channel": "C",
+                  "Color": "◉", "Filter": "F", "Keyer": "K", "Merge": "M",
+                  "Transform": "↗", "3D": "3", "Particles": "✦", "Fluids": "≈",
+                  "Metadata": "#", "Other": "…"}
+        self.node_category_buttons = {}
+        for category in (FAVOURITES_CATEGORY, RECENT_CATEGORY, *NODE_CATEGORIES):
+            button = QToolButton(self.node_category_toolbar)
+            button.setObjectName("node-category-" + category.lower().replace(" ", "-"))
+            glyph = "★" if category == FAVOURITES_CATEGORY else "↻" if category == RECENT_CATEGORY \
+                else glyphs.get(category, category[:1])
+            kinds = NODE_CATEGORIES.get(category, {})
+            color = COLORS.get(next(iter(kinds), ""), "#e6c15c")
+            button.setIcon(_category_icon(glyph, color))
+            button.setToolTip(category + " nodes")
+            button.setAccessibleName(category + " nodes")
+            button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            menu = QMenu(button)
+            menu.aboutToShow.connect(lambda name=category, target=menu:
+                                     self._fill_node_category_menu(name, target))
+            button.setMenu(menu)
+            self.node_category_toolbar.addWidget(button)
+            self.node_category_buttons[category] = button
+        self.node_category_toolbar.addSeparator()
+        browse = self.node_category_toolbar.addAction(_glyph_icon("⌕"), "Search and browse nodes")
+        browse.setObjectName("node-category-search")
+        browse.triggered.connect(self.focus_node_search)
+
+    def _fill_node_category_menu(self, category, menu):
+        menu.clear()
+        kinds = self.node_toolbar._category_kinds(category)
+        if not kinds:
+            empty = menu.addAction("No nodes yet")
+            empty.setEnabled(False)
+            return
+        for kind, description in kinds.items():
+            action = menu.addAction(_node_chip_icon(kind), kind)
+            action.setToolTip(description)
+            action.setStatusTip(description)
+            action.triggered.connect(lambda checked=False, node_kind=kind:
+                                     self.add_node(node_kind))
+
     def _fit_workspace_toolbar(self):
         toolbar = getattr(self, "workspace_toolbar", None)
         if toolbar is None or not hasattr(self, "_toolbar_overflow"):
@@ -5770,7 +5830,13 @@ class Window(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, "_toolbar_reflow_timer"):
             self._toolbar_reflow_timer.start(0)
-        # Growing the window hands the new width to the central placeholder; the viewer takes it.
+        # With a zero-width central widget Qt gives window growth to the right dock. Preserve
+        # its previous width and give the extra room to the Viewer/Graph column instead.
+        if hasattr(self, "properties_dock") and event.oldSize().width() > 0 \
+                and event.size().width() > event.oldSize().width():
+            growth = event.size().width() - event.oldSize().width()
+            self._grow_properties_target = max(PROPERTIES_USABLE_WIDTH,
+                                               self.properties_dock.width() - growth)
         if hasattr(self, "viewer_dock") and not getattr(self, "_dead_width_pending", False):
             self._dead_width_pending = True
             QTimer.singleShot(0, self._reclaim_dead_width)
@@ -5908,6 +5974,15 @@ class Window(QMainWindow):
         toolbar.setMovable(True)
         self.addToolBar(toolbar)
         self.workspace_toolbar = toolbar
+        # The node families live in a single, icon-only row.  Each icon opens its family's
+        # kinds; the full browser remains available for search, drag/drop and presets.
+        self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
+        self.node_category_toolbar = QToolBar("Node categories", self)
+        self.node_category_toolbar.setObjectName("node-category-toolbar")
+        self.node_category_toolbar.setMovable(False)
+        self.node_category_toolbar.setIconSize(QSize(24, 24))
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.node_category_toolbar)
+        self._build_node_category_toolbar()
         brand = QLabel("◈  NODEBASED")
         brand.setObjectName("brand")
         toolbar.addWidget(brand)
@@ -5971,8 +6046,9 @@ class Window(QMainWindow):
         # A zero-minimum placeholder keeps QMainWindow's central-area contract without pinning
         # the layout. Every useful workspace surface lives in a movable dock.
         central = QWidget(self)
-        central.setMinimumSize(0, 0)
-        central.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        central.setFixedWidth(0)
+        central.setMinimumHeight(0)
+        central.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Ignored)
         self.setCentralWidget(central)
         viewer_panel = QWidget()
         vl = QVBoxLayout(viewer_panel)
@@ -6295,6 +6371,9 @@ class Window(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.queue_dock)
         self.tabifyDockWidget(self.properties_dock, self.queue_dock)
         self.queue_dock.hide()
+        # The category bar replaces the permanently open NODES dock.  Keep the full browser
+        # reachable for Ctrl+F, presets and drag-to-place workflows.
+        self.nodes_dock.hide()
         self.workspace_docks = [self.viewer_dock, self.graph_dock, self.properties_dock,
                                 self.nodes_dock, self.slice_dock,
                                 self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock,
@@ -6986,12 +7065,12 @@ class Window(QMainWindow):
 
     def _apply_default_graph_split(self, widths=True):
         """Lay out the default workspace once the window is shown: the shared VIEWER (2D and 3D in
-        one panel, Gonzo 10/1) across the whole left column, the Node Graph and NODES side by side
-        under it, PROPERTIES on the right.
+        one panel) over the full-width Node Graph, PROPERTIES on the right. The optional NODES
+        browser can still be opened beside the graph.
 
         Width: PROPERTIES gets `default_properties_width` of the window and the left column takes
-        every other pixel; the central placeholder keeps none. NODES keeps `DEFAULT_NODES_WIDTH`
-        (at most 40% of the row) and the Node Graph the rest.
+        every other pixel; the central placeholder keeps none. If NODES is open, it keeps
+        `DEFAULT_NODES_WIDTH` (at most 40% of the row) and the Node Graph takes the rest.
 
         Height: the bottom row gets at least 36% of the column, which is at least the 35% the Node
         Graph was promised when it sat in a stack of three. Priority when the column is too short
@@ -7002,6 +7081,7 @@ class Window(QMainWindow):
         `widths=False` keeps the current widths (a saved layout being repaired)."""
         if widths:
             self._apply_default_widths()
+        nodes_visible = self.nodes_dock.isVisible()
         row_docks = (self.nodes_dock, self.graph_dock)
         column_height = self.viewer_dock.height() + self.graph_dock.height()
         if column_height <= 0:
@@ -7017,7 +7097,7 @@ class Window(QMainWindow):
             # posts and processes the pending LayoutRequest.
             nodes_list.updateGeometry()
             QApplication.processEvents()
-        nodes_height = self.nodes_dock.minimumSizeHint().height()
+        nodes_height = self.nodes_dock.minimumSizeHint().height() if nodes_visible else 0
         row_floor = max(graph_intrinsic, nodes_height)
         bottom_height = max(row_floor, math.ceil(column_height * DEFAULT_BOTTOM_ROW_SHARE))
         viewer_height = column_height - bottom_height
@@ -7035,9 +7115,10 @@ class Window(QMainWindow):
         self.resizeDocks([self.viewer_dock, self.graph_dock], [viewer_height, bottom_height],
                          Qt.Orientation.Vertical)
         row_width = self.viewer_dock.width()
-        nodes_width = min(DEFAULT_NODES_WIDTH, int(row_width * DEFAULT_NODES_MAX_SHARE))
-        nodes_width = max(nodes_width, min(self.nodes_dock.minimumSizeHint().width(), row_width // 2))
-        self.resizeDocks(list(row_docks), [nodes_width, row_width - nodes_width], Qt.Orientation.Horizontal)
+        if nodes_visible:
+            nodes_width = min(DEFAULT_NODES_WIDTH, int(row_width * DEFAULT_NODES_MAX_SHARE))
+            nodes_width = max(nodes_width, min(self.nodes_dock.minimumSizeHint().width(), row_width // 2))
+            self.resizeDocks(list(row_docks), [nodes_width, row_width - nodes_width], Qt.Orientation.Horizontal)
         # Reset Workspace -> Default workspace must return to this split too, not the
         # pre-show one `_default_workspace_state` captured before layout settled.
         self._default_workspace_state = self.saveState(Preferences.WORKSPACE_VERSION)
@@ -7094,6 +7175,11 @@ class Window(QMainWindow):
                 and self.dockWidgetArea(properties) in side and properties is not viewer:
             docks.append(properties)
         sizes = [dock.width() for dock in docks]
+        growth_target = getattr(self, "_grow_properties_target", None)
+        self._grow_properties_target = None
+        if len(docks) == 2 and growth_target is not None:
+            sizes[0] += max(0, sizes[1] - growth_target)
+            sizes[1] = min(sizes[1], growth_target)
         if dead > DEAD_CENTRAL_SLACK:
             sizes[0] += dead
         if len(docks) == 2 and sizes[1] < PROPERTIES_USABLE_WIDTH:
