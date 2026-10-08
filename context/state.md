@@ -1,5 +1,30 @@
 ## 2026-10-08 — Lane 4 P1 finish 1: portable benchmark measured (6:10 AM PDT)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (8:06 AM on 2026-10-08 PDT)
+
+`main` moved `1f68117` -> `41f2a45` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 16 tests in 28.152 s, OK. Full suite on
+the stacked tip `41f2a45` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1008-0616.log`, started 6:16 AM): **Ran 4703 tests in 6505.301 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step P1 of 1: portable final-render benchmark on the working adapters (finish 1).** Commits:
+  - `821dd3d` bench: record portable final-render measurements on AMD, llvmpipe and RTX with ranked bottlenecks
+  Diff: 28 files changed, 1672 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step N3 of 3: one production-sized scene that uses everything, and its numbers (finish 1).** Commits:
+  - `a648360` bench: Hot pour full-size Radeon playback measurement
+  - `f558ed5` Record N3 measurement blocker and cache state
+  - `a1197ca` Refresh full-size Hot pour bake measurements
+  Diff: 5 files changed, 569 insertions(+), 516 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Full matrix recorded on AMD, llvmpipe and RTX (`benchmarks/portable_render/`); report in `docs/BENCHMARKS-v0.35-portable-render.md`. Top recommendation: Y1 adaptive sampling; second: RTX smoke dispatch profile. RTX validated for these eight cases on one boot.
 
 ## 2026-10-07 — Lane 4 P1 portable rendering benchmark, PARTIAL (9:19 PM PDT)
