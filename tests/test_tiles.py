@@ -325,9 +325,10 @@ class TileKindBehaviorRegistryTests(unittest.TestCase):
     OLD_SOURCE_KINDS = ("Read", "ReadBundle", "ConditionedRead", "Render3D", "Constant", "Checker")
     # TVIScale (2D parity plan 15, step F2) postdates the F1 refactor these tuples snapshot, but
     # joins TimeBlur/TimeEcho/Inpaint's exact shape (`tileexec._temporal_tile` resolves its own
-    # bypass), so it belongs in this reference set on the same terms they do.
+    # bypass), so it belongs in this reference set on the same terms they do. Roto (Roto plan, step
+    # R2) joined the tile path the way RotoPaint did: it resolves once and resolves its own bypass.
     OLD_BYPASS_EXEMPT_KINDS = ("Read", "ReadBundle", "ConditionedRead", "Constant", "Checker",
-                               "TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint")
+                               "TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint", "Roto")
     OLD_READS_FILES_KINDS = ("Read", "ReadBundle", "ConditionedRead")
 
     def test_registry_agrees_with_the_old_hard_coded_tuples_for_every_spec_kind(self):
