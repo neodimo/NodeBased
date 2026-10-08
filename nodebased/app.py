@@ -10982,7 +10982,7 @@ class Window(QMainWindow):
         self._write_folder = folder
         self.show_in_folder.show()
         token = self._write_folder_token = getattr(self, "_write_folder_token", 0) + 1
-        QTimer.singleShot(60000, lambda: token == self._write_folder_token and self._hide_write_folder_button())
+        QTimer.singleShot(60000, self.show_in_folder, lambda: token == self._write_folder_token and self._hide_write_folder_button())
 
     def _hide_write_folder_button(self):
         self._write_folder_token = getattr(self, "_write_folder_token", 0) + 1
