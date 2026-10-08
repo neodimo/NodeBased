@@ -295,20 +295,19 @@ The full-size Radeon bake took 1,940.5 s wall time. The liquid ran on `resident`
 equivalent. RTX 3080 Ti numbers remain pending the card's reset. Times are mean seconds per
 frame; playback is median frames per second from cache. At 960 × 540, Radeon playback was 0.19 FPS for the steam volume alone (5,282.9 ms median fetch, 33.2 ms draw) and 0.06 FPS for the whole scene (15,421.7 ms median fetch, 62.3 ms draw). The playback checkpoint is `benchmarks/hot_pour/radeon-full-playback.json`.
 
-**Cached-frame fetch profile (2026-10-08, Radeon full-size cache, frame 20).** The existing
-Hot pour harness scene evaluated that cached frame in 1.398 s. Its two on-disk cache hits
-took 12.9 ms (liquid particles) and 28.1 ms (steam volume); rebuilding the sparse steam
-grid took 3.6 ms. A phase probe of the 80,580,636-byte steam `.npz` found ZIP `STORED`
-members (0 ms decompression): file open and central-directory setup took 3.1 ms cold / 0.2
-ms warm, reading the members took 55.3 / 28.6 ms, and NumPy array decoding took 8.7 / 8.5
-ms. The existing loader then copied the arrays twice (another 5–7 ms in this probe).
-The GPU texture upload was not isolated in this baseline: the adapter was reserved by the
-integrator's full-suite run. The measured disk phases are far below the whole-scene
-benchmark's 15,421.7 ms median fetch, so cache file reading alone cannot explain that
-number; evaluator work outside these two cache hits and the GPU upload remain to be timed.
-The disk loader now retains the arrays owned by NumPy's archive reader instead of making
-two additional copies. New cache writes use the packed `.nbc` format described below; a
-Radeon before/after playback comparison is pending.
+**Cached-frame profile (2026-10-08, Radeon full-size run, frame 20).** The instrumented frame
+took 3.820 s to evaluate and 18.5 ms to draw. Sparse-grid rebuild took 8.52 ms; the upload
+to the GPU took 0.573 ms for 12,686,080 bytes. The shared legacy cache had already evicted
+this steam frame, so the profile does not report a disk hit and includes solver work. Across
+the 120-frame diagnostic playback, steam alone measured 0.19 FPS (5,198.3 ms median fetch,
+33.4 ms draw) and the whole scene 0.07 FPS (14,761.8 ms fetch, 64.6 ms draw). At completion,
+the shared cache held one steam-output frame and only 30/31 liquid frames in its two runs;
+the 8.7 GB directory also held 28 steam solver checkpoints. This eviction/recompute result
+shows why the earlier file-only probe could not explain playback time.
+
+New `.nbc` writes use packed arrays and per-budget directories; the Hot pour steam output
+budget is 24,576 MiB to hold a full-size frame range. The corrected-cache Radeon measurement
+and the packed cache-hit file/read/decode phases are pending the exclusive GPU lock.
 
 GPU path-traced showcase stills at 1920 × 1080:
 
@@ -502,10 +501,11 @@ each array's dtype, shape and byte offset), then the C-order array bytes concate
 same file. A single mutable byte buffer backs the loaded NumPy views, so each frame is read
 once and array views need no per-field copy. Writes remain atomic through a sibling temporary
 file and `os.replace`. The reader also accepts the previous `.npz` archive format; the first
-successful read converts it to `.nbc` and removes the legacy file. When both exist, the new
-format wins. Sharding by the run key's first two hex characters keeps one long-lived project
-from putting hundreds of thousands of files in a single directory. One file remains the
-eviction unit for a multi-array simulation state.
+successful read converts it to `.nbc`; a direct-layout cache used by several budget scopes
+stays available as the migration source until each scope has its own copy. When both exist,
+the new format wins. Sharding by the run key's first two hex characters keeps one long-lived
+project from putting hundreds of thousands of files in a single directory. One file remains
+the eviction unit for a multi-array simulation state.
 
 A **corrupt or truncated entry is a miss, never an error raised to the artist**, matching
 clause C4 of `docs/EVALUATION_TIERS.md`: a `.nbc` with an invalid header or array bounds, or
@@ -813,9 +813,10 @@ disk tier under the user cache directory; otherwise the cache node still works, 
 Every frame is a checkpoint, a new session finds its earlier frames on disk and solves zero steps for
 them, and the two knobs are budgets: `cache_memory_mb` bounds the in-memory tier and `cache_disk_mb`
 the disk tier, with a disk budget of 0 keeping the node memory-only. One store exists per distinct
-pair of budgets and each is bounded separately. When every reader of an emitter is an enabled cache
-node the emitter returns only the run (an empty particle set) instead of solving, so the same frames
-are not solved twice.
+pair of budgets; each pair uses its own `stores/<memory>-<disk>` directory so its LRU cannot evict
+another node's frames. Existing direct-layout entries remain readable and are copied into the
+scope on demand. When every reader of an emitter is an enabled cache node the emitter returns only
+the run (an empty particle set) instead of solving, so the same frames are not solved twice.
 
 Cancellation is the cooperative check between substeps that `simcache` already provides: a cancelled
 evaluation raises `Cancelled` and every frame it finished stays banked. Scrubbing to frame 50 after
