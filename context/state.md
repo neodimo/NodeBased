@@ -1,5 +1,26 @@
 ## 2026-10-08 — Lane 4 Q1 finish 1: adaptive sampling capped at Path samples (worktree, not yet merged)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (3:16 PM on 2026-10-08 PDT)
+
+`main` moved `0df0bb3` -> `7640428` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 26 tests in 30.526 s, OK. Full suite on
+the stacked tip `7640428` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1008-1306.log`, started 1:06 PM): **Ran 4735 tests in 7452.786 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step P1 of 2: cached playback that is not bound by reading the cache.** Commits:
+  - `77734bd` docs: record cached frame profile and loader change
+  - `45ca53c` perf: avoid duplicate copies when loading sim frames
+  - `b4eb7cc` docs: profile cached Hot pour frame fetch
+  Diff: 4 files changed, 48 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (12:56 PM on 2026-10-08 PDT)
 
 `main` moved `f45b298` -> `734258b` (lane commits cherry-picked onto main in lane order) and then to this
