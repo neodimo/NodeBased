@@ -282,11 +282,11 @@ equivalent. Playback is measured from the baked cache at 960 × 540.
 | Adapter / workload | Liquid solver | Surface | Whitewater | Steam solver | Peak host / GPU | Steam cache (sparse / dense) | Playback |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | RTX 3080 Ti, 256 / 192 cells, 120 frames | pending the card's reset | pending | pending | pending | pending | pending | pending |
-| Radeon 8060S, 256 / 192 cells, 120 frames | 0.866 s/frame | 0.528 s/frame | 9.662 s/frame | 5.096 s/frame | 9,909 / 11,069 MiB | 3,129 / 3,212 MiB | pending |
+| Radeon 8060S, 256 / 192 cells, 120 frames | 0.807 s/frame | 0.527 s/frame | 9.701 s/frame | 5.135 s/frame | 10,910 / 10,813 MiB | 3,129 / 3,212 MiB | pending |
 | Radeon 8060S, reduced | pending | pending | pending | pending | pending | pending | pending |
 | llvmpipe, reduced | pending | pending | pending | pending | pending | pending | pending |
 
-The full-size Radeon bake took 1,938.5 s wall time. The liquid ran on `resident` and steam on
+The full-size Radeon bake took 1,940.5 s wall time. The liquid ran on `resident` and steam on
 `resident_sparse`; the steam cache occupied 3,129 MiB on disk against a 3,212 MiB dense raw
 equivalent. RTX 3080 Ti numbers remain pending the card's reset. Times are mean seconds per
 frame; playback is median frames per second for the whole scene from cache.

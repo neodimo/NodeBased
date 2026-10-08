@@ -1,6 +1,6 @@
-# Lane 6 N3 finish 2 — active (2026-10-07, 11:40 AM PDT)
+# Lane 6 N3 finish 1 — active (2026-10-08, 12:57 AM PDT)
 
-Update 12:55 PM PDT: the 256/192-cell, 120-frame Radeon bake completed. Means: liquid 0.866, surface 0.528, whitewater 9.662 and steam 5.096 s/frame; host peak 9,909 MiB; Radeon VRAM+GTT above baseline 11,069 MiB. JSON: `benchmarks/hot_pour/radeon-full-bake.json`. Next: docs/JSON commit, then cached playback and stills; reduced runs and targeted tests remain unverified.
+The full-size Radeon bake metrics are committed in `benchmarks/hot_pour/radeon-full-bake.json` and `docs/SIMULATION.md`. The prior `/tmp` caches and stills are absent after date rollover, so this finish pass must regenerate a full-size cache before playback/stills. Shared GPU lock is currently free. RTX stays pending card reset. Remaining: playback, stills, reduced Radeon/llvmpipe runs, targeted Hot pour tests, and final issue/board/report update.
 
 # Lane 4 Rendering 8 step T1 — light linking everywhere
 
