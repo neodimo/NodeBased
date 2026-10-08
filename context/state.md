@@ -1,5 +1,36 @@
 ## 2026-10-08 — Lane 4 Q1 finish 1: adaptive sampling capped at Path samples (worktree, not yet merged)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (12:56 PM on 2026-10-08 PDT)
+
+`main` moved `f45b298` -> `734258b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 328 tests in 146.348 s, OK. Full suite on
+the stacked tip `734258b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1008-1046.log`, started 10:46 AM): **Ran 4734 tests in 7340.865 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step NL1 of 7: colours, spacing, type and the top bar.** Commits:
+  - `2125506` Time row fits the new theme: tighter field and button padding inside the time row, play button sized by its padding instead of a fixed 40 px; knob-fit tests hand freed panel width to the viewer
+  - `c7d6615` Screenshot of the new top bar at 1920x1080 and a note on it in the redesign doc
+  - `3c5b5a9` Top bar: logo, project / shot with saved dot, workspace tabs, search, GPU pill, menu button, update button
+  - `817103b` Theme: design tokens, family colours, radii and type scale from the new-look mockup, one app-wide stylesheet
+  - `700a257` docs: record node category shelf and empty-strip removal
+  - `3a80366` feat: compact node category shelf and remove empty workspace strip
+  Diff: 14 files changed, 1054 insertions(+), 174 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step Q1 of 2: adaptive sampling that wins on every adapter.** Commits:
+  - `767b490` tests, notes: adaptive overhead benchmark helpers; Q1 completion note in TASKLOG and state
+  - `f7c4c06` bench: rerun X1, Y1 and Z1 on the Radeon, llvmpipe and RTX after the adaptive cap; adaptive is faster than fixed 64 on all nine pairs
+  - `a6c04e2` render: cap an adaptive render at Path samples per pixel and end the GPU loop when no pixel is open
+  - `2658d17` bench: measure why Y1 adaptive sampling loses to fixed 64 (stopping rule, sample spread, cost per pass by phase)
+  Diff: 43 files changed, 4016 insertions(+), 364 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-3d-astra-lane` at the commit that carries this note; code commit `a6c04e2`, results commit `f7c4c06`. An adaptive render now takes at most `Path samples` per pixel (`PathSettings.clamped`) and the GPU loop ends when no pixel is open. Adaptive is faster than fixed 64 on all nine adapter and scene pairs (Radeon, llvmpipe, RTX; X1, Y1, Z1). Quality against the CPU path tracer: X1 within 0.1 dB, Y1 RTX -1.5 dB (outside the 0.5 dB allowed), the rest up. Limits: Linux only, one resolution and seed, no real-display or Windows check. Details: TASKLOG.md and `docs/BENCHMARKS-v0.35-portable-render.md`, section "Step Q1".
 
 ## 2026-10-07 — Node category shelf branch (9:47 PM PDT)
