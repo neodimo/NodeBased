@@ -1,5 +1,32 @@
 ## 2026-10-07 — Lane 4 P1 portable rendering benchmark, PARTIAL (9:19 PM PDT)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (12:55 AM on 2026-10-08 PDT)
+
+`main` moved `0284e2f` -> `73ac3eb` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 24 tests in 29.015 s, OK. Full suite on
+the stacked tip `73ac3eb` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1007-2305.log`, started 11:05 PM): **Ran 4692 tests in 6351.066 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step P1 of 1: portable final-render benchmark on the working adapters.** Commits:
+  - `6fd1200` Document portable benchmark method and blocked GPU measurements
+  - `abcce2e` Portable final-render benchmark: X1/Y1/Z1 fixed and adaptive plus the majorant-grid smoke plume on any adapter, one JSON per case, run in short GPU-lock turns with timeouts, quality against the CPU path tracer (Lane 4 Rendering step P1, part 1)
+  Diff: 6 files changed, 503 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step N3 of 3: one production-sized scene that uses everything, and its numbers (finish 2).** Commits:
+  - `bdc5a6f` docs: record Hot pour full-size Radeon bake
+  - `97687a8` bench: checkpoint Hot pour measurement passes
+  - `db9144d` docs: record completed Radeon bake and outstanding metrics
+  - `fb1715d` docs: record Hot pour adapter fault and pending NVIDIA run
+  Diff: 5 files changed, 2331 insertions(+), 27 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Evidence: committed harness `abcce2e` persists one JSON per case and compares against a CPU path-tracer image. Follow-up fixes run exactly one warm-up, prepare CPU references outside the GPU lock, lock llvmpipe too, and record failed reference preparation. Targeted benchmark and knowledge tests passed (15 tests); the mirrored benchmark doc is byte-identical. CPU references for all eight cases at 64 by 36 exist only in local scratch, for harness preparation, and are not timing evidence. The integration suite still holds `/tmp/nb-gpu.lock`, so no P1 adapter benchmark has been run. The RTX responded after reboot but remains unvalidated by this step; no new watchdog probe was made.
 
 Status: PARTIAL. Committed artifacts: benchmark tool, its tests, `docs/BENCHMARKS-v0.35-portable-render.md` and bundled copy. Local-only artifacts: `/tmp`-style scratch references and test logs, outside the repo. Needs Gonzo: after the suite releases the lock and Fluids gets its first short turn, run the exact bounded commands in the benchmark doc, review per-case JSON, fill measured tables and revise the bottleneck ranking. Failure mode: the original harness held the lock while preparing CPU references and warmed twice; both are fixed in this step. Full suite, AMD, llvmpipe and RTX P1 matrix remain unverified.
