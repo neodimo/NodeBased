@@ -1,3 +1,7 @@
+## 2026-10-08 — Lane 4 Q2 finish: smoke on the RTX (worktree, not yet merged)
+
+Branch `openclaw/nb-3d-astra-lane` at the commit that carries this note; renderer change `c94b4eb`, rows `e5b4023`. A smoke or splat GPU render grows its row bands from 65 000 paths to about 8 ms per dispatch, so the RTX is no longer left idle: smoke box 144 to 71 ms, grid 143 to 59 ms (grid 17 percent faster than box); AMD 157 to 102 and 113 to 61 ms; llvmpipe grid 515 to 367 ms, box unchanged. Images unchanged (PSNR against CPU the same on all six rows). GPU test modules passed on all three adapters. Limits: one resolution and seed; surface-only and adaptive renders untouched; no Windows or real-display run. Details: TASKLOG.md and `docs/BENCHMARKS-v0.35-portable-render.md`, "Step Q2".
+
 ## 2026-10-08 — Lane 4 Q1 finish 1: adaptive sampling capped at Path samples (worktree, not yet merged)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:06 PM on 2026-10-08 PDT)
