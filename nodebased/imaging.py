@@ -607,7 +607,8 @@ class Evaluator:
             template = self.sim_template
             enabled = bool(template is not None and template.enabled and template.root is not None and key[1] > 0)
             store = simcache.SimCache(root=template.root if enabled else None,
-                                      memory_budget=key[0] << 20, disk_budget=key[1] << 20, enabled=enabled)
+                                      memory_budget=key[0] << 20, disk_budget=key[1] << 20, enabled=enabled,
+                                      profile=None if template is None else template.profile)
             self._sim_stores[key] = store
         return store
 

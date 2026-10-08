@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import time
 import weakref
 from dataclasses import replace
 from collections import OrderedDict
@@ -692,8 +693,13 @@ def _field(state, key, make, used):
         gpu_texture = device.create_texture(
             size=(nx, ny, nz), dimension='3d', format=fmt,
             usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
+        profile = state.get('profile')
+        upload_started = time.perf_counter() if profile is not None else 0.0
         device.queue.write_texture({'texture': gpu_texture}, data,
                                    {'bytes_per_row': nx * 4 * channels, 'rows_per_image': ny}, (nx, ny, nz))
+        if profile is not None:
+            profile['host_gpu_upload_s'] = profile.get('host_gpu_upload_s', 0.0) + time.perf_counter() - upload_started
+            profile['host_gpu_upload_bytes'] = profile.get('host_gpu_upload_bytes', 0) + data.nbytes
         entry = cache[key] = (gpu_texture, gpu_texture.create_view(dimension='3d'), data.nbytes)
         state['volume_uploads'] = upload_count(state) + 1
     cache.move_to_end(key)

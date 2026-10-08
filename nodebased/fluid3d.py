@@ -45,6 +45,7 @@ and `restore` copy a State in and out of a cache.
 from __future__ import annotations
 
 import math
+import time
 
 import numpy as np
 from collections import OrderedDict
@@ -1799,7 +1800,10 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name=""):
     domain_origin = tuple(got.meta.get("domain_origin", stream.origin))
     if sparse:
         from .sparsevol import SparseGrid
+        rebuild_started = time.perf_counter() if store.profile is not None else 0.0
         grid = SparseGrid.from_arrays(domain_shape, {k: (v if k == "coords" else v.astype(np.float32)) for k, v in a.items()})
+        if store.profile is not None:
+            store.profile["sparse_rebuild_s"] = store.profile.get("sparse_rebuild_s", 0.0) + time.perf_counter() - rebuild_started
         return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=domain_origin, stream=stream, frame=int(frame), name=name)
     return Volume(a["density"].astype(np.float32), voxel_size=stream.voxel, origin=domain_origin,
                   temperature=a.get("temperature"), velocity=a.get("velocity"), flame=a.get("flame"), fuel=a.get("fuel"),

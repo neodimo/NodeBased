@@ -67,9 +67,10 @@ class SimCache:
     """Bounded memory and disk cache of solved simulation frames."""
 
     def __init__(self, root=None, memory_budget: int | None = None,
-                 disk_budget: int | None = None, enabled: bool = True):
+                 disk_budget: int | None = None, enabled: bool = True, profile=None):
         self.enabled = bool(enabled)
         self.root = Path(root) if root is not None else None
+        self.profile = profile
         self.memory_budget = DEFAULT_MEMORY_BUDGET if memory_budget is None else int(memory_budget)
         self.disk_budget = DEFAULT_DISK_BUDGET if disk_budget is None else int(disk_budget)
         self._memory: OrderedDict[tuple[str, int], State] = OrderedDict()
@@ -224,10 +225,11 @@ class SimCache:
         except (OSError, ValueError, EOFError, KeyError, TypeError):
             return None
 
-    @staticmethod
-    def _load_packed(path: Path) -> State | None:
+    def _load_packed(self, path: Path) -> State | None:
         try:
+            started = time.perf_counter()
             with path.open("rb") as stream:
+                opened = time.perf_counter()
                 if stream.read(len(PACKED_MAGIC)) != PACKED_MAGIC:
                     raise ValueError("bad simulation cache magic")
                 raw_length = stream.read(4)
@@ -239,6 +241,7 @@ class SimCache:
                 header_bytes = stream.read(header_length)
                 if len(header_bytes) != header_length:
                     raise ValueError("truncated simulation cache header")
+                read_header = time.perf_counter()
                 header = json.loads(header_bytes)
                 if header.get("version") != 2 or not isinstance(header.get("meta"), dict) \
                         or not isinstance(header.get("arrays"), dict):
@@ -246,6 +249,7 @@ class SimCache:
                 payload = bytearray(path.stat().st_size - len(PACKED_MAGIC) - 4 - header_length)
                 if stream.readinto(payload) != len(payload):
                     raise ValueError("truncated simulation cache payload")
+                read_done = time.perf_counter()
             arrays = {}
             for name, item in header["arrays"].items():
                 dtype = np.dtype(item["dtype"])
@@ -256,7 +260,13 @@ class SimCache:
                     raise ValueError("invalid simulation cache array bounds")
                 arrays[name] = np.frombuffer(payload, dtype=dtype, count=expected // dtype.itemsize,
                                              offset=offset).reshape(shape)
-            return State(arrays, header["meta"], copy=False)
+            state = State(arrays, header["meta"], copy=False)
+            if self.profile is not None:
+                self.profile["file_open_s"] = self.profile.get("file_open_s", 0.0) + opened - started
+                self.profile["file_read_s"] = self.profile.get("file_read_s", 0.0) + read_done - opened
+                self.profile["deserialize_s"] = self.profile.get("deserialize_s", 0.0) + time.perf_counter() - read_done
+                self.profile["decompress_s"] = 0.0
+            return state
         except (OSError, ValueError, EOFError, KeyError, TypeError, struct.error, json.JSONDecodeError):
             return None
 

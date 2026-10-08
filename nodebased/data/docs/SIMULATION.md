@@ -307,8 +307,8 @@ integrator's full-suite run. The measured disk phases are far below the whole-sc
 benchmark's 15,421.7 ms median fetch, so cache file reading alone cannot explain that
 number; evaluator work outside these two cache hits and the GPU upload remain to be timed.
 The disk loader now retains the arrays owned by NumPy's archive reader instead of making
-two additional copies. The existing `.npz` layout remains readable and writable; a Radeon
-before/after playback comparison is pending the adapter lock.
+two additional copies. New cache writes use the packed `.nbc` format described below; a
+Radeon before/after playback comparison is pending.
 
 GPU path-traced showcase stills at 1920 × 1080:
 
@@ -496,23 +496,23 @@ sync with what actually changed.
 
 ### On-disk layout
 
-One frame state is one file: `<root>/<run_key[:2]>/<run_key>/<frame:010d>.npz`, an
-`np.savez` archive holding every named array in the state plus a `__meta__` entry (the
-state's small JSON-safe scalar dict, serialized to a string array so it survives `np.savez`
-without a second file format). Sharding by the run key's first two hex characters keeps one
-long-lived project from putting hundreds of thousands of files in a single directory, the
-same reason `cachetier.DiskCache` shards by digest prefix. A single `.npz` per frame (rather
-than `cachetier`'s array-plus-JSON-sidecar split) is deliberate: a simulation state is
-multiple named arrays by nature — positions, velocities, ages are different arrays, not
-sidecar metadata about one array — so one archive per checkpoint is the natural unit, and it
-is also the unit eviction removes.
+One frame state is one file: `<root>/<run_key[:2]>/<run_key>/<frame:010d>.nbc`. The packed
+format has an eight-byte magic, a length-prefixed JSON header (version, scalar metadata, and
+each array's dtype, shape and byte offset), then the C-order array bytes concatenated in that
+same file. A single mutable byte buffer backs the loaded NumPy views, so each frame is read
+once and array views need no per-field copy. Writes remain atomic through a sibling temporary
+file and `os.replace`. The reader also accepts the previous `.npz` archive format; the first
+successful read converts it to `.nbc` and removes the legacy file. When both exist, the new
+format wins. Sharding by the run key's first two hex characters keeps one long-lived project
+from putting hundreds of thousands of files in a single directory. One file remains the
+eviction unit for a multi-array simulation state.
 
 A **corrupt or truncated entry is a miss, never an error raised to the artist**, matching
-clause C4 of `docs/EVALUATION_TIERS.md`: a `.npz` that fails to load, or whose `__meta__`
-entry is missing or unparseable, is discarded and the frame is re-solved from the nearest
-earlier checkpoint. Writes go to a sibling temporary file and `os.replace` into place, so a
-crash mid-write can never leave a half-written archive under the real path — the same pattern
-`cachetier.DiskCache.put` already uses.
+clause C4 of `docs/EVALUATION_TIERS.md`: a `.nbc` with an invalid header or array bounds, or
+a legacy `.npz` that fails to load or has missing/unparseable metadata, is discarded and the
+frame is re-solved from the nearest earlier checkpoint. Writes go to a sibling temporary
+file and `os.replace` into place, so a crash mid-write cannot leave a partial frame at its
+real path — the same pattern `cachetier.DiskCache.put` uses.
 
 ### Eviction and budget
 

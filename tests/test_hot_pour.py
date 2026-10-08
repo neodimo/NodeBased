@@ -62,9 +62,13 @@ def bake(document, root, frames=range(1, FRAMES + 1), first=None):
 def cache_arrays(root):
     """{relative path: {array name: array}} of every file in a cache."""
     out = {}
-    for path in sorted(Path(root).rglob("*.npz")):
-        with np.load(path, allow_pickle=False) as data:
-            out[str(path.relative_to(root))] = {name: data[name] for name in data.files}
+    store = simcache.SimCache(root, memory_budget=8 << 30, disk_budget=8 << 30)
+    for path in sorted(Path(root).rglob("*.nbc")):
+        state = store.get(path.parent.name, int(path.stem))
+        if state is not None:
+            arrays = dict(state.arrays)
+            arrays["__meta__"] = np.array(json.dumps(state.meta))
+            out[str(path.relative_to(root))] = arrays
     return out
 
 

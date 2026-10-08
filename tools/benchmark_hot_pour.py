@@ -133,13 +133,40 @@ def timed(function, *args, **kwargs):
 def cache_report(root, args):
     """Bytes on disk per run in the cache, classified by what its frames hold, and the dense equivalent of the served volumes."""
     import numpy as np
+    from nodebased.simcache import PACKED_MAGIC
+
+    def info(path):
+        if path.suffix == ".nbc":
+            import struct
+            with path.open("rb") as stream:
+                if stream.read(len(PACKED_MAGIC)) != PACKED_MAGIC:
+                    raise ValueError(f"invalid packed cache: {path}")
+                header_size = struct.unpack("<I", stream.read(4))[0]
+                header = json.loads(stream.read(header_size))
+            descriptors = header["arrays"]
+            return set(descriptors), header["meta"], descriptors
+        with np.load(path, allow_pickle=False) as archive:
+            names = set(archive.files)
+            meta = json.loads(str(archive["__meta__"])) if "__meta__" in names else {}
+            first = "density" if "density" in names else next(
+                iter(sorted(name for name in names if name != "__meta__")), None)
+            descriptors = {} if first is None else {first: {"dtype": archive[first].dtype.str}}
+            return names, meta, descriptors
+
+    def frame_files(run_dir):
+        chosen = {}
+        for suffix in (".npz", ".nbc"):
+            for path in run_dir.glob(f"*{suffix}"):
+                if path.stem not in chosen or suffix == ".nbc":
+                    chosen[path.stem] = path
+        return [chosen[name] for name in sorted(chosen)]
+
     runs = {}
     for run_dir in sorted(Path(root).glob("*/*")):
-        files = sorted(run_dir.glob("*.npz"))
+        files = frame_files(run_dir)
         if not files:
             continue
-        with np.load(files[0], allow_pickle=False) as sample:
-            names = set(sample.files)
+        names, _, _ = info(files[0])
         total = sum(f.stat().st_size for f in files)
         if "coords" in names:
             kind = "steam volume (sparse tiles)"
@@ -156,23 +183,22 @@ def cache_report(root, args):
     dense_equivalent = 0
     stored = 0
     for run_dir in sorted(Path(root).glob("*/*")):
-        files = sorted(run_dir.glob("*.npz"))
+        files = frame_files(run_dir)
         if not files:
             continue
-        with np.load(files[0], allow_pickle=False) as sample:
-            if "coords" not in sample.files:
-                continue
-            channels = [n for n in sample.files if n not in ("coords", "__meta__")]
-            itemsize = sample[channels[0]].dtype.itemsize
-            scalar = {"velocity": 3}
+        names, _, _ = info(files[0])
+        if "coords" not in names:
+            continue
+        channels = sorted(n for n in names if n not in ("coords", "__meta__"))
+        scalar = {"velocity": 3}
         for f in files:
-            with np.load(f, allow_pickle=False) as frame:
-                meta = json.loads(str(frame["__meta__"]))
-                shape = meta.get("domain_shape")
-                if shape:
-                    dense_equivalent += int(shape[0]) * int(shape[1]) * int(shape[2]) * itemsize * sum(
-                        scalar.get(c, 1) for c in channels)
-                stored += f.stat().st_size
+            frame_names, meta, frame_descriptors = info(f)
+            shape = meta.get("domain_shape")
+            if shape:
+                itemsize = np.dtype(frame_descriptors[channels[0]]["dtype"]).itemsize
+                dense_equivalent += int(shape[0]) * int(shape[1]) * int(shape[2]) * itemsize * sum(
+                    scalar.get(c, 1) for c in channels if c in frame_names)
+            stored += f.stat().st_size
     report["steam_sparse_bytes"] = stored
     report["steam_dense_equivalent_bytes"] = dense_equivalent
     return report
@@ -243,21 +269,40 @@ def playback(args, document, evaluator, gpu):
     renderer = viewportgpu.renderer()
     camera = evaluator.evaluate_raster(document, "camera", frame=1, typed=True)
     results = {}
+    profile_frame = getattr(args, "profile_frame", None)
+    frame_profile = None
+    profile = {} if profile_frame is not None else None
+    if profile is not None:
+        evaluator.sim_template.profile = profile
+        for store in evaluator._sim_stores.values():
+            store.profile = profile
+        gpu["profile"] = profile
     for label, node in (("steam volume alone", "steam_volume_scene"), ("whole scene", "scene")):
         times = []
-        for f in range(1, args.frames + 1):
+        playback_frames = ([profile_frame] if getattr(args, "profile_only", False) else range(1, args.frames + 1))
+        for f in playback_frames:
+            if profile is not None and label == "steam volume alone" and f == profile_frame:
+                profile.clear()
             started = time.perf_counter()
             scene = evaluator.evaluate_raster(document, node, frame=f, typed=True)
             fetched = time.perf_counter()
             renderer.render(scene, camera, args.play_width, args.play_height, (0.02, 0.02, 0.025, 1.0), ambient=0.2)
             done = time.perf_counter()
             times.append((fetched - started, done - fetched))
+            if profile is not None and label == "steam volume alone" and f == profile_frame:
+                frame_profile = {"frame": f, "workload": label,
+                                "evaluation_s": fetched - started, "draw_s": done - fetched,
+                                **profile}
+            if args.progress and f % 10 == 0:
+                print(f"  playback {label} frame {f}: {(done - started):.2f} s", flush=True)
         fetch = [t[0] for t in times]
         draw = [t[1] for t in times]
         total = [a + b for a, b in times]
         results[label] = {"fps_median": round(1.0 / statistics.median(total), 2), "fps_mean": round(len(total) / sum(total), 2),
                           "fetch_ms_median": round(statistics.median(fetch) * 1000, 1),
                           "draw_ms_median": round(statistics.median(draw) * 1000, 1)}
+    if frame_profile is not None:
+        results["frame_profile"] = frame_profile
     return results
 
 
@@ -328,7 +373,15 @@ def main(argv=None):
     parser.add_argument("--still-size", default="1920x1080")
     parser.add_argument("--still-samples", type=int, default=64)
     parser.add_argument("--progress", action="store_true")
+    parser.add_argument("--profile-frame", type=int, default=None,
+                        help="record cached-frame file/read/decode/sparse rebuild/upload phases for one steam-only frame")
+    parser.add_argument("--profile-only", action="store_true",
+                        help="evaluate and draw only --profile-frame; for phase diagnosis, not an FPS result")
     args = parser.parse_args(argv)
+    if args.profile_only and args.profile_frame is None:
+        parser.error("--profile-only requires --profile-frame")
+    if args.profile_frame is not None and not 1 <= args.profile_frame <= args.frames:
+        parser.error("--profile-frame must be within the selected frame range")
     workdir = Path(args.workdir or f"/tmp/hot-pour-{args.adapter}-{args.liquid_cells}-{args.smoke_cells}")
     workdir.mkdir(parents=True, exist_ok=True)
     os.environ["NODEBASED_SIM_CACHE_MB"] = "400000"
