@@ -35,6 +35,8 @@ ADAPTIVE_SPARSE_PIXELS = 1 << 17         # at most this many open pixels get the
 ADAPTIVE_SPARSE_THREADS = 1 << 21        # and at most this many (pixel, sample) threads: 64 MiB of per-sample sums after the image
 ADAPTIVE_PACE = 4                        # passes the host lets the card run ahead before it waits (it waits every pass when asked for progress)
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
+BAND_TARGET_SECONDS = 0.008   # a smoke or splat render grows its row bands until one dispatch takes about this long (0: fixed bands)
+BAND_MAX_PATHS = 1 << 22      # and never past this many paths in one dispatch, however fast the first bands were
 COUNT_COLLISIONS = False   # compile the volume counting variant: a render's rgb is the mean (tentative, real, region hops) per path
 ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
 STACK = 64
@@ -2729,6 +2731,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         else:
             tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
             blocks = upload(np.zeros(4, "u4"), storage)       # the adaptive list, unused here
+            band_floor = band_paths = GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)
             while sample_index < total_samples:
                 raytrace._cancel(cancel)
                 take = min(per_pass, total_samples - sample_index)
@@ -2736,9 +2739,14 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                 if not len(np.flatnonzero(~tile_done)):
                     break
                 lap("mask update")
-                rows_per_band = max(1, (GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // max(width * take, 1))
-                for y0 in range(0, height, rows_per_band):
+                # A smoke or splat band starts small (SOFT_SLOWDOWN times fewer paths than a surface band: a path can be that
+                # much slower) and grows with the measured time per path to about BAND_TARGET_SECONDS. A band of 65 000 paths
+                # left the RTX 3080 Ti mostly idle (the render took 2.6 times longer than one dispatch over the whole image
+                # at the same sample count); a slow adapter stays at short dispatches because the band follows its time.
+                y0 = 0
+                while y0 < height:
                     raytrace._cancel(cancel)
+                    rows_per_band = max(1, band_paths // max(width * take, 1))
                     y1 = min(height, y0 + rows_per_band)
                     uniform = upload(_uniform(packed, ps, camera, width, height, y0, y1, sample_index, take, settings,
                                               code, bits, tiles_x), wgpu.BufferUsage.UNIFORM)
@@ -2750,11 +2758,17 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                     compute.set_bind_group(0, group_once)
                     compute.dispatch_workgroups(-(-width // wg), -(-(y1 - y0) // wg), 1)
                     compute.end()
+                    began = time.perf_counter()
                     device.queue.submit([encoder.finish()])
                     device.queue.read_buffer(accum, 0, 16)     # wait for this band: keeps submissions short and cancellation prompt
+                    took = time.perf_counter() - began
                     readbacks["waits"] += 1
                     resources.pop().destroy()
                     lap("dispatch")
+                    if heavy and BAND_TARGET_SECONDS > 0 and (y0 == 0 or y1 - y0 == rows_per_band):     # a short last band says nothing
+                        fit = (y1 - y0) * width * take * BAND_TARGET_SECONDS / max(took, 1e-4)
+                        band_paths = int(min(BAND_MAX_PATHS, max(band_floor, min(fit, band_paths * 4))))
+                    y0 = y1
                 tile_count[~tile_done] += take
                 sample_index += take
                 passes += 1
