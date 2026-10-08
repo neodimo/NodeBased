@@ -127,6 +127,44 @@ class RotoArtistPanelTests(unittest.TestCase):
         swatch = self.panel().findChild(QLabel, "roto-shape-color-swatch")
         self.assertTrue(np.allclose(swatch.property("rgba"), expected))
 
+    def test_properties_scroll_and_focus_survive_roto_and_transform_edits(self):
+        w = self.window
+        settle_layout(w, w.properties.widget())
+        for node_id, field_name, value in (("r", "roto-shape-feather", 8.0),
+                                           ("t", "mix-field", 0.9)):
+            if node_id == "t":
+                w.command({"op": "create", "id": "t", "type": "Transform", "pos": [100, 0]},
+                          render=False)
+                w.graph.items_by_id["t"].setSelected(True)
+                w.inspect("t")
+            bar = w.properties.verticalScrollBar()
+            bar.setValue(bar.maximum())
+            settle_layout(w, w.properties.widget())
+            self.assertGreater(bar.maximum(), 0, f"{node_id} panel should scroll at the default dock size")
+            field = w.properties.widget().findChild(QDoubleSpinBox, field_name)
+            self.assertIsNotNone(field, f"missing {field_name} on {node_id}")
+            w.properties.ensureWidgetVisible(field)
+            settle_layout(w, w.properties.widget())
+            before = bar.value()
+            self.assertGreater(before, 0, f"{node_id} field should be focused at a scrolled position")
+            field.setFocus()
+            APP.processEvents()
+            focused = w.focusWidget()
+            while focused is not None and focused.objectName() != field_name:
+                focused = focused.parentWidget()
+            self.assertIsNotNone(focused, f"could not focus {node_id} control before edit")
+            field.setValue(value)
+            field.editingFinished.emit()
+            def restored():
+                focused = w.focusWidget()
+                while focused is not None and focused.objectName() != field_name:
+                    focused = focused.parentWidget()
+                return bar.value() == before and focused is not None
+            self.assertTrue(wait_until(restored),
+                            f"{node_id} panel state changed: scroll {before}->{bar.value()}, "
+                            f"focus={getattr(w.focusWidget(), 'objectName', lambda: '')()}, "
+                            f"remembered={getattr(w, '_properties_last_focus_path', [])}")
+
     def test_shape_key_button_keys_all_scalars_and_marks_the_selected_timeline(self):
         self.panel().findChild(QPushButton,"roto-shape-key-0").click()
         shape=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]

@@ -8993,12 +8993,11 @@ class Window(QMainWindow):
         scroll_position = (self.properties.verticalScrollBar().value(),
                            self.properties.horizontalScrollBar().value())
         focused = self.focusWidget()
-        focus_path = []
-        while focused is not None and focused is not self.properties:
-            name = focused.objectName()
-            if name:
-                focus_path.append(name)
-            focused = focused.parentWidget()
+        focus_path = self._properties_focus_path(focused)
+        if focus_path and focus_path[0] == "node-panel-content":
+            focus_path = []
+        if not focus_path and focused is not None and self.properties.isAncestorOf(focused):
+            focus_path = getattr(self, "_properties_last_focus_path", [])
         old = self.properties.takeWidget()
         if old:
             old.deleteLater()
@@ -9010,6 +9009,8 @@ class Window(QMainWindow):
             box.addWidget(panel)
             panel = root
         self.properties.setWidget(panel)
+        for child in [panel, *panel.findChildren(QWidget)]:
+            child.installEventFilter(self)
         def restore_panel_state():
             self.properties.verticalScrollBar().setValue(scroll_position[0])
             self.properties.horizontalScrollBar().setValue(scroll_position[1])
@@ -9019,6 +9020,24 @@ class Window(QMainWindow):
                     candidate.setFocus(Qt.FocusReason.OtherFocusReason)
                     break
         QTimer.singleShot(0, restore_panel_state)
+
+    def _properties_focus_path(self, focused):
+        path = []
+        while focused is not None and focused is not self.properties:
+            name = focused.objectName()
+            if name:
+                path.append(name)
+            focused = focused.parentWidget()
+        return path
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.FocusIn and isinstance(watched, QWidget):
+            properties = getattr(self, "properties", None)
+            if properties is not None and properties.isAncestorOf(watched):
+                path = self._properties_focus_path(watched)
+                if path:
+                    self._properties_last_focus_path = path
+        return super().eventFilter(watched, event)
 
     def preview_knobs(self, key, values):
         """Reflect a viewer drag in its open numeric controls without dispatching edits."""
