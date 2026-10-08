@@ -163,7 +163,7 @@ class FittedSpinMixin:
     def _schedule_fit(self):
         if not self._fit_pending:
             self._fit_pending = True
-            QTimer.singleShot(0, self.refit)
+            QTimer.singleShot(0, self, self.refit)
 
     def refit(self):
         """Show the full number if it fits the editor, otherwise an ellipsis with the tooltip."""

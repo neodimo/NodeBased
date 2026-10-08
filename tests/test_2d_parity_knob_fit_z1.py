@@ -6,6 +6,7 @@ the field displays, the width its editor has for text, and where the key button 
 
 import tests.isolation  # noqa: F401  (keeps the window's layout out of the real Qt settings)
 
+import sys
 import unittest
 
 from PySide6.QtCore import QEvent, Qt
@@ -99,6 +100,28 @@ class KnobFitTests(unittest.TestCase):
         self.assertEqual(spin.lineEdit().text(), "-12345.678")
         self.assert_text_fits(spin)
         self.assert_key_beside_editor("rotate")
+
+    def test_a_field_deleted_before_its_queued_refit_runs_raises_nothing(self):
+        # The properties panel rebuilds on every selection; a refit queued by the old fields used to fire
+        # on deleted C++ objects ("Internal C++ object (FittedSpinBox) already deleted" in the CI log).
+        import shiboken6
+        from PySide6.QtCore import QCoreApplication
+        from nodebased.knobfit import FittedSpinBox
+        spin = FittedSpinBox()
+        spin.show()
+        spin.setValue(7)
+        spin._schedule_fit()
+        errors = []
+        previous = sys.excepthook
+        sys.excepthook = lambda *info: errors.append(info)
+        try:
+            spin.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            self.assertFalse(shiboken6.isValid(spin))
+            pause(50)
+        finally:
+            sys.excepthook = previous
+        self.assertEqual(errors, [])
 
     def test_the_width_a_field_asks_for_holds_its_number_and_the_diamond(self):
         self.keyed("Transform", "translate_x", 200.0)
