@@ -148,7 +148,7 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
         "auto_resize": 1, "padding": 8, "max_size": smoke_cells, "pressure": smoke_pressure,
         "max_iterations": 60, "cooling_rate": 0.12, "dissipation": 0.1, "vorticity": 0.4})
     connect("steam", "fluid", "steam_table")
-    create("steam_cache", "FluidCache3D", {"cache_memory_mb": 1024, "cache_disk_mb": 8192})
+    create("steam_cache", "FluidCache3D", {"cache_memory_mb": 1024, "cache_disk_mb": 24576})
     connect("steam_cache", "volume", "steam")
 
     # ---- the picture

@@ -115,6 +115,20 @@ class SimCacheTests(unittest.TestCase):
             self.assertTrue(cache._path((run, frame)).is_file())
             self.assertFalse(legacy_path.exists())
 
+    def test_scoped_cache_reads_and_migrates_direct_layout_entries(self):
+        with tempfile.TemporaryDirectory() as root:
+            run, frame = "e" * 64, 4
+            old = simcache.SimCache(root)
+            expected = simcache.State({"x": np.arange(6, dtype=np.float32)}, {"frame": frame})
+            old.put(run, frame, expected)
+            scoped = simcache.SimCache(Path(root) / "stores" / "256-2048",
+                                       legacy_root=root)
+
+            self.assertEqual(scoped.get(run, frame), expected)
+            self.assertTrue(scoped._path((run, frame)).is_file())
+            self.assertFalse(old._path((run, frame)).exists())
+            self.assertEqual(scoped.frames(run), [frame])
+
     def test_cancellation(self):
         cancel = threading.Event()
         calls = [0]

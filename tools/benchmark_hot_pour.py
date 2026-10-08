@@ -162,7 +162,9 @@ def cache_report(root, args):
         return [chosen[name] for name in sorted(chosen)]
 
     runs = {}
-    for run_dir in sorted(Path(root).glob("*/*")):
+    run_dirs = {path.parent for suffix in ("*.npz", "*.nbc")
+                for path in Path(root).rglob(suffix)}
+    for run_dir in sorted(run_dirs):
         files = frame_files(run_dir)
         if not files:
             continue
@@ -178,11 +180,13 @@ def cache_report(root, args):
             kind = "liquid particles"
         else:
             kind = "other: " + ",".join(sorted(names))[:60]
-        runs[run_dir.name[:10]] = {"kind": kind, "frames": len(files), "bytes": total}
+        entry = runs.setdefault(run_dir.name[:10], {"kind": kind, "frames": 0, "bytes": 0})
+        entry["frames"] += len(files)
+        entry["bytes"] += total
     report = {"runs": runs, "total_bytes": sum(r["bytes"] for r in runs.values())}
     dense_equivalent = 0
     stored = 0
-    for run_dir in sorted(Path(root).glob("*/*")):
+    for run_dir in sorted(run_dirs):
         files = frame_files(run_dir)
         if not files:
             continue

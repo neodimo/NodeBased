@@ -496,7 +496,7 @@
       "type": "FluidCache3D",
       "params": {
         "cache_memory_mb": 1024,
-        "cache_disk_mb": 8192
+        "cache_disk_mb": 24576
       }
     },
     {

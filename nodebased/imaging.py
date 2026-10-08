@@ -606,9 +606,14 @@ class Evaluator:
         if store is None:
             template = self.sim_template
             enabled = bool(template is not None and template.enabled and template.root is not None and key[1] > 0)
-            store = simcache.SimCache(root=template.root if enabled else None,
+            # Each budget pair owns its own LRU namespace. Sharing a root made a
+            # small-budget store evict unrelated frames written by a larger one.
+            root = (template.root / "stores" / f"{key[0]}-{key[1]}"
+                    if enabled else None)
+            store = simcache.SimCache(root=root,
                                       memory_budget=key[0] << 20, disk_budget=key[1] << 20, enabled=enabled,
-                                      profile=None if template is None else template.profile)
+                                      profile=None if template is None else template.profile,
+                                      legacy_root=template.root if enabled else None)
             self._sim_stores[key] = store
         return store
 

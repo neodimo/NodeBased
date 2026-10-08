@@ -67,9 +67,11 @@ class SimCache:
     """Bounded memory and disk cache of solved simulation frames."""
 
     def __init__(self, root=None, memory_budget: int | None = None,
-                 disk_budget: int | None = None, enabled: bool = True, profile=None):
+                 disk_budget: int | None = None, enabled: bool = True, profile=None,
+                 legacy_root=None):
         self.enabled = bool(enabled)
         self.root = Path(root) if root is not None else None
+        self.legacy_root = Path(legacy_root) if legacy_root is not None else None
         self.profile = profile
         self.memory_budget = DEFAULT_MEMORY_BUDGET if memory_budget is None else int(memory_budget)
         self.disk_budget = DEFAULT_DISK_BUDGET if disk_budget is None else int(disk_budget)
@@ -103,11 +105,27 @@ class SimCache:
 
     def _legacy_path(self, key: tuple[str, int]) -> Path:
         run, frame = key
-        return self.root / run[:2] / run / f"{frame:010d}.npz"
+        base = self.legacy_root or self.root
+        return base / run[:2] / run / f"{frame:010d}.npz"
+
+    def _legacy_packed_path(self, key: tuple[str, int]) -> Path | None:
+        if self.legacy_root is None:
+            return None
+        run, frame = key
+        return self.legacy_root / run[:2] / run / f"{frame:010d}.nbc"
 
     def _existing_path(self, key: tuple[str, int]) -> Path:
         packed = self._path(key)
-        return packed if packed.exists() else self._legacy_path(key)
+        if packed.exists():
+            return packed
+        legacy_packed = self._legacy_packed_path(key)
+        if legacy_packed is not None and legacy_packed.exists():
+            return legacy_packed
+        return self._legacy_path(key)
+
+    def _has_legacy_entry(self, key: tuple[str, int]) -> bool:
+        packed = self._legacy_packed_path(key)
+        return ((packed is not None and packed.exists()) or self._legacy_path(key).exists())
 
     def _scan(self) -> None:
         if self._scanned or not self.enabled or self.root is None:
@@ -139,6 +157,9 @@ class SimCache:
         try:
             self._path(key).unlink(missing_ok=True)
             self._legacy_path(key).unlink(missing_ok=True)
+            legacy_packed = self._legacy_packed_path(key)
+            if legacy_packed is not None:
+                legacy_packed.unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -150,6 +171,9 @@ class SimCache:
             try:
                 self._path(key).unlink(missing_ok=True)
                 self._legacy_path(key).unlink(missing_ok=True)
+                legacy_packed = self._legacy_packed_path(key)
+                if legacy_packed is not None:
+                    legacy_packed.unlink(missing_ok=True)
             except OSError:
                 pass
             self.evictions += 1
@@ -185,6 +209,9 @@ class SimCache:
             os.replace(temporary, path)
             temporary = None
             self._legacy_path(key).unlink(missing_ok=True)
+            legacy_packed = self._legacy_packed_path(key)
+            if legacy_packed is not None:
+                legacy_packed.unlink(missing_ok=True)
             self._scan()
             size = path.stat().st_size
             self._index[key] = size
@@ -282,16 +309,17 @@ class SimCache:
                 self.misses += 1
                 return None
             self._scan()
-            if key not in self._index:
+            if key not in self._index and not self._has_legacy_entry(key):
                 self.misses += 1
                 return None
+        source_path = self._existing_path(key)
         state = self._load_disk(key)
         if state is None:
             with self._lock:
                 self._discard_locked(key)
                 self.misses += 1
             return None
-        if not self._path(key).exists():
+        if source_path != self._path(key):
             # One-time conversion of legacy NPZ entries. A successful packed write removes
             # the old file; failed conversion still leaves the legacy cache usable.
             self._write_disk(key, state)
@@ -340,16 +368,34 @@ class SimCache:
             if self.enabled and self.root is not None:
                 self._scan()
                 present.update(frame for (r, frame) in self._index if r == run)
+                if self.legacy_root is not None:
+                    for suffix in (".npz", ".nbc"):
+                        for path in (self.legacy_root / run[:2] / run).glob(f"*{suffix}"):
+                            try:
+                                present.add(int(path.stem))
+                            except ValueError:
+                                continue
         return sorted(present)
 
     def disk_size(self, run: str, frame: int) -> "int | None":
-        """Bytes of the on-disk `.npz` for one cached frame, or `None` when it has none (still
+        """Bytes of the on-disk cache file for one frame, or `None` when it has none (still
         memory-only, or never solved)."""
         key = (run, int(frame))
         with self._lock:
             if self.enabled and self.root is not None:
                 self._scan()
-            return self._index.get(key)
+            size = self._index.get(key)
+            if size is not None:
+                return size
+            if self.legacy_root is not None:
+                path = self._legacy_packed_path(key)
+                if path is None or not path.exists():
+                    path = self._legacy_path(key)
+                try:
+                    return path.stat().st_size
+                except OSError:
+                    pass
+            return None
 
     def solve_ms(self, run: str, frame: int) -> "float | None":
         """Milliseconds the last `solve_to_frame` in this process spent computing `frame` of
