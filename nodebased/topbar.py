@@ -7,7 +7,7 @@ Every colour, radius and size comes from `theme` (tokens) or from the applicatio
 metrics, so the bar fits the fonts of whichever platform it runs on.
 """
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QFontMetrics, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
                                QToolButton, QWidget)
@@ -54,6 +54,22 @@ class LogoMark(QWidget):
         painter.setBrush(QColor(TOKENS["bg0"]))
         painter.drawRoundedRect(QRectF(rect.center().x() - core / 2, rect.center().y() - core / 2, core, core),
                                 core * 0.3, core * 0.3)
+
+
+class ElidedLabel(QLabel):
+    """A label that shows `…` instead of forcing the bar wider: it asks for its full text but
+    can be squeezed down to a few characters."""
+
+    def minimumSizeHint(self):
+        metrics = self.fontMetrics()
+        hint = super().sizeHint()
+        return QSize(min(hint.width(), metrics.horizontalAdvance("W…")), hint.height())
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setPen(self.palette().windowText().color())
+        text = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, self.width())
+        painter.drawText(self.rect(), int(self.alignment()), text)
 
 
 class StatusDot(QWidget):
@@ -190,12 +206,29 @@ class SearchBox(QPushButton):
         layout.addWidget(self.hint, 1)
         layout.addWidget(self.keycap)
 
+    def set_icon_only(self, icon_only):
+        """The narrowest form: just the magnifier, as a square button."""
+        self._icon_only = bool(icon_only)
+        self.hint.setVisible(not self._icon_only)
+        self.keycap.setVisible(not self._icon_only)
+        margin = SPACING["sm"] if self._icon_only else SPACING["md"]
+        self.layout().setContentsMargins(margin, 0, margin, 0)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed if self._icon_only else QSizePolicy.Policy.Expanding,
+                           QSizePolicy.Policy.Fixed)
+        self.updateGeometry()
+
     def sizeHint(self):
+        if getattr(self, "_icon_only", False):
+            return self.minimumSizeHint()
         # A comfortable resting width of about 28 characters; the bar stretches it from there.
         base = self.layout().sizeHint()
         return QSize(max(base.width(), self.fontMetrics().averageCharWidth() * 40), base.height() + 2 * SPACING["sm"])
 
     def minimumSizeHint(self):
+        if getattr(self, "_icon_only", False):
+            layout = self.layout()
+            return QSize(layout.contentsMargins().left() * 2 + layout.itemAt(0).sizeHint().width(),
+                         layout.minimumSize().height() + 2 * SPACING["sm"])
         metrics = self.fontMetrics()
         return QSize(metrics.averageCharWidth() * 14 + self.keycap.sizeHint().width(),
                      self.layout().minimumSize().height() + 2 * SPACING["sm"])
@@ -217,6 +250,7 @@ class GpuPill(QFrame):
         layout.addWidget(self.label)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._compact = False
+        self._tooltip = ""
         self.set_state("", None, gpu=False)
 
     def set_state(self, adapter, frame_ms, gpu=True):
@@ -225,23 +259,23 @@ class GpuPill(QFrame):
         self._adapter = adapter or ("GPU" if gpu else "CPU")
         self._frame_ms = frame_ms
         self.light.set_color(TOKENS["acc"] if gpu else TOKENS["tx2"])
-        self.setToolTip(f"{self._adapter}: display adapter and the last frame time" if gpu
-                        else "No GPU display adapter in use; the CPU is drawing the viewer")
+        self._tooltip = (f"{self._adapter}: display adapter and the last frame time" if gpu
+                         else "No GPU display adapter in use; the CPU is drawing the viewer")
+        self.setToolTip(self._tooltip)
         self._refresh()
 
     def set_compact(self, compact):
-        """In a narrow bar the pill keeps the light and the frame time and drops the adapter name."""
+        """In a narrow bar the pill shrinks to the light alone; the tooltip keeps the text."""
         self._compact = bool(compact)
         self._refresh()
 
     def _refresh(self):
-        if self._frame_ms is None:
-            text = self._adapter
-        elif self._compact:
-            text = f"{self._frame_ms:.0f} ms"
-        else:
-            text = f"{self._adapter} · {self._frame_ms:.0f} ms"
+        text = self._adapter if self._frame_ms is None else f"{self._adapter} · {self._frame_ms:.0f} ms"
         self.label.setText(text)
+        self.label.setVisible(not self._compact)
+        self.layout().invalidate()
+        self.updateGeometry()
+        self.setToolTip(f"{text}\n{self._tooltip}" if self._compact else self._tooltip)
 
     def text(self):
         return self.label.text()
@@ -271,9 +305,9 @@ class TopBar(QWidget):
         project_layout = QHBoxLayout(project)
         project_layout.setContentsMargins(0, 0, 0, 0)
         project_layout.setSpacing(SPACING["sm"] + 2)
-        self.project_name = QLabel("Untitled")
+        self.project_name = ElidedLabel("Untitled")
         self.project_name.setObjectName("topbar-project-name")
-        self.project_shot = QLabel("")
+        self.project_shot = ElidedLabel("")
         self.project_shot.setObjectName("topbar-project")
         self.saved_dot = StatusDot(TOKENS["acc"])
         project_layout.addWidget(self.project_name)
@@ -281,6 +315,7 @@ class TopBar(QWidget):
         project_layout.addWidget(self.saved_dot)
         self.project = project
         layout.addWidget(project)
+        layout.setStretchFactor(project, 0)
 
         self.tabs = SegmentedTabs(WORKSPACE_TABS)
         self.tabs.selected.connect(self.workspace_selected)
@@ -311,7 +346,7 @@ class TopBar(QWidget):
     def set_project(self, name, shot="", saved=True):
         self.project_name.setText(name)
         self.project_shot.setText(f"/ {shot}" if shot else "")
-        self.project_shot.setVisible(bool(shot) and self._collapsed < 1)
+        self.project_shot.setVisible(bool(shot) and self._collapsed < 2)
         self.saved_dot.set_color(TOKENS["acc"] if saved else TOKENS["tx2"])
         self.saved_dot.setToolTip("Saved" if saved else "Unsaved changes")
 
@@ -324,14 +359,26 @@ class TopBar(QWidget):
         super().resizeEvent(event)
         self._fit()
 
+    def event(self, event):
+        handled = super().event(event)
+        kind = event.type()
+        if kind in (QEvent.Type.FontChange, QEvent.Type.StyleChange, QEvent.Type.ShowToParent):
+            # The text got wider or narrower without the bar being resized: measure again.
+            self.layout().invalidate()
+            self._fit()
+        return handled
+
     def _fit(self):
-        """Give up the least useful pieces first when the bar is narrower than its contents: the
-        shot name, then the GPU pill's adapter name, then the search box's keycap hint."""
+        """Shed the least useful pieces in order while the bar is narrower than its contents.
+        The search box already shrinks on its own down to its minimum; after that it becomes an
+        icon, then the shot name goes (the project name elides), then the GPU pill keeps only its
+        light. The workspace tabs and the Check for updates button never lose any text."""
         layout = self.layout()
-        for step in (0, 1, 2):
+        for step in range(4):
             self._collapsed = step
-            self.project_shot.setVisible(bool(self.project_shot.text()) and step < 1)
-            self.gpu_pill.set_compact(step >= 2)
+            self.search.set_icon_only(step >= 1)
+            self.project_shot.setVisible(bool(self.project_shot.text()) and step < 2)
+            self.gpu_pill.set_compact(step >= 3)
             layout.invalidate()
             if layout.minimumSize().width() <= self.width():
                 break
