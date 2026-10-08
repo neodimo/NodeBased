@@ -1425,7 +1425,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "alpha": (0, 1), "mix": (0, 1), "smoothing": (0, 1000000), "smoothness": (0.0, 100.0), "falloff": (0, 1000000),
           "near": (-1000000, 1000000), "far": (-1000000, 1000000),
           "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
-          "translate_x": (-8192.0, 8192.0), "translate_y": (-8192.0, 8192.0),
+          "translate_x": (-1000000.0, 1000000.0), "translate_y": (-1000000.0, 1000000.0),
           "rotate": (-100000.0, 100000.0), "scale": (0.001, 1000.0),
           "center_x": (-8192.0, 8192.0), "center_y": (-8192.0, 8192.0),
           "lift": (-10, 10), "gamma": (0.01, 100), "gain": (0, 100), "saturation": (0, 10),

@@ -85,10 +85,10 @@ class KnobFitTests(unittest.TestCase):
         self.assert_key_beside_editor("translate_x")
 
     def test_the_longest_translate_value_the_range_allows_shows_all_of_it(self):
-        # Translate stops at 8192 either way, so -8192.000 is its longest number.
-        self.keyed("Transform", "translate_x", -8192.0)
+        # Translate stops at a million either way, so -1000000.000 is its longest number.
+        self.keyed("Transform", "translate_x", -1000000.0)
         spin = self.field("translate_x")
-        self.assertEqual(spin.lineEdit().text(), "-8192.000")
+        self.assertEqual(spin.lineEdit().text(), "-1000000.000")
         self.assert_text_fits(spin)
         self.assert_key_beside_editor("translate_x")
 

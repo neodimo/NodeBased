@@ -14,9 +14,10 @@ key-frame diamond drawn inside the editor took more of what was left. Three piec
 """
 
 import math
+import re
 
 from PySide6.QtCore import QEvent, QObject, QSize, QTimer
-from PySide6.QtGui import QFontMetrics
+from PySide6.QtGui import QFontMetrics, QValidator
 from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QStyle, QStyleOptionComboBox, QStylePainter, QGridLayout, QSpinBox, QToolButton, QWidget)
 
 ELLIPSIS = "…"
@@ -68,6 +69,50 @@ class FittedSpinMixin:
         self._focus_filter = _FocusFilter(self)
         self.lineEdit().installEventFilter(self._focus_filter)
         self.lineEdit().textChanged.connect(self._text_changed)
+
+    # -- typing --------------------------------------------------------------------------------
+
+    _NUMBER_PREFIX = re.compile(r"^[+-]?\d*\.?\d*(?:[eE][+-]?\d*)?$")
+
+    def _bare_text(self, text):
+        text = text.strip()
+        if self.prefix() and text.startswith(self.prefix()):
+            text = text[len(self.prefix()):]
+        if self.suffix() and text.endswith(self.suffix()):
+            text = text[:-len(self.suffix())]
+        return text.strip()
+
+    def validate(self, text, pos):
+        """Qt refuses a digit as soon as the number could no longer fit the range, so a range of
+        +-8192 only ever let four integer digits in and 123456 became 1234 (10/7 hands-on pass,
+        finding 7). Any number is accepted while typing; the value is clamped to the range when
+        the edit finishes."""
+        state, text_out, pos_out = super().validate(text, pos)
+        if state == QValidator.State.Acceptable:
+            return state, text_out, pos_out
+        bare = self._bare_text(text)
+        decimal = isinstance(self, QDoubleSpinBox)
+        pattern = self._NUMBER_PREFIX if decimal else re.compile(r"^[+-]?\d*$")
+        if not pattern.match(bare):
+            return state, text_out, pos_out
+        try:
+            float(bare)
+        except ValueError:
+            return QValidator.State.Intermediate, text, pos
+        return QValidator.State.Acceptable, text, pos
+
+    def valueFromText(self, text):
+        bare = self._bare_text(text)
+        if isinstance(self, QDoubleSpinBox):
+            try:
+                number = float(bare)
+            except ValueError:
+                return super().valueFromText(text)
+            return number if math.isfinite(number) else self.value()
+        try:
+            return int(bare)
+        except ValueError:
+            return super().valueFromText(text)
 
     # -- size ----------------------------------------------------------------------------------
 
