@@ -1,0 +1,257 @@
+{
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "adapter_request": "cpu",
+ "liquid_cells": 32,
+ "smoke_cells": 32,
+ "frames": 8,
+ "passes": {
+  "bake": "complete",
+  "playback": "complete"
+ },
+ "bake_wall_s": 1.2,
+ "stages": {
+  "liquid": {
+   "seconds": 0.10726082199835218,
+   "host_rss_peak_mb": 232.65234375,
+   "host_rss_now_mb": 232.65234375,
+   "gpu_tracked_peak_mb": 4.6897430419921875
+  },
+  "surface": {
+   "seconds": 0.008808619000774343,
+   "host_rss_peak_mb": 232.69140625,
+   "host_rss_now_mb": 232.69140625,
+   "gpu_tracked_peak_mb": 4.6897430419921875
+  },
+  "whitewater": {
+   "seconds": 0.08644882700173184,
+   "host_rss_peak_mb": 234.58203125,
+   "host_rss_now_mb": 234.58203125,
+   "gpu_tracked_peak_mb": 4.6897430419921875
+  },
+  "steam": {
+   "seconds": 0.9524754000012763,
+   "host_rss_peak_mb": 290.08203125,
+   "host_rss_now_mb": 290.08203125,
+   "gpu_tracked_peak_mb": 8.54278564453125
+  }
+ },
+ "driver_gpu_peak_mb": null,
+ "liquid": {
+  "mean_s": 0.013,
+  "median_s": 0.003,
+  "max_s": 0.09,
+  "total_s": 0.11
+ },
+ "surface": {
+  "mean_s": 0.001,
+  "median_s": 0.001,
+  "max_s": 0.002,
+  "total_s": 0.01
+ },
+ "whitewater": {
+  "mean_s": 0.011,
+  "median_s": 0.004,
+  "max_s": 0.055,
+  "total_s": 0.09
+ },
+ "steam": {
+  "mean_s": 0.119,
+  "median_s": 0.036,
+  "max_s": 0.704,
+  "total_s": 0.95
+ },
+ "peak_particles": 0,
+ "peak_triangles": 0,
+ "liquid_backend": "resident",
+ "liquid_fallback": null,
+ "steam_backend": "resident_sparse",
+ "peak_steam_tiles": 0,
+ "per_frame": {
+  "1": {
+   "liquid_s": 0.09031061299901921,
+   "particles": 0,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.0016054829975473695,
+   "triangles": 0,
+   "whitewater_s": 0.05524193799647037,
+   "whitewater_particles": 0,
+   "steam_s": 0.7037841839992325,
+   "steam_shape": [
+    32,
+    32,
+    32
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "2": {
+   "liquid_s": 0.0028269670001463965,
+   "particles": 0,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.001196904995595105,
+   "triangles": 0,
+   "whitewater_s": 0.00500387200008845,
+   "whitewater_particles": 0,
+   "steam_s": 0.040607370996440295,
+   "steam_shape": [
+    32,
+    32,
+    32
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "3": {
+   "liquid_s": 0.0026369419938419014,
+   "particles": 0,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.0010272200015606359,
+   "triangles": 0,
+   "whitewater_s": 0.004310432996135205,
+   "whitewater_particles": 0,
+   "steam_s": 0.03732204800326144,
+   "steam_shape": [
+    32,
+    32,
+    32
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "4": {
+   "liquid_s": 0.0025240260001737624,
+   "particles": 0,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.0010148399960598908,
+   "triangles": 0,
+   "whitewater_s": 0.0047288710047723725,
+   "whitewater_particles": 0,
+   "steam_s": 0.036660196994489525,
+   "steam_shape": [
+    32,
+    32,
+    32
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "5": {
+   "liquid_s": 0.002510126003471669,
+   "particles": 0,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.000992760993540287,
+   "triangles": 0,
+   "whitewater_s": 0.004155616996285971,
+   "whitewater_particles": 0,
+   "steam_s": 0.034721755000646226,
+   "steam_shape": [
+    32,
+    32,
+    32
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "6": {
+   "liquid_s": 0.0021920750004937872,
+   "particles": 0,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.00098165099916514,
+   "triangles": 0,
+   "whitewater_s": 0.004167565995885525,
+   "whitewater_particles": 0,
+   "steam_s": 0.03167197400034638,
+   "steam_shape": [
+    32,
+    32,
+    32
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "7": {
+   "liquid_s": 0.00210941799741704,
+   "particles": 0,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.0009940710006048903,
+   "triangles": 0,
+   "whitewater_s": 0.004207325997413136,
+   "whitewater_particles": 0,
+   "steam_s": 0.032078032003482804,
+   "steam_shape": [
+    32,
+    32,
+    32
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "8": {
+   "liquid_s": 0.002065559005131945,
+   "particles": 0,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.0009708210054668598,
+   "triangles": 0,
+   "whitewater_s": 0.004578784995828755,
+   "whitewater_particles": 0,
+   "steam_s": 0.035437683000054676,
+   "steam_shape": [
+    32,
+    32,
+    32
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  }
+ },
+ "cache": {
+  "runs": {
+   "75c1fc946c": {
+    "kind": "steam solver checkpoints",
+    "frames": 8,
+    "bytes": 8512656
+   },
+   "92ee5ac4b2": {
+    "kind": "steam volume (sparse tiles)",
+    "frames": 8,
+    "bytes": 17536
+   },
+   "9cadfc84e1": {
+    "kind": "liquid particles",
+    "frames": 9,
+    "bytes": 26156
+   },
+   "a319e13159": {
+    "kind": "liquid particles",
+    "frames": 8,
+    "bytes": 16128
+   }
+  },
+  "total_bytes": 8572476,
+  "steam_sparse_bytes": 17536,
+  "steam_dense_equivalent_bytes": 7340032
+ },
+ "completed_pass": "playback",
+ "playback": {
+  "steam volume alone": {
+   "fps_median": 39.14,
+   "fps_mean": 18.88,
+   "fetch_ms_median": 18.9,
+   "draw_ms_median": 6.2
+  },
+  "whole scene": {
+   "fps_median": 35.65,
+   "fps_mean": 12.53,
+   "fetch_ms_median": 20.7,
+   "draw_ms_median": 7.6
+  }
+ }
+}
