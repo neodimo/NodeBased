@@ -311,6 +311,12 @@ class RadialMenuGestureTests(unittest.TestCase):
         cls.window = Window(agent_name='nodebased-test-' + uuid.uuid4().hex)
         cls.window.show()
         assert wait_until(lambda: cls.window.frame is not None)
+        # New look (NL2): the wire toggle, zoom control and minimap sit in the graph's bottom-right
+        # corner and take mouse moves there. These tests flick to scene positions that can land on that
+        # corner of the small docked graph, so the controls stay out of the way here; the controls have
+        # their own tests (test_graph_look).
+        for control in cls.window.graph.corner.widgets:
+            control.hide()
 
     @classmethod
     def tearDownClass(cls):

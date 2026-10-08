@@ -194,6 +194,9 @@ class GraphCorner:
         self.minimap = MiniMap(graph, viewport)
         self.widgets = (self.toggle, self.zoom, self.minimap)
         self.reposition()
+        for widget in self.widgets:
+            widget.show()
+            widget.raise_()
 
     def reposition(self):
         viewport = self.graph.viewport()
@@ -206,11 +209,6 @@ class GraphCorner:
             if widget.pos() != where:
                 widget.move(where)
             right -= GAP
-        for widget in self.widgets:
-            if not widget.isVisible():
-                widget.show()
-                widget.raise_()
-
     def sync(self):
         """Called whenever the graph repaints: the zoom label and the minimap follow the view."""
         self.toggle.sync()
