@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import struct
 import tempfile
 import threading
 import time
@@ -17,6 +18,8 @@ from .cancellation import Cancelled
 MIB = 1024 * 1024
 DEFAULT_MEMORY_BUDGET = 256 * MIB
 DEFAULT_DISK_BUDGET = 2048 * MIB
+PACKED_MAGIC = b"NBSIMC02"
+MAX_PACKED_HEADER = 8 * MIB
 
 
 def run_key(upstream_digest, params) -> str:
@@ -95,25 +98,38 @@ class SimCache:
 
     def _path(self, key: tuple[str, int]) -> Path:
         run, frame = key
+        return self.root / run[:2] / run / f"{frame:010d}.nbc"
+
+    def _legacy_path(self, key: tuple[str, int]) -> Path:
+        run, frame = key
         return self.root / run[:2] / run / f"{frame:010d}.npz"
+
+    def _existing_path(self, key: tuple[str, int]) -> Path:
+        packed = self._path(key)
+        return packed if packed.exists() else self._legacy_path(key)
 
     def _scan(self) -> None:
         if self._scanned or not self.enabled or self.root is None:
             return
         self._scanned = True
-        entries = []
+        entries = {}
         try:
-            for path in self.root.glob("*/*/*.npz"):
-                try:
-                    run = path.parent.name
-                    frame = int(path.stem)
-                    stat = path.stat()
-                except (OSError, ValueError):
-                    continue
-                entries.append((stat.st_mtime_ns, (run, frame), stat.st_size))
+            for suffix in (".npz", ".nbc"):
+                for path in self.root.glob(f"*/*/*{suffix}"):
+                    try:
+                        run = path.parent.name
+                        frame = int(path.stem)
+                        stat = path.stat()
+                    except (OSError, ValueError):
+                        continue
+                    key = (run, frame)
+                    old = entries.get(key)
+                    # Prefer the packed format if both generations are present.
+                    if old is None or suffix == ".nbc":
+                        entries[key] = (stat.st_mtime_ns, stat.st_size)
         except OSError:
             return
-        for _, key, size in sorted(entries):
+        for key, (mtime, size) in sorted(entries.items(), key=lambda item: item[1][0]):
             self._index[key] = size
         self._evict_disk_locked()
 
@@ -121,6 +137,7 @@ class SimCache:
         self._index.pop(key, None)
         try:
             self._path(key).unlink(missing_ok=True)
+            self._legacy_path(key).unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -131,6 +148,7 @@ class SimCache:
             total -= size
             try:
                 self._path(key).unlink(missing_ok=True)
+                self._legacy_path(key).unlink(missing_ok=True)
             except OSError:
                 pass
             self.evictions += 1
@@ -143,12 +161,29 @@ class SimCache:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             handle, temporary = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+            arrays = {}
+            offset = 0
+            for name, value in state.arrays.items():
+                array = np.ascontiguousarray(value)
+                if array.dtype.hasobject:
+                    raise TypeError("object arrays cannot be stored in a simulation cache")
+                arrays[name] = {"dtype": array.dtype.str, "shape": list(array.shape),
+                                "offset": offset, "nbytes": array.nbytes}
+                offset += array.nbytes
+            header = json.dumps({"version": 2, "meta": state.meta, "arrays": arrays},
+                                separators=(",", ":")).encode("utf-8")
+            if len(header) > MAX_PACKED_HEADER:
+                raise ValueError("simulation cache header is too large")
             with os.fdopen(handle, "wb") as stream:
-                values = dict(state.arrays)
-                values["__meta__"] = np.array(json.dumps(state.meta))
-                np.savez(stream, **values)
+                stream.write(PACKED_MAGIC)
+                stream.write(struct.pack("<I", len(header)))
+                stream.write(header)
+                for name in state.arrays:
+                    array = np.ascontiguousarray(state.arrays[name])
+                    stream.write(memoryview(array).cast("B"))
             os.replace(temporary, path)
             temporary = None
+            self._legacy_path(key).unlink(missing_ok=True)
             self._scan()
             size = path.stat().st_size
             self._index[key] = size
@@ -170,8 +205,11 @@ class SimCache:
             return self._write_disk_locked(key, state)
 
     def _load_disk(self, key: tuple[str, int]) -> State | None:
+        path = self._existing_path(key)
+        if path.suffix == ".nbc":
+            return self._load_packed(path)
         try:
-            with np.load(self._path(key), allow_pickle=False) as archive:
+            with np.load(path, allow_pickle=False) as archive:
                 if "__meta__" not in archive.files:
                     raise KeyError("__meta__")
                 meta = json.loads(str(archive["__meta__"]))
@@ -184,6 +222,42 @@ class SimCache:
                           for name in archive.files if name != "__meta__"}
             return State(arrays, meta, copy=False)
         except (OSError, ValueError, EOFError, KeyError, TypeError):
+            return None
+
+    @staticmethod
+    def _load_packed(path: Path) -> State | None:
+        try:
+            with path.open("rb") as stream:
+                if stream.read(len(PACKED_MAGIC)) != PACKED_MAGIC:
+                    raise ValueError("bad simulation cache magic")
+                raw_length = stream.read(4)
+                if len(raw_length) != 4:
+                    raise ValueError("truncated simulation cache header")
+                header_length = struct.unpack("<I", raw_length)[0]
+                if not 0 < header_length <= MAX_PACKED_HEADER:
+                    raise ValueError("invalid simulation cache header length")
+                header_bytes = stream.read(header_length)
+                if len(header_bytes) != header_length:
+                    raise ValueError("truncated simulation cache header")
+                header = json.loads(header_bytes)
+                if header.get("version") != 2 or not isinstance(header.get("meta"), dict) \
+                        or not isinstance(header.get("arrays"), dict):
+                    raise ValueError("invalid simulation cache header")
+                payload = bytearray(path.stat().st_size - len(PACKED_MAGIC) - 4 - header_length)
+                if stream.readinto(payload) != len(payload):
+                    raise ValueError("truncated simulation cache payload")
+            arrays = {}
+            for name, item in header["arrays"].items():
+                dtype = np.dtype(item["dtype"])
+                shape = tuple(int(size) for size in item["shape"])
+                offset, nbytes = int(item["offset"]), int(item["nbytes"])
+                expected = int(np.prod(shape, dtype=np.int64)) * dtype.itemsize
+                if offset < 0 or nbytes != expected or offset + nbytes > len(payload):
+                    raise ValueError("invalid simulation cache array bounds")
+                arrays[name] = np.frombuffer(payload, dtype=dtype, count=expected // dtype.itemsize,
+                                             offset=offset).reshape(shape)
+            return State(arrays, header["meta"], copy=False)
+        except (OSError, ValueError, EOFError, KeyError, TypeError, struct.error, json.JSONDecodeError):
             return None
 
     def get(self, run: str, frame: int) -> "State | None":
@@ -207,6 +281,10 @@ class SimCache:
                 self._discard_locked(key)
                 self.misses += 1
             return None
+        if not self._path(key).exists():
+            # One-time conversion of legacy NPZ entries. A successful packed write removes
+            # the old file; failed conversion still leaves the legacy cache usable.
+            self._write_disk(key, state)
         with self._lock:
             self._index.move_to_end(key)
             self.disk_hits += 1

@@ -1,3 +1,4 @@
+import json
 import tempfile
 import threading
 import unittest
@@ -92,6 +93,28 @@ class SimCacheTests(unittest.TestCase):
 
             self.assertEqual(expected, loaded)
 
+    def test_legacy_npz_and_packed_cache_load_to_identical_fields(self):
+        with tempfile.TemporaryDirectory() as root:
+            run, frame = "c" * 64, 12
+            expected = simcache.State({
+                "coords": np.arange(12, dtype=np.int32).reshape(4, 3),
+                "density": np.linspace(-1, 1, 24, dtype=np.float32).reshape(2, 3, 4),
+            }, {"frame": frame, "origin": [0.25, -1.5, 3.0]})
+            cache = simcache.SimCache(root)
+            legacy_path = cache._legacy_path((run, frame))
+            legacy_path.parent.mkdir(parents=True)
+            with legacy_path.open("wb") as stream:
+                np.savez(stream, **expected.arrays, __meta__=np.array(json.dumps(expected.meta)))
+
+            from_legacy = simcache.SimCache(root).get(run, frame)
+            from_packed = simcache.SimCache(root).get(run, frame)
+
+            self.assertEqual(expected, from_legacy)
+            self.assertEqual(expected, from_packed)
+            self.assertEqual(from_legacy, from_packed)
+            self.assertTrue(cache._path((run, frame)).is_file())
+            self.assertFalse(legacy_path.exists())
+
     def test_cancellation(self):
         cancel = threading.Event()
         calls = [0]
@@ -138,7 +161,7 @@ class SimCacheTests(unittest.TestCase):
             initial, step = self.solver()
             cache = simcache.SimCache(root)
             simcache.solve_to_frame(cache, "a" * 64, 3, 0, 1, 1, initial, step)
-            path = Path(root) / "aa" / ("a" * 64) / "0000000003.npz"
+            path = Path(root) / "aa" / ("a" * 64) / "0000000003.nbc"
             path.write_bytes(b"not an npz")
             fresh = simcache.SimCache(root)
             self.assertIsNone(fresh.get("a" * 64, 3))

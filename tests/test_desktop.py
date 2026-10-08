@@ -1087,6 +1087,20 @@ class DesktopTests(unittest.TestCase):
         w.preview_ready((request, cancel), wrong, to_qimage(wrong), 'wrong frame')
         np.testing.assert_array_equal(w.frame, original)
 
+    def test_prefetched_frame_never_enters_viewer_before_its_display_request(self):
+        import numpy as np
+        w = self.window
+        original = w.frame.copy()
+        prefetched = np.full_like(original, 0.75)
+        current = w.dispatcher.document['time']['current']
+        request = FrameRequest(w.generation, current + 1, False,
+                               copy.deepcopy(w.dispatcher.document), playing=True)
+        cancel = threading.Event()
+
+        w.preview_ready((request, cancel), prefetched, to_qimage(prefetched), 'prefetched')
+
+        np.testing.assert_array_equal(w.frame, original)
+
     def test_screenshot_artifact(self):
         target = os.environ.get('NODEBASED_SCREENSHOT')
         if target:
