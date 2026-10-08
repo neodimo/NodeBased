@@ -688,6 +688,15 @@ class _FittedKnobRow(QWidget):
         return QSize(max(hint.width(), self._control.sizeHint().width() + spacing + 26), hint.height())
 
 
+class FpsSpinBox(FittedDoubleSpinBox):
+    """The comp's frame rate. Shows only the digits it needs ("24 fps", "29.97 fps") and keeps three
+    decimals for typing. "24.000 fps" in Windows' font made the field wider than the current-frame box
+    (10/8 CI: frame 150 px, fps 170 px at 1440x920)."""
+
+    def textFromValue(self, value):
+        return f"{value:.{self.decimals()}f}".rstrip("0").rstrip(".")
+
+
 class FrameSpinBox(QSpinBox):
     """The current-frame field: a plain number goes to that frame, "+10" / "-5" moves relative to
     the frame it shows (Nuke's viewer frame box does the same). Commits on Enter or focus-out."""
@@ -695,21 +704,6 @@ class FrameSpinBox(QSpinBox):
     def __init__(self):
         super().__init__()
         self.setKeyboardTracking(False)
-        # The other time-row fields; the frame box stays wider than each of them. Their fitted width
-        # follows their text and font, and "24.000 fps" in Windows' font outgrew a fixed 150 px
-        # (10/8 CI: the current frame stopped being the largest field at 1440x920).
-        self.peers = ()
-
-    def _peer_floor(self):
-        return max((peer.sizeHint().width() + 12 for peer in self.peers), default=0)
-
-    def sizeHint(self):
-        hint = super().sizeHint()
-        return QSize(max(hint.width(), self.minimumWidth(), self._peer_floor()), hint.height())
-
-    def minimumSizeHint(self):
-        hint = super().minimumSizeHint()
-        return QSize(max(hint.width(), self._peer_floor()), hint.height())
 
     @staticmethod
     def _relative(text):
@@ -6435,7 +6429,7 @@ class Window(QMainWindow):
         row.addWidget(self.frame_last)
         # Playback rate is a property of the comp, so it is an undoable document edit through the
         # same boundary as the range — an agent setting fps and an artist typing it share one path.
-        self.frame_fps = FittedDoubleSpinBox()
+        self.frame_fps = FpsSpinBox()
         self.frame_fps.setRange(*TIME_LIMITS["fps"])
         self.frame_fps.setDecimals(3)
         self.frame_fps.setSingleStep(1.0)
@@ -6443,9 +6437,6 @@ class Window(QMainWindow):
         self.frame_fps.setToolTip("Playback rate. New comps start at 24 fps; the transport and the "
                                   "dropped-frame counter both follow this value.")
         row.addWidget(self.frame_fps)
-        self.frame_current.peers = (self.frame_first, self.frame_last, self.frame_fps)
-        for peer in self.frame_current.peers:
-            peer.lineEdit().textChanged.connect(lambda _text: self.frame_current.updateGeometry())
         self.fps_presets = QComboBox()
         self.fps_presets.setToolTip("Common delivery rates")
         self.fps_presets.addItem("rate", None)
