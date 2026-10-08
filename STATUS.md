@@ -1,5 +1,7 @@
 # Lane 6 N3 finish 1 — active (2026-10-08, 12:57 AM PDT)
 
+The full-size Radeon bake metrics are committed in `benchmarks/hot_pour/radeon-full-bake.json` and `docs/SIMULATION.md`. The prior `/tmp` caches and stills are absent after date rollover, so this finish pass must regenerate a full-size cache before playback/stills. Shared GPU lock is currently free. RTX stays pending card reset. Remaining: playback, stills, reduced Radeon/llvmpipe runs, targeted Hot pour tests, and final issue/board/report update.
+
 The full-size Radeon bake was regenerated (1,940.5 s) and committed with updated metrics in `benchmarks/hot_pour/radeon-full-bake.json` and `docs/SIMULATION.md`; cache is at `/tmp/hot-pour-integrated-full-1008`. Playback command is queued on `/tmp/nb-gpu.lock` behind a parallel `python -m unittest discover -s tests` process, active for >32 min; do not interrupt it. RTX stays pending card reset. Remaining: playback, stills, reduced Radeon/llvmpipe runs, targeted Hot pour tests, and final issue/board/report update.
 
 # Lane 4 Rendering 8 step T1 — light linking everywhere
