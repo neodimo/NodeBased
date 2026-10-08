@@ -295,6 +295,18 @@ The full-size Radeon bake took 1,940.5 s wall time. The liquid ran on `resident`
 equivalent. RTX 3080 Ti numbers remain pending the card's reset. Times are mean seconds per
 frame; playback is median frames per second from cache. At 960 × 540, Radeon playback was 0.19 FPS for the steam volume alone (5,282.9 ms median fetch, 33.2 ms draw) and 0.06 FPS for the whole scene (15,421.7 ms median fetch, 62.3 ms draw). The playback checkpoint is `benchmarks/hot_pour/radeon-full-playback.json`.
 
+**Cached-frame fetch profile (2026-10-08, Radeon full-size cache, frame 20).** The existing
+Hot pour harness scene evaluated that cached frame in 1.398 s. Its two on-disk cache hits
+took 12.9 ms (liquid particles) and 28.1 ms (steam volume); rebuilding the sparse steam
+grid took 3.6 ms. A phase probe of the 80,580,636-byte steam `.npz` found ZIP `STORED`
+members (0 ms decompression): file open and central-directory setup took 3.1 ms cold / 0.2
+ms warm, reading the members took 55.3 / 28.6 ms, and NumPy array decoding took 8.7 / 8.5
+ms. The existing loader then copied the arrays twice (another 5–7 ms in this probe).
+The GPU texture upload was not isolated in this baseline: the adapter was reserved by the
+integrator's full-suite run. The measured disk phases are far below the whole-scene
+benchmark's 15,421.7 ms median fetch, so cache file reading alone cannot explain that
+number; evaluator work outside these two cache hits and the GPU upload remain to be timed.
+
 GPU path-traced showcase stills at 1920 × 1080:
 
 ![Hot pour, frame 60](images/hot_pour_frame_060.png)
