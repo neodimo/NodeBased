@@ -38,6 +38,10 @@ TRACK_COLOR = QColor("#26262c")
 CACHE_BAND_HEIGHT = 3
 KEY_BAND_HEIGHT = 3
 BAND_TOTAL = CACHE_BAND_HEIGHT + KEY_BAND_HEIGHT
+# A key is also drawn as a tick standing on the key band, at least this share of the track
+# height and 3 px wide, so it reads at a glance and cannot be mistaken for the 1 px playhead line.
+KEY_TICK_FRACTION = 0.5
+KEY_TICK_WIDTH = 3
 
 # A label needs this much horizontal room before the next one, or the step coarsens. Sized for
 # four digits plus breathing space at the default UI font.
@@ -216,6 +220,8 @@ class TimelineBar(QWidget):
         self._draw_band(painter, self.key_frames, band_top + CACHE_BAND_HEIGHT, KEY_BAND_HEIGHT,
                         KEY_COLOR)
 
+        self._draw_key_ticks(painter)
+
         # Playhead last, so it is never buried under a band.
         playhead_x = self.frame_x(self._value)
         painter.fillRect(QRectF(playhead_x, 0, max(1.0, per_frame), height),
@@ -223,6 +229,24 @@ class TimelineBar(QWidget):
         painter.setPen(QPen(PLAYHEAD_COLOR, 1))
         painter.drawLine(int(playhead_x), 0, int(playhead_x), height)
         painter.end()
+
+    def key_tick_height(self):
+        """Pixels a key tick stands: half the track or more."""
+        return max(BAND_TOTAL + 1, -(-self.height() * KEY_TICK_FRACTION // 1))
+
+    def key_tick_rect(self, frame):
+        """The key tick of ``frame``, centred on its cell, standing on the bottom edge."""
+        height = self.height()
+        tick = self.key_tick_height()
+        centre = self.frame_x(frame) + self.frame_width() / 2
+        return QRectF(round(centre - KEY_TICK_WIDTH / 2), height - tick, KEY_TICK_WIDTH, tick)
+
+    def _draw_key_ticks(self, painter):
+        for frame in self.key_frames:
+            if self._first <= frame <= self._last:
+                rect = self.key_tick_rect(frame)
+                painter.fillRect(rect, KEY_COLOR)
+                painter.fillRect(QRectF(rect.left(), rect.top(), rect.width(), 1), KEY_COLOR.lighter(150))
 
     def _draw_band(self, painter, frames, top, band_height, color):
         if not frames:
