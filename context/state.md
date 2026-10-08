@@ -1,5 +1,35 @@
 ## 2026-10-06 — Lane 4 Rendering 8 step T1: light linking everywhere (6:40 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (7:05 PM on 2026-10-07 PDT)
+
+`main` moved `cf9d54f` -> `30961b2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 168 tests in 190.683 s, OK. Full suite on
+the stacked tip `30961b2` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1007-1718.log`, started 5:18 PM): **Ran 4669 tests in 5677.062 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step Z2 of 2: shortcut-created nodes are wired to the selection like Nuke.** Commits:
+  - `4d229e1` feat: create shortcuts and Tab search wire the new node to the selection like Nuke
+  - `cdc57de` feat: Roto takes an optional bg plate and puts the shape's coverage in its alpha
+  Diff: 9 files changed, 282 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step R2 of 2: animating Roto shapes.** Commits:
+  - `941de3d` test: Roto joins the tile registry's bypass reference set, like RotoPaint
+  - `f819229` fix: keep Roto control edits on animation curves
+  - `bd5e586` test: round-trip all Roto animation keys
+  - `049b169` fix: align Roto overlay with tracker transform
+  - `b3965b6` feat: link Roto shapes to named tracker paths
+  - `c78c2ee` feat: show Roto keys on timeline and viewer
+  - `cc4d5c6` feat: key and auto-key Roto shapes
+  Diff: 14 files changed, 351 insertions(+), 47 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (12:25 PM on 2026-10-07 PDT)
 
 `main` moved `4f7928d` -> `c2432b8` (lane commits cherry-picked onto main in lane order) and then to this
