@@ -9026,15 +9026,32 @@ class Window(QMainWindow):
         self.properties.setWidget(panel)
         for child in [panel, *panel.findChildren(QWidget)]:
             child.installEventFilter(self)
-        def restore_panel_state():
-            self.properties.verticalScrollBar().setValue(scroll_position[0])
-            self.properties.horizontalScrollBar().setValue(scroll_position[1])
-            for name in focus_path:
-                candidate = self.properties.findChild(QWidget, name)
-                if candidate is not None and candidate.isEnabled() and candidate.isVisible():
-                    candidate.setFocus(Qt.FocusReason.OtherFocusReason)
-                    break
-        QTimer.singleShot(0, restore_panel_state)
+        scroll_area = self.properties
+        restored = {"scroll": False, "focus": not focus_path}
+        def restore_panel_state(attempts_left=40):
+            # A queued restore can outlive the window, and the panel's tabs fill in lazily, so the
+            # field and the full scroll range may not exist yet: retry briefly instead of giving up.
+            if scroll_area.widget() is not panel:
+                return
+            if not restored["scroll"]:
+                vbar, hbar = scroll_area.verticalScrollBar(), scroll_area.horizontalScrollBar()
+                vbar.setValue(scroll_position[0])
+                hbar.setValue(scroll_position[1])
+                restored["scroll"] = (vbar.value(), hbar.value()) == tuple(scroll_position)
+            if not restored["focus"]:
+                current = self.focusWidget()
+                if current is not None and not scroll_area.isAncestorOf(current):
+                    restored["focus"] = True  # the user moved on; do not pull focus back
+                # The exact control first; an enclosing container only once the retries run out.
+                for name in (focus_path if attempts_left == 0 else focus_path[:1]):
+                    candidate = scroll_area.findChild(QWidget, name)
+                    if candidate is not None and candidate.isEnabled() and candidate.isVisible():
+                        candidate.setFocus(Qt.FocusReason.OtherFocusReason)
+                        restored["focus"] = True
+                        break
+            if not (restored["scroll"] and restored["focus"]) and attempts_left > 0:
+                QTimer.singleShot(25, scroll_area, lambda: restore_panel_state(attempts_left - 1))
+        QTimer.singleShot(0, scroll_area, restore_panel_state)
 
     def _properties_focus_path(self, focused):
         path = []
