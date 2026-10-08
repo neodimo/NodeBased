@@ -8,10 +8,10 @@
  },
  "adapter_request": "discrete",
  "case": "Z1-fixed64",
- "commit": "7bae83e",
+ "commit": "a6c04e2",
  "counters": {},
  "label": "fixed 64",
- "median_s": 0.04203565799980424,
+ "median_s": 0.04366710100293858,
  "quality": {
   "max_abs": 0.00018195214245797509,
   "mean_abs": 1.1749061526885725e-08,
@@ -22,13 +22,13 @@
   "backend": "gpu",
   "passes": 64,
   "phases_ms": {
-   "dispatch": 29.733,
-   "final readback": 2.578,
-   "mask update": 2.174,
-   "pack": 0.323,
-   "postprocess": 5.085,
-   "scene build": 0.462,
-   "upload": 0.26
+   "dispatch": 29.894,
+   "final readback": 2.749,
+   "mask update": 2.396,
+   "pack": 0.334,
+   "postprocess": 5.973,
+   "scene build": 0.505,
+   "upload": 0.291
   },
   "samples": {
    "max": 64,
@@ -52,10 +52,10 @@
  "status": "ok",
  "timed": 3,
  "times_s": [
-  0.04368,
-  0.041782,
-  0.042036
+  0.044674,
+  0.042663,
+  0.043667
  ],
- "timestamp": "2026-10-08 05:57:07",
+ "timestamp": "2026-10-08 08:46:41",
  "warmup": 1
 }

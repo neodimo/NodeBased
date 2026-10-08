@@ -1,0 +1,235 @@
+{
+ "adapter": "discrete",
+ "device": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti\n  type DiscreteGPU, backend Vulkan, vendor NVIDIA, driver 615.71.09, wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 2147483644, max texture 32768",
+ "fit": {
+  "intercept_ms": 19.53,
+  "ms_per_pass": 0.015
+ },
+ "rows": {
+  "adaptive 0.003, Path samples 64": {
+   "max_spp": 64,
+   "mean_spp": 18.33,
+   "passes": 7,
+   "phases_ms": {
+    "dispatch": 3.88,
+    "encode": 1.6,
+    "final readback": 2.71,
+    "pack": 0.34,
+    "postprocess": 6.35,
+    "scene build": 0.57,
+    "upload": 0.24
+   },
+   "psnr_vs_1024_db": 45.43,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 2
+   },
+   "wall_ms": 16.06
+  },
+  "adaptive 0.003, Path samples 65536": {
+   "max_spp": 256,
+   "mean_spp": 20.34,
+   "passes": 31,
+   "phases_ms": {
+    "dispatch": 6.44,
+    "encode": 3.31,
+    "final readback": 2.61,
+    "pack": 0.36,
+    "postprocess": 5.76,
+    "scene build": 0.61,
+    "upload": 0.26
+   },
+   "psnr_vs_1024_db": 46.04,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 8
+   },
+   "wall_ms": 21.41
+  },
+  "fixed 64": {
+   "max_spp": 64,
+   "mean_spp": 64.0,
+   "passes": 64,
+   "phases_ms": {
+    "dispatch": 28.44,
+    "final readback": 2.59,
+    "mask update": 2.51,
+    "pack": 0.34,
+    "postprocess": 6.31,
+    "scene build": 0.58,
+    "upload": 0.3
+   },
+   "psnr_vs_1024_db": 48.59,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 64
+   },
+   "wall_ms": 41.4
+  },
+  "never stops, pass size 12": {
+   "max_spp": 64,
+   "mean_spp": 37.83,
+   "passes": 5,
+   "phases_ms": {
+    "dispatch": 8.57,
+    "encode": 1.39,
+    "final readback": 2.78,
+    "pack": 0.33,
+    "postprocess": 5.9,
+    "scene build": 0.57,
+    "upload": 0.25
+   },
+   "psnr_vs_1024_db": 48.59,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 2
+   },
+   "wall_ms": 20.1
+  },
+  "never stops, pass size 16": {
+   "max_spp": 64,
+   "mean_spp": 37.83,
+   "passes": 4,
+   "phases_ms": {
+    "dispatch": 8.35,
+    "encode": 1.13,
+    "final readback": 2.73,
+    "pack": 0.33,
+    "postprocess": 6.08,
+    "scene build": 0.59,
+    "upload": 0.26
+   },
+   "psnr_vs_1024_db": 48.59,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 2
+   },
+   "wall_ms": 19.98
+  },
+  "never stops, pass size 2": {
+   "max_spp": 64,
+   "mean_spp": 37.83,
+   "passes": 25,
+   "phases_ms": {
+    "dispatch": 8.37,
+    "encode": 1.94,
+    "final readback": 2.69,
+    "pack": 0.33,
+    "postprocess": 5.8,
+    "scene build": 0.58,
+    "upload": 0.26
+   },
+   "psnr_vs_1024_db": 48.59,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 7
+   },
+   "wall_ms": 20.29
+  },
+  "never stops, pass size 24": {
+   "max_spp": 64,
+   "mean_spp": 37.83,
+   "passes": 3,
+   "phases_ms": {
+    "dispatch": 8.22,
+    "encode": 1.05,
+    "final readback": 2.74,
+    "pack": 0.33,
+    "postprocess": 6.05,
+    "scene build": 0.57,
+    "upload": 0.26
+   },
+   "psnr_vs_1024_db": 48.59,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 1
+   },
+   "wall_ms": 19.67
+  },
+  "never stops, pass size 4": {
+   "max_spp": 64,
+   "mean_spp": 37.83,
+   "passes": 13,
+   "phases_ms": {
+    "dispatch": 7.03,
+    "encode": 2.3,
+    "final readback": 2.63,
+    "pack": 0.33,
+    "postprocess": 6.03,
+    "scene build": 0.6,
+    "upload": 0.26
+   },
+   "psnr_vs_1024_db": 48.59,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 4
+   },
+   "wall_ms": 19.13
+  },
+  "never stops, pass size 48": {
+   "max_spp": 64,
+   "mean_spp": 37.83,
+   "passes": 2,
+   "phases_ms": {
+    "dispatch": 8.42,
+    "encode": 1.04,
+    "final readback": 2.87,
+    "pack": 0.33,
+    "postprocess": 6.14,
+    "scene build": 0.58,
+    "upload": 0.25
+   },
+   "psnr_vs_1024_db": 48.59,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 1
+   },
+   "wall_ms": 19.73
+  },
+  "never stops, pass size 8": {
+   "max_spp": 64,
+   "mean_spp": 37.83,
+   "passes": 7,
+   "phases_ms": {
+    "dispatch": 6.77,
+    "encode": 1.24,
+    "final readback": 2.8,
+    "pack": 0.33,
+    "postprocess": 6.6,
+    "scene build": 0.57,
+    "upload": 0.25
+   },
+   "psnr_vs_1024_db": 48.59,
+   "readbacks": {
+    "counter": 0,
+    "image": 1,
+    "mask": 0,
+    "waits": 2
+   },
+   "wall_ms": 18.72
+  }
+ },
+ "scene": "Z1",
+ "size": [
+  640,
+  360
+ ]
+}
