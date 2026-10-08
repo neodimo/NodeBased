@@ -283,8 +283,10 @@ equivalent. Playback is measured from the baked cache at 960 × 540.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | RTX 3080 Ti, 256 / 192 cells, 120 frames | pending the card's reset | pending | pending | pending | pending | pending | pending |
 | Radeon 8060S, 256 / 192 cells, 120 frames | 0.807 s/frame | 0.527 s/frame | 9.701 s/frame | 5.135 s/frame | 10,910 / 10,813 MiB | 3,129 / 3,212 MiB | 0.06 FPS whole / 0.19 FPS steam |
-| Radeon 8060S, reduced | pending | pending | pending | pending | pending | pending | pending |
+| Radeon 8060S, 32 / 32 cells, 8 frames | 0.011 s/frame | 0.001 s/frame | 0.008 s/frame | 0.042 s/frame | 214 / 7 MiB | 0.017 / 7 MiB | 50.43 FPS whole / 52.60 FPS steam |
 | llvmpipe, reduced | pending | pending | pending | pending | pending | pending | pending |
+
+The reduced Radeon bake (32 / 32 cells, 8 frames) took 0.5 s wall time; mean liquid, surface, whitewater and steam times were 0.011, 0.001, 0.008 and 0.042 s/frame. Peak host/device memory was 214 / 7 MiB, and the steam cache was 0.017 MiB sparse against a 7 MiB dense equivalent. Median playback was 50.43 FPS for the whole scene and 52.60 FPS for steam alone; full per-frame data is in `benchmarks/hot_pour/radeon-reduced.json`.
 
 The full-size Radeon bake took 1,940.5 s wall time. The liquid ran on `resident` and steam on
 `resident_sparse`; the steam cache occupied 3,129 MiB on disk against a 3,212 MiB dense raw
