@@ -282,14 +282,14 @@ equivalent. Playback is measured from the baked cache at 960 × 540.
 | Adapter / workload | Liquid solver | Surface | Whitewater | Steam solver | Peak host / GPU | Steam cache (sparse / dense) | Playback |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | RTX 3080 Ti, 256 / 192 cells, 120 frames | pending the card's reset | pending | pending | pending | pending | pending | pending |
-| Radeon 8060S, 256 / 192 cells, 120 frames | 0.807 s/frame | 0.527 s/frame | 9.701 s/frame | 5.135 s/frame | 10,910 / 10,813 MiB | 3,129 / 3,212 MiB | pending |
+| Radeon 8060S, 256 / 192 cells, 120 frames | 0.807 s/frame | 0.527 s/frame | 9.701 s/frame | 5.135 s/frame | 10,910 / 10,813 MiB | 3,129 / 3,212 MiB | 0.06 FPS whole / 0.19 FPS steam |
 | Radeon 8060S, reduced | pending | pending | pending | pending | pending | pending | pending |
 | llvmpipe, reduced | pending | pending | pending | pending | pending | pending | pending |
 
 The full-size Radeon bake took 1,940.5 s wall time. The liquid ran on `resident` and steam on
 `resident_sparse`; the steam cache occupied 3,129 MiB on disk against a 3,212 MiB dense raw
 equivalent. RTX 3080 Ti numbers remain pending the card's reset. Times are mean seconds per
-frame; playback is median frames per second for the whole scene from cache.
+frame; playback is median frames per second from cache. At 960 × 540, Radeon playback was 0.19 FPS for the steam volume alone (5,282.9 ms median fetch, 33.2 ms draw) and 0.06 FPS for the whole scene (15,421.7 ms median fetch, 62.3 ms draw). The playback checkpoint is `benchmarks/hot_pour/radeon-full-playback.json`.
 
 GPU path-traced showcase stills at 1920 × 1080:
 
