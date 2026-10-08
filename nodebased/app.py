@@ -673,6 +673,21 @@ def apply_theme(name, accent=None):
     return name
 
 
+class _FittedKnobRow(QWidget):
+    """A numeric knob and its key button. The row reports the width the number needs as its minimum,
+    so a form row wraps the field under its label on a narrow panel instead of squeezing the number
+    into an ellipsis (10/7 CI: a 1024x768 window cut -12345.678 to '-1234…')."""
+
+    def __init__(self, control):
+        super().__init__()
+        self._control = control
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        spacing = self.layout().spacing() if self.layout() is not None else 4
+        return QSize(max(hint.width(), self._control.sizeHint().width() + spacing + 26), hint.height())
+
+
 class FrameSpinBox(QSpinBox):
     """The current-frame field: a plain number goes to that frame, "+10" / "-5" moves relative to
     the frame it shows (Nuke's viewer frame box does the same). Commits on Enter or focus-out."""
@@ -9659,7 +9674,7 @@ class Window(QMainWindow):
 
     def animatable_row(self, key, param, control, expression=None):
         """Pack a numeric control next to its keyframe button."""
-        row = QWidget()
+        row = _FittedKnobRow(control)
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
