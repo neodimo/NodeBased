@@ -32,3 +32,6 @@ each stage of the restyle changed in the real Qt app. Stages: 1 colours, spacing
   close a panel, and the highlighted tab follows the viewer's own 2D / 3D switch.
 - **Narrow windows.** Sizes come from font metrics. When the bar is narrower than its contents it drops
   the shot name first, then the GPU adapter name (the light and the frame time stay).
+- **Screenshot.** `docs/images/ui-redesign/nl1.png`: the real app, offscreen at 1920 x 1080, with a viewer
+  image and a dozen nodes of several families. The project label there ("hot_pour / comp_v012") is set
+  for the picture only. The offscreen run has no GL, so the GPU pill reads CPU there.
