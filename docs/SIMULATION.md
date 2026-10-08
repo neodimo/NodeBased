@@ -300,7 +300,7 @@ GPU path-traced showcase stills at 1920 × 1080:
 The Radeon 8060S full-size bake completed all 120 frames for liquid, surface extraction,
 whitewater and steam, and passed the former frame-60 stall. Its reproducible benchmark result
 is committed at `benchmarks/hot_pour/radeon-full-bake.json`. RTX 3080 Ti numbers remain pending
-the card's reset. Render times: frame 60 pending; frame 120 pending.
+the card's reset. On the Radeon 8060S, the GPU path tracer rendered both 1920 × 1080 stills at 64 samples: frame 60 took 600.1 s cold and 17.7 s on the timed second render; frame 120 took 1,016.5 s cold and 17.8 s on the timed second render. The cold render includes scene setup and shader compilation; benchmark timings are in `benchmarks/hot_pour/radeon-full-stills.json`.
 Reproduce with
 `python tools/benchmark_hot_pour.py --adapter default --liquid-cells 256 --smoke-cells 192 --frames 120 --playback --stills docs/images --still-size 1920x1080`.
 

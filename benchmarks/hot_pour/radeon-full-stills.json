@@ -1,0 +1,61 @@
+{
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "adapter_request": "integrated",
+ "liquid_cells": 256,
+ "smoke_cells": 192,
+ "frames": 120,
+ "passes": {
+  "bake": "reused existing cache; bake metrics unavailable",
+  "stills": "complete"
+ },
+ "cache": {
+  "runs": {
+   "2409cd323d": {
+    "kind": "liquid particles",
+    "frames": 30,
+    "bytes": 131461080
+   },
+   "3ef85e1a61": {
+    "kind": "steam solver checkpoints",
+    "frames": 17,
+    "bytes": 3858182534
+   },
+   "4e2ef5e1d8": {
+    "kind": "steam volume (sparse tiles)",
+    "frames": 17,
+    "bytes": 3282660152
+   },
+   "d4dc2a2c8b": {
+    "kind": "liquid particles",
+    "frames": 18,
+    "bytes": 1226446080
+   }
+  },
+  "total_bytes": 8498749846,
+  "steam_sparse_bytes": 3282660152,
+  "steam_dense_equivalent_bytes": 3369074688
+ },
+ "stills": {
+  "60": {
+   "first_render_s": 600.1,
+   "second_render_s": 17.7,
+   "size": [
+    1920,
+    1080
+   ],
+   "samples": 64,
+   "file": "docs/images/hot_pour_frame_060.png"
+  },
+  "120": {
+   "first_render_s": 1016.5,
+   "second_render_s": 17.8,
+   "size": [
+    1920,
+    1080
+   ],
+   "samples": 64,
+   "file": "docs/images/hot_pour_frame_120.png"
+  }
+ },
+ "completed_pass": "stills"
+}
