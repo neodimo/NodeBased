@@ -5015,10 +5015,11 @@ class Graph(PanZoomView):
             self.scale(factor, factor)
             self.centerOn(target.center())
 
-    def reveal(self, keys):
+    def reveal(self, keys, keep_zoom=False):
         """Bring the nodes `keys` and the node feeding the first of them fully into view, with a
         margin. It pans (instantly: the graph view has no animated transitions) and zooms out only
-        when they cannot all fit at the current zoom."""
+        when they cannot all fit at the current zoom; `keep_zoom` never zooms and, when they cannot
+        all fit, shows the first node of `keys` instead."""
         if self.viewport().width() <= 0 or self.viewport().height() <= 0:
             return
         wanted = [key for key in keys if key in self.items_by_id]
@@ -5037,8 +5038,12 @@ class Graph(PanZoomView):
         if view.contains(target):
             return
         if target.width() > view.width() or target.height() > view.height():
-            self.fitInView(target, Qt.AspectRatioMode.KeepAspectRatio)
-            return
+            if not keep_zoom:
+                self.fitInView(target, Qt.AspectRatioMode.KeepAspectRatio)
+                return
+            target = self._node_rects(wanted[:1])[0].adjusted(-margin, -margin, margin, margin)
+            if view.contains(target):
+                return
         dx = (target.left() - view.left() if target.left() < view.left()
               else target.right() - view.right() if target.right() > view.right() else 0)
         dy = (target.top() - view.top() if target.top() < view.top()
@@ -10034,7 +10039,19 @@ class Window(QMainWindow):
                 return True
         return super().eventFilter(watched, event)
 
-    def node_position(self, desired, below=False, kind=None):
+    def downstream_closure(self, keys):
+        """`keys` and every node that reads from them, directly or through other nodes."""
+        nodes = self.graph_nodes()
+        found, queue = set(), list(keys)
+        while queue:
+            key = queue.pop()
+            if key in found or key not in self.graph.items_by_id:
+                continue
+            found.add(key)
+            queue.extend(dest for dest, node in nodes.items() if key in node["inputs"].values())
+        return found
+
+    def node_position(self, desired, below=False, kind=None, ignore=()):
         """Find the nearest vacant spot at `desired`'s height; never drop a node on another one.
 
         A node added under a selection already sits at the standard spacing below it; when
@@ -10045,7 +10062,8 @@ class Window(QMainWindow):
         pos = QPointF(round(desired.x()), round(desired.y()))
         size = node_size({"type": kind or ""}, self.show_thumbnails)
         occupied = [item.sceneBoundingRect().adjusted(-12, -12, 12, 12)
-                    for item in self.graph.items_by_id.values() if not item.is_backdrop]
+                    for key, item in self.graph.items_by_id.items()
+                    if not item.is_backdrop and key not in ignore]
         for _ in range(len(occupied) + 1):
             rect = QRectF(pos.x(), pos.y(), *size)
             blocker = next((other for other in occupied if rect.intersects(other)), None)
@@ -10083,8 +10101,12 @@ class Window(QMainWindow):
             # Directly underneath the selection, centred on it -- a Dot is far narrower than a
             # node, so centre on its bounds rather than aligning left edges.
             selected = self.graph.items_by_id[source].sceneBoundingRect()
-            anchor = QPointF(selected.center().x() - node_size({"type": kind}, self.show_thumbnails)[0] / 2,
-                             selected.bottom() + NODE_GAP)
+            width = node_size({"type": kind}, self.show_thumbnails)[0]
+            anchor = QPointF(selected.center().x() - width / 2, selected.bottom() + NODE_GAP)
+            if kind == "Write" or OUTPUT_TYPES.get(kind, "image") != produced:
+                # A branch-off (a Write, a tap of another type) goes below and to the side, so
+                # the stream under the selection keeps its column.
+                anchor.setX(selected.center().x() + width / 2 + NODE_GAP / 2)
         elif position is not None:
             anchor = position
         else:
@@ -10092,7 +10114,24 @@ class Window(QMainWindow):
             width, height = node_size({"type": kind}, self.show_thumbnails)
             centre = self.graph_center()
             anchor = QPointF(centre.x() - width / 2, centre.y() - height / 2)
-        pos = self.node_position(anchor, below=bool(source), kind=kind)
+        # Nodes that read from the selection and take the new node's place downstream, with
+        # everything below them: they make room instead of the new node sliding sideways.
+        downstream = []
+        if source and OUTPUT_TYPES.get(kind, "image") == produced and kind != "Write":
+            downstream = [(dest, name) for dest, node in self.graph_nodes().items()
+                          for name, src in node["inputs"].items() if src == source]
+        pushed = self.downstream_closure({dest for dest, _ in downstream})
+        pos = self.node_position(anchor, below=bool(source), kind=kind, ignore=pushed)
+        moves = []
+        if downstream:
+            new_bottom = pos.y() + node_size({"type": kind}, self.show_thumbnails)[1]
+            push = max(new_bottom + NODE_GAP - self.graph.items_by_id[dest].sceneBoundingRect().top()
+                       for dest, _ in downstream)
+            if push > 0:
+                moves = [{"op": "move", "id": key,
+                          "pos": [self.graph.items_by_id[key].pos().x(),
+                                  round(self.graph.items_by_id[key].pos().y() + push, 2)]}
+                         for key in pushed]
         if kind == "Backdrop":
             # Like Nuke: a backdrop made with nodes selected frames them, with room for its title.
             picked = [item.sceneBoundingRect() for item in self.graph.scene().selectedItems()
@@ -10108,16 +10147,13 @@ class Window(QMainWindow):
         key = __import__("uuid").uuid4().hex[:12]
         commands = [{"op": "create", "id": key, "type": kind, "pos": [pos.x(), pos.y()], "params": params or {}}]
         if source:
+            commands.extend(moves)
             commands.append({"op": "connect", "id": key, "input": slot, "source": source})
             # Splice into the branch: anything currently reading from the selected node's
             # output is rewired to read from the new node instead, so it's inserted inline
             # rather than just forking a new dead-end off the selection.
-            nodes = self.graph_nodes()
             # Only a node that outputs what the selection outputs can stand in for it downstream
             # (a Write is a sink: it hangs off the selection and leaves the branch alone).
-            downstream = [(dest, name) for dest, node in nodes.items()
-                          for name, src in node["inputs"].items() if src == source
-                          ] if OUTPUT_TYPES.get(kind, "image") == produced and kind != "Write" else []
             commands.extend({"op": "connect", "id": dest, "input": name, "source": key} for dest, name in downstream)
             if (not self.graph_path and self.dispatcher.document.get("view") == source
                     and OUTPUT_TYPES.get(kind, "image") == "image" and kind != "Write"):
@@ -10126,7 +10162,7 @@ class Window(QMainWindow):
         if self.command({"op": "batch", "commands": commands}) is not None:
             self.graph.scene().clearSelection()
             self.graph.items_by_id[key].setSelected(True)
-            self.graph.reveal([key])
+            self.graph.reveal([key], keep_zoom=True)
             self.node_toolbar.note_added(kind)
             if kind == "Read" and not params:
                 self.browse_read(key)

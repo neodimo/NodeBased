@@ -562,10 +562,11 @@ class DesktopTests(unittest.TestCase):
 
         blur = add_below('grade', 'Blur')
         above, below = rect('grade'), rect(blur)
-        # Standard spacing under the parent; the demo's Merge already stands in that spot, so the
-        # new node moves right past it, on the same row (step Y2).
+        # Standard spacing under the parent; the demo's Merge already stands in that spot, so it
+        # and everything after it move down to make room (step AA2).
         self.assertAlmostEqual(below.top() - above.bottom(), 40, delta=1)
-        self.assertGreater(below.left(), rect('merge').right())
+        self.assertAlmostEqual(below.center().x(), above.center().x(), delta=1)
+        self.assertGreaterEqual(rect('merge').top() - below.bottom(), 40 - 1)
         others = [rect(key) for key in w.graph.items_by_id if key != blur]
         self.assertFalse(any(below.intersects(other) for other in others))
         # Adding under that node has a free column, so it stacks straight down.

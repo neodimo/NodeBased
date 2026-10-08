@@ -89,7 +89,7 @@ class PlacementTests(unittest.TestCase):
         self.assertAlmostEqual(child.top() - parent.bottom(), NODE_GAP, delta=1)
         self.assertAlmostEqual(child.center().x(), parent.center().x(), delta=1)
 
-    def test_second_g_on_the_same_parent_stands_beside_the_first_child(self):
+    def test_second_g_on_the_same_parent_goes_between_and_pushes_the_first_child_down(self):
         w = self.open_empty_window()
         self.put(w, "r1", "Checker", (0, 0))
         self.select(w, "r1")
@@ -102,8 +102,8 @@ class PlacementTests(unittest.TestCase):
         (second,) = self.new_ids(w, before)
         a, b = self.rect(w, first), self.rect(w, second)
         self.assertFalse(a.intersects(b))
-        self.assertGreaterEqual(b.left() - a.right(), NODE_GAP - 1, "right of the first child, with space")
-        self.assertAlmostEqual(b.top(), a.top(), delta=1)
+        self.assertGreaterEqual(a.top() - b.bottom(), NODE_GAP - 1, "the first child made room below")
+        self.assertAlmostEqual(a.center().x(), b.center().x(), delta=1)
 
     def test_nothing_selected_lands_at_the_centre_of_the_visible_graph(self):
         w = self.open_empty_window()
