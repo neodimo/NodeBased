@@ -41,7 +41,7 @@ def main():
     batches = [mods[i:i + args.batch] for i in range(0, len(mods), args.batch)]
     for n, batch in enumerate(batches, 1):
         print(f"=== batch {n} of {len(batches)}: {batch[0]} .. {batch[-1]} ({len(batch)} modules)", flush=True)
-        cmd = [sys.executable, "-m", "unittest"] + (["-v"] if args.verbose else []) + batch
+        cmd = [sys.executable, "-X", "faulthandler", "-m", "unittest"] + (["-v"] if args.verbose else []) + batch
         t = time.monotonic()
         code = subprocess.call(cmd, cwd=ROOT, env=env)
         print(f"=== batch {n} exit {code} in {time.monotonic() - t:.1f} s", flush=True)

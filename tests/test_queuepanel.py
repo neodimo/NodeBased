@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import QApplication
 
 from nodebased.artifacts import ArtifactStore
@@ -18,13 +19,25 @@ APP = QApplication.instance() or QApplication([])
 
 
 class QueuePanelTests(unittest.TestCase):
+    def _panel(self, queue):
+        """A panel that is deleted before the interpreter exits. PySide6 6.12.0 segfaults (or bus-errors)
+        in its exit hook when a QueuePanel is still alive then (10/8 CI: batch 21 exit -11)."""
+        panel = QueuePanel(queue)
+
+        def dispose():
+            panel.close()
+            panel.deleteLater()
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.addCleanup(dispose)
+        return panel
+
     def test_lists_chains_and_links_and_controls_priority_pause_resume(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             queue = Queue(root / "queue.sqlite", ArtifactStore(root / "artifacts"))
             try:
                 chain = queue.add_chain("shot A", [{"name": "export", "operation": "tests.job_fixtures:make"}], priority=2)
-                panel = QueuePanel(queue)
+                panel = self._panel(queue)
                 self.assertEqual(panel.tree.topLevelItemCount(), 1)
                 top = panel.tree.topLevelItem(0)
                 self.assertEqual(top.text(0), "shot A")
@@ -51,7 +64,7 @@ class QueuePanelTests(unittest.TestCase):
         return str(path)
 
     def _loop_panel(self, root, queue, store, *, accepts_reference=True):
-        panel = QueuePanel(queue)
+        panel = self._panel(queue)
         panel.provider.addItem(self._provider(root, accepts_reference))
         panel.provider.setCurrentIndex(panel.provider.count() - 1)
         panel.scene_id.setText(store.put(b"scene", "scene_state"))
@@ -92,7 +105,7 @@ class QueuePanelTests(unittest.TestCase):
                 self.assertEqual([a["state"] for a in snap["attempts"]], ["failed_verification", "pass"])
                 generated.extend(a["outputs"]["generated_sequence"] for a in snap["attempts"])
                 panel.close()
-                restored = QueuePanel(queue)
+                restored = self._panel(queue)
                 self.assertEqual(restored.selected_loop, loop_id)
                 self.assertEqual(restored.attempts.rowCount(), 2)
                 restored.attempts.selectRow(0)
