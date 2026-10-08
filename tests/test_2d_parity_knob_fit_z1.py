@@ -21,7 +21,10 @@ from tests.waiting import pause, settle_layout, wait_until
 
 def narrow_panel(window, width):
     dock = window.findChild(QDockWidget, "properties-dock")
-    window.resizeDocks([dock], [width], Qt.Orientation.Horizontal)
+    # The central placeholder has no width, so the viewer must take what the panel gives up.
+    viewer = window.findChild(QDockWidget, "viewer-dock")
+    total = viewer.width() + dock.width()
+    window.resizeDocks([viewer, dock], [total - width, width], Qt.Orientation.Horizontal)
     settle_layout(window, window.properties)
     pause(80)
 

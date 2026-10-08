@@ -6515,7 +6515,7 @@ class Window(QMainWindow):
 
         row.addWidget(QLabel("  TIME"))
         self.play_button = QPushButton("▶")
-        self.play_button.setFixedWidth(40)
+        self.play_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.play_button.setToolTip("Play / stop (Space)")
         self.play_button.clicked.connect(lambda: self.toggle_playback())
         row.addWidget(self.play_button)

@@ -219,6 +219,8 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {c['field']}; bord
 QSpinBox, QDoubleSpinBox {{ font-family: {t['mono']}; font-size: {t['value']}px; }}
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border: 1px solid {c['accent']}; }}
 QPushButton {{ background: {c['button']}; border: 1px solid {c['button_border']}; border-radius: {r['control']}px; padding: 6px {sp['lg']}px; }}
+QWidget#time-row QSpinBox, QWidget#time-row QDoubleSpinBox, QWidget#time-row QComboBox {{ padding: 5px {sp['xs'] + 1}px; }}
+QWidget#time-row QPushButton {{ padding: 6px {sp['md']}px; }}
 QPushButton:hover {{ background: {c['hover']}; border-color: {c['faint']}; }}
 QPushButton:pressed {{ background: {c['field']}; }}
 QPushButton:disabled {{ color: {c['muted']}; }}
