@@ -1537,11 +1537,18 @@ GPU still refusing them.
 
 `Sampling` (`sampling`) is `fixed` or `adaptive`. **`fixed`**, the default, is what every document did before the knob
 existed: `Path samples` (`pt_samples`) per pixel, and, when `noise_threshold` is above 0, the older stop that retires a
-16 by 16 tile once its relative standard error is under the threshold after at least 16 samples. **`adaptive`** ignores
-`Path samples`: every pixel takes `Min samples` (`min_samples`, default 16, at least 2), then `Adaptive pass size`
-(`adaptive_pass_size`, default 8) more per pass, and **stops on its own** once its noise estimate is under
-`Noise threshold` (`noise_threshold`) or it has `Max samples` (`max_samples`, default 256). A threshold of 0 never stops a
-pixel early, so an adaptive render at 0 is a fixed render of `Max samples`.
+16 by 16 tile once its relative standard error is under the threshold after at least 16 samples. **`adaptive`** takes
+`Path samples` as the fixed render it replaces and **never spends more than that on any pixel**: every pixel takes `Min samples`
+(`min_samples`, default 16, at least 2), then `Adaptive pass size` (`adaptive_pass_size`, default 8) more per pass, and
+**stops on its own** once its noise estimate is under `Noise threshold` (`noise_threshold`) or it has the smaller of
+`Max samples` (`max_samples`, default 256) and `Path samples` (default 64; the last pass is cut short to land on it). So an
+adaptive render takes at most `Path samples` per pixel, costs no more shader work than the fixed render of that many samples
+and, for a scene whose pixels converge at different rates, much less; the minimum is held to the same cap, and a cap below 2
+is 2 (a variance needs two samples). Raise `Path samples` to let a tight threshold spend more: a tight 0.0003 under the default
+64 reads 37.1 dB against a 1024-sample render on the shadow test scene, 39.2 dB with `Path samples` 512. A threshold of 0 never
+stops a pixel early, so an adaptive render at 0 is a fixed render of `Max samples` or of `Path samples`, whichever is
+fewer. Before Q1 (v0.35) an adaptive render ignored `Path samples` and took up to `Max samples` per pixel; a document
+saved with that behaviour needs `Path samples` raised to its `Max samples` to render the same.
 
 **The noise estimate** (`pathtrace.pixel_noise`) is the variance of the pixel's mean luminance relative to the square of
 that mean, from the running sum of the luminance of each sample `x` and the running sum of its square. With `n` samples,
@@ -1563,8 +1570,9 @@ one thread per open pixel, so a converged pixel costs nothing and the host reads
 `mask` is the old per-pass read of a fixed render's tile retirement, 0 for adaptive). When at most 131072 pixels are still
 open, a pass runs its samples side by side, one thread per pixel and sample, and a reduce step adds them up: the same
 samples in another summing order, so the tail of a few noisy pixels no longer costs one dispatch per sample. A pass with
-no open pixel left dispatches nothing; the render still ends when every pixel has stopped, and `stats["passes"]` counts
-the passes that did work. The progress events report each pass's share of converged pixels. The finished render's per-pixel sample
+no open pixel left dispatches nothing; the render ends when every pixel has stopped (the host learns that at the wait it
+already makes, a 4-byte read of the list's length every fourth pass, and encodes no pass after it), and
+`stats["passes"]` counts the passes that did work. The progress events report each pass's share of converged pixels. The finished render's per-pixel sample
 counts are `stats["samples"]`, the estimate `stats["noise"]` and the stopped mask `stats["converged"]`. The data passes
 (depth, normals, position, uv, object_id) take their one un-jittered sample as ever. With motion blur the CPU reference
 runs one adaptive render over all shutter times; the GPU runs one per time, each with its share of `Min samples` and
@@ -1579,7 +1587,8 @@ at its default. On the three scenes below, 0.001 scored higher than fixed 64 on 
 hard sun and glossy floor keep its mean at 125 samples (RTX 3080 Ti, 1280 by 720). A looser 0.006 matches fixed 64 on Y1 in
 about 80% of its time, and 0.003 is the faster, noisier step and 0.0003 the slower, cleaner one. `Adaptive pass size` changes the time
 little on Y1 and Z1 (4, 8, 16 and 32 are within 8% of one another) and 8 is the fastest on X1 (142 ms against 173 to 195 ms), so
-leave it at 8.
+leave it at 8. These figures were measured before step Q1, when `Max samples` alone capped an adaptive render: to repeat them
+set `Path samples` to 256, since with its default of 64 every pixel now stops at 64 at the latest.
 
 Measured on the X1, Y1 and Z1 scenes against a 1024-sample reference, on all three adapters:
 `docs/BENCHMARKS-v0.35-adaptive.md` (the v0.34 measurements, before the device-side mask, stay in

@@ -112,7 +112,7 @@ class AdaptiveCpuTests(unittest.TestCase):
     def test_a_tight_threshold_is_within_the_documented_psnr_of_the_fixed_reference(self):
         scene = shadow_scene()
         reference, _ = render(scene, SHADOW_CAMERA, pt.PathSettings(samples=1024, max_bounces=2, seed=5))
-        image, stats = render(scene, SHADOW_CAMERA, adaptive(0.0003, max_samples=512, seed=9))
+        image, stats = render(scene, SHADOW_CAMERA, adaptive(0.0003, samples=512, max_samples=512, seed=9))
         self.assertGreaterEqual(psnr(image, reference), TIGHT_PSNR_DB)
         # and it is no accident of taking every sample: the quiet floor still stopped early, under a fixed 64
         self.assertLess(float(stats["samples"].mean()), 64)
@@ -127,11 +127,38 @@ class AdaptiveCpuTests(unittest.TestCase):
         b, sb = render(flat_scene(), FLAT_CAMERA, adaptive(0.0, max_samples=32, adaptive_pass_size=16, max_bounces=1))
         np.testing.assert_allclose(a, b, atol=1e-6)
 
-    def test_adaptive_ignores_samples_and_matches_fixed_when_nothing_stops(self):
+    def test_adaptive_matches_fixed_when_nothing_stops(self):
         scene = shadow_scene()
         a, _ = render(scene, SHADOW_CAMERA, adaptive(0.0, max_samples=24))
         b, _ = render(scene, SHADOW_CAMERA, pt.PathSettings(samples=24, max_bounces=2))
         np.testing.assert_allclose(a, b, atol=1e-6)
+
+    def test_the_loop_stops_at_or_before_the_fixed_budget_it_replaces(self):
+        # a tight threshold keeps the shadow edge open as long as it may; `samples` is the fixed render adaptive replaces
+        scene = shadow_scene()
+        for budget in (12, 20, 40):
+            with self.subTest(samples=budget):
+                _, stats = render(scene, SHADOW_CAMERA, adaptive(0.0001, samples=budget, max_samples=256))
+                self.assertLessEqual(int(stats["samples"].max()), budget)       # no pixel takes more than the fixed render does
+                self.assertLessEqual(float(stats["samples"].mean()), budget)    # so the average never does
+                self.assertEqual(int(stats["samples"].max()), budget)           # the noisy ones took all of it, the last pass cut short
+                self.assertLess(int(stats["samples"].min()), int(stats["samples"].max()))     # and the quiet ones stopped early
+
+    def test_the_cap_is_the_fixed_budget_in_the_clamped_settings(self):
+        st = pt.PathSettings(sampling="adaptive", samples=6, min_samples=16, max_samples=64).clamped()
+        self.assertEqual((st.min_samples, st.max_samples), (6, 6))
+        st = pt.PathSettings(sampling="adaptive", samples=1, min_samples=1, max_samples=64).clamped()
+        self.assertEqual((st.min_samples, st.max_samples), (2, 2))              # a variance needs two samples
+        st = pt.PathSettings(sampling="adaptive", samples=512, max_samples=256).clamped()
+        self.assertEqual(st.max_samples, 256)                                   # the larger budget caps nothing
+        self.assertEqual(pt.PathSettings(samples=16, max_samples=64).clamped().max_samples, 64)     # fixed is untouched
+        _, stats = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.0, samples=6, min_samples=16, max_samples=64))
+        self.assertTrue(np.all(stats["samples"] == 6))
+
+    def test_a_budget_above_max_samples_changes_nothing(self):
+        _, spare = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.02, samples=4096))
+        _, plenty = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.02, samples=65536))
+        np.testing.assert_array_equal(spare["samples"], plenty["samples"])
 
     def test_progress_reports_the_converged_fraction_and_ends_at_one(self):
         seen = []
@@ -188,7 +215,8 @@ class OldDocumentTests(unittest.TestCase):
         self.assertEqual(legacy.shape, (12, 16, 4))
 
     def test_sampling_adaptive_reaches_the_renderer(self):
-        d = self._graph(sampling="adaptive", noise_threshold=0.05, min_samples=4, max_samples=12, adaptive_pass_size=4)
+        d = self._graph(sampling="adaptive", noise_threshold=0.05, min_samples=4, max_samples=12, adaptive_pass_size=4,
+                        pt_samples=12)
         st = pt.settings_from_params(d.document["nodes"]["render"]["params"])
         self.assertEqual((st.sampling, st.min_samples, st.max_samples, st.adaptive_pass_size), ("adaptive", 4, 12, 4))
         image = Evaluator().evaluate(d.document, "render")
@@ -362,6 +390,25 @@ class AdaptiveGpuTests(unittest.TestCase):
         self.assertEqual(list(raster.layers), ["beauty_raw"])
         self.assertLess(float(np.var(raster.pixels[..., :3])), float(np.var(raster.layers["beauty_raw"].pixels[..., :3])) * 1.0001)
 
+    def test_the_gpu_loop_stops_at_or_before_the_fixed_budget_like_the_cpu_loop(self):
+        scene = shadow_scene()
+        for budget in (12, 20, 40):
+            with self.subTest(samples=budget):
+                settings = adaptive(0.0001, samples=budget, max_samples=256, seed=4)
+                _, cs = render(scene, SHADOW_CAMERA, settings)
+                _, gs = render(scene, SHADOW_CAMERA, settings, backend="gpu")
+                self.assertLessEqual(int(gs["samples"].max()), budget)
+                self.assertEqual(int(gs["samples"].max()), int(cs["samples"].max()))
+                self.assertLess(int(gs["samples"].min()), int(gs["samples"].max()))
+
+    def test_the_gpu_render_ends_when_every_pixel_is_done_without_encoding_the_passes_left(self):
+        _, stats = render(flat_scene(), FLAT_CAMERA, adaptive(0.05, min_samples=8, max_samples=256, samples=256, max_bounces=1),
+                          backend="gpu")
+        self.assertEqual(stats["passes"], 1)
+        # the wait after the fourth pass reads that no pixel is open and ends the loop, then the last wait: not the 31 passes
+        # (and 8 waits) a 256-sample run has
+        self.assertLessEqual(stats["readbacks"]["waits"], 2)
+
     def test_adaptive_threshold_zero_matches_fixed_on_the_gpu(self):
         a, _ = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.0, max_samples=16), backend="gpu")
         b, _ = render(shadow_scene(), SHADOW_CAMERA, pt.PathSettings(samples=16, max_bounces=2), backend="gpu")
@@ -403,7 +450,7 @@ class AdaptiveGpuDeviceTests(unittest.TestCase):
     def test_a_tight_threshold_is_within_the_documented_psnr_of_the_fixed_reference_on_the_gpu(self):
         scene = shadow_scene()
         reference, _ = render(scene, SHADOW_CAMERA, pt.PathSettings(samples=1024, max_bounces=2, seed=5), backend="gpu")
-        image, stats = render(scene, SHADOW_CAMERA, adaptive(0.0003, max_samples=512, seed=9), backend="gpu")
+        image, stats = render(scene, SHADOW_CAMERA, adaptive(0.0003, samples=512, max_samples=512, seed=9), backend="gpu")
         fixed, _ = render(scene, SHADOW_CAMERA, pt.PathSettings(samples=64, max_bounces=2, seed=9), backend="gpu")
         self.assertGreaterEqual(psnr(image, reference), TIGHT_PSNR_DB)
         self.assertGreaterEqual(psnr(image, reference), psnr(fixed, reference) - 3.0)     # no worse than fixed 64 within noise
@@ -426,9 +473,9 @@ class AdaptiveGpuDeviceTests(unittest.TestCase):
         with _Reads() as reads:
             image, stats = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.02, max_samples=64), backend="gpu")
         accumulator = SIZE[0] * SIZE[1] * 32
-        # the one large read is the finished image; every other read is a 16-byte wait on the accumulator
+        # the one large read is the finished image; every other read is a wait on the list's length (one word, ctl[2])
         self.assertEqual([c[0] for c in reads.large()], [accumulator])
-        self.assertTrue(all(c[0] == 16 and c[2] == 0 for c in reads.waits()), reads.calls)
+        self.assertTrue(all(c[0] == 4 and c[2] == 8 for c in reads.waits()), reads.calls)
         self.assertEqual((stats["readbacks"]["mask"], stats["readbacks"]["counter"], stats["readbacks"]["image"]), (0, 0, 1))
         self.assertGreater(int(stats["samples"].max()), int(stats["samples"].min()))     # and the mask did its work
 
@@ -438,12 +485,13 @@ class AdaptiveGpuDeviceTests(unittest.TestCase):
         with _Reads() as reads:
             pt.render(shadow_scene(), SHADOW_CAMERA, SIZE[0], SIZE[1], BACKGROUND, 0.0, "rgba", adaptive(0.02, max_samples=64),
                       progress=lambda stage, fraction, info: events.append((fraction, info)), stats=stats, backend="gpu")
-        counters = [c for c in reads.calls if c[0] == 4]                           # the list length, once per pass
-        self.assertEqual(len(counters), len(events))
+        counters = [c for c in reads.calls if c[0] == 4]                           # the list length: once per pass, then the last wait
+        self.assertEqual(len(counters), len(events) + 1)
         self.assertEqual(len(reads.large()), 1)                                    # and the one image read
         self.assertEqual({c[1] for c in counters}, {counters[0][1]})               # all from the same (list) buffer
         self.assertEqual(stats["readbacks"]["mask"], 0)
-        self.assertEqual(stats["readbacks"]["counter"], len(events))
+        self.assertEqual(stats["readbacks"]["counter"], 0)                         # the wait of each pass is that read
+        self.assertEqual(stats["readbacks"]["waits"], len(events) + 1)
         self.assertTrue(events)
         converged = [info["converged"] for _, info in events]
         self.assertEqual(converged, sorted(converged))                           # a pixel that is done stays done

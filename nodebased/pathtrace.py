@@ -90,9 +90,11 @@ class PathSettings:
     seed: int = 1
     pass_samples: int = 0          # samples per pass; 0 = choose from the image size
     # Per-pixel adaptive sampling (plan "Rendering 6", step R1). "fixed" is everything above exactly as it always ran
-    # (including the legacy tile retirement under `noise_threshold`). "adaptive" ignores `samples`: every pixel takes
-    # `min_samples`, then `adaptive_pass_size` more per pass until its own noise estimate (`pixel_noise`) is under
-    # `noise_threshold` or it has `max_samples`; a threshold of 0 never stops a pixel early.
+    # (including the legacy tile retirement under `noise_threshold`). "adaptive" takes `samples` as the fixed budget it
+    # replaces and never spends more than that on any pixel: every pixel takes `min_samples`, then `adaptive_pass_size`
+    # more per pass until its own noise estimate (`pixel_noise`) is under `noise_threshold` or it has `max_samples`,
+    # which `clamped` holds to `samples`; a threshold of 0 never stops a pixel early, so an adaptive render at 0 is a
+    # fixed render of `min(samples, max_samples)`.
     sampling: str = "fixed"
     min_samples: int = 16
     max_samples: int = 256
@@ -107,6 +109,8 @@ class PathSettings:
         max_samples = int(np.clip(self.max_samples, 1, 65536))
         min_samples = int(np.clip(self.min_samples, 1, max_samples))
         if sampling == "adaptive":
+            # the fixed render it replaces is the most a pixel may take (never fewer than the 2 samples a variance needs)
+            max_samples = min(max_samples, max(int(np.clip(self.samples, 1, 65536)), 2))
             min_samples = min(max(min_samples, 2), max_samples)   # one sample has no variance to estimate
         return replace(self, sampling=sampling, min_samples=min_samples, max_samples=max_samples,
                        adaptive_pass_size=int(np.clip(self.adaptive_pass_size, 1, 1024)),

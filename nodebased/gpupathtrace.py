@@ -2574,10 +2574,13 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
         compute.dispatch_workgroups(1, 1, 1)
 
     def wait():
+        # the read of the list's length (one word) is the wait; `on_submitted_work_done_sync` fails to build its callback in
+        # wgpu-py 0.32. It is the number of pixels the next pass would take, 0 once every pixel is done.
         lap("encode")
-        device.queue.read_buffer(accum, 0, 16)      # `on_submitted_work_done_sync` fails to build its callback in wgpu-py 0.32
+        open_now = int(np.frombuffer(device.queue.read_buffer(ctl, (header + 2) * 4, 4), "u4")[0])
         readbacks["waits"] += 1
         lap("dispatch")
+        return open_now
     encoder = device.create_command_encoder()
     compute = encoder.begin_compute_pass()
     compaction(compute)                    # every pixel is open before the first pass
@@ -2619,21 +2622,23 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
         device.queue.submit([encoder.finish()])
         sample_index += take
         passes += 1
+        pixels_open = None
         if asked or heavy or passes % ADAPTIVE_PACE == 0:
-            wait()
+            pixels_open = wait()
         else:
             lap("encode")
         if progress is not None:
-            pixels_open = int(np.frombuffer(device.queue.read_buffer(ctl, (header + 2) * 4, 4), "u4")[0])
-            readbacks["counter"] += 1
-            lap("flag readback")
+            if pixels_open is None:
+                pixels_open = int(np.frombuffer(device.queue.read_buffer(ctl, (header + 2) * 4, 4), "u4")[0])
+                readbacks["counter"] += 1
+                lap("flag readback")
             elapsed = time.perf_counter() - started
             converged = 1.0 - pixels_open / (width * height)
             progress("pathtrace", max(sample_index / total_samples, converged),
                      dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=-(-pixels_open // threads),
                           converged=converged, pixels_active=pixels_open))
-            if not pixels_open:
-                break
+        if pixels_open == 0:
+            break              # every pixel is done: the passes left would dispatch nothing
         if settings.time_limit and time.perf_counter() - started >= settings.time_limit:
             break
     wait()                     # the card may still owe the last passes: the final readback then times the transfer alone
