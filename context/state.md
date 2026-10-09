@@ -1,3 +1,7 @@
+## Lane 6 P1 cached playback — complete (2026-10-09)
+
+Full-size Radeon playback and frame profile are documented; steam cache budget is 65,536 MiB. Cached output playback measured 0.72 FPS steam-only / 0.09 FPS whole scene. Frame 120 evaluation took 1.653 s, with 88.6 ms reading, 20.7 ms sparse rebuild, and 1.582 ms upload. This exact bound is recorded; the 6 / 2 FPS target remains unmet. Fresh 32/32, 8-frame llvmpipe playback measured 42.78 / 46.83 FPS whole/steam but produced no particles or steam tiles, so it is empty-field throughput. JSON and synchronized docs are committed. Focused Hot pour/cache/playback and knowledge tests pass under the GPU lock. RTX full-size row remains pending reset. Next: P2 interactive preview work.
+
 ## 2026-10-09 — Lane 4 R1 finish: X1 agrees with the CPU (worktree, not yet merged)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (3:06 PM on 2026-10-09 PDT)
