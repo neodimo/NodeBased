@@ -18,28 +18,28 @@ PYTHONPATH=$PWD QT_QPA_PLATFORM=offscreen python tools/benchmark_portable_render
 
 ## Measurements and next recommendation
 
-The six X1, Y1 and Z1 case pairs were re-measured on October 8 in step Q1 (renderer commit `a6c04e2`); the smoke rows were re-measured in step Q2 (renderer commit `c94b4eb`; the P1 smoke times are in the Q2 section). Median of three timed renders after one warm-up. "Passes" is the number of render passes the adaptive loop or fixed loop ran; "mean spp" is the mean samples per pixel. PSNR and max error compare each adapter with the CPU path tracer at the same settings and seed (clipped sRGB RGB). Two of the 24 rows carry noticeable GPU-to-CPU differences: X1 (54 to 55 dB, max error 0.014 to 0.064, the same on all three adapters, so it comes from the scene and not one driver) and the smoke grid cases (74 to 75 dB). Everything else is above 97 dB.
+The six X1, Y1 and Z1 case pairs were re-measured on October 8 in step Q1 (renderer commit `a6c04e2`) and the two X1 cases on October 9 in step R1 (renderer commit `6007642`); the smoke rows were re-measured in step Q2 (renderer commit `c94b4eb`; the P1 smoke times are in the Q2 section). Median of three timed renders after one warm-up. "Passes" is the number of render passes the adaptive loop or fixed loop ran; "mean spp" is the mean samples per pixel. PSNR and max error compare each adapter with the CPU path tracer at the same settings and seed (clipped sRGB RGB). Only the smoke grid cases (74 to 75 dB) and the RTX X1 adaptive row (90.1 dB, one pixel; see step R1) carry noticeable GPU-to-CPU differences; everything else is above 97 dB. Before step R1, X1 read 54 to 55 dB on all three adapters (max error 0.014 to 0.064) because the CPU path tracer mishandled the occlusion map, and the P1 and Q1 sections below quote those older X1 numbers as measured then.
 
 | adapter | backend | case | status | median | passes | mean spp | PSNR vs CPU | max error |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| llvmpipe | Vulkan | X1-adaptive0.003 | ok | 271 ms | 7 | 19.0 | 54.6 dB | 0.064 |
-| llvmpipe | Vulkan | X1-fixed64 | ok | 623 ms | 64 | 64.0 | 55.2 dB | 0.014 |
+| llvmpipe | Vulkan | X1-adaptive0.003 | ok | 263 ms | 7 | 19.0 | 105.3 dB | 0.001 |
+| llvmpipe | Vulkan | X1-fixed64 | ok | 619 ms | 64 | 64.0 | 109.4 dB | 0.000 |
 | llvmpipe | Vulkan | Y1-adaptive0.003 | ok | 763 ms | 7 | 38.0 | 104.3 dB | 0.002 |
 | llvmpipe | Vulkan | Y1-fixed64 | ok | 1251 ms | 64 | 64.0 | 104.6 dB | 0.002 |
 | llvmpipe | Vulkan | Z1-adaptive0.003 | ok | 147 ms | 7 | 18.3 | 159.2 dB | 0.000 |
 | llvmpipe | Vulkan | Z1-fixed64 | ok | 374 ms | 64 | 64.0 | 122.6 dB | 0.000 |
 | llvmpipe | Vulkan | smoke-box | ok | 1025 ms | 32 | 32.0 | 84.8 dB | 0.028 |
 | llvmpipe | Vulkan | smoke-grid | ok | 367 ms | 32 | 32.0 | 75.2 dB | 0.053 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-adaptive0.003 | ok | 43 ms | 7 | 19.0 | 54.6 dB | 0.064 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-fixed64 | ok | 97 ms | 64 | 64.0 | 55.2 dB | 0.014 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-adaptive0.003 | ok | 43 ms | 7 | 19.0 | 90.1 dB | 0.022 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-fixed64 | ok | 87 ms | 64 | 64.0 | 110.3 dB | 0.001 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | Y1-adaptive0.003 | ok | 53 ms | 7 | 38.0 | 97.4 dB | 0.006 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | Y1-fixed64 | ok | 90 ms | 64 | 64.0 | 97.6 dB | 0.006 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | Z1-adaptive0.003 | ok | 20 ms | 7 | 18.3 | 156.2 dB | 0.000 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | Z1-fixed64 | ok | 44 ms | 64 | 64.0 | 127.4 dB | 0.000 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-box | ok | 71 ms | 32 | 32.0 | 84.8 dB | 0.028 |
 | NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-grid | ok | 59 ms | 32 | 32.0 | 73.6 dB | 0.053 |
-| AMD Radeon 8060S | Vulkan | X1-adaptive0.003 | ok | 53 ms | 7 | 19.0 | 54.6 dB | 0.064 |
-| AMD Radeon 8060S | Vulkan | X1-fixed64 | ok | 104 ms | 64 | 64.0 | 55.2 dB | 0.014 |
+| AMD Radeon 8060S | Vulkan | X1-adaptive0.003 | ok | 55 ms | 7 | 19.0 | 104.8 dB | 0.002 |
+| AMD Radeon 8060S | Vulkan | X1-fixed64 | ok | 101 ms | 64 | 64.0 | 106.9 dB | 0.001 |
 | AMD Radeon 8060S | Vulkan | Y1-adaptive0.003 | ok | 90 ms | 7 | 38.0 | 101.9 dB | 0.003 |
 | AMD Radeon 8060S | Vulkan | Y1-fixed64 | ok | 115 ms | 64 | 64.0 | 102.2 dB | 0.003 |
 | AMD Radeon 8060S | Vulkan | Z1-adaptive0.003 | ok | 17 ms | 7 | 18.3 | 151.5 dB | 0.000 |
@@ -50,7 +50,7 @@ The six X1, Y1 and Z1 case pairs were re-measured on October 8 in step Q1 (rende
 What the numbers show (measured):
 
 - **Y1 adaptive is faster than Y1 fixed 64 on all three adapters after step Q1** (AMD 90 against 115 ms, llvmpipe 763 against 1251 ms, RTX 53 against 90 ms). In P1 it was slower on AMD (183 against 117 ms) and llvmpipe (1548 against 1187 ms) and level on RTX, because it averaged 72.7 samples per pixel; the Q1 section below has the cause and the change. Y1 adaptive now averages 38.0 samples per pixel.
-- X1 and Z1 adaptive are faster than fixed on every adapter (mean 19.0 and 18.3 spp after Q1; 19.6 and 20.3 in P1): X1 53 against 104 ms on AMD, Z1 20 against 44 ms on RTX.
+- X1 and Z1 adaptive are faster than fixed on every adapter (mean 19.0 and 18.3 spp after Q1; 19.6 and 20.3 in P1): X1 55 against 101 ms on AMD after R1, Z1 20 against 44 ms on RTX.
 - **Smoke majorant grid:** collisions fall from 112.6 tentative per path (single box) to 15.4 (grid), 7.3 times fewer, with real collisions unchanged at 0.19. After step Q2 the grid case is faster than the box case on every adapter: 1.7 times on AMD (102 to 61 ms), 2.8 times on llvmpipe (1025 to 367 ms) and 1.2 times on the RTX (71 to 59 ms). In P1 the RTX was level (144 against 143 ms); step Q2 found the cause in the dispatch size, not the collision loop.
 - The RTX is 1.2 to 1.3 times faster than the Radeon on X1 and Y1 fixed, level on Z1 fixed (42 against 44 ms), slower on Z1 adaptive (24 against 20 ms) and level on the smoke grid after Q2 (59 against 61 ms).
 
@@ -58,7 +58,7 @@ Ranked recommendation for the next rendering brief (evidence above; no optimizat
 
 1. **Y1 adaptive sampling.** Done in step Q1 (below): adaptive is faster than fixed on every adapter and scene. It was the only scene where adaptive lost on two adapters; it averaged more samples than fixed.
 2. **Smoke on the RTX.** Done in step Q2 (below): the render no longer leaves the card idle (143 to 59 ms) and the grid is 17 percent faster than the single box. The collision loop is a small part of the remaining RTX time; what is left is per-path shader cost.
-3. X1 quality: 54 to 55 dB on all adapters points at a scene or reference difference worth one look before it is used for a visual claim.
+3. X1 quality: 54 to 55 dB on all adapters pointed at a scene or reference difference. Done in step R1 (below): the CPU reference was wrong, X1 now reads 105 to 110 dB on the Radeon and llvmpipe and 110 dB (fixed) on the RTX.
 
 Known limits: one resolution (640 by 360), one seed per scene, three timed frames, so differences under about 10 percent are not established. Lock contention with other lanes was heavy; the timings were taken inside short exclusive lock turns, but a lane holding only the shared side of the lock cannot overlap them. RTX validation covers these eight cases on one boot only. No speed target is claimed.
 
@@ -173,9 +173,9 @@ Unverified or limited: one resolution (640 by 360), one scene and seed, three ti
 
 ## Step R1: why X1 reads 55 dB against the CPU path tracer
 
-Lane 4, step R1, October 9, 2026. Written from measurements taken before any renderer change (the commit that adds this section changes no renderer file). Base: `e08f6b4`.
+Lane 4, step R1, October 9, 2026. The finding below was written from measurements taken before any renderer change (the commit that first added this section changed no renderer file; base `e08f6b4`); the change and the rerun follow it.
 
-**Where the images differ** (measured; X1 fixed 64 at 640 by 360, llvmpipe against the CPU path tracer, the same 55.2 dB and 0.014 maximum error as the table above). Every pixel off the sphere is identical (mean difference exactly 0). On the sphere the mean absolute difference is 0.0067 in linear light, and the difference has two shapes. The left half of the sphere (the left column of the 2 by 1 metallic-roughness map, metallic 0.9 and roughness 0.2) differs by noise: the GPU is 0.0049 brighter there on average, speckled pixel by pixel. The right half (roughness 0.8, metallic 0.1, mostly diffuse) differs smoothly across a disc, the GPU darker. The difference follows the sphere's material.
+**Where the images differ** (measured; X1 fixed 64 at 640 by 360, llvmpipe against the CPU path tracer, the same 55.2 dB and 0.014 maximum error as the P1 and Q1 tables). Every pixel off the sphere is identical (mean difference exactly 0). On the sphere the mean absolute difference is 0.0067 in linear light, and the difference has two shapes. The left half of the sphere (the left column of the 2 by 1 metallic-roughness map, metallic 0.9 and roughness 0.2) differs by noise: the GPU is 0.0049 brighter there on average, speckled pixel by pixel. The right half (roughness 0.8, metallic 0.1, mostly diffuse) differs smoothly across a disc, the GPU darker. The difference follows the sphere's material.
 
 **Which feature** (measured; 256 by 144, 32 samples, llvmpipe against CPU, one scene feature removed at a time):
 
@@ -196,3 +196,24 @@ Removing the occlusion texture alone brings the two backends to 106.9 dB, the sa
 - CPU (`_surface_event` in `nodebased/pathtrace.py`): the scaled colour is used to choose between the specular and the diffuse lobe when it samples a bounce, but `bsdf_eval` rebuilds the lobe from the unscaled colour to get its `pdf`. The `pdf` therefore describes a different choice probability than the one the sampler used. That `pdf` divides the BSDF sample's weight and feeds the MIS weight of every light sample, so with an occlusion map the CPU estimate converges to the wrong image. Where the two probabilities differ most (the left half: a near-mirror lobe on a surface that also has a diffuse lobe) the CPU image is wrong in a speckled way; on the right half the bias is smooth.
 
 So the CPU path tracer is the image that is wrong, and the GPU image is the one that is consistent. Fix in the next commit: the CPU lobe carries the occlusion the way the GPU lobe does.
+
+### Step R1: the change and the numbers after it
+
+**The change** (`6007642`, `nodebased/pathtrace.py`). `_lobes` and `bsdf_eval` take the hit's occlusion and scale the diffuse colour with it before the lobe choice probability, the responses and the `pdf` are derived, the way the GPU `make_lobe` does. `_surface_event` passes the occlusion in and no longer multiplies it into the diffuse response separately at the four places it did. Without an occlusion map (factor 1) nothing changes. The GPU renderer is untouched. This is a change to the CPU reference: every earlier CPU render of a scene with an occlusion map (the CPU path tracer is the reference of the benchmark and of the 1024-sample quality rows) was biased toward a different image than the GPU draws; scenes without an occlusion map render exactly as before.
+
+**Rerun** (`tools/benchmark_portable_render.py --matrix`, the two X1 cases on each adapter, each in its own bounded exclusive GPU lock turn, the CPU references re-rendered with the fixed code; commit `6007642`):
+
+| adapter | case | PSNR before to after | max error before to after | median before to after |
+| --- | --- | ---: | ---: | ---: |
+| AMD Radeon 8060S | X1 fixed 64 | 55.2 to 106.9 dB | 0.014 to 0.001 | 104 to 101 ms |
+| AMD Radeon 8060S | X1 adaptive 0.003 | 54.6 to 104.8 dB | 0.064 to 0.002 | 53 to 55 ms |
+| llvmpipe | X1 fixed 64 | 55.2 to 109.4 dB | 0.014 to 0.000 | 623 to 619 ms |
+| llvmpipe | X1 adaptive 0.003 | 54.6 to 105.3 dB | 0.064 to 0.001 | 271 to 263 ms |
+| RTX 3080 Ti | X1 fixed 64 | 55.2 to 110.3 dB | 0.014 to 0.001 | 97 to 87 ms |
+| RTX 3080 Ti | X1 adaptive 0.003 | 54.6 to 90.1 dB | 0.064 to 0.022 | 43 to 43 ms |
+
+Five of the six rows are above the 97 dB the other scenes read. The RTX adaptive row reads 90.1 dB, below that line, because of one pixel (measured: per-pixel sample counts of the CPU and the RTX renders of X1 adaptive 0.003, mean 19.0 on both; they differ at exactly one pixel of 230 400, x 249, y 179, which stops after 40 samples on the CPU and 48 on the RTX, one pass later). Everywhere else the two images differ by at most 0.009 in linear light. The stopping rule reads a pixel whose noise estimate sits on the threshold, and the RTX's float32 sums land on the other side of it (inference: the sample counts are the only difference, and the Radeon and llvmpipe rows read above 104 dB). That is the same kind of single-pixel decision the Q1 section saw on Y1, and it is not a rendering defect, so it is left as it is. Timings moved by at most the run-to-run spread of the earlier rows (no renderer change on the GPU side).
+
+**Tests** (`tests/test_3d_occlusion_lobe.py`): two CPU tests that the occlusion scales the diffuse colour of the lobe (a dielectric hit with occlusion 0.5 evaluates exactly like the same hit with half the base colour: both responses and the `pdf`; and an occlusion of 1 leaves it unchanged), and a regression test that renders X1 at 160 by 90 and 32 samples on the CPU and the default GPU adapter and compares the sphere's crop: it measured 48.4 dB (largest error 0.0136) on llvmpipe before the change and 102.3 dB after, and the test asks for more than 85 dB and 0.004. Before the change all three tests fail; after it they pass. The test modules `test_3d_occlusion_lobe`, `test_3d_pbr_textures`, `test_3d_pathtrace`, `test_3d_pathtrace_gpu_soft` and `test_benchmark_portable_render` (148 tests) passed on the default adapter (the RTX), on the Radeon through `force-adapter.py integrated` and on llvmpipe through `force-adapter.py cpu`; the splat, volume, denoise, progressive, sparse and GPU ray-trace modules (126 tests) passed on the default adapter.
+
+Unverified or limited: one resolution and seed per scene; the RTX adaptive row's one-pixel explanation is an inference from the sample counts; Windows and the real display were not checked; the 1024-sample quality rows of the Q1 section (X1 46.68, 44.99 and 44.74 dB) were measured against the old CPU reference and have not been re-measured.
