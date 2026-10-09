@@ -2758,6 +2758,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                     compute.set_bind_group(0, group_once)
                     compute.dispatch_workgroups(-(-width // wg), -(-(y1 - y0) // wg), 1)
                     compute.end()
+                    lap("encode")
                     began = time.perf_counter()
                     device.queue.submit([encoder.finish()])
                     device.queue.read_buffer(accum, 0, 16)     # wait for this band: keeps submissions short and cancellation prompt
@@ -2810,6 +2811,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             bg[3] = np.clip(bg[3], 0, 1)
             bg[:3] *= bg[3]
             image = image + bg.astype(np.float32) * (np.float32(1) - image[:, 3:4])
+    lap("convert")
     if stats is not None:
         stats.update(backend="gpu", sampling=settings.sampling, samples=pixel_samples.reshape(height, width).copy(),
                      passes=passes, seconds=time.perf_counter() - started, adapter=gpu3d.describe(), phases=phases,
@@ -2823,6 +2825,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             variance = np.maximum(lum_sq / n - mean_lum * mean_lum, 0.0) * n / np.maximum(n - 1, 1) / n
             stats["variance"] = variance.reshape(height, width)
             stats["noise"] = pt.pixel_noise(lum_sum, lum_sq, n).reshape(height, width)
+        lap("stats")
     result = np.ascontiguousarray(image, np.float32).reshape(height, width, 4)
     if data_pass and ps.volumes is not None and merge_volumes:
         # the smoke's first sample is found by the CPU raymarch for both tracers (it is one ray per pixel), cut at the

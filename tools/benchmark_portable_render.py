@@ -159,10 +159,10 @@ def set_majorant(case):
         ptvolume.MAJORANT_RATIO = 4
 
 
-def render_once(case, size, backend):
+def render_once(case, size, backend, skip_noise_maps=True):
     from nodebased import pathtrace as pt
     scene, camera, ambient, background, settings, volume = build_case(case)
-    stats = {}
+    stats = {"skip_noise_maps": skip_noise_maps}      # as the viewport's progressive render asks: no variance or noise maps to build
     kwargs = dict(volume=volume) if volume is not None else {}
     image = pt.render(scene, camera, size[0], size[1], background, ambient, "rgba", settings, stats=stats, backend=backend, **kwargs)
     return image, stats
