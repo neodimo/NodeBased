@@ -327,7 +327,11 @@ class SimCache:
             # the old file; failed conversion still leaves the legacy cache usable.
             self._write_disk(key, state)
         with self._lock:
-            self._index.move_to_end(key)
+            # A concurrent cache write can evict this disk entry while it is being
+            # read. The loaded state is still valid for this caller; avoid assuming
+            # the index entry survived the unlocked file I/O.
+            if key in self._index:
+                self._index.move_to_end(key)
             self.disk_hits += 1
             self.misses += 0
             self._memory[key] = state
