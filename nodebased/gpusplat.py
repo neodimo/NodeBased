@@ -611,31 +611,34 @@ fn in_range(key: u32, fixed_bits: u32, prefix: u32) -> bool {
        batch[lid] = projected[i]; batch_index[lid] = i;
      }
      workgroupBarrier();
-     if (phase == 3u) { continue; }
-     let used = min(BATCH, last - base);
-     for (var j = 0u; j < used; j += 1u) {
-       let f = fragment(batch[j], pixel, ray, ray_length, mesh_depth);
-       if (f.alpha <= 0.0) { continue; }
-       let i = batch_index[j];
-       let key = order_key(f.depth);
-       if (phase == 0u) {
-         kmin = min(kmin, key); kmax = max(kmax, key); total = total*(1.0-f.alpha); count += 1u;
-       } else if (phase == 1u) {
-         if (!in_range(key, fixed_bits, prefix)) { continue; }
-         let b = (key >> shift) & mask;
-         product[b] = product[b]*(1.0-f.alpha); counts[b] += 1u;
-         continue;
-       } else {
-         if (!in_range(key, fixed_bits, prefix)) { continue; }
-         if (resumed && !(f.depth > rz || (f.depth == rz && i > ri))) { continue; }
+     // D3D12 (FXC) rule: a barrier may not follow a varying continue/break/return, so a finished thread skips the
+     // work under a guard and still reaches the next iteration's barriers.
+     if (phase != 3u) {
+       let used = min(BATCH, last - base);
+       for (var j = 0u; j < used; j += 1u) {
+         let f = fragment(batch[j], pixel, ray, ray_length, mesh_depth);
+         if (f.alpha <= 0.0) { continue; }
+         let i = batch_index[j];
+         let key = order_key(f.depth);
+         if (phase == 0u) {
+           kmin = min(kmin, key); kmax = max(kmax, key); total = total*(1.0-f.alpha); count += 1u;
+         } else if (phase == 1u) {
+           if (!in_range(key, fixed_bits, prefix)) { continue; }
+           let b = (key >> shift) & mask;
+           product[b] = product[b]*(1.0-f.alpha); counts[b] += 1u;
+           continue;
+         } else {
+           if (!in_range(key, fixed_bits, prefix)) { continue; }
+           if (resumed && !(f.depth > rz || (f.depth == rz && i > ri))) { continue; }
+         }
+         if (m == NEAREST && !(f.depth < kz[NEAREST-1u] || (f.depth == kz[NEAREST-1u] && i < ki[NEAREST-1u]))) { continue; }
+         var at = min(m, NEAREST-1u);
+         while (at > 0u && (kz[at-1u] > f.depth || (kz[at-1u] == f.depth && ki[at-1u] > i))) {
+           kz[at] = kz[at-1u]; ki[at] = ki[at-1u]; ka[at] = ka[at-1u]; at -= 1u;
+         }
+         kz[at] = f.depth; ki[at] = i; ka[at] = f.alpha;
+         if (m < NEAREST) { m += 1u; }
        }
-       if (m == NEAREST && !(f.depth < kz[NEAREST-1u] || (f.depth == kz[NEAREST-1u] && i < ki[NEAREST-1u]))) { continue; }
-       var at = min(m, NEAREST-1u);
-       while (at > 0u && (kz[at-1u] > f.depth || (kz[at-1u] == f.depth && ki[at-1u] > i))) {
-         kz[at] = kz[at-1u]; ki[at] = ki[at-1u]; ka[at] = ka[at-1u]; at -= 1u;
-       }
-       kz[at] = f.depth; ki[at] = i; ka[at] = f.alpha;
-       if (m < NEAREST) { m += 1u; }
      }
    }
    // What each thread does with the pass it just made (no barriers below).
@@ -1060,20 +1063,22 @@ fn fragment(s: Projected, pixel: vec2<f32>, ray: vec3<f32>, ray_length: f32, beh
      batch[k] = projected[i]; batch_index[k] = i;
    }
    workgroupBarrier();
-   if (finished) { continue; }
-   let used = min(BATCH, last - base);
-   for (var j = 0u; j < used; j += 1u) {
-     let f = fragment(batch[j], pixel, ray, ray_length, behind);
-     if (f.alpha <= 0.0) { continue; }
-     let i = batch_index[j];
-     if (cursor_i != 0u && !(f.depth > cursor_z || (f.depth == cursor_z && i + 1u > cursor_i))) { continue; }
-     if (m == NEAREST && !(f.depth < kz[NEAREST-1u] || (f.depth == kz[NEAREST-1u] && i < ki[NEAREST-1u]))) { continue; }
-     var at = min(m, NEAREST-1u);
-     while (at > 0u && (kz[at-1u] > f.depth || (kz[at-1u] == f.depth && ki[at-1u] > i))) {
-       kz[at] = kz[at-1u]; ki[at] = ki[at-1u]; ka[at] = ka[at-1u]; at -= 1u;
+   // D3D12 (FXC) rule: no barrier may follow a varying continue, so a finished thread skips the work under a guard.
+   if (!finished) {
+     let used = min(BATCH, last - base);
+     for (var j = 0u; j < used; j += 1u) {
+       let f = fragment(batch[j], pixel, ray, ray_length, behind);
+       if (f.alpha <= 0.0) { continue; }
+       let i = batch_index[j];
+       if (cursor_i != 0u && !(f.depth > cursor_z || (f.depth == cursor_z && i + 1u > cursor_i))) { continue; }
+       if (m == NEAREST && !(f.depth < kz[NEAREST-1u] || (f.depth == kz[NEAREST-1u] && i < ki[NEAREST-1u]))) { continue; }
+       var at = min(m, NEAREST-1u);
+       while (at > 0u && (kz[at-1u] > f.depth || (kz[at-1u] == f.depth && ki[at-1u] > i))) {
+         kz[at] = kz[at-1u]; ki[at] = ki[at-1u]; ka[at] = ka[at-1u]; at -= 1u;
+       }
+       kz[at] = f.depth; ki[at] = i; ka[at] = f.alpha;
+       if (m < NEAREST) { m += 1u; }
      }
-     kz[at] = f.depth; ki[at] = i; ka[at] = f.alpha;
-     if (m < NEAREST) { m += 1u; }
    }
  }
  if (finished) { return; }
