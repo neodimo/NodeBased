@@ -1,3 +1,7 @@
+## 2026-10-09 — Lane 4 R1 finish: X1 agrees with the CPU (worktree, not yet merged)
+
+Branch `openclaw/nb-3d-astra-lane` at the commit that carries this note; fix `6007642`, rows `6d0694a`. The CPU path tracer's lobe now carries the occlusion map's factor before its lobe choice probability and `pdf` are derived (it used the unscaled colour for the `pdf`), as the GPU lobe always did; X1 against the CPU went from 54.6 and 55.2 dB to 104.8 to 109.4 dB on the Radeon and llvmpipe and 110.3 dB on the RTX fixed 64; the RTX adaptive row is 90.1 dB from one pixel whose stop pass differs (40 against 48 samples). The CPU image was the wrong one; scenes without an occlusion map render as before. GPU test modules passed on all three adapters. Limits: one resolution and seed; Q1's quality-against-1024 rows not re-measured; no Windows or real-display run. Details: TASKLOG.md and `docs/BENCHMARKS-v0.35-portable-render.md`, "Step R1".
+
 ## 2026-10-08 — Lane 4 Q2 finish: smoke on the RTX (worktree, not yet merged)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (11:46 PM on 2026-10-08 PDT)

@@ -1,0 +1,64 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "Mesa 26.2.2",
+  "format": "rgba32float",
+  "name": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+  "type": "IntegratedGPU"
+ },
+ "adapter_request": "integrated",
+ "case": "X1-adaptive0.003",
+ "commit": "6007642",
+ "counters": {},
+ "label": "adaptive 0.003",
+ "median_s": 0.05452265100029763,
+ "quality": {
+  "max_abs": 0.0016375523555625104,
+  "mean_abs": 1.435113158369214e-07,
+  "psnr_db": 104.761,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 7,
+  "phases_ms": {
+   "dispatch": 30.896,
+   "encode": 1.521,
+   "final readback": 0.868,
+   "pack": 4.252,
+   "postprocess": 4.834,
+   "scene build": 4.792,
+   "upload": 0.251
+  },
+  "samples": {
+   "max": 64,
+   "mean": 18.99628472222222,
+   "min": 16
+  }
+ },
+ "scene": "X1",
+ "schema": 1,
+ "seed": 1,
+ "settings": {
+  "adaptive_pass_size": 8,
+  "max_bounces": 8,
+  "max_samples": 256,
+  "min_samples": 16,
+  "noise_threshold": 0.003,
+  "sampling": "adaptive",
+  "seed": 1
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.054565,
+  0.054523,
+  0.048854
+ ],
+ "timestamp": "2026-10-09 02:07:32",
+ "warmup": 1
+}

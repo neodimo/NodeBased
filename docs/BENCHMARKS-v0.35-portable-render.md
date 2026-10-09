@@ -201,7 +201,7 @@ So the CPU path tracer is the image that is wrong, and the GPU image is the one 
 
 **The change** (`6007642`, `nodebased/pathtrace.py`). `_lobes` and `bsdf_eval` take the hit's occlusion and scale the diffuse colour with it before the lobe choice probability, the responses and the `pdf` are derived, the way the GPU `make_lobe` does. `_surface_event` passes the occlusion in and no longer multiplies it into the diffuse response separately at the four places it did. Without an occlusion map (factor 1) nothing changes. The GPU renderer is untouched. This is a change to the CPU reference: every earlier CPU render of a scene with an occlusion map (the CPU path tracer is the reference of the benchmark and of the 1024-sample quality rows) was biased toward a different image than the GPU draws; scenes without an occlusion map render exactly as before.
 
-**Rerun** (`tools/benchmark_portable_render.py --matrix`, the two X1 cases on each adapter, each in its own bounded exclusive GPU lock turn, the CPU references re-rendered with the fixed code; commit `6007642`):
+**Rerun** (`tools/benchmark_portable_render.py --matrix`, raw rows in `benchmarks/portable_render/r1/`, the two X1 cases on each adapter, each in its own bounded exclusive GPU lock turn, the CPU references re-rendered with the fixed code; commit `6007642`):
 
 | adapter | case | PSNR before to after | max error before to after | median before to after |
 | --- | --- | ---: | ---: | ---: |
