@@ -32,6 +32,17 @@ class MotionAnimatorTests(unittest.TestCase):
         animator.deleteLater()
         target.deleteLater()
 
+    def test_enabling_reduce_motion_finishes_every_live_track(self):
+        target = QWidget()
+        values = []
+        animator = MotionAnimator(enabled=True)
+        animator.animate("x", target, 0, 10, values.append, 1000)
+        animator.set_enabled(False)
+        self.assertEqual(values[-1], 10)
+        self.assertFalse(animator._timer.isActive())
+        animator.deleteLater()
+        target.deleteLater()
+
     def test_target_closed_mid_animation_is_dropped_safely(self):
         target = QWidget()
         values = []

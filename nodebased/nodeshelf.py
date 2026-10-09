@@ -663,11 +663,22 @@ class NodeShelf(QObject):
         self.panel.show()
         self.panel.raise_()
         if opacity is not None:
+            def fade(value, panel=self.panel, effect=opacity):
+                if not panel.isVisible():
+                    return
+                effect.setOpacity(value)
+                if value >= 1.0:
+                    shadow = QGraphicsDropShadowEffect(panel)
+                    shadow.setBlurRadius(60)
+                    shadow.setOffset(0, 24)
+                    shadow.setColor(QColor(0, 0, 0, 140))
+                    panel.setGraphicsEffect(shadow)
+
             self.window.motion.animate(("family-panel-x", id(self)), self.panel,
                                        self.panel.x(), final_pos.x(),
                                        lambda x, p=self.panel, y=final_pos.y(): p.move(round(x), y), 120)
             self.window.motion.animate(("family-panel-opacity", id(self)), self.panel, 0.0, 1.0,
-                                       opacity.setOpacity, 120)
+                                       fade, 120)
         self.panel.filter.setFocus(Qt.FocusReason.PopupFocusReason)
         self._watch(True)
 
