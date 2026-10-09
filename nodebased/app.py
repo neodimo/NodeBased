@@ -18,7 +18,7 @@ import time
 import uuid
 
 from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
-from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPen, QPixmap,
+from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -34,7 +34,7 @@ from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
-                   DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES)
+                   DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES)
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
 from . import graphlook
@@ -3972,7 +3972,7 @@ class NodeItem(QGraphicsRectItem):
 class Edge(QGraphicsPathItem):
     """A wire: coloured by its source node's family with a faint glow, in the graph's wire mode
     (curved or right angle), with a small arrow showing output -> input direction."""
-    GLOW = 6  # how far the glow reaches past the stroke on each side
+    GLOW = 10  # how far the glow (and the insert highlight) reaches past the stroke on each side
 
     def __init__(self, color="#898995", dashed=False, arrow=True, width=2.2, glow=True, mode=graphlook.CURVED,
                  opacity=0.85):
@@ -3987,6 +3987,13 @@ class Edge(QGraphicsPathItem):
         self.setBrush(Qt.BrushStyle.NoBrush)
         self.arrow = arrow
         self.arrowhead = QPolygonF()
+        self.highlighted = False
+
+    def set_highlight(self, on):
+        """Light the wire up while a free node hovers over it ready to be inserted."""
+        if on != self.highlighted:
+            self.highlighted = on
+            self.update()
 
     def boundingRect(self):
         return super().boundingRect().adjusted(-self.GLOW, -self.GLOW, self.GLOW, self.GLOW)
@@ -4011,16 +4018,24 @@ class Edge(QGraphicsPathItem):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        if self.glow:
+        stroke = self.pen()
+        if self.highlighted:
+            bright = graphlook.mix(self.color, QColor("#ffffff"), 0.55)
+            stroke = QPen(bright, self.pen().widthF() + 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                          Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(QPen(graphlook.with_alpha(bright, 70), stroke.widthF() + 8, Qt.PenStyle.SolidLine,
+                                Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            painter.drawPath(self.path())
+        elif self.glow:
             halo = QPen(graphlook.with_alpha(self.color, 40), self.pen().widthF() + 5, Qt.PenStyle.SolidLine,
                         Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
             painter.setPen(halo)
             painter.drawPath(self.path())
-        painter.setPen(self.pen())
+        painter.setPen(stroke)
         painter.drawPath(self.path())
         if self.arrow and not self.arrowhead.isEmpty():
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(self.color)
+            painter.setBrush(stroke.color())
             painter.drawPolygon(self.arrowhead)
         painter.restore()
 
@@ -5028,6 +5043,7 @@ class Graph(PanZoomView):
         self.pending_edge = None
         self.inserting_edge = None
         self.dot_preview = None
+        self.insert_target = None   # the wire a dragged free node would be inserted into (see wire_to_insert_into)
         self.ctrl_handles_visible = False
         self.primary_id = None
         self.last_click_scene_pos = QPointF(0, 0)
@@ -5180,10 +5196,94 @@ class Graph(PanZoomView):
             self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
 
+    # ------------------------------------------------------------------------------------------
+    # Dragging a free node onto a wire inserts it into the stream (new look, step 3).
+    INSERT_REACH = 8   # screen pixels: how close a wire has to pass to the node for it to count
+
+    def insertable_kind(self, key):
+        """The node type of `key` when it may be inserted into a wire, else None.
+
+        Only a node with no connections at all inserts: a connected node dragged over a wire just moves.
+        A node with no input or no output (Read, Viewer, Write, Output) never does."""
+        nodes = self.window.graph_nodes()
+        node = nodes.get(key)
+        if node is None or not node["inputs"] or node["type"] in ("Viewer", "Output", "Backdrop"):
+            return None
+        if node["type"].startswith("Write") or any(node["inputs"].values()):
+            return None
+        if any(key in other["inputs"].values() for other in nodes.values()):
+            return None
+        return node["type"]
+
+    def wire_to_insert_into(self, item):
+        """The wire record (edge, source, destination, slot, output) that dropping `item` where it is
+        would splice it into, or None. The wire has to pass through the node's card (within a few screen
+        pixels at any zoom); of several, the one closest to the card's centre wins. Both ends must be
+        able to take the node: its main input the wire's source, the wire's destination its output."""
+        if not isinstance(item, NodeItem) or item.is_backdrop:
+            return None
+        kind = self.insertable_kind(item.key)
+        if kind is None:
+            return None
+        nodes = self.window.graph_nodes()
+        if item.pos() == QPointF(*nodes[item.key]["pos"]):
+            return None   # not moved: a node resting on a wire is left alone
+        reach = self.INSERT_REACH / max(self.transform().m11(), 0.05)
+        card = item.mapRectToScene(item.rect())
+        centre = card.center()
+        best, best_distance = None, None
+        for record in self.edges:
+            edge, source, destination, slot, _output = record
+            if edge.path().isEmpty() or not edge.path().controlPointRect().adjusted(-reach, -reach, reach, reach).intersects(card):
+                continue
+            stroker = QPainterPathStroker()
+            stroker.setWidth(2 * reach)
+            if not stroker.createStroke(edge.path()).intersects(card):
+                continue
+            produced = OUTPUT_TYPES.get(nodes[source]["type"], "image")
+            if creation_slot(kind, produced) is None:
+                continue
+            if OUTPUT_TYPES.get(kind, "image") not in INPUT_TYPES.get(slot, ("image",)):
+                continue
+            path = edge.path()
+            distance = min(QLineF(path.pointAtPercent(i / 48), centre).length() for i in range(49))
+            if best is None or distance < best_distance:
+                best, best_distance = record, distance
+        return best
+
+    def set_insert_target(self, record):
+        """Light up the wire a free node would be inserted into (None clears it)."""
+        if record is not None and not any(record[0] is edge for edge, *_ in self.edges):
+            record = None
+        previous = self.insert_target
+        if previous is not None and (record is None or previous[0] is not record[0]):
+            previous[0].set_highlight(False)
+        self.insert_target = record
+        if record is not None:
+            record[0].set_highlight(True)
+
+    def drag_item(self):
+        """The node card being dragged with the left button, or None."""
+        item = self.scene().mouseGrabberItem()
+        while item is not None and not isinstance(item, NodeItem):
+            item = item.parentItem()
+        return item
+
+    def insert_commands(self, item, record):
+        """The edits that splice the free node `item` into the wire `record`."""
+        _edge, source, destination, slot, output = record
+        kind = self.window.graph_nodes()[item.key]["type"]
+        produced = OUTPUT_TYPES.get(self.window.graph_nodes()[source]["type"], "image")
+        into = {"op": "connect", "id": item.key, "input": creation_slot(kind, produced), "source": source}
+        if output not in ("rgba", "out1"):
+            into["output"] = output
+        return [into, {"op": "connect", "id": destination, "input": slot, "source": item.key}]
+
     def rebuild(self):
         selected = self.selected_id()
         self.scene().blockSignals(True)
         self.edges = []
+        self.insert_target = None
         self.items_by_id = {}
         self.scene().clear()
         self.pending_edge = None  # scene().clear() already deleted the previous item, if any.
@@ -5419,6 +5519,8 @@ class Graph(PanZoomView):
         super().mouseMoveEvent(event)
         if self.wire_source or self.wire_input:
             self.update_pending_edge(self.mapToScene(event.position().toPoint()))
+        elif event.buttons() & Qt.MouseButton.LeftButton and len(self.scene().selectedItems()) == 1:
+            self.set_insert_target(self.wire_to_insert_into(self.drag_item()))
 
     def mouseReleaseEvent(self, event):
         if self.pan is not None:
@@ -5437,6 +5539,9 @@ class Graph(PanZoomView):
             ]})
             event.accept()
             return
+        dragged = self.drag_item() if len(self.scene().selectedItems()) == 1 else None
+        record = self.wire_to_insert_into(dragged) if event.button() == Qt.MouseButton.LeftButton else None
+        self.set_insert_target(None)
         super().mouseReleaseEvent(event)
         edits = []
         for key, item in self.items_by_id.items():
@@ -5444,8 +5549,16 @@ class Graph(PanZoomView):
             if pos != self.window.graph_nodes()[key]["pos"]:
                 edits.append({"op": "move", "id": key, "pos": pos})
         if edits:
+            splice = self.insert_commands(dragged, record) if record is not None else []
             # Defer rebuild until QGraphicsScene has finished delivering this event.
-            QTimer.singleShot(0, lambda: self.window.command({"op": "batch", "commands": edits}, render=False))
+            QTimer.singleShot(0, lambda: self.commit_moves(edits, splice))
+
+    def commit_moves(self, moves, splice):
+        """Apply the moves of a drag; with `splice`, the dragged free node is also wired into the wire it
+        was dropped on, in the same batch so one undo restores the wire and the node's position."""
+        if splice and self.window.command({"op": "batch", "commands": moves + splice}) is not None:
+            return
+        self.window.command({"op": "batch", "commands": moves}, render=False)
 
     def group_selection(self):
         """Ctrl+G: the selected nodes become one Group node (the S1 `group` op, one undo step)."""
