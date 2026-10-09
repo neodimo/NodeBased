@@ -98,3 +98,50 @@ each stage of the restyle changed in the real Qt app. Stages: 1 colours, spacing
 - **Screenshot.** `docs/images/ui-redesign/nl3.png`: the real app, offscreen at 1920 x 1080, mid-drag with
   a free Blur held over the Constant's wire into the Merge, the wire lit. `nl3-inserted.png` shows the
   result after the drop.
+
+### NL4: icons and the left column
+
+- **The column.** The category shelf that sat as a second row under the top bar is now the mockup's tall
+  icon column on the left (`nodebased/nodeshelf.py`, `NodeRail`, in a left tool bar named
+  `node-rail-toolbar`): Favourites, Recent, a hairline, one button per family with its family colour dot,
+  Settings pinned at the bottom (it opens the existing Settings dialog). The family whose panel is open is
+  lit and shows a 3 px bar on the column's edge in the family colour (the accent for Favourites and
+  Recent). Sizes come from font metrics: the column is a button plus two margins wide (60 px at the 13 px
+  Noto Sans, wider on a font that is wider), and when the window is short the buttons and then the gaps
+  shrink so all seventeen stay on screen (1280 x 720 shows them at about 31 px; the floor is 22 px, which
+  is what the 800 x 500 minimum window gets).
+- **The panel.** Clicking a family opens `NodePanel`, a rounded (14 px) panel with a blurred copy of the
+  window behind a 92% tint (a grab of the window region under it, shrunk and enlarged) and the mockup's
+  soft drop shadow: the family colour square, its name and node count, a filter box that has focus on
+  open, a two column grid (22 px tile with the node's glyph in its family colour, then the name), and a
+  footer with "N more" and the Enter key hint. Six rows show; the rest scroll (wheel, arrow keys, or a click
+  on "N more"). The common nodes, those with a glyph of their own, come first, in catalog order. Enter adds
+  the highlighted node, a click adds it, dragging a row into the graph adds it at the drop point (the same
+  `application/x-nodebased-kind` drag the NODES dock uses); Up/Down/PageUp/PageDown (and Left/Right while
+  the filter is empty) move the highlight; Escape, a click anywhere outside the panel and the column, a
+  resize of the window or the window losing focus close it, and clicking the lit family again closes it
+  too. The filter looks at node names and descriptions within the family. Favourites and Recent open the
+  same panel with the starred and the recently added nodes.
+- **Icons.** SVG files in `nodebased/data/icons/`, on the mockup's 24 x 24 grid with a 1.6 stroke in
+  `currentColor`: `family-<Family>.svg` (the thirteen families and Other, the glyphs of the mockup's rail),
+  `ui-*.svg` (favourites, recent, search, settings) and `node-<Kind>.svg` for 146 common nodes. A node
+  with no file of its own wears its family's glyph. `nodebased/nodeicons.py` renders a file in any colour
+  (pixmaps at 1x and 2x for high-DPI screens). The files are listed in `pyproject.toml`'s package data and
+  the PyInstaller build already bundles `nodebased/data`.
+- **Minimum window width.** `TopBar.floor_width()` measures the bar's narrowest form from the fonts (search
+  as an icon, no shot name, GPU light only; the logo, tabs, menu and Check for updates button whole) and
+  the window sets its minimum width to that plus the column's width (never below 800 px), again whenever
+  the font or style changes. On Windows' wider fonts the bar is no longer cut off at the minimum. The
+  narrowest-window top bar tests now drag the window to its real minimum instead of `max(800, floor + 40)`.
+- **Saved layouts.** The workspace layout version went from 3 to 4 (the toolbar changed shape, so a layout
+  saved with the family row under the top bar is dropped for the new default) and the layout revision
+  from 4 to 5.
+- **Tests changed because the design changes them.** `test_workspace_layout`: the family buttons are the
+  column's 17 buttons and the node panel lists a family's nodes (the old per-family menus are gone); the
+  stacked-column check compares only the docks on screen (the column moved every visible dock 60 px right,
+  and a hidden dock keeps its old position). `test_topbar`: see above.
+- **Screenshot.** `docs/images/ui-redesign/nl4.png`: the real app, offscreen at 1920 x 1080, the Color panel
+  open beside its lit button; `nl4-filter.png` has "gr" typed into the filter. The graph panel is given
+  more height for the picture only.
+- **Not done.** The panel's blur is a still copy of what was under it when it opened, not a live
+  backdrop blur (Qt has no blur-behind for a child widget).
