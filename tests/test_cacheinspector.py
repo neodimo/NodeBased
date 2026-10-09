@@ -102,9 +102,11 @@ class InvalidateFromFrameTests(unittest.TestCase):
             cache = simcache.SimCache(root=root)
             _put_particle_frame(cache, "runA", 1, 2)
             folder = cacheinspector.cache_folder(cache, "runA")
-            self.assertTrue(any(folder.glob("*.npz")))
+            # Frames are packed .nbc files since Fluids 8 (P1); older caches hold .npz. Either kind must go.
+            frames = lambda: [p for p in folder.iterdir() if p.suffix in (".nbc", ".npz")]
+            self.assertTrue(frames())
             cacheinspector.invalidate_from_frame(cache, "runA", 1)
-            self.assertFalse(list(folder.glob("*.npz")))
+            self.assertFalse(frames())
 
 
 class CacheFolderTests(unittest.TestCase):
