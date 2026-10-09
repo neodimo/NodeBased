@@ -229,6 +229,10 @@ QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border
 QPushButton {{ background: {c['button']}; border: 1px solid {c['button_border']}; border-radius: {r['control']}px; padding: 6px {sp['lg']}px; }}
 QWidget#time-row QSpinBox, QWidget#time-row QDoubleSpinBox, QWidget#time-row QComboBox {{ padding: 5px {sp['xs'] + 1}px; }}
 QWidget#time-row QPushButton {{ padding: 6px {sp['md']}px; }}
+QDoubleSpinBox#knob-value {{ background: {c['field']}; border-radius: {r['field']}px; padding: 3px 6px; }}
+QSlider#knob-slider::groove:horizontal {{ height: 6px; background: {c['border']}; border-radius: 3px; }}
+QSlider#knob-slider::sub-page:horizontal {{ background: {c['accent']}; border-radius: 3px; }}
+QSlider#knob-slider::handle:horizontal {{ width: 14px; margin: -4px 0; border-radius: 7px; background: {c['text']}; }}
 QPushButton:hover {{ background: {c['hover']}; border-color: {c['faint']}; }}
 QPushButton:pressed {{ background: {c['field']}; }}
 QPushButton:disabled {{ color: {c['muted']}; }}

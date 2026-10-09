@@ -302,14 +302,9 @@ class FloatSliderControl(QWidget):
         self.spin.setDecimals(3)
         self.spin.setSingleStep(0.1)
         self.spin.setKeyboardTracking(False)
-        self.spin.setStyleSheet("QDoubleSpinBox { font-family: monospace; background: #0b0d10; "
-                                "border: 1px solid #232930; border-radius: 6px; padding: 3px 6px; }")
+        self.spin.setObjectName("knob-value")   # styled by the theme; a per-widget sheet is kept for key tints
         self.slider = RulerSlider(*(soft_range or hard_range))
-        self.slider.setStyleSheet("QSlider::groove:horizontal { height: 6px; background: #1c2127; "
-                                  "border-radius: 3px; } QSlider::sub-page:horizontal { "
-                                  "background: #5ee0b5; border-radius: 3px; } QSlider::handle:horizontal { "
-                                  "width: 14px; margin: -4px 0; border-radius: 7px; "
-                                  "background: #f4f7f9; }")
+        self.slider.setObjectName("knob-slider")
         self.slider.set_float_value(value)
         self.spin.setValue(value)
         layout = QHBoxLayout(self)
