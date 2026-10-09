@@ -1,3 +1,77 @@
+# NodeBased 0.35.0 — the first of the new look, a Roto node that animates and follows trackers, a graph that behaves like Nuke's, volumes in the path tracer, adaptive sampling that pays off on the GPU, and liquids that stay on the card
+
+## What changed since 0.34.0
+
+- **The new look (first two of seven stages).** A darker theme with new type and rounded controls; a new
+  top bar with the project and shot, workspace tabs, one search box, a GPU status light and Check for updates.
+  The node graph draws each node tinted in its family's colour with a coloured outline, wires take the colour of
+  the node they come from, mask inputs sit on the right side of a node, a Curved / Right angle switch sets the
+  wire style, and the minimap shows the families. The left node column, the viewer strip, the timeline,
+  Properties and motion follow in the next releases.
+- **2D.**
+  - New `Roto` node: an editable shape list, feather and opacity per shape, motion blur from animated shapes,
+    keys and auto-key on each shape, keys shown on the timeline, in the viewer and in Properties, shapes linked
+    to named tracker paths, and an optional background plate with the shape's coverage in its alpha.
+  - The graph works like Nuke's: a node made from a shortcut or Tab search is wired to the selection; new nodes
+    land below the selection (or at the centre of the view with nothing selected) and the graph pans to show
+    them; F frames the selection. S makes a Shuffle (Settings moved to Ctrl+,).
+  - Animated knobs say so: a tinted field, a diamond on key frames, a key button, I sets a key, previous and
+    next key in the knob menu. Timeline key marks name the node and knobs keyed on the hovered frame.
+  - Numeric fields show their full value and accept every typed digit (out-of-range values clamp, exponents
+    allowed). The time row reads Frame, In and Out like a compositor's and refuses an inverted range.
+  - Write renders report frame N of M with elapsed time and Cancel, a completion message with Show in folder,
+    and stop on a failing frame with its number.
+  - Merge with nothing in A passes B through unchanged. New point tracking nodes (2D and 3D), `PointsTo3D` and
+    `Reconcile3D`. `HSVTool` range masks and alpha outputs, HueCorrect's saturation threshold, tile-native
+    `Encryptomatte` masks, ScreenKeyer's remaining matte and edge controls; keyframed analysis regions are
+    measured on every frame of a range.
+  - Workspace: an artist-sized default layout with the Node Graph and NODES side by side, cramped saved layouts
+    repaired; the 3D viewport button opens the viewer in front. RotoPaint puts its paint controls first.
+- **Rendering.**
+  - Smoke and other volumes in the path tracers (CPU and GPU), with volume motion blur across `Render3D`'s
+    shutter and every data pass (normals, position, ids, Cryptomatte, motion, depth) for volumes.
+  - Adaptive sampling never takes more samples per pixel than "Path samples", and is now faster than fixed 64
+    samples on all nine pairs of graphics card and benchmark scene (Radeon 8060S, RTX 3080 Ti and the software
+    renderer); a portable benchmark (`tools/benchmark_portable_render.py`) measures any adapter.
+  - Smoke renders fill the GPU: on the RTX 3080 Ti a smoke frame takes 59 ms instead of 143 ms, on the Radeon
+    61 ms instead of 113 ms.
+  - Adaptive sampling now saves time on the GPU: on an RTX 3080 Ti it beats fixed 64 samples' quality in less
+    time on all three benchmark scenes (one scene: 47.8 dB in 141 ms against 46.8 dB in 230 ms).
+  - Light linking on the GPU without a CPU fallback for splat and instance sets, and now also on liquid glints,
+    lit particle sets (whitewater included) and smoke, in every renderer.
+  - Transparent meshes mixed with Gaussian splats on the GPU; depth, position and object_id passes for scenes
+    with splats; a faster layered splat resolve. Sparse volumes are read straight from their tiles in the
+    viewport, the GPU raster and the GPU path tracer. A mixed-scene example project.
+- **Fluids.**
+  - The FLIP liquid stays on the GPU between substeps (particles, grid, pressure), surface tension and
+    adaptive domains included; face-field extrapolation runs on the card.
+  - Long bakes keep the card's memory bounded; colliders that run past the domain stay solid to the edge and no
+    longer widen an adaptive domain; steam rises off a liquid surface and collides with it; whitewater emits at
+    fine resolutions and its neighbour search is about ten times faster.
+  - A new Hot pour scene and preset: tea poured into a glass on a table, with steam.
+  - Simulation caches are written as one packed file per frame (older caches still load), and Hot pour's
+    full-size bake, stills and playback are measured on the Radeon and the software renderer.
+- **Generative conditioning.** A persistent job queue with a Conditioning Queue panel and LAN workers; bounded
+  generate-and-verify loops with saved candidates, hard limits, and controls to inspect, stop and choose a
+  result. Artifact writes are safe under concurrency and on Windows.
+
+## Known limits
+
+- **Generative conditioning:** still no real model provider; only the stand-ins run.
+- **Fluids:** cached playback of the full-size Hot pour scene is slow (about 0.09 frames per second on the
+  Radeon): its frames outgrow the cache and are worked out again. Real-time 128³ liquids are not reached yet.
+- **New look:** on Windows the top bar needs more than the 800-pixel minimum window width; a window squeezed
+  to its minimum can still cut it off.
+- **2D:** the Keylight row stays partial. **Rigid bodies:** no fracture.
+- **Windows:** tested by the automated suite on the CI runner only.
+
+## Moved to 0.36.0
+
+- Interactive Hot pour playback, the rest of the new look, and the remaining 2D parity and Roto polish found in
+  the hands-on pass of October 7.
+- A first real model provider for generative conditioning (DiMo's choice).
+- The 2D-to-3D pipe (ImageToSplat, ImageToMesh, WorldSculpt), on hold.
+
 # NodeBased 0.34.0 — one viewer for 2D and 3D, adaptive sampling and light groups, liquids an artist can scrub, several fluids in one scene, and a generative conditioning chain from scene export to scored result
 
 ## What changed since 0.33.0
