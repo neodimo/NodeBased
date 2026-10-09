@@ -62,8 +62,16 @@ def bake(document, root, frames=range(1, FRAMES + 1), first=None):
 def cache_arrays(root):
     """{relative path: {array name: array}} of every file in a cache."""
     out = {}
-    store = simcache.SimCache(root, memory_budget=8 << 30, disk_budget=8 << 30)
+    stores = {}
     for path in sorted(Path(root).rglob("*.nbc")):
+        # Evaluator.sim_store scopes each budget pair below `stores/<memory>-<disk>`.
+        # The frame's store root is three parents above the file for both scoped and
+        # legacy direct-layout entries.
+        store_root = path.parents[2]
+        store = stores.get(store_root)
+        if store is None:
+            store = simcache.SimCache(store_root, memory_budget=8 << 30, disk_budget=8 << 30)
+            stores[store_root] = store
         state = store.get(path.parent.name, int(path.stem))
         if state is not None:
             arrays = dict(state.arrays)
