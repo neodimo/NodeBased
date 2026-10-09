@@ -291,8 +291,8 @@ class FloatSliderControl(QWidget):
         layout.setSpacing(8)
         # Match the mockup's label / slider / typed value / key sequence. Size from the
         # active platform's font metrics so Windows' wider digits keep their full width.
-        metrics = self.spin.fontMetrics()
-        self.spin.setFixedWidth(max(54, metrics.horizontalAdvance("-000.000") + 28))
+        # No fixed width: the fitted value field asks for the width its number needs (every digit of -12345.678)
+        # and, on a panel too narrow for that, gives way to an ellipsis with the whole number in its tooltip.
         layout.addWidget(self.slider, 1)
         layout.addWidget(self.spin)
         self._syncing = False
@@ -6715,9 +6715,7 @@ class Window(QMainWindow):
         self.splitDockWidget(self.viewer_dock, self.graph_dock, Qt.Orientation.Vertical)
         dock = QDockWidget("PROPERTIES", self)
         dock.setObjectName("properties-dock")
-        # Keep the mockup's label / slider / value / key columns intact even when a
-        # previous workspace saved a narrower Properties dock.
-        dock.setMinimumWidth(DEFAULT_PROPERTIES_RANGE[0])
+        dock.setMinimumWidth(0)
         self.properties = QScrollArea()
         self.properties.setWidgetResizable(True)
         # Panels reflow to the dock's width (see make_fluid), so sideways scrolling would only
