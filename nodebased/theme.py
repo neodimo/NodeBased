@@ -339,7 +339,7 @@ QFrame#shortcut-overlay {{ background: {_rgba(c['title'], 0.96)}; border: 1px so
 QFrame#shortcut-overlay QLabel {{ background: transparent; }}
 QLabel#shortcut-title {{ color: {c['text']}; font-size: {t['base']}px; font-weight: 600; }}
 QLabel#shortcut-hint {{ color: {c['faint']}; font-size: {t['caption']}px; }}
-QLabel#shortcut-keys {{ color: {TOKENS['tx1']}; font-family: {t['mono']}; font-size: {t['caption']}px; background: {c['panel']}; border: 1px solid {c['button_border']}; border-radius: {r['kbd']}px; padding: 1px {sp['sm']}px; }}
+QLabel#shortcut-keys {{ color: {TOKENS['tx1']}; font-size: {t['caption']}px; background: {c['panel']}; border: 1px solid {c['button_border']}; border-radius: {r['kbd']}px; padding: 1px {sp['sm']}px; }}
 QLabel#shortcut-action {{ color: {c['muted']}; font-size: {t['small']}px; }}
 
 /* ---- the left column of node families and the floating node panel (see nodeshelf.py) ---- */

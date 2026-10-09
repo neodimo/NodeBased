@@ -11302,7 +11302,7 @@ class Window(QMainWindow):
         if overlay.isVisible():
             overlay.close()
         else:
-            overlay.show_above(self.graph.corner.help)
+            overlay.show_above(self.graph.corner.minimap)
 
     def update_corner_readout(self, scene_rect=None, scale=None):
         """Resolution, colour space and proxy state in the viewer's bottom-left corner."""

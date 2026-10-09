@@ -145,3 +145,57 @@ each stage of the restyle changed in the real Qt app. Stages: 1 colours, spacing
   more height for the picture only.
 - **Not done.** The panel's blur is a still copy of what was under it when it opened, not a live
   backdrop blur (Qt has no blur-behind for a child widget).
+
+### NL5: viewer strip and timeline
+
+- **Strip.** The viewer's two rows of controls are one rounded strip floating at the top of the viewer
+  (`nodebased/viewerstrip.py`): 2D / 3D, the channel buttons RGB R G B A (R, G and B in their own
+  colours), the display transform as a menu, gain and gamma, ROI and Fit, and a "more" menu. The more
+  menu holds what the old rows held beyond that: Proxy (Full, 1/2, 1/4, 1/8), Proxy while playing, Zebra,
+  Format mask and Mask mode, 1:1 pixels, Reset gain, Reset gamma and the viewer inputs (Show input 1 to 9,
+  B buffer, Compare). The display menu has two sections: Project view (sRGB, ACES 2.0, Linear) and This
+  viewer (the project's default or any view of the ACES config).
+- **Same state as before.** The widgets keep their names and signals (`channels`, `display_view`,
+  `viewer_display`, `proxy`, `playback_proxy`, `exposure`, `gamma`, `zebra`, `roi_button`, `mask_choice`,
+  `mask_mode`, `viewer_info`). The combo boxes and check boxes that have no place in the strip stay as
+  hidden models, and menu picks go through them (`currentIndex` then `activated`), so the document, the
+  shortcuts and the agent bridge read and write exactly what they did. `channels` is now `ChannelButtons`
+  with the combo's methods (`currentText`, `setCurrentText`, `currentTextChanged`).
+- **Corner readouts.** Bottom left: resolution, colour space and proxy state ("proxy 1/2", "proxy while
+  playing" or "full resolution"). Bottom right: cursor position (Nuke's y), the pixel value with its
+  swatch and the A/B buffer tag, and the zoom. The pixel readout is no longer a box that hunts for a free
+  spot over the picture; the 2D picture is fitted into the band between the strip and the corners
+  (`Viewer.insets`). `pixel_readout.label` still holds the whole machine-readable line (raw floats,
+  alpha included). The nine-button input strip is shown on the bottom edge between the two corners when
+  they leave it room, and its choices are always in the more menu.
+- **Time row.** One slim row: previous frame, the accent play button, next frame; the monospace frame
+  field (still the largest field); the track; In and Out; the rate and its presets; the real-time light.
+  The light is green and reads "real time" while playback keeps the clock and turns warm and reads
+  "dropping frames" once playback has dropped frames. When the viewer is narrow or the font is wide the row
+  hides the status text, then the light's words, then the rate presets (`TimeRow.fit`); a field that is
+  being edited is never hidden.
+- **Track.** The cached range is a green bar along the bottom (uncached frames show the quiet track), keys
+  are diamonds in the key blue between the frame numbers and the bar, and the playhead is an accent line
+  with a glow and its frame number on a tab. The cache and key marks are pushed in exactly as before.
+- **Graph "?" overlay.** The line of shortcuts above the node graph is gone. The same items, word for word
+  (`nodebased/shortcuthelp.py`), open as a panel from the "?" button in the graph's corner and from the ?
+  key; Escape, ? or a click outside closes it.
+- **Dock title bars.** VIEWER, NODE GRAPH, PROPERTIES and the other docks have a slim, quiet title bar
+  (small muted caps over a hairline, a transparent float and close pair). They float, close and rearrange
+  as before.
+- **Sizes.** Every width is from font metrics. At 1280 x 720 and 1440 x 920, also with the font a quarter
+  larger, nothing in the strip, the corners or the time row is clipped (`tests/test_new_look_*_nl5.py`).
+  The strip turns ROI and Fit into icons before it would clip.
+- **Tests changed because the design changes them.** `test_no_toolbar_widget_is_clipped_at_1440x920` read
+  the two old rows and now reads the strip; `test_menu_shortcuts_and_graph_hint_remain_current` and
+  `test_the_table_covers_every_shortcut_in_the_hint_row` read the "?" overlay instead of the hint label;
+  the key mark test reads the diamond rectangle (`key_mark_rect`) instead of the old bottom-standing tick;
+  the time row clipping test counts nine widgets instead of ten (the TIME caption is gone).
+- **Screenshot.** `docs/images/ui-redesign/nl5.png`: the real app, offscreen at 1920 x 1080, the pointer
+  over the picture, frames 1 to 61 cached (the green range), four keys on the selected Grade (the
+  diamonds); `nl5-help.png` has the "?" overlay open. The graph panel is given less height than its
+  default for the picture only.
+- **Not done.** The strip is translucent, not a live backdrop blur (Qt has no blur-behind for a child
+  widget). The picture is fitted below the strip when the app fits it (first picture, Fit, a new format);
+  resizing a dock afterwards does not refit, as before, so the picture can reach under a corner readout
+  until Fit is pressed.

@@ -9,7 +9,7 @@ small frosted panel over the graph. It closes with Escape, with ? again, or with
 line did, so a test can hold the overlay to every shortcut the line listed.
 """
 from PySide6.QtCore import QEvent, QPoint, Qt
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
 
 SEPARATOR = "  ·  "
 GRAPH_SHORTCUTS = (
@@ -71,7 +71,8 @@ class ShortcutOverlay(QFrame):
             keycap.setObjectName("shortcut-keys")
             action = QLabel(what)
             action.setObjectName("shortcut-action")
-            grid.addWidget(keycap, row, column * 3)
+            keycap.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+            grid.addWidget(keycap, row, column * 3, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             grid.addWidget(action, row, column * 3 + 1)
             if column + 1 < COLUMNS:
                 grid.setColumnMinimumWidth(column * 3 + 2, 18)
@@ -90,7 +91,8 @@ class ShortcutOverlay(QFrame):
         super().keyPressEvent(event)
 
     def show_above(self, widget):
-        """Open with its bottom-right corner just above `widget`'s top-right corner."""
+        """Open with its bottom-right corner just above `widget`'s top-right corner (the graph's minimap
+        is the corner's rightmost control, so the panel lines up with the corner's right edge)."""
         self.adjustSize()
         anchor = widget.mapToGlobal(QPoint(widget.width(), 0))
         self.move(anchor.x() - self.width(), anchor.y() - self.height() - 8)
