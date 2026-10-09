@@ -23,4 +23,4 @@ nodebased-mcp = "nodebased.mcpserver:main"
 include = ["nodebased*"]
 
 [tool.setuptools.package-data]
-nodebased = ["data/docs/*.md"]
+nodebased = ["data/docs/*.md", "data/icons/*.svg"]
