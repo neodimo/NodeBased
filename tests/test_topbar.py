@@ -187,6 +187,23 @@ class TopBarTests(unittest.TestCase):
         self.assertIn(undo, w.actions())
         self.assertEqual(undo.shortcut().toString(), "Ctrl+Z")
 
+    def _floor(self):
+        """The narrowest the bar can be with every optional piece shed: the logo, tabs, menu and
+        Check for updates button always show in full, and on Windows' wider fonts that sum is more
+        than the window's 800 px minimum, so the narrow checks start from here."""
+        bar = self.window.topbar
+        bar.set_gpu("AMD Radeon Graphics", 12)
+        bar.search.set_icon_only(True)
+        bar.project_shot.hide()
+        bar.gpu_pill.set_compact(True)
+        bar.layout().invalidate()
+        floor = bar.layout().minimumSize().width()
+        bar._fit()
+        return floor
+
+    def _narrow(self):
+        return max(NARROW[0], self._floor() + 40), NARROW[1]
+
     def _assert_bar_fits(self, width, height, scale=None):
         w = self.window
         base = w.font()
@@ -236,7 +253,7 @@ class TopBarTests(unittest.TestCase):
             self._assert_bar_fits(width, height, scale=1.25)
 
     def test_nothing_clips_at_the_narrowest_window(self):
-        self._assert_bar_fits(*NARROW)
+        self._assert_bar_fits(*self._narrow())
 
     def test_nothing_clips_with_a_wider_family_as_on_windows(self):
         # Windows fonts run wider than Linux's. The stylesheet fixes sizes per widget, so a window
@@ -250,7 +267,7 @@ class TopBarTests(unittest.TestCase):
             self._assert_bar_fits(1280, 720, scale=1.25)
             # Windows' Segoe UI bar is about 1.4x the width of Noto Sans here, so the window's
             # narrowest size on Linux stands in for 1280 there.
-            self._assert_bar_fits(*NARROW)
+            self._assert_bar_fits(*self._narrow())
         finally:
             APP.setStyleSheet(base)
 
@@ -258,13 +275,15 @@ class TopBarTests(unittest.TestCase):
         w, bar = self.window, self.window.topbar
         bar.set_project("hot_pour_long_project_name", "comp_v012", saved=True)
         bar.set_gpu("AMD Radeon Graphics", 12)
-        w.resize(1600, 800)
+        floor = self._floor()
+        top = max(1600, floor + 800)       # wide enough that nothing has been shed yet
+        w.resize(top, 800)
         for _ in range(5):
             APP.processEvents()
         self.assertTrue(bar.search.hint.isVisible() and bar.project_shot.isVisible())
         self.assertIn("AMD Radeon Graphics", bar.gpu_pill.text())
         order = []
-        for width in range(1600, 500, -20):
+        for width in [*range(top, floor, -20), floor]:
             w.resize(width, 800)
             for _ in range(3):
                 APP.processEvents()
