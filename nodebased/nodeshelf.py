@@ -16,6 +16,7 @@ import math
 from PySide6.QtCore import QEvent, QMimeData, QObject, QPoint, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication, QFrame, QGraphicsDropShadowEffect,
+                               QGraphicsOpacityEffect,
                                QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QStyledItemDelegate,
                                QSizePolicy, QVBoxLayout, QWidget)
 
@@ -652,8 +653,21 @@ class NodeShelf(QObject):
         self._position(button)
         self.panel.hide()                       # so the grab below shows the window, not the old panel
         self.panel.set_backdrop(self.window.grab(self.panel.geometry()))
+        final_pos = self.panel.pos()
+        opacity = None
+        if self.window.motion.enabled:
+            self.panel.move(final_pos.x() - 12, final_pos.y())
+            opacity = QGraphicsOpacityEffect(self.panel)
+            self.panel.setGraphicsEffect(opacity)
+            opacity.setOpacity(0.0)
         self.panel.show()
         self.panel.raise_()
+        if opacity is not None:
+            self.window.motion.animate(("family-panel-x", id(self)), self.panel,
+                                       self.panel.x(), final_pos.x(),
+                                       lambda x, p=self.panel, y=final_pos.y(): p.move(round(x), y), 120)
+            self.window.motion.animate(("family-panel-opacity", id(self)), self.panel, 0.0, 1.0,
+                                       opacity.setOpacity, 120)
         self.panel.filter.setFocus(Qt.FocusReason.PopupFocusReason)
         self._watch(True)
 

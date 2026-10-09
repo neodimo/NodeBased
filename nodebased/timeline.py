@@ -107,6 +107,7 @@ class TimelineBar(QWidget):
         self._first = 1
         self._last = 100
         self._value = 1
+        self._visual_value = 1.0
         self.cached_frames: set[int] = set()
         self.key_frames: set[int] = set()
         # frame -> ["Grade · exposure", ...]: what the key marks are keys of, for the hover tooltip.
@@ -130,6 +131,7 @@ class TimelineBar(QWidget):
         self._first = int(first)
         self._last = max(int(last), int(first))
         self._value = min(max(self._value, self._first), self._last)
+        self._visual_value = min(max(self._visual_value, self._first), self._last)
         self.update()
 
     def setValue(self, value):
@@ -137,8 +139,14 @@ class TimelineBar(QWidget):
         if value == self._value:
             return
         self._value = value
+        self._visual_value = float(value)
         self.update()
         self.valueChanged.emit(value)
+
+    def set_visual_value(self, value):
+        """Move the painted playhead independently of the exact transport frame."""
+        self._visual_value = min(max(float(value), self._first), self._last)
+        self.update()
 
     def value(self):
         return self._value
@@ -283,7 +291,8 @@ class TimelineBar(QWidget):
         self._draw_key_diamonds(painter)
 
         # Playhead last, so nothing buries it: a glow, the line, and the frame number on a tab.
-        playhead_x = self.frame_x(self._value) + min(per_frame, 6.0) / 2
+        # The motion clock moves _visual_value smoothly between frames during playback; the tab keeps the exact frame.
+        playhead_x = self.frame_x(self._visual_value) + min(per_frame, 6.0) / 2
         playhead_x = min(max(playhead_x, 1.0), width - 1.0)
         glow = QColor(PLAYHEAD_COLOR)
         glow.setAlpha(60)

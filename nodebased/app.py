@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
     QCheckBox, QMenu, QSizePolicy, QProgressDialog, QProgressBar, QTabWidget, QPlainTextEdit, QFrame,
     QColorDialog, QAbstractSpinBox, QAbstractItemView, QTextEdit, QToolButton, QDialogButtonBox,
-    QStackedWidget, QButtonGroup)
+    QStackedWidget, QButtonGroup, QStyleOptionSlider, QStylePainter)
 
 from . import __version__
 from .updater import Updater
@@ -53,6 +53,7 @@ from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
 from .queuepanel import QueuePanel, create_default_queue
+from .motion import MotionAnimator
 
 
 class GenerateSignals(QObject):
@@ -259,6 +260,8 @@ class RulerSlider(QSlider):
         self.soft_min = float(soft_min)
         self.soft_max = float(soft_max)
         self.setRange(0, 1000)
+        self._visual_position = float(self.value())
+        self.motion = None
         self.setFixedHeight(24)
         self.setToolTip(f"Soft range: {self.soft_min:g} to {self.soft_max:g}")
 
@@ -274,6 +277,16 @@ class RulerSlider(QSlider):
             value = max(self.soft_min, min(self.soft_max, float(value)))
             position = round((value - self.soft_min) / (self.soft_max - self.soft_min) * 1000)
         self.setValue(position)
+        self._visual_position = float(position)
+        self.update()
+
+    def paintEvent(self, event):
+        option = QStyleOptionSlider()
+        self.initStyleOption(option)
+        option.sliderPosition = round(self._visual_position)
+        option.sliderValue = self.value()
+        painter = QStylePainter(self)
+        painter.drawComplexControl(QStyle.ComplexControl.CC_Slider, option)
 
 class FloatSliderControl(QWidget):
     """A float spin box paired with a soft-range ruler slider."""
@@ -322,6 +335,17 @@ class FloatSliderControl(QWidget):
         self._syncing = True
         self.spin.setValue(self.slider.float_value())
         self._syncing = False
+        start = self.slider._visual_position
+        if self.slider.isSliderDown() and self.motion is not None and self.motion.enabled:
+            self.motion.animate(("knob-slider", id(self)), self.slider, start, float(value),
+                                self._set_slider_visual, 90)
+        else:
+            self.slider._visual_position = float(value)
+            self.slider.update()
+
+    def _set_slider_visual(self, value):
+        self.slider._visual_position = float(value)
+        self.slider.update()
 
     def value(self):
         return self.spin.value()
@@ -367,9 +391,12 @@ class PropertiesColorWheel(QWidget):
         self.setAccessibleName("Color balance wheel")
         self._lo, self._hi = limits
         self._value = float(value)
+        self._visual_value = float(value)
+        self.motion = None
 
     def setValue(self, value):
         self._value = max(self._lo, min(self._hi, float(value)))
+        self._visual_value = self._value
         self.update()
 
     def _set_from_pos(self, point):
@@ -378,9 +405,19 @@ class PropertiesColorWheel(QWidget):
         value = self._lo + (self._hi - self._lo) * (point.x() - margin) / width
         value = max(self._lo, min(self._hi, value))
         if value != self._value:
+            start = self._visual_value
             self._value = value
             self.valueChanged.emit(value)
+            if self.motion is not None and self.motion.enabled:
+                self.motion.animate(("color-wheel", id(self)), self, start, value,
+                                    self._set_visual_value, 90)
+            else:
+                self._visual_value = value
             self.update()
+
+    def _set_visual_value(self, value):
+        self._visual_value = float(value)
+        self.update()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -426,7 +463,7 @@ class PropertiesColorWheel(QWidget):
         painter.drawEllipse(center, radius - 1, radius - 1)
         painter.setPen(QPen(QColor(17, 20, 24, 95), 10))
         painter.drawEllipse(center, radius - 6, radius - 6)
-        ratio = 0.5 if self._hi == self._lo else (self._value - self._lo) / (self._hi - self._lo)
+        ratio = 0.5 if self._hi == self._lo else (self._visual_value - self._lo) / (self._hi - self._lo)
         angle = (ratio * 300 - 150) * 3.141592653589793 / 180
         marker = QPointF(center.x() + math.cos(angle) * radius * .55,
                          center.y() + math.sin(angle) * radius * .55)
@@ -611,6 +648,7 @@ class Preferences:
     RECENT_KINDS = "interface/node_recents"
     RECENT_KINDS_CAP = 10
     NODE_TOOLBAR_COMPACT = "interface/node_toolbar_compact"
+    REDUCE_MOTION = "interface/reduce_motion"
 
     def _kind_list(self, key):
         try:
@@ -652,6 +690,18 @@ class Preferences:
 
     def set_node_toolbar_compact(self, enabled):
         self._store.setValue(self.NODE_TOOLBAR_COMPACT, bool(enabled))
+        self._store.sync()
+
+    def reduce_motion(self):
+        # Offscreen Qt is the test runner. Keep tests deterministic and instant unless a test
+        # explicitly opts in through QSettings.
+        if QApplication.platformName().casefold() == "offscreen":
+            return True
+        value = self._store.value(self.REDUCE_MOTION, False)
+        return value not in (False, "false", "0", 0)
+
+    def set_reduce_motion(self, enabled):
+        self._store.setValue(self.REDUCE_MOTION, bool(enabled))
         self._store.sync()
 
     # ---- radial menu: trigger key, dead zone, and local-usage learning (plan "Radial menu", ----
@@ -5362,6 +5412,8 @@ class Graph(PanZoomView):
 
     def rebuild(self):
         selected = self.selected_id()
+        old_positions = {key: (item.pos().x(), item.pos().y())
+                         for key, item in self.items_by_id.items()}
         self.scene().blockSignals(True)
         self.edges = []
         self.insert_target = None
@@ -5373,6 +5425,14 @@ class Graph(PanZoomView):
             item = NodeItem(self, key, node)
             self.items_by_id[key] = item
             self.scene().addItem(item)
+            old_pos = old_positions.get(key)
+            target_x, target_y = node["pos"]
+            if self.window.motion.enabled and old_pos is not None and old_pos != (target_x, target_y):
+                item.setPos(*old_pos)
+                self.window.motion.animate(("node-x", key), item, old_pos[0], target_x,
+                                           lambda value, node_item=item: node_item.setX(value), 150)
+                self.window.motion.animate(("node-y", key), item, old_pos[1], target_y,
+                                           lambda value, node_item=item: node_item.setY(value), 150)
             item.setSelected(key == selected)
         for key, node in doc["nodes"].items():
             # A PostageStamp with "hide input" keeps its connection but draws no noodle.
@@ -6289,6 +6349,7 @@ class Window(QMainWindow):
         self.dispatcher = Dispatcher(document or demo_document())
         self.saved_document = copy.deepcopy(self.dispatcher.document)
         self.preferences = Preferences()
+        self.motion = MotionAnimator(self, enabled=not self.preferences.reduce_motion())
         self.theme_name = self.preferences.theme()
         self.accent_color = self.preferences.accent()
         self.show_thumbnails = self.preferences.thumbnails()
@@ -7013,6 +7074,7 @@ class Window(QMainWindow):
     def sync_timeline(self):
         """Push document time into the widgets without re-emitting edits back into the dispatcher."""
         time_range = self.dispatcher.document["time"]
+        old_playhead = self.frame_slider._visual_value
         widgets = (self.frame_first, self.frame_last, self.frame_current, self.frame_slider,
                    self.frame_fps, self.fps_presets)
         for widget in widgets:
@@ -7023,6 +7085,11 @@ class Window(QMainWindow):
         self.frame_last.setValue(time_range["last"])
         self.frame_current.setValue(time_range["current"])
         self.frame_slider.setValue(time_range["current"])
+        if self.playing and self.motion.enabled:
+            self.frame_slider.set_visual_value(old_playhead)
+            self.motion.animate(("playhead", id(self)), self.frame_slider, old_playhead,
+                                time_range["current"], self.frame_slider.set_visual_value,
+                                max(24, round(1000 / float(time_range["fps"]))))
         self.frame_fps.setValue(float(time_range["fps"]))
         # The preset box follows the rate rather than leading it, so a document opened at 23.976
         # shows that name instead of leaving a stale selection from the previous comp.
@@ -7312,6 +7379,14 @@ class Window(QMainWindow):
                                      "install has them")
         default_workspace.triggered.connect(lambda checked=False: self.reset_workspace())
         preferences_menu = self.menuBar().addMenu("Preferences")
+        reduce_motion_action = preferences_menu.addAction("Reduce motion")
+        reduce_motion_action.setCheckable(True)
+        reduce_motion_action.setChecked(self.preferences.reduce_motion())
+        reduce_motion_action.setToolTip("Make interface motion immediate")
+        reduce_motion_action.toggled.connect(self.preferences.set_reduce_motion)
+        reduce_motion_action.toggled.connect(lambda reduced: self.motion.set_enabled(not reduced))
+        self.reduce_motion_action = reduce_motion_action
+        preferences_menu.addSeparator()
         radial_commands_action = preferences_menu.addAction("Radial commands…")
         radial_commands_action.triggered.connect(lambda checked=False: self.open_radial_commands_editor())
         radial_settings_action = preferences_menu.addAction("Radial settings…")
@@ -8455,6 +8530,7 @@ class Window(QMainWindow):
                 for label_text, param in bindings:
                     limits = parameter_limits(node["type"], param)
                     wheel = PropertiesColorWheel(resolved[param], limits)
+                    wheel.motion = self.motion
                     wheel.setObjectName(f"{param}-color-wheel")
                     wheel.editingFinished.connect(
                         lambda value, k=key, p=param: self.commit_param(k, p, value))
@@ -8782,6 +8858,8 @@ class Window(QMainWindow):
                     curve = curves.get(param)
                     shown = resolved[param] if (curve or param in expressions) else value
                     control = FloatSliderControl(parameter_limits(node["type"], param), group.soft_range, shown)
+                    control.motion = self.motion
+                    control.slider.motion = self.motion
                     control.spin.setObjectName(f"{param}-field")
                     if param in expressions:
                         control.setEnabled(False)
