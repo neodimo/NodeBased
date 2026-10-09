@@ -2481,6 +2481,8 @@ class KnobLayoutTests(unittest.TestCase):
         panel = self.select('transform')
         for name in ('view-node', 'reference-node', 'help-node', 'revert-knobs', 'close-knobs'):
             self.assertIsInstance(panel.findChild(PropertiesIconButton, name), PropertiesIconButton)
+        self.assertIsInstance(panel.findChild(PropertiesIconButton, 'properties-menu'), PropertiesIconButton)
+        self.assertEqual(panel.findChild(QLabel, 'properties-node-type').text(), 'Transform · Transform')
         self.assertTrue(panel.findChild(PropertiesIconButton, 'help-node').toolTip().startswith(
             node_description('Transform')))
         self.assertFalse(any(button.text() in ('Close', 'Revert')
@@ -2725,6 +2727,36 @@ class PropertiesRedesignTests(unittest.TestCase):
         switch.click()
         self.assertTrue(wait_until(lambda: self.window.graph_nodes()["switch_clamp"]
                                    ["params"]["clamp_min"] != before))
+
+    def test_slider_precedes_font_fitted_value_and_range_stays_in_tooltip(self):
+        panel = self._panel_for("slider_grade", "Grade")
+        value = panel.findChild(QDoubleSpinBox, "exposure-field")
+        slider = panel.findChild(QSlider)
+        key = panel.findChild(QPushButton, "key-button")
+        self.assertIsNotNone(value)
+        self.assertIsNotNone(slider)
+        self.assertIsNotNone(key)
+        APP.processEvents()
+        self.assertLess(slider.mapTo(panel, QPoint(0, 0)).x(),
+                        value.mapTo(panel, QPoint(0, 0)).x())
+        self.assertLess(value.mapTo(panel, QPoint(0, 0)).x(),
+                        key.mapTo(panel, QPoint(0, 0)).x())
+        self.assertEqual(slider.height(), 24)
+        self.assertIn("Soft range", slider.toolTip())
+
+    def test_colour_wheel_is_filled_and_marker_tracks_value(self):
+        from nodebased.app import PropertiesColorWheel
+        wheel = PropertiesColorWheel(0.0, (-1.0, 1.0))
+        wheel.show()
+        APP.processEvents()
+        image = wheel.grab().toImage()
+        # Hue is present through the disc, including its centre; the old ring left a hole.
+        center = image.pixelColor(image.width() // 2, image.height() // 2)
+        rim = image.pixelColor(image.width() // 2, 6)
+        self.assertGreater(center.red() + center.green() + center.blue(), 120)
+        self.assertGreater(rim.red() + rim.green() + rim.blue(), 100)
+        wheel.setValue(1.0)
+        self.assertNotEqual(wheel._value, 0.0)
 
 
 class PropertiesLabelTests(unittest.TestCase):

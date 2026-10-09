@@ -20,7 +20,8 @@ import uuid
 from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
-                           QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient)
+                           QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
+                           QConicalGradient, QRadialGradient)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -205,6 +206,11 @@ class PropertiesIconButton(QToolButton):
         elif self.icon_name == "close-knobs":
             painter.drawLine(8, 8, 20, 20)
             painter.drawLine(20, 8, 8, 20)
+        elif self.icon_name == "properties-menu":
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            for y in (8, 14, 20):
+                painter.drawEllipse(QPointF(14, y), 1.5, 1.5)
         if self.hasFocus():
             painter.setPen(QPen(QColor("#65b9ff"), 1.0, Qt.PenStyle.DashLine))
             painter.drawRoundedRect(QRectF(1.5, 1.5, self.width() - 3, self.height() - 3), 3, 3)
@@ -249,7 +255,7 @@ class RulerSlider(QSlider):
         self.soft_min = float(soft_min)
         self.soft_max = float(soft_max)
         self.setRange(0, 1000)
-        self.setFixedHeight(38)
+        self.setFixedHeight(24)
         self.setToolTip(f"Soft range: {self.soft_min:g} to {self.soft_max:g}")
 
     def float_value(self):
@@ -264,34 +270,6 @@ class RulerSlider(QSlider):
             value = max(self.soft_min, min(self.soft_max, float(value)))
             position = round((value - self.soft_min) / (self.soft_max - self.soft_min) * 1000)
         self.setValue(position)
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-        painter.setPen(self.palette().color(self.foregroundRole()))
-        font = painter.font()
-        font.setPointSize(8)
-        painter.setFont(font)
-        left, right = 8, max(8, self.width() - 8)
-        for fraction in (0.0, 0.5, 1.0):
-            x = left + fraction * (right - left)
-            painter.drawLine(QPointF(x, 24), QPointF(x, 28))
-            label = f"{self.soft_min + fraction * (self.soft_max - self.soft_min):g}"
-            bounds = painter.fontMetrics().boundingRect(label)
-            # Centering every label on its tick ran the end ones past the widget's own edges
-            # (finding 7, 2026-09-30: "-10" at the start, "1" at the end, both clipped). The
-            # two end ticks anchor to the inside edge instead; only the middle one centers.
-            if fraction <= 0.0:
-                text_x = x
-            elif fraction >= 1.0:
-                text_x = x - bounds.width()
-            else:
-                text_x = x - bounds.width() / 2
-            text_x = max(0.0, min(text_x, self.width() - bounds.width()))
-            painter.drawText(QRectF(text_x, 27, bounds.width(), 11),
-                             Qt.AlignmentFlag.AlignCenter, label)
-
 
 class FloatSliderControl(QWidget):
     """A float spin box paired with a soft-range ruler slider."""
@@ -310,9 +288,13 @@ class FloatSliderControl(QWidget):
         self.spin.setValue(value)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        layout.addWidget(self.spin)
+        layout.setSpacing(8)
+        # Match the mockup's label / slider / typed value / key sequence. Size from the
+        # active platform's font metrics so Windows' wider digits keep their full width.
+        metrics = self.spin.fontMetrics()
+        self.spin.setFixedWidth(max(54, metrics.horizontalAdvance("-000.000") + 28))
         layout.addWidget(self.slider, 1)
+        layout.addWidget(self.spin)
         self._syncing = False
         self.spin.valueChanged.connect(self._spin_changed)
         self.slider.valueChanged.connect(self._slider_changed)
@@ -422,21 +404,31 @@ class PropertiesColorWheel(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         center = QPointF(self.width() / 2, self.height() / 2)
         radius = min(self.width(), self.height()) / 2 - 2
-        for index in range(72):
-            color = QColor.fromHsv(int(index * 360 / 72), 210, 245)
-            pen = QPen(color, 9)
-            painter.setPen(pen)
-            painter.drawArc(QRectF(center.x() - radius + 5, center.y() - radius + 5,
-                                   2 * (radius - 5), 2 * (radius - 5)),
-                            int((90 - (index + 1) * 5) * 16), 5 * 16)
+        disc = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
+        hue = QConicalGradient(center, 90)
+        for stop, color in ((0.0, "#ff5a5a"), (.17, "#ffd25a"), (.34, "#7be07b"),
+                            (.51, "#5ad9ff"), (.68, "#7a7aff"), (.85, "#ff5ad9"), (1.0, "#ff5a5a")):
+            hue.setColorAt(stop, QColor(color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(hue)
+        painter.drawEllipse(disc)
+        falloff = QRadialGradient(center, radius * .9)
+        falloff.setColorAt(0, QColor(255, 255, 255, 38))
+        falloff.setColorAt(.68, QColor(255, 255, 255, 0))
+        painter.setBrush(falloff)
+        painter.drawEllipse(disc)
         painter.setPen(QPen(QColor("#2c333b"), 1))
-        painter.setBrush(QColor("#111418"))
-        painter.drawEllipse(center, radius - 12, radius - 12)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(center, radius - 1, radius - 1)
+        painter.setPen(QPen(QColor(17, 20, 24, 95), 10))
+        painter.drawEllipse(center, radius - 6, radius - 6)
         ratio = 0.5 if self._hi == self._lo else (self._value - self._lo) / (self._hi - self._lo)
-        marker_x = 9 + ratio * (self.width() - 18)
+        angle = (ratio * 300 - 150) * 3.141592653589793 / 180
+        marker = QPointF(center.x() + math.cos(angle) * radius * .55,
+                         center.y() + math.sin(angle) * radius * .55)
         painter.setPen(QPen(QColor("#ffffff"), 2))
-        painter.setBrush(QColor("#5ee0b5"))
-        painter.drawEllipse(QPointF(marker_x, center.y()), 5, 5)
+        painter.setBrush(QColor("#20252b"))
+        painter.drawEllipse(marker, 5, 5)
 
 
 class PropertiesSwitch(QCheckBox):
@@ -6723,7 +6715,9 @@ class Window(QMainWindow):
         self.splitDockWidget(self.viewer_dock, self.graph_dock, Qt.Orientation.Vertical)
         dock = QDockWidget("PROPERTIES", self)
         dock.setObjectName("properties-dock")
-        dock.setMinimumWidth(0)
+        # Keep the mockup's label / slider / value / key columns intact even when a
+        # previous workspace saved a narrower Properties dock.
+        dock.setMinimumWidth(DEFAULT_PROPERTIES_RANGE[0])
         self.properties = QScrollArea()
         self.properties.setWidgetResizable(True)
         # Panels reflow to the dock's width (see make_fluid), so sideways scrolling would only
@@ -8269,7 +8263,7 @@ class Window(QMainWindow):
             collapse.setText("▾")
             collapse.setToolTip("Collapse or expand this node's properties")
             collapse.setAccessibleName("Collapse properties")
-            collapse.setVisible(key not in self.pinned_panels)
+            collapse.setVisible(False)
             title = QLineEdit(node["name"])
             title.setObjectName("node-name-header")
             title.setFrame(False)
@@ -8284,20 +8278,27 @@ class Window(QMainWindow):
             name_layout.setContentsMargins(0, 0, 0, 0)
             name_layout.setSpacing(0)
             name_layout.addWidget(title)
-            node_type = QLabel(node["type"])
+            node_type = QLabel(f"{node_family(node['type'])} · {node['type']}")
             node_type.setObjectName("properties-node-type")
             node_type.setStyleSheet("color: #7d8793; font-size: 11px")
             name_layout.addWidget(node_type)
             top_layout.addWidget(badge)
-            top_layout.addWidget(collapse)
             top_layout.addWidget(name_stack, 1)
+            properties_menu = QMenu(top)
 
-            def icon_button(name, tooltip, callback):
+            def icon_button(name, tooltip, callback, *, in_menu=False):
                 button = PropertiesIconButton(name)
                 button.setToolTip(tooltip)
                 button.setAccessibleName(tooltip)
                 button.clicked.connect(lambda checked=False: callback(checked))
-                top_layout.addWidget(button)
+                if in_menu:
+                    button.setParent(top)
+                    button.hide()
+                    action = properties_menu.addAction(tooltip)
+                    action.setObjectName(name)
+                    action.triggered.connect(button.click)
+                else:
+                    top_layout.addWidget(button)
                 return button
 
             if not self.graph_path:
@@ -8305,7 +8306,7 @@ class Window(QMainWindow):
                             lambda _=False, k=key: self.command({"op": "view", "id": k}))
             reference_button = icon_button(
                 "reference-node", "Reference for agent", lambda value, k=key:
-                self.defer_command({"op": "reference", "id": k, "value": value}))
+                self.defer_command({"op": "reference", "id": k, "value": value}), in_menu=True)
             reference_button.setChecked(key in self.dispatcher.document["references"])
             catalog_description = node_description(node["type"])
             long_description = ""
@@ -8317,7 +8318,7 @@ class Window(QMainWindow):
                     long_description = cells[-1] if cells else ""
             except (OSError, ValueError):
                 pass
-            help_button = icon_button("help-node", "Node help", lambda _=False: None)
+            help_button = icon_button("help-node", "Node help", lambda _=False: None, in_menu=True)
             help_text = catalog_description or ""
             if long_description and long_description.strip() != help_text.strip():
                 help_text += "\n\n" + long_description.strip()
@@ -8329,10 +8330,20 @@ class Window(QMainWindow):
                         lambda _=False, k=key, defaults=SPECS[node["type"]]["params"]: self.command(
                             {"op": "batch", "commands": [
                                 {"op": "set", "id": k, "param": param, "value": value}
-                                for param, value in defaults.items()]}))
+                                for param, value in defaults.items()]}), in_menu=True)
             icon_button("close-knobs", "Close this node's properties",
                         lambda _=False, k=key: self.close_panel(k) if k in self.pinned_panels
-                        else self.inspect(None))
+                        else self.inspect(None), in_menu=True)
+            properties_menu.addSeparator()
+            collapse_action = properties_menu.addAction("Collapse properties")
+            collapse_action.triggered.connect(collapse.click)
+            menu_button = PropertiesIconButton("properties-menu")
+            menu_button.setText("⋮")
+            menu_button.setToolTip("More node actions")
+            menu_button.setAccessibleName("More node actions")
+            menu_button.setMenu(properties_menu)
+            menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            top_layout.addWidget(menu_button)
             content = QWidget()
             content.setObjectName("node-panel-content")
             content_layout = QVBoxLayout(content)
@@ -8355,7 +8366,8 @@ class Window(QMainWindow):
             reset_controls = QPushButton("Reset")
             reset_controls.setObjectName("properties-controls-reset")
             reset_controls.setFlat(True)
-            reset_controls.setStyleSheet("color: #5ee0b5; border: 0; font-size: 11px")
+            reset_controls.setStyleSheet("QPushButton { color: #5ee0b5; background: transparent; "
+                                         "border: 0; padding: 0; font-size: 11px; }")
             reset_controls.clicked.connect(lambda checked=False, k=key, defaults=SPECS[node["type"]]["params"]:
                 self.command({"op": "batch", "commands": [
                     {"op": "set", "id": k, "param": param, "value": value}
@@ -8384,6 +8396,7 @@ class Window(QMainWindow):
             if node["type"] in ("Grade", "ColorCorrect"):
                 balance = QWidget()
                 balance.setObjectName("properties-balance-section")
+                balance.setMinimumHeight(142)
                 balance_layout = QVBoxLayout(balance)
                 balance_layout.setContentsMargins(0, 6, 0, 8)
                 balance_layout.setSpacing(6)
@@ -8401,7 +8414,8 @@ class Window(QMainWindow):
                 reset = QPushButton("Reset")
                 reset.setObjectName("balance-reset")
                 reset.setFlat(True)
-                reset.setStyleSheet("color: #5ee0b5; border: 0; font-size: 11px")
+                reset.setStyleSheet("QPushButton { color: #5ee0b5; background: transparent; "
+                                    "border: 0; padding: 0; font-size: 11px; }")
                 reset.clicked.connect(lambda checked=False, k=key, kind=node["type"]:
                     self.command({"op": "batch", "commands": [
                         {"op": "set", "id": k, "param": p, "value": value}
@@ -8431,6 +8445,7 @@ class Window(QMainWindow):
                     wheel_column.addWidget(caption)
                     wheels.addLayout(wheel_column, 1)
                 wheel_body = QWidget()
+                wheel_body.setMinimumHeight(112)
                 wheel_body.setLayout(wheels)
                 balance_layout.addWidget(wheel_body)
                 heading.toggled.connect(lambda shown, body=wheel_body, button=heading:
@@ -9531,6 +9546,8 @@ class Window(QMainWindow):
             # that change pixels.
             tabs = QTabWidget()
             tabs.setObjectName("node-tabs")
+            tabs.setStyleSheet("QTabBar::tab { padding: 6px 10px; color: #7d8793; border: 0; }"
+                               "QTabBar::tab:selected { color: #edf1f5; border-bottom: 2px solid #5ee0b5; }")
             tabs.addTab(top_aligned(content), "Knobs")
             user_knobs = node.get("user_knobs") or (self.graph_document().get("node_data", {}).get(key, {}).get("user_knobs", []))
             if user_knobs:
