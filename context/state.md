@@ -1,5 +1,53 @@
 ## 2026-10-09 — Lane 4 R1 finish: X1 agrees with the CPU (worktree, not yet merged)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (7:56 AM on 2026-10-09 PDT)
+
+`main` moved `b5e4dc2` -> `1d05eff` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 255 tests in 148.285 s, OK. Full suite on
+the stacked tip `1d05eff` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1009-0516.log`, started 5:16 AM): **Ran 4789 tests in 9383.576 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step NL3 of 7: drag a free node onto a wire to insert it.** Commits:
+  - `1786bbe` Docs and screenshots for NL3: dragging a free node onto a wire
+  - `048ed20` Drag a free node onto a wire to insert it: wire lights up under the card, drop splices it into the main input and the old destination (mask kept), one undo
+  Diff: 5 files changed, 398 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R1 of 2: X1 renders the same on the GPU as on the CPU.** Commits:
+  - `b5adfd0` notes: Lane 4 step R1 completion note in TASKLOG and state; raw X1 rows
+  - `6d0694a` bench: rerun the X1 rows on the Radeon, llvmpipe and RTX after the CPU occlusion fix; 105 to 110 dB against the CPU, RTX adaptive 90 dB from one pixel
+  - `6007642` render: the CPU path tracer builds its lobe from the occlusion-scaled diffuse colour, so its sampling density matches its sampler and the GPU (X1 55 to 106 dB against the GPU)
+  - `517f810` docs: X1 differs from the CPU reference only through the occlusion map; the CPU pdf ignores the occlusion the sampler used
+  Diff: 12 files changed, 583 insertions(+), 32 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step P1 of 2: cached playback that is not bound by reading the cache (finish 1).** Commits:
+  - `2531bb9` test: cache inspector invalidation checks packed .nbc frames as well as old .npz
+  - `b7cabc0` bench: corrected packed-cache Hot pour playback on the Radeon (0.09 fps whole, 0.19 fps steam)
+  - `a6deaa5` fix: tolerate cache eviction during disk reads
+  - `811b52d` test: find namespaced Hot pour cache frames
+  - `c8efaf5` test: isolate evaluator simulation cache budgets
+  - `45e1bd8` docs: explain cached playback eviction diagnosis
+  - `3a7f3fd` fix: use legacy frames as scoped cache anchors
+  - `cff8666` fix: preserve shared legacy simulation cache entries
+  - `3a8a93a` test: report namespaced simulation caches
+  - `ceff2a5` fix: isolate simulation cache budgets and retain full runs
+  - `e2cc9e2` perf: pack simulation cache frames and profile Hot pour playback
+  - `7f6df6b` perf: pack sim cache frames and verify read-ahead display
+  Diff: 15 files changed, 514 insertions(+), 133 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step NL6 of 7: Properties.** Commits:
+  - `acc85d4` Properties: number fields and sliders take their look from the theme (objectName rules) instead of per-widget sheets
+  - `666d1d0` feat: group Properties controls into compact sections
+  - `a44c4b3` feat: restyle Properties controls and add color wheels
+  Diff: 4 files changed, 268 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-3d-astra-lane` at the commit that carries this note; fix `6007642`, rows `6d0694a`. The CPU path tracer's lobe now carries the occlusion map's factor before its lobe choice probability and `pdf` are derived (it used the unscaled colour for the `pdf`), as the GPU lobe always did; X1 against the CPU went from 54.6 and 55.2 dB to 104.8 to 109.4 dB on the Radeon and llvmpipe and 110.3 dB on the RTX fixed 64; the RTX adaptive row is 90.1 dB from one pixel whose stop pass differs (40 against 48 samples). The CPU image was the wrong one; scenes without an occlusion map render as before. GPU test modules passed on all three adapters. Limits: one resolution and seed; Q1's quality-against-1024 rows not re-measured; no Windows or real-display run. Details: TASKLOG.md and `docs/BENCHMARKS-v0.35-portable-render.md`, "Step R1".
 
 ## 2026-10-08 — Lane 4 Q2 finish: smoke on the RTX (worktree, not yet merged)
