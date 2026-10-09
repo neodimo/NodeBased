@@ -1,5 +1,27 @@
 ## 2026-10-08 — Lane 4 Q2 finish: smoke on the RTX (worktree, not yet merged)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (11:46 PM on 2026-10-08 PDT)
+
+`main` moved `2d3d5ed` -> `1178316` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 17 tests in 29.640 s, OK. Full suite on
+the stacked tip `1178316` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1008-2116.log`, started 9:16 PM): **Ran 4766 tests in 8412.574 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step Q2 of 2: smoke on the RTX gets the grid speed-up.** Commits:
+  - `79915be` notes: Lane 4 step Q2 completion note in TASKLOG and state
+  - `e5b4023` bench: rerun the smoke rows on the RTX, Radeon and llvmpipe after band growth; RTX grid 59 ms against box 71 ms
+  - `c94b4eb` render: grow a smoke or splat render's row bands to about 8 ms per dispatch so the RTX is no longer left idle
+  - `32f9228` bench: profile the RTX smoke render by dispatch shape and phase; dispatch size, not the collision loop, bounds it
+  Diff: 25 files changed, 462 insertions(+), 99 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-3d-astra-lane` at the commit that carries this note; renderer change `c94b4eb`, rows `e5b4023`. A smoke or splat GPU render grows its row bands from 65 000 paths to about 8 ms per dispatch, so the RTX is no longer left idle: smoke box 144 to 71 ms, grid 143 to 59 ms (grid 17 percent faster than box); AMD 157 to 102 and 113 to 61 ms; llvmpipe grid 515 to 367 ms, box unchanged. Images unchanged (PSNR against CPU the same on all six rows). GPU test modules passed on all three adapters. Limits: one resolution and seed; surface-only and adaptive renders untouched; no Windows or real-display run. Details: TASKLOG.md and `docs/BENCHMARKS-v0.35-portable-render.md`, "Step Q2".
 
 ## 2026-10-08 — Lane 4 Q1 finish 1: adaptive sampling capped at Path samples (worktree, not yet merged)
