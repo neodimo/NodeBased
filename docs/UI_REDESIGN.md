@@ -74,3 +74,27 @@ each stage of the restyle changed in the real Qt app. Stages: 1 colours, spacing
   on the Checker and the Constant. The graph panel is given more height for the picture only.
 - **Speed.** The halo is drawn once per shape, colour and selection state and reused (a pixmap cache),
   so panning and dragging in a large graph repaint a picture per node instead of a dozen strokes.
+
+### NL3: drag a free node onto a wire to insert it
+
+- **Gesture.** Drag a node that has no connections over a wire: the wire lights up (a brighter, thicker
+  stroke with a soft halo). Drop it there and the node is spliced in: the wire's source feeds the node's
+  main input and the node's output feeds the wire's old destination input, a mask input included. The
+  main input is the one a node made from a selection takes (`creation_slot`: B on a Merge, bg on a Roto,
+  otherwise the first input that accepts the source's type). A wire out of a ShuffleCopy's second output
+  keeps that output choice.
+- **When it applies.** Only a node with no connections at all inserts, and only one node at a time. A
+  connected node dragged over a wire just moves, as does a node with no input or no output (Read, Input,
+  Viewer, Output, Write and the other Write nodes). A node that was not moved is never inserted, so a
+  click on a node resting on a wire does nothing. A wire only counts when both ends can take the node by
+  type, so a 2D node does not light a geometry wire.
+- **Which wire.** The wire has to pass through the node's card within 8 screen pixels (so the reach is
+  the same at any zoom); with several, the one nearest the card's centre. It works the same in Curved and
+  Right angle, because the test uses the wire's actual path.
+- **Undo.** The move and the two new connections are one batch: a single undo restores the original wire
+  and the node's position. If the batch is refused the node is just moved.
+- **Code.** `Graph.wire_to_insert_into` (hit test and type check), `Graph.set_insert_target` (highlight,
+  `Edge.set_highlight`), `Graph.commit_moves` (the batch). Tests: `tests/test_wire_insert.py`.
+- **Screenshot.** `docs/images/ui-redesign/nl3.png`: the real app, offscreen at 1920 x 1080, mid-drag with
+  a free Blur held over the Constant's wire into the Merge, the wire lit. `nl3-inserted.png` shows the
+  result after the drop.
