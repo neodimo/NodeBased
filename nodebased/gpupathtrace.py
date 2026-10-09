@@ -46,6 +46,8 @@ SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: ban
 BAND_TARGET_SECONDS = 0.008   # a smoke or splat render grows its row bands until one dispatch takes about this long (0: fixed bands)
 BAND_MAX_PATHS = 1 << 22      # and never past this many paths in one dispatch, however fast the first bands were
 MAX_JOBS = 32                 # dispatches one submission may carry (one uniform slot and bind group each)
+SURFACE_PASS_SAMPLES = 8      # samples a surface-only fixed render takes per pixel in one dispatch when the settings leave it open
+SOFT_PASS_SAMPLES = 2         # and a smoke or splat render (more is slower on the RTX 3080 Ti and the Radeon, step R2)
 CACHE_LIMIT_BYTES = 128 << 20  # a scene whose buffers, host copies and image need more than this is not kept between frames
 # what the renderer built or reused since the process started (tests read the difference around a render)
 COUNTERS = dict(pipelines=0, resolve_pipelines=0, scene_uploads=0, scene_reuses=0, accum_buffers=0, accum_reuses=0,
@@ -2603,18 +2605,18 @@ class _Frame:
     def release(self):
         for buffer in [*getattr(self, "scene_buffers", ()), getattr(self, "blocks", None), getattr(self, "accum", None),
                        getattr(self, "image", None), getattr(self, "counts", None), getattr(self, "resolve_params", None),
-                       *getattr(self, "uniforms", ()), *getattr(self, "staging", {}).values()]:
+                       getattr(self, "uniform_block", None), *getattr(self, "staging", {}).values()]:
             if buffer is not None:
                 buffer.destroy()
         self.arrays, self.scene_buffers, self.blocks = None, [], None
         self.accum, self.accum_size, self.image, self.counts, self.resolve_params = None, 0, None, None, None
-        self.uniforms, self.staging = [], {}
+        self.uniform_block, self.uniform_stride, self.uniform_bytes, self.uniform_scratch, self.staging = None, 0, 0, None, {}
         self.groups, self.group_key = {}, None
         self.resolve_group, self.resolve_key = None, None
 
     def nbytes(self):
         host = sum(a.nbytes for a in self.arrays or ())
-        device = sum(b.size for b in [*self.scene_buffers, self.accum, self.image, *self.uniforms, *self.staging.values()]
+        device = sum(b.size for b in [*self.scene_buffers, self.accum, self.image, self.uniform_block, *self.staging.values()]
                      if b is not None)
         return host + device
 
@@ -2656,21 +2658,34 @@ class _Frame:
             COUNTERS["accum_buffers"] += 1
         return self.accum
 
-    def group(self, device, wgpu, pipeline, slot, uniform_bytes):
-        """The bind group of dispatch `slot` (its own uniform buffer), built once per scene, accumulator and pipeline."""
+    def uniforms(self, device, wgpu, uniform_bytes):
+        """The stride of the dispatch slots in the one uniform buffer all of a submission's dispatches read (each binds its own
+        `uniform_bytes` at an offset of the adapter-guaranteed 256-byte alignment), and a scratch array for writing them."""
+        if self.uniform_block is None or self.uniform_bytes != uniform_bytes:
+            if self.uniform_block is not None:
+                self.uniform_block.destroy()
+            self.uniform_bytes = uniform_bytes
+            self.uniform_stride = -(-uniform_bytes // 256) * 256
+            self.uniform_block = device.create_buffer(size=MAX_JOBS * self.uniform_stride,
+                                                      usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+            self.uniform_scratch = bytearray(MAX_JOBS * self.uniform_stride)
+            self.groups = {}
+            COUNTERS["uniform_buffers"] += 1
+        return self.uniform_stride
+
+    def group(self, device, wgpu, pipeline, slot):
+        """The bind group of dispatch `slot`, built once per scene, accumulator and pipeline."""
         key = (pipeline, id(self.accum))
         if self.group_key != key:
             self.groups, self.group_key = {}, key
         if slot not in self.groups:
-            while len(self.uniforms) <= slot:
-                self.uniforms.append(device.create_buffer(size=uniform_bytes, usage=wgpu.BufferUsage.UNIFORM
-                                                          | wgpu.BufferUsage.COPY_DST))
-                COUNTERS["uniform_buffers"] += 1
-            self.groups[slot] = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
-                {"binding": i, "resource": {"buffer": b}}
-                for i, b in enumerate([*self.scene_buffers, self.accum, self.uniforms[slot], self.blocks])])
+            entries = [{"binding": i, "resource": {"buffer": b}} for i, b in enumerate([*self.scene_buffers, self.accum])]
+            entries.append({"binding": len(entries), "resource": {"buffer": self.uniform_block, "offset": slot * self.uniform_stride,
+                                                                  "size": self.uniform_bytes}})
+            entries.append({"binding": len(entries), "resource": {"buffer": self.blocks}})
+            self.groups[slot] = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=entries)
             COUNTERS["bind_groups"] += 1
-        return self.groups[slot], self.uniforms[slot]
+        return self.groups[slot]
 
     def stage(self, device, wgpu, size):
         """A mappable buffer of `size` bytes to read the card's answers through (made once per size)."""
@@ -2847,6 +2862,7 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
         readbacks["waits"] += 1
         lap("dispatch")
         return open_now
+    lap("adaptive setup")
     encoder = device.create_command_encoder()
     compute = encoder.begin_compute_pass()
     compaction(compute)                    # every pixel is open before the first pass
@@ -2991,7 +3007,16 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
         lap("upload")
-        per_pass = 1 if data_pass else max(1, settings.pass_samples or 1)
+        if data_pass or adaptive:
+            per_pass = 1
+        elif settings.pass_samples:
+            per_pass = max(1, settings.pass_samples)
+        elif settings.noise_threshold > 0:       # the legacy noise test retires tiles after every pass
+            per_pass = 1
+        elif heavy:
+            per_pass = SOFT_PASS_SAMPLES
+        else:
+            per_pass = SURFACE_PASS_SAMPLES       # a dispatch of one sample leaves the card mostly launching (Z1 on the RTX: 2.3 times slower)
         total_samples = 1 if data_pass else (settings.max_samples if adaptive else settings.samples)
         sample_index, passes = 0, 0
         tile_done = np.zeros(tiles_x * tiles_y, bool)
@@ -3019,15 +3044,19 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                 if not jobs:
                     return
                 through = appended
+                lap("job list")
+                stride = frame.uniforms(device, wgpu, len(base))
+                scratch = frame.uniform_scratch
+                for slot, (y0, y1, first, take_) in enumerate(jobs):       # every dispatch's uniform, written in one go
+                    scratch[slot * stride:slot * stride + len(base)] = base
+                    struct.pack_into("<IIII", scratch, slot * stride + 8, y0, y1, first, take_)    # row range, first sample, samples
+                device.queue.write_buffer(frame.uniform_block, 0, memoryview(scratch)[:len(jobs) * stride])
+                lap("uniform write")
                 encoder = device.create_command_encoder()
                 compute = encoder.begin_compute_pass()
                 compute.set_pipeline(pipeline)
                 for slot, (y0, y1, first, take_) in enumerate(jobs):
-                    group, uniform = frame.group(device, wgpu, pipeline, slot, len(base))
-                    struct.pack_into("<II", base, 8, y0, y1)               # the uniform's row range, first sample and sample count
-                    struct.pack_into("<II", base, 16, first, take_)
-                    device.queue.write_buffer(uniform, 0, base)           # the whole 8.5 KB: cheaper than slicing out the 32 that changed
-                    compute.set_bind_group(0, group)
+                    compute.set_bind_group(0, frame.group(device, wgpu, pipeline, slot))
                     compute.dispatch_workgroups(-(-width // wg), -(-(y1 - y0) // wg), 1)
                 compute.end()
                 lap("encode")
@@ -3064,7 +3093,10 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                         appended = sample_index + take         # this pass is now whole in the submission being filled
                     if job_paths >= sub_paths or len(jobs) >= MAX_JOBS:
                         flush(full=True)
-                tile_count[~tile_done] += take
+                if legacy_mask:
+                    tile_count[~tile_done] += take
+                else:
+                    tile_count += take             # no tile retires without the legacy noise test
                 sample_index += take
                 passes += 1
                 if legacy_mask:

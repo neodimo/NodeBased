@@ -127,8 +127,8 @@ class SparseOnTheGpuMatchesDense(unittest.TestCase):
         empty = s.Volume.from_sparse(grid, voxel_size=0.1, origin=(-1.6, -1.6, -1.6))
         scene = s.Scene((FLOOR,), lights=(SUN,), volumes=(empty,))
         with never_dense():
-            image = trace(scene)
-        np.testing.assert_allclose(image, trace(s.Scene((FLOOR,), lights=(SUN,))), atol=0)
+            image = trace(scene, pass_samples=2)       # the same samples per dispatch as the bare scene: the sums then add in the same order
+        np.testing.assert_allclose(image, trace(s.Scene((FLOOR,), lights=(SUN,)), pass_samples=2), atol=0)
         packed = gpupathtrace.pack(pt.build_scene(scene, 0.0, volume=SMOKE))
         bare = gpupathtrace.pack(pt.build_scene(s.Scene((FLOOR,), lights=(SUN,)), 0.0, volume=SMOKE))
         # the header, the one-cell tile table and the coarse bounds: no density value at all

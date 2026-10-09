@@ -212,14 +212,17 @@ def breakdown(width, height, max_samples, repeats=3, denoise=True):
 
 
 def print_breakdown(rows):
-    keys = ["scene build", "pack", "upload", "mask update", "encode", "dispatch", "final readback", "postprocess", "denoise"]
+    keys = ["scene build", "pack", "upload", "mask update", "job list", "uniform write", "adaptive setup", "encode", "dispatch",
+            "final readback", "convert", "stats", "postprocess", "denoise"]
     print("| scene | sampling | wall time | passes | " + " | ".join(keys) + " |")
     print("| --- | --- | ---: | ---: | " + " | ".join("---:" for _ in keys) + " |")
     for name, label, wall, passes, ph in rows:
         cells = " | ".join(f"{ph.get(k, 0.0) * 1000:.1f}" for k in keys)
         print(f"| {name} | {label} | {wall * 1000:.0f} ms | {passes} | {cells} |")
     print("\nPhase columns are milliseconds: `mask update` is the host's per-pass tile list of a fixed render, `encode` the host"
-          " recording and submitting an adaptive render's passes, `dispatch` the card's own time (the host waiting on it).")
+          " recording and submitting an adaptive render's passes, `dispatch` the card's own time (the host waiting on it); `job list`,"
+          " `uniform write` and `adaptive setup` are the host work in a fixed render's submissions and an adaptive render's"
+          " set-up, `convert` and `stats` the host's image conversion and statistics (zero when the card finished the image).")
 
 
 def main():

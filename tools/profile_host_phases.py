@@ -3,12 +3,15 @@
     flock /tmp/nb-gpu.lock python tools/profile_host_phases.py --adapter discrete --cases smoke-grid,Z1-fixed64 [--timed 7]
 
 Every case of `tools/benchmark_portable_render.py` can be named. The renderer's own laps (`stats["phases"]`) give, per frame:
-`scene build` and `pack` (the scene encode on the host), `upload` (static buffers, the image accumulator, the pipeline lookup),
-`encode` (the per-band uniform, bind group and command encoder), `dispatch` (the submit and the wait for the card, which holds
-the shader's own time), `final readback` (the accumulator copied to the host), `convert` (float32 image from the sums),
-`stats` (the per-pixel variance and noise a caller that asks for statistics receives) and `postprocess`. `host_ms` is the frame
-minus `dispatch`; `host_no_stats_ms` leaves out `stats`, which only callers that pass a stats dict pay for.
-The medians are per phase, so they need not add up to the median frame. Run under the shared GPU lock.
+`scene build` and `pack` (the scene encode on the host), `upload` (the scene buffers, the image accumulator and the pipeline
+lookup), `mask update` (the per-render uniform), `encode` (the per-submission uniform write, bind groups and command encoder),
+`dispatch` (the submit and the wait for the card, which holds the shader's own time), `final readback` (the image copied to the
+host), `convert` (float32 image from the sums, when the card did not finish it), `stats` (the per-pixel variance and noise a
+caller that asks for the noise maps receives) and `postprocess`. `frame_ms` is the renderer's own time (`stats["seconds"]`; the
+scene is already built); `host_ms` is the sum of the laps other than `dispatch`, which is the host work around the card;
+`host_no_stats_ms` leaves out `stats`. The medians are per phase, so they need not add up to the median frame.
+By default the profile asks as the viewport's progressive render does (`stats["skip_noise_maps"]`); `--noise-maps` asks for the
+variance and noise maps too. Run under the shared GPU lock.
 """
 from __future__ import annotations
 
@@ -30,24 +33,25 @@ def run(case, adapter, size, timed, noise_maps=False, pass_samples=0):
     state = bpr.force_adapter(adapter)
     bpr.set_majorant(case)
     if pass_samples:
-        bpr.CASES[case]["settings"]["pass_samples"] = pass_samples      # samples one dispatch takes per pixel (0: one)
+        bpr.CASES[case]["settings"]["pass_samples"] = pass_samples      # samples one dispatch takes per pixel (0: the renderer's choice)
     for _ in range(2):                                    # the first render compiles the pipeline
         bpr.render_once(case, size, "gpu", not noise_maps)
-    frames, phases, reads, image = [], {}, {}, None
+    seconds, hosts, phases, reads = [], [], {}, {}
     for _ in range(timed):
-        started = time.perf_counter()
-        image, stats = bpr.render_once(case, size, "gpu", not noise_maps)
-        frames.append(time.perf_counter() - started)
-        for key, value in stats.get("phases", {}).items():
+        _, stats = bpr.render_once(case, size, "gpu", not noise_maps)
+        laps = stats.get("phases", {})
+        seconds.append(stats["seconds"])
+        hosts.append(sum(v for k, v in laps.items() if k not in HOST_ONLY_SKIPS))
+        for key, value in laps.items():
             phases.setdefault(key, []).append(value)
         reads = stats.get("readbacks", reads)
     ms = {key: round(statistics.median(values) * 1000, 3) for key, values in phases.items()}
-    frame = statistics.median(frames) * 1000
-    host = frame - ms.get("dispatch", 0.0)
+    frame = statistics.median(seconds) * 1000
+    host = statistics.median(hosts) * 1000
     return dict(case=case, adapter=adapter, device=bpr.adapter_info(state)["name"], size=list(size), timed=timed, pass_samples=pass_samples,
-                frame_ms=round(frame, 2), frames_ms=[round(f * 1000, 2) for f in frames], phases_ms=ms,
+                frame_ms=round(frame, 2), frames_ms=[round(f * 1000, 2) for f in seconds], phases_ms=ms,
                 host_ms=round(host, 2), host_no_stats_ms=round(host - ms.get("stats", 0.0), 2),
-                waits=reads.get("waits"), counters=reads, build=_build(), passes=None)
+                waits=reads.get("waits"), counters=reads, build=_build())
 
 
 def _build():
