@@ -282,7 +282,7 @@ equivalent. Playback is measured from the baked cache at 960 × 540.
 | Adapter / workload | Liquid solver | Surface | Whitewater | Steam solver | Peak host / GPU | Steam cache (sparse / dense) | Playback |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | RTX 3080 Ti, 256 / 192 cells, 120 frames | pending the card's reset | pending | pending | pending | pending | pending | pending |
-| Radeon 8060S, 256 / 192 cells, 120 frames | 0.807 s/frame | 0.527 s/frame | 9.701 s/frame | 5.135 s/frame | 10,910 / 10,813 MiB | 3,129 / 3,212 MiB | 0.06 FPS whole / 0.19 FPS steam |
+| Radeon 8060S, 256 / 192 cells, 120 frames | 0.807 s/frame | 0.527 s/frame | 9.701 s/frame | 5.135 s/frame | 10,910 / 10,813 MiB | 3,129 / 3,212 MiB | 0.09 FPS whole / 0.19 FPS steam |
 | Radeon 8060S, 32 / 32 cells, 8 frames | 0.011 s/frame | 0.001 s/frame | 0.008 s/frame | 0.042 s/frame | 214 / 7 MiB | 0.017 / 7 MiB | 50.43 FPS whole / 52.60 FPS steam |
 | llvmpipe, 32 / 32 cells, 8 frames | 0.013 s/frame | 0.001 s/frame | 0.011 s/frame | 0.119 s/frame | 290 / n/a MiB | 0.017 / 7 MiB | 35.65 FPS whole / 39.14 FPS steam |
 
@@ -295,7 +295,7 @@ The full-size Radeon bake took 1,940.5 s wall time. The liquid ran on `resident`
 equivalent. RTX 3080 Ti numbers remain pending the card's reset. Times are mean seconds per
 frame; playback is median frames per second from cache. At 960 × 540, Radeon playback was 0.19 FPS for the steam volume alone (5,282.9 ms median fetch, 33.2 ms draw) and 0.06 FPS for the whole scene (15,421.7 ms median fetch, 62.3 ms draw). The playback checkpoint is `benchmarks/hot_pour/radeon-full-playback.json`.
 
-**Cached-frame profile (2026-10-08, Radeon full-size run, frame 20).** The instrumented frame
+**Pre-fix diagnostic (2026-10-08, Radeon full-size run, frame 20).** The instrumented frame
 took 3.820 s to evaluate and 18.5 ms to draw. Sparse-grid rebuild took 8.52 ms; the upload
 to the GPU took 0.573 ms for 12,686,080 bytes. The shared legacy cache had already evicted
 this steam frame, so the profile does not report a disk hit and includes solver work. Across
@@ -306,8 +306,14 @@ the 8.7 GB directory also held 28 steam solver checkpoints. This eviction/recomp
 shows why the earlier file-only probe could not explain playback time.
 
 New `.nbc` writes use packed arrays and per-budget directories; the Hot pour steam output
-budget is 24,576 MiB to hold a full-size frame range. The corrected-cache Radeon measurement
-and the packed cache-hit file/read/decode phases are pending the exclusive GPU lock.
+budget is 24,576 MiB. The corrected packed-cache playback pass covered all 120 frames; at
+completion its cache held 79 steam-volume frames, 119 liquid frames, 30 additional liquid
+frames, and 80 steam solver checkpoints. Playback measured 0.19 FPS for steam alone (5,232.9
+ms median fetch, 34.9 ms draw) and 0.09 FPS for the whole scene (11,383.3 ms median fetch,
+73.7 ms draw). The frame-120 steam cache hit took 1.773 s to evaluate and 33.1 ms to draw:
+file open 0.049 ms, file read 163.5 ms, deserialize 0.342 ms, sparse rebuild 20.1 ms, and
+GPU upload 1.546 ms for 28,311,552 bytes. Packed data needs no decompression. Full playback
+data is in `benchmarks/hot_pour/radeon-full-playback.json`.
 
 GPU path-traced showcase stills at 1920 × 1080:
 
