@@ -1,3 +1,7 @@
+# Lane 8 NL7 — motion — active (2026-10-09, 3:18 PM PDT)
+
+Shared animator, Reduce motion preference, family panel transition, eased Properties controls, graph node glides, and playback playhead are implemented. 76 targeted UI/motion tests and 7 documentation tests pass. Screenshot and completion notes are committed on this branch; integration and display QA remain with Gonzo.
+
 # Lane 6 P2 — interactive cached-fluid preview — PARTIAL (2026-10-09)
 
 Preview implementation, UI behavior, benchmark records and docs are committed. Active 64³/48³,

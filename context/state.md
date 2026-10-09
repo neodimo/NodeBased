@@ -1,3 +1,10 @@
+## 2026-10-09 — Lane 8 NL7: motion (worktree, ready for integration)
+
+- **What was done (evidence):** Added an owner-scoped main-thread `QTimer` animator and a Preferences > Reduce motion switch. It drives the family panel's 120 ms slide/fade, eased slider handles and color-wheel markers while values commit exactly, 150 ms node repositioning, and the playback playhead. Reduced motion finishes current tracks and disables future motion; offscreen Qt defaults to reduced motion. Dock widgets use no property animations.
+- **Artifacts:** Core code is committed on `openclaw/nb-2d-parity-b` at `b6822df`; a follow-up restores the panel shadow after fading and adds coverage for Reduce motion finishing active tracks. The completion commit adds the capture and notes. The 1920×1080 offscreen app image is `docs/images/ui-redesign/motion.png`. Test logs are in `scratch/nb-lanes/run/tests-L8-NL7-final.log` and `tests-L8-NL7-docs-final.log` (deliberate scratch).
+- **State:** Done for the four motion behaviors on Linux. 76 targeted UI/motion tests and 7 documentation tests passed. Windows, real-display review, and the integrator's full suite remain unverified.
+- **Next owner + artifact:** Gonzo owns integration and Windows/real-display QA; use this branch and inspect `docs/images/ui-redesign/motion.png`.
+
 ## Lane 6 P2 interactive cached-fluid preview — partial (2026-10-09)
 
 **Evidence.** Preview tier keeps FluidSolver3D/FluidLiquidSolver3D resolution unchanged, so the viewer uses their full-resolution simulation cache. FluidSurface3D deterministically subsamples particles in tier-sized cells before rebuilding its display mesh. Cached volumes are averaged to the selected tier; the transformed box bounds remain equal within 1e-6 and integrated density within 1e-6 relative error. The viewer's proxy badge follows the displayed frame. Stop restores tier 1, queues a full-detail render, and a desktop test settles it within one second. Checked 253 focused tests plus 7 knowledge tests.

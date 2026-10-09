@@ -1,3 +1,12 @@
+## 2026-10-09 — Lane 8 NL7: motion (worktree, ready for integration)
+
+- **What was done (evidence):** Added an owner-scoped main-thread `QTimer` animator and a Preferences > Reduce motion switch. It drives the family panel's 120 ms slide/fade, eased slider handles and color-wheel markers while values commit exactly, 150 ms node repositioning, and the playback playhead. Reduced motion finishes current tracks and disables future motion; offscreen Qt defaults to reduced motion. Dock widgets use no property animations.
+- **Artifacts:** Core code is committed on `openclaw/nb-2d-parity-b` at `b6822df`; a follow-up restores the panel shadow after fading and adds coverage for Reduce motion finishing active tracks. The completion commit adds the capture and notes. The 1920×1080 offscreen app image is `docs/images/ui-redesign/motion.png`. Test logs are in `scratch/nb-lanes/run/tests-L8-NL7-final.log` and `tests-L8-NL7-docs.log` (deliberate scratch).
+- **State:** Done for the four motion behaviors on Linux. 76 targeted UI/motion tests and 7 documentation tests passed. Windows, real-display review, and the integrator's full suite remain unverified.
+- **Next owner + artifact:** Gonzo owns integration and Windows/real-display QA; use this branch and inspect `docs/images/ui-redesign/motion.png`.
+
+## 2026-10-09 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step NL4 of 7: icons and the left column, Lane 6 (Fluids, GPT-6 Luna) step P1 of 2: cached playback that is not bound by reading the cache (finish 1), Lane 8 (2D parity B, GPT-6 Luna) step NL6b of 7: Properties closer to the mockup (integrator tick)
+
 ## 2026-10-09 — Lane 6 P2: interactive cached-fluid preview (partial)
 
 - **What was done:** viewer proxy tiers now preserve fluid solver cache identity, thin liquid particles before surface extraction and reduce cached volume grids while preserving world bounds and integrated density. Stop restores full detail and the badge reports the displayed tier. Measured 1/4 preview at 14.96 FPS Radeon and 11.06 FPS llvmpipe for an active 64³/48³, 24-frame Hot pour.
