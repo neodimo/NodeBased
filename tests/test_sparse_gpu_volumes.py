@@ -15,7 +15,7 @@ import numpy as np
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
-from nodebased import gpu3d, gpuvolume, scene3d as s, viewportgpu, volumerender
+from nodebased import gpu3d, gpupathtrace, gpuvolume, scene3d as s, viewportgpu, volumerender
 from nodebased.sparsevol import SparseField, SparseGrid
 from tests import gpu_precision
 from tools import benchmark_sparse_gpu as bench
@@ -362,6 +362,8 @@ class SparseThroughTheGraph(unittest.TestCase):
         np.testing.assert_allclose(gpu.pixels, expected.pixels, atol=TOLERANCE * 10)
         np.testing.assert_allclose(self.graph(sparse, 'cpu').pixels, expected.pixels, atol=4e-3)
 
+    @unittest.skipUnless(gpu3d.available() and gpupathtrace.soft_supported(gpu3d._state()),
+                         'splats and smoke are path traced only on adapters gpupathtrace.soft_supported allows')
     def test_render3d_path_traces_a_sparse_frame_on_the_gpu_like_the_dense_one(self):
         dense, sparse = twin(24, 'column', velocity=False, temperature=False)
         traced = dict(render_mode='pathtrace', pt_samples=16, pt_seed=3)

@@ -11,11 +11,12 @@ from dataclasses import replace
 import numpy as np
 
 from nodebased import gpu3d, scene3d as s
+from tests import gpu_precision
 from tests.test_3d_light_linking import AMBIENT, CAMERA, NOBODY, SIZE, SUN, ball, core_of, coverage, ground
 from tests.test_3d_pathtrace import box
 from tests.test_3d_pathtrace_splats import SPLAT_CAMERA, instance, plane_cloud
 
-SPLAT_TOLERANCE = 2e-3
+SPLAT_TOLERANCE = gpu_precision.tolerance(2e-3)   # x20 on an adapter that blends the rgba layers in half float
 SPLAT_SIZE = (24, 24)
 KEY = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(), s.Vec3(0.3, -0.2, -1.0), name="key", shadows=True)
 LAMP = s.Light("Point", (.4, .5, 1), 3.0, s.Vec3(-1.2, 1.0, 2.5), shadows=True, name="lamp")
