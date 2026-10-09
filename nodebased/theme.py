@@ -229,14 +229,16 @@ QMenu::item {{ padding: 6px 24px 6px 20px; border-radius: {r['chip'] + 1}px; }}
 QMenu::item:selected {{ background: {c['hover']}; }}
 QMenu::separator {{ height: 1px; background: {c['border']}; margin: 4px 8px; }}
 QToolTip {{ background: {c['title']}; color: {c['text']}; border: 1px solid {c['button_border']}; border-radius: {r['chip']}px; padding: 4px 8px; }}
-QDockWidget {{ font-weight: 600; }}
-QDockWidget::title {{ background: {c['title']}; padding: 9px; border-bottom: 1px solid {c['border']}; }}
+/* Dock title bars (new look, step 5): slim and quiet like the mockup's panel labels. The docks still
+   float, close and rearrange exactly as before; only the bar's size and colour change. */
+QDockWidget {{ font-size: {t['caption']}px; font-weight: 600; color: {TOKENS['tx3']}; }}
+QDockWidget::title {{ background: {c['panel']}; padding: {sp['xs'] + 1}px {sp['md']}px; border-bottom: 1px solid {c['border']}; text-align: left; }}
+QDockWidget::close-button, QDockWidget::float-button {{ background: transparent; border: 0; border-radius: {r['chip'] - 2}px; padding: 0px; }}
+QDockWidget::close-button:hover, QDockWidget::float-button:hover {{ background: {c['hover']}; }}
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {c['field']}; border: 1px solid {c['border']}; border-radius: {r['field']}px; padding: 5px {sp['sm'] + 2}px; selection-background-color: {c['accent']}; selection-color: {c['accent_ink']}; }}
 QSpinBox, QDoubleSpinBox {{ font-family: {t['mono']}; font-size: {t['value']}px; }}
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border: 1px solid {c['accent']}; }}
 QPushButton {{ background: {c['button']}; border: 1px solid {c['button_border']}; border-radius: {r['control']}px; padding: 6px {sp['lg']}px; }}
-QWidget#time-row QSpinBox, QWidget#time-row QDoubleSpinBox, QWidget#time-row QComboBox {{ padding: 5px {sp['xs'] + 1}px; }}
-QWidget#time-row QPushButton {{ padding: 6px {sp['md']}px; }}
 QDoubleSpinBox#knob-value {{ background: {c['field']}; border-radius: {r['field']}px; padding: 3px 6px; }}
 QSlider#knob-slider::groove:horizontal {{ height: 6px; background: {c['border']}; border-radius: 3px; }}
 QSlider#knob-slider::sub-page:horizontal {{ background: {c['accent']}; border-radius: 3px; }}

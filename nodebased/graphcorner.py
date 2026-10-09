@@ -80,6 +80,25 @@ class WireToggle(QFrame):
             button.setChecked(mode == self.graph.wire_mode)
 
 
+class HelpButton(QFrame):
+    """The "?" that opens the graph's shortcut overlay (shortcuthelp.py); the ? key does the same."""
+
+    def __init__(self, graph, parent):
+        super().__init__(parent)
+        self.graph = graph
+        self.setObjectName("graph-panel")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(3, 3, 3, 3)
+        row.setSpacing(2)
+        self.button = panel_button("?", "Node graph shortcuts (also the ? key)")
+        self.button.setObjectName("graph-help")
+        self.button.clicked.connect(lambda: graph.window.toggle_graph_shortcuts())
+        row.addWidget(self.button)
+        # A square touching no fixed pixel size: as wide as it is tall, from the font.
+        side = QFontMetrics(self.button.font()).height() + 10
+        self.button.setMinimumWidth(side)
+
+
 class ZoomControl(QFrame):
     """[-] 100% [+]: the middle button returns to 100%."""
 
@@ -183,16 +202,17 @@ class MiniMap(QWidget):
 
 
 class GraphCorner:
-    """Places the toggle, the zoom control and the minimap in the graph's bottom-right corner,
-    in that order from the left, and keeps them in step with the view."""
+    """Places the help button, the toggle, the zoom control and the minimap in the graph's bottom-right corner,
+    in that order from the left (the "?" help button first), and keeps them in step with the view."""
 
     def __init__(self, graph):
         self.graph = graph
         viewport = graph.viewport()
+        self.help = HelpButton(graph, viewport)
         self.toggle = WireToggle(graph, viewport)
         self.zoom = ZoomControl(graph, viewport)
         self.minimap = MiniMap(graph, viewport)
-        self.widgets = (self.toggle, self.zoom, self.minimap)
+        self.widgets = (self.help, self.toggle, self.zoom, self.minimap)
         self.reposition()
         for widget in self.widgets:
             widget.show()

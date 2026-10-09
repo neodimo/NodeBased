@@ -222,9 +222,13 @@ class DesktopTests(unittest.TestCase):
         actions = {action.text(): action for menu in menus.values() for action in menu.actions()}
         self.assertEqual(actions['Undo'].shortcut().toString(), 'Ctrl+Z')
         self.assertEqual(actions['Play / Stop'].shortcut().toString(), 'Space')
-        hint = next(label for label in w.findChildren(ElidedLabel)
-                    if label.objectName() == 'graph-shortcuts-hint')
-        self.assertIn('Ctrl+A', hint.text())
+        # New look, step 5: the cheat-line above the graph is gone; the same text is the "?" overlay.
+        self.assertIsNone(w.findChild(ElidedLabel, 'graph-shortcuts-hint'))
+        w.toggle_graph_shortcuts()
+        try:
+            self.assertIn('Ctrl+A', w.shortcut_overlay.text())
+        finally:
+            w.shortcut_overlay.close()
 
     def test_reconnecting_viewer_to_a_larger_source_requests_the_full_canvas(self):
         # Reported live against a 4K sequence: the image appeared stuck zoomed into its top-left

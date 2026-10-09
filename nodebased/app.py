@@ -84,6 +84,7 @@ from . import cachecontext
 from .timeline import (PLAY_ICON, STEP_BACK_ICON, STEP_FORWARD_ICON, STOP_ICON, TimelineBar, TimeRow, KEY_COLOR,
                        transport_icon)
 from .topbar import StatusDot
+from .shortcuthelp import ShortcutOverlay
 from .viewerstrip import ChannelButtons, CornerReadouts, PixelReadout, ViewerStrip
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from .groups import scope_document
@@ -5790,6 +5791,8 @@ class Graph(PanZoomView):
         if (event.key() == self.window.preferences.radial_trigger_key() and not modifiers
                 and not event.isAutoRepeat()):
             self.open_radial_menu()
+        elif event.key() == Qt.Key.Key_Question or event.text() == "?":
+            self.window.toggle_graph_shortcuts()
         elif event.key() == Qt.Key.Key_A and modifiers == Qt.KeyboardModifier.ControlModifier:
             self.scene().clearSelection()
             for item in self.items_by_id.values():
@@ -6652,11 +6655,6 @@ class Window(QMainWindow):
         graph_panel = QWidget()
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
-        # Elided: one long single-line hint must not set the floor for the whole window's width.
-        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  ·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  Ctrl+G group / Ctrl+Shift+G ungroup  ·  MMB or Alt+drag pan  ·  "
-                                 "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
-        help_label.setObjectName("graph-shortcuts-hint")
-        gl.addWidget(help_label)
         self.breadcrumbs = QWidget()
         self.breadcrumbs.setObjectName("graph-breadcrumbs")
         crumb_row = QHBoxLayout(self.breadcrumbs)
@@ -11295,6 +11293,16 @@ class Window(QMainWindow):
         self.statusBar().showMessage(status)
         self.viewer_info.setText(status)
         self._show_image(image, scale, render_region)
+
+    def toggle_graph_shortcuts(self):
+        """The "?" overlay over the node graph: every shortcut the graph's old hint line listed."""
+        overlay = getattr(self, "shortcut_overlay", None)
+        if overlay is None:
+            overlay = self.shortcut_overlay = ShortcutOverlay(self)
+        if overlay.isVisible():
+            overlay.close()
+        else:
+            overlay.show_above(self.graph.corner.help)
 
     def update_corner_readout(self, scene_rect=None, scale=None):
         """Resolution, colour space and proxy state in the viewer's bottom-left corner."""

@@ -124,8 +124,10 @@ class ShortcutWiringTests(unittest.TestCase):
     def test_the_table_covers_every_shortcut_in_the_hint_row(self):
         w = Window()
         try:
-            from PySide6.QtWidgets import QLabel
-            hint = w.findChild(QLabel, "graph-shortcuts-hint").text()
+            # New look, step 5: the hint row became the "?" overlay (same text, nodebased/shortcuthelp.py).
+            w.toggle_graph_shortcuts()
+            hint = w.shortcut_overlay.text()
+            w.shortcut_overlay.close()
         finally:
             w.close()
             w.deleteLater()
