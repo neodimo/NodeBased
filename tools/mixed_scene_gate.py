@@ -32,6 +32,13 @@ EXPECTED_CHANNELS = ["R", "G", "B", "A", "depth.Z", "object_id.R", "position.X",
 TOLERANCE = 2e-3
 
 
+def tolerance():
+    """TOLERANCE, twenty times wider on an adapter without float32-blendable (the rgba layers blend as rgba16float,
+    see tests/gpu_precision.py)."""
+    from nodebased import gpu3d
+    return TOLERANCE * 20 if gpu3d.available() and gpu3d._state()['format'] == 'rgba16float' else TOLERANCE
+
+
 def exr_channels(path):
     import OpenImageIO as oiio
     source = oiio.ImageInput.open(str(path))
@@ -75,10 +82,10 @@ def compare(exr, ref_beauty, ref_layers):
         difference = np.abs(got - want)
         difference = difference.max(axis=-1) if difference.ndim == 3 else difference
         report[name] = dict(max=float(difference.max()), mean=float(difference.mean()),
-                            pixels_over_tolerance=int((difference > TOLERANCE).sum()), pixels=int(difference.size))
+                            pixels_over_tolerance=int((difference > tolerance()).sum()), pixels=int(difference.size))
     alpha_got, alpha_want = planes["A"], ref_beauty[..., 3]
     report["alpha"] = dict(max=float(np.abs(alpha_got - alpha_want).max()),
-                           pixels_over_tolerance=int((np.abs(alpha_got - alpha_want) > TOLERANCE).sum()),
+                           pixels_over_tolerance=int((np.abs(alpha_got - alpha_want) > tolerance()).sum()),
                            covered=float((alpha_got > 0).mean()))
     ids = np.unique(planes["object_id.R"])
     report["object_ids_present"] = [float(i) for i in ids]

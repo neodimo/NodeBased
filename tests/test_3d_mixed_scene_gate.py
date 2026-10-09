@@ -113,7 +113,7 @@ class MultichannelBackend(unittest.TestCase):
         for name in ("depth", "object_id"):
             difference = np.abs(np.asarray(gpu_raster.layers[name].to_display())
                                 - np.asarray(cpu_raster.layers[name].to_display())).max(axis=-1)
-            self.assertLessEqual(int((difference > gate.TOLERANCE).sum()), 3, name)
+            self.assertLessEqual(int((difference > gate.tolerance()).sum()), 3, name)
         document["nodes"]["render"]["params"]["passes"] = "beauty,normals,depth"
         with self.assertRaisesRegex(ValueError, "CPU-only for now.*beauty, depth, position, object_id"):
             Evaluator().evaluate_raster(document, "render", tier=1)
