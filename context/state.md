@@ -1,5 +1,26 @@
 ## 2026-10-08 — Lane 4 Q1 finish 1: adaptive sampling capped at Path samples (worktree, not yet merged)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:06 PM on 2026-10-08 PDT)
+
+`main` moved `d8ebbe6` -> `5d0c392` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 273 tests in 318.410 s, OK. Full suite on
+the stacked tip `5d0c392` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1008-1806.log`, started 6:06 PM): **Ran 4762 tests in 8177.785 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step NL2 of 7: node graph look and wires.** Commits:
+  - `af052b7` Graph corner controls: shown once at creation so they can be hidden; radial menu gesture tests hide them (they flick into that corner)
+  - `634cf48` Node graph look: postage stamps with rounded corners, cached halo, corner controls placed without repainting, NL2 screenshots and notes
+  - `004eede` Node graph look: family-coloured nodes, directional wires, Curved / Right angle toggle, minimap and zoom control
+  Diff: 12 files changed, 1221 insertions(+), 75 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (3:16 PM on 2026-10-08 PDT)
 
 `main` moved `0df0bb3` -> `7640428` (lane commits cherry-picked onto main in lane order) and then to this
