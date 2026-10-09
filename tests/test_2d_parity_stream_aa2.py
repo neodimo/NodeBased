@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 import tests.isolation  # noqa: F401  (keeps the window's layout out of the real Qt settings)
 from nodebased.app import NODE_GAP, NodeItem
-from nodebased.timeline import KEY_TICK_FRACTION, TimelineBar
+from nodebased.timeline import PLAYHEAD_WIDTH, TimelineBar
 from tests import test_2d_parity_placement_y2 as y2
 from tests.test_2d_parity_placement_y2 import APP
 from tests.waiting import wait_until
@@ -127,16 +127,21 @@ class StreamPlacementTests(unittest.TestCase):
         self.assertAlmostEqual(self.rect(w, new).top(), self.rect(w, "src").top(), delta=1)
 
 
-class KeyTickTests(unittest.TestCase):
-    def test_key_ticks_stand_at_least_half_the_track_and_are_wider_than_the_playhead(self):
+class KeyMarkTests(unittest.TestCase):
+    def test_key_marks_are_diamonds_wider_than_the_playhead_inside_the_track(self):
+        # New look, step 5: a key is a diamond between the frame numbers and the cached range,
+        # not a bottom-standing tick. It must still read at a glance next to the playhead.
         bar = TimelineBar()
         bar.resize(600, 34)
         bar.setRange(1, 100)
         bar.set_marks([], [10, 50])
-        rect = bar.key_tick_rect(10)
-        self.assertGreaterEqual(rect.height(), bar.height() * KEY_TICK_FRACTION)
-        self.assertGreater(rect.width(), 1)
-        self.assertEqual(rect.bottom(), bar.height())
+        rect = bar.key_mark_rect(10)
+        self.assertGreater(bar.key_diamond_size(), PLAYHEAD_WIDTH * 2)
+        self.assertGreater(rect.width(), PLAYHEAD_WIDTH)
+        self.assertGreaterEqual(rect.top(), 0)
+        self.assertLessEqual(rect.bottom(), bar.cache_band_rect().top())
+        centre = rect.center().x()
+        self.assertAlmostEqual(centre, bar.frame_x(10) + bar.frame_width() / 2, delta=1)
 
 
 if __name__ == "__main__":

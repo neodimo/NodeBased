@@ -178,7 +178,8 @@ class TimeRowTests(unittest.TestCase):
             self.assertTrue(bounds.contains(widget.geometry()), f"{widget.geometry()} outside {bounds}")
             self.assertGreaterEqual(widget.width(), widget.minimumSizeHint().width(),
                                     f"{type(widget).__name__} is squeezed below its minimum")
-        self.assertGreaterEqual(checked, 10)
+        # Nine: the TIME caption is gone and the transport buttons sit in their own group (new look, step 5).
+        self.assertGreaterEqual(checked, 9)
         self.assertGreaterEqual(w.frame_slider.width(), 140, "the timeline keeps usable width")
 
     def test_no_time_row_widget_is_clipped_at_1280x720(self):

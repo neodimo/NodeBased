@@ -3,16 +3,19 @@
 This replaces a plain ``QSlider``. It keeps that widget's contract on purpose -- ``setRange``,
 ``setValue``, ``value`` and a ``valueChanged(int)`` signal -- so the window wires it, blocks its
 signals during sync, and reads it back exactly as before. What it adds is the information a
-compositor reads off a timeline without clicking anything:
+compositor reads off a timeline without clicking anything (new look, step 5: as in the mockup):
 
     * **Tick marks and frame numbers**, at a density chosen from the widget's actual pixel width
       rather than a fixed step. A 24-frame comp labels every frame; a 2000-frame comp labels every
       250th and thins the unlabelled ticks to match. Labels never collide, at any range.
-    * **An orange underline** under frames whose finished display image is in RAM, so "what will
-      replay instantly" is visible instead of inferred from playback behaviour.
-    * **A blue underline** under frames carrying an animation key.
+    * **A green range** along the bottom of the track over the frames whose finished display image
+      is in RAM, so "what will replay instantly" is visible instead of inferred from playback
+      behaviour; frames that are not cached show the quiet track colour.
+    * **Diamonds** over frames carrying an animation key, in the key blue the Properties panel uses.
+    * **The playhead** as an accent line with a glow and its frame number on a small tab.
 
-The two underlines occupy separate bands so a frame that is both cached and keyed shows both.
+``TimeRow`` is the slim row around it: transport buttons, the frame field, this track, the range,
+the rate and the real-time light. It drops its optional parts, last first, instead of clipping.
 
 Ownership note: this widget renders state, it does not track it. ``cached_frames`` and
 ``key_frames`` are pushed in by the window from the display cache and the document, which keeps
@@ -20,28 +23,34 @@ the one source of truth for "is frame N cached?" inside the cache itself.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
+from PySide6.QtCore import QByteArray, QEvent, QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QLinearGradient, QPainter, QPen, QPixmap
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QToolTip, QWidget
+
+from .theme import TOKENS
 
 
 # A frame is cached when its post-view-transform image is resident; it is keyed when some curve
-# in scope has a key on it. Orange and blue are DiMo's call and match the house viewer palette.
-CACHED_COLOR = QColor("#e0873c")
+# in scope has a key on it. Green is the accent of the new look, the key blue matches Properties.
+CACHED_COLOR = QColor(TOKENS["acc"])
+CACHED_COLOR_DEEP = QColor(TOKENS["acc2"])
 KEY_COLOR = QColor("#4f8cff")
-PLAYHEAD_COLOR = QColor("#f2f2f5")
-TICK_COLOR = QColor("#6d6d78")
-LABEL_COLOR = QColor("#9a9aa4")
-TRACK_COLOR = QColor("#26262c")
+PLAYHEAD_COLOR = QColor(TOKENS["acc"])
+PLAYHEAD_INK = QColor(TOKENS["acc_ink"])
+TICK_COLOR = QColor(TOKENS["line2"])
+LABEL_COLOR = QColor(TOKENS["tx3"])
+TRACK_COLOR = QColor(TOKENS["line2"])
 
-# Band geometry, measured up from the bottom edge.
+# Track geometry, measured up from the bottom edge. The cache range is a 3 px rounded bar 4 px
+# above the bottom, as in the mockup; key diamonds sit above it, ticks and numbers hang from the top.
 CACHE_BAND_HEIGHT = 3
-KEY_BAND_HEIGHT = 3
-BAND_TOTAL = CACHE_BAND_HEIGHT + KEY_BAND_HEIGHT
-# A key is also drawn as a tick standing on the key band, at least this share of the track
-# height and 3 px wide, so it reads at a glance and cannot be mistaken for the 1 px playhead line.
-KEY_TICK_FRACTION = 0.5
-KEY_TICK_WIDTH = 3
+CACHE_BAND_LIFT = 4
+# A key diamond is a square turned 45 degrees, KEY_DIAMOND_PER_TEXT of a text line across and at
+# least KEY_DIAMOND_MIN pixels, so it is always wider than the 2 px playhead and reads at a glance.
+KEY_DIAMOND_PER_TEXT = 0.62
+KEY_DIAMOND_MIN = 7
+PLAYHEAD_WIDTH = 2
 
 # A label needs this much horizontal room before the next one, or the step coarsens. Sized for
 # four digits plus breathing space at the default UI font.
@@ -51,6 +60,29 @@ MIN_TICK_SPACING_PX = 5
 # Nice-number ladder for both label and tick steps. Frame counts are read in these units by
 # everyone who has ever looked at a timeline; 3s and 7s are not.
 STEP_LADDER = (1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000)
+
+
+# Transport glyphs (24 x 24, the mockup's own paths).
+STEP_BACK_ICON = '<path d="M6 5v14M19 5 9 12l10 7z"/>'
+STEP_FORWARD_ICON = '<path d="M18 5v14M5 5l10 7-10 7z"/>'
+PLAY_ICON = '<path d="M8 5.5v13l11-6.5z"/>'
+STOP_ICON = '<rect x="7" y="7" width="10" height="10" rx="1.5"/>'
+
+
+def transport_icon(shapes, filled=False, ink=False, side=18):
+    """A transport glyph as a QIcon: stroked in the quiet text colour, or filled; `ink` draws it in
+    the dark ink the accent play button carries."""
+    color = TOKENS["acc_ink"] if ink else TOKENS["tx1"]
+    paint = f'fill="{color}" stroke="none"' if filled else \
+        f'fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" {paint}>{shapes}</svg>'
+    pixmap = QPixmap(side * 2, side * 2)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    QSvgRenderer(QByteArray(svg.encode())).render(painter, QRectF(0, 0, side * 2, side * 2))
+    painter.end()
+    pixmap.setDevicePixelRatio(2)
+    return QIcon(pixmap)
 
 
 def choose_step(frames_per_pixel_span, minimum_spacing):
@@ -79,12 +111,18 @@ class TimelineBar(QWidget):
         self.key_frames: set[int] = set()
         # frame -> ["Grade · exposure", ...]: what the key marks are keys of, for the hover tooltip.
         self.key_labels: dict[int, list[str]] = {}
-        self.setMinimumHeight(34)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.SizeHorCursor)
         self.setToolTip("Scrub the playhead. ← → step, Home/End jump to the range ends.\n"
-                        "Orange underline: frame is cached and will replay instantly.\n"
-                        "Blue underline: frame carries an animation key; hover it to see which knobs.")
+                        "Green bar: frames that are cached and will replay instantly.\n"
+                        "Blue diamond: frame carries an animation key; hover it to see which knobs.")
+
+    def sizeHint(self):
+        # Tall enough for the numbers, a diamond and the cache bar on any font.
+        return QSize(160, max(34, round(self._text_height() * 2.3)))
+
+    def minimumSizeHint(self):
+        return QSize(60, self.sizeHint().height())
 
     # -- QSlider-compatible surface -------------------------------------------------------
 
@@ -181,24 +219,44 @@ class TimelineBar(QWidget):
 
     # -- Painting --------------------------------------------------------------------------
 
+    def _text_height(self):
+        return QFontMetrics(self.font()).height()
+
+    def key_diamond_size(self):
+        """Pixels across a key diamond (corner to corner)."""
+        return max(KEY_DIAMOND_MIN, round(self._text_height() * KEY_DIAMOND_PER_TEXT) | 1)
+
+    def cache_band_rect(self):
+        return QRectF(0, self.height() - CACHE_BAND_LIFT - CACHE_BAND_HEIGHT, self.width(), CACHE_BAND_HEIGHT)
+
+    def key_mark_rect(self, frame):
+        """The square that, turned 45 degrees, is the key diamond of ``frame``: centred on the
+        frame's cell, in the middle of the space between the numbers and the cache bar."""
+        size = self.key_diamond_size()
+        side = size / 1.4142
+        centre_x = self.frame_x(frame) + self.frame_width() / 2
+        top = self._text_height() * 0.9
+        bottom = self.cache_band_rect().top() - 2
+        centre_y = (top + bottom) / 2 + 1
+        return QRectF(centre_x - side / 2, centre_y - side / 2, side, side)
+
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         width, height = self.width(), self.height()
         per_frame = self.frame_width()
-        painter.fillRect(0, 0, width, height, TRACK_COLOR)
+        text_height = self._text_height()
 
         label_step = choose_step(per_frame, MIN_LABEL_SPACING_PX)
         tick_step = choose_step(per_frame, MIN_TICK_SPACING_PX)
 
-        band_top = height - BAND_TOTAL
         font = QFont(self.font())
-        font.setPointSizeF(max(7.0, font.pointSizeF() - 1.0))
+        font.setPixelSize(max(8, round(text_height * 0.72)))
         painter.setFont(font)
 
         # Ticks and numbers. Both step sets are anchored on multiples of the step rather than on
         # the range start, so the labels stay on round frame numbers (100, 125, 150) instead of
         # drifting with wherever the comp happens to begin.
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         first_tick = self._first - (self._first % tick_step)
         for frame in range(first_tick, self._last + 1, tick_step):
             if frame < self._first:
@@ -206,60 +264,131 @@ class TimelineBar(QWidget):
             x = int(self.frame_x(frame))
             labelled = frame % label_step == 0
             painter.setPen(QPen(TICK_COLOR))
-            painter.drawLine(x, 0, x, 5 if labelled else 3)
+            painter.drawLine(x, 0, x, 6 if labelled else 3)
             if labelled:
                 painter.setPen(QPen(LABEL_COLOR))
-                painter.drawText(QRectF(x + 2, 4, MIN_LABEL_SPACING_PX, 12),
+                painter.drawText(QRectF(x + 3, 2, MIN_LABEL_SPACING_PX, text_height),
                                  int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
                                  str(frame))
 
-        # Underlines. Drawn as merged runs rather than per-frame rectangles: a 1000-frame cached
-        # range is a handful of fills instead of a thousand, and at sub-pixel frame widths the
-        # run still renders as a solid band instead of dropping frames to rounding.
-        self._draw_band(painter, self.cached_frames, band_top, CACHE_BAND_HEIGHT, CACHED_COLOR)
-        self._draw_band(painter, self.key_frames, band_top + CACHE_BAND_HEIGHT, KEY_BAND_HEIGHT,
-                        KEY_COLOR)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # The track under the cache range, then the range in green. Drawn as merged runs rather
+        # than per-frame rectangles: a 1000-frame cached range is a handful of fills instead of
+        # a thousand, and at sub-pixel frame widths a run still renders as a solid bar.
+        band = self.cache_band_rect()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(TRACK_COLOR)
+        painter.drawRoundedRect(band, 1.5, 1.5)
+        self._draw_cache_runs(painter, band)
+        self._draw_key_diamonds(painter)
 
-        self._draw_key_ticks(painter)
-
-        # Playhead last, so it is never buried under a band.
-        playhead_x = self.frame_x(self._value)
-        painter.fillRect(QRectF(playhead_x, 0, max(1.0, per_frame), height),
-                         QColor(255, 255, 255, 40))
-        painter.setPen(QPen(PLAYHEAD_COLOR, 1))
-        painter.drawLine(int(playhead_x), 0, int(playhead_x), height)
+        # Playhead last, so nothing buries it: a glow, the line, and the frame number on a tab.
+        playhead_x = self.frame_x(self._value) + min(per_frame, 6.0) / 2
+        playhead_x = min(max(playhead_x, 1.0), width - 1.0)
+        glow = QColor(PLAYHEAD_COLOR)
+        glow.setAlpha(60)
+        painter.setBrush(glow)
+        painter.drawRoundedRect(QRectF(playhead_x - 3, 0, 6, height), 3, 3)
+        painter.setBrush(PLAYHEAD_COLOR)
+        painter.drawRect(QRectF(playhead_x - PLAYHEAD_WIDTH / 2, 0, PLAYHEAD_WIDTH, height))
+        self._draw_playhead_tab(painter, playhead_x, text_height)
         painter.end()
 
-    def key_tick_height(self):
-        """Pixels a key tick stands: half the track or more."""
-        return max(BAND_TOTAL + 1, -(-self.height() * KEY_TICK_FRACTION // 1))
+    def _draw_playhead_tab(self, painter, playhead_x, text_height):
+        font = QFont(self.font())
+        font.setPixelSize(max(9, round(text_height * 0.74)))
+        font.setBold(True)
+        painter.setFont(font)
+        label = str(self._value)
+        metrics = QFontMetrics(font)
+        tab_width = metrics.horizontalAdvance(label) + 10
+        tab_height = metrics.height() + 1
+        left = min(max(playhead_x - tab_width / 2, 0), max(self.width() - tab_width, 0))
+        tab = QRectF(left, 0, tab_width, tab_height)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(PLAYHEAD_COLOR)
+        painter.drawRoundedRect(tab, 4, 4)
+        painter.setPen(QPen(PLAYHEAD_INK))
+        painter.drawText(tab, int(Qt.AlignmentFlag.AlignCenter), label)
 
-    def key_tick_rect(self, frame):
-        """The key tick of ``frame``, centred on its cell, standing on the bottom edge."""
-        height = self.height()
-        tick = self.key_tick_height()
-        centre = self.frame_x(frame) + self.frame_width() / 2
-        return QRectF(round(centre - KEY_TICK_WIDTH / 2), height - tick, KEY_TICK_WIDTH, tick)
-
-    def _draw_key_ticks(self, painter):
+    def _draw_key_diamonds(self, painter):
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(KEY_COLOR)
         for frame in self.key_frames:
             if self._first <= frame <= self._last:
-                rect = self.key_tick_rect(frame)
-                painter.fillRect(rect, KEY_COLOR)
-                painter.fillRect(QRectF(rect.left(), rect.top(), rect.width(), 1), KEY_COLOR.lighter(150))
+                rect = self.key_mark_rect(frame)
+                painter.save()
+                painter.translate(rect.center())
+                painter.rotate(45)
+                painter.drawRoundedRect(QRectF(-rect.width() / 2, -rect.height() / 2, rect.width(), rect.height()),
+                                        1.5, 1.5)
+                painter.restore()
 
-    def _draw_band(self, painter, frames, top, band_height, color):
-        if not frames:
+    def _draw_cache_runs(self, painter, band):
+        if not self.cached_frames:
             return
         per_frame = self.frame_width()
-        for start, end in contiguous_runs(frames):
+        gradient = QLinearGradient(QPointF(band.left(), 0), QPointF(band.right(), 0))
+        gradient.setColorAt(0, CACHED_COLOR_DEEP)
+        gradient.setColorAt(1, CACHED_COLOR)
+        painter.setBrush(gradient)
+        for start, end in contiguous_runs(self.cached_frames):
             if end < self._first or start > self._last:
                 continue
             start = max(start, self._first)
             end = min(end, self._last)
             x = self.frame_x(start)
-            painter.fillRect(QRectF(x, top, max(1.0, (end - start + 1) * per_frame), band_height),
-                             color)
+            painter.drawRoundedRect(QRectF(x, band.top(), max(1.0, (end - start + 1) * per_frame), band.height()),
+                                    1.5, 1.5)
+
+
+class TimeRow(QWidget):
+    """The slim row under the viewer. `add` places a widget; `optional` names the widgets it may
+    hide, in the order it hides them, when the row would otherwise be wider than the viewer: a
+    narrow dock or a wide font loses the status text and the light's words before anything that
+    is being edited is cut off."""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("time-row")
+        self.row = QHBoxLayout(self)
+        self.row.setContentsMargins(16, 0, 16, 0)
+        self.row.setSpacing(8)
+        self._optional = []
+        self._fitting = False
+
+    def add(self, widget, stretch=0):
+        self.row.addWidget(widget, stretch)
+        return widget
+
+    def set_optional(self, widgets):
+        """Widgets the row may hide, first to go first."""
+        self._optional = list(widgets)
+
+    def fit(self):
+        if self._fitting or not self._optional:
+            return
+        self._fitting = True
+        try:
+            for widget in self._optional:
+                widget.setVisible(True)
+            self.row.activate()
+            for widget in self._optional:
+                if self.row.minimumSize().width() <= self.width():
+                    break
+                widget.setVisible(False)
+                self.row.activate()
+        finally:
+            self._fitting = False
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.fit()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.FontChange:
+            self.fit()
 
 
 def contiguous_runs(frames):

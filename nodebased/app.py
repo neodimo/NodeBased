@@ -81,7 +81,9 @@ from .tiles import TileCache, TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
 from .artisttools import CacheInspectorPanel, SliceView
 from . import cachecontext
-from .timeline import TimelineBar, KEY_COLOR
+from .timeline import (PLAY_ICON, STEP_BACK_ICON, STEP_FORWARD_ICON, STOP_ICON, TimelineBar, TimeRow, KEY_COLOR,
+                       transport_icon)
+from .topbar import StatusDot
 from .viewerstrip import ChannelButtons, CornerReadouts, PixelReadout, ViewerStrip
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from .groups import scope_document
@@ -6864,81 +6866,120 @@ class Window(QMainWindow):
 
         Reads the way compositors read it (QA 10/6, finding 1): current frame first and largest,
         then the timeline, then the range as In and Out, then the rate. Every numeric field
-        commits on Enter or focus-out, so typing "24" is one edit and not a 2 followed by a 24."""
-        container = QWidget()
-        container.setObjectName("time-row")
-        row = QHBoxLayout(container)
-        row.setContentsMargins(0, 0, 0, 0)
+        commits on Enter or focus-out, so typing "24" is one edit and not a 2 followed by a 24.
+        One slim row as in the new look (step 5): transport buttons with the accent play button,
+        the monospace frame field, the track, the range, the rate and a real-time light. When the
+        viewer is narrow or the font is wide the row hides its status text and the light's words
+        (TimeRow.fit) rather than clip a field."""
+        container = TimeRow()
+        row = container
         self.time_row = container
 
         def caption(text, tip):
             label = QLabel(text)
             label.setObjectName("time-label")
             label.setToolTip(tip)
-            row.addWidget(label)
+            row.add(label)
             return label
 
-        row.addWidget(QLabel("  TIME"))
-        self.play_button = QPushButton("▶")
-        self.play_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.play_button.setToolTip("Play / stop (Space)")
+        transport = QWidget()
+        transport.setObjectName("transport")
+        transport_row = QHBoxLayout(transport)
+        transport_row.setContentsMargins(0, 0, 0, 0)
+        transport_row.setSpacing(2)
+
+        def transport_button(name, icon, tip):
+            button = QToolButton()
+            button.setObjectName(name)
+            button.setIcon(icon)
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setToolTip(tip)
+            transport_row.addWidget(button)
+            return button
+
+        self.step_back_button = transport_button("transport-back", transport_icon(STEP_BACK_ICON),
+                                                 "Previous frame (Left)")
+        self.step_back_button.clicked.connect(lambda: self.step_frame(-1))
+        # The play button keeps its glyph as its text (the tests and the agent read "▶" and "■")
+        # and shows the icon beside it; icon-only style paints the icon and not the text.
+        self.play_button = transport_button("transport-play", transport_icon(PLAY_ICON, filled=True, ink=True),
+                                            "Play / stop (Space)")
+        self.play_button.setText("▶")
         self.play_button.clicked.connect(lambda: self.toggle_playback())
-        row.addWidget(self.play_button)
+        self.step_forward_button = transport_button("transport-forward", transport_icon(STEP_FORWARD_ICON),
+                                                    "Next frame (Right)")
+        self.step_forward_button.clicked.connect(lambda: self.step_frame(1))
+        row.add(transport)
         self.frame_current_label = caption("Frame", "The frame on screen")
         self.frame_current = FrameSpinBox()
+        self.frame_current.setObjectName("frame-current")
         self.frame_current.setRange(*TIME_LIMITS["current"])
-        self.frame_current.setMinimumWidth(150)
-        emphasis = self.frame_current.font()
-        emphasis.setBold(True)
-        emphasis.setPointSizeF(emphasis.pointSizeF() + 2)
-        self.frame_current.setFont(emphasis)
+        mono = QFont()
+        mono.setPixelSize(15)
+        mono.setWeight(QFont.Weight.DemiBold)
+        self.frame_current.setMinimumWidth(QFontMetrics(mono).horizontalAdvance("00000") + 34)
         self.frame_current.setToolTip("Current frame. Type a number to go there, or +10 / -5 to move "
                                       "relative to it. Press Enter to apply.")
-        row.addWidget(self.frame_current)
+        row.add(self.frame_current)
         # TimelineBar keeps the QSlider surface this row was built against (setRange/setValue/
-        # value/valueChanged), and adds the tick marks, frame numbers, and the cached/keyed
-        # underlines. Everything below wires to it unchanged.
+        # value/valueChanged), and adds the tick marks, frame numbers, the cached range and the
+        # key diamonds. Everything below wires to it unchanged.
         self.frame_slider = TimelineBar()
         self.frame_slider.setMinimumWidth(140)
-        row.addWidget(self.frame_slider, 1)
+        row.add(self.frame_slider, 1)
         self.frame_first_label = caption("In", "First frame of the comp's range")
         self.frame_first = FittedSpinBox()
+        self.frame_first.setObjectName("time-field")
         self.frame_first.setRange(*TIME_LIMITS["first"])
-        self.frame_first.setMinimumWidth(76)
         self.frame_first.setToolTip("In: first frame of the comp's range. It cannot pass Out.")
-        row.addWidget(self.frame_first)
+        row.add(self.frame_first)
         self.frame_last_label = caption("Out", "Last frame of the comp's range")
         self.frame_last = FittedSpinBox()
+        self.frame_last.setObjectName("time-field")
         self.frame_last.setRange(*TIME_LIMITS["last"])
-        self.frame_last.setMinimumWidth(76)
         self.frame_last.setToolTip("Out: last frame of the comp's range. It cannot precede In.")
-        row.addWidget(self.frame_last)
+        row.add(self.frame_last)
         # Playback rate is a property of the comp, so it is an undoable document edit through the
         # same boundary as the range — an agent setting fps and an artist typing it share one path.
         self.frame_fps = FpsSpinBox()
+        self.frame_fps.setObjectName("time-field")
         self.frame_fps.setRange(*TIME_LIMITS["fps"])
         self.frame_fps.setDecimals(3)
         self.frame_fps.setSingleStep(1.0)
         self.frame_fps.setSuffix(" fps")
         self.frame_fps.setToolTip("Playback rate. New comps start at 24 fps; the transport and the "
                                   "dropped-frame counter both follow this value.")
-        row.addWidget(self.frame_fps)
+        row.add(self.frame_fps)
         self.fps_presets = QComboBox()
+        self.fps_presets.setObjectName("time-presets")
         self.fps_presets.setToolTip("Common delivery rates")
         self.fps_presets.addItem("rate", None)
         for label, value in FPS_PRESETS:
             self.fps_presets.addItem(label, value)
         self.fps_presets.currentIndexChanged.connect(self.apply_fps_preset)
-        row.addWidget(self.fps_presets)
+        row.add(self.fps_presets)
+        # The real-time light: green while playback keeps the clock, warm once frames are dropped.
+        self.realtime_dot = StatusDot(TOKENS["acc"], glow=True)
+        self.realtime_label = QLabel("real time")
+        self.realtime_label.setObjectName("time-realtime")
+        self.realtime_label.setToolTip("Playback keeps up with the clock. Turns warm when frames are dropped.")
+        row.add(self.realtime_dot)
+        row.add(self.realtime_label)
         self.frame_info = ShrinkableLabel("")
         self.frame_info.setObjectName("muted")
-        row.addWidget(self.frame_info)
+        row.add(self.frame_info)
+        row.set_optional([self.frame_info, self.realtime_label, self.fps_presets])
         # Commit on Enter or focus-out rather than per keystroke: one undoable edit per typed value.
         for spin in (self.frame_first, self.frame_last, self.frame_current, self.frame_fps):
             spin.setKeyboardTracking(False)
         # Frame numbers are typed or scrubbed, as in Nuke; the step arrows only cost row width.
-        for spin in (self.frame_first, self.frame_last, self.frame_current):
+        for spin in (self.frame_first, self.frame_last, self.frame_current, self.frame_fps):
             hide_spin_buttons(spin)
+        # The current frame is the largest field of the row (QA 10/6): at least as wide as its
+        # digits need, and always wider than the rate beside the range.
+        self.frame_current.setMinimumWidth(max(self.frame_current.minimumWidth(),
+                                               self.frame_fps.sizeHint().width() + 8))
         self.frame_current.valueChanged.connect(lambda value: self.set_time(current=value))
         self.frame_first.valueChanged.connect(lambda value: self.commit_range("first", value))
         self.frame_last.valueChanged.connect(lambda value: self.commit_range("last", value))
@@ -6946,6 +6987,16 @@ class Window(QMainWindow):
         self.frame_slider.valueChanged.connect(lambda value: self.set_time(current=value))
         self.sync_timeline()
         return container
+
+    def update_realtime_light(self):
+        """Green "real time" while playback keeps the clock; warm "dropping frames" once it has
+        dropped any since it started."""
+        behind = self.playing and self.playback_dropped_frames > 0
+        self.realtime_dot.set_color(TOKENS["warn"] if behind else TOKENS["acc"])
+        self.realtime_label.setText("dropping frames" if behind else "real time")
+        self.realtime_label.setProperty("behind", behind)
+        self.realtime_label.style().unpolish(self.realtime_label)
+        self.realtime_label.style().polish(self.realtime_label)
 
     def commit_range(self, name, value):
         """An In or Out typed by hand. An inverted range is refused and the field goes back to the
@@ -7130,6 +7181,7 @@ class Window(QMainWindow):
             return
         self.playing = start
         self.play_button.setText("■" if start else "▶")
+        self.play_button.setIcon(transport_icon(STOP_ICON if start else PLAY_ICON, filled=True, ink=True))
         if start:
             time_range = self.dispatcher.document["time"]
             self.playback_origin_frame = time_range["current"]
@@ -7137,6 +7189,7 @@ class Window(QMainWindow):
             self.playback_elapsed_frames = 0
             self.playback_dropped_frames = 0
             self.playback_frames_rendered = 0
+            self.update_realtime_light()
             # Standard proxy-resolution playback: a source above HD makes the ACES 2.0 CPU
             # transform too slow for real-time (measured ~2.3s at 4K), so drop to the smallest
             # downscale that brings it under budget for the duration of playback only. Never
@@ -7165,6 +7218,7 @@ class Window(QMainWindow):
             if self.playback_auto_proxy_index is not None:
                 self.proxy.setCurrentIndex(self.playback_auto_proxy_index)
                 self.playback_auto_proxy_index = None
+            self.update_realtime_light()
 
     def playback_tick(self):
         """Follow the wall clock when rendering can keep up. When it can't, Nuke-style fallback:
@@ -7182,6 +7236,7 @@ class Window(QMainWindow):
         advanced = elapsed_frames - self.playback_elapsed_frames
         if advanced > 1:
             self.playback_dropped_frames += advanced - 1
+            self.update_realtime_light()
         self.playback_elapsed_frames = elapsed_frames
         bounded_frames = min(elapsed_frames, self.playback_frames_rendered)
         target = time_range["first"] + (
