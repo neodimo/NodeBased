@@ -2210,19 +2210,21 @@ class RealDisplayQALayoutTests(unittest.TestCase):
         self.assertGreaterEqual(self._format_display_height(w), 10)
 
     def test_no_toolbar_widget_is_clipped_at_1440x920(self):
+        # New look, step 5: the two rows of viewer controls became one floating strip (and a menu
+        # for what the rows held beyond it), so the check reads the strip's own children.
         w = self._open_window((1440, 920))
-        rows = [child for child in w.viewer_panel.children()
-               if hasattr(child, "objectName") and child.objectName() == "viewer-controls-row"]
-        self.assertEqual(len(rows), 2, "expected the two viewer-control rows")
-        for row in rows:
-            bounds = row.rect()
-            for widget in row.findChildren(QWidget):
-                if widget.parentWidget() is not row:
-                    continue
-                geometry = widget.geometry()
-                self.assertTrue(bounds.contains(geometry),
-                                f"{widget.objectName() or type(widget).__name__} "
-                                f"{geometry} is not inside the row {bounds}")
+        strip = w.viewer_strip
+        self.assertTrue(strip.isVisible())
+        bounds = strip.rect()
+        checked = 0
+        for widget in strip.findChildren(QWidget):
+            if widget.parentWidget() is not strip or not widget.isVisible():
+                continue
+            checked += 1
+            self.assertTrue(bounds.contains(widget.geometry()),
+                            f"{widget.objectName() or type(widget).__name__} "
+                            f"{widget.geometry()} is not inside the strip {bounds}")
+        self.assertGreaterEqual(checked, 10)
 
     def _roto_node(self, w):
         w.command({"op": "batch", "commands": [

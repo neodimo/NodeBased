@@ -113,9 +113,11 @@ TOKENS = {
     "accbg": "rgba(94, 224, 181, 0.10)",                                        # accent wash (hover, selection)
     "mark_b": "#56c2ff", "mark_c": "#9aa8ff",                                   # logo rim colours
     "bar_top": "#12161a", "bar_bottom": "#0f1215",                              # top bar gradient
-    "danger": "#ff6b6b", "shadow": "rgba(0, 0, 0, 0.4)",
+    "danger": "#ff6b6b", "warn": "#f39a4c", "shadow": "rgba(0, 0, 0, 0.4)",
     "glass": "rgba(17, 20, 24, 0.85)",                                          # panels floating over the graph
     "acc_ring": "rgba(94, 224, 181, 0.35)",                                     # accent outline on a checked chip
+    "hud": "rgba(17, 20, 24, 0.78)",                                            # the viewer's floating strip
+    "ch_r": "#ff6b6b", "ch_g": "#7be07b", "ch_b": "#6cc4ff",                    # the R, G and B channel buttons
 }
 
 # The thirteen node families (UI-SPEC.md). No yellow: dark yellow reads brown and dirty.
@@ -283,6 +285,60 @@ QLabel#gpu-pill-text {{ color: {TOKENS['tx1']}; font-size: {t['small']}px; }}
 QToolButton#topbar-menu {{ color: {c['muted']}; border: 0; border-radius: {r['field']}px; padding: 5px; }}
 QToolButton#topbar-menu::menu-indicator {{ image: none; width: 0px; }}
 QToolButton#topbar-menu:hover, QToolButton#topbar-menu:checked {{ background: {c['hover']}; color: {c['text']}; }}
+
+/* ---- the viewer strip and its corner readouts (new look, step 5) ---- */
+QFrame#viewer-strip {{ background: {TOKENS['hud']}; border: 1px solid {TOKENS['line2']}; border-radius: {r['panel']}px; }}
+QFrame#viewer-strip QWidget {{ background: transparent; }}
+QFrame#viewer-strip QToolButton {{ background: transparent; border: 0; border-radius: {r['chip'] + 1}px; padding: 4px {sp['md'] - 1}px; color: {TOKENS['tx1']}; font-size: {t['small']}px; }}
+QFrame#viewer-strip QToolButton:hover {{ background: {TOKENS['bg2']}; color: {TOKENS['tx0']}; }}
+QFrame#viewer-strip QToolButton:checked {{ background: {TOKENS['bg3']}; color: {TOKENS['tx0']}; }}
+QFrame#viewer-strip QToolButton::menu-indicator {{ image: none; width: 0px; }}
+QFrame#viewer-strip QToolButton#strip-channel {{ padding: 3px {sp['sm'] - 1}px; font-size: {t['caption']}px; font-weight: 700; }}
+QFrame#viewer-strip QToolButton#strip-channel[channel="R"] {{ color: {TOKENS['ch_r']}; }}
+QFrame#viewer-strip QToolButton#strip-channel[channel="G"] {{ color: {TOKENS['ch_g']}; }}
+QFrame#viewer-strip QToolButton#strip-channel[channel="B"] {{ color: {TOKENS['ch_b']}; }}
+QFrame#viewer-strip QToolButton#strip-channel[channel="A"] {{ color: {TOKENS['tx2']}; }}
+QFrame#viewer-strip QToolButton#strip-channel[channel="RGB"]:checked {{ color: {TOKENS['tx0']}; }}
+QFrame#viewer-strip QToolButton#viewer-mode-2d:checked, QFrame#viewer-strip QToolButton#viewer-mode-3d:checked {{ background: {TOKENS['bg3']}; color: {TOKENS['tx0']}; border: 0; border-radius: {r['chip'] + 1}px; }}
+QFrame#viewer-strip QFrame#strip-separator {{ background: {TOKENS['line2']}; border: 0; }}
+QFrame#viewer-strip QLabel {{ background: transparent; color: {TOKENS['tx2']}; font-size: {t['small']}px; }}
+QFrame#viewer-strip QDoubleSpinBox {{ background: transparent; border: 1px solid transparent; border-radius: {r['chip'] + 1}px; padding: 2px {sp['xs']}px; color: {TOKENS['tx1']}; font-family: {t['mono']}; font-size: {t['small']}px; }}
+QFrame#viewer-strip QDoubleSpinBox:hover {{ background: {TOKENS['bg2']}; }}
+QFrame#viewer-strip QDoubleSpinBox:focus {{ background: {TOKENS['bg0']}; border: 1px solid {TOKENS['acc_ring']}; color: {TOKENS['tx0']}; }}
+QWidget#viewer-corner, QWidget#pixel-readout {{ background: transparent; }}
+QWidget#viewer-corner QLabel, QWidget#pixel-readout QLabel {{ background: transparent; color: {TOKENS['tx2']}; font-size: {t['caption'] + 0.5}px; }}
+QLabel#corner-strong {{ color: {TOKENS['tx1']}; font-weight: 500; }}
+QLabel#corner-buffer {{ color: #f4ce63; font-weight: 700; }}
+QWidget#pixel-readout QLabel#corner-strong {{ font-family: {t['mono']}; }}
+QLabel#corner-swatch {{ border: 1px solid {TOKENS['line2']}; border-radius: 3px; }}
+
+/* ---- the slim time row (new look, step 5) ---- */
+QWidget#time-row {{ background: {TOKENS['bg1']}; border-top: 1px solid {TOKENS['line']}; border-bottom: 1px solid {TOKENS['line']}; }}
+QWidget#time-row QLabel {{ background: transparent; color: {TOKENS['tx3']}; font-size: {t['caption']}px; }}
+QWidget#time-row QLabel#muted {{ color: {TOKENS['tx3']}; }}
+QWidget#time-row QLabel#time-realtime {{ color: {TOKENS['acc']}; font-size: {t['small']}px; }}
+QWidget#time-row QLabel#time-realtime[behind="true"] {{ color: {TOKENS['warn']}; }}
+QWidget#transport {{ background: transparent; }}
+QWidget#time-row QToolButton {{ background: transparent; border: 0; border-radius: {r['field']}px; padding: 6px; }}
+QWidget#time-row QToolButton:hover {{ background: {TOKENS['bg3']}; }}
+QWidget#time-row QToolButton#transport-play {{ background: {TOKENS['acc']}; }}
+QWidget#time-row QToolButton#transport-play:hover {{ background: {TOKENS['acc2']}; }}
+QWidget#time-row QSpinBox#frame-current {{ background: transparent; border: 1px solid transparent; color: {TOKENS['tx0']}; font-family: {t['mono']}; font-size: 15px; font-weight: 600; padding: 3px {sp['xs']}px; }}
+QWidget#time-row QSpinBox#frame-current:hover {{ background: {TOKENS['bg2']}; }}
+QWidget#time-row QSpinBox#frame-current:focus {{ background: {TOKENS['bg0']}; border: 1px solid {TOKENS['acc_ring']}; }}
+QWidget#time-row QSpinBox#time-field, QWidget#time-row QDoubleSpinBox#time-field {{ background: transparent; border: 1px solid transparent; color: {TOKENS['tx1']}; padding: 3px {sp['xs']}px; }}
+QWidget#time-row QSpinBox#time-field:hover, QWidget#time-row QDoubleSpinBox#time-field:hover {{ background: {TOKENS['bg2']}; }}
+QWidget#time-row QSpinBox#time-field:focus, QWidget#time-row QDoubleSpinBox#time-field:focus {{ background: {TOKENS['bg0']}; border: 1px solid {TOKENS['acc_ring']}; }}
+QWidget#time-row QComboBox#time-presets {{ background: transparent; border: 1px solid transparent; color: {TOKENS['tx2']}; padding: 3px {sp['xs'] + 2}px; }}
+QWidget#time-row QComboBox#time-presets:hover {{ background: {TOKENS['bg2']}; }}
+
+/* ---- the graph's "?" shortcut overlay (new look, step 5) ---- */
+QFrame#shortcut-overlay {{ background: {_rgba(c['title'], 0.96)}; border: 1px solid {c['button_border']}; border-radius: {r['flyout']}px; }}
+QFrame#shortcut-overlay QLabel {{ background: transparent; }}
+QLabel#shortcut-title {{ color: {c['text']}; font-size: {t['base']}px; font-weight: 600; }}
+QLabel#shortcut-hint {{ color: {c['faint']}; font-size: {t['caption']}px; }}
+QLabel#shortcut-keys {{ color: {TOKENS['tx1']}; font-family: {t['mono']}; font-size: {t['caption']}px; background: {c['panel']}; border: 1px solid {c['button_border']}; border-radius: {r['kbd']}px; padding: 1px {sp['sm']}px; }}
+QLabel#shortcut-action {{ color: {c['muted']}; font-size: {t['small']}px; }}
 
 /* ---- the left column of node families and the floating node panel (see nodeshelf.py) ---- */
 QToolBar#node-rail-toolbar {{ background: {c['panel']}; border: 0; padding: 0; spacing: 0; }}

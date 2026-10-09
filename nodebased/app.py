@@ -82,6 +82,7 @@ from .tiers import PROXY_TIERS, auto_playback_tier
 from .artisttools import CacheInspectorPanel, SliceView
 from . import cachecontext
 from .timeline import TimelineBar, KEY_COLOR
+from .viewerstrip import ChannelButtons, CornerReadouts, PixelReadout, ViewerStrip
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from .groups import scope_document
 from . import shapes as shape_model
@@ -1047,34 +1048,6 @@ class PanZoomView(QGraphicsView):
             self.fitInView(rect.adjusted(-24, -24, 24, 24), Qt.AspectRatioMode.KeepAspectRatio)
 
 
-class PixelReadout(QWidget):
-    """A fixed-size viewer overlay; changing pixel text must not affect the window layout."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(272, 28)
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet("QWidget { background: rgba(25, 25, 27, 220); border: 1px solid #5f5f6b; }")
-        self.label = QLabel(self)
-        self.label.setGeometry(8, 0, 214, 27)
-        self.label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        self.label.setStyleSheet("border: 0; color: #e8e8eb; background: transparent;")
-        self.swatch = QLabel(self)
-        self.swatch.setGeometry(226, 6, 16, 16)
-        # Which buffer the numbers come from while an A/B compare is on; empty otherwise.
-        self.buffer_tag = QLabel(self)
-        self.buffer_tag.setGeometry(246, 0, 24, 27)
-        self.buffer_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.buffer_tag.setStyleSheet("border: 0; color: #f4ce63; background: transparent; font-weight: bold;")
-        self.swatch.setStyleSheet("border: 1px solid #e8e8eb; background: transparent;")
-        self.setToolTip("Pixel values are raw scene-linear floats; y=0 is the bottom row, Nuke-style.")
-
-    def set_value(self, text, color, buffer=""):
-        self.label.setText(text)
-        self.buffer_tag.setText(buffer)
-        self.swatch.setStyleSheet(
-            f"border: 1px solid #e8e8eb; background: rgb({color.red()}, {color.green()}, {color.blue()});")
-
-
 class ViewerInputStrip(QWidget):
     """Nuke-style viewer inputs: nine numbered buttons (bright = active A, plain = wired, dim = empty,
     amber outline = B), the B selector and the compare mode. A fixed overlay on the viewport, like the
@@ -1216,8 +1189,11 @@ class Viewer(PanZoomView):
         self.pixel_readout = PixelReadout(self.viewport())
         self.pixel_readout.hide()
         self.input_strip = ViewerInputStrip(self)
-        self.input_strip.move(8, 8)
         self.input_strip.show()
+        # Room the floating strip (top) and the corner readouts (bottom) take from the picture:
+        # fit() leaves it free, so the controls never sit on the pixels. Set by the window.
+        self.insets = (0, 0)
+        self._reported_zoom = None
         # A tool prompt (Roto drawing, Tracker picking, ...) shown over the picture itself:
         # the status bar alone was never seen on the QA pass 1 display, because a render
         # progress message queued right behind it overwrote it within the same second
@@ -1251,36 +1227,31 @@ class Viewer(PanZoomView):
         return QRectF(self._image_rect)
 
     def _place_pixel_readout(self):
+        """Reflow the nine-button input strip. The pixel readout itself sits in the corner row of
+        the viewer stack (CornerReadouts), outside the picture, so it never needs a free spot over
+        the image; the input strip keeps its rule of showing only where it covers no picture and
+        no corner readout. Returns True: the readout can always be shown."""
         margin = 8
-        viewport_rect = self.viewport().rect()
-        image_poly = self.mapFromScene(self.sceneRect())
-        image_rect = image_poly.boundingRect().intersected(viewport_rect)
         strip = getattr(self, "input_strip", None)
-        if strip is not None:
-            overlaps = image_rect.intersects(strip.geometry())
-            if strip.isVisible() == overlaps:
-                strip.setVisible(not overlaps)
-        overlays = [image_rect]
-        if strip is not None and strip.isVisible():
-            overlays.append(strip.geometry())
-        width, height = self.pixel_readout.width(), self.pixel_readout.height()
-        candidates = (
-            QPoint(max(margin, viewport_rect.right() - width - margin),
-                   max(margin, viewport_rect.bottom() - height - margin)),
-            QPoint(max(margin, viewport_rect.right() - width - margin), margin),
-            QPoint(margin, max(margin, viewport_rect.bottom() - height - margin)),
-            QPoint(margin, margin),
-        )
-        for point in candidates:
-            rect = QRect(point, self.pixel_readout.size()).intersected(viewport_rect)
-            if rect.width() == width and rect.height() == height and not any(rect.intersects(item) for item in overlays):
-                self.pixel_readout.move(point)
-                self.pixel_readout.raise_()
-                return True
-        # A HUD over the picture corrupts the pixels the viewer is meant to show.  Small images
-        # get a free corner; when a zoomed/full-frame picture fills the viewport, keep it clear.
-        self.pixel_readout.hide()
-        return False
+        if strip is None:
+            return True
+        viewport_rect = self.viewport().rect()
+        image_rect = self.mapFromScene(self.sceneRect()).boundingRect().intersected(viewport_rect)
+        corners = getattr(self.window, "viewer_corners", None)
+        y = max(margin, viewport_rect.bottom() - strip.height() - margin)
+        x = margin
+        if corners is not None:
+            # Between the two corner readouts, along the bottom edge, when they leave the room.
+            left, right = corners.free_span()
+            x = left + max((right - left - strip.width()) // 2, 0)
+            fits = right - left >= strip.width()
+        else:
+            fits = True
+        strip.move(x, y)
+        visible = fits and not image_rect.intersects(strip.geometry())
+        if strip.isVisible() != visible:
+            strip.setVisible(visible)
+        return True
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1292,6 +1263,7 @@ class Viewer(PanZoomView):
         # Zooming or resizing a dock can move the frame under the fixed HUD widgets.  Reflow
         # before each paint so pixel grabs never sample the controls themselves.
         self._place_pixel_readout()
+        self.report_zoom()
         super().paintEvent(event)
 
     def showEvent(self, event):
@@ -1321,6 +1293,31 @@ class Viewer(PanZoomView):
         viewport_rect = self.viewport().rect()
         x = (viewport_rect.width() - self.prompt_banner.width()) // 2
         self.prompt_banner.move(max(0, x), 8)
+
+    def fit(self):
+        """Fit the picture into the part of the viewer the strip and the corner readouts leave
+        free (`insets`: pixels kept clear at the top and the bottom)."""
+        top, bottom = self.insets
+        rect = self.scene().itemsBoundingRect()
+        if rect.isEmpty() or not (top or bottom):
+            return super().fit()
+        target = rect.adjusted(-24, -24, 24, 24)
+        viewport = self.viewport().rect()
+        room = max(viewport.height() - top - bottom, 1)
+        scale = min(viewport.width() / target.width(), room / target.height())
+        self.resetTransform()
+        self.scale(scale, scale)
+        # The picture's middle goes to the middle of the free band: the view's own middle is
+        # (top - bottom) / 2 pixels above it.
+        self.centerOn(target.center().x(), target.center().y() - (top - bottom) / (2 * scale))
+
+    def report_zoom(self):
+        """Tell the corner readout the zoom, once per change (called from every paint)."""
+        corners = getattr(self.window, "viewer_corners", None)
+        scale = round(self.transform().m11(), 4)
+        if corners is not None and scale != self._reported_zoom:
+            self._reported_zoom = scale
+            corners.set_zoom(scale)
 
     def _fit_initial_image(self):
         """Fit the first picture after its dock has a real, visible viewport size."""
@@ -1386,7 +1383,8 @@ class Viewer(PanZoomView):
                                 min(max(blue, 0.0), 1.0), 1.0)
         self.pixel_readout.set_value(
             f"{full_x}, {nuke_y}  {red:.5f} {green:.5f} {blue:.5f} {alpha:.5f}", color,
-            buffer if self.window.frame_b is not None and self.compare_mode() != "A only" else "")
+            buffer if self.window.frame_b is not None and self.compare_mode() != "A only" else "",
+            position=f"x {full_x}  y {nuke_y}", values=f"{red:.3f} {green:.3f} {blue:.3f}")
         self.readout_buffer = buffer
         self._pixel_readout_active = True
         if self._place_pixel_readout():
@@ -6482,10 +6480,8 @@ class Window(QMainWindow):
         vl = QVBoxLayout(viewer_panel)
         vl.setContentsMargins(0, 0, 0, 0)
         vl.setSpacing(2)
-        controls_widget = QWidget()
-        controls = QHBoxLayout(controls_widget)
-        controls.setContentsMargins(6, 2, 6, 2)
-        controls.addWidget(QLabel("  VIEWER"))
+        self.strip_models = QWidget(viewer_panel)
+        self.strip_models.hide()
         # 2D/3D toggle: the viewer panel holds both views (Nuke's Tab); the checked button shows
         # which one is on screen.
         self.viewer_mode_group = QButtonGroup(self)
@@ -6504,20 +6500,16 @@ class Window(QMainWindow):
             button.clicked.connect(lambda _checked=False, m=mode: self.set_viewer_mode(m))
             self.viewer_mode_group.addButton(button)
             self.viewer_mode_buttons[mode] = button
-            controls.addWidget(button)
-        self.channels = QComboBox()
-        self.channels.addItems(["RGB", "R", "G", "B", "A"])
+        self.channels = ChannelButtons()
         self.channels.currentTextChanged.connect(self.request_preview)
-        controls.addWidget(self.channels)
-        self.display_view = QComboBox()
+        self.display_view = QComboBox(self.strip_models)
         self.display_view.addItems(VIEWS)
         self.display_view.setCurrentText(self.dispatcher.document["settings"]["color"]["view"])
         self.display_view.setToolTip("Display transform only; exports stay independent of the viewer")
         self.display_view.currentTextChanged.connect(self.request_preview)
-        controls.addWidget(self.display_view)
         # Proxy is viewer state, never document state: it is how one artist is looking at the comp
         # right now. Export and the agent's render op always evaluate at tier 1 (clause C3).
-        self.proxy = QComboBox()
+        self.proxy = QComboBox(self.strip_models)
         for label, tier in (("Full", 1), ("1/2", 2), ("1/4", 4), ("1/8", 8)):
             self.proxy.addItem(label, tier)
         self.proxy.setToolTip("Proxy resolution for the viewer only. Sources generate at this "
@@ -6529,31 +6521,26 @@ class Window(QMainWindow):
         self.proxy.activated.connect(lambda _index: self.set_viewer_proxy(self.proxy.currentData()))
         self._proxy_seen = 1
         self._last_proxy = 2
-        controls.addWidget(self.proxy)
         # Proxy-while-playing used to be unconditional. It is the right default -- native 4K
         # through ACES 2.0 cannot hit real time on the CPU -- but "the viewer silently changed
         # resolution when I pressed play" is a decision the artist gets to make, not one the app
         # makes for them. Unchecking it plays at whatever tier is selected, however slow that is.
-        self.playback_proxy = QCheckBox("Proxy while playing")
+        self.playback_proxy = QCheckBox("Proxy while playing", self.strip_models)
         self.playback_proxy.setChecked(True)
+        self.playback_proxy.toggled.connect(lambda _on: self.update_corner_readout())
         self.playback_proxy.setToolTip(
             "Drop to the smallest proxy tier that can keep up, for the duration of playback only, "
             "then restore the tier you had. Never overrides a proxy tier you chose yourself.\n"
             "Uncheck to always play at the selected tier.")
-        controls.addWidget(self.playback_proxy)
         # Gain, gamma, the clipping warning and the display choice are viewer state saved in the
         # document (settings.viewer.look) and applied to the picture on screen only. The gain
         # spinbox is the old Exposure control under Nuke's name; `self.exposure` stays its name.
-        controls.addWidget(QLabel("Gain"))
         self.exposure = QDoubleSpinBox()
         self.exposure.setRange(*VIEWER_GAIN_RANGE)
         self.exposure.setSingleStep(0.25)
         self.exposure.setToolTip("Viewer gain in f-stops, before the display transform. Display only: "
                                  "never written to the document's pixels or to a Write.")
         self.exposure.valueChanged.connect(lambda value: self.set_viewer_look(gain=value))
-        controls.addWidget(self.exposure)
-        controls.addWidget(self._look_reset("gain"))
-        controls.addWidget(QLabel("Gamma"))
         self.gamma = QDoubleSpinBox()
         self.gamma.setRange(*VIEWER_GAMMA_RANGE)
         self.gamma.setDecimals(2)
@@ -6561,21 +6548,14 @@ class Window(QMainWindow):
         self.gamma.setValue(1.0)
         self.gamma.setToolTip("Viewer gamma, after gain and before the display transform. Display only.")
         self.gamma.valueChanged.connect(lambda value: self.set_viewer_look(gamma=value))
-        controls.addWidget(self.gamma)
-        controls.addWidget(self._look_reset("gamma"))
-        self.zebra = QCheckBox(f"Zebra >{ZEBRA_HIGH:g} <{ZEBRA_LOW:g}")
+        self.zebra = QCheckBox(f"Zebra >{ZEBRA_HIGH:g} <{ZEBRA_LOW:g}", self.strip_models)
         self.zebra.setToolTip(f"Clipping warning: stripes pixels whose viewed scene-linear value is above "
                               f"{ZEBRA_HIGH:g} (red) or below {ZEBRA_LOW:g} (blue). Display only.")
         self.zebra.toggled.connect(lambda on: self.set_viewer_look(zebra=on))
-        controls.addWidget(self.zebra)
-        controls.addStretch()
-        # Row 2: display/navigation controls. Two fixed rows, rather than one scrolled row, so
-        # nothing needs a horizontal scrollbar (an empty-looking bar of its own) or falls off the
-        # right edge at 1440px (QA pass 1, finding 2, 2026-09-30).
-        controls2_widget = QWidget()
-        controls2 = QHBoxLayout(controls2_widget)
-        controls2.setContentsMargins(6, 2, 6, 2)
-        self.viewer_display = QComboBox()
+        # Display and navigation controls. They live in the viewer's floating strip (viewerstrip.py);
+        # the combo boxes and check boxes that hold their state stay here as hidden models, so the
+        # document sync, the shortcuts and the tests read and set them exactly as before.
+        self.viewer_display = QComboBox(self.strip_models)
         self.viewer_display.addItem("Project view")
         self.viewer_display.addItems(viewer_displays())
         self.viewer_display.setToolTip("Display transform for this viewer: the project's default view, or "
@@ -6583,37 +6563,27 @@ class Window(QMainWindow):
                                        "values untransformed). The pixel readout stays scene-linear.")
         self.viewer_display.activated.connect(
             lambda _index: self.set_viewer_look(display=self.viewer_display.currentText()))
-        controls2.addWidget(self.viewer_display)
-        self.roi_button = QPushButton("ROI")
+        self.roi_button = QToolButton()
+        self.roi_button.setText("ROI")
         self.roi_button.setCheckable(True)
         self.roi_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.roi_button.setToolTip("Region of interest: evaluate and show only the box in the viewer; the "
                                    "rest keeps the last full picture, dimmed. Drag the box or its edges; "
                                    "Shift-drag draws a new one. Display only.")
         self.roi_button.toggled.connect(self.toggle_viewer_roi)
-        controls2.addWidget(self.roi_button)
-        self.mask_choice = QComboBox()
+        self.mask_choice = QComboBox(self.strip_models)
         self.mask_choice.addItems(VIEWER_MASKS)
         self.mask_choice.setToolTip("Format mask aspect ratio ('format' is the frame's own). Display only.")
         self.mask_choice.activated.connect(lambda _i: self.set_viewer_mask(mask=self.mask_choice.currentText()))
-        controls2.addWidget(self.mask_choice)
-        self.mask_mode = QComboBox()
+        self.mask_mode = QComboBox(self.strip_models)
         self.mask_mode.addItems(VIEWER_MASK_MODES)
         self.mask_mode.setToolTip("Mask mode: none, lines at the mask edge, half-dark or black outside. Display only.")
         self.mask_mode.activated.connect(lambda _i: self.set_viewer_mask(mode=self.mask_mode.currentText()))
-        controls2.addWidget(self.mask_mode)
-        fit = QPushButton("Fit")
-        fit.clicked.connect(lambda: self.viewer.fit())
-        controls2.addWidget(fit)
-        one = QPushButton("1:1")
-        one.clicked.connect(lambda: self.viewer.resetTransform())
-        controls2.addWidget(one)
-        controls2.addStretch()
         # Elided, so the length of the playback status can never resize the layout around it.
-        self.viewer_info = ElidedLabel("Waiting for image")
+        # The full status line of the last render. The status bar shows the same text; this label
+        # keeps it for the agent bridge and the tests, out of sight.
+        self.viewer_info = ElidedLabel("Waiting for image", self.strip_models)
         self.viewer_info.setObjectName("muted")
-        self.viewer_info.setMinimumWidth(60)
-        controls2.addWidget(self.viewer_info, 1)
         self.command_error_label = ElidedLabel("")
         self.command_error_label.setObjectName("command-error")
         self.command_error_label.setStyleSheet("color: #e3b18d")
@@ -6643,11 +6613,6 @@ class Window(QMainWindow):
         self.show_in_folder.hide()
         self._write_folder = None
         self.statusBar().addPermanentWidget(self.show_in_folder)
-        for row_widget, row_layout in ((controls_widget, controls), (controls2_widget, controls2)):
-            row_widget.setObjectName("viewer-controls-row")
-            row_widget.adjustSize()
-            row_widget.setFixedHeight(max(row_widget.sizeHint().height() + 4, 32))
-            vl.addWidget(row_widget)
         self.viewer = Viewer(self)
         self.viewer.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         # The viewer is a window onto an image of any size; its own footprint must not follow the
@@ -6671,6 +6636,13 @@ class Window(QMainWindow):
         self.view_stack.addWidget(self.viewer)
         self.view_stack.addWidget(self.viewport)
         vl.addWidget(self.view_stack)
+        # The viewer's controls float over the top of the stack and its readouts sit in the bottom
+        # corners (viewerstrip.py); the 2D picture is fitted into the band between them.
+        self.viewer_strip = ViewerStrip(self, self.view_stack)
+        self.viewer_corners = CornerReadouts(self.view_stack, self.viewer.pixel_readout)
+        self.viewer_strip.place()
+        self.viewer_corners.place()
+        self.viewer.insets = (self.viewer_strip.band_height(), self.viewer_corners.band_height())
         vl.addWidget(self._timeline())
         self.viewer_panel = viewer_panel
         viewer_panel.setMinimumSize(0, 0)
@@ -11269,6 +11241,21 @@ class Window(QMainWindow):
         self.viewer_info.setText(status)
         self._show_image(image, scale, render_region)
 
+    def update_corner_readout(self, scene_rect=None, scale=None):
+        """Resolution, colour space and proxy state in the viewer's bottom-left corner."""
+        if scene_rect is None:
+            scene_rect, scale = self.viewer.sceneRect(), self.viewer.last_scale
+        tier = int(scale or 1)
+        if tier > 1:
+            proxy = f"proxy 1/{tier}"
+        elif self.playback_proxy.isChecked():
+            proxy = "proxy while playing"
+        else:
+            proxy = "full resolution"
+        space = self.dispatcher.document.get("settings", {}).get("color", {}).get("working_space", "ACEScg")
+        self.viewer_corners.set_image(round(scene_rect.width()), round(scene_rect.height()),
+                                      f"{space} · float RGBA", proxy)
+
     def _show_image(self, image, scale, render_region, image_b=None):
         previous = self.viewer.sceneRect().size()
         self.viewer.set_compare_image(image_b, scale, render_region)
@@ -11310,6 +11297,7 @@ class Window(QMainWindow):
         else:
             scene_rect = QRectF(0, 0, image.width(), image.height())
         self.viewer.set_image_rect(scene_rect)
+        self.update_corner_readout(scene_rect, scale)
         self.viewer.draw_format_overlay(scene_rect)
         if self.viewer._initial_fit_pending:
             self.viewer._fit_initial_image()
