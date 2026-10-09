@@ -18,10 +18,18 @@ Splats (ellipsoidal Gaussians met with probability alpha) and smoke and fire (de
 `ptsplats.py` and `ptvolume.py`. The shader is compiled per scene kind (`shader_source`): the splat and
 smoke code is only in the variants whose scene has them, because it costs registers whether it runs or not.
 
+Between frames the device keeps what does not change (`_Frame`): the pipelines, the scene's storage buffers while the next frame
+packs to the same bytes, the image accumulator (cleared on the card), a uniform buffer and bind group per dispatch slot, and the
+readback buffers. A fixed-sampling render puts several passes in one submission (about `BAND_TARGET_SECONDS` of work), and a caller
+that sets `stats["skip_noise_maps"]` gets the image finished on the card (`_RESOLVE_SHADER`), 16 bytes a pixel over the bus.
+`reuse_counters` counts what was built and what was reused.
+
 Scope, named rather than assumed: textures, more than one environment and particles raise
 `gpu3d.Unsupported` (callers fall back to the CPU reference).
 """
 import math
+import struct
+import threading
 import time
 
 import numpy as np
@@ -37,6 +45,17 @@ ADAPTIVE_PACE = 4                        # passes the host lets the card run ahe
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
 BAND_TARGET_SECONDS = 0.008   # a smoke or splat render grows its row bands until one dispatch takes about this long (0: fixed bands)
 BAND_MAX_PATHS = 1 << 22      # and never past this many paths in one dispatch, however fast the first bands were
+MAX_JOBS = 32                 # dispatches one submission may carry (one uniform slot and bind group each)
+CACHE_LIMIT_BYTES = 128 << 20  # a scene whose buffers, host copies and image need more than this is not kept between frames
+# what the renderer built or reused since the process started (tests read the difference around a render)
+COUNTERS = dict(pipelines=0, resolve_pipelines=0, scene_uploads=0, scene_reuses=0, accum_buffers=0, accum_reuses=0,
+                bind_groups=0, uniform_buffers=0, staging_buffers=0, submissions=0)
+
+
+def reuse_counters():
+    """A copy of `COUNTERS`: pipelines compiled, scene uploads and reuses, image accumulators made and reused, bind groups and
+    uniform buffers created, readback buffers made, command buffers submitted."""
+    return dict(COUNTERS)
 COUNT_COLLISIONS = False   # compile the volume counting variant: a render's rgb is the mean (tentative, real, region hops) per path
 ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
 STACK = 64
@@ -2108,6 +2127,7 @@ def _pipeline(state, splats=False, volumes=False, links=False, sparse=False):
     key = (bool(splats), bool(volumes), bool(links), bool(sparse and volumes), bool(COUNT_COLLISIONS and volumes))
     if key not in cache:
         device = state["device"]
+        COUNTERS["pipelines"] += 1
         cache[key] = device.create_compute_pipeline(layout="auto", compute={
             "module": device.create_shader_module(code=shader_source(*key)), "entry_point": "main"})
     return cache[key]
@@ -2514,6 +2534,250 @@ def _tile_bits(tile_done):
     return words
 
 
+# --- what stays on the device between frames ---------------------------------------------------------------
+
+_RESOLVE_SHADER = """
+struct Params {
+    npix: u32, width: u32, tiles_x: u32, tile: u32,
+    data_pass: u32, stride: u32, adaptive: u32, pad1: u32,
+    bg: vec4<f32>,
+};
+@group(0) @binding(0) var<storage, read> acc: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> counts: array<u32>;
+@group(0) @binding(2) var<storage, read_write> out: array<u32>;
+@group(0) @binding(3) var<uniform> p: Params;
+
+fn put(i: u32, c: vec4<f32>) {
+    out[4u * i] = bitcast<u32>(c.x);
+    out[4u * i + 1u] = bitcast<u32>(c.y);
+    out[4u * i + 2u] = bitcast<u32>(c.z);
+    out[4u * i + 3u] = bitcast<u32>(c.w);
+}
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x + gid.y * p.stride;
+    if (i >= p.npix) { return; }
+    let a = acc[2u * i];
+    let b = acc[2u * i + 1u];
+    if (p.adaptive != 0u) {
+        // the pixel's own sample count and done flag, after the image: the count in the low bits, the flag in the top one
+        out[4u * p.npix + i] = u32(b.z) | select(0u, 0x80000000u, b.w > 0.5);
+    }
+    if (p.data_pass != 0u) {
+        put(i, select(vec4<f32>(0.0), a, a.w > 0.0));
+        return;
+    }
+    var n = b.z;
+    if (p.adaptive == 0u) {
+        let x = i % p.width;
+        let y = i / p.width;
+        n = f32(counts[(y / p.tile) * p.tiles_x + x / p.tile]);
+    }
+    let c = a / max(n, 1.0);
+    put(i, c + p.bg * (1.0 - c.w));
+}
+"""
+
+
+def _same_bytes(x, y):
+    """True when two arrays hold the same bytes (a NaN that pads a record equals itself here)."""
+    return (x.shape == y.shape and x.dtype == y.dtype
+            and np.array_equal(np.ascontiguousarray(x).reshape(-1).view(np.uint8), np.ascontiguousarray(y).reshape(-1).view(np.uint8)))
+
+
+def _same_arrays(a, b):
+    return b is not None and len(a) == len(b) and all(_same_bytes(x, y) for x, y in zip(a, b))
+
+
+class _Frame:
+    """The device objects a fixed-sampling render of one scene keeps for the next frame of it: the scene's storage buffers (the
+    host arrays they were made from decide whether a new frame may use them), the image accumulator (cleared, not made, each
+    frame), a uniform buffer and bind group per dispatch slot, and the readback buffers. One per wgpu device; renders take
+    `lock`, so two threads never share the accumulator or the uniform slots."""
+
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.release()
+
+    def release(self):
+        for buffer in [*getattr(self, "scene_buffers", ()), getattr(self, "blocks", None), getattr(self, "accum", None),
+                       getattr(self, "image", None), getattr(self, "counts", None), getattr(self, "resolve_params", None),
+                       *getattr(self, "uniforms", ()), *getattr(self, "staging", {}).values()]:
+            if buffer is not None:
+                buffer.destroy()
+        self.arrays, self.scene_buffers, self.blocks = None, [], None
+        self.accum, self.accum_size, self.image, self.counts, self.resolve_params = None, 0, None, None, None
+        self.uniforms, self.staging = [], {}
+        self.groups, self.group_key = {}, None
+        self.resolve_group, self.resolve_key = None, None
+
+    def nbytes(self):
+        host = sum(a.nbytes for a in self.arrays or ())
+        device = sum(b.size for b in [*self.scene_buffers, self.accum, self.image, *self.uniforms, *self.staging.values()]
+                     if b is not None)
+        return host + device
+
+    def scene(self, device, wgpu, packed):
+        """The six scene buffers for `packed`: the ones from the last frame when its arrays are identical, else new ones."""
+        arrays = [packed.nodes, packed.order, packed.triangles, packed.shapes, packed.lights, packed.env]
+        if _same_arrays(arrays, self.arrays):
+            COUNTERS["scene_reuses"] += 1
+            return self.scene_buffers
+        for buffer in self.scene_buffers:
+            buffer.destroy()
+        self.scene_buffers = [device.create_buffer_with_data(data=a, usage=wgpu.BufferUsage.STORAGE) for a in arrays]
+        self.arrays = arrays
+        if self.blocks is None:
+            self.blocks = device.create_buffer_with_data(data=np.zeros(4, "u4"), usage=wgpu.BufferUsage.STORAGE)
+        self.groups, self.group_key = {}, None
+        COUNTERS["scene_uploads"] += 1
+        return self.scene_buffers
+
+    def accumulator(self, device, wgpu, size):
+        """The image accumulator, zeroed: the same buffer as last frame when it has this size (cleared on the card), else new."""
+        if self.accum is not None and self.accum_size == size:
+            COUNTERS["accum_reuses"] += 1
+            encoder = device.create_command_encoder()
+            encoder.clear_buffer(self.accum)
+            device.queue.submit([encoder.finish()])
+            COUNTERS["submissions"] += 1
+        else:
+            if self.accum is not None:
+                self.accum.destroy()
+            if self.image is not None:           # sized for the old image
+                self.image.destroy()
+                self.image = None
+            self.accum = device.create_buffer(size=size, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC
+                                              | wgpu.BufferUsage.COPY_DST)
+            self.accum_size = size
+            self.groups, self.group_key = {}, None
+            self.resolve_group = None
+            COUNTERS["accum_buffers"] += 1
+        return self.accum
+
+    def group(self, device, wgpu, pipeline, slot, uniform_bytes):
+        """The bind group of dispatch `slot` (its own uniform buffer), built once per scene, accumulator and pipeline."""
+        key = (pipeline, id(self.accum))
+        if self.group_key != key:
+            self.groups, self.group_key = {}, key
+        if slot not in self.groups:
+            while len(self.uniforms) <= slot:
+                self.uniforms.append(device.create_buffer(size=uniform_bytes, usage=wgpu.BufferUsage.UNIFORM
+                                                          | wgpu.BufferUsage.COPY_DST))
+                COUNTERS["uniform_buffers"] += 1
+            self.groups[slot] = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+                {"binding": i, "resource": {"buffer": b}}
+                for i, b in enumerate([*self.scene_buffers, self.accum, self.uniforms[slot], self.blocks])])
+            COUNTERS["bind_groups"] += 1
+        return self.groups[slot], self.uniforms[slot]
+
+    def stage(self, device, wgpu, size):
+        """A mappable buffer of `size` bytes to read the card's answers through (made once per size)."""
+        if size not in self.staging:
+            self.staging[size] = device.create_buffer(size=size, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ)
+            COUNTERS["staging_buffers"] += 1
+        return self.staging[size]
+
+
+def _frame(state):
+    if "_gpupt_frame" not in state:
+        state["_gpupt_frame"] = _Frame()
+    return state["_gpupt_frame"]
+
+
+def release_frame_cache(state=None):
+    """Free what the renderer keeps on the device between frames (a scene's buffers, the accumulator, the readback buffers)."""
+    state = state or gpu3d._state()
+    frame = state.get("_gpupt_frame")
+    if frame is not None:
+        with frame.lock:
+            frame.release()
+
+
+def _resolve_pipeline(state):
+    cache = state.setdefault("_gpupt_resolve", {})
+    if "pipeline" not in cache:
+        device = state["device"]
+        COUNTERS["resolve_pipelines"] += 1
+        cache["pipeline"] = device.create_compute_pipeline(layout="auto", compute={
+            "module": device.create_shader_module(code=_RESOLVE_SHADER), "entry_point": "main"})
+    return cache["pipeline"]
+
+
+def _wait_for(device, frame, wgpu, encoder, source):
+    """Finish `encoder` with a copy of the first 16 bytes of `source` into a mappable buffer, submit it and read those bytes
+    back: the read returns when the card has run everything in the submission."""
+    stage = frame.stage(device, wgpu, 16)
+    encoder.copy_buffer_to_buffer(source, 0, stage, 0, 16)
+    device.queue.submit([encoder.finish()])
+    COUNTERS["submissions"] += 1
+    stage.map_async("READ").sync_wait()
+    stage.unmap()
+
+
+_TILE_INDEX = {}
+
+
+def _tile_index(width, height, tiles_x):
+    """The tile (of `pt.TILE` pixels square) each pixel belongs to, as a flat index (kept for the last image size)."""
+    key = (width, height, tiles_x)
+    if _TILE_INDEX.get("key") != key:
+        index = np.arange(width * height)
+        _TILE_INDEX.update(key=key, value=((index // width) // pt.TILE) * tiles_x + (index % width) // pt.TILE)
+    return _TILE_INDEX["value"]
+
+
+def _resolved_image(state, device, wgpu, frame, accum, width, npix, tiles_x, tile_count, data_pass, background, adaptive=False):
+    """The finished image as float32 (npix, 4), made on the card: the channel sums divided by their pixel's sample count (the
+    count of its tile; its own, for adaptive sampling) with the premultiplied `background` laid under the coverage, or a data
+    pass's values where covered. Only these 16 bytes a pixel cross to the host, and for adaptive sampling 4 more: the pixel's
+    sample count with its done flag in the top bit (returned as the second value, else None). `_RESOLVE_SHADER` does the
+    arithmetic of the host conversion."""
+    pipeline = _resolve_pipeline(state)
+    size = npix * (20 if adaptive else 16)
+    if frame.image is None or frame.image.size != size:
+        if frame.image is not None:
+            frame.image.destroy()
+        frame.image = device.create_buffer(size=size, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
+        frame.resolve_group = None
+    need = max(16, 4 * len(tile_count))
+    if frame.counts is None or frame.counts.size < need:
+        if frame.counts is not None:
+            frame.counts.destroy()
+        frame.counts = device.create_buffer(size=need, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
+        frame.resolve_group = None
+    if frame.resolve_params is None:
+        frame.resolve_params = device.create_buffer(size=48, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        frame.resolve_group = None
+    groups = -(-npix // 64)
+    groups_x = min(groups, 4096)
+    groups_y = -(-groups // groups_x)
+    device.queue.write_buffer(frame.counts, 0, np.ascontiguousarray(tile_count, "u4"))
+    device.queue.write_buffer(frame.resolve_params, 0, struct.pack(
+        "<8I4f", npix, width, tiles_x, pt.TILE, int(data_pass), groups_x * 64, int(adaptive), 0, *(float(v) for v in background)))
+    if frame.resolve_group is None:
+        frame.resolve_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+            {"binding": i, "resource": {"buffer": b}}
+            for i, b in enumerate((accum, frame.counts, frame.image, frame.resolve_params))])
+        COUNTERS["bind_groups"] += 1
+    encoder = device.create_command_encoder()
+    compute = encoder.begin_compute_pass()
+    compute.set_pipeline(pipeline)
+    compute.set_bind_group(0, frame.resolve_group)
+    compute.dispatch_workgroups(groups_x, groups_y, 1)
+    compute.end()
+    stage = frame.stage(device, wgpu, size)
+    encoder.copy_buffer_to_buffer(frame.image, 0, stage, 0, size)
+    device.queue.submit([encoder.finish()])
+    COUNTERS["submissions"] += 1
+    stage.map_async("READ").sync_wait()
+    data = stage.read_mapped(copy=True)
+    stage.unmap()
+    image = np.frombuffer(data, "f4", npix * 4).reshape(npix, 4)
+    return image, (np.frombuffer(data, "u4", npix, npix * 16) if adaptive else None)
+
+
 # --- rendering ------------------------------------------------------------------------------------------
 
 def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height, wg,
@@ -2614,9 +2878,11 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
             encoder = device.create_command_encoder()
             compute = encoder.begin_compute_pass()
             compute.set_pipeline(pipeline)
-            for _ in range(take):
-                for c in range(chunks):
-                    compute.set_bind_group(0, groups[c])
+            for c in range(chunks):
+                # a sample's dispatches are interchangeable (each pixel counts its own samples), so a chunk's samples run
+                # back to back under one bind group instead of re-binding it for every sample
+                compute.set_bind_group(0, groups[c])
+                for _ in range(take):
                     compute.dispatch_workgroups_indirect(args, c * 16)
             sparse(compute)
             compaction(compute)
@@ -2691,7 +2957,8 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     if accum_bytes > cap:
         raise ValueError(f"GPU path tracing needs {accum_bytes / 2**20:.1f} MiB for the image; the adapter allows {cap / 2**20:.1f} MiB")
     device, wgpu = state["device"], state["wgpu"]
-    resources = []
+    frame = _frame(state)
+    resources = []          # buffers of this render only; the scene, accumulator and readback buffers belong to `frame`
 
     def upload(data, usage):
         buffer = device.create_buffer_with_data(data=data, usage=usage)
@@ -2703,17 +2970,23 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     adaptive = settings.adaptive and not data_pass
     readbacks = {"waits": 0, "mask": 0, "counter": 0, "image": 0}     # stats["readbacks"]: what came back from the card, and why
     heavy = ps.splats is not None or ps.volumes is not None
+    # A caller that sets `stats["skip_noise_maps"]` does not read stats["variance"] or stats["noise"], so the render finishes
+    # the image on the card (the divide, the background) and reads back 16 bytes a pixel (20 with adaptive sampling's counts
+    # and done flags) instead of the 32 of sums and moments, converting nothing on the host.
+    lean = stats is None or bool(stats.get("skip_noise_maps"))
+    raw = lean_image = lean_meta = None
+    tile_of = None
+    done = False
+    frame.lock.acquire()
     try:
-        buffers = [upload(packed.nodes, storage), upload(packed.order, storage), upload(packed.triangles, storage),
-                   upload(packed.shapes, storage), upload(packed.lights, storage), upload(packed.env, storage)]
+        buffers = frame.scene(device, wgpu, packed)
         # the sparse passes' per-sample sums sit after the image: as many (pixel, sample) slots as a pass can use, the constant
         # allows and the adapter has room for (none: every pass is dense)
         sparse_threads = 0
         if adaptive:
             lanes = min(max(settings.min_samples, settings.adaptive_pass_size), 1024)
             sparse_threads = int(max(0, min(ADAPTIVE_SPARSE_THREADS, npix * lanes, (cap - accum_bytes) // 32)))
-        accum = device.create_buffer(size=npix * 32 + sparse_threads * 32, usage=storage | wgpu.BufferUsage.COPY_SRC)   # a new buffer is zeroed
-        resources.append(accum)
+        accum = frame.accumulator(device, wgpu, npix * 32 + sparse_threads * 32)       # zeroed
         links = bool(ps.linked_bits)
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
@@ -2723,101 +2996,173 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         sample_index, passes = 0, 0
         tile_done = np.zeros(tiles_x * tiles_y, bool)
         tile_count = np.zeros(tiles_x * tiles_y, np.int64)
-        tile_of = None
         if adaptive:
             _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height,
                              wg, heavy, settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap,
                              sparse_threads)
         else:
-            tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
-            blocks = upload(np.zeros(4, "u4"), storage)       # the adaptive list, unused here
-            band_floor = band_paths = GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)
+            legacy_mask = settings.noise_threshold > 0 and not data_pass
+            # A submission carries dispatches (one pass over some rows each) until their paths reach `sub_paths`. A smoke or
+            # splat submission starts small (SOFT_SLOWDOWN times fewer paths than a surface one: a path can be that much
+            # slower) and it grows with the measured time per path to about BAND_TARGET_SECONDS; with the whole image in one
+            # dispatch, the growth adds more passes to the submission. A band of 65 000 paths left the RTX 3080 Ti mostly
+            # idle (the render took 2.6 times longer than one dispatch over the whole image at the same sample count), and a
+            # wait after every pass of a surface scene costs more host time than the pass itself.
+            sub_floor = sub_paths = GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)
+            jobs, job_paths = [], 0          # (row0, row1, first sample, samples) waiting for the next submission
+            bits, base = None, None
+            appended = flushed = reported = 0       # samples of the passes in `jobs` or submitted / finished / reported to `progress`
+            last_flush = time.perf_counter()
+
+            def flush(full=False):
+                nonlocal job_paths, sub_paths, last_flush, flushed
+                if not jobs:
+                    return
+                through = appended
+                encoder = device.create_command_encoder()
+                compute = encoder.begin_compute_pass()
+                compute.set_pipeline(pipeline)
+                for slot, (y0, y1, first, take_) in enumerate(jobs):
+                    group, uniform = frame.group(device, wgpu, pipeline, slot, len(base))
+                    struct.pack_into("<II", base, 8, y0, y1)               # the uniform's row range, first sample and sample count
+                    struct.pack_into("<II", base, 16, first, take_)
+                    device.queue.write_buffer(uniform, 0, base)           # the whole 8.5 KB: cheaper than slicing out the 32 that changed
+                    compute.set_bind_group(0, group)
+                    compute.dispatch_workgroups(-(-width // wg), -(-(y1 - y0) // wg), 1)
+                compute.end()
+                lap("encode")
+                began = time.perf_counter()
+                _wait_for(device, frame, wgpu, encoder, accum)     # keeps submissions short and cancellation prompt
+                took = time.perf_counter() - began
+                readbacks["waits"] += 1
+                lap("dispatch")
+                if BAND_TARGET_SECONDS > 0 and full:       # a short last submission says nothing about the card
+                    fit = job_paths * BAND_TARGET_SECONDS / max(took, 1e-4)
+                    sub_paths = int(min(BAND_MAX_PATHS, max(sub_floor, min(fit, sub_paths * 4))))
+                jobs.clear()
+                job_paths = 0
+                flushed = through
+                last_flush = time.perf_counter()
             while sample_index < total_samples:
                 raytrace._cancel(cancel)
                 take = min(per_pass, total_samples - sample_index)
-                bits = _tile_bits(tile_done)
-                if not len(np.flatnonzero(~tile_done)):
-                    break
-                lap("mask update")
-                # A smoke or splat band starts small (SOFT_SLOWDOWN times fewer paths than a surface band: a path can be that
-                # much slower) and grows with the measured time per path to about BAND_TARGET_SECONDS. A band of 65 000 paths
-                # left the RTX 3080 Ti mostly idle (the render took 2.6 times longer than one dispatch over the whole image
-                # at the same sample count); a slow adapter stays at short dispatches because the band follows its time.
+                if bits is None:                           # the tile mask changes only when the legacy noise test retires tiles
+                    bits = _tile_bits(tile_done)
+                    if tile_done.all():
+                        break
+                    base = bytearray(_uniform(packed, ps, camera, width, height, 0, height, 0, 1, settings, code, bits, tiles_x))
+                    lap("mask update")
                 y0 = 0
                 while y0 < height:
                     raytrace._cancel(cancel)
-                    rows_per_band = max(1, band_paths // max(width * take, 1))
-                    y1 = min(height, y0 + rows_per_band)
-                    uniform = upload(_uniform(packed, ps, camera, width, height, y0, y1, sample_index, take, settings,
-                                              code, bits, tiles_x), wgpu.BufferUsage.UNIFORM)
-                    group_once = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
-                        {"binding": i, "resource": {"buffer": b}} for i, b in enumerate([*buffers, accum, uniform, blocks])])
-                    encoder = device.create_command_encoder()
-                    compute = encoder.begin_compute_pass()
-                    compute.set_pipeline(pipeline)
-                    compute.set_bind_group(0, group_once)
-                    compute.dispatch_workgroups(-(-width // wg), -(-(y1 - y0) // wg), 1)
-                    compute.end()
-                    lap("encode")
-                    began = time.perf_counter()
-                    device.queue.submit([encoder.finish()])
-                    device.queue.read_buffer(accum, 0, 16)     # wait for this band: keeps submissions short and cancellation prompt
-                    took = time.perf_counter() - began
-                    readbacks["waits"] += 1
-                    resources.pop().destroy()
-                    lap("dispatch")
-                    if heavy and BAND_TARGET_SECONDS > 0 and (y0 == 0 or y1 - y0 == rows_per_band):     # a short last band says nothing
-                        fit = (y1 - y0) * width * take * BAND_TARGET_SECONDS / max(took, 1e-4)
-                        band_paths = int(min(BAND_MAX_PATHS, max(band_floor, min(fit, band_paths * 4))))
+                    rows = max(1, sub_paths // max(width * take, 1))
+                    y1 = min(height, y0 + rows)
+                    jobs.append((y0, y1, sample_index, take))
+                    job_paths += (y1 - y0) * width * take
                     y0 = y1
+                    if y0 >= height:
+                        appended = sample_index + take         # this pass is now whole in the submission being filled
+                    if job_paths >= sub_paths or len(jobs) >= MAX_JOBS:
+                        flush(full=True)
                 tile_count[~tile_done] += take
                 sample_index += take
                 passes += 1
-                if settings.noise_threshold > 0 and not data_pass:
+                if legacy_mask:
+                    flush()
+                    if tile_of is None:
+                        tile_of = _tile_index(width, height, tiles_x)
                     raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(-1, 2, 4)
                     readbacks["mask"] += 1
                     lum_sum, lum_sq = raw[:, 1, 0].astype(np.float64), raw[:, 1, 1].astype(np.float64)
                     count = tile_count[tile_of]
                     pt._retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles_x * tiles_y, settings.noise_threshold)
+                    raw = None
+                    bits = None
                     lap("mask update")
-                elapsed = time.perf_counter() - started
-                if progress is not None:
-                    progress("pathtrace", sample_index / total_samples,
-                             dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),
-                                  converged=float(tile_done[tile_of].mean())))
-                if settings.time_limit and elapsed >= settings.time_limit:
-                    break
+                elif jobs and (passes == 1 or ((progress is not None or settings.time_limit)
+                                               and time.perf_counter() - last_flush >= BAND_TARGET_SECONDS)):
+                    # The first pass goes alone (its time sizes the next submissions, and `progress` and a time limit hear of it
+                    # at once); after that they hear of a pass boundary about every BAND_TARGET_SECONDS, not after a long wait.
+                    flush()
+                if flushed == sample_index:
+                    elapsed = time.perf_counter() - started
+                    if progress is not None:
+                        reported = sample_index
+                        progress("pathtrace", sample_index / total_samples,
+                                 dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),
+                                      converged=float(tile_done[tile_of].mean()) if tile_done.any() else 0.0))
+                    if settings.time_limit and elapsed >= settings.time_limit:
+                        break
+            flush()
+            if progress is not None and reported < sample_index == flushed:      # the last passes were submitted together
+                progress("pathtrace", sample_index / total_samples,
+                         dict(samples=sample_index, passes=passes, seconds=time.perf_counter() - started,
+                              tiles_active=int((~tile_done).sum()),
+                              converged=float(tile_done[tile_of].mean()) if tile_done.any() else 0.0))
         raytrace._cancel(cancel)
-        raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(npix, 2, 4)
+        if lean:
+            background_premult = np.zeros(4, np.float64)
+            if output == "rgba":
+                background_premult = np.asarray(background, np.float64).copy()
+                background_premult[3] = np.clip(background_premult[3], 0, 1)
+                background_premult[:3] *= background_premult[3]
+            lean_image, lean_meta = _resolved_image(state, device, wgpu, frame, accum, width, npix, tiles_x, tile_count,
+                                                    data_pass, background_premult, adaptive)
+        else:
+            raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(npix, 2, 4)
         readbacks["image"] += 1
         lap("final readback")
+        done = True
     finally:
         for resource in reversed(resources):
             resource.destroy()
-    pixel_done = raw[:, 1, 3] > 0.5 if adaptive else None       # adaptive: the shader's own per-pixel done flags
-    pixel_samples = raw[:, 1, 2].astype(np.int64) if adaptive else tile_count[tile_of]
+        if not done or frame.nbytes() > CACHE_LIMIT_BYTES:
+            frame.release()
+        frame.lock.release()
+    if lean:
+        pixel_done = None
+        count = None
+        if adaptive:
+            pixel_samples = (lean_meta & 0x7FFFFFFF).astype(np.int64)
+            pixel_done = (lean_meta >> 31).astype(bool)
+        elif tile_count.min() == tile_count.max():
+            pixel_samples = np.full(npix, tile_count[0], np.int64)
+        else:
+            tile_of = tile_of if tile_of is not None else _tile_index(width, height, tiles_x)
+            pixel_samples = tile_count[tile_of]
+        image = lean_image
+    else:
+        pixel_done = raw[:, 1, 3] > 0.5 if adaptive else None       # adaptive: the shader's own per-pixel done flags
+        if not adaptive:
+            tile_of = tile_of if tile_of is not None else _tile_index(width, height, tiles_x)
+        pixel_samples = raw[:, 1, 2].astype(np.int64) if adaptive else tile_count[tile_of]
     if adaptive:
         # passes that did any work: the first takes the minimum, each later one `adaptive_pass_size` more for the pixels left
         # (passes after every pixel is done are encoded but dispatch nothing, and the host never read how many there were)
         passes = 1 + -(-max(int(pixel_samples.max()) - settings.min_samples, 0) // settings.adaptive_pass_size)
-    count = np.maximum(pixel_samples, 1).astype(np.float32)
-    if data_pass:
-        image = raw[:, 0, :]
-        image = np.where(image[:, 3:4] > 0, image, 0.0)
-    else:
-        image = raw[:, 0, :] / count[:, None]                 # float32 throughout: the accumulator is float32 already
-        if output == "rgba":
-            bg = np.asarray(background, np.float64).copy()
-            bg[3] = np.clip(bg[3], 0, 1)
-            bg[:3] *= bg[3]
-            image = image + bg.astype(np.float32) * (np.float32(1) - image[:, 3:4])
+    if not lean:
+        count = np.maximum(pixel_samples, 1).astype(np.float32)
+        if data_pass:
+            image = raw[:, 0, :]
+            image = np.where(image[:, 3:4] > 0, image, 0.0)
+        else:
+            image = raw[:, 0, :] / count[:, None]                 # float32 throughout: the accumulator is float32 already
+            if output == "rgba":
+                bg = np.asarray(background, np.float64).copy()
+                bg[3] = np.clip(bg[3], 0, 1)
+                bg[:3] *= bg[3]
+                image = image + bg.astype(np.float32) * (np.float32(1) - image[:, 3:4])
     lap("convert")
     if stats is not None:
-        stats.update(backend="gpu", sampling=settings.sampling, samples=pixel_samples.reshape(height, width).copy(),
+        if lean and not adaptive:
+            converged = (np.zeros(npix, bool) if not tile_done.any() else tile_done[tile_of if tile_of is not None
+                                                                                   else _tile_index(width, height, tiles_x)])
+        else:
+            converged = pixel_done if adaptive else tile_done[tile_of]
+        stats.update(backend="gpu", sampling=settings.sampling, samples=pixel_samples.reshape(height, width),
                      passes=passes, seconds=time.perf_counter() - started, adapter=gpu3d.describe(), phases=phases,
-                     readbacks=readbacks,
-                     converged=(pixel_done if adaptive else tile_done[tile_of]).reshape(height, width).copy())
-        if not data_pass:
+                     readbacks=readbacks, converged=converged.reshape(height, width))
+        if not data_pass and not lean:
             # the variance of each pixel's mean luminance from the moments the shader summed, as the CPU reference has it
             n = count.astype(np.float64)
             lum_sum, lum_sq = raw[:, 1, 0].astype(np.float64), raw[:, 1, 1].astype(np.float64)

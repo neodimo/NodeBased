@@ -89,7 +89,7 @@ def step(state, scene, camera, width, height, background, ambient, key, backend=
         samples=target, max_bounces=max_bounces,
         **(dict(sampling="adaptive", noise_threshold=NOISE_THRESHOLD, min_samples=ADAPTIVE_FROM, max_samples=target,
                 adaptive_pass_size=ADAPTIVE_FROM) if measured else {}))
-    stats = {}
+    stats = {"skip_noise_maps": True}      # only `converged` is read below: the GPU path tracer builds no variance or noise maps
     started = time.perf_counter()
     if moments:
         moments = [(_drop_particles(scene_at), camera_at) for scene_at, camera_at in moments]
