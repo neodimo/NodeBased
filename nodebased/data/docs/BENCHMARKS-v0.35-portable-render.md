@@ -170,3 +170,29 @@ Same-session before and after, from `tools/profile_smoke_phases.py` (`fixed` is 
 **What bounds the RTX now** (measured in the profile above, with the inference named there): about 12 ms of every 59 ms render is host-side (upload, image readback and post-processing, none of which the grid changes), 12.7 ms of the dispatch is the shader's fixed cost per path, and the rest is the smoke vertices' own work. The collision loop is the 4 to 7 ms the box adds, which is why the grid wins 17 percent and not the 7 times its collision count suggests. A bigger win on the RTX would need a cheaper smoke vertex (light sampling and the phase-function continuation after each real collision) or a leaner fixed path; both are shader changes with the AMD work-group limits behind them (`WG_SIZE_SPLATS_AND_VOLUMES`), left for a later step.
 
 Unverified or limited: one resolution (640 by 360), one scene and seed, three timed renders; the RTX gain was measured on one boot with no watchdog or device-lost error seen in the case outputs (the kernel log is not readable from the worker); llvmpipe timings share the CPU with other lanes; no Windows or real-display run; surface-only renders were not changed and not re-measured (their bands are the same as in P1).
+
+## Step R1: why X1 reads 55 dB against the CPU path tracer
+
+Lane 4, step R1, October 9, 2026. Written from measurements taken before any renderer change (the commit that adds this section changes no renderer file). Base: `e08f6b4`.
+
+**Where the images differ** (measured; X1 fixed 64 at 640 by 360, llvmpipe against the CPU path tracer, the same 55.2 dB and 0.014 maximum error as the table above). Every pixel off the sphere is identical (mean difference exactly 0). On the sphere the mean absolute difference is 0.0067 in linear light, and the difference has two shapes. The left half of the sphere (the left column of the 2 by 1 metallic-roughness map, metallic 0.9 and roughness 0.2) differs by noise: the GPU is 0.0049 brighter there on average, speckled pixel by pixel. The right half (roughness 0.8, metallic 0.1, mostly diffuse) differs smoothly across a disc, the GPU darker. The difference follows the sphere's material.
+
+**Which feature** (measured; 256 by 144, 32 samples, llvmpipe against CPU, one scene feature removed at a time):
+
+| X1 with | PSNR vs CPU |
+| --- | ---: |
+| everything (as benchmarked) | 55.2 dB |
+| no occlusion texture | 106.9 dB |
+| no environment light | 75.9 dB |
+| no metallic-roughness map | 50.9 dB |
+| no base-colour texture | 54.1 dB |
+| no normal map, no emissive map, no rectangle light, no point light, no shadows (each alone) | 54.7, 53.8, 55.1, 54.7, 55.2 dB |
+
+Removing the occlusion texture alone brings the two backends to 106.9 dB, the same as Y1 and Z1. Removing the environment light lifts the number to 75.9 dB, which still leaves a gap; no other single removal moves it by more than a few dB. X1 is the only benchmark scene with an occlusion map.
+
+**Why** (inference from reading both renderers; step R1's fix tests it). Occlusion scales the diffuse colour of the hit, here by 0.58. The two backends apply that scale in different places:
+
+- GPU (`make_lobe` in `nodebased/gpupathtrace.py`): the scale goes into the lobe's diffuse colour first, so the specular-or-diffuse choice probability (`p_spec`), the BSDF response and the sampling density (`pdf`) are all computed from the scaled colour. Light samples, MIS weights and BSDF samples agree with one another.
+- CPU (`_surface_event` in `nodebased/pathtrace.py`): the scaled colour is used to choose between the specular and the diffuse lobe when it samples a bounce, but `bsdf_eval` rebuilds the lobe from the unscaled colour to get its `pdf`. The `pdf` therefore describes a different choice probability than the one the sampler used. That `pdf` divides the BSDF sample's weight and feeds the MIS weight of every light sample, so with an occlusion map the CPU estimate converges to the wrong image. Where the two probabilities differ most (the left half: a near-mirror lobe on a surface that also has a diffuse lobe) the CPU image is wrong in a speckled way; on the right half the bias is smooth.
+
+So the CPU path tracer is the image that is wrong, and the GPU image is the one that is consistent. Fix in the next commit: the CPU lobe carries the occlusion the way the GPU lobe does.
