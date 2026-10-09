@@ -1053,10 +1053,12 @@ fn fragment(s: Projected, pixel: vec2<f32>, ray: vec3<f32>, ray_length: f32, beh
  workgroupBarrier();
  if (lid == 0u) { go = atomicLoad(&pending); }
  workgroupBarrier();
- if (workgroupUniformLoad(&go) == 0u) { return; }
+ // No early return ahead of the barriers below (D3D12/FXC: every thread must reach every barrier). When the whole
+ // tile is finished the batch loop gets an empty range and the finished threads leave after it.
+ let stop = select(first, last, workgroupUniformLoad(&go) != 0u);
  var kz: array<f32, @K@>; var ki: array<u32, @K@>; var ka: array<f32, @K@>;
  var m = 0u;
- for (var base = first; base < last; base += BATCH) {
+ for (var base = first; base < stop; base += BATCH) {
    workgroupBarrier();
    for (var k = lid; k < BATCH && base + k < last; k += @T@u*@T@u) {
      let i = lists[base + k];
