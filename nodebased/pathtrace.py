@@ -814,8 +814,11 @@ def _dot(a, b):
     return np.einsum("ij,ij->i", a, b)
 
 
-def _lobes(ps, shape, base, nv, metallic, roughness, f0d):
+def _lobes(ps, shape, base, nv, metallic, roughness, f0d, occlusion=None):
     """Per-hit lobe constants: diffuse colour (N,3), specular F0 (N,3), compensation (N,3), spec albedo (N,3), delta mask.
+
+    `occlusion` (N,) scales the diffuse colour before anything is derived from it, so the lobe choice probability,
+    the response and the sampling density all describe the same lobe (the GPU `make_lobe` does the same).
 
     `metallic`/`roughness`/`f0d` are the per-hit values (materials 3): a shape's own scalar knob,
     overridden per texel where its metallic-roughness texture is present (`_surface`)."""
@@ -831,6 +834,8 @@ def _lobes(ps, shape, base, nv, metallic, roughness, f0d):
     # lobe what the specular lobe does not take
     legacy = (ps.kind[shape] == 0)[:, None]
     diffuse = base * np.where(legacy, 1.0, (1 - m) * (1 - dielectric[:, None]))
+    if occlusion is not None:
+        diffuse = diffuse * occlusion[:, None]
     has_spec = (f0.max(axis=1) > 0)
     return diffuse, f0, k, spec_albedo, has_spec
 
@@ -856,16 +861,17 @@ def _ggx_terms(n, v, wi, r):
     return h, nl, nv, vh, d, g1
 
 
-def bsdf_eval(ps, shape, base, n, v, wi, metallic, roughness, f0d):
+def bsdf_eval(ps, shape, base, n, v, wi, metallic, roughness, f0d, occlusion=None):
     """(diffuse*cos (N,3), specular*cos (N,3), pdf of sampling `wi` (N,)) at hits.
 
     `specular` is the GGX response of `splatshade._cook_torrance` (divided by pi: it carries the pi of the
     codebase's lights) with the multiple-scattering compensation of the environment split sum.
-    `metallic`/`roughness`/`f0d` are the per-hit values `_surface_event` derives (materials 3).
+    `metallic`/`roughness`/`f0d` are the per-hit values `_surface_event` derives (materials 3); `occlusion` is the
+    per-hit occlusion-map factor on the diffuse colour, in the lobe so `pdf` matches the lobe the sampler picks from.
     """
     from .splatshade import _cook_torrance
     nv = np.maximum(_dot(n, v), 1e-4)
-    diffuse, f0, k, spec_albedo, has_spec = _lobes(ps, shape, base, nv, metallic, roughness, f0d)
+    diffuse, f0, k, spec_albedo, has_spec = _lobes(ps, shape, base, nv, metallic, roughness, f0d, occlusion)
     r = roughness
     nl = np.maximum(_dot(n, wi), 0)
     f_diff = diffuse * (nl / PI)[:, None]
@@ -1419,8 +1425,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
     metallic_hit = np.where(metallic_ovr >= 0, metallic_ovr, ps.metallic[sh])
     roughness_hit = np.where(roughness_ovr >= 0, roughness_ovr, ps.roughness[sh])
     f0d_hit = ps.f0[sh]
-    diffuse, f0, k, spec_albedo, has_spec = _lobes(ps, sh, base, nv, metallic_hit, roughness_hit, f0d_hit)
-    diffuse = diffuse * occlusion[:, None]
+    diffuse, f0, k, spec_albedo, has_spec = _lobes(ps, sh, base, nv, metallic_hit, roughness_hit, f0d_hit, occlusion)
     rough = roughness_hit
     delta = (rough <= _DELTA_ROUGHNESS) & has_spec
     origin_side = lambda w: np.where((_dot(w, ng) >= 0)[:, None], ng, -ng)
@@ -1448,8 +1453,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
         if not len(idx):
             continue
         f_diff, f_spec, _ = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
-                              metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
-        f_diff = f_diff * occlusion[idx, None]
+                              metallic_hit[idx], roughness_hit[idx], f0d_hit[idx], occlusion[idx])
         seen = _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx], sh[idx], ns[idx], cancel, bit)
         direct_d[idx] += f_diff * (irr[idx] * seen[:, None])
         direct_s[idx] += f_spec * (irr[idx] * seen[:, None])
@@ -1475,8 +1479,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
             continue
         pdf_l = _area_pdf(light, dist[idx], cos_l[idx])
         f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
-                                  metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
-        f_diff = f_diff * occlusion[idx, None]
+                                  metallic_hit[idx], roughness_hit[idx], f0d_hit[idx], occlusion[idx])
         weight = ps.mis(bit, pdf_l, pdf_b) / pdf_l
         weight = weight * _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx] * (1 - 1e-4), sh[idx],
                                        ns[idx], cancel, bit)
@@ -1498,8 +1501,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
         if not len(idx):
             continue
         f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
-                                  metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
-        f_diff = f_diff * occlusion[idx, None]
+                                  metallic_hit[idx], roughness_hit[idx], f0d_hit[idx], occlusion[idx])
         weight = ps.mis(bit, pdf_l[idx], pdf_b) / pdf_l[idx]
         weight = weight * _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], np.full(len(idx), np.inf),
                                        sh[idx], ns[idx], cancel, bit)
@@ -1533,8 +1535,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
     wi_spec = np.where(delta[:, None], mirror, wi_spec)
     wi = np.where(choose_spec[:, None], wi_spec, wi_diffuse)
     cos = np.maximum(_dot(ns, wi), 0)
-    f_diff, f_spec, pdf = bsdf_eval(ps, sh, base, ns, wo, wi, metallic_hit, roughness_hit, f0d_hit)
-    f_diff = f_diff * occlusion[:, None]
+    f_diff, f_spec, pdf = bsdf_eval(ps, sh, base, ns, wo, wi, metallic_hit, roughness_hit, f0d_hit, occlusion)
     weight = np.zeros((n, 3))
     safe = pdf > 1e-12
     weight[safe] = (f_diff[safe] + f_spec[safe]) / pdf[safe][:, None]
