@@ -1,6 +1,9 @@
 name: Splat probe (temporary)
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/splat-d3d-1009]
+    paths: ['.github/workflows/splat-probe.yml']
 jobs:
   probe:
     runs-on: windows-latest
