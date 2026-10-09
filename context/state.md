@@ -1,5 +1,36 @@
 ## 2026-10-09 — Lane 4 R1 finish: X1 agrees with the CPU (worktree, not yet merged)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (3:06 PM on 2026-10-09 PDT)
+
+`main` moved `d1fffb9` -> `d4c5a89` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 290 tests in 164.040 s, OK. Full suite on
+the stacked tip `d4c5a89` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1009-1206.log`, started 12:06 PM): **Ran 4834 tests in 10344.487 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step NL4 of 7: icons and the left column.** Commits:
+  - `14c1015` Docs and screenshots for NL4: icons and the left column
+  - `545c003` Left column of node families with a floating node panel, and a window minimum width that follows the top bar
+  - `771e932` Icons for the new left column: SVG glyphs for the thirteen families, the column's buttons and 146 common nodes, with a loader that draws them in any colour
+  Diff: 177 files changed, 1604 insertions(+), 90 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step P1 of 2: cached playback that is not bound by reading the cache (finish 1).** Commits:
+  - `02073e4` docs: record 65 GiB Hot pour cached playback profile
+  - `3237176` fix: retain full Hot pour steam playback cache
+  Diff: 5 files changed, 2315 insertions(+), 20 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step NL6b of 7: Properties closer to the mockup.** Commits:
+  - `83176fd` Properties: value fields size to their number again and the panel can narrow as before
+  - `9b09238` ui: bring Properties panel closer to mockup
+  Diff: 3 files changed, 102 insertions(+), 55 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (7:56 AM on 2026-10-09 PDT)
 
 `main` moved `b5e4dc2` -> `1d05eff` (lane commits cherry-picked onto main in lane order) and then to this
