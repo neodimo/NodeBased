@@ -443,6 +443,30 @@ class PropertiesColorWheel(QWidget):
         painter.drawEllipse(QPointF(marker_x, center.y()), 5, 5)
 
 
+class PropertiesSwitch(QCheckBox):
+    """Accessible checkbox behaviour painted as the compact Properties toggle."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(34, 20)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        checked = self.isChecked()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#5ee0b5" if checked else "#1c2127"))
+        painter.drawRoundedRect(QRectF(0, 0, 34, 20), 10, 10)
+        if not checked:
+            painter.setPen(QPen(QColor("#2c333b"), 1))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(QRectF(0.5, 0.5, 33, 19), 9.5, 9.5)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#05231a" if checked else "#7d8793"))
+        painter.drawEllipse(QPointF(24 if checked else 10, 10), 7, 7)
+
+
 def resource_path(relative: str) -> Path:
     """Locate a source asset both from a checkout and a PyInstaller bundle."""
     root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -8347,7 +8371,38 @@ class Window(QMainWindow):
                         else self.inspect(None))
             content = QWidget()
             content.setObjectName("node-panel-content")
-            content.setLayout(form)
+            content_layout = QVBoxLayout(content)
+            content_layout.setContentsMargins(0, 0, 0, 0)
+            content_layout.setSpacing(2)
+            section_bar = QWidget()
+            section_bar_layout = QHBoxLayout(section_bar)
+            section_bar_layout.setContentsMargins(8, 8, 8, 3)
+            section_bar_layout.setSpacing(4)
+            section_toggle = QToolButton()
+            section_toggle.setObjectName("properties-controls-toggle")
+            section_toggle.setText("▾  CONTROLS")
+            section_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            section_toggle.setCheckable(True)
+            section_toggle.setChecked(True)
+            section_toggle.setStyleSheet("QToolButton { color: #56606b; font-size: 11px; "
+                                         "font-weight: 600; letter-spacing: 1px; border: 0; }")
+            section_bar_layout.addWidget(section_toggle)
+            section_bar_layout.addStretch(1)
+            reset_controls = QPushButton("Reset")
+            reset_controls.setObjectName("properties-controls-reset")
+            reset_controls.setFlat(True)
+            reset_controls.setStyleSheet("color: #5ee0b5; border: 0; font-size: 11px")
+            reset_controls.clicked.connect(lambda checked=False, k=key, defaults=SPECS[node["type"]]["params"]:
+                self.command({"op": "batch", "commands": [
+                    {"op": "set", "id": k, "param": param, "value": value}
+                    for param, value in defaults.items()]}))
+            section_bar_layout.addWidget(reset_controls)
+            control_content = QWidget()
+            control_content.setLayout(form)
+            content_layout.addWidget(section_bar)
+            content_layout.addWidget(control_content)
+            section_toggle.toggled.connect(lambda shown, body=control_content, button=section_toggle:
+                (body.setVisible(shown), button.setText("▾  CONTROLS" if shown else "▸  CONTROLS")))
             title._panel_content = content
             title._panel_collapse = collapse
             panel_layout.addWidget(top)
@@ -8369,8 +8424,14 @@ class Window(QMainWindow):
                 balance_layout.setContentsMargins(0, 6, 0, 8)
                 balance_layout.setSpacing(6)
                 section_header = QHBoxLayout()
-                heading = QLabel("BALANCE")
-                heading.setStyleSheet("color: #56606b; font-size: 11px; font-weight: 600; letter-spacing: 1px")
+                heading = QToolButton()
+                heading.setObjectName("properties-balance-toggle")
+                heading.setText("▾  BALANCE")
+                heading.setCheckable(True)
+                heading.setChecked(True)
+                heading.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+                heading.setStyleSheet("QToolButton { color: #56606b; font-size: 11px; font-weight: 600; "
+                                      "letter-spacing: 1px; border: 0; }")
                 section_header.addWidget(heading)
                 section_header.addStretch(1)
                 reset = QPushButton("Reset")
@@ -8405,7 +8466,11 @@ class Window(QMainWindow):
                     wheel_column.addWidget(wheel, 0, Qt.AlignmentFlag.AlignCenter)
                     wheel_column.addWidget(caption)
                     wheels.addLayout(wheel_column, 1)
-                balance_layout.addLayout(wheels)
+                wheel_body = QWidget()
+                wheel_body.setLayout(wheels)
+                balance_layout.addWidget(wheel_body)
+                heading.toggled.connect(lambda shown, body=wheel_body, button=heading:
+                    (body.setVisible(shown), button.setText("▾  BALANCE" if shown else "▸  BALANCE")))
                 form.addRow(balance)
             if node["type"] == "Group":
                 inner = node["graph"]["nodes"]
@@ -8697,13 +8762,8 @@ class Window(QMainWindow):
                     line.addWidget(reset)
                     form.addRow(group.label, row)
                 elif group.kind == "bool":
-                    control = QCheckBox()
+                    control = PropertiesSwitch()
                     control.setObjectName(f"{param}-switch")
-                    control.setStyleSheet("QCheckBox::indicator { width: 34px; height: 20px; "
-                                          "border-radius: 10px; background: #1c2127; "
-                                          "border: 1px solid #2c333b; } "
-                                          "QCheckBox::indicator:checked { background: #5ee0b5; "
-                                          "border-color: #5ee0b5; }")
                     control.setChecked(bool(value))
                     control.toggled.connect(lambda checked, k=key, p=param: self.defer_command(
                         {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
