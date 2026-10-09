@@ -287,10 +287,14 @@ class TopBar(QWidget):
 
     search_requested = Signal()
     workspace_selected = Signal(str)
+    # The narrowest the bar can be changed (a font, a style or the content moved): the window
+    # re-derives its minimum width from `floor_width`.
+    floor_changed = Signal()
 
     def __init__(self, update_button, parent=None):
         super().__init__(parent)
         self.setObjectName("topbar")
+        self._floor = 0
         self.update_button = update_button
         layout = QHBoxLayout(self)
         gutter = SPACING["lg"]
@@ -353,6 +357,7 @@ class TopBar(QWidget):
     def set_gpu(self, adapter, frame_ms, gpu=True):
         self.gpu_pill.set_state(adapter, frame_ms, gpu)
         self._fit()      # a longer adapter name or time may no longer fit
+        self._announce_floor()
 
     # ---- fitting -------------------------------------------------------------------------------
     def resizeEvent(self, event):
@@ -366,7 +371,28 @@ class TopBar(QWidget):
             # The text got wider or narrower without the bar being resized: measure again.
             self.layout().invalidate()
             self._fit()
+            self._announce_floor()
         return handled
+
+    def floor_width(self):
+        """The narrowest this bar can be, from the fonts it is set in: every piece that sheds
+        (the search text, the shot name, the GPU text) is shed, and the logo, tabs, menu and Check
+        for updates button keep their full width. Measured, never a constant: Windows' fonts make
+        the same bar wider than Linux's."""
+        layout = self.layout()
+        self.search.set_icon_only(True)
+        self.project_shot.hide()
+        self.gpu_pill.set_compact(True)
+        layout.invalidate()
+        floor = layout.minimumSize().width()
+        self._fit()                      # put back whatever fits at the bar's current width
+        return floor
+
+    def _announce_floor(self):
+        floor = self.floor_width()
+        if floor != self._floor:
+            self._floor = floor
+            self.floor_changed.emit()
 
     def _fit(self):
         """Shed the least useful pieces in order while the bar is narrower than its contents.

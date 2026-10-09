@@ -134,7 +134,7 @@ def family_color(kind):
 
 # Corner radii in pixels. Panels and the larger controls sit between 9 and 12; small chips and
 # keycaps are tighter, the status pill is a full capsule.
-RADIUS = {"control": 9, "field": 8, "panel": 12, "popup": 12, "chip": 6, "kbd": 5, "pill": 14}
+RADIUS = {"control": 9, "field": 8, "panel": 12, "popup": 12, "chip": 6, "kbd": 5, "pill": 14, "flyout": 14}
 
 # Type scale. Sizes are pixels at 100% scaling and every widget sizes itself from font metrics,
 # never from a pixel width that only fits one platform's fonts.
@@ -204,6 +204,12 @@ def theme_colors(theme=DEFAULT_THEME, accent=None):
     if valid_accent(accent):
         colors["accent"] = valid_accent(accent)
     return colors
+
+
+def _rgba(color, alpha):
+    """"#rrggbb" as a stylesheet `rgba(...)` with `alpha` (0..1)."""
+    value = int(color.lstrip("#"), 16)
+    return f"rgba({value >> 16}, {(value >> 8) & 255}, {value & 255}, {alpha})"
 
 
 def build_style(theme=DEFAULT_THEME, accent=None):
@@ -277,6 +283,20 @@ QLabel#gpu-pill-text {{ color: {TOKENS['tx1']}; font-size: {t['small']}px; }}
 QToolButton#topbar-menu {{ color: {c['muted']}; border: 0; border-radius: {r['field']}px; padding: 5px; }}
 QToolButton#topbar-menu::menu-indicator {{ image: none; width: 0px; }}
 QToolButton#topbar-menu:hover, QToolButton#topbar-menu:checked {{ background: {c['hover']}; color: {c['text']}; }}
+
+/* ---- the left column of node families and the floating node panel (see nodeshelf.py) ---- */
+QToolBar#node-rail-toolbar {{ background: {c['panel']}; border: 0; padding: 0; spacing: 0; }}
+QFrame#node-panel {{ background: {_rgba(c['title'], 0.92)}; border: 1px solid {c['button_border']}; border-radius: {r['flyout']}px; }}
+QFrame#node-panel QLabel {{ background: transparent; }}
+QLabel#node-panel-title {{ color: {c['text']}; font-size: {t['base']}px; font-weight: 600; }}
+QLabel#node-panel-count {{ color: {c['faint']}; font-size: {t['base']}px; }}
+QLineEdit#node-panel-filter {{ background: {c['field']}; border: 1px solid {c['border']}; border-radius: {r['field']}px; color: {c['text']}; padding: 0 {sp['md'] - 1}px; font-size: {t['small']}px; }}
+QLineEdit#node-panel-filter:focus {{ border-color: {TOKENS['acc_ring']}; }}
+QListWidget#node-panel-list {{ background: transparent; border: 0; outline: 0; font-size: {t['small']}px; }}
+QLabel#node-panel-more {{ color: {c['faint']}; font-size: {t['caption']}px; }}
+QLabel#node-panel-more:hover {{ color: {c['muted']}; }}
+QLabel#node-panel-hint {{ color: {c['faint']}; font-size: {t['caption']}px; }}
+QLabel#node-panel-kbd {{ color: {c['muted']}; font-size: {t['caption']}px; background: {c['panel']}; border: 1px solid {c['button_border']}; border-radius: {r['kbd']}px; padding: 0 {sp['sm'] - 1}px; }}
 QScrollBar:vertical {{ background: {c['status']}; width: 10px; }}
 QScrollBar::handle:vertical {{ background: {c['button_border']}; min-height: 25px; }}
 /* Styling QScrollBar:vertical's background switches Qt to fully custom rendering: an

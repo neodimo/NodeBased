@@ -112,7 +112,11 @@ class WorkspaceLayoutTests(unittest.TestCase):
         self.assertEqual(Preferences().workspace()["layout"], 2)
 
     def is_stacked(self, window):
-        return len({window.viewer_dock.x(), window.graph_dock.x(), window.nodes_dock.x()}) == 1
+        # A hidden dock keeps the position it last had, so only the docks on screen are compared
+        # (the left column of node families moved every visible dock 60px right; a hidden one
+        # stayed where it was).
+        docks = (window.viewer_dock, window.graph_dock, window.nodes_dock)
+        return len({dock.x() for dock in docks if dock.isVisible()}) == 1
 
     # -- the default ------------------------------------------------------------------------
 
@@ -123,22 +127,27 @@ class WorkspaceLayoutTests(unittest.TestCase):
         self.assertGreater(window.viewer_dock.width(), 2 * window.properties_dock.width())
         self.assertGreaterEqual(window.properties_dock.width(), PROPERTIES_USABLE_WIDTH)
 
-    def test_graph_fills_the_row_below_viewer_and_nodes_live_in_the_top_bar(self):
+    def test_graph_fills_the_row_below_viewer_and_node_families_live_in_the_left_column(self):
         window = self.open_window()
         self.assertFalse(window.nodes_dock.isVisible())
         self.assertGreater(window.graph_dock.y(), window.viewer_dock.y())
         self.assertEqual(window.graph_dock.width(), window.viewer_dock.width())
-        self.assertEqual(len(window.node_category_buttons), 16)
+        # Favourites, Recent, the thirteen families and Other, then Settings
+        self.assertEqual(len(window.node_rail.buttons), 17)
+        self.assertEqual(window.toolBarArea(window.node_rail_toolbar), Qt.ToolBarArea.LeftToolBarArea)
+        self.assertLessEqual(window.node_rail.geometry().right(), window.viewer_dock.geometry().left())
 
     def test_category_icon_reveals_its_nodes_and_creates_the_selected_kind(self):
         window = self.open_window()
         for category, kinds in NODE_CATEGORIES.items():
-            menu = window.node_category_buttons[category].menu()
-            window._fill_node_category_menu(category, menu)
-            self.assertEqual([action.text() for action in menu.actions()], list(kinds))
-        color_menu = window.node_category_buttons["Color"].menu()
+            window.node_shelf.open_family(category)
+            self.assertCountEqual(window.node_panel.visible_kinds(), list(kinds))
+        window.node_shelf.open_family("Color")
+        panel = window.node_panel
         before = set(window.dispatcher.document["nodes"])
-        next(action for action in color_menu.actions() if action.text() == "Grade").trigger()
+        item = next(panel.list.item(i) for i in range(panel.list.count()) if panel.list.item(i).text() == "Grade")
+        panel.list.setCurrentItem(item)
+        panel.add_current()
         added = set(window.dispatcher.document["nodes"]) - before
         self.assertEqual(len(added), 1)
         self.assertEqual(window.dispatcher.document["nodes"][added.pop()]["type"], "Grade")

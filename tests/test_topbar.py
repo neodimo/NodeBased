@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QAbstractButton, QMenu, QToolBar
 
-from nodebased import theme, topbar
+from nodebased import app as nodebased_app, theme, topbar
 from nodebased.app import NodeSearch, Window
 from tests.test_desktop import APP, release_window, wait_until
 
@@ -202,7 +202,13 @@ class TopBarTests(unittest.TestCase):
         return floor
 
     def _narrow(self):
-        return max(NARROW[0], self._floor() + 40), NARROW[1]
+        """The window dragged to its real minimum: its own minimum width, which follows the bar's
+        floor plus the left column (a constant 800 cut the bar off on Windows' wider fonts)."""
+        self._floor()
+        self.window.resize(100, NARROW[1])
+        for _ in range(5):
+            APP.processEvents()
+        return self.window.width(), NARROW[1]
 
     def _assert_bar_fits(self, width, height, scale=None):
         w = self.window
@@ -254,6 +260,30 @@ class TopBarTests(unittest.TestCase):
 
     def test_nothing_clips_at_the_narrowest_window(self):
         self._assert_bar_fits(*self._narrow())
+
+    def test_the_window_cannot_be_narrower_than_the_bar_floor_plus_the_left_column(self):
+        w = self.window
+        floor = self._floor()
+        width, _ = self._narrow()
+        self.assertEqual(width, w.minimumWidth())
+        self.assertGreaterEqual(width, floor + w.node_rail.column_width())
+        self.assertGreaterEqual(width, nodebased_app.MIN_WINDOW_SIZE[0])
+
+    def test_the_minimum_width_follows_the_fonts_not_a_constant(self):
+        w = self.window
+        before = w.minimumWidth()
+        base = APP.styleSheet()
+        APP.setStyleSheet(base + "QWidget#topbar *, QPushButton#update { font-family: 'Liberation Mono'; font-size: 17px; }")
+        try:
+            for _ in range(5):
+                APP.processEvents()
+            floor = self._floor()
+            self.assertGreater(floor + w.node_rail.column_width(), before)
+            self.assertGreaterEqual(w.minimumWidth(), floor + w.node_rail.column_width())
+            self.assertGreater(w.minimumWidth(), before)
+            self._assert_bar_fits(*self._narrow())
+        finally:
+            APP.setStyleSheet(base)
 
     def test_nothing_clips_with_a_wider_family_as_on_windows(self):
         # Windows fonts run wider than Linux's. The stylesheet fixes sizes per widget, so a window

@@ -59,8 +59,9 @@ class GenerateSignals(QObject):
     finished = Signal(object, object)
 
 from .topbar import TopBar
+from .nodeshelf import NODE_KIND_MIME_TYPE, FAVOURITES as FAVOURITES_CATEGORY, RECENT as RECENT_CATEGORY, NodeShelf
 from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, grid_color,
-                    valid_accent, TOKENS, FAMILY_COLORS, TYPE)
+                    valid_accent, TOKENS, FAMILY_COLORS, TYPE, theme_colors)
 from .color import VIEWS
 from . import gpudisplay
 from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE, VIEWER_INPUT_COUNT,
@@ -571,13 +572,15 @@ class Preferences:
 
     # Bump when the window's dock/toolbar layout changes shape, so an older saved layout is
     # dropped for the default instead of restored into widgets it no longer describes.
-    WORKSPACE_VERSION = 3
+    WORKSPACE_VERSION = 4
     # The default arrangement's revision, stored next to a saved layout. It does not discard the
     # layout the way WORKSPACE_VERSION does; it tells restore_workspace which layouts were written
     # by a build whose defaults are known to be cramped (see Window._repair_legacy_layout).
     #   absent/2: cramped three-high stack; 3: viewer over graph|NODES; 4: icon category bar
-    #   above a full-width graph, with the empty central widget fixed to zero width.
-    WORKSPACE_LAYOUT = 4
+    #   above a full-width graph, with the empty central widget fixed to zero width; 5: the family
+    #   icons are a tall column on the left (WORKSPACE_VERSION 4 dropped the layouts that still
+    #   had them as a second row under the top bar).
+    WORKSPACE_LAYOUT = 5
 
     def workspace(self):
         """The window layout saved at the last close, or None when there isn't a usable one."""
@@ -890,6 +893,9 @@ class ShrinkableLabel(ElidedLabel):
 
 # The default workspace: what a first launch gets, and what Workspace → Default workspace restores.
 DEFAULT_WINDOW_SIZE = (1440, 920)
+# The smallest window the workspace is laid out for. The width is a floor: the real minimum is the
+# top bar's narrowest form plus the left column, measured from the fonts (`update_minimum_width`).
+MIN_WINDOW_SIZE = (800, 500)
 DEFAULT_PROPERTIES_WIDTH = 400
 # Properties' share of the window width, clamped so it stays a readable form at 1280x720 and does
 # not balloon at 1920x1080 (400px at 1440). The shared viewer takes everything else in the row:
@@ -4141,8 +4147,8 @@ class Edge(QGraphicsPathItem):
         painter.restore()
 
 
-# The mime type a node kind travels under when dragged out of the NODES dock onto the graph.
-NODE_KIND_MIME_TYPE = "application/x-nodebased-kind"
+# NODE_KIND_MIME_TYPE (imported above from nodeshelf) is the mime type a node kind travels under
+# when dragged out of the NODES dock or the left column's panel onto the graph.
 
 
 def _node_chip_icon(kind):
@@ -4171,9 +4177,8 @@ class NodeListWidget(QListWidget):
         return data
 
 
-# The two pinned rows above every real `nodecatalog.NODE_CATEGORIES` group in the NODES dock.
-FAVOURITES_CATEGORY = "Favourites"
-RECENT_CATEGORY = "Recent"
+# The two pinned rows above every real `nodecatalog.NODE_CATEGORIES` group in the NODES dock and
+# the left column (FAVOURITES_CATEGORY and RECENT_CATEGORY are imported from nodeshelf).
 
 
 def _glyph_icon(glyph, color="#e6c15c"):
@@ -4186,24 +4191,6 @@ def _glyph_icon(glyph, color="#e6c15c"):
     painter.setPen(QColor(color))
     font = painter.font()
     font.setPointSize(9)
-    painter.setFont(font)
-    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
-    painter.end()
-    return QIcon(pixmap)
-
-
-def _category_icon(glyph, color):
-    """Legible shelf icon at normal and high-DPI toolbar sizes."""
-    pixmap = QPixmap(24, 24)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(QPen(QColor(color), 1))
-    painter.setBrush(QColor("#30343d"))
-    painter.drawRoundedRect(1, 1, 22, 22, 4, 4)
-    font = painter.font()
-    font.setBold(True)
-    font.setPointSize(11)
     painter.setFont(font)
     painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
     painter.end()
@@ -6272,51 +6259,25 @@ class Window(QMainWindow):
         if kind.endswith("3D") or OUTPUT_TYPES.get(kind, "image") not in ("image", "none"):
             self.set_viewer_mode("3d", focus=False)
 
-    def _build_node_category_toolbar(self):
-        """A compact category shelf; opening an icon reveals every kind in that family."""
-        glyphs = {"Image": "I", "Draw": "D", "Time": "T", "Channel": "C",
-                  "Color": "◉", "Filter": "F", "Keyer": "K", "Merge": "M",
-                  "Transform": "↗", "3D": "3", "Particles": "✦", "Fluids": "≈",
-                  "Metadata": "#", "Other": "…"}
-        self.node_category_buttons = {}
-        for category in (FAVOURITES_CATEGORY, RECENT_CATEGORY, *NODE_CATEGORIES):
-            button = QToolButton(self.node_category_toolbar)
-            button.setObjectName("node-category-" + category.lower().replace(" ", "-"))
-            glyph = "★" if category == FAVOURITES_CATEGORY else "↻" if category == RECENT_CATEGORY \
-                else glyphs.get(category, category[:1])
-            kinds = NODE_CATEGORIES.get(category, {})
-            color = COLORS.get(next(iter(kinds), ""), "#e6c15c")
-            button.setIcon(_category_icon(glyph, color))
-            button.setToolTip(category + " nodes")
-            button.setAccessibleName(category + " nodes")
-            button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            menu = QMenu(button)
-            menu.aboutToShow.connect(lambda name=category, target=menu:
-                                     self._fill_node_category_menu(name, target))
-            button.setMenu(menu)
-            self.node_category_toolbar.addWidget(button)
-            self.node_category_buttons[category] = button
-        self.node_category_toolbar.addSeparator()
-        browse = self.node_category_toolbar.addAction(_glyph_icon("⌕"), "Search and browse nodes")
-        browse.setObjectName("node-category-search")
-        browse.triggered.connect(self.focus_node_search)
-
-    def _fill_node_category_menu(self, category, menu):
-        menu.clear()
-        kinds = self.node_toolbar._category_kinds(category)
-        if not kinds:
-            empty = menu.addAction("No nodes yet")
-            empty.setEnabled(False)
+    def update_minimum_width(self):
+        """The window cannot be narrower than the top bar at its narrowest plus the left column:
+        both are measured from the fonts, so a platform with wider text gets a wider floor instead
+        of a bar cut off at the window's edge."""
+        if not hasattr(self, "topbar") or not hasattr(self, "node_rail"):
             return
-        for kind, description in kinds.items():
-            action = menu.addAction(_node_chip_icon(kind), kind)
-            action.setToolTip(description)
-            action.setStatusTip(description)
-            action.triggered.connect(lambda checked=False, node_kind=kind:
-                                     self.add_node(node_kind))
+        width = max(MIN_WINDOW_SIZE[0], self.topbar.floor_width() + self.node_rail.column_width())
+        if width != self.minimumWidth():
+            self.setMinimumWidth(width)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self.update_minimum_width()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if hasattr(self, "node_shelf"):
+            self.node_shelf.close_panel()        # the panel is anchored to the column, not the new size
         # With a zero-width central widget Qt gives window growth to the right dock. Preserve
         # its previous width and give the extra room to the Viewer/Graph column instead.
         if hasattr(self, "properties_dock") and event.oldSize().width() > 0 \
@@ -6450,7 +6411,7 @@ class Window(QMainWindow):
         self.playback_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.playback_timer.timeout.connect(self.playback_tick)
         self.setWindowTitle("NodeBased · Untitled")
-        self.setMinimumSize(800, 500)
+        self.setMinimumSize(MIN_WINDOW_SIZE[0], MIN_WINDOW_SIZE[1])
         icon_path = resource_path("assets/nodebased-icon.png")
         if icon_path.is_file():
             self.setWindowIcon(QIcon(str(icon_path)))
@@ -6460,15 +6421,19 @@ class Window(QMainWindow):
         toolbar.setObjectName("workspace-toolbar")
         self.addToolBar(toolbar)
         self.workspace_toolbar = toolbar
-        # The node families live in a single, icon-only row.  Each icon opens its family's
-        # kinds; the full browser remains available for search, drag/drop and presets.
-        self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
-        self.node_category_toolbar = QToolBar("Node categories", self)
-        self.node_category_toolbar.setObjectName("node-category-toolbar")
-        self.node_category_toolbar.setMovable(False)
-        self.node_category_toolbar.setIconSize(QSize(24, 24))
-        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.node_category_toolbar)
-        self._build_node_category_toolbar()
+        # The node families live in the tall icon column on the left (the mockup's rail); a click on
+        # a family opens the floating node panel. The full browser (NODES dock) stays reachable
+        # for Ctrl+F, presets and drag-to-place workflows.
+        self.node_shelf = NodeShelf(self, kinds_for=lambda key: self.node_toolbar._category_kinds(key),
+                                    add=self.add_node, settings=self.project_settings)
+        self.node_rail = self.node_shelf.rail
+        self.node_panel = self.node_shelf.panel
+        self.node_rail_toolbar = QToolBar("Node families", self)
+        self.node_rail_toolbar.setObjectName("node-rail-toolbar")
+        self.node_rail_toolbar.setMovable(False)
+        self.node_rail_toolbar.setFloatable(False)
+        self.node_rail_toolbar.addWidget(self.node_rail)
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.node_rail_toolbar)
         # The top bar is one widget: logo, project / shot, workspace tabs, search, GPU pill, a
         # compact menu button and the Check for updates button. The quick actions the old toolbar
         # carried live in that menu button (see `_build_topbar_menu`).
@@ -6480,6 +6445,7 @@ class Window(QMainWindow):
         self.topbar = TopBar(self.update_button)
         self.topbar.search_requested.connect(self.node_search_from_topbar)
         self.topbar.workspace_selected.connect(self.select_workspace_tab)
+        self.topbar.floor_changed.connect(self.update_minimum_width)
         toolbar.addWidget(self.topbar)
         self.topbar_actions = {}
         for name, callback in [("Open image", self.read_file), ("Add node", self.add_node),
@@ -8208,6 +8174,9 @@ class Window(QMainWindow):
         """Restyle the application and repaint the graph background for one theme."""
         self.accent_color = valid_accent(accent)
         self.theme_name = apply_theme(name, self.accent_color)
+        if hasattr(self, "node_shelf"):
+            self.node_shelf.set_theme(theme_colors(self.theme_name, self.accent_color))
+        self.update_minimum_width()
         self.graph.grid_pen = QPen(QColor(grid_color(self.theme_name)), 1)
         self.graph.viewport().update()
 
