@@ -2685,6 +2685,48 @@ class FluidPropertiesPanelTests(unittest.TestCase):
         self.assertGreaterEqual(area.widget().width(), area.viewport().width() - 1)
 
 
+class PropertiesRedesignTests(unittest.TestCase):
+    """NL6 controls keep their edits on the existing undoable knob path."""
+
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        APP.processEvents()
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def _panel_for(self, key, kind):
+        self.window.command({"op": "create", "id": key, "type": kind, "pos": [0, 0]}, render=False)
+        panel = self.window.build_node_panel(key)
+        self.window.set_properties_widget(panel)
+        APP.processEvents()
+        return panel
+
+    def test_color_wheel_drag_sets_bound_knob_and_undo_restores_it(self):
+        panel = self._panel_for("wheel_color_correct", "ColorCorrect")
+        wheel = panel.findChild(QWidget, "lift-color-wheel")
+        self.assertIsNotNone(wheel)
+        before = self.window.graph_nodes()["wheel_color_correct"]["params"]["lift"]
+        QTest.mouseClick(wheel, Qt.MouseButton.LeftButton, pos=QPoint(74, 46))
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["wheel_color_correct"]
+                                   ["params"]["lift"] != before))
+        self.window.command({"op": "undo"}, render=False)
+        self.assertEqual(self.window.graph_nodes()["wheel_color_correct"]["params"]["lift"], before)
+
+    def test_boolean_control_is_a_switch_and_toggles_its_existing_knob(self):
+        panel = self._panel_for("switch_clamp", "Clamp")
+        switch = panel.findChild(QCheckBox, "clamp_min-switch")
+        self.assertIsNotNone(switch)
+        before = self.window.graph_nodes()["switch_clamp"]["params"]["clamp_min"]
+        switch.click()
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["switch_clamp"]
+                                   ["params"]["clamp_min"] != before))
+
+
 class PropertiesLabelTests(unittest.TestCase):
     """Every knob label is a human label, never a raw parameter name."""
 

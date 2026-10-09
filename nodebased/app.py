@@ -302,7 +302,14 @@ class FloatSliderControl(QWidget):
         self.spin.setDecimals(3)
         self.spin.setSingleStep(0.1)
         self.spin.setKeyboardTracking(False)
+        self.spin.setStyleSheet("QDoubleSpinBox { font-family: monospace; background: #0b0d10; "
+                                "border: 1px solid #232930; border-radius: 6px; padding: 3px 6px; }")
         self.slider = RulerSlider(*(soft_range or hard_range))
+        self.slider.setStyleSheet("QSlider::groove:horizontal { height: 6px; background: #1c2127; "
+                                  "border-radius: 3px; } QSlider::sub-page:horizontal { "
+                                  "background: #5ee0b5; border-radius: 3px; } QSlider::handle:horizontal { "
+                                  "width: 14px; margin: -4px 0; border-radius: 7px; "
+                                  "background: #f4f7f9; }")
         self.slider.set_float_value(value)
         self.spin.setValue(value)
         layout = QHBoxLayout(self)
@@ -359,6 +366,81 @@ class ClickableColorSwatch(QFrame):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
+
+
+class PropertiesColorWheel(QWidget):
+    """Compact draggable hue wheel used by scalar Grade/ColorCorrect controls.
+
+    These nodes currently expose one scalar per balance control. Horizontal position maps
+    across that existing knob's legal range; the wheel is a visual scrubber, not new colour
+    data or a render-path change.
+    """
+    valueChanged = Signal(float)
+    editingFinished = Signal(float)
+
+    def __init__(self, value, limits, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(92, 92)
+        self.setMouseTracking(True)
+        self.setAccessibleName("Color balance wheel")
+        self._lo, self._hi = limits
+        self._value = float(value)
+
+    def setValue(self, value):
+        self._value = max(self._lo, min(self._hi, float(value)))
+        self.update()
+
+    def _set_from_pos(self, point):
+        margin = 8
+        width = max(1, self.width() - margin * 2)
+        value = self._lo + (self._hi - self._lo) * (point.x() - margin) / width
+        value = max(self._lo, min(self._hi, value))
+        if value != self._value:
+            self._value = value
+            self.valueChanged.emit(value)
+            self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._set_from_pos(event.position())
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self._set_from_pos(event.position())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.editingFinished.emit(self._value)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        center = QPointF(self.width() / 2, self.height() / 2)
+        radius = min(self.width(), self.height()) / 2 - 2
+        for index in range(72):
+            color = QColor.fromHsv(int(index * 360 / 72), 210, 245)
+            pen = QPen(color, 9)
+            painter.setPen(pen)
+            painter.drawArc(QRectF(center.x() - radius + 5, center.y() - radius + 5,
+                                   2 * (radius - 5), 2 * (radius - 5)),
+                            int((90 - (index + 1) * 5) * 16), 5 * 16)
+        painter.setPen(QPen(QColor("#2c333b"), 1))
+        painter.setBrush(QColor("#111418"))
+        painter.drawEllipse(center, radius - 12, radius - 12)
+        ratio = 0.5 if self._hi == self._lo else (self._value - self._lo) / (self._hi - self._lo)
+        marker_x = 9 + ratio * (self.width() - 18)
+        painter.setPen(QPen(QColor("#ffffff"), 2))
+        painter.setBrush(QColor("#5ee0b5"))
+        painter.drawEllipse(QPointF(marker_x, center.y()), 5, 5)
 
 
 def resource_path(relative: str) -> Path:
@@ -8185,7 +8267,15 @@ class Window(QMainWindow):
             top.setObjectName("node-panel-header")
             top_layout = QHBoxLayout(top)
             top_layout.setContentsMargins(8, 3, 8, 3)
-            top_layout.setSpacing(3)
+            top_layout.setSpacing(8)
+            family = node_family(node["type"])
+            badge = QLabel(family[:1].upper())
+            badge.setObjectName("properties-family-badge")
+            badge.setAccessibleName(f"{family} node family")
+            badge.setFixedSize(34, 34)
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setStyleSheet(f"color: {FAMILY_COLORS[family]}; background: {FAMILY_COLORS[family]}22; "
+                                "border-radius: 10px; font-weight: 700")
             collapse = QToolButton()
             collapse.setObjectName("panel-collapse-arrow")
             collapse.setText("▾")
@@ -8201,8 +8291,18 @@ class Window(QMainWindow):
                 and self.defer_command({"op": "rename", "id": k, "name": w.text()}))
             title.installEventFilter(self)
             title.setToolTip("Node name · edit here; double-click to collapse or expand")
+            name_stack = QWidget()
+            name_layout = QVBoxLayout(name_stack)
+            name_layout.setContentsMargins(0, 0, 0, 0)
+            name_layout.setSpacing(0)
+            name_layout.addWidget(title)
+            node_type = QLabel(node["type"])
+            node_type.setObjectName("properties-node-type")
+            node_type.setStyleSheet("color: #7d8793; font-size: 11px")
+            name_layout.addWidget(node_type)
+            top_layout.addWidget(badge)
             top_layout.addWidget(collapse)
-            top_layout.addWidget(title, 1)
+            top_layout.addWidget(name_stack, 1)
 
             def icon_button(name, tooltip, callback):
                 button = PropertiesIconButton(name)
@@ -8262,6 +8362,51 @@ class Window(QMainWindow):
             resolved_document = resolve_document(self.graph_document(),
                                                  self.dispatcher.document["time"]["current"])
             resolved = resolved_document["nodes"][key]["params"]
+            if node["type"] in ("Grade", "ColorCorrect"):
+                balance = QWidget()
+                balance.setObjectName("properties-balance-section")
+                balance_layout = QVBoxLayout(balance)
+                balance_layout.setContentsMargins(0, 6, 0, 8)
+                balance_layout.setSpacing(6)
+                section_header = QHBoxLayout()
+                heading = QLabel("BALANCE")
+                heading.setStyleSheet("color: #56606b; font-size: 11px; font-weight: 600; letter-spacing: 1px")
+                section_header.addWidget(heading)
+                section_header.addStretch(1)
+                reset = QPushButton("Reset")
+                reset.setObjectName("balance-reset")
+                reset.setFlat(True)
+                reset.setStyleSheet("color: #5ee0b5; border: 0; font-size: 11px")
+                reset.clicked.connect(lambda checked=False, k=key, kind=node["type"]:
+                    self.command({"op": "batch", "commands": [
+                        {"op": "set", "id": k, "param": p, "value": value}
+                        for p, value in SPECS[kind]["params"].items()
+                        if p in (("offset", "multiply", "exposure") if kind == "Grade"
+                                 else ("lift", "gamma", "gain"))]}))
+                section_header.addWidget(reset)
+                balance_layout.addLayout(section_header)
+                wheels = QHBoxLayout()
+                wheels.setContentsMargins(0, 0, 0, 0)
+                wheels.setSpacing(8)
+                bindings = (("Lift", "offset"), ("Gamma", "multiply"), ("Gain", "exposure")) \
+                    if node["type"] == "Grade" else (("Lift", "lift"), ("Gamma", "gamma"), ("Gain", "gain"))
+                for label_text, param in bindings:
+                    limits = parameter_limits(node["type"], param)
+                    wheel = PropertiesColorWheel(resolved[param], limits)
+                    wheel.setObjectName(f"{param}-color-wheel")
+                    wheel.editingFinished.connect(
+                        lambda value, k=key, p=param: self.commit_param(k, p, value))
+                    caption = QLabel(label_text)
+                    caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    caption.setStyleSheet("color: #7d8793; font-size: 11px")
+                    wheel_column = QVBoxLayout()
+                    wheel_column.setContentsMargins(0, 0, 0, 0)
+                    wheel_column.setSpacing(4)
+                    wheel_column.addWidget(wheel, 0, Qt.AlignmentFlag.AlignCenter)
+                    wheel_column.addWidget(caption)
+                    wheels.addLayout(wheel_column, 1)
+                balance_layout.addLayout(wheels)
+                form.addRow(balance)
             if node["type"] == "Group":
                 inner = node["graph"]["nodes"]
                 count = sum(1 for member in inner.values() if member["type"] not in ("Input", "Output"))
@@ -8553,6 +8698,12 @@ class Window(QMainWindow):
                     form.addRow(group.label, row)
                 elif group.kind == "bool":
                     control = QCheckBox()
+                    control.setObjectName(f"{param}-switch")
+                    control.setStyleSheet("QCheckBox::indicator { width: 34px; height: 20px; "
+                                          "border-radius: 10px; background: #1c2127; "
+                                          "border: 1px solid #2c333b; } "
+                                          "QCheckBox::indicator:checked { background: #5ee0b5; "
+                                          "border-color: #5ee0b5; }")
                     control.setChecked(bool(value))
                     control.toggled.connect(lambda checked, k=key, p=param: self.defer_command(
                         {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
@@ -8582,8 +8733,18 @@ class Window(QMainWindow):
                     control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     control.customContextMenuRequested.connect(
                         lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
-                    form.addRow(group.label, self.animatable_row(
-                        key, param, control, expression=expressions.get(param)))
+                    animated = self.animatable_row(key, param, control, expression=expressions.get(param))
+                    if param == "mix":
+                        card = QFrame()
+                        card.setObjectName("properties-mix-card")
+                        card.setStyleSheet("QFrame#properties-mix-card { margin-top: 10px; padding: 8px; "
+                                           "border-radius: 12px; background: #161a1f; border: 1px solid #232930; }")
+                        card_layout = QFormLayout(card)
+                        card_layout.setContentsMargins(8, 6, 8, 6)
+                        card_layout.addRow(group.label, animated)
+                        form.addRow(card)
+                    else:
+                        form.addRow(group.label, animated)
                 else:
                     add_legacy_param(param, value, group.kind, label=group.label)
             form = main_form
