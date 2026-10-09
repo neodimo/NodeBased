@@ -305,15 +305,18 @@ the shared cache held one steam-output frame and only 30/31 liquid frames in its
 the 8.7 GB directory also held 28 steam solver checkpoints. This eviction/recompute result
 shows why the earlier file-only probe could not explain playback time.
 
-New `.nbc` writes use packed arrays and per-budget directories; the Hot pour steam output
-budget is 24,576 MiB. The corrected packed-cache playback pass covered all 120 frames; at
-completion its cache held 79 steam-volume frames, 119 liquid frames, 30 additional liquid
-frames, and 80 steam solver checkpoints. Playback measured 0.19 FPS for steam alone (5,232.9
-ms median fetch, 34.9 ms draw) and 0.09 FPS for the whole scene (11,383.3 ms median fetch,
-73.7 ms draw). The frame-120 steam cache hit took 1.773 s to evaluate and 33.1 ms to draw:
-file open 0.049 ms, file read 163.5 ms, deserialize 0.342 ms, sparse rebuild 20.1 ms, and
-GPU upload 1.546 ms for 28,311,552 bytes. Packed data needs no decompression. Full playback
-data is in `benchmarks/hot_pour/radeon-full-playback.json`.
+New `.nbc` writes use packed arrays and per-budget directories. The Hot pour steam output
+budget is now 65,536 MiB so the checkpoint and output stores fit together on disk. The
+2026-10-09 full-size run completed cached playback with 120 steam solver checkpoints, 118
+steam-volume outputs, and 181 liquid entries across two cache runs (48.63 GB total). At 960 ×
+540, playback measured 0.72 FPS steam-only (1,349.8 ms median fetch, 33.3 ms draw) and 0.09
+FPS whole-scene (11,116.3 ms median fetch, 76.4 ms draw). The frame-120 steam profile took
+1.653 s to evaluate and 34.1 ms to draw: file open 0.053 ms, file read 88.6 ms, deserialize
+0.232 ms, decompress 0 ms, sparse rebuild 20.7 ms, and GPU upload 1.582 ms for 28,532,736
+bytes. The 6 FPS steam / 2 FPS whole-scene targets remain unmet; the cached frame is still
+evaluation-bound after the 88.6 ms read, chiefly in work outside the measured disk/decode/
+rebuild/upload phases. This run does not establish a target-meeting prefetch result. Detailed
+JSON: `benchmarks/hot_pour/radeon-full-playback-2026-10-09.json`.
 
 GPU path-traced showcase stills at 1920 × 1080:
 
