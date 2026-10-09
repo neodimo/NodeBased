@@ -12,6 +12,7 @@ from nodebased.app import NodeSearch, Window
 from tests.test_desktop import APP, release_window, wait_until
 
 SIZES = ((1280, 720), (1440, 920))
+NARROW = (800, 720)
 PARTS = ("logo", "project", "tabs", "search", "gpu_pill", "menu_button", "update_button")
 
 
@@ -186,6 +187,23 @@ class TopBarTests(unittest.TestCase):
         self.assertIn(undo, w.actions())
         self.assertEqual(undo.shortcut().toString(), "Ctrl+Z")
 
+    def _floor(self):
+        """The narrowest the bar can be with every optional piece shed: the logo, tabs, menu and
+        Check for updates button always show in full, and on Windows' wider fonts that sum is more
+        than the window's 800 px minimum, so the narrow checks start from here."""
+        bar = self.window.topbar
+        bar.set_gpu("AMD Radeon Graphics", 12)
+        bar.search.set_icon_only(True)
+        bar.project_shot.hide()
+        bar.gpu_pill.set_compact(True)
+        bar.layout().invalidate()
+        floor = bar.layout().minimumSize().width()
+        bar._fit()
+        return floor
+
+    def _narrow(self):
+        return max(NARROW[0], self._floor() + 40), NARROW[1]
+
     def _assert_bar_fits(self, width, height, scale=None):
         w = self.window
         base = w.font()
@@ -233,6 +251,54 @@ class TopBarTests(unittest.TestCase):
     def test_nothing_clips_when_the_font_is_a_quarter_larger(self):
         for width, height in SIZES:
             self._assert_bar_fits(width, height, scale=1.25)
+
+    def test_nothing_clips_at_the_narrowest_window(self):
+        self._assert_bar_fits(*self._narrow())
+
+    def test_nothing_clips_with_a_wider_family_as_on_windows(self):
+        # Windows fonts run wider than Linux's. The stylesheet fixes sizes per widget, so a window
+        # font change does not widen the bar; a wider family does (Liberation Mono is ~19% wider).
+        base = APP.styleSheet()
+        wide = "QWidget#topbar *, QPushButton#update { font-family: 'Liberation Mono'; }"
+        APP.setStyleSheet(base + wide)
+        try:
+            for width, height in SIZES:
+                self._assert_bar_fits(width, height)
+            self._assert_bar_fits(1280, 720, scale=1.25)
+            # Windows' Segoe UI bar is about 1.4x the width of Noto Sans here, so the window's
+            # narrowest size on Linux stands in for 1280 there.
+            self._assert_bar_fits(*self._narrow())
+        finally:
+            APP.setStyleSheet(base)
+
+    def test_the_bar_sheds_search_then_shot_then_gpu_text_and_keeps_tabs_and_update_whole(self):
+        w, bar = self.window, self.window.topbar
+        bar.set_project("hot_pour_long_project_name", "comp_v012", saved=True)
+        bar.set_gpu("AMD Radeon Graphics", 12)
+        floor = self._floor()
+        top = max(1600, floor + 800)       # wide enough that nothing has been shed yet
+        w.resize(top, 800)
+        for _ in range(5):
+            APP.processEvents()
+        self.assertTrue(bar.search.hint.isVisible() and bar.project_shot.isVisible())
+        self.assertIn("AMD Radeon Graphics", bar.gpu_pill.text())
+        order = []
+        for width in [*range(top, floor, -20), floor]:
+            w.resize(width, 800)
+            for _ in range(3):
+                APP.processEvents()
+            state = (not bar.search.hint.isVisible(), not bar.project_shot.isVisible(),
+                     not bar.gpu_pill.label.isVisible())
+            if not order or order[-1][0] != state:
+                order.append((state, width))
+            for button in bar.tabs.buttons.values():
+                self.assertGreaterEqual(button.width(), button.fontMetrics().horizontalAdvance(button.text()), width)
+            self.assertGreaterEqual(w.update_button.width(),
+                                    w.update_button.fontMetrics().horizontalAdvance(w.update_button.text()), width)
+        states = [state for state, _ in order]
+        self.assertEqual(states[0], (False, False, False))
+        self.assertEqual(states, sorted(states), "pieces return in the same order they leave")
+        self.assertEqual(len(states), len(set(states)))
 
 
 if __name__ == "__main__":
