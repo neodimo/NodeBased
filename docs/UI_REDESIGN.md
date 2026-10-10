@@ -210,3 +210,39 @@ each stage of the restyle changed in the real Qt app. Stages: 1 colours, spacing
   widget). The picture is fitted below the strip when the app fits it (first picture, Fit, a new format);
   resizing a dock afterwards does not refit, as before, so the picture can reach under a corner readout
   until Fit is pressed.
+
+## End-to-end sprint, stage 5: punch list and workspace layouts (Gonzo, 10/10)
+
+From the real-display QA of the new look (`FINDINGS.md`, findings 1 to 6), plus the Agent and Queue panels.
+
+- **Family panel ghost (finding 1).** The green block over the list rows was the timeline's cache bar and
+  playhead, blurred by the panel's frosted backdrop and shown through its translucent tint. The panel is
+  now opaque and paints no backdrop. `tests/test_e2e5_ui_punchlist.py` opens every family panel and checks
+  that no row, widget or item overlays another row and that the panel ignores what is behind it.
+- **Simulate overlaps (finding 2).** The 2D corner readouts (size, colour space, proxy, pixel, zoom) hide
+  while the 3D viewport is shown; the viewport's help and status lines start below the viewer strip
+  (`Viewport3D.top_inset`); and the strip is raised above the page the stack shows (switching pages had
+  put the 3D viewport over it).
+- **Workspace layouts (finding 3).** `Window.select_workspace_tab` switches dock layouts. Composite and 3D
+  share the artist's layout. **Simulate**: 3D viewport and timeline on top, the cache inspector and slice
+  viewer side by side where the node graph sat, Properties at its normal width. **Render**: the queue and
+  the new **output preview** (`nodebased/outputpreview.py`: the viewed Write node's name, file, format,
+  bit depth and the viewer's current picture) side by side there, the viewer in 2D on the Write node, its
+  Properties on the right. Leaving a layout saves its dock state in QSettings (`tab_layouts/<name>`);
+  entering restores it, so Composite returns exactly. A layout is built the first time it is entered.
+  The workspace saved at close is always the Composite arrangement. The queue panel sits in a scroll area
+  so its tall form never squeezes the viewer.
+- **Top-bar search (finding 4).** "Search nodes, commands, settings…": one list of node types, menu
+  commands (every enabled menu action, with its menu path) and settings names (which open Settings).
+  Enter runs the first result. Tab in the graph still searches nodes only.
+- **Status bar state word (finding 5).** Ready, Rendering, Playing or Saving at the far left (a Write
+  render or a viewport render shows Rendering; saving wins over the rest). Not done: the live render pill
+  in the viewer ("Grade1 updated · 9 ms on GPU").
+- **Letterbox (finding 6).** The viewer no longer draws a dotted frame, or the "640 x 360" label under it,
+  around the canvas; the size is in the corner readout.
+- **Agent panel and Conditioning Queue.** Surfaces, type and spacing from the tokens: accent primary
+  buttons (Start Claude Code, Start bounded loop), mono caption activity log, quiet table headers,
+  small-caps section headings, 14 px margins and 10 px gaps. Behaviour and object names the tests use are
+  unchanged.
+- **Screenshots** (offscreen, 1920 x 1080, `examples/mixed_scene`): `docs/images/ui-redesign/`
+  `stage5-composite.png`, `stage5-simulate.png`, `stage5-render.png`, `stage5-agent.png`, `stage5-queue.png`.

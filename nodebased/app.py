@@ -6502,8 +6502,10 @@ class Window(QMainWindow):
         """Put two docks side by side where the node graph sits, under the viewer, and hide the
         graph and NODES docks (Composite brings them back)."""
         properties_width = self.properties_dock.width()
-        for dock in (self.graph_dock, self.nodes_dock):
-            dock.hide()
+        for dock in (self.graph_dock, self.nodes_dock, self.cache_inspector_dock, self.slice_dock,
+                     self.queue_dock, self.output_preview_dock):
+            if dock is not first and dock is not second:
+                dock.hide()
         for dock in (first, second):
             if dock.isFloating():
                 dock.setFloating(False)
@@ -6565,7 +6567,7 @@ class Window(QMainWindow):
             params = node["params"]
             details = "  ·  ".join(part for part in (
                 params.get("path") or "no file set", params.get("file_type"), params.get("bit_depth")) if part)
-            self.output_preview.set_write(node_label(node), details)
+            self.output_preview.set_write(node_label(node) or node["name"], details)
         else:
             self.output_preview.set_write(None, "")
         image = getattr(self.viewer, "last_display_image", None)
@@ -7224,7 +7226,15 @@ class Window(QMainWindow):
         self.job_queue = create_default_queue()
         self.queue_panel = QueuePanel(self.job_queue, self)
         self.queue_panel.use_result_callback = self.use_conditioning_loop_result
-        self.queue_dock.setWidget(self.queue_panel)
+        # The queue form is tall; scrolled, it never forces a minimum height on the dock (in the Render
+        # layout that would squeeze the viewer).
+        queue_scroll = QScrollArea()
+        queue_scroll.setObjectName("queue-scroll")
+        queue_scroll.setWidgetResizable(True)
+        queue_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        queue_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        queue_scroll.setWidget(self.queue_panel)
+        self.queue_dock.setWidget(queue_scroll)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.queue_dock)
         self.tabifyDockWidget(self.properties_dock, self.queue_dock)
         self.queue_dock.hide()

@@ -260,6 +260,26 @@ QStatusBar QLabel#status-state {{ color: {c['text']}; font-weight: 600; padding:
 QStatusBar QLabel#status-state[state="rendering"], QStatusBar QLabel#status-state[state="saving"] {{ color: {TOKENS['warn']}; }}
 QStatusBar QLabel#status-state[state="playing"] {{ color: {c['accent']}; }}
 QLabel#muted {{ color: {c['muted']}; }}
+/* Agent and Conditioning Queue panels (end-to-end sprint, stage 5): the new look's surfaces, type and spacing. */
+QWidget#agent-panel, QWidget#queue-panel {{ background: {c['panel']}; }}
+QWidget#agent-panel QLabel, QWidget#queue-panel QLabel {{ background: transparent; color: {TOKENS['tx1']}; font-size: {t['small']}px; }}
+QLabel#panel-heading {{ color: {TOKENS['tx3']}; font-size: {t['caption']}px; font-weight: 600; padding-top: {sp['xs']}px; }}
+QLabel#queue-status {{ color: {TOKENS['tx2']}; font-size: {t['caption']}px; }}
+QLabel#loopCapabilities {{ color: {TOKENS['tx2']}; font-size: {t['caption']}px; }}
+QWidget#agent-panel QPushButton, QWidget#queue-panel QPushButton {{ font-size: {t['small']}px; padding: {sp['sm'] - 1}px {sp['md'] + 2}px; }}
+QPushButton#agent-primary, QPushButton#queue-primary {{ background: {c['accent']}; color: {c['accent_ink']}; border: 1px solid {c['accent']}; font-weight: 600; }}
+QPushButton#agent-primary:hover, QPushButton#queue-primary:hover {{ border-color: {c['text']}; }}
+QPushButton#agent-primary:pressed, QPushButton#queue-primary:pressed {{ background: {c['panel']}; color: {c['accent']}; }}
+QPushButton#agent-primary:disabled, QPushButton#queue-primary:disabled {{ background: {c['raised']}; color: {c['muted']}; border-color: {c['border']}; }}
+QListWidget#agent-activity {{ background: {c['field']}; border: 1px solid {c['border']}; border-radius: {r['field']}px; font-family: {t['mono']}; font-size: {t['caption']}px; color: {TOKENS['tx1']}; padding: {sp['xs']}px; outline: 0; }}
+QListWidget#agent-activity::item {{ padding: {sp['xs']}px {sp['sm']}px; border-radius: {r['chip'] - 2}px; }}
+QListWidget#agent-activity::item:selected {{ background: {TOKENS['accbg']}; color: {c['text']}; }}
+QPlainTextEdit#agent-terminal {{ background: {c['field']}; color: {TOKENS['tx0']}; border: 1px solid {c['border']}; border-radius: {r['field']}px; font-size: {t['small']}px; selection-background-color: {c['accent']}; selection-color: {c['accent_ink']}; }}
+QTreeWidget#queue-tree, QTableWidget#loopAttemptHistory {{ background: {c['field']}; alternate-background-color: {c['field']}; border: 1px solid {c['border']}; border-radius: {r['field']}px; font-size: {t['small']}px; color: {TOKENS['tx1']}; gridline-color: {c['border']}; outline: 0; }}
+QTreeWidget#queue-tree::item, QTableWidget#loopAttemptHistory::item {{ padding: {sp['xs']}px {sp['sm']}px; }}
+QTreeWidget#queue-tree::item:selected, QTableWidget#loopAttemptHistory::item:selected {{ background: {TOKENS['accbg']}; color: {c['text']}; }}
+QWidget#queue-panel QHeaderView::section {{ background: {c['title']}; color: {TOKENS['tx2']}; border: 0; border-bottom: 1px solid {c['border']}; padding: {sp['xs'] + 1}px {sp['sm'] + 2}px; font-size: {t['caption']}px; font-weight: 600; }}
+QWidget#queue-panel QTableCornerButton::section {{ background: {c['title']}; border: 0; }}
 QLabel#brand {{ color: {c['accent']}; font-size: {t['title']}px; font-weight: 700; padding: 6px; }}
 QCheckBox::indicator {{ width: 13px; height: 13px; background: {c['field']}; border: 1px solid {c['button_border']}; border-radius: 3px; }}
 QCheckBox::indicator:checked {{ background: {c['accent']}; border: 1px solid {c['accent']}; border-radius: 3px; }}

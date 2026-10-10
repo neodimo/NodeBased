@@ -6,10 +6,11 @@ import unittest.mock
 from pathlib import Path
 
 from PySide6.QtCore import QRect, QSettings, Qt
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
 from nodebased.app import NodeSearch, Preferences
 from nodebased.core import SPECS
+from nodebased.theme import SPACING, TOKENS
 from tests.waiting import wait_until
 import tests.isolation  # noqa: F401  (keeps the window's layout out of the real Qt settings)
 from tests.test_new_look_viewer_strip_nl5 import Base
@@ -167,6 +168,17 @@ class TabLayoutTests(Base):
         self.assertGreater(w.properties_dock.geometry().left(), w.viewer_dock.geometry().right() - 1)
         self.assertIn("exr", w.output_preview.details.text())
         self.assertLessEqual(w.properties_dock.width(), 520)
+
+    def test_each_layout_shows_only_its_own_panels(self):
+        w = self.open_scene()
+        shown = {}
+        for tab in ("Simulate", "Render", "Simulate", "Render"):
+            w.select_workspace_tab(tab)
+            settle()
+            shown[tab] = {d.objectName() for d in (w.cache_inspector_dock, w.slice_dock, w.queue_dock,
+                                                   w.output_preview_dock) if d.isVisible()}
+        self.assertEqual(shown["Simulate"], {"cache-inspector-dock", "slice-viewer-dock"})
+        self.assertEqual(shown["Render"], {"conditioning-queue-dock", "output-preview-dock"})
 
     def test_composite_comes_back_exactly(self):
         w = self.open_scene()
@@ -350,6 +362,41 @@ class LetterboxTests(Base):
         self.assertGreater(len(ring), 500)
         odd = [p for p in ring if image.pixel(*p) != background]
         self.assertEqual(odd, [])
+
+
+class PanelRestyleTests(Base):
+    """The Agent panel and the Conditioning Queue take the new look's colours, type and spacing."""
+
+    def test_agent_panel_uses_the_accent_surface_and_spacing(self):
+        w = self.open_window((1600, 960))
+        w.agent_dock.show()
+        w.agent_dock.raise_()
+        settle(10)
+        panel = w.agent_panel
+        margins = panel.layout().contentsMargins()
+        self.assertEqual((margins.left(), margins.top()), (SPACING["lg"], SPACING["lg"]))
+        primary = panel.claude_button.grab().toImage()
+        self.assertEqual(primary.pixelColor(primary.width() // 2, 3).name(), TOKENS["acc"])
+        # the secondary button and the log keep the quiet surfaces
+        self.assertNotEqual(panel.codex_button.grab().toImage().pixelColor(
+            panel.codex_button.width() // 2, 3).name(), TOKENS["acc"])
+        log = panel.activity_log.grab().toImage()
+        self.assertEqual(log.pixelColor(log.width() // 2, log.height() - 6).name(), "#0b0d10")
+
+    def test_queue_panel_uses_the_new_look(self):
+        w = self.open_window((1600, 960))
+        w.queue_dock.show()
+        w.queue_dock.raise_()
+        settle(10)
+        panel = w.queue_panel
+        margins = panel.layout().contentsMargins()
+        self.assertEqual(margins.left(), SPACING["lg"])
+        button = panel.loop_start.grab().toImage()
+        self.assertEqual(button.pixelColor(button.width() // 2, 3).name(), TOKENS["acc"])
+        tree = panel.tree.grab().toImage()
+        self.assertEqual(tree.pixelColor(tree.width() // 2, tree.height() - 6).name(), "#0b0d10")
+        headings = [l.text() for l in panel.findChildren(QLabel) if l.objectName() == "panel-heading"]
+        self.assertEqual(headings, ["QUEUE", "BOUNDED LOOP"])
 
 
 if __name__ == "__main__":

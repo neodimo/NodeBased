@@ -15,6 +15,7 @@ from .artifacts import ArtifactStore
 from .jobs import Queue
 from .loops import LoopRun, LoopError
 from .generative import ProviderDescription
+from .theme import SPACING
 
 
 def create_default_queue():
@@ -35,15 +36,30 @@ class QueuePanel(QWidget):
         self.loop_runs = LoopRun(queue.path.parent / "conditioning-loops.sqlite", queue)
         self.selected_loop = ""
         self.use_result_callback = None
+        self.setObjectName("queue-panel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(SPACING["lg"], SPACING["lg"], SPACING["lg"], SPACING["lg"])
+        layout.setSpacing(SPACING["md"])
+        heading = QLabel("QUEUE")
+        heading.setObjectName("panel-heading")
+        layout.addWidget(heading)
         self.status = QLabel("Queue is ready")
+        self.status.setObjectName("queue-status")
         layout.addWidget(self.status)
         self.tree = QTreeWidget()
+        self.tree.setObjectName("queue-tree")
+        self.tree.setRootIsDecorated(True)
         self.tree.setColumnCount(len(self.COLUMNS))
         self.tree.setHeaderLabels(self.COLUMNS)
         self.tree.setUniformRowHeights(True)
         layout.addWidget(self.tree)
+        loop_heading = QLabel("BOUNDED LOOP")
+        loop_heading.setObjectName("panel-heading")
+        layout.addWidget(loop_heading)
         form = QFormLayout()
+        form.setHorizontalSpacing(SPACING["lg"])
+        form.setVerticalSpacing(SPACING["sm"] + 2)
         self.scene_id = QLineEdit(); self.scene_id.setPlaceholderText("SceneState artifact ID")
         self.bundle_id = QLineEdit(); self.bundle_id.setPlaceholderText("ControlBundle artifact ID")
         self.provider = QComboBox(); self.provider.addItems(["reproject", "null"])
@@ -64,9 +80,11 @@ class QueuePanel(QWidget):
         self.loop_capability.setWordWrap(True); self.loop_capability.setObjectName("loopCapabilities")
         layout.addWidget(self.loop_capability)
         self.loop_start = QPushButton("Start bounded loop")
+        self.loop_start.setObjectName("queue-primary")
         self.loop_cancel = QPushButton("Cancel selected loop")
         self.loop_result = QPushButton("Use selected result in ConditionedRead")
         loop_buttons = QHBoxLayout()
+        loop_buttons.setSpacing(SPACING["sm"] + 2)
         for button in (self.loop_start, self.loop_cancel, self.loop_result): loop_buttons.addWidget(button)
         layout.addLayout(loop_buttons)
         self.attempts = QTableWidget(0, 8)
@@ -82,6 +100,7 @@ class QueuePanel(QWidget):
         self.attempts.itemDoubleClicked.connect(self.show_attempt_details)
         self.refresh_capabilities()
         controls = QHBoxLayout()
+        controls.setSpacing(SPACING["sm"] + 2)
         self.import_button = QPushButton("Import chain…")
         self.run_button = QPushButton("Run queue")
         self.pause_button = QPushButton("Pause")

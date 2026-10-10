@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import issues
+from .theme import SPACING
 
 
 _OVERVIEW_PROMPT = "Call the knowledge tool with topic 'overview' before doing anything else in this NodeBased session."
@@ -74,6 +75,7 @@ class PtyTerminal(QWidget):
         self.screen = pyte.Screen(*self._screen_size())
         self.stream = pyte.ByteStream(self.screen)
         self.output = QPlainTextEdit(self)
+        self.output.setObjectName("agent-terminal")
         self.output.setReadOnly(True)
         self.output.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.output.setFont(QFont("Monospace"))
@@ -250,11 +252,16 @@ class AgentPanel(QWidget):
         self.agent_name = "nodebased-agent"
         self.terminal = None
         self._claude_config_paths = []
+        self.setObjectName("agent-panel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.claude_button = QPushButton("Start Claude Code")
+        self.claude_button.setObjectName("agent-primary")
         self.codex_button = QPushButton("Start Codex")
+        self.codex_button.setObjectName("agent-secondary")
         self.claude_button.clicked.connect(self.start_claude)
         self.codex_button.clicked.connect(self.start_codex)
         self.activity_log = QListWidget()
+        self.activity_log.setObjectName("agent-activity")
         self.disk_checkbox = QCheckBox("Allow save / load / render from the agent")
         self.issue_checkbox = QCheckBox("Allow the agent to file GitHub issues")
         settings = QSettings("NodeBased", "NodeBased")
@@ -266,11 +273,16 @@ class AgentPanel(QWidget):
         buttons = QHBoxLayout()
         buttons.addWidget(self.claude_button)
         buttons.addWidget(self.codex_button)
+        buttons.setSpacing(SPACING["sm"] + 2)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(SPACING["lg"], SPACING["lg"], SPACING["lg"], SPACING["lg"])
+        layout.setSpacing(SPACING["md"])
         layout.addLayout(buttons)
         layout.addLayout(self.terminal_container)
-        layout.addWidget(QLabel("Activity"))
-        layout.addWidget(self.activity_log)
+        heading = QLabel("ACTIVITY")
+        heading.setObjectName("panel-heading")
+        layout.addWidget(heading)
+        layout.addWidget(self.activity_log, 1)
         layout.addWidget(self.disk_checkbox)
         layout.addWidget(self.issue_checkbox)
 
