@@ -1,3 +1,20 @@
+## 2026-10-10 — Lane 4 step R2 of 3: holdout objects (DONE)
+
+- **What was done (evidence):** the **Holdout** switch on every mesh node (off by default; `Geometry.holdout`). A holdout hides what
+  lies behind it from the camera and is itself zero colour, zero alpha and no depth, position, normal, uv or object id: CPU raster,
+  CPU ray-traced (with the lens), CPU path tracer (with a shutter), GPU raster, GPU ray-traced, GPU path tracer, plus Cryptomatte,
+  splats, particles and smoke (CPU modes and both path tracers). Shadows follow Cast shadows; reflections, refractions and bounces do
+  not meet it. `tests/test_3d_holdout.py` (46 tests) OK on the RTX 3080 Ti, the Radeon 8060S and llvmpipe; 1644 `test_3d_*` tests and
+  125 knob, tier, core, bypass, catalog, knowledge, label and motion-blur tests OK on the RTX; the existing GPU modules (260 tests) OK on
+  all three except nine adapter-routing mock tests that only `force-adapter.py` breaks.
+- **Artifacts:** docs/3D_FOUNDATION.md "Holdouts" (bundled copy identical), `docs/images/holdout_recipe.png`,
+  `examples/holdout_plate.png` and `tools/render_holdout_reference.py` (the plate is generated, fixed seed, no licence issue),
+  `tests/test_3d_holdout.py`. All committed.
+- **State:** done. Raises `gpu3d.Unsupported` (GPU raster, ray-traced, instanced tracer) for a holdout with splats, particles, smoke,
+  a liquid or a camera-seen environment or area light; `ValueError` in the CPU raster and ray-traced modes with a liquid or splat
+  reflections and bounces. Unverified: Windows, CI, the knob on a real display.
+- **Next owner:** Gonzo integrates; R3 reads `Geometry.holdout` and reuses the plate.
+
 ## 2026-10-10 — Lane 6 P2 finish: production preview benchmark (PARTIAL)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (10:06 AM on 2026-10-10 PDT)
