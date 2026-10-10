@@ -187,13 +187,18 @@ so it shows in the Agent panel's activity log:
 - `export_conditioning` — `{id, first, last, camera}`. Exports SceneState and ControlBundle for a
   `WriteGeo3D` or `Render3D` node (or a scene node plus `camera`) into the artifact store; returns
   `scene_state` and `control_bundle` artifact ids.
-- `generate` — `{scene_state, bundle, provider, options, output_pattern}`. Runs a local provider
-  and returns the `generated_sequence` artifact id. `output_pattern` writes outside the artifact
+- `generate` — `{scene_state, bundle, provider, options, seed, sampler_settings, output_pattern}`.
+  Runs a local provider and returns the `generated_sequence` artifact id, the provider version, the
+  `seed` and `sampler_settings` used, and `controls` (every control as `used` or `ignored`). `seed`
+  (default 0) and `sampler_settings` (a small JSON object) are part of the artifact id. `output_pattern` writes outside the artifact
   store and is refused unless `agent/allow_disk_ops` is on. Queued (remote) providers go through
   `loop`.
-- `verify` — `{scene_state, bundle, generated_sequence}`. Returns the score card and report id.
+- `verify` — `{scene_state, bundle, generated_sequence}`. Returns the score card, the report id and a
+  `determinism` section (provider, version, seed, sampler settings, seed honoured). Checks whose pass the
+  sequence lacks read "not conditioned" and stay out of the verdict.
 - `loop` — `{action}`: `start` (`scene_state`, `bundle`, `provider`, `max_attempts`, `spend_cap`,
-  `estimate`, `unit`, optional `text`, `feedback`), `status` (`loop`; without it, the recent loops),
+  `estimate`, `unit`, optional `text`, `feedback`, `seed`, `sampler_settings`, `vary_seed`), `status`
+  (`loop`; without it, the recent loops; each attempt shows its `seed`; the reply has `controls`),
   `cancel`, `use_result` (`loop`, optional `attempt`; returns the `ConditionedRead` parameters).
 - `artifacts` — `{action}`: `list` (`kind`, `limit`) or `provenance` (`id`), the chain that
   `python -m nodebased.artifacts provenance <id>` prints, as JSON.

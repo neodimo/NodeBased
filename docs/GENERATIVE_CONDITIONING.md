@@ -144,14 +144,38 @@ beauty is the project's scene-linear OCIO role.
 ## 8. Provider contract and Generate
 
 Provider descriptions are versioned JSON records under `nodebased/providers/`. Each declares its name and
-version; acceptance for depth, normals, motion, IDs, camera pose, text and reference frames; maximum width,
+version; acceptance for depth, normals, motion, IDs, camera pose, text, reference frames, `seed` and
+`sampler_settings` (a description written before the last two existed reads as ignoring them); maximum width,
 height and frame count; accepted colour spaces; local/remote execution; and output frame and honoured-control
 claims. `nodebased.generative.ProviderDescription.load()` loads a description. The single provider entry point
 is `nodebased.generative.generate(manifest, scene_state, output_pattern, provider, ...)`; it checks frame and
 image limits and rejects supplied text or reference inputs that the selected provider cannot honour. The
-Generate node's panel names every control as used or ignored before invocation. Generated EXR sequences can
-be loaded by `ConditionedRead`; the verifier labels an intentionally unconditioned motion check
-"not conditioned" and excludes it from the verdict. Generate takes the source plate on its required `image`
+Generate node's panel names every control as used or ignored before invocation, and the MCP `generate`
+and `loop` start replies carry the same `controls` map. Generated EXR sequences can be loaded by
+`ConditionedRead`.
+
+**Seed contract.** Generate has `seed` (a non-negative integer, default 0) and `sampler_settings` (a small
+JSON object of at most 4096 bytes, default empty; the node stores it as JSON text). Both reach the provider
+entry point (`generate(..., seed=0, sampler_settings=None)`). A provider whose description declares seed or
+sampler settings ignored refuses a non-default value before work, like text and reference frames. The
+sequence's artifact is a ZIP of the frames plus `generation.json`, which holds the provider name and
+version, the provider-description ID, the seed, the sampler settings, whether each was honoured, the
+SceneState and ControlBundle IDs and every option (the text prompt and the hashes of any reference
+frames). Because the artifact ID is the hash of that archive, any change to one of those inputs gives a new
+ID, even when a provider that ignores the change writes identical frames. `python -m nodebased.artifacts
+provenance <id>` and the MCP `artifacts provenance` tool show provider, version, seed and settings on the
+generated-sequence row. The stand-ins declare `seed` honoured (their output is bit-identical for every
+seed, so a fixed seed reproduces the same bytes and the same ID) and `sampler_settings` ignored.
+
+**What the verifier is given.** The verifier receives beauty plus every pass the generated EXR carries,
+named like the bundle layers (`depth.Z`, `normals.X/Y/Z`, `motion_forward.X/Y`, `object_id.id`), each
+compared with the exported pass. A check whose pass the sequence lacks (depth, motion, normals, or object
+IDs when no tracked point answers) is labelled "not conditioned" and left out of the verdict, as the
+intentionally unconditioned motion check always was. A SceneState with no light has no key direction to
+compare, so lighting then rests on colour balance alone. The unconditioned `null` baseline therefore gets
+PASS on the checks beauty alone can answer (camera, objects by tracking, lighting) and "not conditioned" on
+the rest. The report also has a `determinism` section (provider, version, seed, sampler settings and
+whether the provider declared seed honoured); it never changes the verdict. Generate takes the source plate on its required `image`
 input and passes it through unchanged during ordinary evaluation; the explicit panel action writes the
 provider result. Its provider description and bundle/control parameters are part of evaluator and tile cache
 keys, so changing a setting invalidates the tap's cached result.
@@ -160,10 +184,10 @@ Two deterministic CPU stand-ins establish the contract without a model or networ
 
 - **reproject 1.0** is local, accepts ACEScg sequences up to 8192 by 8192 and 10,000 frames. It forward-splats
   beauty using exported pixel motion and metric depth as a nearest-surface z-buffer; the validated SceneState
-  camera pose supplies the camera context encoded by those vectors. It honours depth, motion and camera pose,
-  ignores normals, IDs, text and reference frames, and returns RGBA OpenEXR frames.
-- **null 1.0** has the same local limits and colour space, copies beauty unchanged, and honours no controls.
-  It is the deliberately unconditioned baseline.
+  camera pose supplies the camera context encoded by those vectors. It honours depth, motion, camera pose and
+  `seed`, ignores normals, IDs, text, reference frames and sampler settings, and returns RGBA OpenEXR frames.
+- **null 1.0** has the same local limits and colour space, copies beauty unchanged, and honours only `seed`
+  (recorded, no effect on the pixels). It is the deliberately unconditioned baseline.
 
 A real provider implements this Python entry point and supplies a description that accurately reports its
 capabilities and honoured controls. A real model is a later, separately approved step; DiMo decides which
@@ -331,6 +355,10 @@ and a declared per-attempt estimate with units. Missing estimates are rejected; 
 the next attempt is refused before dispatch when its estimate would exceed the remaining budget.
 These values are estimates only; NodeBased makes no claim about provider billing.
 
+Each attempt records its seed. By default every attempt reuses the loop's `seed` (default 0), so a rerun
+reproduces the first; with `vary_seed` the seed of attempt *n* is `seed + n - 1`. The loop's `seed`,
+`sampler_settings` and `vary_seed` are part of its identity, and status output shows the seed per attempt.
+
 Loop states are `queued`/`running`, then one of `pass`, `provider_failure`, `verification_failed`,
 `attempts_exhausted`, `budget_exhausted`, `feedback_unsupported` or `cancelled`. Each attempt
 persists its exact input/output IDs, provider name/version/options, score-card verdict, terminal state,
@@ -385,11 +413,13 @@ Loop and queue history are SQLite-backed and restore when the application is reo
 
 Repeatable smoke demo, using only existing local stand-ins:
 
-1. Export SceneState and ControlBundle from a small local scene with one frame, then copy their artifact
+1. Export SceneState and ControlBundle from a small local scene with one frame (a cube at 160 by 120; the
+   camera check needs enough pixels to track, so a 16 by 12 frame cannot answer it), then copy their artifact
    IDs from the export result/provenance view into the queue panel.
 2. Choose `null`, set maximum attempts to `2`, spend cap to `0.02`, estimate to `0.01` with unit
    `credits (estimate)`, and start. The unchanged beauty sequence is generated locally and checked by
-   the CPU score-card verifier; a passing first score stops the loop.
+   the CPU score-card verifier; depth, motion and normals are "not conditioned", the other checks pass,
+   and the passing first score stops the loop after one attempt and one 0.01 estimate.
 3. Reopen the project and select the loop chain to inspect the restored attempt. Choose that attempt's
    result for ConditionedRead; its path should be the displayed generated-sequence ID.
 
