@@ -345,7 +345,7 @@ QLabel#shortcut-action {{ color: {c['muted']}; font-size: {t['small']}px; }}
 
 /* ---- the left column of node families and the floating node panel (see nodeshelf.py) ---- */
 QToolBar#node-rail-toolbar {{ background: {c['panel']}; border: 0; padding: 0; spacing: 0; }}
-QFrame#node-panel {{ background: {_rgba(c['title'], 0.92)}; border: 1px solid {c['button_border']}; border-radius: {r['flyout']}px; }}
+QFrame#node-panel {{ background: {c['title']}; border: 1px solid {c['button_border']}; border-radius: {r['flyout']}px; }}
 QFrame#node-panel QLabel {{ background: transparent; }}
 QLabel#node-panel-title {{ color: {c['text']}; font-size: {t['base']}px; font-weight: 600; }}
 QLabel#node-panel-count {{ color: {c['faint']}; font-size: {t['base']}px; }}

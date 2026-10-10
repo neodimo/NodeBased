@@ -2,7 +2,7 @@
 
 `NodeRail` is the tall icon column of the mockup: Favourites, Recent, a hairline, one icon per
 family with its family colour dot, and Settings at the bottom; the family whose panel is open shows
-the bar on the column's edge. `NodePanel` is the frosted, rounded panel a click on a family opens:
+the bar on the column's edge. `NodePanel` is the rounded panel a click on a family opens:
 the family's name and node count, a filter box that has focus on open, a two column grid of nodes
 with their icons and an "N more" footer. Enter adds the highlighted node, a click adds it, a drag
 into the graph adds it where it is dropped; Escape or a click outside closes the panel.
@@ -390,7 +390,6 @@ class NodePanel(QFrame):
         self.colors = theme_colors()
         self.family = None
         self._kinds = {}
-        self._backdrop = None
         self.total = 0
         self.hide()
         fm = QFontMetrics(self.font())
@@ -466,28 +465,6 @@ class NodePanel(QFrame):
         shadow.setColor(QColor(0, 0, 0, 140))
         self.setGraphicsEffect(shadow)
         self.setFixedWidth(self.grid_width + 2 * pad + 2 + 6)      # a little slack: a grid wraps only if its cells fit
-
-    # ---- frosted glass ----------------------------------------------------------------------
-    def set_backdrop(self, pixmap):
-        """What the window shows behind the panel, blurred, so the panel reads as frosted glass:
-        the tint over it is translucent and would otherwise let the viewer's text show through."""
-        self._backdrop = None
-        if pixmap is not None and not pixmap.isNull():
-            small = pixmap.scaled(max(1, pixmap.width() // 9), max(1, pixmap.height() // 9),
-                                  Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            self._backdrop = small.scaled(pixmap.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
-                                          Qt.TransformationMode.SmoothTransformation)
-
-    def paintEvent(self, event):
-        if self._backdrop is not None:
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            clip = QPainterPath()
-            clip.addRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), RADIUS["flyout"], RADIUS["flyout"])
-            painter.setClipPath(clip)
-            painter.drawPixmap(self.rect(), self._backdrop)
-            painter.end()
-        super().paintEvent(event)
 
     # ---- content ----------------------------------------------------------------------------
     def set_theme(self, colors):
@@ -651,8 +628,6 @@ class NodeShelf(QObject):
         self.panel.show_family(key, self._kinds_for(key), color, label)
         self.rail.set_active(key)
         self._position(button)
-        self.panel.hide()                       # so the grab below shows the window, not the old panel
-        self.panel.set_backdrop(self.window.grab(self.panel.geometry()))
         final_pos = self.panel.pos()
         opacity = None
         if self.window.motion.enabled:
