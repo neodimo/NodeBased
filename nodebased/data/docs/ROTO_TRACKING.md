@@ -365,18 +365,22 @@ first (see "Paint strokes" below).
 
 ## What this pass deliberately does not do
 
-* The Viewer now paints Tracker and Stabilize point markers, pattern/search boxes and error-coloured paths. The desktop viewer now offers
+* The Viewer paints Tracker and Stabilize point markers, pattern/search boxes and error-coloured paths. The desktop viewer offers
   an artist-facing Roto overlay when the selected node is the viewed Roto: **Draw
-  shape…** collects a closed polygon (click points, Enter commits, Esc cancels),
-  and existing point handles can be dragged. Both gestures replace the whole
-  payload through the validated `set_shapes` Dispatcher command, so they share
-  validation, undo, save and agent semantics. The overlay is painted in the
+  shape…** collects a closed Bezier (click for cusp points, drag for mirrored
+  smooth tangents, click the first point or press Enter to close, Esc to cancel).
+  Selected points expose tangent handles; dragging bends the span, Ctrl-drag
+  breaks the pair, Z mirrors the handles and Shift+Z leaves a cusp. Ctrl+Alt-click
+  on an outline splits its cubic span, and Delete removes selected points while
+  preserving the three-point minimum. Gestures replace the whole payload through
+  the validated `set_shapes` Dispatcher command (`set_paint_items` for RotoPaint),
+  so they share validation, undo, save and agent semantics. The overlay is painted in the
   foreground rather than inserted into the scene; it therefore cannot alter
   `itemsBoundingRect()`, the format/display window, tile coordinates or EXR data
   window. Proxy tiers map screen coordinates back to the node's pixel space.
   Dragging an animated point updates/adds the current-frame key in its v8 scalar
-  envelope instead of removing the curve. Shape mode, opacity, feather and
-  tangent fields remain command-editable payload fields.
+  envelope instead of removing the curve. Shape mode, opacity and feather
+  remain command-editable payload fields.
 * No `roto_set_key` convenience op. v6 is merged now, so the stated blocker is
   gone; the op is simply not written. When it is, it reuses
   `nodebased.animation.merge_key` rather than growing a second key-insertion
