@@ -71,6 +71,9 @@ class RotoOverlayTests(unittest.TestCase):
     def scene_pos(self, x, y):
         return self.window.viewer.mapFromScene(QPointF(x, y))
 
+    def scene_pixel_tolerance(self):
+        return 1.0 / max(abs(self.window.viewer.transform().m11()), 0.05) + 0.05
+
     def test_drawing_commits_one_validated_payload_and_keeps_scene_bounds(self):
         viewer = self.window.viewer
         original_bounds = viewer.scene().itemsBoundingRect()
@@ -111,8 +114,8 @@ class RotoOverlayTests(unittest.TestCase):
         # The drop lands on a whole viewport pixel, so the exact value depends on the viewer's
         # zoom, which follows the window's size. Compare against where that pixel really is.
         dropped = viewer.mapToScene(target)
-        self.assertAlmostEqual(dropped.x(), 80.0, delta=1.0)
-        self.assertAlmostEqual(dropped.y(), 40.0, delta=1.0)
+        self.assertAlmostEqual(dropped.x(), 80.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(dropped.y(), 40.0, delta=self.scene_pixel_tolerance())
         self.assertTrue(wait_until(lambda: isinstance(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][1]["x"], dict)))
         point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][1]
         self.assertEqual(point["x"]["curve"]["keys"][-1]["frame"], 2)
@@ -148,8 +151,9 @@ class RotoOverlayTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: "r" in self.window.dispatcher.document["node_data"]))
         points=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
         self.assertEqual(len(points),3)
-        self.assertAlmostEqual(points[0]["out_x"],10.0,delta=.2)
-        self.assertAlmostEqual(points[0]["in_x"],-10.0,delta=.2)
+        pixel_tolerance = self.scene_pixel_tolerance()
+        self.assertAlmostEqual(points[0]["out_x"],10.0,delta=pixel_tolerance)
+        self.assertAlmostEqual(points[0]["in_x"],-10.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),1)
 
     def test_ctrl_alt_outline_insert_preserves_rendered_matte_and_is_one_undo(self):
@@ -173,11 +177,12 @@ class RotoOverlayTests(unittest.TestCase):
         viewer=self.window.viewer; context=viewer._roto_context()
         viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(20,10)),"broken":False}
         viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertAlmostEqual(point["out_x"],10.0,delta=.2); self.assertAlmostEqual(point["in_x"],-10.0,delta=.2)
+        pixel_tolerance = self.scene_pixel_tolerance()
+        self.assertAlmostEqual(point["out_x"],10.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-10.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),1)
         viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(30,10)),"broken":True}
         viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertAlmostEqual(point["out_x"],20.0,delta=.2); self.assertAlmostEqual(point["in_x"],-10.0,delta=.2)
+        self.assertAlmostEqual(point["out_x"],20.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-10.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),2)
 
     def test_deleting_selected_point_enforces_minimum_and_is_one_undo(self):
