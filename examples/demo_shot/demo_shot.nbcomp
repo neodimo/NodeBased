@@ -1,0 +1,1388 @@
+{
+  "version": 20,
+  "nodes": {
+    "plate": {
+      "type": "Read",
+      "name": "Plate (rendered by NodeBased)",
+      "params": {
+        "path": "plate/plate.%04d.exr",
+        "colorspace": "Auto",
+        "alpha_mode": "Auto",
+        "layer": "",
+        "subimage": 0,
+        "frame_offset": 0,
+        "missing": "error"
+      },
+      "inputs": {},
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "checker": {
+      "type": "Checker",
+      "name": "Checker",
+      "params": {
+        "width": 256,
+        "height": 256,
+        "size": 8
+      },
+      "inputs": {},
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "ground": {
+      "type": "Card3D",
+      "name": "Card3D",
+      "params": {
+        "card_width": 40.0,
+        "card_height": 40.0,
+        "rows": 1,
+        "columns": 1,
+        "tx": 0.0,
+        "ty": -1.2,
+        "tz": 0.0,
+        "rx": -90.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": "checker"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "cube": {
+      "type": "Cube3D",
+      "name": "Cube3D",
+      "params": {
+        "cube_size": 1.3,
+        "tx": -1.2,
+        "ty": -0.55,
+        "tz": 0.5,
+        "rx": 0.0,
+        "ry": 28.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.9,
+        "green": 0.35,
+        "blue": 0.25,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "ball": {
+      "type": "Sphere3D",
+      "name": "Sphere3D",
+      "params": {
+        "sphere_radius": 0.75,
+        "segments": 32,
+        "rows": 16,
+        "columns": 32,
+        "tx": 1.3,
+        "ty": -0.45,
+        "tz": 0.2,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.35,
+        "green": 0.85,
+        "blue": 0.45,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "key": {
+      "type": "Light3D",
+      "name": "Light3D",
+      "params": {
+        "light_type": "Directional",
+        "tx": 2.5,
+        "ty": 4.0,
+        "tz": 4.0,
+        "target_x": 0.0,
+        "target_y": 0.0,
+        "target_z": 0.0,
+        "red": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "intensity": 1.1,
+        "shadows": "off",
+        "cone_angle": 30.0,
+        "cone_penumbra_angle": 5.0,
+        "cone_falloff": 1.0,
+        "falloff_type": "No falloff",
+        "shadow_bias": 0.001,
+        "shadow_blur": 0.0,
+        "shadow_samples": 1,
+        "env_rotation": 0.0,
+        "env_blur": 0.0,
+        "area_width": 1.0,
+        "area_height": 1.0,
+        "area_radius": 0.5,
+        "area_normalize": "off",
+        "two_sided": "off",
+        "light_samples": 4,
+        "exposure": 0.0,
+        "light_color_mode": "RGB",
+        "kelvin": 6500.0,
+        "visible_to_camera": "on",
+        "light_group": ""
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "sky": {
+      "type": "Light3D",
+      "name": "Light3D",
+      "params": {
+        "light_type": "Environment",
+        "tx": 2.0,
+        "ty": 4.0,
+        "tz": 3.0,
+        "target_x": 0.0,
+        "target_y": 0.0,
+        "target_z": 0.0,
+        "red": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "intensity": 0.35,
+        "shadows": "off",
+        "cone_angle": 30.0,
+        "cone_penumbra_angle": 5.0,
+        "cone_falloff": 1.0,
+        "falloff_type": "No falloff",
+        "shadow_bias": 0.001,
+        "shadow_blur": 0.0,
+        "shadow_samples": 1,
+        "env_rotation": 0.0,
+        "env_blur": 0.0,
+        "area_width": 1.0,
+        "area_height": 1.0,
+        "area_radius": 0.5,
+        "area_normalize": "off",
+        "two_sided": "off",
+        "light_samples": 4,
+        "exposure": 0.0,
+        "light_color_mode": "RGB",
+        "kelvin": 6500.0,
+        "visible_to_camera": "on",
+        "light_group": ""
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "camera": {
+      "type": "Camera3D",
+      "name": "Solved camera",
+      "params": {
+        "tx": 0.0,
+        "ty": 1.1,
+        "tz": 8.0,
+        "roll": 0.0,
+        "target_x": -0.2,
+        "target_y": 0.0,
+        "target_z": 0.0,
+        "focal": 22.539097818315216,
+        "haperture": 24.576,
+        "vaperture": 18.672,
+        "near": 0.1,
+        "far": 1000.0,
+        "fstop": 0.0,
+        "focus_distance": 5.0,
+        "aperture_blades": 0,
+        "blade_rotation": 0.0,
+        "anamorphic_squeeze": 1.0
+      },
+      "inputs": {},
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "scene": {
+      "type": "Scene3D",
+      "name": "Layout",
+      "params": {
+        "tx": 0.0,
+        "ty": 0.0,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0
+      },
+      "inputs": {
+        "object0": "ground",
+        "object1": "cube",
+        "object2": "ball",
+        "object3": "key",
+        "object4": "sky",
+        "object5": null,
+        "object6": null,
+        "object7": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "export": {
+      "type": "WriteGeo3D",
+      "name": "SceneState and ControlBundle export",
+      "params": {
+        "geo_write_path": ""
+      },
+      "inputs": {
+        "scene": "scene",
+        "camera": "camera"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "render": {
+      "type": "Render3D",
+      "name": "Render3D",
+      "params": {
+        "width": 480,
+        "height": 270,
+        "red": 0.0,
+        "green": 0.0,
+        "blue": 0.0,
+        "alpha": 0.0,
+        "ambient": 0.25,
+        "samples": 1,
+        "render_output": "multichannel",
+        "render_backend": "cpu",
+        "render_mode": "raster",
+        "passes": "beauty,normals,depth,motion,object_id",
+        "cryptomatte": 0,
+        "cryptomatte_levels": 6,
+        "volumes": "on",
+        "volume_step_size": 0.05,
+        "volume_density_scale": 1.0,
+        "volume_shadow_density": 1.0,
+        "volume_shadow_steps": 16,
+        "volume_scattering": 1.0,
+        "volume_absorption": 0.2,
+        "volume_red": 1.0,
+        "volume_green": 1.0,
+        "volume_blue": 1.0,
+        "volume_fps": 24.0,
+        "volume_depth_threshold": 0.1,
+        "volume_motion_blur": 0.0,
+        "volume_motion_samples": 8,
+        "volume_anisotropy": 0.0,
+        "volume_multi_scatter": 0.0,
+        "volume_multi_scatter_blur": 0.5,
+        "volume_fire_intensity": 0.0,
+        "volume_temperature_scale": 1500.0,
+        "volume_fire_threshold": 600.0,
+        "volume_fire_light": 1.0,
+        "volume_fire_ramp": "",
+        "volume_quality": "custom",
+        "pt_samples": 64,
+        "max_bounces": 8,
+        "diffuse_bounces": 4,
+        "specular_bounces": 8,
+        "transmission_bounces": 8,
+        "time_limit": 0.0,
+        "noise_threshold": 0.0,
+        "pt_seed": 1,
+        "sampling": "fixed",
+        "min_samples": 16,
+        "max_samples": 256,
+        "adaptive_pass_size": 8,
+        "motion_blur": 0,
+        "shutter": 0.5,
+        "shutter_offset": "centred",
+        "custom_offset": 0.0,
+        "motion_samples": 8,
+        "denoiser_strength": 1.0,
+        "denoise_color_sensitivity": 1.0,
+        "denoise_normal_sensitivity": 1.0,
+        "denoise_depth_sensitivity": 1.0,
+        "denoise_iterations": 4,
+        "denoise_temporal": 0,
+        "denoise": "off",
+        "beauty_raw": 0
+      },
+      "inputs": {
+        "scene": "export",
+        "camera": "camera"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "generate": {
+      "type": "Generate",
+      "name": "Generate",
+      "params": {
+        "provider": "reproject",
+        "manifest": "",
+        "scene_state": "",
+        "output_path": "generated.%04d.exr",
+        "text": "replace the backdrop with a rainy street, keep the cube and sphere, match the camera",
+        "seed": 7,
+        "sampler_settings": ""
+      },
+      "inputs": {
+        "image": "plate"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "grade": {
+      "type": "Grade",
+      "name": "Grade the generated backdrop",
+      "params": {
+        "exposure": -0.15,
+        "multiply": 0.95,
+        "offset": 0.0,
+        "mix": 1.0
+      },
+      "inputs": {
+        "image": null,
+        "mask": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "merge": {
+      "type": "Merge",
+      "name": "Merge over the plate",
+      "params": {
+        "operation": "over",
+        "mix": 1.0
+      },
+      "inputs": {
+        "A": "grade",
+        "B": "plate",
+        "mask": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "write": {
+      "type": "Write",
+      "name": "Write",
+      "params": {
+        "path": "shot.%04d.exr",
+        "file_type": "exr",
+        "bit_depth": "half",
+        "bundle": 0
+      },
+      "inputs": {
+        "image": "merge"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    }
+  },
+  "view": null,
+  "time": {
+    "first": 1,
+    "last": 24,
+    "current": 1,
+    "fps": 24.0
+  },
+  "animation": {
+    "curves": {
+      "camera": {
+        "tx": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": -0.0007714632083661854
+            },
+            {
+              "frame": 2,
+              "value": 0.019072914496064186
+            },
+            {
+              "frame": 3,
+              "value": 0.027817482128739357
+            },
+            {
+              "frame": 4,
+              "value": 0.0597226619720459
+            },
+            {
+              "frame": 5,
+              "value": 0.07003235816955566
+            },
+            {
+              "frame": 6,
+              "value": 0.07833994925022125
+            },
+            {
+              "frame": 7,
+              "value": 0.10490252077579498
+            },
+            {
+              "frame": 8,
+              "value": 0.11990079283714294
+            },
+            {
+              "frame": 9,
+              "value": 0.14960598945617676
+            },
+            {
+              "frame": 10,
+              "value": 0.171319380402565
+            },
+            {
+              "frame": 11,
+              "value": 0.191274493932724
+            },
+            {
+              "frame": 12,
+              "value": 0.19017232954502106
+            },
+            {
+              "frame": 13,
+              "value": 0.23278051614761353
+            },
+            {
+              "frame": 14,
+              "value": 0.23886850476264954
+            },
+            {
+              "frame": 15,
+              "value": 0.24631367623806
+            },
+            {
+              "frame": 16,
+              "value": 0.2956450879573822
+            },
+            {
+              "frame": 17,
+              "value": 0.31116554141044617
+            },
+            {
+              "frame": 18,
+              "value": 0.31790316104888916
+            },
+            {
+              "frame": 19,
+              "value": 0.3520660102367401
+            },
+            {
+              "frame": 20,
+              "value": 0.3754209280014038
+            },
+            {
+              "frame": 21,
+              "value": 0.38412779569625854
+            },
+            {
+              "frame": 22,
+              "value": 0.3959788382053375
+            },
+            {
+              "frame": 23,
+              "value": 0.41657182574272156
+            },
+            {
+              "frame": 24,
+              "value": 0.46040064096450806
+            }
+          ]
+        },
+        "ty": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": 1.0958417654037476
+            },
+            {
+              "frame": 2,
+              "value": 1.0958195924758911
+            },
+            {
+              "frame": 3,
+              "value": 1.091970443725586
+            },
+            {
+              "frame": 4,
+              "value": 1.0850940942764282
+            },
+            {
+              "frame": 5,
+              "value": 1.0859901905059814
+            },
+            {
+              "frame": 6,
+              "value": 1.0797994136810303
+            },
+            {
+              "frame": 7,
+              "value": 1.0817190408706665
+            },
+            {
+              "frame": 8,
+              "value": 1.0722267627716064
+            },
+            {
+              "frame": 9,
+              "value": 1.0763226747512817
+            },
+            {
+              "frame": 10,
+              "value": 1.0960674285888672
+            },
+            {
+              "frame": 11,
+              "value": 1.083564043045044
+            },
+            {
+              "frame": 12,
+              "value": 1.0902799367904663
+            },
+            {
+              "frame": 13,
+              "value": 1.0909056663513184
+            },
+            {
+              "frame": 14,
+              "value": 1.0958322286605835
+            },
+            {
+              "frame": 15,
+              "value": 1.0853646993637085
+            },
+            {
+              "frame": 16,
+              "value": 1.081743597984314
+            },
+            {
+              "frame": 17,
+              "value": 1.0707738399505615
+            },
+            {
+              "frame": 18,
+              "value": 1.0819164514541626
+            },
+            {
+              "frame": 19,
+              "value": 1.0961459875106812
+            },
+            {
+              "frame": 20,
+              "value": 1.0867290496826172
+            },
+            {
+              "frame": 21,
+              "value": 1.0843887329101562
+            },
+            {
+              "frame": 22,
+              "value": 1.0920851230621338
+            },
+            {
+              "frame": 23,
+              "value": 1.0901644229888916
+            },
+            {
+              "frame": 24,
+              "value": 1.0908318758010864
+            }
+          ]
+        },
+        "tz": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": 7.98975133895874
+            },
+            {
+              "frame": 2,
+              "value": 7.901810646057129
+            },
+            {
+              "frame": 3,
+              "value": 7.87767219543457
+            },
+            {
+              "frame": 4,
+              "value": 7.806559085845947
+            },
+            {
+              "frame": 5,
+              "value": 7.791112899780273
+            },
+            {
+              "frame": 6,
+              "value": 7.690734386444092
+            },
+            {
+              "frame": 7,
+              "value": 7.642543315887451
+            },
+            {
+              "frame": 8,
+              "value": 7.546510696411133
+            },
+            {
+              "frame": 9,
+              "value": 7.515086650848389
+            },
+            {
+              "frame": 10,
+              "value": 7.48311710357666
+            },
+            {
+              "frame": 11,
+              "value": 7.359514236450195
+            },
+            {
+              "frame": 12,
+              "value": 7.347757339477539
+            },
+            {
+              "frame": 13,
+              "value": 7.303437232971191
+            },
+            {
+              "frame": 14,
+              "value": 7.234726428985596
+            },
+            {
+              "frame": 15,
+              "value": 7.186564922332764
+            },
+            {
+              "frame": 16,
+              "value": 7.054682731628418
+            },
+            {
+              "frame": 17,
+              "value": 6.9831929206848145
+            },
+            {
+              "frame": 18,
+              "value": 6.961166858673096
+            },
+            {
+              "frame": 19,
+              "value": 6.917370796203613
+            },
+            {
+              "frame": 20,
+              "value": 6.831835746765137
+            },
+            {
+              "frame": 21,
+              "value": 6.773959159851074
+            },
+            {
+              "frame": 22,
+              "value": 6.742387294769287
+            },
+            {
+              "frame": 23,
+              "value": 6.642206192016602
+            },
+            {
+              "frame": 24,
+              "value": 6.598214149475098
+            }
+          ]
+        },
+        "target_x": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": -0.1756260097026825
+            },
+            {
+              "frame": 2,
+              "value": -0.15615351498126984
+            },
+            {
+              "frame": 3,
+              "value": -0.13818754255771637
+            },
+            {
+              "frame": 4,
+              "value": -0.1187654510140419
+            },
+            {
+              "frame": 5,
+              "value": -0.10116569697856903
+            },
+            {
+              "frame": 6,
+              "value": -0.0842248946428299
+            },
+            {
+              "frame": 7,
+              "value": -0.06661276519298553
+            },
+            {
+              "frame": 8,
+              "value": -0.05409487709403038
+            },
+            {
+              "frame": 9,
+              "value": -0.02825923077762127
+            },
+            {
+              "frame": 10,
+              "value": -0.011837678961455822
+            },
+            {
+              "frame": 11,
+              "value": 0.0031620129011571407
+            },
+            {
+              "frame": 12,
+              "value": 0.026049591600894928
+            },
+            {
+              "frame": 13,
+              "value": 0.04537620767951012
+            },
+            {
+              "frame": 14,
+              "value": 0.062333427369594574
+            },
+            {
+              "frame": 15,
+              "value": 0.0824526846408844
+            },
+            {
+              "frame": 16,
+              "value": 0.09562711417675018
+            },
+            {
+              "frame": 17,
+              "value": 0.11434601247310638
+            },
+            {
+              "frame": 18,
+              "value": 0.1329459846019745
+            },
+            {
+              "frame": 19,
+              "value": 0.15046733617782593
+            },
+            {
+              "frame": 20,
+              "value": 0.16717639565467834
+            },
+            {
+              "frame": 21,
+              "value": 0.1874420940876007
+            },
+            {
+              "frame": 22,
+              "value": 0.2038000077009201
+            },
+            {
+              "frame": 23,
+              "value": 0.21770209074020386
+            },
+            {
+              "frame": 24,
+              "value": 0.23561468720436096
+            }
+          ]
+        },
+        "target_y": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": 0.13356563448905945
+            },
+            {
+              "frame": 2,
+              "value": 0.12303764373064041
+            },
+            {
+              "frame": 3,
+              "value": 0.12070094794034958
+            },
+            {
+              "frame": 4,
+              "value": 0.11142877489328384
+            },
+            {
+              "frame": 5,
+              "value": 0.11237236857414246
+            },
+            {
+              "frame": 6,
+              "value": 0.09669744223356247
+            },
+            {
+              "frame": 7,
+              "value": 0.09341959655284882
+            },
+            {
+              "frame": 8,
+              "value": 0.08034855127334595
+            },
+            {
+              "frame": 9,
+              "value": 0.07690586149692535
+            },
+            {
+              "frame": 10,
+              "value": 0.07299324125051498
+            },
+            {
+              "frame": 11,
+              "value": 0.05332871153950691
+            },
+            {
+              "frame": 12,
+              "value": 0.053598061203956604
+            },
+            {
+              "frame": 13,
+              "value": 0.0486353300511837
+            },
+            {
+              "frame": 14,
+              "value": 0.03695111721754074
+            },
+            {
+              "frame": 15,
+              "value": 0.0319729745388031
+            },
+            {
+              "frame": 16,
+              "value": 0.009475170634686947
+            },
+            {
+              "frame": 17,
+              "value": 0.00212006364017725
+            },
+            {
+              "frame": 18,
+              "value": -0.003868499305099249
+            },
+            {
+              "frame": 19,
+              "value": -0.00855996087193489
+            },
+            {
+              "frame": 20,
+              "value": -0.022853000089526176
+            },
+            {
+              "frame": 21,
+              "value": -0.03260686621069908
+            },
+            {
+              "frame": 22,
+              "value": -0.03765754774212837
+            },
+            {
+              "frame": 23,
+              "value": -0.05467294529080391
+            },
+            {
+              "frame": 24,
+              "value": -0.06291515380144119
+            }
+          ]
+        },
+        "target_z": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": 0.9866485595703125
+            },
+            {
+              "frame": 2,
+              "value": 0.900168776512146
+            },
+            {
+              "frame": 3,
+              "value": 0.8755955100059509
+            },
+            {
+              "frame": 4,
+              "value": 0.8051221370697021
+            },
+            {
+              "frame": 5,
+              "value": 0.789487361907959
+            },
+            {
+              "frame": 6,
+              "value": 0.6902286410331726
+            },
+            {
+              "frame": 7,
+              "value": 0.6429830193519592
+            },
+            {
+              "frame": 8,
+              "value": 0.5475177764892578
+            },
+            {
+              "frame": 9,
+              "value": 0.5172637104988098
+            },
+            {
+              "frame": 10,
+              "value": 0.48885035514831543
+            },
+            {
+              "frame": 11,
+              "value": 0.3664303719997406
+            },
+            {
+              "frame": 12,
+              "value": 0.35502198338508606
+            },
+            {
+              "frame": 13,
+              "value": 0.3121178150177002
+            },
+            {
+              "frame": 14,
+              "value": 0.2456205189228058
+            },
+            {
+              "frame": 15,
+              "value": 0.19632086157798767
+            },
+            {
+              "frame": 16,
+              "value": 0.06825084239244461
+            },
+            {
+              "frame": 17,
+              "value": -0.003883650526404381
+            },
+            {
+              "frame": 18,
+              "value": -0.023592153564095497
+            },
+            {
+              "frame": 19,
+              "value": -0.06395991891622543
+            },
+            {
+              "frame": 20,
+              "value": -0.14852666854858398
+            },
+            {
+              "frame": 21,
+              "value": -0.20555587112903595
+            },
+            {
+              "frame": 22,
+              "value": -0.23520126938819885
+            },
+            {
+              "frame": 23,
+              "value": -0.3327338993549347
+            },
+            {
+              "frame": 24,
+              "value": -0.3744705021381378
+            }
+          ]
+        },
+        "roll": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": 0.009730904886898853
+            },
+            {
+              "frame": 2,
+              "value": 6.890934690447123e-05
+            },
+            {
+              "frame": 3,
+              "value": 0.003942913752204988
+            },
+            {
+              "frame": 4,
+              "value": 0.001929552384412427
+            },
+            {
+              "frame": 5,
+              "value": 0.0360609907552643
+            },
+            {
+              "frame": 6,
+              "value": 0.05112212350793807
+            },
+            {
+              "frame": 7,
+              "value": 0.05166803915213371
+            },
+            {
+              "frame": 8,
+              "value": 0.0695852004147825
+            },
+            {
+              "frame": 9,
+              "value": 0.035756022976112044
+            },
+            {
+              "frame": 10,
+              "value": 0.021730496569709167
+            },
+            {
+              "frame": 11,
+              "value": 0.02533967431891799
+            },
+            {
+              "frame": 12,
+              "value": 0.061139469332992
+            },
+            {
+              "frame": 13,
+              "value": 0.024341981907800264
+            },
+            {
+              "frame": 14,
+              "value": 0.026202330689571306
+            },
+            {
+              "frame": 15,
+              "value": 0.10910077870972608
+            },
+            {
+              "frame": 16,
+              "value": -0.0012039378366625597
+            },
+            {
+              "frame": 17,
+              "value": 0.021640319119707027
+            },
+            {
+              "frame": 18,
+              "value": 0.03611501581473567
+            },
+            {
+              "frame": 19,
+              "value": 0.02107220863225536
+            },
+            {
+              "frame": 20,
+              "value": 0.009364218688307233
+            },
+            {
+              "frame": 21,
+              "value": 0.04353749944027986
+            },
+            {
+              "frame": 22,
+              "value": 0.055330419532238356
+            },
+            {
+              "frame": 23,
+              "value": 0.06290298111592915
+            },
+            {
+              "frame": 24,
+              "value": 0.0009684471689534345
+            }
+          ]
+        },
+        "focal": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": 22.519662882636755
+            },
+            {
+              "frame": 2,
+              "value": 22.415187745272533
+            },
+            {
+              "frame": 3,
+              "value": 22.542896576377363
+            },
+            {
+              "frame": 4,
+              "value": 22.51995825052701
+            },
+            {
+              "frame": 5,
+              "value": 22.608507287403867
+            },
+            {
+              "frame": 6,
+              "value": 22.55235319663846
+            },
+            {
+              "frame": 7,
+              "value": 22.541654670270848
+            },
+            {
+              "frame": 8,
+              "value": 22.433433852910962
+            },
+            {
+              "frame": 9,
+              "value": 22.53250212287086
+            },
+            {
+              "frame": 10,
+              "value": 22.627277194150075
+            },
+            {
+              "frame": 11,
+              "value": 22.429999477839065
+            },
+            {
+              "frame": 12,
+              "value": 22.606196398471013
+            },
+            {
+              "frame": 13,
+              "value": 22.64186186235515
+            },
+            {
+              "frame": 14,
+              "value": 22.647189436036395
+            },
+            {
+              "frame": 15,
+              "value": 22.69533771468543
+            },
+            {
+              "frame": 16,
+              "value": 22.424248153469964
+            },
+            {
+              "frame": 17,
+              "value": 22.335194308382924
+            },
+            {
+              "frame": 18,
+              "value": 22.53768546865695
+            },
+            {
+              "frame": 19,
+              "value": 22.557834655868625
+            },
+            {
+              "frame": 20,
+              "value": 22.503540643144948
+            },
+            {
+              "frame": 21,
+              "value": 22.514049909993897
+            },
+            {
+              "frame": 22,
+              "value": 22.635469989017523
+            },
+            {
+              "frame": 23,
+              "value": 22.43247018915493
+            },
+            {
+              "frame": 24,
+              "value": 22.559494154169673
+            }
+          ]
+        }
+      }
+    }
+  },
+  "settings": {
+    "color": {
+      "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
+      "working_space": "ACEScg",
+      "display": "sRGB - Display",
+      "view": "ACES 2.0"
+    },
+    "viewer": {
+      "background": "black"
+    },
+    "formats": {
+      "HD_1080": {
+        "width": 1920,
+        "height": 1080,
+        "pixel_aspect": 1.0
+      },
+      "HD_720": {
+        "width": 1280,
+        "height": 720,
+        "pixel_aspect": 1.0
+      },
+      "UHD_4K": {
+        "width": 3840,
+        "height": 2160,
+        "pixel_aspect": 1.0
+      },
+      "2K_DCP": {
+        "width": 2048,
+        "height": 1080,
+        "pixel_aspect": 1.0
+      },
+      "Square_1K": {
+        "width": 1024,
+        "height": 1024,
+        "pixel_aspect": 1.0
+      }
+    }
+  },
+  "node_data": {},
+  "expressions": {},
+  "references": []
+}
