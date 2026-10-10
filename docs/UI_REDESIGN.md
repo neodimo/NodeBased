@@ -186,10 +186,14 @@ each stage of the restyle changed in the real Qt app. Stages: 1 colours, spacing
 - **Lock panels (final pass, Gonzo 10/10).** The mockup has no panel title bars, so docked panels now
   hide theirs by default. Workspace → Lock panels (on) controls it and is remembered per machine
   (`interface/lock_panels`); unlock to drag, float or close panels by their bars. A floating panel always
-  keeps its bar. The Window menu still shows and hides every panel (`tests/test_new_look_lock_panels.py`).
+  keeps its bar. The Window menu still shows and hides every panel (`tests/test_new_look_final_pass.py`).
 - **Input row only when in use (Gonzo 10/10).** The nine-button input row and its B and compare menus
   stay hidden until two or more viewer inputs are wired or a B buffer is chosen; with a single input the
   bottom edge is clear as in the mockup. The more menu holds the same choices at all times.
+- **One-line colour and xyz rows (Gonzo 10/10).** A wrapping knob row now sizes a numeric field for
+  the number it shows (plus a spare digit) instead of the widest number its range allows. At the default
+  Properties width a colour's swatch and four fields sit on one line (before: four lines, each field
+  squeezed to "0…"), and Translate, Rotate, Scale and Pivot keep x, y and z on one line.
 - **Sizes.** Every width is from font metrics. At 1280 x 720 and 1440 x 920, also with the font a quarter
   larger, nothing in the strip, the corners or the time row is clipped (`tests/test_new_look_*_nl5.py`).
   The strip turns ROI and Fit into icons before it would clip.

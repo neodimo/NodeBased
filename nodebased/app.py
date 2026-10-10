@@ -8871,7 +8871,7 @@ class Window(QMainWindow):
 
                     swatch.clicked.connect(pick_color)
                     set_swatch()
-                    form.addRow(group.label, WrappingRow([swatch, *color_fields]))
+                    form.addRow(group.label, WrappingRow([swatch, *color_fields], spacing=3))
                     continue
                 param = group.params[0]
                 value = node["params"][param]

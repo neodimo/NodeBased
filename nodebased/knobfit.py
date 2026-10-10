@@ -18,7 +18,7 @@ import re
 
 from PySide6.QtCore import QEvent, QObject, QSize, QTimer
 from PySide6.QtGui import QFontMetrics, QValidator
-from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QStyle, QStyleOptionComboBox, QStylePainter, QGridLayout, QSpinBox, QToolButton, QWidget)
+from PySide6.QtWidgets import (QAbstractSpinBox, QComboBox, QDoubleSpinBox, QStyle, QStyleOptionComboBox, QStylePainter, QGridLayout, QSpinBox, QToolButton, QWidget)
 
 ELLIPSIS = "…"
 # The editor keeps 2 px of margin on each side of its text.
@@ -278,8 +278,25 @@ class WrappingRow(QWidget):
             self._grid.setColumnStretch(column, 1 if column < columns else 0)
         self.updateGeometry()
 
+    @staticmethod
+    def _unit_need(unit):
+        """The width a unit needs to show what it holds now. A numeric field's size hint is the
+        widest number its range allows (about 87px for a plain float), which pushed a colour's four
+        fields onto four lines of 48px each (Gonzo 10/10); its shown value needs far less."""
+        floor = max(unit.minimumSizeHint().width(), unit.minimumWidth())
+        if floor <= 0:
+            return max(unit.sizeHint().width(), 0)
+        fields = [unit] if isinstance(unit, QAbstractSpinBox) else unit.findChildren(QAbstractSpinBox)
+        for field in fields:
+            hidden = field.property("hideButtons") or \
+                field.buttonSymbols() == QAbstractSpinBox.ButtonSymbols.NoButtons
+            text = field.fontMetrics().horizontalAdvance(field.text() + "0") + 12 + (0 if hidden else 20)
+            shown = max(field.minimumWidth(), min(text, field.sizeHint().width()))
+            floor += shown - max(field.minimumSizeHint().width(), field.minimumWidth())
+        return min(floor, max(unit.sizeHint().width(), floor))
+
     def _needed(self, columns):
-        widths = [unit.sizeHint().width() for unit in self.units]
+        widths = [self._unit_need(unit) for unit in self.units]
         lines = [widths[start:start + columns] for start in range(0, len(widths), columns)]
         column_widths = [max((line[c] for line in lines if c < len(line)), default=0) for c in range(columns)]
         return sum(column_widths) + self._spacing * (columns - 1)
