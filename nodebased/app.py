@@ -53,6 +53,7 @@ from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
 from .queuepanel import QueuePanel, create_default_queue
+from . import pipeline
 from .motion import MotionAnimator
 
 
@@ -7066,6 +7067,7 @@ class Window(QMainWindow):
         self.queue_dock = QDockWidget("CONDITIONING QUEUE", self)
         self.queue_dock.setObjectName("conditioning-queue-dock")
         self.queue_dock.setMinimumWidth(0)
+        self._pipeline = None
         self.job_queue = create_default_queue()
         self.queue_panel = QueuePanel(self.job_queue, self)
         self.queue_panel.use_result_callback = self.use_conditioning_loop_result
@@ -8276,6 +8278,16 @@ class Window(QMainWindow):
                     "playing": self.playing, "status": self.viewer_info.text()}
         if cmd.get("op") == "reference_context":
             return self.reference_context(cmd)
+        if cmd.get("op") == "workspace":
+            self.select_workspace_tab(cmd.get("tab"))
+            return {"tab": self.workspace_tab}
+        if cmd.get("op") in pipeline.OPS:
+            # The generative pipeline shares the Conditioning Queue panel's queue and loop store, so
+            # a loop an agent starts shows in the panel and the reverse.
+            if self._pipeline is None:
+                self._pipeline = pipeline.Pipeline(queue=self.job_queue, loops=self.queue_panel.loop_runs,
+                                                   runner=self.queue_panel.runner)
+            return self._pipeline.execute(cmd, self.dispatcher.document)
         if cmd.get("op") == "load" and self.dispatcher.document != self.saved_document:
             raise ValueError("Save current changes before agent load; human edits are unsaved")
         result = self.dispatcher.execute(cmd)

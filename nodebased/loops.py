@@ -205,7 +205,7 @@ def generate_task(options, input_ids, progress, cancelled):
             _unpack_artifact(store.get(input_ids[2]),previous_dir)
             reference_frames=sorted(str(path) for path in previous_dir.glob("*.exr"))
             if not reference_frames: raise ValueError("reference-frame feedback artifact has no EXR frames")
-        pattern=str(root/"generated.####.exr")
+        pattern=options.get("output_pattern") or str(root/"generated.####.exr")
         from .workers import Job, Worker
         worker_options = {"manifest_path": str(manifest_path), "scene_state_path": str(scene_path),
             "output_pattern": pattern, "text": options.get("text"),

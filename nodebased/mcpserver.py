@@ -44,7 +44,44 @@ TOOLS = [
      "inputSchema": _schema({"title": {"type": "string"}, "body": {"type": "string"},
                              "labels": {"type": "array", "items": {"type": "string"}}},
                              ("title", "body"))},
+    {"name": "export_conditioning",
+     "description": "Export SceneState and ControlBundle artifacts for a WriteGeo3D or Render3D node (or a scene node plus camera). Returns artifact ids.",
+     "inputSchema": _schema({"id": {"type": "string"}, "first": {"type": "integer"},
+                             "last": {"type": "integer"}, "camera": {"type": "string"}}, ("id",))},
+    {"name": "generate",
+     "description": "Run a local provider on a SceneState and ControlBundle. Returns the generated-sequence artifact id. output_pattern writes frames outside the artifact store and needs the disk setting.",
+     "inputSchema": _schema({"scene_state": {"type": "string"}, "bundle": {"type": "string"},
+                             "provider": {"type": "string"}, "options": {"type": "object"},
+                             "output_pattern": {"type": "string"}},
+                            ("scene_state", "bundle", "provider"))},
+    {"name": "verify",
+     "description": "Check a generated sequence against its scene. Returns the score card and report artifact id.",
+     "inputSchema": _schema({"scene_state": {"type": "string"}, "bundle": {"type": "string"},
+                             "generated_sequence": {"type": "string"}},
+                            ("scene_state", "bundle", "generated_sequence"))},
+    {"name": "loop",
+     "description": "Bounded generate-and-verify loop. start (scene_state, bundle, provider, max_attempts, spend_cap, estimate, unit), status (loop id, or none to list), cancel, use_result (ConditionedRead params for a finished attempt).",
+     "inputSchema": _schema({"action": {"type": "string", "enum": ["start", "status", "cancel", "use_result"]},
+                             "loop": {"type": "string"}, "scene_state": {"type": "string"},
+                             "bundle": {"type": "string"}, "provider": {"type": "string"},
+                             "max_attempts": {"type": "integer"}, "spend_cap": {"type": "number"},
+                             "estimate": {"type": "number"}, "unit": {"type": "string"},
+                             "text": {"type": "string"},
+                             "feedback": {"type": "array", "items": {"type": "string"}},
+                             "attempt": {"type": "integer"}}, ("action",))},
+    {"name": "artifacts",
+     "description": "List recent artifacts (optionally by kind) or read one artifact's provenance chain.",
+     "inputSchema": _schema({"action": {"type": "string", "enum": ["list", "provenance"]},
+                             "kind": {"type": "string"}, "id": {"type": "string"},
+                             "limit": {"type": "integer"}}, ("action",))},
+    {"name": "workspace",
+     "description": "Switch the top-bar workspace tab.",
+     "inputSchema": _schema({"tab": {"type": "string", "enum": ["Composite", "3D", "Simulate", "Render"]}},
+                            ("tab",))},
 ]
+
+# Tools that go straight to the bridge as one op of the same name; the arguments are the command.
+PIPELINE_TOOLS = frozenset({"export_conditioning", "generate", "verify", "loop", "artifacts", "workspace"})
 
 
 def _json_error(code, message, request_id=None):
@@ -149,6 +186,11 @@ class MCPServer:
                 raise RuntimeError("Issue filing is disabled")
             return issues.file_issue(arguments.get("title"), arguments.get("body"),
                                      arguments.get("labels"), agent_name=self.agent_name)
+        if name in PIPELINE_TOOLS:
+            if name == "generate" and arguments.get("output_pattern") and not self._disk_ops_allowed():
+                raise agentloop.ProtocolError(
+                    "generate with output_pattern writes outside the artifact store and is disabled by agent/allow_disk_ops")
+            return self._request_bridge({**arguments, "op": name})
         raise ValueError(f"Unknown tool: {name!r}")
 
     def dispatch(self, request):

@@ -68,7 +68,8 @@ class MCPServerTests(unittest.TestCase):
         result = self.server.dispatch({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         self.assertEqual({tool["name"] for tool in result["result"]["tools"]},
                          {"describe", "inspect", "edit", "undo", "redo", "view", "errors",
-                          "reference_context", "knowledge", "file_issue"})
+                          "reference_context", "knowledge", "file_issue", "export_conditioning",
+                          "generate", "verify", "loop", "artifacts", "workspace"})
         resources = self.server.dispatch({"jsonrpc": "2.0", "id": 2, "method": "resources/list"})
         self.assertEqual(len(resources["result"]["resources"]), len(knowledge.TOPICS))
         uri = "knowledge://overview"
@@ -142,6 +143,165 @@ class MCPServerTests(unittest.TestCase):
         result = offline.dispatch({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
                                    "params": {"name": "inspect", "arguments": {}}})
         self.assertTrue(result["result"]["isError"])
+
+
+class MCPPipelineTests(unittest.TestCase):
+    """A scripted MCP client delivers the smoke demo from GENERATIVE_CONDITIONING.md through the
+    tools only, against a real (offscreen) window so every call crosses Window.agent_command."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_desktop import APP, release_window, wait_until
+        cls.app, cls.release_window, cls.wait_until = APP, staticmethod(release_window), staticmethod(wait_until)
+
+    def setUp(self):
+        from nodebased.app import Window
+        QSettings("NodeBased", "NodeBased").clear()
+        self.cache = tempfile.TemporaryDirectory()
+        self.addCleanup(self.cache.cleanup)
+        patcher = mock.patch.dict(os.environ, {"NODEBASED_CACHE": self.cache.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.endpoint = "nodebased-mcp-pipeline-" + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        self.assertTrue(self.wait_until(lambda: self.window.frame is not None))
+        self.server = MCPServer(self.endpoint, "test-agent")
+        self.addCleanup(self.teardown_window)
+        self.build_scene()
+
+    def teardown_window(self):
+        if self.server.connection:
+            self.server.connection.close()
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.queue_panel.runner.shutdown(wait=True)
+        self.window.close()
+        self.app.processEvents()
+        self.release_window(self)
+
+    def call(self, name, arguments=None):
+        reply = self.server.dispatch({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                      "params": {"name": name, "arguments": arguments or {}}})
+        return reply["result"]
+
+    def ok(self, name, arguments=None):
+        result = self.call(name, arguments)
+        self.assertFalse(result["isError"], result["content"][0]["text"])
+        return json.loads(result["content"][0]["text"])
+
+    def build_scene(self):
+        self.ok("edit", {"commands": [
+            {"op": "create", "id": "cube", "type": "Cube3D", "params": {"cube_size": 1}},
+            {"op": "create", "id": "scene", "type": "Scene3D"},
+            {"op": "create", "id": "camera", "type": "Camera3D", "params": {"tz": 7}},
+            {"op": "create", "id": "render", "type": "Render3D",
+             "params": {"width": 16, "height": 12, "samples": 1}},
+            {"op": "connect", "id": "scene", "input": "object0", "source": "cube"},
+            {"op": "connect", "id": "render", "input": "scene", "source": "scene"},
+            {"op": "connect", "id": "render", "input": "camera", "source": "camera"}]})
+
+    def wait_loop(self, loop_id):
+        status = {}
+        def finished():
+            nonlocal status
+            status = self.ok("loop", {"action": "status", "loop": loop_id})
+            return status["finished"]
+        self.assertTrue(self.wait_until(finished), status)
+        return status
+
+    def export(self):
+        exported = self.ok("export_conditioning", {"id": "render", "first": 1, "last": 1})
+        return exported["scene_state"], exported["control_bundle"]
+
+    def test_smoke_demo_through_tools_only(self):
+        scene_id, bundle_id = self.export()
+        started = self.ok("loop", {"action": "start", "scene_state": scene_id, "bundle": bundle_id,
+                                   "provider": "null", "max_attempts": 2, "spend_cap": 0.02,
+                                   "estimate": 0.01, "unit": "credits (estimate)"})
+        status = self.wait_loop(started["loop"])
+        # The loop's CPU verifier is given the beauty frames only, so depth, motion, lighting and
+        # object bindings have nothing to check and the score card is FAIL: both attempts run and
+        # the attempt cap stops the loop, inside the 0.02 spend cap (2 x 0.01).
+        self.assertEqual(status["stop_reason"], "attempts_exhausted")
+        self.assertEqual([a["state"] for a in status["attempts"]], ["failed_verification"] * 2)
+        self.assertAlmostEqual(status["cumulative_estimate"], 0.02)
+        generated = status["attempts"][-1]["generated_sequence"]
+        used = self.ok("loop", {"action": "use_result", "loop": started["loop"]})
+        self.assertEqual(used["path"], generated)
+        self.ok("edit", {"commands": [{"op": "create", "id": "result", "type": "ConditionedRead",
+                                       "params": used["node"]["params"]}]})
+        document = self.ok("inspect")["document"]
+        self.assertEqual(document["nodes"]["result"]["params"]["path"], generated)
+        chain = self.ok("artifacts", {"action": "provenance", "id": generated})["chain"]
+        ids = [row["id"] for row in chain]
+        self.assertIn(scene_id, ids)
+        self.assertIn(bundle_id, ids)
+        listed = self.ok("artifacts", {"action": "list", "kind": "generated_sequence"})["artifacts"]
+        self.assertIn(generated, [row["id"] for row in listed])
+        self.ok("view", {"id": "result"})
+
+    def test_generate_and_verify_are_synchronous(self):
+        scene_id, bundle_id = self.export()
+        generated = self.ok("generate", {"scene_state": scene_id, "bundle": bundle_id,
+                                         "provider": "null"})["generated_sequence"]
+        verdict = self.ok("verify", {"scene_state": scene_id, "bundle": bundle_id,
+                                     "generated_sequence": generated})
+        self.assertIn(verdict["verdict"], ("PASS", "FAIL"))
+        self.assertIn("bindings", verdict["score_card"])
+        self.assertEqual(self.ok("artifacts", {"action": "provenance", "id": verdict["report"]})["chain"][-1]["id"],
+                         verdict["report"])
+
+    def test_loop_spend_cap_and_cancel(self):
+        scene_id, bundle_id = self.export()
+        args = {"action": "start", "scene_state": scene_id, "bundle": bundle_id, "provider": "null",
+                "max_attempts": 2, "spend_cap": 0.005, "estimate": 0.01, "unit": "credits (estimate)"}
+        status = self.wait_loop(self.ok("loop", args)["loop"])
+        self.assertEqual(status["stop_reason"], "budget_exhausted")
+        self.assertEqual(status["attempts"], [])
+        self.assertTrue(self.call("loop", {"action": "cancel"})["isError"])
+
+    def test_output_pattern_needs_disk_ops(self):
+        scene_id, bundle_id = self.export()
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        arguments = {"scene_state": scene_id, "bundle": bundle_id, "provider": "null",
+                     "output_pattern": os.path.join(folder.name, "out.####.exr")}
+        refused = self.call("generate", arguments)
+        self.assertTrue(refused["isError"])
+        self.assertIn("allow_disk_ops", refused["content"][0]["text"])
+        self.assertEqual(os.listdir(folder.name), [])
+        QSettings("NodeBased", "NodeBased").setValue("agent/allow_disk_ops", True)
+        self.ok("generate", arguments)
+        self.assertTrue(any(name.endswith(".exr") for name in os.listdir(folder.name)))
+
+    def test_bad_arguments_are_errors(self):
+        self.assertTrue(self.call("generate", {"scene_state": "x", "bundle": "y", "provider": "null"})["isError"])
+        scene_id, bundle_id = self.export()
+        self.assertTrue(self.call("generate", {"scene_state": scene_id, "bundle": bundle_id,
+                                               "provider": "../../etc/passwd"})["isError"])
+        self.assertTrue(self.call("export_conditioning", {"id": "missing"})["isError"])
+        self.assertTrue(self.call("workspace", {"tab": "Nope"})["isError"])
+
+    def test_workspace_switches_tab(self):
+        self.assertEqual(self.ok("workspace", {"tab": "3D"})["tab"], "3D")
+        self.assertEqual(self.window.workspace_tab, "3D")
+        self.assertEqual(self.ok("workspace", {"tab": "Composite"})["tab"], "Composite")
+
+    def test_every_new_tool_shows_in_the_activity_log(self):
+        scene_id, bundle_id = self.export()
+        generated = self.ok("generate", {"scene_state": scene_id, "bundle": bundle_id,
+                                         "provider": "null"})["generated_sequence"]
+        self.ok("verify", {"scene_state": scene_id, "bundle": bundle_id, "generated_sequence": generated})
+        self.ok("loop", {"action": "status"})
+        self.ok("artifacts", {"action": "list"})
+        self.ok("workspace", {"tab": "Render"})
+        log = self.window.agent_panel.activity_log
+        lines = [log.item(i).text() for i in range(log.count())]
+        for name in ("export_conditioning", "generate", "verify", "loop", "artifacts", "workspace"):
+            self.assertTrue(any(f"| {name}(" in line and line.endswith("-> ok") for line in lines), name)
+        self.assertTrue(self.call("generate", {"scene_state": "bad", "bundle": bundle_id,
+                                               "provider": "null"})["isError"])
+        self.assertTrue(log.item(log.count() - 1).text().rsplit("-> ", 1)[1].startswith("error:"))
 
 
 if __name__ == "__main__":

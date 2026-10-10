@@ -8,6 +8,7 @@ import sys
 from PySide6.QtCore import QObject, QCoreApplication
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
+from . import pipeline
 from .core import Dispatcher, load_document
 
 MAX_REQUEST = 1024 * 1024
@@ -82,6 +83,7 @@ def main():
             return 1
     dispatcher = Dispatcher(load_document(args.project) if args.project else None)
     evaluator = None
+    generative = None
     for line in sys.stdin.buffer:
         if len(line) > MAX_REQUEST:
             print(json.dumps({"ok": False, "error": "Request exceeds 1 MiB"}), flush=True)
@@ -100,7 +102,13 @@ def main():
         try:
             request = json.loads(line)
             def dispatch(cmd):
-                nonlocal evaluator
+                nonlocal evaluator, generative
+                if cmd.get("op") == "workspace":
+                    raise ValueError("workspace needs the desktop window; use the GUI bridge (--connect)")
+                if cmd.get("op") in pipeline.OPS:
+                    # No window: loops run to completion before the reply, on the default queue.
+                    generative = generative or pipeline.Pipeline()
+                    return generative.execute(cmd, dispatcher.document)
                 if cmd.get("op") == "render":
                     from .imaging import Evaluator, write_png
                     from .media import DEFAULT_EXR_BITS, DEFAULT_EXR_COMPRESSION, write_exr
