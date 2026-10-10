@@ -76,3 +76,35 @@ Expected: stages 1, 2 and 5's QA this weekend; 3 and 4 next week; 6 when 4 holds
 An attached agent, given one sentence and this repository, produces the shot with the same artifact
 IDs as the hand-made one, and the release notes link a capture of both. Anything short of that is
 progress to report, not done.
+
+## Stage 4a: the demo shot by hand (10/10)
+
+Built before the real model exists, so stage 3 only swaps the provider. Files and how to run them:
+`examples/demo_shot/README.md`; the agent's script: `examples/demo_shot/BRIEF.md`.
+
+- **The plate** is rendered by NodeBased itself (the repository has no filmed footage): 24 frames,
+  480 by 270, EXR with beauty, depth, normals, motion and object ids; a textured ground, two set
+  pieces, the mixed scene's cube and sphere, a key light, an environment light, and a camera that
+  dollies in with a small pan. Frames are not committed; `make_plate.py` regenerates them into the
+  cache (about 24 s) and checks per-frame pixel digests against `plate.sha256.json`.
+- **The solve** tracks 49 survey points with `nodebased.tracker` and fits the camera per frame from a
+  generic starting camera. Against the camera that rendered the plate: position 2.9 cm mean and 5.2 cm
+  worst, rotation 0.15 and 0.32 degrees, field of view 0.12 and 0.37 degrees, reprojection 0.64 px
+  worst. The graph uses the solved camera. It converges; position is outside the verifier's 1 cm
+  tolerance, so the camera check reports FAIL.
+- **The hand run** (`run_by_hand.py`, headless through `nodebased.agent`, provider `reproject`, seed 7,
+  the brief in the Generate node's text control, which `reproject` ignores and refuses if sent): 107 s
+  at full size on this machine's CPU, byte-identical on a second run with a fresh store. Artifact ids:
+  - scene_state `33a8a6863d603bcd281ba43282a9c26b6c9fd59a760d5e8d636cff77135ce962`
+  - control_bundle `923c0e45385796e022bd8032d9e648b40b62eca0df9756c37f150a4c9bde9416`
+  - generated_sequence `008b822ab484a1f39c3f59b3d4bf7aa0c31ba6f4e9a1622a4510808b7cae823d`
+  - report `5080c93ef3769f62fa4ab40c7552714b6a628278ef89057a4789e30e3f0e7a42`
+  - verdict FAIL (camera, lighting, objects fail; depth, motion, normals not conditioned);
+    output pixel digest `34929a1267fe6cf10cf1416837495b5ce9d3e045d05295d1004fa5b77ab5fe93`.
+- **Findings for Gonzo.** (1) A text brief to a provider that ignores text is refused before any work,
+  not just reported ignored; the run records the refusal and resends without it. (2) The provider
+  worker's 2 GiB cap fails above about 300 by 180 pixels on this 32-core machine unless numpy's thread
+  pools are limited; the script limits them. (3) Only `loop` `use_result` unpacks ConditionedRead
+  parameters, so the agent sequence uses a one-attempt loop after `generate`; it returns the same ids.
+  (4) VerifyConditioning, SceneState and ControlBundle are not graph nodes; WriteGeo3D is the export
+  node and verification is an op. (5) The headless `render` op writes RGBA only, not the layers.
