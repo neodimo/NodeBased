@@ -275,6 +275,21 @@ class GraphLookTests(unittest.TestCase):
         corner.toggle.buttons[graphlook.CURVED].click()
         self.assertEqual(self.graph.wire_mode, graphlook.CURVED)
 
+    def test_framing_keeps_every_node_above_the_corner_controls(self):
+        self.graph.resize(700, 260)
+        self.settle()
+        self.graph.frame_nodes()
+        self.settle()
+        top = self.graph.mapToScene(0, 0).y()
+        row_top = self.graph.mapToScene(0, self.graph.viewport().height() - self.graph.corner.band_height()).y()
+        for item in self.graph.items_by_id.values():
+            rect = item.sceneBoundingRect()
+            self.assertGreaterEqual(rect.top(), top)
+            self.assertLessEqual(rect.bottom(), row_top)
+        # The minimap is not part of the reserved band, so a short panel does not shrink the graph to a speck.
+        self.assertLess(self.graph.corner.band_height(),
+                        self.graph.corner.minimap.height() + 12)
+
     def test_the_wire_mode_persists_across_a_restart(self):
         self.graph.corner.toggle.buttons[graphlook.RIGHT_ANGLE].click()
         self.settle()

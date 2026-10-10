@@ -229,6 +229,12 @@ class GraphCorner:
             if widget.pos() != where:
                 widget.move(where)
             right -= GAP
+    def band_height(self):
+        """Height the corner's button row covers at the bottom of the panel, margin included. The minimap is left
+        out: it is tall but sits at the far right, and reserving its height shrank a framed graph to a speck."""
+        return MARGIN + max((widget.height() for widget in self.widgets
+                             if widget.isVisible() and widget is not self.minimap), default=0)
+
     def sync(self):
         """Called whenever the graph repaints: the zoom label and the minimap follow the view."""
         self.toggle.sync()

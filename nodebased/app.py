@@ -21,7 +21,7 @@ from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTi
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
-                           QConicalGradient, QRadialGradient)
+                           QConicalGradient, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -5552,11 +5552,14 @@ class Graph(PanZoomView):
         target = rects[0]
         for rect in rects[1:]:
             target = target.united(rect)
-        self.fitInView(target.adjusted(-24, -24, 24, 24), Qt.AspectRatioMode.KeepAspectRatio)
-        if self.transform().m11() > FRAME_MAX_ZOOM:
-            factor = FRAME_MAX_ZOOM / self.transform().m11()
-            self.scale(factor, factor)
-            self.centerOn(target.center())
+        target = target.adjusted(-24, -24, 24, 24)
+        # The help button, wire toggle, zoom control and minimap float over the bottom of the panel, so the nodes
+        # are fitted into the band above them (10/10 sprint: framing put the lowest nodes under the zoom bar).
+        band = self.corner.band_height() if hasattr(self, "corner") else 0
+        width, height = self.viewport().width(), max(40, self.viewport().height() - band)
+        scale = min(width / max(target.width(), 1), height / max(target.height(), 1), FRAME_MAX_ZOOM)
+        self.setTransform(QTransform.fromScale(scale, scale))
+        self.centerOn(target.center().x(), target.center().y() + band / (2 * scale))
         self.auto_fit = keys is None or set(keys) == set(self.items_by_id)
 
     def reveal(self, keys, keep_zoom=False):
@@ -8386,7 +8389,12 @@ class Window(QMainWindow):
         dirty = self.dispatcher.document != self.saved_document
         # Stamp the time when the project goes from unsaved to saved, not on every later title refresh.
         if hasattr(self, "status_summary") and self.project_path and not dirty and getattr(self, "_title_dirty", True):
-            self.status_summary["saved"].setText("Saved " + time.strftime("%I:%M %p").lstrip("0"))
+            # The file's own time, so an opened project shows when it was last saved rather than when it was opened.
+            try:
+                stamp = time.localtime(os.path.getmtime(self.project_path))
+            except OSError:
+                stamp = time.localtime()
+            self.status_summary["saved"].setText("Saved " + time.strftime("%I:%M %p", stamp).lstrip("0"))
         self._title_dirty = dirty
         self.setWindowTitle(f"NodeBased {__version__} · {Path(self.project_path).name if self.project_path else 'Untitled'}{' *' if dirty else ''}")
         if not hasattr(self, "topbar"):
