@@ -1579,10 +1579,20 @@ class PlaybackProxyToggleTests(unittest.TestCase):
         APP.processEvents()
         self.assertEqual(w.proxy.currentData(), 2,
                          'above-HD source did not drop to a proxy tier for playback')
+        self.assertTrue(wait_until(lambda: w.viewer.last_scale == 2),
+                        'the preview frame did not reach the viewer')
+        self.assertEqual(w.viewer.proxy_badge_text(), 'proxy 1/2',
+                         'viewer did not identify its playback preview tier')
         self.assertIsNotNone(w.playback_auto_proxy_index)
         w.toggle_playback(False)
         self.assertEqual(w.proxy.currentData(), 1, 'the artist\'s tier was not restored on stop')
         self.assertIsNone(w.playback_auto_proxy_index)
+        queued = w.preview_queue._items[0] if w.preview_queue._items else None
+        self.assertIsNotNone(queued, 'stopping did not request a refinement frame')
+        request = queued
+        self.assertEqual(request.tier, 1, 'the stop refinement did not request full detail')
+        self.assertTrue(wait_until(lambda: w.viewer.last_scale == 1, timeout=1.0),
+                        'the viewer did not finish its full-detail refinement within one second of stopping')
 
     def test_unchecked_plays_at_the_selected_tier_and_never_auto_switches(self):
         w = self.window

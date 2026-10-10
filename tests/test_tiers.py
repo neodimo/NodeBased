@@ -273,6 +273,13 @@ class ProxyTierTests(unittest.TestCase):
         self.assertEqual(scaled["height"], 270)
         self.assertEqual(scaled["size"], 32)
 
+    def test_fluid_proxy_keeps_simulation_resolution_for_cached_preview(self):
+        for kind in ("FluidSolver3D", "FluidLiquidSolver3D"):
+            with self.subTest(kind=kind):
+                params = dict(SPECS[kind]["params"])
+                params["max_size"] = 256
+                self.assertEqual(scale_params(kind, params, 4)["max_size"], 256)
+
     def test_every_pixel_unit_param_exists_on_its_node(self):
         for kind, names in PIXEL_UNIT_PARAMS.items():
             for name in names:
@@ -309,6 +316,10 @@ class ProxyTierTests(unittest.TestCase):
                        "to3_x", "to3_y", "to4_x", "to4_y"}
         for kind, spec in SPECS.items():
             present = pixel_names & set(spec["params"])
+            # The fluid `max_size` knob caps simulated cells. Its meaning must stay fixed when
+            # the viewer resolution drops, otherwise proxy playback forks the simulation cache.
+            if kind in ("FluidSolver3D", "FluidLiquidSolver3D"):
+                present.discard("max_size")
             with self.subTest(kind=kind):
                 self.assertEqual(present, set(PIXEL_UNIT_PARAMS.get(kind, ())))
 

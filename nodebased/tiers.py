@@ -702,8 +702,6 @@ PIXEL_UNIT_PARAMS = {
     "DropShadow": ("distance", "shadow_size"),
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
-    # FluidSolver3D's `max_size` is a cell-count cap and scales with the proxy resolution.
-    "FluidSolver3D": ("max_size",), "FluidLiquidSolver3D": ("max_size",),
     "IBKColor": ("fill_size", "screen_erode"),
     "ScreenKeyer": ("screen_shrink", "screen_softness"),
     "Grain": ("red_size", "green_size", "blue_size"),
@@ -757,6 +755,10 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
         return params
     if tier not in PROXY_TIERS:
         raise ValueError(f"Unsupported proxy tier {tier}; expected one of {PROXY_TIERS}")
+    # Solver resolution is simulation state, not display resolution. Keep the fluid run key
+    # identical across viewer tiers so preview playback reads the full-resolution cache.
+    if kind in ("FluidSolver3D", "FluidLiquidSolver3D"):
+        return params
     names = PIXEL_UNIT_PARAMS.get(kind)
     divided = TIER_DIVIDED_PARAMS.get(kind)
     if divided:

@@ -529,6 +529,51 @@ class Scene:
     point_frames: tuple | None = None
 
 
+def proxy_scene(scene: Scene, tier: int) -> Scene:
+    """Return a display-only scene with volume grids reduced by ``tier``.
+
+    The simulation/cache stays at its authored resolution. Coarse cells are block averages;
+    the affine compensates for ceil-sized edge blocks so the world-space volume bounds remain
+    fixed. Density is renormalized for the changed cell volume, preserving its integrated total.
+    Meshes (including cached liquid surfaces) are rasterized at Render3D's tier-scaled output
+    size, so their solver and mesh caches are likewise untouched.
+    """
+    tier = int(tier)
+    if tier <= 1 or not scene.volumes:
+        return scene
+
+    def reduce_field(field, vector=False):
+        if field is None:
+            return None
+        array = np.asarray(field, dtype=np.float32)
+        for axis in range(3):
+            groups = np.array_split(array, max(1, int(math.ceil(array.shape[axis] / tier))), axis=axis)
+            array = np.stack([group.mean(axis=axis, dtype=np.float32) for group in groups], axis=axis)
+        return array
+
+    reduced = []
+    for volume in scene.volumes:
+        source_density = np.asarray(volume.density, dtype=np.float32)
+        density = reduce_field(source_density)
+        factors = np.asarray(source_density.shape, dtype=np.float64) / np.asarray(density.shape, dtype=np.float64)
+        transform = np.eye(4, dtype=np.float64)
+        transform[:3, :3] = np.diag(factors)
+        origin = np.eye(4, dtype=np.float64)
+        origin[:3, 3] = volume.origin
+        matrix = np.asarray(volume.matrix, dtype=np.float64) @ origin @ transform
+        scale = float(np.prod(factors))
+        old_total = float(np.sum(source_density, dtype=np.float64))
+        new_total = float(np.sum(density, dtype=np.float64))
+        if new_total and old_total:
+            density *= np.float32(old_total / (new_total * scale))
+        reduced.append(replace(
+            volume, density=density, temperature=reduce_field(volume.temperature),
+            velocity=reduce_field(volume.velocity), flame=reduce_field(volume.flame),
+            fuel=reduce_field(volume.fuel), voxel_size=volume.voxel_size, origin=(0.0, 0.0, 0.0),
+            matrix=matrix, sparse=None))
+    return replace(scene, volumes=tuple(reduced))
+
+
 def write_obj(scene, path):
     """Atomically write world-space OBJ geometry, returning object/vertex/triangle counts.
 

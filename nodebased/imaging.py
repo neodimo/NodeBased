@@ -1282,6 +1282,8 @@ class Evaluator:
                     if node["disabled"] or incoming is None:
                         value = scene3d.empty_geometry()
                     else:
+                        if tier > 1:
+                            incoming = flip3d.proxy_instance(incoming, tier)
                         radius = max(0, int(params.get("temporal_smoothing", 0)))
                         temporal = []
                         if radius and isinstance(getattr(incoming, "stream", None), flip3d.LiquidStream):
@@ -1290,7 +1292,8 @@ class Evaluator:
                                     continue
                                 sample_frame = incoming.frame + offset
                                 state = flip3d.solve_frame(incoming.stream, sample_frame, self._sim_memory, cancel)
-                                temporal.append(flip3d.instance_from_state(state, incoming.stream, sample_frame))
+                                sample = flip3d.instance_from_state(state, incoming.stream, sample_frame)
+                                temporal.append(flip3d.proxy_instance(sample, tier) if tier > 1 else sample)
                         value = replace(flip3d.surface_geometry(incoming, params, temporal),
                                         **scene3d.material_fields(params))
                 elif kind == "FluidFoam3D":
@@ -1551,6 +1554,10 @@ class Evaluator:
                         values[key] = Raster.of(np.zeros((params["height"], params["width"], 4), np.float32))
                         continue
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
+                    if tier > 1 and isinstance(scene, scene3d.Scene):
+                        # Read the full-resolution simulation cache, then make a disposable
+                        # display proxy. Fluid solver identity and saved cache data stay intact.
+                        scene = scene3d.proxy_scene(scene, tier)
                     if getattr(scene, "volumes", ()) and params.get("volumes", "on") == "off":
                         scene = replace(scene, volumes=())   # the knob makes every backend ignore them
                     if params.get("render_output", "rgba") == "motion":

@@ -1060,6 +1060,33 @@ def instance_from_state(state, stream, frame):
     return replace(inst, surface=Volume(phi, voxel_size=voxel, origin=frame_stream.origin, frame=int(frame)))
 
 
+def proxy_instance(instance, tier):
+    """Deterministically thin liquid particles for a display-only surface extraction."""
+    tier = int(tier)
+    positions = np.asarray(instance.positions)
+    stream = getattr(instance, "stream", None)
+    if tier <= 1 or len(positions) < 2 or stream is None:
+        return instance
+    spacing = max(float(getattr(stream, "spacing", 0.0)) * tier, 1e-9)
+    origin = np.asarray(getattr(stream, "origin", (0.0, 0.0, 0.0)), dtype=np.float64)
+    cells = np.floor((positions - origin) / spacing).astype(np.int64)
+    _unique, first = np.unique(cells, axis=0, return_index=True)
+    # Preserve the six silhouette extrema so coarse playback keeps the cached liquid's bounds.
+    boundary = {int(np.argmin(positions[:, axis])) for axis in range(3)}
+    boundary.update(int(np.argmax(positions[:, axis])) for axis in range(3))
+    indices = np.asarray(sorted(set(first.tolist()) | boundary), dtype=np.int64)
+    if len(indices) >= len(positions):
+        return instance
+    from dataclasses import replace
+    fields = {}
+    for name in ("positions", "sizes", "colors", "velocities", "ages", "lifetimes", "ids",
+                 "emission", "whitewater_type"):
+        value = getattr(instance, name, None)
+        if value is not None and len(value) == len(positions):
+            fields[name] = np.asarray(value)[indices]
+    return replace(instance, **fields)
+
+
 def apply_rigid_feedback(stream, frame, cache, bodies, solver_key, *, gravity=9.81, strength=0.04):
     """Persist a rigid body's liquid reaction at ``frame`` and invalidate dependent FLIP frames.
 
