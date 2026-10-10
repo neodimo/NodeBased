@@ -1,5 +1,31 @@
 ## Lane 6 P1 cached playback — complete (2026-10-09)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (6:16 PM on 2026-10-09 PDT)
+
+`main` moved `05b2658` -> `8cbaeef` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 39 tests in 33.436 s, OK. Full suite on
+the stacked tip `8cbaeef` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1009-1516.log`, started 3:16 PM): **Ran 4847 tests in 10457.366 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R2 of 2: the 12 ms of host work around every GPU render.** Commits:
+  - `e18cb24` bench: host-phase measurements before and after the R2 host-cost changes (integrated, discrete, cpu)
+  - `d0dea8c` render: one uniform write per submission, 8 samples per dispatch for surface scenes and 2 for smoke and splats (the RTX launch cost halves Z1), adaptive passes share a bind group; host laps in the breakdown tools
+  - `d3b890a` render: keep the scene buffers, accumulator, bind groups and readback buffers between frames, put several fixed-sampling passes in one submission, and finish the image on the card for callers that skip the noise maps
+  - `f6c0ed7` bench: split the GPU path tracer's host laps (encode, convert, stats) and add tools/profile_host_phases.py to measure the host side of a frame by phase
+  Diff: 26 files changed, 806 insertions(+), 77 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step P1 of 2: cached playback that is not bound by reading the cache (finish 1).** Commits:
+  - `53b200a` docs: record reduced llvmpipe playback benchmark
+  Diff: 5 files changed, 269 insertions(+), 4 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Full-size Radeon playback and frame profile are documented; steam cache budget is 65,536 MiB. Cached output playback measured 0.72 FPS steam-only / 0.09 FPS whole scene. Frame 120 evaluation took 1.653 s, with 88.6 ms reading, 20.7 ms sparse rebuild, and 1.582 ms upload. This exact bound is recorded; the 6 / 2 FPS target remains unmet. Fresh 32/32, 8-frame llvmpipe playback measured 42.78 / 46.83 FPS whole/steam but produced no particles or steam tiles, so it is empty-field throughput. JSON and synchronized docs are committed. Focused Hot pour/cache/playback and knowledge tests pass under the GPU lock. RTX full-size row remains pending reset. Next: P2 interactive preview work.
 
 ## 2026-10-09 — Lane 4 R1 finish: X1 agrees with the CPU (worktree, not yet merged)
