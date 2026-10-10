@@ -109,6 +109,13 @@ class InputTests(ViewerCompareBase):
         self.assertEqual(self.viewer.input_strip.states(),
                          ["wired", "wired", "active"] + ["empty"] * 6)
 
+    def test_the_strip_shows_itself_only_once_a_second_input_is_wired(self):
+        self.press_graph_key("a", Qt.Key.Key_1)
+        self.assertFalse(self.viewer.input_strip.in_use)
+        self.assertFalse(self.viewer.input_strip.isVisibleTo(self.viewer))
+        self.press_graph_key("b", Qt.Key.Key_2)
+        self.assertTrue(self.viewer.input_strip.in_use)
+
     def test_switching_inputs_shows_the_other_nodes_pixels(self):
         self.press_graph_key("b", Qt.Key.Key_2)
         self.assertEqual(tuple(self.window.frame[0, 0][:3]), BLUE)

@@ -1156,12 +1156,18 @@ class ViewerInputStrip(QWidget):
         self.setFixedSize(self.sizeHint())
         self.setToolTip("Viewer inputs: press 1-9 in the graph to connect the selected node, "
                         "1-9 in the viewer to switch")
+        self.in_use = False
 
     def states(self):
         """One word per button: active, wired or empty (the tests and the tooltips read this)."""
         return [words.split()[0] for words in self._states]
 
     def refresh(self, state, names):
+        # The approved mockup has no input row under the picture. It shows itself only while it
+        # has something to say: two or more inputs wired, or a B buffer chosen. The viewer's
+        # "more" menu always holds the same choices.
+        wired = sum(1 for node in state["inputs"] if node)
+        self.in_use = wired >= 2 or state["b"] is not None
         for index, button in enumerate(self.buttons):
             number = index + 1
             node = state["inputs"][index]
@@ -1312,7 +1318,7 @@ class Viewer(PanZoomView):
         else:
             fits = True
         strip.move(x, y)
-        visible = fits and not image_rect.intersects(strip.geometry())
+        visible = strip.in_use and fits and not image_rect.intersects(strip.geometry())
         if strip.isVisible() != visible:
             strip.setVisible(visible)
         return True
@@ -1479,6 +1485,7 @@ class Viewer(PanZoomView):
             self.hide_prompt()
         names = {key: node["name"] for key, node in document["nodes"].items()}
         self.input_strip.refresh(self.input_state(), names)
+        self._place_pixel_readout()
         self.viewport().update()
 
     def show_input(self, number):
