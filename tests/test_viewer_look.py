@@ -151,6 +151,18 @@ class ViewerLookWindowTests(unittest.TestCase):
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.frame is not None
                                    and self.window.viewer.format_rect is not None))
+        # The default dock split can land a few event-loop passes after the first frame (10/10: after
+        # another module's windows, the viewer went 355 -> 348 px mid-test); the viewer refits on resize,
+        # so a readout taken before the layout settles points at a different pixel afterwards.
+        last = [None, 0.0]
+
+        def layout_settled():
+            size = self.window.viewer.size()
+            if size != last[0]:
+                last[:] = [size, time.monotonic()]
+                return False
+            return time.monotonic() - last[1] >= 0.3
+        self.assertTrue(wait_until(layout_settled))
 
     def tearDown(self):
         self.window.saved_document = self.window.dispatcher.document

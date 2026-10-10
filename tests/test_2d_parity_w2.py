@@ -1,6 +1,7 @@
 """W2: curve editor tangents, HueCorrect output curves, and viewer-drawn analysis regions."""
 import copy
 import os
+import time
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -215,6 +216,17 @@ class RegionDragTests(unittest.TestCase):
         self.window.resize(1600, 1000)
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.viewer.format_rect is not None))
+        # Let the default dock split land first: the viewer refits on resize until the artist zooms, so a late
+        # split would undo the transform set below between the drag and the check (10/10 full suite).
+        last = [None, 0.0]
+
+        def layout_settled():
+            size = self.window.viewer.size()
+            if size != last[0]:
+                last[:] = [size, time.monotonic()]
+                return False
+            return time.monotonic() - last[1] >= 0.3
+        self.assertTrue(wait_until(layout_settled))
         self.window.viewer.resetTransform()
         self.window.viewer.centerOn(130, 36)  # the default layout leaves the viewer only ~60 px tall
         viewport = self.window.viewer.viewport().rect()
