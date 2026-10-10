@@ -65,6 +65,11 @@ fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 
 // Splat-shadow rays of a splat centre start beyond its own footprint and skip its own caster; -1 = unused.
 var<private> splat_near: f32 = -1.;
 var<private> exclude_id: i32 = -1;
+// Per-object render switches: the material record's last slot is 1 for a mesh that takes no shadow, and every shadow ray a
+// fragment of it would trace returns "unblocked" (`shadow_off`, set where the material is read). A mesh that casts no
+// shadow carries every bit in its triangles' `e1.w` (`gpu3d.NO_CAST_MASK`). A mesh hidden from the camera has `f.w` set in
+// its triangles' attributes, which only the primary rays of `main` read.
+var<private> shadow_off: bool = false;
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
 @group(0) @binding(1) var<storage, read> order: array<u32>;
 @group(0) @binding(2) var<storage, read> triangles: array<Triangle>;
@@ -153,6 +158,7 @@ fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
  return transmission;
 }
 fn visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
+ if (shadow_off) { return 1.; }
  var transmission=1.; var stack: array<i32,64>; stack[0]=0; var size=select(1u,0u,params.empty!=0u);
  loop {
   if (size==0u) { break; } size--; let index=stack[size];
@@ -433,6 +439,7 @@ fn shade_solid(hit: Hit, origin: vec3<f32>) -> vec3<f32> {
   if (dot(normal,origin-position)<0.) { normal=-normal; }
   var radiance=vec3<f32>(params.ambient); var specular=vec3<f32>(0.);
   let link=u32(table[material+3u].z);
+  shadow_off=table[material+3u].w>.5;
   for (var j=0u;j<params.lights;j++) {
    if (excl_bit(link,j)) { continue; }
    let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u];
@@ -493,7 +500,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
   // by ~1e-6 relative in t and barycentrics: the CPU's 1e-10 thresholds are widened to 1e-5 here.
   let duplicate=at.info.x==previous_object && edge && previous_edge && abs(hit.t-ct)<=1e-5*max(1.,abs(hit.t));
   ct=hit.t; cp=hit.id; previous_object=at.info.x; previous_edge=edge;
-  if (at.info.x<0. || duplicate) { continue; }
+  if (at.info.x<0. || duplicate || at.f.w>0.5) { continue; }
   surfaces++;
   if (surfaces>params.maxhits) { rays[r*4u+2u]=vec4<f32>(0.,0.,0.,-1.); return; }
   let w=vec3<f32>(1.-hit.u-hit.v,hit.u,hit.v);
@@ -501,6 +508,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
   var normal=unit(at.n0.xyz*w.x+at.n1.xyz*w.y+at.n2.xyz*w.z);
   let uv=at.uv.xy*w.x+at.uv.zw*w.y+at.info.zw*w.z;
   let material=u32(at.info.x); let properties=table[material+1u];
+  shadow_off=table[material+3u].w>.5;
   var source=table[material]; var level=at.info.y;
   if (at.a.w>=0.) {
    let delta=position-at.a.xyz; let ee=dot(at.e.xyz,at.e.xyz); let ef=dot(at.e.xyz,at.f.xyz); let ff=dot(at.f.xyz,at.f.xyz);
@@ -701,7 +709,7 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
         local = (view @ (world-eye).T).T
         vertices.append(world[geometry.triangles].astype('f8'))
         alphas.extend([np.clip(geometry.color[3], 0, 1)]*len(geometry.triangles))
-        link_masks.append(np.full(len(geometry.triangles), gpu3d.link_mask(geometry.light_link, order)))
+        link_masks.append(np.full(len(geometry.triangles), gpu3d.caster_mask(geometry, order)))
         normals = None
         if geometry.normals is not None:
             normals = (np.linalg.inv(matrix[:3, :3]).T @ geometry.normals.T).T
@@ -723,7 +731,7 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
                       (float(np.clip(geometry.metallic, 0, 1)), float(np.clip(geometry.pbr_roughness, 0, 1)),
                        0.08*float(np.clip(geometry.pbr_specular, 0, 1)), float(geometry.material == 'pbr')),
                       (float(geometry.normal_scale), float(geometry.occlusion_strength),
-                       gpu3d.link_mask(geometry.light_link, order), 0.),
+                       gpu3d.link_mask(geometry.light_link, order), 0. if geometry.receive_shadows else 1.),
                       (*np.asarray(geometry.emissive_color, 'f4')[:3], 0.)])
         for texture in (geometry.metallic_roughness_texture, geometry.normal_texture,
                         geometry.occlusion_texture, geometry.emissive_texture):
@@ -751,6 +759,7 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
             attrs = np.concatenate((local[tri], world[tri], ns, uv[tri]), axis=1).astype('f4')
             at[:3, :3] = ns
             at[0, 3] = object_id
+            at[7, 3] = 0. if geometry.visible_to_camera else 1.     # primary rays pass through (the shader's main loop)
             if tangent_map:
                 # scene3d._render_primary's flat UV-gradient tangent, kept in the spare .w of n1, n2 and e.
                 e1, e2 = world[tri[1]]-world[tri[0]], world[tri[2]]-world[tri[0]]
@@ -861,7 +870,7 @@ def _pack_casters(state, scene, cancel=None):
             and any(i.cast_shadows for i in scene.splats)):
         return np.zeros((1, 4), 'f4'), 0
     casters = s._SplatCasters(scene.splats, cancel)
-    masks = caster_link_masks(casters, scene.splats, gpu3d.link_order(scene)) if s.has_light_links(scene) else None
+    masks = caster_link_masks(casters, scene.splats, gpu3d.link_order(scene)) if s.has_shadow_links(scene) else None
     return _pack_caster_set(state, casters, cancel, masks)
 
 
@@ -922,7 +931,7 @@ def mesh_occluders(scene, cancel=None, link_order=None):
         points = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
         world.append(points[geometry.triangles])
         alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), 'f4'))
-        masks.append(np.full(len(geometry.triangles), gpu3d.link_mask(geometry.light_link, link_order or ()), 'f4'))
+        masks.append(np.full(len(geometry.triangles), gpu3d.caster_mask(geometry, link_order or ()), 'f4'))
     world = np.concatenate(world)
     primitives = raytrace.TriangleSet(world[:, 0], world[:, 1]-world[:, 0], world[:, 2]-world[:, 0],
                                       np.concatenate(alphas))
@@ -1083,7 +1092,7 @@ def _splat_lighting(state, scene, camera, ambient, cancel):
     relit = any(i.relight > 0 for i in scene.splats)
     shadowed = any(light.shadows and light.intensity > 0 for light in scene.lights)
     catching = shadowed and bool(scene.geometries) and any(i.shadow_catch > 0 and i.relight < 1 for i in scene.splats)
-    linked = s.has_light_links(scene)
+    linked = s.has_shadow_links(scene)
     if linked and len(scene.lights) > 24:
         raise gpu3d.Unsupported('light linking on the GPU takes at most 24 lights and environments together')
     link_order = list(scene.lights) if linked else None
@@ -1094,7 +1103,7 @@ def _splat_lighting(state, scene, camera, ambient, cancel):
         if provider is not None:
             provider.relit_shadows = relit and shadowed
             provider.link_order = link_order
-            provider.mesh_links = tuple(g.light_link for g in scene.geometries)
+            provider.mesh_links = tuple(s.caster_link(g) for g in scene.geometries)
         lighting = ((scene.lights, ambient, provider, gpu3d._splat_extras(scene, ambient, provider, cancel))
                     if relit or catching else None)
     except BaseException:

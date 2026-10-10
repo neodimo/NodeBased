@@ -205,6 +205,9 @@ var<private> near_bias: f32 = 0.0;
 // the lights its mesh excludes (light i is bit i: the table's lights, then the area lights, then the environment).
 // `shadow_bit` is the light a shadow ray goes to; a triangle that excludes it casts no shadow from it.
 var<private> shadow_bit: u32 = 99u;
+// Per-object render switches: a triangle whose mesh casts no shadow carries every bit in `e1.w` (see `NO_CAST_MASK`); a
+// fragment whose mesh takes no shadow has `scales.w` set, and every shadow ray it would trace returns "unblocked".
+var<private> shadow_off: bool = false;
 fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
@@ -332,6 +335,7 @@ fn seed_hash(p: vec3<f32>) -> u32 {
     return h;
 }
 fn trace_visibility(origin: vec3<f32>, ray: vec3<f32>, limit: f32, light: Light) -> f32 {
+    if (shadow_off) { return 1.0; }
     var transmission = 1.0;
     // BVH_TRAVERSAL
     for (var j = 0u; j < u32(params.shadow.y); j += 1u) {
@@ -537,6 +541,7 @@ struct Vertex {
     if (source.a <= 0.0) { discard; }
     if (PASS == 0u && source.a < 0.999) { discard; }
     if (PASS == 1u && source.a >= 0.999) { discard; }
+    shadow_off = v.scales.w > 0.5;
     var normal = v.normal / max(length(v.normal), 1e-8);
     if (v.maps.y > 0.5) {
         // Y3 of 3, part 1: tangent-space normal map (`scene3d._shade_fragments`'s normal-map block
@@ -901,7 +906,7 @@ def _pipeline(state, data, phase, bvh=False, smoke=False):
     if smoke:
         from . import gpuvolume
         code = gpuvolume.MESH_SHADOW_WGSL + code.replace(
-            '// VOLUME_SHADOW', 'transmission *= volume_transmission(v.world, lights[i], u32(i));')
+            '// VOLUME_SHADOW', 'if (!shadow_off) { transmission *= volume_transmission(v.world, lights[i], u32(i)); }')
     module = device.create_shader_module(code=code)
     target = {'format': 'rgba32float' if data else state['format']}
     if not data:
@@ -932,9 +937,19 @@ def link_order(scene):
     active = [light for light in scene.lights if light.intensity > 0]
     order = ([l for l in active if l.kind not in scene3d._AREA] + [l for l in active if l.kind in scene3d._AREA]
              + list(getattr(scene, 'environments', ())[:1]))
-    if len(order) > 24 and scene3d.has_light_links(scene):
-        raise Unsupported('light linking on the GPU takes at most 24 lights and environments together')
+    if len(order) > 24 and scene3d.has_shadow_links(scene):
+        raise Unsupported('light linking and per-object shadow switches on the GPU take at most 24 lights and '
+                          'environments together')
     return order
+
+
+# A mesh with `cast_shadows` off excludes every light from its shadow triangles (all 24 bits `excl_bit` reads).
+NO_CAST_MASK = float((1 << 24) - 1)
+
+
+def caster_mask(geometry, order):
+    """The shadow-triangle mask of `geometry`: the lights its link excludes, or every light when it casts no shadow."""
+    return NO_CAST_MASK if not geometry.cast_shadows else link_mask(geometry.light_link, order)
 
 
 def link_mask(link, order):
@@ -949,6 +964,8 @@ def _prepare(scene, camera, width, height, cancel):
     vertices, queue, materials = [], [], []
     for object_id, geometry in enumerate(scene.geometries, 1):
         _cancel(cancel)
+        if not geometry.visible_to_camera:
+            continue        # drawn by no pass; `_shadow_data` still holds its triangles, so it casts its shadow
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
         local = (view @ (world-eye).T).T
@@ -984,7 +1001,7 @@ def _prepare(scene, camera, width, height, cancel):
                 1.0 if occlusion_texture is not None else 0.0, 1.0 if emissive_texture is not None else 0.0)
         emissive_color = np.asarray(geometry.emissive_color, 'f4') if geometry.material == 'pbr' else np.zeros(3, 'f4')
         scales = (float(geometry.normal_scale) if is_pbr else 0.0, float(geometry.occlusion_strength) if is_pbr else 0.0,
-                  link_mask(geometry.light_link, order), 0.0)
+                  link_mask(geometry.light_link, order), 0.0 if geometry.receive_shadows else 1.0)
         for index, tri in enumerate(geometry.triangles):
             if index % 256 == 0:
                 _cancel(cancel)
@@ -1058,7 +1075,7 @@ def _shadow_data(scene, count, limit, cancel):
             block[:, 1, :3] = triangles[:, 1] - triangles[:, 0]
             block[:, 2, :3] = triangles[:, 2] - triangles[:, 0]
             block[:, 0, 3] = np.clip(geometry.color[3], 0, 1)
-            block[:, 1, 3] = link_mask(geometry.light_link, order)
+            block[:, 1, 3] = caster_mask(geometry, order)
             offset += n
     return packed, 1e-3 * max(1.0, float((high-low).max()) if count else 1.0)
 

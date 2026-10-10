@@ -181,6 +181,11 @@ fn rnd(key: u32, dim: u32) -> f32 { return f32(pcg(key ^ (dim * 2654435769u)) >>
 // ------------------------------------------------------------------------------------------- traversal
 var<private> tlas_stack: array<i32, 32>;
 var<private> blas_stack: array<i32, 64>;
+// Per-object render switches (a shape's `ids.yzw`: casts no shadow, hidden from the camera, takes no shadow). A mesh that casts
+// no shadow is skipped by shadow rays; a hidden one by the camera's own rays (`camera_ray`, set around that one intersect call);
+// a surface that takes no shadow (`shadow_free`, set while it is shaded) sees every shadow ray unblocked.
+var<private> shadow_free: bool = false;
+var<private> camera_ray: bool = false;
 //#if LINKS
 // Light linking: a shape's `sigma.w` holds the bit mask of the lights it excludes (light `li` is bit `li` in the packed
 // order, the environment is bit `light_count`). A shadow ray (any_hit) toward light `shadow_bit` skips the shapes that
@@ -246,6 +251,7 @@ fn to_local_d(sh: Shape, d: vec3<f32>) -> vec3<f32> {
 fn intersect(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, any_hit: bool) -> Hit {
   var best = Hit(upper, -1, -1, 0.0, 0.0);
   if (params.e.x == 0u) { return best; }
+  if (any_hit && shadow_free) { return best; }
   var top = 1u;
   tlas_stack[0] = 0;
   loop {
@@ -265,7 +271,8 @@ fn intersect(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, any_hit: bool) 
       let sh = shapes[sid];
       if (any_hit && sh.base.w < 0.5) { continue; }
 //#if LINKS
-      if (any_hit && excl_bit(u32(sh.sigma.w), shadow_bit)) { continue; }
+      if (any_hit && (excl_bit(u32(sh.sigma.w), shadow_bit) || sh.ids.y != 0u)) { continue; }
+      if (!any_hit && camera_ray && sh.ids.z != 0u) { continue; }
 //#endif
       let lo = to_local_o(sh, o);
       let ld = to_local_d(sh, d);
@@ -1195,6 +1202,7 @@ fn hg_sample(g: f32, d: vec3<f32>, u1: f32, u2: f32) -> PhaseSample {
 //#if SOFT
 // what a shadow ray meets that is soft: splat casters and smoke. `on_splat` (-1 for none) is the splat the ray leaves.
 fn soft_visibility(o: vec3<f32>, wi: vec3<f32>, dist: f32, on_splat: i32, ns: vec3<f32>) -> f32 {
+  if (shadow_free) { return 1.0; }
   var out = 1.0;
 //#if SPLATS
   if (params.g.y > 0u) {
@@ -1306,6 +1314,10 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
   let has_env = params.d.y > 0u;
   for (var turn = 0u; turn < max_b + 40u; turn++) {
     let dim = DIM_BASE + turn * DIM_STRIDE;
+    shadow_free = false;
+//#if LINKS
+    camera_ray = vdepth == 0u;
+//#endif
 //#if SPLATS
     var h = intersect(o, d, tmin, tmax, false);
     var splat_id = -1;
@@ -1324,6 +1336,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
 //#if LINKS
     let splat_id = -1;
 //#endif
+//#endif
+//#if LINKS
+    camera_ray = false;
 //#endif
     tmin = 0.0;
     tmax = INF;
@@ -1630,6 +1645,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       continue;
     }
     // ---- a surface with a BSDF ----
+//#if LINKS
+    if (splat_id < 0) { shadow_free = shapes[h.shape].ids.w != 0u; }
+//#endif
     let nv = max(dot(ns, wo), 1e-4);
     let lobe = make_lobe(sh, sf.base, nv, sf.metallic_ovr, sf.roughness_ovr, sf.occlusion);
     var direct_d = vec3<f32>(0.0);
@@ -2230,6 +2248,10 @@ def pack(ps, environment_size=None, cancel=None):
         shapes[i, 20:24] = (ps.kind[i], ps.ior[i], ps.reflection[i], ps.object_id[i])
         shapes[i, 24:27] = ps.sigma[i]
         shapes[i, 28:29] = np.array([root_of_blas[ps.shape_blas[i]]], np.uint32).view("f4")
+    # Per-object render switches in the spare words of `ids`: y casts no shadow, z hidden from the camera, w takes no shadow.
+    for column, flags in ((29, ps.no_cast), (30, ps.hidden), (31, ps.no_receive)):
+        if flags is not None:
+            shapes[:n_shapes, column] = flags[:n_shapes].astype(np.uint32).view("f4")
     packed.shapes = shapes
     lights = []
     light_bits = []        # the bit each row has in `ps.excl` (points, areas, environments), before the sort below
@@ -2270,6 +2292,9 @@ def pack(ps, environment_size=None, cancel=None):
             packed.shapes[i, 27] = float(sum(1 << packed_of[b] for b in range(len(lights) + 1) if (mask >> b) & 1))
             packed.linked |= int(packed.shapes[i, 27])
     packed.lights = np.array(lights, "f4").reshape(-1, LIGHT_VECS * 4) if lights else np.zeros((1, LIGHT_VECS * 4), "f4")
+    if ps.no_cast is not None or ps.no_receive is not None:
+        # the lights are then sampled by next-event estimation alone (`PathScene.linked_bits`), the environment's bit included
+        packed.linked |= (1 << (len(lights) + 1)) - 1
     packed.light_count = len(lights)
     if ps.envs:
         env = ps.envs[0]
@@ -3005,7 +3030,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             lanes = min(max(settings.min_samples, settings.adaptive_pass_size), 1024)
             sparse_threads = int(max(0, min(ADAPTIVE_SPARSE_THREADS, npix * lanes, (cap - accum_bytes) // 32)))
         accum = frame.accumulator(device, wgpu, npix * 32 + sparse_threads * 32)       # zeroed
-        links = bool(ps.linked_bits)
+        links = bool(ps.linked_bits) or ps.hidden is not None
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
         lap("upload")
