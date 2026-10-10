@@ -183,6 +183,10 @@ each stage of the restyle changed in the real Qt app. Stages: 1 colours, spacing
 - **Dock title bars.** VIEWER, NODE GRAPH, PROPERTIES and the other docks have a slim, quiet title bar
   (small muted caps over a hairline, a transparent float and close pair). They float, close and rearrange
   as before.
+- **Lock panels (final pass, Gonzo 10/10).** The mockup has no panel title bars, so docked panels now
+  hide theirs by default. Workspace → Lock panels (on) controls it and is remembered per machine
+  (`interface/lock_panels`); unlock to drag, float or close panels by their bars. A floating panel always
+  keeps its bar. The Window menu still shows and hides every panel (`tests/test_new_look_lock_panels.py`).
 - **Sizes.** Every width is from font metrics. At 1280 x 720 and 1440 x 920, also with the font a quarter
   larger, nothing in the strip, the corners or the time row is clipped (`tests/test_new_look_*_nl5.py`).
   The strip turns ROI and Fit into icons before it would clip.

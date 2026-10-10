@@ -517,6 +517,7 @@ class Preferences:
     LAST_PROJECT_DIRECTORY = "interface/last_project_directory"
     VIEWER_AUTO_3D = "interface/viewer_auto_3d"
     WIRE_MODE = "interface/wire_mode"
+    LOCK_PANELS = "interface/lock_panels"
     WORKSPACE = "workspace"
 
     def __init__(self):
@@ -577,6 +578,16 @@ class Preferences:
 
     def set_viewer_auto_3d(self, enabled):
         self._store.setValue(self.VIEWER_AUTO_3D, bool(enabled))
+        self._store.sync()
+
+    def lock_panels(self):
+        """Whether docked panels hide their title bars, as in the approved mockup. On by default;
+        unlocking brings the bars back so panels can be dragged, floated and closed."""
+        value = self._store.value(self.LOCK_PANELS, True)
+        return value not in (False, "false", "0", 0)
+
+    def set_lock_panels(self, enabled):
+        self._store.setValue(self.LOCK_PANELS, bool(enabled))
         self._store.sync()
 
     def last_project_directory(self):
@@ -7378,6 +7389,16 @@ class Window(QMainWindow):
         default_workspace.setToolTip("Put the window, panels and dividers back where a fresh "
                                      "install has them")
         default_workspace.triggered.connect(lambda checked=False: self.reset_workspace())
+        self.lock_panels_action = QAction("Lock panels", self, checkable=True)
+        self.lock_panels_action.setObjectName("lock-panels")
+        self.lock_panels_action.setToolTip("Hide the panel title bars. Unlock to drag, float or "
+                                           "close panels.")
+        self.lock_panels_action.setChecked(self.preferences.lock_panels())
+        self.lock_panels_action.toggled.connect(self.set_panels_locked)
+        workspace_menu.addAction(self.lock_panels_action)
+        for dock in self.workspace_docks:
+            dock.topLevelChanged.connect(lambda floating, d=dock: self._apply_panel_lock(d))
+        self.set_panels_locked(self.preferences.lock_panels(), remember=False)
         preferences_menu = self.menuBar().addMenu("Preferences")
         reduce_motion_action = preferences_menu.addAction("Reduce motion")
         reduce_motion_action.setCheckable(True)
@@ -7394,6 +7415,32 @@ class Window(QMainWindow):
         help_menu = self.menuBar().addMenu("Help")
         action = help_menu.addAction("Keyboard shortcuts…")
         action.triggered.connect(self.show_keyboard_shortcuts)
+
+    def set_panels_locked(self, locked, remember=True):
+        """Locked docks drop their title bars (the mockup has none); floating docks keep theirs
+        so they can still be moved and docked again."""
+        self._panels_locked = bool(locked)
+        if remember:
+            self.preferences.set_lock_panels(self._panels_locked)
+        if self.lock_panels_action.isChecked() != self._panels_locked:
+            self.lock_panels_action.setChecked(self._panels_locked)
+        for dock in self.workspace_docks:
+            self._apply_panel_lock(dock)
+
+    def panels_locked(self):
+        return getattr(self, "_panels_locked", False)
+
+    def _apply_panel_lock(self, dock):
+        hide = self.panels_locked() and not dock.isFloating()
+        current = dock.titleBarWidget()
+        if hide and current is None:
+            blank = QWidget(dock)
+            blank.setObjectName("locked-title-bar")
+            blank.setFixedHeight(0)
+            dock.setTitleBarWidget(blank)
+        elif not hide and current is not None and current.objectName() == "locked-title-bar":
+            dock.setTitleBarWidget(None)
+            current.deleteLater()
 
     def save_workspace(self):
         """Remember window placement, dock layout and panel dividers for the next launch."""
