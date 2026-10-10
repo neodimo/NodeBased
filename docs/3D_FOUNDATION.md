@@ -142,7 +142,7 @@ untouched, and a `Point` light with `No falloff` renders byte-identically to bef
 | CPU reference, raster and ray-traced (`scene3d._shade_fragments`, shadows included) | Cone and falloff, diffuse and specular, every output |
 | GPU raster (`gpu3d.py`) and GPU ray tracer (`gpurt_render.py`) | Same formula in the shader from cone terms and falloff power in the light table, checked against the CPU within the GPU parity tolerance |
 | Relit splats (`splatshade.py`, shared by the CPU and GPU splat paths) | Same multiply on the per-splat Lambert term |
-| Editor viewport (`viewportgpu.py`) | Same formula in the shader (lane L4 step E): the light table grew from 32 to 64 bytes per light to carry the falloff power (`color.w`), the direction and the cone terms, and a `Spot` now lights the view with its cone and penumbra. `Point` and `Spot` lights also show their distance falloff. Shadows are still never shown in the viewport. Checked against the CPU reference on a spot-lit card (dark outside the cone, mean difference under 1.5 of 255) |
+| Editor viewport (`viewportgpu.py`) | Same formula in the shader (lane L4 step E): the light table grew from 32 to 64 bytes per light to carry the falloff power (`color.w`), the direction and the cone terms, and a `Spot` now lights the view with its cone and penumbra. `Point` and `Spot` lights also show their distance falloff. Shadow maps came later ("The 3D viewport" below). Checked against the CPU reference on a spot-lit card (dark outside the cone, mean difference under 1.5 of 255) |
 
 **Light3D shadow bias, blur and samples** (lane L4 step B, Nuke's Light knobs). Three knobs on every
 `Light3D`, all with limits; the defaults reproduce the hard shadows of earlier versions byte for byte, and
@@ -465,16 +465,19 @@ the door their results come through.
   mesh until its fragment shader gets a Fresnel tint.
 - **Shadows** (CPU reference only). `Light3D` has a `Shadows` knob (off by default; old documents are
   unchanged). With it on, `Render3D` traces a ray from every shaded fragment to the light through all
-  triangles in the scene, so every geometry casts and receives shadows; there are no per-object flags yet.
+  triangles in the scene, so every geometry casts and receives shadows unless its `Cast shadows` or `Receive shadows`
+  switch is off ("Per-object render switches" below).
   A hit multiplies the light by (1 - the geometry's colour alpha), so an alpha 0.5 blocker halves it and
-  alpha 0 casts nothing; texture alpha is not considered. Ambient is never shadowed. Shadows are hard
-  (no soft or area lights). On the CPU the rays run through a bounding volume hierarchy
+  alpha 0 casts nothing; texture alpha is not considered. Ambient is never shadowed. Shadows are hard unless the
+  light has `Shadow blur` and `Shadow samples` (a jittered disc) or is a Rect, Disc or Sphere area light (soft shadows from
+  sampling the light's own surface). On the CPU the rays run through a bounding volume hierarchy
   (`nodebased/raytrace.py`, built once per render; scenes of 64 triangles or fewer use a plain loop), with
   results identical to the brute-force test. Measured for 960x540 rays (one per pixel) on this machine: about
   3.1 s for a 10,002-triangle scene and 4.0 s for 99,858 triangles (roughly 130,000-165,000 rays/s), plus a
   61-590 ms build; a 250,000-primitive build took about 1.5 s. A render whose estimated cost (rays x 16 x
   log2 triangles, plus the build) exceeds the built-in budget is refused with an error rather than hanging.
-  The 3D viewport does not show shadows. The wgpu `Backend` implements the same shadow rules
+  The 3D viewport draws shadow maps for up to four Directional or Spot lights ("The 3D viewport" below); Point and area
+  lights cast none there. The wgpu `Backend` implements the same shadow rules
   (same bias, alpha transmission and light handling) and is tested against the CPU reference on the same
   scenes (interior agreement and shadow edges within one pixel). Two GPU paths exist: a brute-force loop
   over all triangles per shadowed fragment, and BVH traversal in the fragment shader (used only when the
@@ -500,6 +503,29 @@ the door their results come through.
   list per band multiplies host preparation, so scenes that fit one submission are never banded;
   other adapters and Windows are unmeasured. GPU frame time for large meshes is currently limited by
   per-triangle host preparation, not by the shader. Projected geometry still renders on the CPU.
+- **Per-object render switches** (plan "Rendering 7", step R1). Every mesh node that has the material knobs (`Card3D`,
+  `Cube3D`, `Sphere3D`, `Cylinder3D`, `ReadGeo3D`) and `ReadGLTF3D` has three switches beside the light-link knobs, all on by
+  default: **Cast shadows** (off: the mesh blocks no shadow ray, from any light), **Receive shadows** (off: it is lit as if
+  nothing shadowed it, which also drops the splat, smoke and particle shadows on it) and **Visible to camera** (off: the
+  camera's own rays, every data pass (`depth`, `normals`, `position`, `uv`, `object_id`) and Cryptomatte pass through it).
+  A mesh that is not visible to the camera still casts its shadow, still appears in reflections and refractions, and in the
+  path tracer still bounces light; that is what a stand-in that only casts a shadow, a light blocker that must stay out of
+  frame, or a floor that should not shadow itself needs. The switches are `Geometry.cast_shadows`, `receive_shadows` and
+  `visible_to_camera` (`scene3d.render_switches_from_params` reads the knobs); an `Instance3D` copy takes its source mesh's
+  switches. A document saved before the switches renders bit-identically (`tests/test_3d_render_switches.py` holds every
+  renderer to pictures made before they existed, `tests/golden_render_switches.py`). Honoured by the CPU raster and ray-traced
+  modes, the CPU path tracer, the GPU raster and GPU ray-traced modes and the GPU path tracer. In the path tracers a scene
+  with a mesh that casts or receives no shadow samples every light by next-event estimation alone (the same estimator light
+  linking uses, for the same reason: a BSDF ray that reaches the light cannot be told to see through the excluded mesh), so a
+  glossy surface is a little noisier there; a camera ray is one that has not yet scattered, so a transparent surface does not
+  turn the ray behind it into a reflection ray. The GPU modes carry the switches in the bit mask light linking already
+  uses (a mesh that casts nothing excludes every light from its shadow triangles) plus one flag per material or shape; they
+  take at most 24 lights and environments together, like light linking. **Not honoured yet:** the GPU instanced ray tracer
+  (`gpuinstance.py`) raises `gpu3d.Unsupported` for an instance source with a switch off, so `auto` renders that scene on the
+  CPU; Cryptomatte's manifest still lists a hidden mesh's name (its id simply never has coverage). The interactive viewport
+  draws a mesh that is not visible to the camera (so it can be selected) and its shadow pass honours **Cast shadows**; it does
+  not preview **Receive shadows**. Holdouts and a shadow catcher for putting CG onto a filmed plate build on these switches
+  (next two steps of the plan).
 - **Mode.** `Render3D` has a `Mode` knob: `raster` (default, what every existing document uses) or
   `raytrace`, a CPU-only alternative that finds visibility by casting one ray per sub-sample through the
   bounding volume hierarchy instead of rasterizing triangles. It shares the shading code with the rasterizer
@@ -1010,7 +1036,13 @@ VIEWPORT was its own dock load normally; the old dock is dropped and its view li
   `_shadow_light`, `_render_shadow_map`), sampled with a small box filter by every shaded mesh and
   splat. `Point` is not supported (it would need a cube map); blended meshes do not cast; every
   other light stays unshadowed. Cost was negligible in what was measured (a two-mesh scene, RTX
-  3080 Ti, 1920x1080: no measurable difference against the same scene with `Shadows` off).
+  3080 Ti, 1920x1080: no measurable difference against the same scene with `Shadows` off). Step Y2 of 2 (Lane 4 step notes)
+  raised the one key light to the four brightest Directional or Spot lights.
+- **Per-object render switches.** A mesh with **Visible to camera** off is still drawn in the viewport, so it can be seen and
+  selected (the final renders leave it out; the CPU fallback viewport draws it too). The viewport's shadow pass honours
+  **Cast shadows**: a mesh that casts no shadow is left out of every light's shadow map but is still drawn and lit. It does
+  not preview **Receive shadows** (a mesh that takes no shadow still shows the shadows of the others in the viewport).
+  See "Per-object render switches" above.
 - **Shaded meshes (plan "Production look" step R6).** A `pbr` material is lit in the viewport with the
   same Cook-Torrance GGX as the final render (`scene3d._shade_pbr_mesh`); a standard (Blinn-Phong)
   material keeps its look and also picks up the dome's diffuse and a mirror-reflection specular, as the
@@ -2298,7 +2330,10 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   card gives visibility 0.25 instead of 0.5). Raster and ray-traced modes build shadow triangles in float32 and
   float64 respectively, so a shadow-edge sample can flip between modes on grid-aligned scenes (seen up to 0.158
   over 320 pixels).
-- Shadows are hard: no soft or area lights, no per-object cast/receive flags, none in the viewport.
+- Shadows from Directional, Point and Spot lights are hard unless the light has `Shadow blur` and `Shadow samples`; the area lights
+  (Rect, Disc, Sphere) give soft shadows from sampling their surface. The viewport has shadow maps for up to four Directional or
+  Spot lights only. Per-object cast/receive/camera switches exist for meshes ("Per-object render switches"); splats, smoke and
+  particles have only their own `Cast shadows` switch (splats, particles) or none (smoke).
 - No deep output. Depth of field exists in the path tracer and the ray-traced mode only (see "Depth of field"), motion blur in those and raster mode (see "Motion blur"; not with the relight or multichannel outputs). Global illumination, reflections and refraction exist only in
   `pathtrace` mode (see "Path tracing" for what it leaves out); `raster` and `raytrace` shade direct light.
 - The rasterizer refuses scenes over 250,000 triangles; the CPU ray tracer and shadow paths have work budgets.
@@ -2924,3 +2959,11 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   benchmark rows of the majorant table were taken and before any test of this step was run, so the card's test results
   for parts 1 to 3 are missing (`gpu3d`'s default adapter has been the AMD Radeon 8060S since). Needs Gonzo: after the card is reset, run `tests/test_volume_majorant_grid.py`,
   `tests/test_volume_path_motion_blur.py` and `tests/test_volume_data_passes.py` on it.
+
+- Step R1 of 3 (plan "Rendering 7", per-object render switches): `Cast shadows`, `Receive shadows` and `Visible to camera` on every
+  mesh node, in all six final renderers; see "Per-object render switches" above for what each does, what the path tracers do
+  differently (next-event estimation alone for the lights), and what is not honoured yet (the GPU instanced ray tracer falls back
+  to the CPU, the viewport does not preview `Receive shadows`). Tests: `tests/test_3d_render_switches.py` on the RTX 3080 Ti, the
+  Radeon 8060S (`force-adapter.py integrated`) and llvmpipe (`force-adapter.py cpu`). Needs Gonzo: holdouts and the shadow catcher
+  (R2, R3) read these switches; the golden pictures in `tests/data/golden/render_switches_*.npy` are regenerable only from a tree
+  that predates the switches (`tests/golden_render_switches.py` says how).

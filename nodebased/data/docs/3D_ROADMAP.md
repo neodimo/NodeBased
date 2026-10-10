@@ -351,7 +351,8 @@ Rendering status (milestone 3): shadows with per-light bias, blur and samples fo
 Blinn-Phong specular and emission, named AOVs (one per `Render3D`), a CPU BVH and CPU ray-traced mode, wgpu raster with shadows (brute-force or BVH per adapter type).
 GPU shadows on relit splats and splat shadow catching are built (L4 step D). Not built: transparent-mesh layering with splats on the GPU, GPU splat AOVs,
 reflections, global illumination, physically based materials, shadows
-in the viewport, per-object shadow flags.
+in the viewport. Per-object cast shadows, receive shadows and visible-to-camera switches for meshes are built (plan "Rendering 7",
+step R1; docs/3D_FOUNDATION.md "Per-object render switches").
 
 ## Design: Gaussian splats and relighting (written before implementation)
 
