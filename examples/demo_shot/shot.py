@@ -33,21 +33,24 @@ def _create(commands, key, kind, params=None, **extra):
 
 
 def scene_commands(width, height):
-    """Create the 3D scene of the plate: ground, set pieces, cube, sphere, backdrop, lights, camera."""
+    """Create the 3D scene of the plate: ground, set pieces, cube, sphere, backdrop, lights, camera.
+
+    The meshes are named: an object's id in the export hashes its name, so two unnamed cubes (or two
+    cards) would share one id and the verifier could not tell their measurements apart."""
     c = []
     _create(c, "checker", "Checker", {"width": 256, "height": 256, "size": 8})
     _create(c, "ground", "Card3D", dict(card_width=40.0, card_height=40.0, rx=-90.0, ty=-1.2, tz=0.0,
-                                         red=1.0, green=1.0, blue=1.0))
+                                         red=1.0, green=1.0, blue=1.0), name="Ground")
     c.append({"op": "connect", "id": "ground", "input": "image", "source": "checker"})
-    _create(c, "pillar", "Cylinder3D", dict(tx=3.2, ty=-0.2, tz=-1.6))
+    _create(c, "pillar", "Cylinder3D", dict(tx=3.2, ty=-0.2, tz=-1.6), name="Pillar")
     _create(c, "crate", "Cube3D", dict(cube_size=1.0, tx=-3.4, ty=-0.7, tz=-1.2, ry=-18.0,
-                                        red=0.55, green=0.45, blue=0.3))
+                                        red=0.55, green=0.45, blue=0.3), name="Crate")
     _create(c, "backdrop", "Card3D", dict(card_width=50.0, card_height=10.0, tx=0.0, ty=2.8, tz=-4.5,
-                                           red=0.18, green=0.2, blue=0.26))
+                                           red=0.18, green=0.2, blue=0.26), name="Backdrop")
     _create(c, "cube", "Cube3D", dict(cube_size=1.3, tx=-1.2, ty=-0.55, tz=0.5, ry=28.0,
-                                       red=0.9, green=0.35, blue=0.25))
+                                       red=0.9, green=0.35, blue=0.25), name="Cube")
     _create(c, "ball", "Sphere3D", dict(sphere_radius=0.75, tx=1.3, ty=-0.45, tz=0.2,
-                                         red=0.35, green=0.85, blue=0.45))
+                                         red=0.35, green=0.85, blue=0.45), name="Ball")
     _create(c, "key", "Light3D", dict(light_type="Directional", tx=2.5, ty=4.0, tz=4.0, intensity=1.1))
     _create(c, "sky", "Light3D", dict(light_type="Environment", intensity=0.35))
     _create(c, "camera", "Camera3D", dict(focal=FOCAL, **CAMERA_START))
@@ -112,9 +115,10 @@ def build_graph_commands(width, height, keys, frames=FRAMES):
     """The shot graph. `keys` maps frame to the solved camera's Camera3D parameter values."""
     c = []
     _create(c, "plate", "Read", dict(path="plate/plate.%04d.exr"), name="Plate (rendered by NodeBased)")
-    # the mixed scene's layout on the tracked ground; the backdrop is what the generative step replaces
+    # The layout is everything the plate shows (set pieces and backdrop included): the exported SceneState
+    # must describe the plate, or no check could tell a faithful result from a different picture.
     for command in scene_commands(width, height):
-        if command["id"] in ("pillar", "crate", "backdrop", "camera", "scene", "render"):
+        if command["id"] in ("camera", "scene", "render"):
             continue
         c.append(command)
     _create(c, "camera", "Camera3D", dict(focal=FOCAL, **CAMERA_START), name="Solved camera")
@@ -122,7 +126,7 @@ def build_graph_commands(width, height, keys, frames=FRAMES):
         c.append({"op": "set_curve", "id": "camera", "param": param, "curve": {"interpolation": "linear",
                   "keys": [{"frame": f, "value": float(keys[f][param])} for f in range(1, frames + 1)]}})
     _create(c, "scene", "Scene3D", name="Layout")
-    for slot, key in enumerate(("ground", "cube", "ball", "key", "sky")):
+    for slot, key in enumerate(("ground", "pillar", "crate", "backdrop", "cube", "ball", "key", "sky")):
         c.append({"op": "connect", "id": "scene", "input": f"object{slot}", "source": key})
     # SceneState + ControlBundle export, then the render the export reads its size and passes from
     _create(c, "export", "WriteGeo3D", name="SceneState and ControlBundle export")

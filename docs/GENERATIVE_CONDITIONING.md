@@ -149,7 +149,11 @@ version; acceptance for depth, normals, motion, IDs, camera pose, text, referenc
 height and frame count; accepted colour spaces; local/remote execution; and output frame and honoured-control
 claims. `nodebased.generative.ProviderDescription.load()` loads a description. The single provider entry point
 is `nodebased.generative.generate(manifest, scene_state, output_pattern, provider, ...)`; it checks frame and
-image limits and rejects supplied text or reference inputs that the selected provider cannot honour. The
+image limits and rejects reference inputs, a non-default seed or sampler settings that the selected provider cannot
+honour. A text brief the provider does not honour does not stop the call: the shot runs and the text is recorded as
+ignored (`ignored` in the reply, `ignored_controls` in the sequence's `generation.json` and in its provenance row),
+so one call does the shot and the record says the text was not used. Colour space, frame count and size stay hard
+refusals, since the provider cannot take those inputs at all. The
 Generate node's panel names every control as used or ignored before invocation, and the MCP `generate`
 and `loop` start replies carry the same `controls` map. Generated EXR sequences can be loaded by
 `ConditionedRead`.
@@ -157,7 +161,8 @@ and `loop` start replies carry the same `controls` map. Generated EXR sequences 
 **Seed contract.** Generate has `seed` (a non-negative integer, default 0) and `sampler_settings` (a small
 JSON object of at most 4096 bytes, default empty; the node stores it as JSON text). Both reach the provider
 entry point (`generate(..., seed=0, sampler_settings=None)`). A provider whose description declares seed or
-sampler settings ignored refuses a non-default value before work, like text and reference frames. The
+sampler settings ignored refuses a non-default value before work, like reference frames (text is the one advisory
+control: recorded as ignored, not refused). The
 sequence's artifact is a ZIP of the frames plus `generation.json`, which holds the provider name and
 version, the provider-description ID, the seed, the sampler settings, whether each was honoured, the
 SceneState and ControlBundle IDs and every option (the text prompt and the hashes of any reference
@@ -171,10 +176,24 @@ seed, so a fixed seed reproduces the same bytes and the same ID) and `sampler_se
 named like the bundle layers (`depth.Z`, `normals.X/Y/Z`, `motion_forward.X/Y`, `object_id.id`), each
 compared with the exported pass. A check whose pass the sequence lacks (depth, motion, normals, or object
 IDs when no tracked point answers) is labelled "not conditioned" and left out of the verdict, as the
-intentionally unconditioned motion check always was. A SceneState with no light has no key direction to
+intentionally unconditioned motion check always was. So is the camera check of a provider whose description does not
+declare `camera_pose` honoured (its measurement stays in the report): the camera is solved from the picture's
+pixels, which a resampled copy of the layout render cannot make exact (see `reproject` below).
+
+**How the verifier measures the camera and objects.** Landmarks are the scene's own vertices that the camera sees
+and that have corner structure (a straight edge or a faintly shaded face matches anywhere along it). The template
+for each is cut from a render of the exported scene through the exported camera on that frame, with the exported
+`ambient` (a Render3D setting that the SceneState records per frame), and matched in the observed beauty; the camera
+is fitted to the matches and compared with the exported one. A picture that follows the SceneState matches at the
+projected positions, so the plate rendered by the same scene scores zero error (the demo's check:
+`examples/demo_shot/diagnose_verdict.py`, plate against its own SceneState passes camera, objects and lighting).
+Templates taken from the observation's own first frame scored that frame zero by construction and drifted with the
+dolly's change of scale (about 0.5 m worst on the demo plate). A light whose shadows are off casts nothing to
+compare, so the shadow direction is not demanded when the reference render shows no shadow. A SceneState with no light has no key direction to
 compare, so lighting then rests on colour balance alone. The unconditioned `null` baseline therefore gets
-PASS on the checks beauty alone can answer (camera, objects by tracking, lighting) and "not conditioned" on
-the rest. The report also has a `determinism` section (provider, version, seed, sampler settings and
+PASS on the checks beauty alone can answer (objects by tracking, lighting) and "not conditioned" on the rest,
+the camera included: it is measured and reported (exactly, for a copy of the beauty) but `null` does not declare
+camera pose honoured. The report also has a `determinism` section (provider, version, seed, sampler settings and
 whether the provider declared seed honoured); it never changes the verdict. Generate takes the source plate on its required `image`
 input and passes it through unchanged during ordinary evaluation; the explicit panel action writes the
 provider result. Its provider description and bundle/control parameters are part of evaluator and tile cache
@@ -184,8 +203,14 @@ Two deterministic CPU stand-ins establish the contract without a model or networ
 
 - **reproject 1.0** is local, accepts ACEScg sequences up to 8192 by 8192 and 10,000 frames. It forward-splats
   beauty using exported pixel motion and metric depth as a nearest-surface z-buffer; the validated SceneState
-  camera pose supplies the camera context encoded by those vectors. It honours depth, motion, camera pose and
-  `seed`, ignores normals, IDs, text, reference frames and sampler settings, and returns RGBA OpenEXR frames.
+  camera pose supplies the camera context encoded by those vectors. Version 1.1: frame N is frame N-1's beauty carried by
+  frame N-1's forward motion (forward motion points at the next frame, so version 1.0 produced frame N+1's picture
+  under frame N's label, which the verifier rightly measured as a camera one frame off); the first frame is copied.
+  It honours depth, motion and `seed`; it ignores normals, IDs, text, reference frames, sampler settings and camera
+  pose, which only decodes the motion vectors. A resampled copy of the layout render measures up to 29 cm and
+  1.7 degrees of field of view away from the exported camera on the 480 by 270 demo plate, far outside the verifier's
+  1 cm, 0.25 degrees and 0.1 degrees, because pixel tracking at that size cannot place a camera that finely; the
+  camera check therefore reads "not conditioned" for it. It returns RGBA OpenEXR frames.
 - **null 1.0** has the same local limits and colour space, copies beauty unchanged, and honours only `seed`
   (recorded, no effect on the pixels). It is the deliberately unconditioned baseline.
 
@@ -418,7 +443,7 @@ Repeatable smoke demo, using only existing local stand-ins:
    IDs from the export result/provenance view into the queue panel.
 2. Choose `null`, set maximum attempts to `2`, spend cap to `0.02`, estimate to `0.01` with unit
    `credits (estimate)`, and start. The unchanged beauty sequence is generated locally and checked by
-   the CPU score-card verifier; depth, motion and normals are "not conditioned", the other checks pass,
+   the CPU score-card verifier; camera, depth, motion and normals are "not conditioned", the other checks pass,
    and the passing first score stops the loop after one attempt and one 0.01 estimate.
 3. Reopen the project and select the loop chain to inspect the restored attempt. Choose that attempt's
    result for ConditionedRead; its path should be the displayed generated-sequence ID.

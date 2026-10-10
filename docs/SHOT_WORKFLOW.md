@@ -22,14 +22,18 @@ activity log, and shares one undo stack. Read this with the `knowledge` topic `s
    per-attempt estimate and its unit; poll `loop` `status` for the attempt list, verdicts and stop
    reason; `cancel` stops it. Providers today are the local stand-ins `null` (returns the beauty
    unchanged) and `reproject`. Pass a `seed` (default 0) and, if the provider uses them,
-   `sampler_settings`; the reply's `controls` map says which the provider used or ignored. The seed and
+   `sampler_settings`; the reply's `controls` map says which the provider used or ignored. A text brief goes in
+   `options` `{"text": ...}`; a provider that does not use text still runs the shot and the reply's `ignored` list
+   names it, so one call does the shot. The reply also carries `path`, `manifest`, `scene_state` and `node`: the
+   ConditionedRead parameters, the same ones a loop's `use_result` returns. The seed and
    settings are part of the artifact id, so the same brief and seed give the same id. A loop reuses its
    seed on every attempt unless `vary_seed` is true (attempt n then uses seed + n - 1).
 6. **Verify.** `verify` (scene_state, bundle, generated_sequence) returns the score card and a
    `determinism` section. The verifier judges beauty and every pass the sequence carries; a check with
-   no pass behind it reads "not conditioned" and is left out of the verdict. The loop verifies each
+   no pass behind it reads "not conditioned" and is left out of the verdict, and so does the camera check of a
+   provider that does not declare camera pose honoured (`reproject` does not). The loop verifies each
    attempt itself.
-7. **Bring it back into the comp.** `loop` `use_result` returns the parameters for a
+7. **Bring it back into the comp.** `generate` (or a loop's `use_result`) returns the parameters for a
    `ConditionedRead` node whose `path` is the generated-sequence artifact id. Create the node with
    `edit`, then connect it, grade it and write it like any other input.
 8. **Prove where it came from.** `artifacts` `provenance` with the generated-sequence id returns the

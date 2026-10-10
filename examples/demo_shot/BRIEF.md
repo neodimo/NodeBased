@@ -18,22 +18,22 @@ Each step is an MCP tool call; ids come from the previous reply.
    `reproject`, seed 7, and whose text control holds the brief.
 2. `export_conditioning` `{"id": "export", "first": 1, "last": 24}` returns `scene_state` and
    `control_bundle`.
-3. `generate` `{"scene_state": ..., "bundle": ..., "provider": "reproject", "seed": 7}` with no text:
-   the reply's `controls` says `text` is ignored, and sending it makes the provider refuse the call
-   (stage 4a recorded that refusal), so the agent omits it and reports the brief as not honoured.
-   The brief's text does not enter the artifact id when it is omitted, which is what makes the ids
-   comparable with the hand run.
+3. `generate` `{"scene_state": ..., "bundle": ..., "provider": "reproject", "seed": 7, "options":
+   {"text": "<the brief>"}}`: one call. The provider does not use text, so the reply's `controls` says
+   `text` is ignored and its `ignored` list names it; the record (generation manifest, provenance row)
+   says the same. The reply also carries `path`, `manifest`, `scene_state` and `node`, the ConditionedRead
+   parameters. The text is part of the artifact id, so the agent must send exactly the text in the
+   `generate` node's text control (the brief's sentence as stored in the graph) for its ids to match the
+   hand run's.
 4. `verify` `{"scene_state": ..., "bundle": ..., "generated_sequence": ...}` returns the verdict and
-   the score card (expected: FAIL on camera, lighting and objects; depth, motion and normals "not
+   the score card (expected: PASS; lighting and objects pass, camera, depth, motion and normals "not
    conditioned").
-5. `loop` `{"action": "start", "scene_state": ..., "bundle": ..., "provider": "reproject",
-   "max_attempts": 1, "spend_cap": 0.01, "estimate": 0.01, "unit": "credits (estimate)", "seed": 7}`,
-   poll `loop` `status` until finished, then `loop` `{"action": "use_result", "loop": ...}`. This is
-   the only tool that unpacks the ConditionedRead parameters (`path`, `manifest`, `scene_state`); the
-   one-attempt loop regenerates with the same inputs and returns the same generated-sequence and
-   report ids as steps 3 and 4 (checked in stage 4a).
+5. Optional: a bounded `loop` `{"action": "start", ..., "max_attempts": 1, "seed": 7}` regenerates
+   with the same inputs; its `use_result` returns the same ConditionedRead node as a `generate` call made without text and the
+   same generated-sequence id (a loop's `text` selects text feedback, which a provider that ignores text
+   stops on, so it carries none); `tests/test_agent.py` asserts it.
 6. `edit` creates the generated read and wires the rest: `create` `generated` as `ConditionedRead`
-   with the `use_result` parameters; `connect` `grade` input `image` to `generated`; `set` `write`
+   with the `node` parameters from step 3; `connect` `grade` input `image` to `generated`; `set` `write`
    `path` to the output pattern.
 7. `edit` `render` on node `write` for frames 1 to 24 (disk operations setting).
 8. `artifacts` `{"action": "provenance", "id": <generated_sequence>}` for the chain.

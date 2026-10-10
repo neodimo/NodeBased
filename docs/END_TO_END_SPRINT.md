@@ -91,20 +91,35 @@ Built before the real model exists, so stage 3 only swaps the provider. Files an
   generic starting camera. Against the camera that rendered the plate: position 2.9 cm mean and 5.2 cm
   worst, rotation 0.15 and 0.32 degrees, field of view 0.12 and 0.37 degrees, reprojection 0.64 px
   worst. The graph uses the solved camera. It converges; position is outside the verifier's 1 cm
-  tolerance, so the camera check reports FAIL.
-- **The hand run** (`run_by_hand.py`, headless through `nodebased.agent`, provider `reproject`, seed 7,
-  the brief in the Generate node's text control, which `reproject` ignores and refuses if sent): 107 s
-  at full size on this machine's CPU, byte-identical on a second run with a fresh store. Artifact ids:
-  - scene_state `33a8a6863d603bcd281ba43282a9c26b6c9fd59a760d5e8d636cff77135ce962`
-  - control_bundle `923c0e45385796e022bd8032d9e648b40b62eca0df9756c37f150a4c9bde9416`
-  - generated_sequence `008b822ab484a1f39c3f59b3d4bf7aa0c31ba6f4e9a1622a4510808b7cae823d`
-  - report `5080c93ef3769f62fa4ab40c7552714b6a628278ef89057a4789e30e3f0e7a42`
-  - verdict FAIL (camera, lighting, objects fail; depth, motion, normals not conditioned);
-    output pixel digest `34929a1267fe6cf10cf1416837495b5ce9d3e045d05295d1004fa5b77ab5fe93`.
-- **Findings for Gonzo.** (1) A text brief to a provider that ignores text is refused before any work,
-  not just reported ignored; the run records the refusal and resends without it. (2) The provider
-  worker's 2 GiB cap fails above about 300 by 180 pixels on this 32-core machine unless numpy's thread
-  pools are limited; the script limits them. (3) Only `loop` `use_result` unpacks ConditionedRead
-  parameters, so the agent sequence uses a one-attempt loop after `generate`; it returns the same ids.
-  (4) VerifyConditioning, SceneState and ControlBundle are not graph nodes; WriteGeo3D is the export
-  node and verification is an op. (5) The headless `render` op writes RGBA only, not the layers.
+  tolerance, which matters only when the plate is checked against it (the verdict judges the generated
+  pictures against the exported, solved, camera).
+- **The hand run** (`run_by_hand.py`, headless through `nodebased.agent`, provider `reproject` 1.1,
+  seed 7, the brief in the Generate node's text control, sent in the one `generate` call and recorded
+  as ignored): 155 s at full size on this machine's CPU, byte-identical on a second run with a fresh
+  store. Artifact ids:
+  - scene_state `b52bc6b3536b15eca47d8c96c2d4d46c4d75532c516e5a09f31e3ea172cfdec7`
+  - control_bundle `e734808faf740d55be8ab7429532227e08fe3810b9aacdacc25c6d2474a3c708`
+  - generated_sequence `47fdd43adee5f8bddc061dc9b9509802e8caadf1476d6e6c305ef1bc9440877d`
+  - report `3f49adfa081dfcf1d5f6d3121cc4ae62319528f3bd06f7554c970a3993994db1`
+  - verdict **PASS** (lighting and objects pass; camera, depth, motion, normals "not conditioned");
+    output pixel digest `ab52e1da767e59065ccfc024cd1e21397e3690fea87918a39475e8a5e260e766`.
+- **Stage 4a fix (10/10).** The first run's verdict was FAIL on camera, lighting and objects. The plate
+  checked against its own SceneState failed too, so the cause was the verifier and the export as well as
+  the stand-in: the export and verifier left out the Render3D's ambient (now recorded per frame in the
+  SceneState), the layout left out set pieces the plate shows, camera landmarks were tracked from the
+  observation's own first frame (zero error on frame 1 by construction, drift after) and are now matched
+  against a render of the exported scene on the same frame (visible vertices with corner structure only),
+  object ids collided for unnamed meshes of one type, a scene with no shadow-casting light was counted as
+  missing shadow evidence, and `reproject` 1.0 put frame N+1's picture under frame N (1.1 carries frame
+  N-1 forward). No threshold changed. Plate against its own SceneState: PASS on camera, objects and
+  lighting (`diagnose_verdict.py`). `reproject` no longer declares camera pose honoured (a resampled copy
+  measures up to 29 cm and 1.7 degrees off at this size), so its camera check reads "not conditioned".
+  Also: one `generate` call does the shot (an unhonoured text brief is recorded as ignored in the reply,
+  the manifest and the provenance row, not refused; colour space, frame count and size still refuse); the
+  reply carries the ConditionedRead node parameters, identical to a loop's `use_result` and tested; the
+  provider worker limits numpy's threads itself and sizes its cap from the job.
+- **Findings for Gonzo.** (1) VerifyConditioning, SceneState and ControlBundle are not graph nodes;
+  WriteGeo3D is the export node and verification is an op. (2) The headless `render` op writes RGBA only,
+  not the layers. (3) A camera held to 1 cm cannot be verified from pixels at 480 by 270 for a provider
+  whose output is not pixel-exact; stage 3's real model will need either a larger plate or a looser,
+  stated camera tolerance for pixel-solved cameras, DiMo's call.

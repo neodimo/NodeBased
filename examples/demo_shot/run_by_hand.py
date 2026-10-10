@@ -32,10 +32,7 @@ class Agent:
     """One `python -m nodebased.agent` process; `call` sends one command and returns its result."""
 
     def __init__(self, project, cache):
-        # The provider worker has a 2 GiB address-space cap; on a many-core machine numpy's thread pools
-        # alone spend a third of it, so the pools are kept small (without this, generate dies with
-        # "failed to map segment from shared object" above about 300x180 pixels).
-        env = {**os.environ, "OMP_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "2", "MKL_NUM_THREADS": "2", "NODEBASED_CACHE": str(cache), "QT_QPA_PLATFORM": "offscreen",
+        env = {**os.environ, "NODEBASED_CACHE": str(cache), "QT_QPA_PLATFORM": "offscreen",
                "PYTHONPATH": str(REPO) + os.pathsep + os.environ.get("PYTHONPATH", "")}
         self.process = subprocess.Popen([sys.executable, "-m", "nodebased.agent", "--project", str(project)],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env,
@@ -56,8 +53,6 @@ class Agent:
 
 
 def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, log=print):
-    from nodebased.artifacts import ArtifactStore
-    from nodebased.pipeline import unpack_inputs
     document = json.loads(Path(graph).read_text())
     generate = document["nodes"]["generate"]["params"]
     last = frames or document["time"]["last"]
@@ -68,27 +63,18 @@ def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, lo
         agent.call(op="set", id="plate", param="path", value=shot.plate_pattern(plate))
         exported = agent.call(op="export_conditioning", id="export", first=1, last=last)
         log(f"export: scene_state {exported['scene_state']}  control_bundle {exported['control_bundle']}")
-        # The Generate node's own controls drive the call. `reproject` does not use a text brief, so the
-        # provider refuses it before doing any work and says which control it cannot honour; the hand run
-        # records that refusal and sends the call again without the text, as the panel's "ignored" says.
-        call = dict(op="generate", scene_state=exported["scene_state"], bundle=exported["control_bundle"],
-                    provider=generate["provider"], seed=generate["seed"])
-        refusal = None
-        try:
-            result = agent.call(**call, options={"text": generate["text"]})
-        except RuntimeError as error:
-            refusal = str(error).split("; worker log")[0]
-            log(f"generate with the brief text: {refusal}")
-            result = agent.call(**call)
+        # The Generate node's own controls drive the call, brief text included. `reproject` does not use a
+        # text brief: the call still runs the shot and records the text as ignored.
+        result = agent.call(op="generate", scene_state=exported["scene_state"], bundle=exported["control_bundle"],
+                            provider=generate["provider"], seed=generate["seed"],
+                            options={"text": generate["text"]})
         log(f"generate: generated_sequence {result['generated_sequence']}  seed {result['seed']}")
-        log(f"  controls: {json.dumps(result['controls'])}")
+        log(f"  controls: {json.dumps(result['controls'])}  ignored in this call: {result['ignored']}")
         verified = agent.call(op="verify", scene_state=exported["scene_state"], bundle=exported["control_bundle"],
                               generated_sequence=result["generated_sequence"])
         log(f"verify: report {verified['report']}  verdict {verified['verdict']}")
-        paths = unpack_inputs(ArtifactStore(Path(cache) / "artifacts"), exported["scene_state"],
-                              exported["control_bundle"])
-        agent.call(op="create", id="generated", type="ConditionedRead", params={
-            "path": result["generated_sequence"], "manifest": paths["bundle"], "scene_state": paths["scene"]})
+        # `generate` hands out the ConditionedRead node that reads its result, the same one a loop does
+        agent.call(op="create", id="generated", **result["node"])
         agent.call(op="connect", id="grade", input="image", source="generated")
         agent.call(op="set", id="write", param="path", value=str(out / "shot.%04d.exr"))
         for frame in range(1, last + 1):
@@ -102,7 +88,7 @@ def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, lo
             "checks": {name: ("pass" if row.get("pass") else row.get("status", "FAIL"))
                        for name, row in verified["score_card"]["bindings"].items()},
             "determinism": verified.get("determinism"),
-            "controls": result["controls"], "text_refused": refusal, "provenance_links": len(provenance["chain"]),
+            "controls": result["controls"], "ignored": result["ignored"], "provenance_links": len(provenance["chain"]),
             "frames": last}
 
 

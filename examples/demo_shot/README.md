@@ -12,6 +12,7 @@ real model comes in stage 3 and only swaps the provider.
 | --- | --- |
 | `make_plate.py` | Renders the 24-frame plate to EXR and checks it against `plate.sha256.json`. |
 | `solve_camera.py` | Tracks the plate, solves the camera from it, compares with the rendering camera, writes `solve.json` and `demo_shot.nbcomp`. |
+| `diagnose_verdict.py` | Measures the verifier on the shot: each check's worst value, its threshold, and the same measurement for the plate against its own SceneState. |
 | `demo_shot.nbcomp` | The shot graph. |
 | `run_by_hand.py` | Headless run through the `nodebased.agent` dispatcher; prints artifact ids and the verdict. |
 | `BRIEF.md` | The one-sentence brief and the MCP tool sequence for the agent run (stage 4b). |
@@ -56,12 +57,15 @@ Error against the camera that rendered the plate, 24 frames (`solve.json`, same 
 | reprojection | 0.47 px | 0.64 px |
 
 The verifier's camera tolerance is 1 cm and 0.25 degrees, so the solved camera is close but outside
-it on position; the score card reports that.
+it on position. That does not enter the verdict: the verifier judges the generated pictures against
+the exported camera (the solved one), not the solve against the rendering camera.
 
 ## The shot graph
 
-`demo_shot.nbcomp`: `plate` (Read) and the solved `camera` (Camera3D); the layout (ground, cube, sphere,
-key light, environment light; the backdrop is left out because it is what gets replaced) in a Scene3D;
+`demo_shot.nbcomp`: `plate` (Read) and the solved `camera` (Camera3D); the layout (everything the plate
+shows: ground, pillar, crate, backdrop, cube, sphere, key light, environment light) in a Scene3D, so the
+exported SceneState describes the plate. The meshes are named (an object's id in the export hashes its
+name: two unnamed cubes shared one id and their measurements collided);
 `export` (WriteGeo3D, the SceneState and ControlBundle export) and `render` (Render3D, the passes the
 bundle carries); `generate` (Generate, provider `reproject`, seed 7, the brief in its text control);
 `grade` and `merge` (the result graded, then merged over the plate); `write` (Write, EXR). Two stages
@@ -72,10 +76,10 @@ sets it to wherever the plate was rendered.
 
 The brief, "replace the backdrop with a rainy street, keep the cube and sphere, match the camera",
 is in `generate`'s text control. `reproject` reports `text` as ignored (it also ignores normals, ids,
-reference frames and sampler settings; it uses depth, motion, camera pose and seed). Sending the
-text to the provider makes it refuse the call before any work ("cannot honour controls: text"), so
-the run records that refusal and sends the call again without the text. The stand-in therefore
-reprojects the layout's own render by its motion vectors; it does not paint a street.
+camera pose, reference frames and sampler settings; it uses depth, motion and seed). The run sends the
+text anyway: one `generate` call does the shot, and the reply, the sequence's `generation.json` and its
+provenance row record `text` as ignored. The stand-in carries each frame's layout render into the next
+by its motion vectors; it does not paint a street.
 
 ## Running it
 
@@ -86,15 +90,50 @@ It starts `python -m nodebased.agent` on the graph and sends the same commands a
 the artifact ids, the controls used and ignored, the per-check verdict and the provenance length. Output
 frames go to `$NODEBASED_CACHE/demo_shot/out`, the artifact store to `.../demo_shot/store`.
 
-Result on this machine's CPU (32 cores, no GPU used): **107 s** for the whole run at full size
+Result on this machine's CPU (32 cores, no GPU used): **155 s** for the whole run at full size
 (24 frames, 480 by 270), identical on a second run with a fresh store and output folder: same four
 artifact ids and same output pixels (`tests/test_demo_shot.py` asserts it at 160 by 90, 4 frames).
-The ids are listed in docs/END_TO_END_SPRINT.md under "Stage 4a". The verdict is FAIL: the camera,
-lighting and objects checks fail (the stand-in forward-warps the layout render by one frame of motion,
-so objects and lighting do not match the next frame's scene, and the solved camera is outside the
-verifier's tolerance), depth, motion and normals read "not conditioned".
+The ids are listed in docs/END_TO_END_SPRINT.md under "Stage 4a". **The verdict is PASS**: lighting and
+objects pass; camera, depth, motion and normals read "not conditioned" (`reproject` does not declare
+those honoured; its camera is a resampled copy, measured up to 29 cm off, see below).
 
-The provider worker has a 2 GiB address-space cap. On a many-core machine the numpy thread pools spend
-a third of it, so `run_by_hand.py` starts the agent with `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and
-`MKL_NUM_THREADS` at 2; without that, generate fails above roughly 300 by 180 pixels with "failed to
-map segment from shared object".
+## Why the verdict was FAIL, and what changed (stage 4a fix)
+
+The first hand run failed camera, lighting and objects. `diagnose_verdict.py` measured the plate itself
+against its own SceneState and found the verifier and the export wrong, not only the stand-in:
+
+| Finding | Measured | Fix |
+| --- | --- | --- |
+| The export rendered its references without the Render3D's ambient fill, and the verifier did the same | plate against the export: mean 0.05 per pixel, 32% of pixels differ | the SceneState records `ambient` per frame; export and verifier use it |
+| The layout left out the pillar, crate and backdrop the plate shows | plate against its SceneState could not match | the layout holds everything the plate shows |
+| Camera landmarks were tracked from the observed first frame: frame 1 scored zero by construction, later frames drifted with the dolly's change of scale, hidden vertices and straight-edge corners matched at random | plate against its own camera: 0.47 m worst | templates come from a render of the exported scene on the same frame; only visible vertices with corner structure count |
+| Object ids hash the name; two unnamed cubes or cards shared an id | 138 px error on the backdrop | the demo's meshes are named |
+| An object origin on a faintly shaded face matched 10 px away | crate, frames 9 and 15 of the plate | origins need corner structure like the camera landmarks |
+| No shadow in a scene whose light has shadows off (the default) was counted as missing evidence | lighting failed on the plate | no shadow in the reference means no shadow direction is demanded |
+| `reproject` 1.0 labelled frame N with frame N+1's picture (forward motion points at the next frame) | one dolly step, about 6 cm, in the camera solve | 1.1 carries frame N-1 into frame N; the first frame is copied |
+
+After the fixes, with the camera that rendered the plate (the solved camera is up to 5 cm off it, so
+against the solved graph the plate would fail the 1 cm check by construction), the plate against its own
+SceneState passes camera, objects and lighting; thresholds are unchanged (1 cm, 0.25 degrees, 0.1 degrees,
+2 px, 5 degrees, 0.05):
+
+| check (worst over 24 frames) | threshold | plate | `reproject` 1.1 |
+| --- | --- | --- | --- |
+| camera position | 0.01 m | 0.0000 | 0.2933 |
+| camera rotation | 0.25 degrees | 0.0369 | 0.4900 |
+| camera field of view | 0.1 degrees | 0.0000 | 1.6490 |
+| object origin | 2 px | 0.0000 | 0.7708 |
+| light direction | 5 degrees | 1.5322 | 1.7491 |
+| colour balance | 0.05 | 0.0000 | 0.0007 |
+
+(shadow direction: the key light has shadows off, so none is demanded.) The generated column is a
+resampled copy of the layout render, and pixel tracking at 480 by 270 cannot place a camera to 1 cm from
+a copy that is off by a fraction of a pixel in places, so the camera check reads "not conditioned" for
+`reproject`, whose description no longer declares camera pose honoured (it only decodes the motion
+vectors). Reproduce the table: `python examples/demo_shot/diagnose_verdict.py` (about 4 minutes).
+
+One `generate` call now does the shot: the text brief is recorded as ignored instead of refused, and
+the reply carries the ConditionedRead node parameters (the hand run creates `generated` from them), the
+same ones a one-attempt loop returns, with the same ids. The provider worker limits numpy's thread
+pools itself and sizes its address-space cap from the job, so no caller sets thread variables: 24 frames
+of 480 by 270 died on the 2 GiB cap before and run now.
