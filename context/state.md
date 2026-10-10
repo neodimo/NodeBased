@@ -1,3 +1,13 @@
+## Lane 6 P2 interactive cached-fluid preview — partial (2026-10-09)
+
+**Evidence.** Preview tier keeps FluidSolver3D/FluidLiquidSolver3D resolution unchanged, so the viewer uses their full-resolution simulation cache. FluidSurface3D deterministically subsamples particles in tier-sized cells before rebuilding its display mesh. Cached volumes are averaged to the selected tier; the transformed box bounds remain equal within 1e-6 and integrated density within 1e-6 relative error. The viewer's proxy badge follows the displayed frame. Stop restores tier 1, queues a full-detail render, and a desktop test settles it within one second. Checked 253 focused tests plus 7 knowledge tests.
+
+Active 24-frame Hot pour, 64³ liquid / 48³ smoke, 960 × 540 viewport: 1/4 preview median 14.96 FPS on the AMD Radeon 8060S and 11.06 FPS on llvmpipe. The Radeon meets 12 FPS in this reduced active scene. The full 256³ / 192³ preset was not rebenchmarked, so its 12 FPS target and one-second refinement remain unverified; the step is partial. llvmpipe remains under 12 FPS.
+
+Commits on `openclaw/nb-fluids-spike`: `af9e4fb` preview and tests, `25afbb3` benchmark code and result JSON, `1aee7f7` docs. `docs/FLUIDS_SPIKE.md` and `nodebased/data/docs/FLUIDS_SPIKE.md` are byte-identical. Temporary cache artifacts are deliberate scratch under `/tmp/hot-pour-preview-radeon-64-2026-10-09` and `/tmp/hot-pour-preview-llvmpipe-64-2026-10-09`. No Windows run or real-display visual QA.
+
+**Next owner:** Gonzo decides whether to benchmark the production preset, with `tools/benchmark_hot_pour.py --playback --preview-tier 4` against its full cache. Integration is pending.
+
 ## Lane 4 R2 finish 1 — host work around GPU renders (2026-10-09, 6:40 PM)
 
 Branch `openclaw/nb-3d-astra-lane` at the commit after `05cc689`. GPU path-traced renders keep scene buffers, accumulator, bind groups and readback buffers between frames; surface scenes take 4 samples per dispatch, smoke and splats 2; callers that set `stats["skip_noise_maps"]` get the image finished on the card. RTX host cost per frame (640 by 360): Z1 fixed 3.0 ms (target met), smoke 4.2 ms, Z1 adaptive 4.3 ms; Radeon 1.4 to 3.0 ms. Details, before/after by phase and the open per-band readback idea: R2 section of `docs/BENCHMARKS-v0.35-portable-render.md`. Tools: `tools/profile_host_phases.py`; data: `benchmarks/host_phases/`, `benchmarks/portable_render/r2/`.

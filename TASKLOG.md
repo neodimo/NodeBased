@@ -1,3 +1,10 @@
+## 2026-10-09 — Lane 6 P2: interactive cached-fluid preview (partial)
+
+- **What was done:** viewer proxy tiers now preserve fluid solver cache identity, thin liquid particles before surface extraction and reduce cached volume grids while preserving world bounds and integrated density. Stop restores full detail and the badge reports the displayed tier. Measured 1/4 preview at 14.96 FPS Radeon and 11.06 FPS llvmpipe for an active 64³/48³, 24-frame Hot pour.
+- **Artifacts:** commits `af9e4fb`, `25afbb3`, `1aee7f7`; benchmark JSON in `benchmarks/hot_pour/*-preview-2026-10-09.json`; docs and bundled copy synchronized. Temporary run caches remain deliberate scratch in `/tmp/hot-pour-preview-radeon-64-2026-10-09` and `/tmp/hot-pour-preview-llvmpipe-64-2026-10-09`.
+- **State:** partial. Targeted implementation/UI/cache tests and knowledge checks passed. The production 256³/192³ 120-frame preview rate and its one-second full-detail settle were not benchmarked; Radeon target at production size remains unverified.
+- **Next owner + concrete artifact:** Gonzo to decide whether to extend the benchmark to the production preset, using `tools/benchmark_hot_pour.py --playback --preview-tier 4` with a full cache. Integration remains pending on `openclaw/nb-fluids-spike`.
+
 ## 2026-10-09 — Lane 4 (Rendering) step R2 of 2, finish 1: the 12 ms of host work around every GPU render (worker note, 6:40 PM)
 
 - **What was done (measured unless marked):** finish pass over the PARTIAL first pass. New commits on `openclaw/nb-3d-astra-lane` after `b9d7708`: `290abf0` (volume grids copied once into the scene buffer), `d4f01c3` (surface scenes take 4 samples per dispatch, not 8: the first pass's 8 made X1 on the Radeon 112 ms against 77 ms), `5ea85ec` (final host-phase rows on the three adapters, the full portable matrix rerun on all three in `benchmarks/portable_render/r2/`, `tests/test_profile_host_phases.py`), `05cc689` (docs: R2 section with the before/after phase tables, the RTX target check, the rerun table, the bundled copy byte-identical). Host cost on the RTX (640 by 360, profile, ms): Z1 fixed 64 21.7 -> 3.0 (target met); smoke grid 21.2 -> 4.2, smoke box 24.9 -> 4.2, Z1 adaptive 12.8 -> 4.3 (just over 4 ms; an earlier run of the same smoke code read 5.9 to 6.1). Radeon 1.4 to 3.0 ms on all four cases. Images unchanged: PSNR and error columns equal the earlier rows on all 24 rows.
@@ -14,4 +21,3 @@
 - **What was done:** `main` `b9d7708` -> `b89c229` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `b89c229`: Ran 4876 tests in 11338.423 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
-
