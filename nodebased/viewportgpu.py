@@ -1633,7 +1633,7 @@ class ViewportRenderer:
                 opaque = source.color[3] >= 0.999 and texture_opaque and projection is None
                 instance_groups.append((opaque, source, mesh_buffer, index_buffer, index_count, view,
                                         buffer, first, count, mesh_radius, data, lods))
-                instance_links.append(instance_set.light_link)
+                instance_links.append((instance_set.light_link, source.cast_shadows))
         object_count = len(scene.geometries) + len(scene.splats) + len(instance_groups)
         uniforms = np.zeros((max(object_count, 1), _OBJECT_STRIDE // 4), np.float32)
         # Light linking: each object row carries the bit mask of the lights it excludes (light i is bit i, the dome the bit
@@ -1641,11 +1641,13 @@ class ViewportRenderer:
         link_order = [light for light, *_rest in lights] + list(scene.environments[:1])
         object_excl = self._object_excl = {}
 
-        def link_row(row, index, link):
+        def link_row(row, index, link, casts=True):
             mask = gpu3d.link_mask(link, link_order)
             row[66] = mask
-            if mask:
-                object_excl[index] = int(mask)
+            # the shadow pass also skips a mesh whose `cast_shadows` is off, for every light (it is still drawn and lit)
+            shadow_mask = mask if casts else gpu3d.NO_CAST_MASK
+            if shadow_mask:
+                object_excl[index] = int(shadow_mask)
         for index, geometry in enumerate(scene.geometries):
             buffer, count, _arrays = self._mesh(geometry, used_meshes)
             if not count:
@@ -1663,7 +1665,7 @@ class ViewportRenderer:
             row[:16], row[16:32] = matrix.T.ravel(), normal.T.ravel()
             row[32:36] = geometry.color
             row[36:40] = geometry.specular, geometry.shininess, geometry.emission, float(image is not None)
-            link_row(row, index, geometry.light_link)
+            link_row(row, index, geometry.light_link, geometry.cast_shadows)
             if geometry.material == "pbr":
                 row[68:72] = (1.0, geometry.metallic, geometry.pbr_roughness,
                              0.08 * float(np.clip(geometry.pbr_specular, 0, 1)))
@@ -1716,7 +1718,7 @@ class ViewportRenderer:
             projection = source.projection
             image = projection.texture if projection is not None else source.texture
             row[36:40] = source.specular, source.shininess, source.emission, float(image is not None)
-            link_row(row, offset, instance_links[offset - len(scene.geometries) - len(scene.splats)])
+            link_row(row, offset, *instance_links[offset - len(scene.geometries) - len(scene.splats)])
             if source.material == "pbr":
                 row[68:72] = (1.0, source.metallic, source.pbr_roughness,
                              0.08 * float(np.clip(source.pbr_specular, 0, 1)))
