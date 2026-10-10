@@ -51,7 +51,8 @@ class KnowledgeTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         names = ("VISION.md", "ARCHITECTURE.md", "AGENT_PROTOCOL.md", "COLOR_MANAGEMENT.md",
                  "PLAYBACK.md", "ANIMATION.md", "ROTO_TRACKING.md", "TIME_MODEL.md",
-                 "RELEASE_NOTES.md", "3D_FOUNDATION.md", "3D_ROADMAP.md", "SIMULATION.md")
+                 "RELEASE_NOTES.md", "3D_FOUNDATION.md", "3D_ROADMAP.md", "SIMULATION.md",
+                 "SHOT_WORKFLOW.md")
         for name in names:
             with self.subTest(document=name):
                 self.assertEqual((root / "docs" / name).read_bytes(),

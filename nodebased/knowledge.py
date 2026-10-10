@@ -21,6 +21,7 @@ TOPICS = (
     "time_model",
     "three_d",
     "simulation",
+    "shot_workflow",
     "version",
     "limits",
     "live_state",
@@ -36,6 +37,7 @@ _DOC_NAMES = {
     "time_model": ("TIME_MODEL.md",),
     "three_d": ("3D_FOUNDATION.md", "3D_ROADMAP.md"),
     "simulation": ("SIMULATION.md",),
+    "shot_workflow": ("SHOT_WORKFLOW.md",),
 }
 
 

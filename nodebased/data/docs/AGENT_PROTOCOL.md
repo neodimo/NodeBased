@@ -171,14 +171,36 @@ Tools:
   Dispatcher only accepts graph-editing ops inside a `batch`.
 - `undo`, `redo`, `view`, `errors`, `reference_context` — proxy the matching op unchanged.
 - `knowledge` — `{topic}`, one of the topics in `nodebased.knowledge.TOPICS` (`overview`, `nodes`,
-  `protocol`, `colour`, `playback`, `animation`, `roto_tracking`, `time_model`, `three_d`, `version`,
-  `limits`) plus `live_state`. Every topic except `live_state` works even without a reachable GUI
+  `protocol`, `colour`, `playback`, `animation`, `roto_tracking`, `time_model`, `three_d`,
+  `shot_workflow`, `version`, `limits`) plus `live_state`. Every topic except `live_state` works even without a reachable GUI
   endpoint (it reads the shipped docs/spec data directly); `live_state` calls `inspect`/`errors`
   on the bridge and summarizes the current nodes and render errors as JSON.
 - `file_issue` — `{title, body, labels}`. Files a GitHub issue on `neodimo/NodeBased` (`gh` CLI if
   present, else the REST API with a `GITHUB_TOKEN`/`gh auth token` token), tags the body with a
   version/OS/agent footer, and appends an entry to a local log. Refused when the "Allow the agent
   to file GitHub issues" setting (on by default) is off.
+
+Pipeline tools (a shot from scene to generated result; order of operations in
+`docs/SHOT_WORKFLOW.md`, `knowledge` topic `shot_workflow`). Each is one bridge op of the same name,
+so it shows in the Agent panel's activity log:
+
+- `export_conditioning` — `{id, first, last, camera}`. Exports SceneState and ControlBundle for a
+  `WriteGeo3D` or `Render3D` node (or a scene node plus `camera`) into the artifact store; returns
+  `scene_state` and `control_bundle` artifact ids.
+- `generate` — `{scene_state, bundle, provider, options, output_pattern}`. Runs a local provider
+  and returns the `generated_sequence` artifact id. `output_pattern` writes outside the artifact
+  store and is refused unless `agent/allow_disk_ops` is on. Queued (remote) providers go through
+  `loop`.
+- `verify` — `{scene_state, bundle, generated_sequence}`. Returns the score card and report id.
+- `loop` — `{action}`: `start` (`scene_state`, `bundle`, `provider`, `max_attempts`, `spend_cap`,
+  `estimate`, `unit`, optional `text`, `feedback`), `status` (`loop`; without it, the recent loops),
+  `cancel`, `use_result` (`loop`, optional `attempt`; returns the `ConditionedRead` parameters).
+- `artifacts` — `{action}`: `list` (`kind`, `limit`) or `provenance` (`id`), the chain that
+  `python -m nodebased.artifacts provenance <id>` prints, as JSON.
+- `workspace` — `{tab}`: `Composite`, `3D`, `Simulate` or `Render`.
+
+The headless `python -m nodebased.agent` dispatcher accepts the same ops except `workspace`, which
+needs the window.
 
 Every knowledge topic is also exposed as an MCP resource at `knowledge://<topic>`.
 
