@@ -1463,6 +1463,32 @@ by another, on the GPU raster preview and the GPU path tracer, matches the CPU r
 link, and the scene that never held the excluded light; excluded from the overhead light it throws no shadow on a floor. Test:
 `tests.test_sparse_light_links`, passing on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.
 
+### P2: interactive cached-simulation preview (2026-10-09)
+
+During playback or scrubbing, the viewer's existing proxy tier now reuses the full-resolution fluid
+simulation cache, thins liquid particles per coarse spatial cell before surface extraction, and
+area-averages cached volume fields for Render3D. A compensating transform preserves volume bounds;
+density is renormalized so integrated density agrees within 1e-6 relative error. The current tier
+remains visible in the viewer's `proxy 1/n` badge. Stopping restores the artist's tier and queues a
+full-detail render; the desktop test verifies refinement within one second. The 1/4 image tier
+renders 240 × 135 from the 960 × 540 benchmark viewport.
+
+Active Hot pour preview playback, 24 frames, median FPS:
+
+| Adapter | Liquid / steam cap | Full-detail scene | Preview 1/4 |
+|---|---:|---:|---:|
+| AMD Radeon 8060S | 64³ / 48³ | 14.56 | 14.96 |
+| llvmpipe | 64³ / 48³ | 11.94 | 11.06 |
+
+The Radeon preview exceeds the 12 FPS target on this active reduced scene. Peak playback content
+was 1,728 liquid particles, 10,412 surface triangles and 216 sparse steam tiles. The preview adds
+little speed at this small cache size; the full 256³ / 192³ Hot pour preset was not remeasured for
+P2, so its 12 FPS target and full-resolution Hot pour's one-second refinement remain unverified.
+The llvmpipe preview is below 12 FPS. Benchmark records:
+`benchmarks/hot_pour/radeon-preview-2026-10-09.json` and
+`benchmarks/hot_pour/llvmpipe-preview-2026-10-09.json`. Targeted coverage is in
+`tests.test_scene3d_proxy`, `tests.test_tiers` and `tests.test_desktop.PlaybackProxyToggleTests`.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up

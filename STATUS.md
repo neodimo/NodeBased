@@ -1,3 +1,10 @@
+# Lane 6 P2 — interactive cached-fluid preview — PARTIAL (2026-10-09)
+
+Preview implementation, UI behavior, benchmark records and docs are committed. Active 64³/48³,
+24-frame Hot pour preview measured 14.96 FPS on Radeon and 11.06 FPS on llvmpipe. The production
+256³/192³ preset was not benchmarked, so its playback target remains unverified. Targeted checks
+passed. Waiting for integration; Gonzo owns deciding any production-size follow-up.
+
 # Lane 6 N3 finish 1 — active (2026-10-08, 12:57 AM PDT)
 
 The full-size Radeon bake was regenerated (1,940.5 s) and committed with updated metrics in `benchmarks/hot_pour/radeon-full-bake.json` and `docs/SIMULATION.md`; cache is at `/tmp/hot-pour-integrated-full-1008`. Playback command is queued on `/tmp/nb-gpu.lock` behind a parallel `python -m unittest discover -s tests` process, active for >32 min; do not interrupt it. RTX stays pending card reset. Remaining: playback, stills, reduced Radeon/llvmpipe runs, targeted Hot pour tests, and final issue/board/report update.
