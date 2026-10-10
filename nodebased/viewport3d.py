@@ -83,6 +83,8 @@ _GRID = _line_vertices([(start, end, color if color[:3] != (0.25, 0.25, 0.25) el
 class Viewport3D(QWidget):
     def __init__(self, window=None, parent=None):
         super().__init__(parent)
+        # How far down the viewer's floating strip reaches; the top lines are drawn below it.
+        self.top_inset = 0
         self.window = window
         self.document = None
         self.azimuth, self.elevation, self.distance = HOME
@@ -567,16 +569,17 @@ class Viewport3D(QWidget):
         self._draw_selection(painter, camera)
         self._draw_fluid_domain_bounds(painter, scene, camera)
         self._draw_gizmo(painter, camera)
+        top = self.top_inset
         painter.setPen(QColor("#d8d8df"))
         mode = "through camera (C to leave)" if self.look_through and authored is not None else \
             f"orbit LMB · pan MMB · dolly wheel · F frame · C camera · W/E/R gizmo [{self.gizmo_mode}] · " \
             "Q pivot mode · B background · P render"
         if self.pivot_mode and not self.look_through:
             painter.setPen(QColor("#f4ce63"))
-            painter.drawText(12, 62, "PIVOT MODE")
+            painter.drawText(12, top + 40, "PIVOT MODE")
             painter.setPen(QColor("#d8d8df"))
         if self.splat_note:  # splat discs are bright and busy: back the text so it stays readable
-            painter.fillRect(0, 0, self.width(), 30, QColor(10, 10, 12, 170))
+            painter.fillRect(0, top, self.width(), 30, QColor(10, 10, 12, 170))
             painter.fillRect(0, self.height() - 28, self.width(), 28, QColor(10, 10, 12, 170))
             painter.drawText(12, self.height() - 10, self.splat_note)
         if self.volume_note:
@@ -590,10 +593,10 @@ class Viewport3D(QWidget):
         if self.render_note:
             painter.fillRect(0, self.height() - 28, self.width(), 28, QColor(10, 10, 12, 170))
             painter.drawText(12, self.height() - 10, self.render_note)
-        painter.drawText(12, 22, f"3D VIEWPORT · {backend} · {mode}")
+        painter.drawText(12, top + 20, f"3D VIEWPORT · {backend} · {mode}")
         if self.status:
             painter.setPen(QColor("#e06f6f"))
-            painter.drawText(12, 42, self.status[:160])
+            painter.drawText(12, top + 40, self.status[:160])
         if self.show_sim_stats:
             overlay_started = time.perf_counter()
             # Cache inspection runs on a separate Qt turn. A changing simulation frame never

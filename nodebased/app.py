@@ -87,6 +87,7 @@ from .timeline import (PLAY_ICON, STEP_BACK_ICON, STEP_FORWARD_ICON, STOP_ICON, 
                        transport_icon)
 from .topbar import StatusDot
 from .shortcuthelp import ShortcutOverlay
+from .outputpreview import OutputPreview
 from .viewerstrip import ChannelButtons, CornerReadouts, PixelReadout, ViewerStrip
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from .groups import scope_document
@@ -6420,6 +6421,9 @@ class Window(QMainWindow):
         index = self.VIEWER_MODES.index(mode)
         changed = self.view_stack.currentIndex() != index
         self.view_stack.setCurrentIndex(index)
+        self.viewer_corners.set_active(mode == "2d")
+        # The stack raises the page it shows, which would cover the strip: put it back on top.
+        self.viewer_strip.place()
         for name, button in self.viewer_mode_buttons.items():
             button.setChecked(name == mode)
         if changed:
@@ -6436,20 +6440,140 @@ class Window(QMainWindow):
     # never close a panel the artist opened.
     WORKSPACE_TAB_VIEW = {"Composite": "2d", "3D": "3d", "Simulate": "3d", "Render": "2d"}
 
+    # Simulate and Render have a dock layout of their own; Composite and 3D share the artist's
+    # layout. Leaving a layout saves its dock state (QSettings, per layout), entering one restores
+    # it, so going back to Composite returns the exact arrangement that was left.
+    TAB_LAYOUT = {"Composite": "Composite", "3D": "Composite", "Simulate": "Simulate", "Render": "Render"}
+    TAB_LAYOUT_KEY = "tab_layouts"
+
     def select_workspace_tab(self, name):
         if name not in self.WORKSPACE_TAB_VIEW:
             raise ValueError(f"workspace tab must be one of {tuple(self.WORKSPACE_TAB_VIEW)}")
         self.workspace_tab = name
         self.topbar.tabs.set_current(name)
+        self._enter_tab_layout(self.TAB_LAYOUT[name])
         if name == "3D" or name == "Simulate":
             self.show_viewport_3d()
         else:
             self.set_viewer_mode("2d")
-        if name == "Simulate":
-            self.slice_dock.show()
-            self.cache_inspector_dock.show()
-        elif name == "Render":
-            self.queue_dock.show()
+        if name == "Render":
+            self._show_viewed_write()
+
+    def _tab_layout_store(self):
+        return QSettings("NodeBased", "NodeBased")
+
+    def _enter_tab_layout(self, layout):
+        """Save the layout being left and restore (or, the first time, build) the one entered."""
+        current = getattr(self, "_tab_layout", "Composite")
+        if layout == current:
+            return
+        store = self._tab_layout_store()
+        states = self._tab_layout_states
+        states[current] = self.saveState(Preferences.WORKSPACE_VERSION)
+        store.setValue(f"{self.TAB_LAYOUT_KEY}/{current}", states[current])
+        store.setValue(f"{self.TAB_LAYOUT_KEY}/version", Preferences.WORKSPACE_VERSION)
+        store.sync()
+        self._tab_layout = layout
+        state = states.get(layout)
+        if state is None and layout != "Composite":
+            saved = store.value(f"{self.TAB_LAYOUT_KEY}/{layout}")
+            try:
+                version = int(store.value(f"{self.TAB_LAYOUT_KEY}/version", 0))
+            except (TypeError, ValueError):
+                version = 0
+            if isinstance(saved, QByteArray) and not saved.isEmpty() and version == Preferences.WORKSPACE_VERSION:
+                state = saved
+        if state is not None and self.restoreState(state, Preferences.WORKSPACE_VERSION):
+            self._after_layout_change()
+            return
+        if layout == "Simulate":
+            self._build_simulate_layout()
+        elif layout == "Render":
+            self._build_render_layout()
+        self._after_layout_change()
+
+    def _after_layout_change(self):
+        self.layout().activate()
+        QApplication.processEvents()
+
+    def _workspace_state_for_save(self):
+        """The Composite arrangement, whichever tab is open: the next launch starts in Composite."""
+        if getattr(self, "_tab_layout", "Composite") == "Composite":
+            return self.saveState(Preferences.WORKSPACE_VERSION)
+        return self._tab_layout_states.get("Composite") or self.saveState(Preferences.WORKSPACE_VERSION)
+
+    def _lower_row(self, first, second):
+        """Put two docks side by side where the node graph sits, under the viewer, and hide the
+        graph and NODES docks (Composite brings them back)."""
+        properties_width = self.properties_dock.width()
+        for dock in (self.graph_dock, self.nodes_dock):
+            dock.hide()
+        for dock in (first, second):
+            if dock.isFloating():
+                dock.setFloating(False)
+            self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+        self.splitDockWidget(self.viewer_dock, first, Qt.Orientation.Vertical)
+        self.splitDockWidget(first, second, Qt.Orientation.Horizontal)
+        first.show()
+        second.show()
+        self.viewer_dock.show()
+        self.layout().activate()
+        total = self.viewer_dock.height() + first.height()
+        self.resizeDocks([self.viewer_dock, first], [round(total * 0.64), total - round(total * 0.64)],
+                         Qt.Orientation.Vertical)
+        row = first.width() + second.width()
+        self.resizeDocks([first, second], [row // 2, row - row // 2], Qt.Orientation.Horizontal)
+        if properties_width > 0:
+            self.resizeDocks([self.viewer_dock, self.properties_dock],
+                             [self.viewer_dock.width() + self.properties_dock.width() - properties_width,
+                              properties_width], Qt.Orientation.Horizontal)
+        self.properties_dock.show()
+        self.properties_dock.raise_()
+
+    def _build_simulate_layout(self):
+        """3D viewport on top, the timeline under it (part of the viewer), then the cache inspector
+        and the slice viewer side by side; Properties keeps its width."""
+        self._lower_row(self.cache_inspector_dock, self.slice_dock)
+
+    def _build_render_layout(self):
+        """The queue and the output preview where the node graph sits; Write nodes' Properties on
+        the right."""
+        self._lower_row(self.queue_dock, self.output_preview_dock)
+
+    def write_nodes(self):
+        return [key for key, node in self.dispatcher.document["nodes"].items() if node["type"] == "Write"]
+
+    def _show_viewed_write(self):
+        """Render tab: the viewer shows a Write node and Properties shows its knobs."""
+        document = self.dispatcher.document
+        writes = self.write_nodes()
+        if not writes:
+            self.refresh_output_preview()
+            return
+        selected = self.graph.selected_id()
+        target = selected if selected in writes else (document["view"] if document["view"] in writes else writes[0])
+        if document["view"] != target:
+            self.command({"op": "view", "id": target})
+        item = self.graph.items_by_id.get(target)
+        if item is not None and not item.isSelected():
+            self.graph.scene().clearSelection()
+            item.setSelected(True)
+        self.refresh_output_preview()
+
+    def refresh_output_preview(self):
+        if not hasattr(self, "output_preview") or not self.output_preview_dock.isVisible():
+            return
+        document = self.dispatcher.document
+        node = document["nodes"].get(document["view"])
+        if node is not None and node["type"] == "Write":
+            params = node["params"]
+            details = "  ·  ".join(part for part in (
+                params.get("path") or "no file set", params.get("file_type"), params.get("bit_depth")) if part)
+            self.output_preview.set_write(node_label(node), details)
+        else:
+            self.output_preview.set_write(None, "")
+        image = getattr(self.viewer, "last_display_image", None)
+        self.output_preview.set_image(image)
 
     def _follow_viewer_mode_in_tabs(self, mode):
         """The viewer mode can also change from the viewer's own 2D / 3D buttons or Tab; keep the
@@ -6460,6 +6584,7 @@ class Window(QMainWindow):
             self.workspace_tab = "3D"
         elif mode == "2d" and self.workspace_tab in ("3D", "Simulate"):
             self.workspace_tab = "Composite"
+        self._enter_tab_layout(self.TAB_LAYOUT[self.workspace_tab])
         self.topbar.tabs.set_current(self.workspace_tab)
 
     def node_search_from_topbar(self):
@@ -6764,6 +6889,8 @@ class Window(QMainWindow):
         cache_action.triggered.connect(lambda: self.cache_inspector_dock.setVisible(not self.cache_inspector_dock.isVisible()))
         self.topbar_actions["Cache inspector"] = cache_action
         self.workspace_tab = "Composite"
+        self._tab_layout = "Composite"
+        self._tab_layout_states = {}
         self.last_frame_ms = None
         self.updater = Updater(self)
         self.updater.changed.connect(self.update_status)
@@ -7075,13 +7202,25 @@ class Window(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.queue_dock)
         self.tabifyDockWidget(self.properties_dock, self.queue_dock)
         self.queue_dock.hide()
+        self.output_preview_dock = QDockWidget("OUTPUT PREVIEW", self)
+        self.output_preview_dock.setObjectName("output-preview-dock")
+        self.output_preview_dock.setMinimumWidth(0)
+        self.output_preview_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                                             QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                                             QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        self.output_preview = OutputPreview(self)
+        self.output_preview_dock.setWidget(self.output_preview)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.output_preview_dock)
+        self.tabifyDockWidget(self.properties_dock, self.output_preview_dock)
+        self.output_preview_dock.hide()
+        self.output_preview_dock.visibilityChanged.connect(lambda _shown: self.refresh_output_preview())
         # The category bar replaces the permanently open NODES dock.  Keep the full browser
         # reachable for Ctrl+F, presets and drag-to-place workflows.
         self.nodes_dock.hide()
         self.workspace_docks = [self.viewer_dock, self.graph_dock, self.properties_dock,
                                 self.nodes_dock, self.slice_dock,
                                 self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock,
-                                self.queue_dock]
+                                self.queue_dock, self.output_preview_dock]
         # QMainWindow otherwise divides a new, three-dock left column almost evenly, leaving
         # the viewer's actual canvas shorter than its controls and timeline.  Give the shared
         # 2D/3D viewer the largest share of the default workspace; artists can resize afterwards.
@@ -7676,8 +7815,7 @@ class Window(QMainWindow):
 
     def save_workspace(self):
         """Remember window placement, dock layout and panel dividers for the next launch."""
-        self.preferences.set_workspace(self.saveGeometry(),
-                                       self.saveState(Preferences.WORKSPACE_VERSION))
+        self.preferences.set_workspace(self.saveGeometry(), self._workspace_state_for_save())
         store = QSettings("NodeBased", "NodeBased")
         store.setValue("workspace/floating", self._floating_dock_geometry())
         store.setValue("workspace/metrics", {"size": [self.width(), self.height()],
@@ -7710,7 +7848,7 @@ class Window(QMainWindow):
         names = list(dict.fromkeys([*names, name]))
         store.setValue("workspaces/names", names)
         store.setValue(f"workspaces/{name}/geometry", self.saveGeometry())
-        store.setValue(f"workspaces/{name}/state", self.saveState(Preferences.WORKSPACE_VERSION))
+        store.setValue(f"workspaces/{name}/state", self._workspace_state_for_save())
         store.setValue(f"workspaces/{name}/floating", self._floating_dock_geometry())
         store.setValue(f"workspaces/{name}/metrics", {"size": [self.width(), self.height()],
                                                        "docks": self._dock_size_metrics()})
@@ -7773,7 +7911,7 @@ class Window(QMainWindow):
     def set_default_workspace(self):
         store = QSettings("NodeBased", "NodeBased")
         store.setValue("workspaces/default/geometry", self.saveGeometry())
-        store.setValue("workspaces/default/state", self.saveState(Preferences.WORKSPACE_VERSION))
+        store.setValue("workspaces/default/state", self._workspace_state_for_save())
         store.setValue("workspaces/default/floating", self._floating_dock_geometry())
         store.setValue("workspaces/default/metrics", {"size": [self.width(), self.height()],
                                                        "docks": self._dock_size_metrics()})
@@ -11731,6 +11869,9 @@ class Window(QMainWindow):
         self.viewer.last_scale = scale
         self.viewer.last_render_region = render_region
         self.viewer.last_frame_size = (image.width(), image.height())
+        self.viewer.last_display_image = image
+        if self.output_preview_dock.isVisible():
+            self.refresh_output_preview()
         self.viewer.scene().clear()
         if scale != 1:
             # Show the proxy at the comp's real size so framing, pans and zooms do not change

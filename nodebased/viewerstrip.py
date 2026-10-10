@@ -330,6 +330,9 @@ class ViewerStrip(QFrame):
         height = self.sizeHint().height()
         self.setGeometry((parent.width() - width) // 2, STRIP_TOP, width, height)
         self.raise_()
+        viewport = getattr(self.window, "viewport", None)
+        if viewport is not None:
+            viewport.top_inset = self.band_height()
 
     def band_height(self):
         """How far down the strip reaches, with a gap: the picture is fitted below this line."""
@@ -439,6 +442,12 @@ class CornerReadouts(QObject):
         pixel_readout.installEventFilter(self)
         self.left.show()
         self.right.show()
+
+    def set_active(self, active):
+        """The corners describe the 2D picture (size, colour space, proxy, pixel, zoom); the 3D
+        viewport draws its own lines along the bottom edge, so the corners step aside for it."""
+        self.left.setVisible(active)
+        self.right.setVisible(active)
 
     def set_image(self, width, height, space, proxy):
         self.resolution.setText(f"{width} × {height}" if width and height else "")
