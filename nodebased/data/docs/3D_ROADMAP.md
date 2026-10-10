@@ -352,7 +352,8 @@ Blinn-Phong specular and emission, named AOVs (one per `Render3D`), a CPU BVH an
 GPU shadows on relit splats and splat shadow catching are built (L4 step D). Not built: transparent-mesh layering with splats on the GPU, GPU splat AOVs,
 reflections, global illumination, physically based materials, shadows
 in the viewport. Per-object cast shadows, receive shadows and visible-to-camera switches for meshes are built (plan "Rendering 7",
-step R1; docs/3D_FOUNDATION.md "Per-object render switches").
+step R1; docs/3D_FOUNDATION.md "Per-object render switches"), and so is a per-mesh Holdout (step R2; "Holdouts"): a stand-in that
+cuts whatever lies behind it out of the render and every data pass, with a compositing recipe over a plate.
 
 ## Design: Gaussian splats and relighting (written before implementation)
 

@@ -370,3 +370,150 @@ class DataPassTests(unittest.TestCase):
                 self.assertTrue(np.all(ball_cut <= ball_alone + 1e-6))
                 self.assertGreater(float(self.coverage_of(*ordinary, "Card").max()), .99)
                 self.assertEqual(float(self.coverage_of(*cut, "Card").max()), 0.0, "the holdout has no coverage of its own")
+
+
+SPLAT_SUN = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(0, 0, 0), s.Vec3(0.3, -0.2, -1.0))
+SMALL = (40, 40)
+SMOKE_CAMERA = s.Camera(s.Transform3D(position=s.Vec3(0, 0, 5)), s.Vec3(0, 0, 0), 30.0)
+LEFT, RIGHT = (slice(14, 27), slice(6, 18)), (slice(14, 27), slice(22, 34))      # clear of the card, behind the card
+SMALL_PATH = pt.PathSettings(samples=16, max_bounces=1, diffuse_bounces=1)
+
+
+def small_card(z):
+    """A holdout over the right half of a 40 x 40 picture of the origin, `z` in front of it."""
+    return s.Geometry(np.array([[0, -1.5, z], [1.5, -1.5, z], [1.5, 1.5, z], [0, 1.5, z]], "f4"),
+                      np.array([[0, 1, 2], [0, 2, 3]], "i4"), HOLD_COLOR, holdout=True, cast_shadows=False)
+
+
+class BehindTests(unittest.TestCase):
+    """Splats, particles and smoke behind a holdout are cut out; the ones in front of it are not (CPU modes, both path
+    tracers); the GPU raster and ray-traced modes hand those scenes to the CPU by raising `Unsupported`."""
+
+    @staticmethod
+    def pictures(scene_in, output="rgba", volume=None):
+        yield "cpu raster", s.render(scene_in, SMOKE_CAMERA, *SMALL, ambient=.1, mode="raster", output=output, volume=volume)
+        yield "cpu ray traced", s.render(scene_in, SMOKE_CAMERA, *SMALL, ambient=.1, mode="raytrace", output=output, volume=volume)
+        yield "cpu path tracer", pt.render(scene_in, SMOKE_CAMERA, *SMALL, BLACK, .1, output, SMALL_PATH, backend="cpu", volume=volume)
+        if gpu3d.available():
+            yield "gpu path tracer", pt.render(scene_in, SMOKE_CAMERA, *SMALL, BLACK, .1, output, SMALL_PATH, backend="gpu", volume=volume)
+
+    def check(self, behind, in_front, outputs=("rgba", "depth", "object_id"), volume=None, tolerance=2e-3):
+        """`behind`: the holdout is in front of the things; `in_front`: they are in front of it. Each is compared with the same
+        scene with the card hidden from the camera (so that object ids stay the same), which is the picture as if no card cut."""
+        def hidden(scene_in):
+            return replace(scene_in, geometries=tuple(replace(g, holdout=False, visible_to_camera=False) for g in scene_in.geometries))
+        for output in outputs:
+            cut, kept = dict(self.pictures(behind, output, volume)), dict(self.pictures(in_front, output, volume))
+            bare, bare_kept = dict(self.pictures(hidden(behind), output, volume)), dict(self.pictures(hidden(in_front), output, volume))
+            for name in cut:
+                with self.subTest(renderer=name, output=output):
+                    if output != "rgba" and name.endswith("path tracer") and float(bare[name][..., 3].max()) == 0:
+                        continue            # the path tracer's data passes do not draw particles
+                    there = bare[name][..., 3] > .5
+                    behind_the_card = np.zeros_like(there)
+                    behind_the_card[RIGHT] = there[RIGHT]
+                    self.assertGreater(int(behind_the_card.sum()), 20, "something is there to cut")
+                    self.assertTrue(np.all(cut[name][behind_the_card] == 0), "cut out behind the card")
+                    if name.endswith("path tracer") and output == "rgba":
+                        # the hidden card is still a surface that light bounces off; the holdout is not, so the pictures differ by
+                        # that bounce light (and by sampling noise)
+                        for got, want in ((cut[name][LEFT], bare[name][LEFT]), (kept[name][RIGHT], bare_kept[name][RIGHT])):
+                            self.assertLess(float(np.abs(got - want).mean()), .02 * float(want.mean()) + .005)
+                    else:
+                        np.testing.assert_allclose(cut[name][LEFT], bare[name][LEFT], atol=tolerance, rtol=tolerance)
+                        np.testing.assert_allclose(kept[name][RIGHT], bare_kept[name][RIGHT], atol=tolerance, rtol=tolerance)
+
+    def test_a_splat_sheet(self):
+        sheet = instance(plane_cloud(n=24, size=2.0), relight=1.0)
+        self.check(s.Scene((small_card(1.5),), (SPLAT_SUN,), splats=(sheet,)),
+                   s.Scene((small_card(-1.0),), (SPLAT_SUN,), splats=(sheet,)))
+        for mode in ("raster", "raytrace"):
+            with self.assertRaises(gpu3d.Unsupported):
+                gpu3d.render(s.Scene((small_card(1.5),), (SPLAT_SUN,), splats=(sheet,)), SMOKE_CAMERA, *SMALL, mode=mode)
+
+    def test_particles(self):
+        positions = np.array([[x, y, 0.0] for x in np.linspace(-1, 1, 5) for y in np.linspace(-1, 1, 5)], np.float32)
+        particles = s.ParticleInstance(positions=positions, sizes=np.full(len(positions), .6, np.float32),
+                                       colors=np.tile(np.array([1, .5, .2, 1], np.float32), (len(positions), 1)),
+                                       render_as="spheres")
+        self.check(s.Scene((small_card(1.5),), particles=(particles,)), s.Scene((small_card(-1.5),), particles=(particles,)))
+        for mode in ("raster", "raytrace"):
+            with self.assertRaises(gpu3d.Unsupported):
+                gpu3d.render(s.Scene((small_card(1.5),), particles=(particles,)), SMOKE_CAMERA, *SMALL, mode=mode)
+
+    def test_smoke(self):
+        from nodebased import volumerender as vr
+        from tests.test_volume_scene import box
+        settings = vr.VolumeSettings(absorption=1.0, scattering=0.0, step_size=0.05, shadow_steps=8)
+        smoke = box(16, 3.0, size=2.0)
+        self.check(s.Scene((small_card(1.5),), volumes=(smoke,)), s.Scene((small_card(-1.5),), volumes=(smoke,)), volume=settings)
+        for mode in ("raster", "raytrace"):
+            with self.assertRaises(gpu3d.Unsupported):
+                gpu3d.render(s.Scene((small_card(1.5),), volumes=(smoke,)), SMOKE_CAMERA, *SMALL, mode=mode, volume=settings)
+
+    def test_smoke_in_front_of_the_holdout_keeps_its_colour_inside_its_alpha(self):
+        from nodebased import volumerender as vr
+        from tests.test_volume_scene import box
+        settings = vr.VolumeSettings(absorption=.4, scattering=.6, step_size=0.05, shadow_steps=8)
+        light = s.Light("Directional", (1, 1, 1), 2.0, s.Vec3(0, 0, 0), s.Vec3(0, 0, -1))
+        in_front = s.Scene((small_card(-1.5),), (light,), volumes=(box(16, 1.0, size=2.0),))
+        for name, picture in self.pictures(in_front, "rgba", settings):
+            with self.subTest(renderer=name):
+                self.assertGreater(float(picture[RIGHT][..., 3].min()), .05)
+                self.assertTrue(np.all(np.isfinite(picture)))
+
+
+class SecondaryRayTests(unittest.TestCase):
+    """A holdout is met by the camera's rays and by shadow rays only: a mirror does not show it and light does not bounce off it."""
+    MIRROR = dict(material="pbr", metallic=1.0, pbr_roughness=0.0, pbr_specular=1.0)
+    PATH = pt.PathSettings(samples=24, max_bounces=3, diffuse_bounces=2, specular_bounces=2)
+
+    @staticmethod
+    def scene(card):
+        mirror = replace(s._sphere(1.2, 32, (.9, .9, .9, 1), s.Transform3D()), **SecondaryRayTests.MIRROR)
+        behind_the_camera = replace(quad(-4, 4, -4, 4, 7.5, color=(.1, .9, .1, 1)), emission=1.0)
+        extra = () if card is None else (replace(behind_the_camera, holdout=card),)
+        return s.Scene((mirror,) + extra, (SUN,))
+
+    def draw(self, scene_in, backend):
+        return pt.render(scene_in, CAMERA, *SIZE, BLACK, 0.0, "rgba", self.PATH, backend=backend)
+
+    def check(self, backend):
+        mirror = core_of(replace(s._sphere(1.2, 32, (.9, .9, .9, 1), s.Transform3D()), **self.MIRROR))
+        absent, seen, held = (self.draw(self.scene(card), backend) for card in (None, False, True))
+        green = lambda picture: float((picture[..., 1] - picture[..., 0])[mirror].max())
+        self.assertGreater(green(seen), .2, "an ordinary card shows in the mirror")
+        self.assertLess(green(held), green(seen) * .05 + 1e-3, "a holdout does not")
+        np.testing.assert_allclose(held, absent, atol=2e-3)       # and the mirror is as if it were not there
+
+    def test_cpu_path_tracer(self):
+        self.check("cpu")
+
+    @unittest.skipUnless(gpu3d.available(), "no GPU adapter")
+    def test_gpu_path_tracer(self):
+        self.check("gpu")
+
+
+@unittest.skipUnless(gpu3d.available(), "no GPU adapter")
+class RefusalTests(unittest.TestCase):
+    """What the GPU raster and ray-traced modes cannot cut stays with the CPU, loudly."""
+
+    def test_a_liquid_or_a_camera_seen_environment_is_refused(self):
+        liquid = replace(ball(0), material="liquid")
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(s.Scene((liquid, holdout()), (SUN,)), CAMERA, *SIZE, mode="raytrace")
+        from nodebased.envlight import Environment, fingerprint_of
+        rgb = np.ones((4, 8, 3), np.float32)
+        sky = Environment(rgb, fingerprint_of(rgb), visible_to_camera=True)
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(s.Scene((ball(0), holdout()), (SUN,), environments=(sky,)), CAMERA, *SIZE, mode="raster")
+
+    def test_instance_sources_that_are_holdouts_are_refused(self):
+        matrices = np.tile(np.eye(4), (2, 1, 1))
+        matrices[:, 0, 3] = (-2, 2)
+        instanced = s.Scene((), (SUN,), instances=(s.InstanceSet((ball(0, holdout=True),), matrices, np.zeros(2, np.int32)),))
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(instanced, CAMERA, *SIZE, mode="raytrace")
+        picture = s.render(instanced, CAMERA, *SIZE, mode="raytrace")          # the CPU cuts them
+        self.assertTrue(np.all(picture == 0))
+

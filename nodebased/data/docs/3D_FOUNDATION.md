@@ -524,8 +524,8 @@ the door their results come through.
   (`gpuinstance.py`) raises `gpu3d.Unsupported` for an instance source with a switch off, so `auto` renders that scene on the
   CPU; Cryptomatte's manifest still lists a hidden mesh's name (its id simply never has coverage). The interactive viewport
   draws a mesh that is not visible to the camera (so it can be selected) and its shadow pass honours **Cast shadows**; it does
-  not preview **Receive shadows**. Holdouts and a shadow catcher for putting CG onto a filmed plate build on these switches
-  (next two steps of the plan).
+  not preview **Receive shadows**. Holdouts (see "Holdouts" below) build on these switches; a shadow catcher for putting CG onto
+  a filmed plate is the next step of the plan.
 - **Mode.** `Render3D` has a `Mode` knob: `raster` (default, what every existing document uses) or
   `raytrace`, a CPU-only alternative that finds visibility by casting one ray per sub-sample through the
   bounding volume hierarchy instead of rasterizing triangles. It shares the shading code with the rasterizer
@@ -943,6 +943,58 @@ The CPU renderer is a deterministic NumPy **CPU reference rasterizer**. It is co
 against analytic answers, and it is not fast: think cards, primitives and modest meshes. Scenes
 over 250,000 triangles are refused with an error instead of hanging the session. Measured GPU-versus-CPU timings, with their caveats, are in the spike document; nothing else here is a performance claim.
 
+### Holdouts (Rendering 7, step R2)
+
+Putting a CG object behind something real is the most common 3D job in a compositor: a ball behind a lamppost, a car behind
+an actor. The artist models a rough stand-in for the real foreground thing, from the same tracked camera, and turns **Holdout**
+on for it (the knob sits beside **Visible to camera** on every mesh node and `ReadGLTF3D`; off by default). A holdout still
+hides everything behind it from the camera, but it draws itself as nothing: zero colour and zero alpha, with no depth,
+position, normal, uv or object id. Whatever it covers is cut out of the render with a proper edge.
+
+The recipe, in plain words:
+
+1. Put the stand-in where the real object is (a card is enough for a pole) and switch **Holdout** on.
+2. Render as usual. Where the stand-in is the nearest thing to the camera the picture is empty (alpha 0); everywhere else it is
+   the CG as it always was.
+3. Merge the render **over** the plate: `Merge` with the render as A and the plate as B. The plate shows through the hole, so
+   the real object stands in front of the CG.
+
+![The plate on the left, the render of a ball with a holdout card where the real post stands in the middle (the checkerboard is
+empty alpha), and the render merged over the plate on the right](images/holdout_recipe.png)
+
+The plate (`examples/holdout_plate.png`) is made by `tools/render_holdout_reference.py` from a fixed seed (a dusk sky, a tree
+line, a road and a lamppost, with the stand-in card's own screen position, so the two line up) and is not a photograph: no
+licence applies beyond the repository's own, and step R3 (the shadow catcher) reuses it. The same script renders the
+three-panel picture with the CPU path tracer (`python tools/render_holdout_reference.py`).
+
+What a holdout does and does not do:
+
+- **It cuts everything behind it**: meshes, splats, particles, smoke, a camera-visible environment or area light, and the
+  `Background` colour of `Render3D` is left as the knob says (a holdout cuts CG, it does not paint). Smoke, particles and
+  splats in front of the holdout stay, with their own alpha. The edge is antialiased like any other edge (`samples` in the raster
+  modes, the sample count in the path tracer), and because the camera's rays are what end at the holdout, a lens blurs it
+  (**Depth of field**) and a shutter blurs it (**Motion blur**) exactly as they blur the cut object.
+- **Premultiplied output stays consistent**: the colour of a cut pixel is the CG's own colour times the alpha that is left, so
+  it never exceeds what the object itself contributes.
+- **Data passes and Cryptomatte**: a held-out pixel has alpha 0 and nothing in `depth`, `position`, `normals`, `uv` and
+  `object_id`, and the returned depth buffer is empty there. A Cryptomatte render counts what the holdout leaves of an object
+  (its coverage is reduced by the holdout's coverage); the holdout itself never has coverage, although its name stays in the
+  manifest, like a hidden mesh's. The motion vector pass has no vector for it.
+- **Shadows and secondary rays**: a holdout casts the shadow its **Cast shadows** switch gives it (on by default, so a stand-in
+  for a pole shadows the CG), and takes none (it is never drawn). Reflections, refractions and bounce light pass through it:
+  a mirror ball does not show the stand-in and no light bounces off it. **Visible to camera** off wins over **Holdout**
+  (nothing is drawn). A holdout is opaque whatever its own colour, alpha or texture. In the path tracers, as with the other
+  switches, the lights are then sampled by next-event estimation alone.
+- **Where it runs**: the CPU raster and ray-traced modes, the CPU path tracer, the GPU raster and ray-traced modes and the GPU
+  path tracer (smoke merged by the same CPU raymarch as the other data passes). `Instance3D` copies take their source's holdout. Some
+  combinations raise instead of drawing the holdout as an object: the GPU raster and ray-traced modes and the GPU instanced
+  ray tracer raise `gpu3d.Unsupported` for a holdout together with splats, particles, smoke, a liquid, or an environment or
+  area light the camera sees (`auto` renders those on the CPU, which does them), and the CPU raster and ray-traced modes raise
+  `ValueError` for a holdout together with a liquid or with splat reflections or splat bounce light (their secondary rays would
+  see it); the path tracers have no such limit. The `denoise` output follows the path tracer's first hit, so it is empty there too.
+- **The viewport** draws a holdout as the stand-in it is (so it can be picked and moved), like a mesh that is not visible to
+  the camera. It shows no cut.
+
 ### Splats with meshes: what runs where (Rendering 7)
 
 Rendering 7 moved the splat scenes an artist actually builds (splats beside opaque and transparent meshes) onto the GPU one
@@ -1042,7 +1094,8 @@ VIEWPORT was its own dock load normally; the old dock is dropped and its view li
   selected (the final renders leave it out; the CPU fallback viewport draws it too). The viewport's shadow pass honours
   **Cast shadows**: a mesh that casts no shadow is left out of every light's shadow map but is still drawn and lit. It does
   not preview **Receive shadows** (a mesh that takes no shadow still shows the shadows of the others in the viewport).
-  See "Per-object render switches" above.
+  See "Per-object render switches" above. A mesh with **Holdout** on is drawn as the ordinary stand-in it is, in the GPU
+  viewport and in the CPU fallback (see "Holdouts").
 - **Shaded meshes (plan "Production look" step R6).** A `pbr` material is lit in the viewport with the
   same Cook-Torrance GGX as the final render (`scene3d._shade_pbr_mesh`); a standard (Blinn-Phong)
   material keeps its look and also picks up the dome's diffuse and a mirror-reflection specular, as the
@@ -2967,3 +3020,10 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   Radeon 8060S (`force-adapter.py integrated`) and llvmpipe (`force-adapter.py cpu`). Needs Gonzo: holdouts and the shadow catcher
   (R2, R3) read these switches; the golden pictures in `tests/data/golden/render_switches_*.npy` are regenerable only from a tree
   that predates the switches (`tests/golden_render_switches.py` says how).
+
+- Step R2 of 3 (plan "Rendering 7", holdouts): **Holdout** on every mesh node, off by default, in all six final renderers and in
+  the data passes, Cryptomatte, splats, particles and smoke; see "Holdouts" for the compositing recipe, the picture
+  (`docs/images/holdout_recipe.png`, from `tools/render_holdout_reference.py`) and what raises instead of drawing the holdout.
+  Tests: `tests/test_3d_holdout.py` on the RTX 3080 Ti, the Radeon 8060S (`force-adapter.py integrated`) and llvmpipe
+  (`force-adapter.py cpu`). Added `examples/holdout_plate.png`, the plate step R3 reuses. Needs Gonzo: the shadow catcher (R3) can
+  read `Geometry.holdout` for the stand-in's shadow on the plate.
