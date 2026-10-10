@@ -1,5 +1,43 @@
 ## 2026-10-09 — Lane 8 NL7: motion (worktree, ready for integration)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (1:26 AM on 2026-10-10 PDT)
+
+`main` moved `9290977` -> `3bf3c00` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 264 tests in 140.412 s, OK. Full suite on
+the stacked tip `3bf3c00` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1009-2156.log`, started 9:56 PM): **Ran 4886 tests in 11963.644 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R2 of 2: the 12 ms of host work around every GPU render (finish 1).** Commits:
+  - `8a5349b` docs: correct the R2 finish note
+  - `393dd92` docs: R2 finish note in the task log and state
+  - `05cc689` docs: step R2 host-phase section (before and after by phase, the RTX target check, the surface samples-per-dispatch sweep) and the rerun benchmark table on all three adapters
+  - `5ea85ec` bench: R2 host-phase rows (final, lean and with noise maps) and the full portable matrix on the RTX, the Radeon and llvmpipe; test for the host-phase profile
+  - `d4f01c3` render: 4 samples per dispatch for surface scenes (8 made X1 on the Radeon 1.4 times slower than 4; Z1 on the RTX gives up 0.7 ms)
+  - `290abf0` render: pack the volume grids into the scene buffer with one copy instead of two (smoke pack 0.85 to 0.66 ms, single-box 0.30 to 0.09 ms)
+  Diff: 37 files changed, 1928 insertions(+), 55 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step P2 of 2: interactive preview while scrubbing and playing.** Commits:
+  - `1278a42` notes: record Lane 6 P2 preview handoff
+  - `1aee7f7` docs: record interactive fluid preview results
+  - `25afbb3` bench: measure cached fluid preview playback
+  - `af9e4fb` preview: reduce cached fluid detail while scrubbing
+  Diff: 15 files changed, 366 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step NL7 of 7: motion.** Commits:
+  - `502f632` tests: motion tests wait for the end value and delete the target before checking, so a busy machine cannot fail them
+  - `cead20a` docs: capture NL7 motion UI and completion notes
+  - `5acc1e0` test: cover motion preference and restore panel shadow
+  - `17213a1` ui: animate family panel with shared motion clock
+  Diff: 9 files changed, 278 insertions(+), 4 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** Added an owner-scoped main-thread `QTimer` animator and a Preferences > Reduce motion switch. It drives the family panel's 120 ms slide/fade, eased slider handles and color-wheel markers while values commit exactly, 150 ms node repositioning, and the playback playhead. Reduced motion finishes current tracks and disables future motion; offscreen Qt defaults to reduced motion. Dock widgets use no property animations.
 - **Artifacts:** Core code is committed on `openclaw/nb-2d-parity-b` at `b6822df`; a follow-up restores the panel shadow after fading and adds coverage for Reduce motion finishing active tracks. The completion commit adds the capture and notes. The 1920×1080 offscreen app image is `docs/images/ui-redesign/motion.png`. Test logs are in `scratch/nb-lanes/run/tests-L8-NL7-final.log` and `tests-L8-NL7-docs-final.log` (deliberate scratch).
 - **State:** Done for the four motion behaviors on Linux. 76 targeted UI/motion tests and 7 documentation tests passed. Windows, real-display review, and the integrator's full suite remain unverified.

@@ -1,32 +1,6 @@
-## 2026-10-09 — Lane 8 NL7: motion (worktree, ready for integration)
+## 2026-10-10 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step R2 of 2: the 12 ms of host work around every GPU render (finish 1), Lane 6 (Fluids, GPT-6 Luna) step P2 of 2: interactive preview while scrubbing and playing, Lane 8 (2D parity B, GPT-6 Luna) step NL7 of 7: motion (integrator tick)
 
-- **What was done (evidence):** Added an owner-scoped main-thread `QTimer` animator and a Preferences > Reduce motion switch. It drives the family panel's 120 ms slide/fade, eased slider handles and color-wheel markers while values commit exactly, 150 ms node repositioning, and the playback playhead. Reduced motion finishes current tracks and disables future motion; offscreen Qt defaults to reduced motion. Dock widgets use no property animations.
-- **Artifacts:** Core code is committed on `openclaw/nb-2d-parity-b` at `b6822df`; a follow-up restores the panel shadow after fading and adds coverage for Reduce motion finishing active tracks. The completion commit adds the capture and notes. The 1920×1080 offscreen app image is `docs/images/ui-redesign/motion.png`. Test logs are in `scratch/nb-lanes/run/tests-L8-NL7-final.log` and `tests-L8-NL7-docs.log` (deliberate scratch).
-- **State:** Done for the four motion behaviors on Linux. 76 targeted UI/motion tests and 7 documentation tests passed. Windows, real-display review, and the integrator's full suite remain unverified.
-- **Next owner + artifact:** Gonzo owns integration and Windows/real-display QA; use this branch and inspect `docs/images/ui-redesign/motion.png`.
-
-## 2026-10-09 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step NL4 of 7: icons and the left column, Lane 6 (Fluids, GPT-6 Luna) step P1 of 2: cached playback that is not bound by reading the cache (finish 1), Lane 8 (2D parity B, GPT-6 Luna) step NL6b of 7: Properties closer to the mockup (integrator tick)
-
-## 2026-10-09 — Lane 6 P2: interactive cached-fluid preview (partial)
-
-- **What was done:** viewer proxy tiers now preserve fluid solver cache identity, thin liquid particles before surface extraction and reduce cached volume grids while preserving world bounds and integrated density. Stop restores full detail and the badge reports the displayed tier. Measured 1/4 preview at 14.96 FPS Radeon and 11.06 FPS llvmpipe for an active 64³/48³, 24-frame Hot pour.
-- **Artifacts:** commits `af9e4fb`, `25afbb3`, `1aee7f7`; benchmark JSON in `benchmarks/hot_pour/*-preview-2026-10-09.json`; docs and bundled copy synchronized. Temporary run caches remain deliberate scratch in `/tmp/hot-pour-preview-radeon-64-2026-10-09` and `/tmp/hot-pour-preview-llvmpipe-64-2026-10-09`.
-- **State:** partial. Targeted implementation/UI/cache tests and knowledge checks passed. The production 256³/192³ 120-frame preview rate and its one-second full-detail settle were not benchmarked; Radeon target at production size remains unverified.
-- **Next owner + concrete artifact:** Gonzo to decide whether to extend the benchmark to the production preset, using `tools/benchmark_hot_pour.py --playback --preview-tier 4` with a full cache. Integration remains pending on `openclaw/nb-fluids-spike`.
-
-## 2026-10-09 — Lane 4 (Rendering) step R2 of 2, finish 1: the 12 ms of host work around every GPU render (worker note, 6:40 PM)
-
-- **What was done (measured unless marked):** finish pass over the PARTIAL first pass. New commits on `openclaw/nb-3d-astra-lane` after `b9d7708`: `290abf0` (volume grids copied once into the scene buffer), `d4f01c3` (surface scenes take 4 samples per dispatch, not 8: the first pass's 8 made X1 on the Radeon 112 ms against 77 ms), `5ea85ec` (final host-phase rows on the three adapters, the full portable matrix rerun on all three in `benchmarks/portable_render/r2/`, `tests/test_profile_host_phases.py`), `05cc689` (docs: R2 section with the before/after phase tables, the RTX target check, the rerun table, the bundled copy byte-identical). Host cost on the RTX (640 by 360, profile, ms): Z1 fixed 64 21.7 -> 3.0 (target met); smoke grid 21.2 -> 4.2, smoke box 24.9 -> 4.2, Z1 adaptive 12.8 -> 4.3 (just over 4 ms; an earlier run of the same smoke code read 5.9 to 6.1). Radeon 1.4 to 3.0 ms on all four cases. Images unchanged: PSNR and error columns equal the earlier rows on all 24 rows.
-- **Inference:** about 1.3 ms of the RTX smoke host cost is the 3.7 MB image crossing the USB4 eGPU link (a throw-away copy probe measured 1.2 to 1.3 ms; the probe is not committed). Reading row bands back while later bands still compute would hide most of it; not built.
-- **Artifacts:** committed: `benchmarks/host_phases/final-*.jsonl` and `exp-passsamples-surface.txt`, `benchmarks/portable_render/r2/*.json`, `docs/BENCHMARKS-v0.35-portable-render.md` (+ bundled copy), `tests/test_profile_host_phases.py`. Local only (not in the repo): CPU reference `.npy` files in `scratch/nb-lanes/run/r2f/reference-r2b/`, logs `tests-L4-r2f-*.log`, probes in `scratch/nb-lanes/run/r2f/`.
-- **State:** done for everything the PARTIAL report left out. The 4 ms target is met for Z1 fixed 64 only on the RTX. Tests: 515 render and benchmark tests passed on the RTX (default), the Radeon (`force-adapter.py integrated`) and llvmpipe (`cpu`); `tests.test_knowledge` passed. Unverified: Windows, a real display, run-to-run spread beyond the runs named in the doc; X1 and Y1 host costs (11 to 13 ms on the RTX, texture and mesh packing) untouched.
-- **Next owner:** Gonzo (decide whether 4.2 ms on smoke is accepted or the per-band readback is worth a step). Artifact: the R2 section of `docs/BENCHMARKS-v0.35-portable-render.md`.
-- **Failure mode recorded:** the first pass's 8 samples per dispatch slowed X1 on the Radeon by 1.4 times and its recorded measurements did not show it (the saved sweep is RTX only); a samples-per-dispatch change needs the surface cases X1, Y1 and Z1 on both cards before it is kept. The first pass's "after" files predated its last renderer commit; re-measure after the final commit.
-
-## 2026-10-09 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step R2 of 2: the 12 ms of host work around every GPU render, Lane 6 (Fluids, GPT-6 Luna) step P1 of 2: cached playback that is not bound by reading the cache (finish 1) (integrator tick)
-
-## 2026-10-09 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step NL5 of 7: viewer strip and timeline (integrator tick)
-
-- **What was done:** `main` `b9d7708` -> `b89c229` plus this docs commit. Evidence and per-lane commit
-  list in the dated `context/state.md` section. Full suite at `b89c229`: Ran 4876 tests in 11338.423 s, OK (skipped=1), exit 0.
+- **What was done:** `main` `9290977` -> `3bf3c00` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `3bf3c00`: Ran 4886 tests in 11963.644 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
+
