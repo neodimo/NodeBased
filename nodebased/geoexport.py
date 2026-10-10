@@ -68,10 +68,14 @@ def export_obj(document, key, frames, path, evaluator=None):
                 samples[int(frame)]['simulations'] = {'rigid_bodies': body_rows}
         time = document.get('time', {})
         width, height = 1920, 1080
+        ambient = 0.0
         for candidate in document.get('nodes', {}).values():
             if candidate.get('type') == 'Render3D' and candidate.get('inputs', {}).get('scene') == key:
                 width = int(candidate['params'].get('width', width))
                 height = int(candidate['params'].get('height', height))
+                # The ambient fill is a Render3D setting, not part of the scene; the references and the
+                # verifier's own renders must use the plate's value or every shaded pixel disagrees.
+                ambient = float(candidate['params'].get('ambient', ambient))
                 break
         # Include the same supporting evidence the contract describes, generated from the exact
         # sampled scene/camera. The terminal frame uses the next evaluated frame for forward motion.
@@ -81,7 +85,8 @@ def export_obj(document, key, frames, path, evaluator=None):
         for frame in sorted(samples):
             scene, camera = samples[frame]['scene'], samples[frame]['camera']
             beauty, layers = scene3d.render_multichannel(
-                scene, camera, width, height, passes='beauty,normals,depth')
+                scene, camera, width, height, passes='beauty,normals,depth', ambient=ambient)
+            samples[frame]['ambient'] = ambient
             samples[frame]['passes'] = {
                 'beauty': beauty,
                 **layers,

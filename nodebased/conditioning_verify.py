@@ -295,13 +295,13 @@ def _shadow_vector(unshadowed, shadowed, albedo):
     return None if length < 1.0 else vector / length
 
 
-def _render_frame(scene, camera, width, height):
+def _render_frame(scene, camera, width, height, ambient=0.0):
     """Render conditioning references on the CPU, in the same scene/camera space."""
-    beauty = scene3d.render(scene, camera, width, height, output="rgba", mode="raster")
+    beauty = scene3d.render(scene, camera, width, height, output="rgba", mode="raster", ambient=ambient)
     albedo = scene3d.render(scene, camera, width, height, output="albedo", mode="raster")
     normals = scene3d.render(scene, camera, width, height, output="normals", mode="raster")
-    diffuse = scene3d.render(scene, camera, width, height, output="diffuse", mode="raster", shadows=True)
-    clear = scene3d.render(scene, camera, width, height, output="diffuse", mode="raster", shadows=False)
+    diffuse = scene3d.render(scene, camera, width, height, output="diffuse", mode="raster", shadows=True, ambient=ambient)
+    clear = scene3d.render(scene, camera, width, height, output="diffuse", mode="raster", shadows=False, ambient=ambient)
     return {"beauty": beauty, "albedo": albedo, "normals": normals,
             "diffuse": diffuse, "unshadowed": clear}
 
@@ -320,85 +320,172 @@ def _resize_for_lighting(image, width, height):
     return image[ys[:, None], xs[None, :]]
 
 
-def _track_camera_sequence(scene_state, observations, width, height):
-    rows = scene_state["frames"]
-    cameras = {int(row["frame"]): row["camera"] for row in rows
-               if isinstance(row.get("camera"), scene3d.Camera)}
-    if not cameras:
-        return {}, {}
-    reference_frame = min(cameras)
-    image_frames = {int(frame): np.asarray(row["beauty"], dtype=np.float32)
-                    for frame, row in observations.items() if row.get("beauty") is not None}
-    if reference_frame not in image_frames:
-        return {}, {frame: "reference image missing" for frame in cameras}
-    anchors = _scene_anchor_points(rows[0]["scene"])
-    reference_camera = cameras[reference_frame]
-    seed_pixels, depths = scene3d.project(reference_camera, width, height, anchors)
-    valid = ((depths > reference_camera.near) & (seed_pixels[:, 0] >= 12)
-             & (seed_pixels[:, 1] >= 12) & (seed_pixels[:, 0] < width - 12)
-             & (seed_pixels[:, 1] < height - 12))
-    anchors, seed_pixels = anchors[valid], seed_pixels[valid]
-    tracked = []
-    for world, seed in zip(anchors, seed_pixels):
-        try:
-            result = tracker.analyse(image_frames, reference_frame, seed,
-                                     first_frame=min(image_frames), last_frame=max(image_frames),
-                                     pattern_radius=4, search_radius=_tracker_search_radius(width, height))
-            tracked.append((world, result))
-        except (tracker.AnalysisError, KeyError):
+def _frame_ambient(row):
+    return float(row.get("ambient", 0.0))
+
+
+def _reference_image(row, width, height):
+    """The exported scene rendered through the exported camera on one frame."""
+    return scene3d.render(row["scene"], row["camera"], width, height, output="rgba", mode="raster",
+                          ambient=_frame_ambient(row))
+
+
+def _anchors(row, width, height, rendered, visible_only=True):
+    """Anchor points in frame with a corner in the render (and their pixel seeds).
+
+    A vertex hidden behind another surface has no pixels of its own: tracking it follows the occluder
+    and pulls the solve off by the parallax between them, so only vertices whose depth matches the
+    rendered depth count, unless the visible ones are too few to solve from (`visible_only` false).
+    """
+    scene, camera = row["scene"], row["camera"]
+    anchors = _scene_anchor_points(scene)
+    if not len(anchors):
+        return anchors, np.empty((0, 2))
+    seeds, depths = scene3d.project(camera, width, height, anchors)
+    inside = ((depths > camera.near) & (seeds[:, 0] >= 12) & (seeds[:, 1] >= 12)
+              & (seeds[:, 0] < width - 12) & (seeds[:, 1] < height - 12))
+    anchors, seeds, depths = anchors[inside], seeds[inside], depths[inside]
+    keep = np.ones(len(anchors), dtype=bool)
+    if visible_only:
+        surface = scene3d.render(scene, camera, width, height, output="depth", mode="raster")[..., 0]
+        for index, ((x, y), depth) in enumerate(zip(seeds, depths)):
+            column, line = int(x), int(y)
+            window = surface[max(line - 1, 0):line + 2, max(column - 1, 0):column + 2]
+            window = window[np.isfinite(window) & (window > 0)]
+            keep[index] = bool(window.size) and float(np.abs(window - depth).min()) <= 0.02 * depth + 0.05
+    luminance = rendered[..., :3].astype(np.float64).mean(axis=-1)
+    bright = max(float(np.percentile(luminance, 99)), 1e-3)
+    for index in np.nonzero(keep)[0]:
+        keep[index] = _has_corner_structure(luminance, seeds[index], bright)
+    return anchors[keep], seeds[keep]
+
+
+def _has_corner_structure(luminance, seed, bright, radius=4):
+    """True when the window around `seed` varies in two directions (a corner, not an edge or a flat).
+
+    A straight edge or a faintly shaded face matches almost as well at every position along it or
+    across it, so the matcher picks one at random (the demo plate's crate origin, on a softly shaded
+    face beside an edge, matched 10 px away on frames 9 and 15 of its own plate); such a landmark says
+    nothing about the camera. The weaker direction must also carry a gradient of at least 1.5% of the
+    image's bright level (99th percentile) per pixel: on the demo plate the checker ground's corners
+    measure 0.0007 to 0.0009 of the bright level squared per window pixel and the crate face 0.00002
+    at most.
+    """
+    x, y = int(seed[0]), int(seed[1])
+    window = luminance[max(y - radius - 1, 0):y + radius + 2, max(x - radius - 1, 0):x + radius + 2]
+    if min(window.shape) < 5:
+        return False
+    gy, gx = np.gradient(window)
+    xx, yy, xy = float((gx * gx).sum()), float((gy * gy).sum()), float((gx * gy).sum())
+    trace, det = xx + yy, xx * yy - xy * xy
+    weak = trace / 2.0 - np.sqrt(max(trace * trace / 4.0 - det, 0.0))
+    return trace > 0 and weak >= 0.05 * trace and weak / window.size >= (0.015 * bright) ** 2
+
+
+def _track_sequence(scene_state, observations, width, height):
+    """Solve each frame's camera from where the scene's own vertices appear in the observed image.
+
+    The template for every landmark is cut from a render of the exported scene through the exported
+    camera on that frame, and is matched in the observed beauty. A sequence that follows the
+    SceneState therefore matches at the projected position (the plate itself at zero error), and one
+    that departs from it moves the matches, which the camera fit turns into a position, rotation and
+    field-of-view error. Templates from the observation's own first frame would score that frame zero
+    by construction and drift with every later frame's change of scale.
+    """
+    solved, failures, objects = {}, {}, {}
+    radius = _tracker_search_radius(width, height)
+    required = _objects_to_track(scene_state, observations)
+    for row in scene_state["frames"]:
+        number, camera = int(row["frame"]), row.get("camera")
+        if not isinstance(camera, scene3d.Camera):
             continue
-    solved, failures = {}, {}
-    for frame_number, camera in cameras.items():
-        pairs = [(world, points[frame_number]) for world, points in tracked if frame_number in points]
+        observed = observations.get(number, {}).get("beauty")
+        if observed is None:
+            failures[number] = "generated image missing"
+            continue
+        observed = np.asarray(observed, dtype=np.float32)
+        rendered = _reference_image(row, width, height)
+        objects[number] = _track_objects(row, observed, rendered, required, radius)
+        for visible_only in (True, False):
+            anchors, seeds = _anchors(row, width, height, rendered, visible_only)
+            pairs = []
+            for world, seed in zip(anchors, seeds):
+                try:
+                    match = tracker.match_pattern(rendered, observed, seed, 4, radius, channels="luminance")
+                except (tracker.AnalysisError, KeyError, ValueError):
+                    continue
+                pairs.append((world, match[:2]))
+            if len(pairs) >= 6:
+                break
         if len(pairs) < 6:
-            failures[frame_number] = f"only {len(pairs)} usable Tracker landmarks; need six non-coplanar points"
+            failures[number] = f"only {len(pairs)} usable Tracker landmarks; need six non-coplanar points"
             continue
         try:
             fitted, rms = _fit_camera(camera, [p[0] for p in pairs], [p[1] for p in pairs], width, height)
-            solved[frame_number] = (fitted, rms, len(pairs))
+            pairs, fitted, rms = _trim_outliers(camera, pairs, fitted, rms, width, height)
+            solved[number] = (fitted, rms, len(pairs))
         except ValueError as error:
-            failures[frame_number] = str(error)
-    return solved, failures
+            failures[number] = str(error)
+    return solved, failures, objects
 
 
-def _track_object_positions(scene_state, observations, width, height):
-    rows = scene_state["frames"]
-    camera_frames = {int(row["frame"]): row["camera"] for row in rows
-                     if isinstance(row.get("camera"), scene3d.Camera)}
-    if not camera_frames:
-        return {}
-    reference_frame = min(camera_frames)
-    images = {int(frame): np.asarray(row["beauty"], dtype=np.float32)
-              for frame, row in observations.items() if row.get("beauty") is not None}
-    if reference_frame not in images:
-        return {}
-    reference_camera = camera_frames[reference_frame]
-    manifest = next((row["objects"] for row in rows if int(row["frame"]) == reference_frame), [])
-    result = {frame: {} for frame in camera_frames}
+def _trim_outliers(base, pairs, fitted, rms, width, height):
+    """Refit without the landmarks that sit far from where the fitted camera projects them.
+
+    A match that latched onto a look-alike neighbour (an identical mark scores the same) is a
+    tracking failure, not evidence about the camera; a coherent shift of the whole image leaves every
+    residual small and trims nothing.
+    """
+    world = np.asarray([p[0] for p in pairs], dtype=np.float64)
+    image = np.asarray([p[1] for p in pairs], dtype=np.float64)
+    pixels, _depth = scene3d.project(fitted, width, height, world)
+    residual = np.linalg.norm(pixels - image, axis=1)
+    keep = residual <= 3.0 * max(float(np.median(residual)), 0.25)
+    if keep.all() or keep.sum() < 6:
+        return pairs, fitted, rms
+    try:
+        refitted, refit_rms = _fit_camera(base, world[keep], image[keep], width, height)
+    except ValueError:
+        return pairs, fitted, rms
+    return [pair for pair, kept in zip(pairs, keep) if kept], refitted, refit_rms
+
+
+def _objects_to_track(scene_state, observations):
+    """Ids of the objects no ID pass or explicit track answers for, so they must be tracked."""
     required = set()
-    for frame, observation in observations.items():
+    for observation in observations.values():
         if observation.get("id_pass") is not None:
             continue
         explicit = set(observation.get("object_ids", {})) | set(observation.get("object_tracks", {}))
-        required.update(row["id"] for row in manifest if row["id"] not in explicit)
-    for obj in manifest:
+        required.update(row["id"] for row in scene_state["frames"][0]["objects"] if row["id"] not in explicit)
+    return required
+
+
+def _track_objects(row, observed, rendered, required, radius):
+    """Where each required object's origin appears in the observed image, found like the landmarks.
+
+    The template is cut from the exported scene's render on the same frame, at the origin's projected
+    pixel; an origin whose patch has no corner structure (inside a flat face) cannot be tracked.
+    """
+    camera, found = row["camera"], {}
+    height, width = rendered.shape[:2]
+    luminance = rendered[..., :3].astype(np.float64).mean(axis=-1)
+    bright = max(float(np.percentile(luminance, 99)), 1e-3)
+    for obj in row["objects"]:
         if obj["id"] not in required:
             continue
         world = np.asarray(obj["world_transform"], dtype=np.float64)[:3, 3]
-        pixel, depth = scene3d.project(reference_camera, width, height, world[None, :])
+        pixel, depth = scene3d.project(camera, width, height, world[None, :])
         seed = pixel[0]
-        if depth[0] <= reference_camera.near or not (12 <= seed[0] < width - 12 and 12 <= seed[1] < height - 12):
+        if (depth[0] <= camera.near or not (12 <= seed[0] < width - 12 and 12 <= seed[1] < height - 12)
+                or not _has_corner_structure(luminance, seed, bright)):
             continue
         try:
-            points = tracker.analyse(images, reference_frame, seed,
-                                     first_frame=min(images), last_frame=max(images),
-                                     pattern_radius=4, search_radius=_tracker_search_radius(width, height))
-        except (tracker.AnalysisError, KeyError):
+            match = tracker.match_pattern(rendered, observed, seed, 4, radius, channels="luminance")
+        except (tracker.AnalysisError, KeyError, ValueError):
             continue
-        for frame, point in points.items():
-            if frame in result:
-                result[frame][obj["id"]] = [float(point[0]), float(point[1])]
-    return result
+        found[obj["id"]] = [float(match[0]), float(match[1])]
+    return found
 
 
 def _centroid(mask):
@@ -559,7 +646,7 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
     Missing camera and object measurements are derived with NodeBased Tracker when the
     scene has enough visible features. Lighting estimation uses a fresh CPU scene render.
 
-    A row may list `not_conditioned` checks (``depth``, ``motion``, ``objects``, ``normals``):
+    A row may list `not_conditioned` checks (``camera``, ``depth``, ``motion``, ``objects``, ``normals``):
     the generated sequence carries no such pass, so the check is labelled "not conditioned" and
     left out of the verdict. `determinism` (provider, version, seed, sampler settings, whether the
     provider declared seed honoured) is copied into the report and never changes the verdict.
@@ -570,9 +657,7 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
               "intensity_checked": False, "frames": []}
     if determinism is not None:
         report["determinism"] = dict(determinism)
-    solved_cameras, solve_failures = _track_camera_sequence(
-        state, observations, *state["frames"][0].get("resolution", (1920, 1080)))
-    tracked_objects = _track_object_positions(
+    solved_cameras, solve_failures, tracked_objects = _track_sequence(
         state, observations, *state["frames"][0].get("resolution", (1920, 1080)))
     # The normals check exists only for callers that supply or explicitly skip a normals pass.
     check_normals = any("normals" in row or "normals" in row.get("not_conditioned", ())
@@ -596,6 +681,12 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
             camera = {"position_error_m": None, "rotation_error_degrees": None,
                       "fov_error_degrees": None, "pass": False,
                       "reason": solve_failures.get(number, "camera solve missing")}
+        if (camera is not None and camera.get("position_error_m") is not None
+                and "camera" in set(observation.get("not_conditioned", ()))):
+            # The provider does not declare camera pose honoured: the measurement stays in the report
+            # for reference but is left out of the verdict. Without a measurement the check keeps its
+            # FAIL and its reason (the camera could not be verified at all).
+            camera = {**camera, **_not_conditioned("provider does not honour camera pose")}
         active_camera = measured_camera if isinstance(measured_camera, scene3d.Camera) else reference_camera
         width, height = frame.get("resolution", (1920, 1080))
         observed_ids = dict(observation.get("object_ids", {}))
@@ -620,7 +711,7 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
                 and isinstance(frame.get("scene"), scene3d.Scene)):
             scene = frame["scene"]
             light_width, light_height = _lighting_resolution(int(width), int(height))
-            reference = _render_frame(scene, active_camera, light_width, light_height)
+            reference = _render_frame(scene, active_camera, light_width, light_height, _frame_ambient(frame))
             observed = _resize_for_lighting(observation["beauty"], light_width, light_height).astype(np.float32)
             expected_direction = _main_direction(scene)
             estimated_direction = _estimate_light_direction(reference["albedo"], reference["normals"], observed)
@@ -630,9 +721,13 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
             direction_scene = (_scene_with_key_direction(scene, estimated_direction)
                                if estimated_direction is not None else scene)
             clear = scene3d.render(direction_scene, active_camera, light_width, light_height, output="diffuse",
-                                   mode="raster", shadows=False)
+                                   mode="raster", shadows=False, ambient=_frame_ambient(frame))
             altered_shadow = _shadow_vector(clear, observed, reference["albedo"])
             reference_shadow = _shadow_vector(reference["unshadowed"], reference["diffuse"], reference["albedo"])
+            if reference_shadow is None:
+                # The exported lights cast no measurable shadow (a light's Shadows switch is off by
+                # default): there is no shadow direction to compare, so none is demanded.
+                lighting["shadow_checked"] = False
             if altered_shadow is not None and reference_shadow is not None:
                 lighting["shadow_direction_error_degrees"] = _angle_degrees(reference_shadow, altered_shadow)
                 lighting["shadow_direction"] = altered_shadow.tolist()
@@ -666,13 +761,17 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
                         and "light_direction_error_degrees" not in lighting
                         and observation.get("dominant_light_direction") is None)
         required = ("colour_balance_error",) if no_key_light else lighting_metrics
+        no_shadow = not no_key_light and lighting.get("shadow_checked") is False
+        if no_shadow:
+            required = tuple(key for key in required if key != "shadow_direction_error_degrees")
         if no_key_light:
             lighting["direction_checked"] = False
         complete_metrics = all(key in lighting and lighting[key] is not None
                                and np.isfinite(lighting[key]) for key in required)
         lighting["pass"] = complete_metrics and all((
             no_key_light or lighting["light_direction_error_degrees"] <= tolerances.light_direction_degrees,
-            no_key_light or lighting["shadow_direction_error_degrees"] <= tolerances.shadow_direction_degrees,
+            no_key_light or no_shadow
+            or lighting["shadow_direction_error_degrees"] <= tolerances.shadow_direction_degrees,
             lighting["colour_balance_error"] <= tolerances.colour_balance))
         if not lighting["pass"] and not complete_metrics:
             lighting["reason"] = "light direction, shadow direction, or colour evidence missing"

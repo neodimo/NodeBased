@@ -101,7 +101,7 @@ class DemoShotRun(unittest.TestCase):
             self.assertRegex(first[key], r"^[0-9a-f]{64}$")
         self.assertIn(first["verdict"], ("PASS", "FAIL"))
         self.assertEqual(first["controls"]["text"], "ignored")
-        self.assertIn("cannot honour controls: text", first["text_refused"])
+        self.assertEqual(first["ignored"], ["text"])
         self.assertEqual(first["controls"]["seed"], "used")
         from nodebased.media import read_media_raster
         pixels = np.asarray(read_media_raster(str(self.root / "out-one" / "shot.0001.exr")).to_display())

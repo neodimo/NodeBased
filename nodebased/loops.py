@@ -240,7 +240,7 @@ def generate_task(options, input_ids, progress, cancelled):
             raise RuntimeError(detail)
         result = result.get("result", result)
         if cancelled.is_set(): raise RuntimeError("cancelled")
-        return {"artifact_id":result["artifact_id"]}
+        return {"artifact_id":result["artifact_id"], "ignored":list(result.get("ignored", []))}
 
 
 def verify_task(options, input_ids, progress, cancelled):
@@ -283,6 +283,9 @@ def verify_task(options, input_ids, progress, cancelled):
                                [row for row in state["frames"] if int(row["frame"])==frame][0])
             carried.update(passes)
         missing=sorted(("objects" if name=="ids" else name) for name in {"depth","motion","normals","ids"}-carried)
+        # A provider that does not declare camera pose honoured is not held to the camera tolerance.
+        honoured=_manifest_honoured(sequence_dir/GENERATION_MANIFEST)
+        if honoured is not None and "camera_pose" not in honoured: missing.append("camera")
         for row in observations.values(): row["not_conditioned"]=missing
         determinism=_determinism(sequence_dir/GENERATION_MANIFEST)
         report_path=root/"verification.json"
@@ -290,6 +293,13 @@ def verify_task(options, input_ids, progress, cancelled):
             artifact_ids=[bundle_id,generated_id],artifact_store=store,determinism=determinism)
         if cancelled.is_set(): raise RuntimeError("cancelled")
         return {"artifact_id":report["artifact_id"]}
+
+
+def _manifest_honoured(manifest_path):
+    """The controls the provider declared honoured, from the sequence's manifest (None when it has none)."""
+    if not manifest_path.is_file(): return None
+    honoured=json.loads(manifest_path.read_text(encoding="utf-8")).get("honoured")
+    return None if honoured is None else list(honoured)
 
 
 def _determinism(manifest_path):

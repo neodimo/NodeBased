@@ -100,7 +100,7 @@ class SeedContractTests(unittest.TestCase):
         result = self.run_generate("covered", seed=7, text=None)
         files = unpack(self.store, result["artifact_id"])
         manifest = json.loads(files[GENERATION_MANIFEST])
-        self.assertEqual((manifest["provider"], manifest["version"], manifest["seed"]), ("reproject", "1.0", 7))
+        self.assertEqual((manifest["provider"], manifest["version"], manifest["seed"]), ("reproject", "1.1", 7))
         self.assertEqual(manifest["sampler_settings"], {})
         self.assertEqual(manifest["scene_state"], self.scene_id)
         self.assertEqual(manifest["control_bundle"], self.bundle_id)
@@ -112,7 +112,7 @@ class SeedContractTests(unittest.TestCase):
     def test_provenance_chain_shows_seed_and_provider(self):
         result = self.run_generate("prov", seed=11)
         row = self.store.provenance(result["artifact_id"])[-1]["provenance"]
-        self.assertEqual((row["seed"], row["provider"], row["provider_version"]), (11, "reproject", "1.0"))
+        self.assertEqual((row["seed"], row["provider"], row["provider_version"]), (11, "reproject", "1.1"))
         self.assertEqual(row["sampler_settings"], {})
         import subprocess, sys
         shown = subprocess.check_output([sys.executable, "-m", "nodebased.artifacts", "provenance",

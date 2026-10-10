@@ -19,6 +19,31 @@ import threading
 import time
 
 DEFAULT_MEMORY_BYTES = 2 * 1024**3
+# A provider holds every bundle layer of every frame as float32 (beauty 4, depth 1, normals 3, motion 2
+# each way, ids 1) and makes working copies of them while it reads and resamples (measured 10/10: 24
+# frames of 480x270 need between 1.25 and 1.5 GiB in all, about 6 copies' worth plus the interpreter and
+# its libraries).
+BUNDLE_CHANNELS = 13
+WORKING_COPIES = 6
+BASE_MEMORY_BYTES = 1024**3
+# numpy's BLAS/OpenMP pools, like OpenImageIO's, size themselves by core count and reserve address space
+# per thread, which an address-space cap counts: limited before the worker imports numpy.
+THREAD_LIMITS = {"OPENIMAGEIO_THREADS": "2", "MALLOC_ARENA_MAX": "2", "OMP_NUM_THREADS": "2",
+                 "OPENBLAS_NUM_THREADS": "2", "MKL_NUM_THREADS": "2", "NUMEXPR_NUM_THREADS": "2"}
+
+
+def job_memory_bytes(options):
+    """The address-space cap a job needs: its frames' pixels with headroom, never below the default.
+
+    The size comes from the ControlBundle manifest the job names (frame size x frames x channels x
+    float32); a job whose manifest cannot be read gets the default cap.
+    """
+    try:
+        manifest = json.loads(Path(options["manifest_path"]).read_text(encoding="utf-8"))
+        pixels = sum(int(row["pixel_size"][0]) * int(row["pixel_size"][1]) for row in manifest["frames"])
+    except (KeyError, TypeError, ValueError, OSError):
+        return DEFAULT_MEMORY_BYTES
+    return max(DEFAULT_MEMORY_BYTES, BASE_MEMORY_BYTES + WORKING_COPIES * pixels * BUNDLE_CHANNELS * 4)
 DEFAULT_WALL_SECONDS = 30 * 60
 CANCEL_GRACE_SECONDS = 1.0
 MAX_MESSAGE = 16 * 1024 * 1024
@@ -194,10 +219,11 @@ def _child(address, token, job):
 
 class Worker:
     """One process per provider job. run() is synchronous; UI callers should use a thread."""
-    def __init__(self, job: Job, *, memory_bytes=DEFAULT_MEMORY_BYTES,
+    def __init__(self, job: Job, *, memory_bytes=None,
                  wall_seconds=DEFAULT_WALL_SECONDS, cancel_grace=CANCEL_GRACE_SECONDS):
         self.job = job
-        self.memory_bytes = int(memory_bytes)
+        # None sizes the cap from the job (job_memory_bytes); an explicit value is used as given.
+        self.memory_bytes = int(job_memory_bytes(job.options) if memory_bytes is None else memory_bytes)
         self.wall_seconds = float(wall_seconds)
         self.cancel_grace = float(cancel_grace)
         self.process = None
@@ -268,9 +294,9 @@ class Worker:
         # The memory cap is an address-space limit, and a many-core machine spends it on thread
         # stacks and per-thread malloc arenas before the first frame is written: OpenEXR then ran
         # out of room mid-compression and left a header-only file that the next stage could not
-        # read (10/10, 3 of 4 runs at 160x120 on 32 cores). Two OIIO threads and two arenas leave
-        # the 2 GiB for the pixels.
-        env = dict(os.environ, **{TOKEN_ENV: token, "OPENIMAGEIO_THREADS": "2", "MALLOC_ARENA_MAX": "2"})
+        # read (10/10, 3 of 4 runs at 160x120 on 32 cores), and numpy's own pools did the same
+        # above about 300x180 pixels. Small pools for both leave the cap for the pixels.
+        env = dict(os.environ, **THREAD_LIMITS, **{TOKEN_ENV: token})
         windows_job = None
         if sys.platform == "win32":
             self.process = subprocess.Popen([sys.executable, "-m", "nodebased.workers", address, json.dumps(job)],

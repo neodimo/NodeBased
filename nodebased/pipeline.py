@@ -147,9 +147,12 @@ class Pipeline:
         options.update({"provider_id": provider, "_artifact_root": str(self.store.root)})
         result = generate_task(options, [scene, bundle], lambda *_: None, threading.Event())
         description = ProviderDescription.load(provider)
-        return {"generated_sequence": result["artifact_id"], "provider": provider,
-                "version": description.version, "seed": options["seed"],
-                "sampler_settings": options["sampler_settings"], "controls": description.control_report()}
+        reply = {"generated_sequence": result["artifact_id"], "provider": provider,
+                 "version": description.version, "seed": options["seed"],
+                 "sampler_settings": options["sampler_settings"], "controls": description.control_report(),
+                 "ignored": result.get("ignored", [])}
+        # The same unpacked ConditionedRead parameters a finished loop attempt hands out (`use_result`).
+        return {**reply, **_conditioned_read(self.store, scene, bundle, result["artifact_id"])}
 
     def verify(self, cmd):
         import json
@@ -242,12 +245,9 @@ class Pipeline:
         if not done:
             raise ValueError("loop has no completed attempt to use")
         chosen = done[-1]
-        paths = unpack_inputs(self.store, status["scene_state"], status["bundle"])
-        return {"attempt": chosen["number"], "path": chosen["generated_sequence"],
-                "manifest": paths["bundle"], "scene_state": paths["scene"],
-                "node": {"type": "ConditionedRead", "params": {
-                    "path": chosen["generated_sequence"], "manifest": paths["bundle"],
-                    "scene_state": paths["scene"]}}}
+        return {"attempt": chosen["number"],
+                **_conditioned_read(self.store, status["scene_state"], status["bundle"],
+                                    chosen["generated_sequence"])}
 
     # -- artifacts ----------------------------------------------------------------------------
     def artifacts(self, cmd):
@@ -268,6 +268,17 @@ class Pipeline:
 def _sidecar_id(path):
     import json
     return json.loads(Path(path).read_text(encoding="utf-8"))["artifact_id"]
+
+
+def _conditioned_read(store, scene_id, bundle_id, sequence_id):
+    """The ConditionedRead node that reads a generated sequence against its inputs, unpacked.
+
+    `generate` and a loop's `use_result` both answer with this, so either path creates the same node.
+    """
+    paths = unpack_inputs(store, scene_id, bundle_id)
+    return {"path": sequence_id, "manifest": paths["bundle"], "scene_state": paths["scene"],
+            "node": {"type": "ConditionedRead", "params": {
+                "path": sequence_id, "manifest": paths["bundle"], "scene_state": paths["scene"]}}}
 
 
 def unpack_inputs(store, scene_id, bundle_id):

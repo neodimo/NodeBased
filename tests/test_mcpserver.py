@@ -222,7 +222,7 @@ class MCPPipelineTests(unittest.TestCase):
                                    "estimate": 0.01, "unit": "credits (estimate)"})
         status = self.wait_loop(started["loop"])
         # The unconditioned null baseline carries beauty only: the checks it can answer pass, the
-        # depth, motion and normals checks are labelled "not conditioned", and the first attempt
+        # camera (not declared honoured), depth, motion and normals checks are labelled "not conditioned", and the first attempt
         # passes, so the loop stops after one attempt and one estimate.
         self.assertEqual(status["stop_reason"], "pass")
         self.assertEqual([a["state"] for a in status["attempts"]], ["pass"])
@@ -255,7 +255,7 @@ class MCPPipelineTests(unittest.TestCase):
             brief = {"scene_state": scene_id, "bundle": bundle_id, "provider": provider, "seed": 1234}
             first, second = self.ok("generate", brief), self.ok("generate", brief)
             self.assertEqual(first["generated_sequence"], second["generated_sequence"])
-            self.assertEqual((first["seed"], first["version"]), (1234, "1.0"))
+            self.assertEqual((first["seed"], first["version"]), (1234, "1.1" if provider == "reproject" else "1.0"))
             self.assertEqual(first["controls"]["seed"], "used")
             self.assertEqual(first["controls"]["sampler_settings"], "ignored")
             other = self.ok("generate", {**brief, "seed": 1235})
@@ -271,7 +271,7 @@ class MCPPipelineTests(unittest.TestCase):
                              (1234, provider))
             verdict = self.ok("verify", {"scene_state": scene_id, "bundle": bundle_id,
                                          "generated_sequence": first["generated_sequence"]})
-            self.assertEqual(verdict["determinism"], {"provider": provider, "version": "1.0", "seed": 1234,
+            self.assertEqual(verdict["determinism"], {"provider": provider, "version": first["version"], "seed": 1234,
                                                       "sampler_settings": {}, "seed_honoured": True})
         refused = self.call("generate", {"scene_state": scene_id, "bundle": bundle_id, "provider": "null",
                                          "sampler_settings": {"steps": 4}})

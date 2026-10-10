@@ -145,12 +145,20 @@ def _check_frame_readable(path, width, height):
         image.close()
 
 
-def _reproject(frame):
-    """Forward-splat beauty using pixel motion; nearest depth wins each destination pixel."""
-    src = np.asarray(frame.beauty.values, dtype=np.float32)
+def _reproject(frame, previous=None):
+    """Carry the previous frame's beauty into this frame with its forward motion; nearest depth wins.
+
+    Forward motion points at the next frame, so the pixels that belong on frame N are frame N-1's
+    beauty moved by frame N-1's forward vectors. The first frame (or one that does not follow a frame
+    of the sequence) has nothing before it and is copied unchanged.
+    """
+    source = frame if previous is None else previous
+    src = np.asarray(source.beauty.values, dtype=np.float32)
     h, w = src.shape[:2]
-    motion = np.asarray(frame.motion_forward.values[..., :2], dtype=np.float32)
-    depth = np.asarray(frame.depth.values[..., 0], dtype=np.float32)
+    if previous is None:
+        return src.copy()
+    motion = np.asarray(source.motion_forward.values[..., :2], dtype=np.float32)
+    depth = np.asarray(source.depth.values[..., 0], dtype=np.float32)
     yy, xx = np.mgrid[:h, :w]
     tx = np.rint(xx + motion[..., 0]).astype(np.int32)
     ty = np.rint(yy + motion[..., 1]).astype(np.int32)
@@ -198,13 +206,18 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
                  if c.beauty.values.shape[1] > desc.max_resolution[0] or c.beauty.values.shape[0] > desc.max_resolution[1]]
     if too_large:
         raise ValueError(f"Provider {desc.name} resolution limit {desc.max_resolution} exceeded")
-    # Bundle layers are always available; unsupported ones remain explicitly visible as ignored.
-    # Fail before work only when the artist actively supplies an unsupported optional control.
-    supplied = {"text": text is not None, "reference_frames": reference_frames is not None,
-                "seed": seed != 0, "sampler_settings": bool(sampler_settings)}
-    ignored = [name for name, active in supplied.items() if active and not desc.accepted(name)]
-    if ignored:
-        raise ValueError(f"Provider {desc.name} cannot honour controls: {', '.join(ignored)}")
+    # Bundle layers are always available; unsupported ones remain explicitly visible as ignored. The text
+    # brief is advisory: a provider that does not honour it still runs the shot, and the call records the
+    # text as ignored (in the manifest and the artifact's provenance). A non-default seed or sampler
+    # setting and reference frames change what the provider is asked to compute, so those are still
+    # refused before work, as are inputs the provider cannot physically take (colour space, frame count,
+    # size) above.
+    supplied = {"reference_frames": reference_frames is not None, "seed": seed != 0,
+                "sampler_settings": bool(sampler_settings)}
+    refused = [name for name, active in supplied.items() if active and not desc.accepted(name)]
+    if refused:
+        raise ValueError(f"Provider {desc.name} cannot honour controls: {', '.join(refused)}")
+    ignored = ["text"] if text is not None and not desc.accepted("text") else []
     if desc.name not in ("reproject", "null"):
         raise ValueError(f"No local implementation for provider {desc.name}")
     outputs = []
@@ -214,7 +227,8 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
         if desc.name == "null":
             pixels = frame.beauty.values
         else:
-            pixels = _reproject(frame)
+            before = controls[index - 1] if index and controls[index - 1].frame == frame.frame - 1 else None
+            pixels = _reproject(frame, before)
         path = Path(sequence_path(output_pattern, frame.frame))
         _write_frame(path, pixels, _bundle_color_space(frame))
         outputs.append(str(path))
@@ -224,7 +238,7 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
               "sampler_settings": sampler_settings,
               "frames": [c.frame for c in controls],
               "honoured": [name for name in CONTROL_NAMES if desc.accepted(name)],
-              "outputs": outputs}
+              "ignored": ignored, "outputs": outputs}
     manifest_output = Path(str(output_pattern).replace("####", "provider").replace("%04d", "provider")
                            .replace("{frame:04d}", "provider")).with_suffix(".json")
     manifest_output.parent.mkdir(parents=True, exist_ok=True)
@@ -244,6 +258,8 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
                   "provider_description": provider_id, "seed": seed, "sampler_settings": sampler_settings,
                   "seed_honoured": desc.accepted("seed"),
                   "sampler_settings_honoured": desc.accepted("sampler_settings"),
+                  "ignored_controls": ignored,
+                  "honoured": result["honoured"],
                   "scene_state": scene_id, "control_bundle": bundle_id, "frames": result["frames"],
                   "options": {"text": text,
                               "reference_frames": [hashlib.sha256(Path(item).read_bytes()).hexdigest()
@@ -255,7 +271,7 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
         "document":str(scene_state_path), "frame_range":result["frames"], "time":__import__("time").time(),
         "pattern":str(output_pattern), "provider":desc.name, "provider_version":desc.version,
         "seed":seed, "sampler_settings":sampler_settings, "seed_honoured":desc.accepted("seed"),
-        "scene_state":scene_id, "control_bundle":bundle_id})
+        "ignored_controls":ignored, "scene_state":scene_id, "control_bundle":bundle_id})
     result["artifact_id"] = sequence_id
     manifest_output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result

@@ -49,7 +49,7 @@ TOOLS = [
      "inputSchema": _schema({"id": {"type": "string"}, "first": {"type": "integer"},
                              "last": {"type": "integer"}, "camera": {"type": "string"}}, ("id",))},
     {"name": "generate",
-     "description": "Run a local provider on a SceneState and ControlBundle with a seed (default 0) and sampler_settings (a small JSON object). Returns the generated-sequence artifact id and which controls the provider used or ignored; the id covers provider, version, seed and settings. output_pattern writes frames outside the artifact store and needs the disk setting.",
+     "description": "Run a local provider on a SceneState and ControlBundle with a seed (default 0) and sampler_settings (a small JSON object). Returns the generated-sequence artifact id, which controls the provider used or ignored (a text brief it does not use is recorded as ignored, not refused), and the ConditionedRead node parameters for reading the result; the id covers provider, version, seed and settings. output_pattern writes frames outside the artifact store and needs the disk setting.",
      "inputSchema": _schema({"scene_state": {"type": "string"}, "bundle": {"type": "string"},
                              "provider": {"type": "string"}, "options": {"type": "object"},
                              "seed": {"type": "integer", "minimum": 0},

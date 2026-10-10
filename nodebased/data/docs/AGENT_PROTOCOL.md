@@ -189,13 +189,17 @@ so it shows in the Agent panel's activity log:
   `scene_state` and `control_bundle` artifact ids.
 - `generate` — `{scene_state, bundle, provider, options, seed, sampler_settings, output_pattern}`.
   Runs a local provider and returns the `generated_sequence` artifact id, the provider version, the
-  `seed` and `sampler_settings` used, and `controls` (every control as `used` or `ignored`). `seed`
+  `seed` and `sampler_settings` used, `controls` (every control as `used` or `ignored`), `ignored` (the
+  controls this call supplied that the provider did not honour: a text brief is recorded, not refused) and
+  the unpacked ConditionedRead parameters (`path`, `manifest`, `scene_state`, `node`), identical to a loop's
+  `use_result`. `seed`
   (default 0) and `sampler_settings` (a small JSON object) are part of the artifact id. `output_pattern` writes outside the artifact
   store and is refused unless `agent/allow_disk_ops` is on. Queued (remote) providers go through
   `loop`.
 - `verify` — `{scene_state, bundle, generated_sequence}`. Returns the score card, the report id and a
   `determinism` section (provider, version, seed, sampler settings, seed honoured). Checks whose pass the
-  sequence lacks read "not conditioned" and stay out of the verdict.
+  sequence lacks, and the camera check of a provider that does not declare camera pose honoured, read
+  "not conditioned" and stay out of the verdict.
 - `loop` — `{action}`: `start` (`scene_state`, `bundle`, `provider`, `max_attempts`, `spend_cap`,
   `estimate`, `unit`, optional `text`, `feedback`, `seed`, `sampler_settings`, `vary_seed`), `status`
   (`loop`; without it, the recent loops; each attempt shows its `seed`; the reply has `controls`),

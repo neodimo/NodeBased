@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "name": "reproject",
-  "version": "1.0",
+  "version": "1.1",
   "locality": "local",
   "accepts": {
     "depth": {"accepted": true, "role": "z-buffer visibility"},
     "normals": {"accepted": false},
-    "motion": {"accepted": true, "role": "forward pixel reprojection"},
+    "motion": {"accepted": true, "role": "previous frame's beauty carried by its forward pixel motion"},
     "ids": {"accepted": false},
-    "camera_pose": {"accepted": true, "role": "validated SceneState camera context for motion"},
+    "camera_pose": {"accepted": false, "note": "the SceneState camera only decodes the motion vectors; the picture is a resampled copy of the layout render, so its camera is not held to the verifier's tolerance (measured up to 29 cm and 1.7 degrees of field of view off on the 480x270 demo plate)"},
     "text": {"accepted": false},
     "reference_frames": {"accepted": false},
     "seed": {"accepted": true, "role": "recorded in the artifact; the output is bit-identical for any seed"},
@@ -16,5 +16,5 @@
   },
   "limits": {"max_resolution": [8192, 8192], "max_frames": 10000},
   "color_spaces": ["ACEScg"],
-  "returns": {"frames": "OpenEXR RGBA sequence", "honoured": ["depth", "motion", "camera_pose", "seed"]}
+  "returns": {"frames": "OpenEXR RGBA sequence", "honoured": ["depth", "motion", "seed"]}
 }

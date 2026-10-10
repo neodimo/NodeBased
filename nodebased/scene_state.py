@@ -191,7 +191,8 @@ def write_scene_state(path, samples, *, first_frame=None, last_frame=None, fps=2
         records.append({
             "frame": frame, "time_seconds": (frame - first) / float(fps),
             "camera": encoded_camera, "camera_data": camera_data, "resolution": list(r),
-            "pixel_aspect": float(pixel_aspect), "objects": _object_manifest(scene),
+            "pixel_aspect": float(pixel_aspect), "ambient": float(sample.get("ambient", 0.0)),
+            "objects": _object_manifest(scene),
             "scene": encoded_scene,
             "lighting": _encode(scene.lights, arrays, array_keys),
             "environments": [{
