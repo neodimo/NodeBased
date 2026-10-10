@@ -8454,6 +8454,12 @@ class Window(QMainWindow):
                     "playing": self.playing, "status": self.viewer_info.text()}
         if cmd.get("op") == "reference_context":
             return self.reference_context(cmd)
+        if cmd.get("op") == "render":
+            # Same op the headless dispatcher serves; a separate evaluator keeps it off the viewer's caches.
+            from .agent import render_op
+            from .imaging import Evaluator
+            self._agent_evaluator = getattr(self, "_agent_evaluator", None) or Evaluator()
+            return render_op(self._agent_evaluator, self.dispatcher.document, cmd)
         if cmd.get("op") == "workspace":
             self.select_workspace_tab(cmd.get("tab"))
             return {"tab": self.workspace_tab}

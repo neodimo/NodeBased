@@ -22,6 +22,28 @@ def response(dispatch, request):
         return {"id": request.get("request_id") if isinstance(request, dict) else None, "ok": False, "error": str(error)}
 
 
+def render_op(evaluator, document, cmd):
+    """The `render` op: evaluate node `id` (at `frame`, else the document's current frame) and write
+    it to `path` (EXR with `bits` and `compression`, anything else as PNG). One implementation for
+    the headless dispatcher and the desktop bridge, so a render means the same through both."""
+    from .imaging import write_png
+    from .media import DEFAULT_EXR_BITS, DEFAULT_EXR_COMPRESSION, write_exr
+    at = cmd.get("frame")
+    pixels = evaluator.evaluate(document, cmd.get("id"), frame=at)
+    written = {"path": cmd["path"], "width": pixels.shape[1], "height": pixels.shape[0],
+               "frame": int(at if at is not None else document["time"]["current"])}
+    if str(cmd["path"]).lower().endswith(".exr"):
+        # An agent rendering a data pass needs to say so; write_exr rejects anything outside the
+        # supported sets rather than quietly substituting.
+        bits = cmd.get("bits", DEFAULT_EXR_BITS)
+        compression = cmd.get("compression", DEFAULT_EXR_COMPRESSION)
+        write_exr(cmd["path"], pixels, bits=bits, compression=compression)
+        written |= {"bits": bits, "compression": compression}
+    else:
+        write_png(cmd["path"], pixels)
+    return written
+
+
 class LocalBridge(QObject):
     def __init__(self, name, dispatch, parent=None):
         super().__init__(parent)
@@ -110,27 +132,9 @@ def main():
                     generative = generative or pipeline.Pipeline()
                     return generative.execute(cmd, dispatcher.document)
                 if cmd.get("op") == "render":
-                    from .imaging import Evaluator, write_png
-                    from .media import DEFAULT_EXR_BITS, DEFAULT_EXR_COMPRESSION, write_exr
+                    from .imaging import Evaluator
                     evaluator = evaluator or Evaluator()
-                    # "frame" is optional; omitting it renders the document's current frame, so
-                    # existing single-frame agent callers keep working unchanged.
-                    at = cmd.get("frame")
-                    pixels = evaluator.evaluate(dispatcher.document, cmd.get("id"), frame=at)
-                    written = {"path": cmd["path"], "width": pixels.shape[1],
-                               "height": pixels.shape[0],
-                               "frame": int(at if at is not None
-                                            else dispatcher.document["time"]["current"])}
-                    if str(cmd["path"]).lower().endswith(".exr"):
-                        # An agent rendering a data pass needs to say so; write_exr rejects
-                        # anything outside the supported sets rather than quietly substituting.
-                        bits = cmd.get("bits", DEFAULT_EXR_BITS)
-                        compression = cmd.get("compression", DEFAULT_EXR_COMPRESSION)
-                        write_exr(cmd["path"], pixels, bits=bits, compression=compression)
-                        written |= {"bits": bits, "compression": compression}
-                    else:
-                        write_png(cmd["path"], pixels)
-                    return written
+                    return render_op(evaluator, dispatcher.document, cmd)
                 return dispatcher.execute(cmd)
             result = response(dispatch, request)
         except (ValueError, UnicodeError) as error:
