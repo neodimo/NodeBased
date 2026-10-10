@@ -1,0 +1,79 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "Mesa 26.2.2",
+  "format": "rgba32float",
+  "name": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+  "type": "IntegratedGPU"
+ },
+ "adapter_request": "integrated",
+ "case": "smoke-grid",
+ "commit": "d4f01c3",
+ "counters": {
+  "cpu_per_path": {
+   "hops": 1.459056712962963,
+   "null": 14.701099537037036,
+   "real": 0.1896701388888889,
+   "tentative": 14.890769675925926
+  },
+  "gpu_per_path": {
+   "hops": 1.461883544921875,
+   "null": 15.169677734375,
+   "real": 0.188934326171875,
+   "tentative": 15.358612060546875
+  }
+ },
+ "label": "fixed 32, two-level majorant grid",
+ "median_s": 0.04321695098769851,
+ "quality": {
+  "max_abs": 0.05271540742302355,
+  "mean_abs": 1.019016351906992e-06,
+  "psnr_db": 73.872,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 16,
+  "phases_ms": {
+   "convert": 0.117,
+   "dispatch": 38.136,
+   "encode": 0.331,
+   "final readback": 0.712,
+   "job list": 0.236,
+   "mask update": 0.11,
+   "pack": 0.783,
+   "postprocess": 0.011,
+   "scene build": 0.219,
+   "stats": 0.032,
+   "uniform write": 0.188,
+   "upload": 0.187
+  },
+  "samples": {
+   "max": 32,
+   "mean": 32.0,
+   "min": 32
+  }
+ },
+ "scene": "smoke plume 64",
+ "schema": 1,
+ "seed": 4,
+ "settings": {
+  "max_bounces": 4,
+  "samples": 32,
+  "sampling": "fixed",
+  "seed": 4
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.04542,
+  0.043217,
+  0.04155
+ ],
+ "timestamp": "2026-10-09 18:30:39",
+ "warmup": 1
+}

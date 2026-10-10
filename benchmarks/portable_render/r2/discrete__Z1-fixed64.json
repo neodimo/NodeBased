@@ -1,0 +1,66 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "615.71.09",
+  "format": "rgba32float",
+  "name": "NVIDIA GeForce RTX 3080 Ti",
+  "type": "DiscreteGPU"
+ },
+ "adapter_request": "discrete",
+ "case": "Z1-fixed64",
+ "commit": "d4f01c3",
+ "counters": {},
+ "label": "fixed 64",
+ "median_s": 0.010890655015828088,
+ "quality": {
+  "max_abs": 0.00018195214245797509,
+  "mean_abs": 8.287508537249134e-09,
+  "psnr_db": 127.37,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 16,
+  "phases_ms": {
+   "convert": 0.112,
+   "dispatch": 6.417,
+   "encode": 0.244,
+   "final readback": 1.777,
+   "job list": 0.164,
+   "mask update": 0.08,
+   "pack": 0.254,
+   "postprocess": 0.008,
+   "scene build": 0.328,
+   "stats": 0.029,
+   "uniform write": 0.307,
+   "upload": 0.085
+  },
+  "samples": {
+   "max": 64,
+   "mean": 64.0,
+   "min": 64
+  }
+ },
+ "scene": "Z1",
+ "schema": 1,
+ "seed": 1,
+ "settings": {
+  "max_bounces": 8,
+  "samples": 64,
+  "sampling": "fixed",
+  "seed": 1
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.011108,
+  0.010891,
+  0.010878
+ ],
+ "timestamp": "2026-10-09 18:31:16",
+ "warmup": 1
+}

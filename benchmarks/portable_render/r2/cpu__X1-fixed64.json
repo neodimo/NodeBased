@@ -1,0 +1,66 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "Mesa 26.2.2 (LLVM 22.1.8)",
+  "format": "rgba32float",
+  "name": "llvmpipe (LLVM 22.1.8, 256 bits)",
+  "type": "CPU"
+ },
+ "adapter_request": "cpu",
+ "case": "X1-fixed64",
+ "commit": "d4f01c3",
+ "counters": {},
+ "label": "fixed 64",
+ "median_s": 0.5504971689952072,
+ "quality": {
+  "max_abs": 0.0004104298017600927,
+  "mean_abs": 1.3401285544353382e-07,
+  "psnr_db": 109.428,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 16,
+  "phases_ms": {
+   "convert": 0.148,
+   "dispatch": 533.661,
+   "encode": 0.669,
+   "final readback": 1.406,
+   "job list": 0.456,
+   "mask update": 0.166,
+   "pack": 4.949,
+   "postprocess": 0.013,
+   "scene build": 5.635,
+   "stats": 0.046,
+   "uniform write": 0.495,
+   "upload": 0.196
+  },
+  "samples": {
+   "max": 64,
+   "mean": 64.0,
+   "min": 64
+  }
+ },
+ "scene": "X1",
+ "schema": 1,
+ "seed": 1,
+ "settings": {
+  "max_bounces": 8,
+  "samples": 64,
+  "sampling": "fixed",
+  "seed": 1
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.550497,
+  0.557587,
+  0.549609
+ ],
+ "timestamp": "2026-10-09 18:30:45",
+ "warmup": 1
+}

@@ -1,0 +1,79 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "Mesa 26.2.2",
+  "format": "rgba32float",
+  "name": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+  "type": "IntegratedGPU"
+ },
+ "adapter_request": "integrated",
+ "case": "smoke-box",
+ "commit": "d4f01c3",
+ "counters": {
+  "cpu_per_path": {
+   "hops": 0.0,
+   "null": 112.01041666666667,
+   "real": 0.1857638888888889,
+   "tentative": 112.19618055555556
+  },
+  "gpu_per_path": {
+   "hops": 0.421142578125,
+   "null": 112.4072265625,
+   "real": 0.188140869140625,
+   "tentative": 112.59536743164062
+  }
+ },
+ "label": "fixed 32, single-box majorant",
+ "median_s": 0.08412454297649674,
+ "quality": {
+  "max_abs": 0.027505673920666995,
+  "mean_abs": 1.1980113029833395e-07,
+  "psnr_db": 84.836,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 16,
+  "phases_ms": {
+   "convert": 0.129,
+   "dispatch": 80.488,
+   "encode": 0.506,
+   "final readback": 0.701,
+   "job list": 0.337,
+   "mask update": 0.11,
+   "pack": 0.189,
+   "postprocess": 0.011,
+   "scene build": 0.257,
+   "stats": 0.047,
+   "uniform write": 0.3,
+   "upload": 0.206
+  },
+  "samples": {
+   "max": 32,
+   "mean": 32.0,
+   "min": 32
+  }
+ },
+ "scene": "smoke plume 64",
+ "schema": 1,
+ "seed": 4,
+ "settings": {
+  "max_bounces": 4,
+  "samples": 32,
+  "sampling": "fixed",
+  "seed": 4
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.089426,
+  0.084125,
+  0.083809
+ ],
+ "timestamp": "2026-10-09 18:30:42",
+ "warmup": 1
+}

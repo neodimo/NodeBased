@@ -1,0 +1,79 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "Mesa 26.2.2 (LLVM 22.1.8)",
+  "format": "rgba32float",
+  "name": "llvmpipe (LLVM 22.1.8, 256 bits)",
+  "type": "CPU"
+ },
+ "adapter_request": "cpu",
+ "case": "smoke-grid",
+ "commit": "d4f01c3",
+ "counters": {
+  "cpu_per_path": {
+   "hops": 1.459056712962963,
+   "null": 14.701099537037036,
+   "real": 0.1896701388888889,
+   "tentative": 14.890769675925926
+  },
+  "gpu_per_path": {
+   "hops": 1.461883544921875,
+   "null": 15.169677734375,
+   "real": 0.188934326171875,
+   "tentative": 15.358612060546875
+  }
+ },
+ "label": "fixed 32, two-level majorant grid",
+ "median_s": 0.38502093800343573,
+ "quality": {
+  "max_abs": 0.05271540742302355,
+  "mean_abs": 7.278553065974446e-07,
+  "psnr_db": 75.167,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 16,
+  "phases_ms": {
+   "convert": 0.098,
+   "dispatch": 366.57,
+   "encode": 1.206,
+   "final readback": 1.397,
+   "job list": 0.824,
+   "mask update": 0.158,
+   "pack": 0.912,
+   "postprocess": 0.01,
+   "scene build": 0.293,
+   "stats": 0.035,
+   "uniform write": 0.811,
+   "upload": 0.171
+  },
+  "samples": {
+   "max": 32,
+   "mean": 32.0,
+   "min": 32
+  }
+ },
+ "scene": "smoke plume 64",
+ "schema": 1,
+ "seed": 4,
+ "settings": {
+  "max_bounces": 4,
+  "samples": 32,
+  "sampling": "fixed",
+  "seed": 4
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.40859,
+  0.385021,
+  0.373099
+ ],
+ "timestamp": "2026-10-09 18:31:03",
+ "warmup": 1
+}

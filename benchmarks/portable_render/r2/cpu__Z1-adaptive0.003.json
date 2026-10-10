@@ -1,0 +1,67 @@
+{
+ "adapter_info": {
+  "backend": "Vulkan",
+  "driver": "Mesa 26.2.2 (LLVM 22.1.8)",
+  "format": "rgba32float",
+  "name": "llvmpipe (LLVM 22.1.8, 256 bits)",
+  "type": "CPU"
+ },
+ "adapter_request": "cpu",
+ "case": "Z1-adaptive0.003",
+ "commit": "d4f01c3",
+ "counters": {},
+ "label": "adaptive 0.003",
+ "median_s": 0.1056523000006564,
+ "quality": {
+  "max_abs": 1.1979979025467102e-07,
+  "mean_abs": 5.111467033480279e-09,
+  "psnr_db": 159.211,
+  "reference": "cpu backend, same settings and seed"
+ },
+ "renderer": {
+  "backend": "gpu",
+  "passes": 7,
+  "phases_ms": {
+   "adaptive setup": 0.933,
+   "convert": 0.255,
+   "dispatch": 9.147,
+   "encode": 92.571,
+   "final readback": 0.841,
+   "pack": 0.339,
+   "postprocess": 0.004,
+   "scene build": 0.503,
+   "stats": 0.011,
+   "upload": 0.088
+  },
+  "samples": {
+   "max": 64,
+   "mean": 18.334756944444443,
+   "min": 16
+  }
+ },
+ "scene": "Z1",
+ "schema": 1,
+ "seed": 1,
+ "settings": {
+  "adaptive_pass_size": 8,
+  "max_bounces": 8,
+  "max_samples": 256,
+  "min_samples": 16,
+  "noise_threshold": 0.003,
+  "sampling": "adaptive",
+  "seed": 1
+ },
+ "size": [
+  640,
+  360
+ ],
+ "status": "ok",
+ "timed": 3,
+ "times_s": [
+  0.105652,
+  0.103689,
+  0.106172
+ ],
+ "timestamp": "2026-10-09 18:30:59",
+ "warmup": 1
+}
