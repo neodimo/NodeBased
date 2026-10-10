@@ -384,7 +384,7 @@ class PropertiesColorWheel(QWidget):
     valueChanged = Signal(float)
     editingFinished = Signal(float)
 
-    def __init__(self, value, limits, parent=None):
+    def __init__(self, value, limits, neutral=None, parent=None):
         super().__init__(parent)
         self.setFixedSize(92, 92)
         self.setMouseTracking(True)
@@ -393,6 +393,20 @@ class PropertiesColorWheel(QWidget):
         self._value = float(value)
         self._visual_value = float(value)
         self.motion = None
+        # The value at which the control does nothing (the knob's default). The marker sits in the middle there
+        # and moves sideways as the value leaves it, so a neutral Grade reads as neutral (10/9 sprint: the old
+        # angle mapping put a neutral control on the rim, as if it shifted the colour).
+        self._neutral = float(neutral) if neutral is not None else (self._lo + self._hi) / 2
+
+    def _span(self):
+        return max(self._hi - self._neutral, self._neutral - self._lo, 1e-9)
+
+    def _reach(self):
+        return (min(self.width(), self.height()) / 2 - 2) * 0.7
+
+    def marker_offset(self):
+        """Marker position relative to the centre, -1 (left) to 1 (right); 0 is neutral."""
+        return max(-1.0, min(1.0, (self._visual_value - self._neutral) / self._span()))
 
     def setValue(self, value):
         self._value = max(self._lo, min(self._hi, float(value)))
@@ -400,9 +414,8 @@ class PropertiesColorWheel(QWidget):
         self.update()
 
     def _set_from_pos(self, point):
-        margin = 8
-        width = max(1, self.width() - margin * 2)
-        value = self._lo + (self._hi - self._lo) * (point.x() - margin) / width
+        offset = (point.x() - self.width() / 2) / self._reach()
+        value = self._neutral + max(-1.0, min(1.0, offset)) * self._span()
         value = max(self._lo, min(self._hi, value))
         if value != self._value:
             start = self._visual_value
@@ -463,10 +476,7 @@ class PropertiesColorWheel(QWidget):
         painter.drawEllipse(center, radius - 1, radius - 1)
         painter.setPen(QPen(QColor(17, 20, 24, 95), 10))
         painter.drawEllipse(center, radius - 6, radius - 6)
-        ratio = 0.5 if self._hi == self._lo else (self._visual_value - self._lo) / (self._hi - self._lo)
-        angle = (ratio * 300 - 150) * 3.141592653589793 / 180
-        marker = QPointF(center.x() + math.cos(angle) * radius * .55,
-                         center.y() + math.sin(angle) * radius * .55)
+        marker = QPointF(center.x() + self.marker_offset() * self._reach(), center.y())
         painter.setPen(QPen(QColor("#ffffff"), 2))
         painter.setBrush(QColor("#20252b"))
         painter.drawEllipse(marker, 5, 5)
@@ -1059,6 +1069,9 @@ class PanZoomView(QGraphicsView):
         self.setBackgroundBrush(QColor("#19191b"))
         self.pan = None
         self.pan_button = None
+        # True until the artist zooms or pans; while it holds, a resize refits the view so the picture (or the
+        # graph) stays centred like the mockup instead of keeping a zoom chosen for an older, smaller window.
+        self.auto_fit = True
 
     def wheelEvent(self, event):
         delta = event.angleDelta()
@@ -1070,6 +1083,7 @@ class PanZoomView(QGraphicsView):
             factor = 1.15 ** steps
             if 0.05 < self.transform().m11() * factor < 20:
                 self.scale(factor, factor)
+                self.auto_fit = False
         event.accept()
 
     def starts_pan(self, event):
@@ -1093,6 +1107,7 @@ class PanZoomView(QGraphicsView):
             self.pan = event.position()
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - round(delta.x()))
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - round(delta.y()))
+            self.auto_fit = False
         else:
             super().mouseMoveEvent(event)
 
@@ -1110,6 +1125,7 @@ class PanZoomView(QGraphicsView):
         rect = self.scene().itemsBoundingRect()
         if not rect.isEmpty():
             self.fitInView(rect.adjusted(-24, -24, 24, 24), Qt.AspectRatioMode.KeepAspectRatio)
+        self.auto_fit = True
 
 
 class ViewerInputStrip(QWidget):
@@ -1326,6 +1342,8 @@ class Viewer(PanZoomView):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._fit_initial_image()
+        if self.auto_fit and not self._initial_fit_pending:
+            self.fit()
         self._place_pixel_readout()
         self._place_prompt_banner()
 
@@ -1380,6 +1398,7 @@ class Viewer(PanZoomView):
         # The picture's middle goes to the middle of the free band: the view's own middle is
         # (top - bottom) / 2 pixels above it.
         self.centerOn(target.center().x(), target.center().y() - (top - bottom) / (2 * scale))
+        self.auto_fit = True
 
     def report_zoom(self):
         """Tell the corner readout the zoom, once per change (called from every paint)."""
@@ -5214,6 +5233,7 @@ class Graph(PanZoomView):
             self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
             self.scale(factor, factor)
             self.setTransformationAnchor(anchor)
+            self.auto_fit = False
 
     def zoom_to(self, level=1.0):
         """Set the zoom to `level` (1.0 is 100%), keeping the middle of the view where it is."""
@@ -5225,7 +5245,16 @@ class Graph(PanZoomView):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if self.auto_fit:
+            # Until the artist zooms or pans, the graph stays framed (10/9 sprint: it opened at 38% with the
+            # nodes a speck in one corner).
+            self.frame_nodes()
         self.corner.reposition()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.auto_fit:
+            QTimer.singleShot(0, self, self.frame_nodes)
 
     def _new_pending_edge(self):
         edge = Edge(TOKENS["tx1"], dashed=True, arrow=False, mode=self.wire_mode)
@@ -5528,6 +5557,7 @@ class Graph(PanZoomView):
             factor = FRAME_MAX_ZOOM / self.transform().m11()
             self.scale(factor, factor)
             self.centerOn(target.center())
+        self.auto_fit = keys is None or set(keys) == set(self.items_by_id)
 
     def reveal(self, keys, keep_zoom=False):
         """Bring the nodes `keys` and the node feeding the first of them fully into view, with a
@@ -6674,6 +6704,7 @@ class Window(QMainWindow):
         # Same rule for the status bar: a long validation message must report a problem, not
         # cause a second one by stretching the window it is reported in.
         self.statusBar().addPermanentWidget(self.command_error_label, 1)
+        self._build_status_summary()
         self.render_progress = QProgressBar()
         self.render_progress.setObjectName("render-progress")
         self.render_progress.setRange(0, 1000)
@@ -8326,8 +8357,37 @@ class Window(QMainWindow):
         self.graph.grid_pen = QPen(QColor(grid_color(self.theme_name)), 1)
         self.graph.viewport().update()
 
+    def _build_status_summary(self):
+        """The quiet line on the right of the status bar, as in the mockup: cache use, the frame on screen and
+        its render time, when the project was last saved, and the version. Transient messages keep the left."""
+        bar = self.statusBar()
+        bar.setObjectName("status-bar")
+        self.status_summary = {}
+        for name in ("cache", "frame", "saved", "version"):
+            label = QLabel("")
+            label.setObjectName(f"status-{name}")
+            bar.addPermanentWidget(label)
+            self.status_summary[name] = label
+        self.status_summary["version"].setText(f"NodeBased {__version__}")
+        bar.showMessage("Ready")
+
+    def update_status_summary(self, frame=None):
+        if not hasattr(self, "status_summary"):
+            return
+        evaluator = getattr(self, "evaluator", None)
+        if evaluator is not None and getattr(evaluator, "budget", 0):
+            self.status_summary["cache"].setText(
+                f"Cache {evaluator.bytes / 2 ** 30:.1f} / {evaluator.budget / 2 ** 30:.0f} GB")
+        if frame is not None:
+            ms = getattr(self, "last_frame_ms", None)
+            self.status_summary["frame"].setText(f"Frame {frame}" + (f" · {ms} ms" if ms is not None else ""))
+
     def update_title(self):
         dirty = self.dispatcher.document != self.saved_document
+        # Stamp the time when the project goes from unsaved to saved, not on every later title refresh.
+        if hasattr(self, "status_summary") and self.project_path and not dirty and getattr(self, "_title_dirty", True):
+            self.status_summary["saved"].setText("Saved " + time.strftime("%I:%M %p").lstrip("0"))
+        self._title_dirty = dirty
         self.setWindowTitle(f"NodeBased {__version__} · {Path(self.project_path).name if self.project_path else 'Untitled'}{' *' if dirty else ''}")
         if not hasattr(self, "topbar"):
             return
@@ -8529,6 +8589,9 @@ class Window(QMainWindow):
             control_content.setLayout(form)
             content_layout.addWidget(section_bar)
             content_layout.addWidget(control_content)
+            # Grade and ColorCorrect open with their own BALANCE section (heading and Reset), so an outer
+            # CONTROLS heading above it read as an empty section (10/9 sprint, compared with the mockup).
+            section_bar.setVisible(node["type"] not in ("Grade", "ColorCorrect"))
             section_toggle.toggled.connect(lambda shown, body=control_content, button=section_toggle:
                 (body.setVisible(shown), button.setText("▾  CONTROLS" if shown else "▸  CONTROLS")))
             title._panel_content = content
@@ -8583,7 +8646,7 @@ class Window(QMainWindow):
                     if node["type"] == "Grade" else (("Lift", "lift"), ("Gamma", "gamma"), ("Gain", "gain"))
                 for label_text, param in bindings:
                     limits = parameter_limits(node["type"], param)
-                    wheel = PropertiesColorWheel(resolved[param], limits)
+                    wheel = PropertiesColorWheel(resolved[param], limits, SPECS[node["type"]]["params"].get(param))
                     wheel.motion = self.motion
                     wheel.setObjectName(f"{param}-color-wheel")
                     wheel.editingFinished.connect(
@@ -11535,6 +11598,7 @@ class Window(QMainWindow):
                 self.last_frame_ms = int(timing.group(1))
                 self.topbar.set_gpu(gpudisplay.adapter_name(), self.last_frame_ms,
                                     gpu=gpudisplay.status() == "GPU")
+            self.update_status_summary(request.frame)
         current = self.dispatcher.document["time"]["current"]
         # Outside playback the rule stays strict: a result is displayable only if it is still the
         # playhead and still the newest request (docs/PLAYBACK.md criterion 4). During playback

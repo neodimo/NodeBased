@@ -255,6 +255,7 @@ QToolButton:hover {{ background: {c['hover']}; }}
 QToolButton#viewer-mode-2d:checked, QToolButton#viewer-mode-3d:checked {{ background: {c['title']}; color: {c['accent']}; border: 1px solid {c['accent']}; border-radius: {r['chip'] - 2}px; }}
 QSplitter::handle {{ background: {c['border']}; height: {sp['hair'] + 3}px; width: {sp['hair'] + 3}px; }}
 QStatusBar {{ background: {c['status']}; color: {c['muted']}; border-top: 1px solid {c['border']}; }}
+QStatusBar QLabel {{ color: {c['muted']}; font-size: {t['caption']}px; padding: 0 9px; }}
 QLabel#muted {{ color: {c['muted']}; }}
 QLabel#brand {{ color: {c['accent']}; font-size: {t['title']}px; font-weight: 700; padding: 6px; }}
 QCheckBox::indicator {{ width: 13px; height: 13px; background: {c['field']}; border: 1px solid {c['button_border']}; border-radius: 3px; }}

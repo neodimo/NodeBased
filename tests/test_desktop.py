@@ -2766,13 +2766,26 @@ class PropertiesRedesignTests(unittest.TestCase):
         wheel.show()
         APP.processEvents()
         image = wheel.grab().toImage()
-        # Hue is present through the disc, including its centre; the old ring left a hole.
-        center = image.pixelColor(image.width() // 2, image.height() // 2)
+        # Hue is present through the disc, including near its centre (the old ring left a hole); the very centre
+        # holds the marker at the neutral value, so sample just above it.
+        center = image.pixelColor(image.width() // 2, image.height() // 2 - 14)
         rim = image.pixelColor(image.width() // 2, 6)
         self.assertGreater(center.red() + center.green() + center.blue(), 120)
         self.assertGreater(rim.red() + rim.green() + rim.blue(), 100)
         wheel.setValue(1.0)
         self.assertNotEqual(wheel._value, 0.0)
+
+    def test_colour_wheel_marker_is_centred_at_the_neutral_value(self):
+        from nodebased.app import PropertiesColorWheel
+        gain = PropertiesColorWheel(1.0, (0.0, 4.0), neutral=1.0)
+        self.assertEqual(gain.marker_offset(), 0.0)
+        gain.setValue(4.0)
+        self.assertEqual(gain.marker_offset(), 1.0)
+        gain.setValue(0.0)
+        self.assertLess(gain.marker_offset(), 0.0)
+        panel = self._panel_for("neutral_grade", "Grade")
+        for param in ("offset", "multiply", "exposure"):
+            self.assertEqual(panel.findChild(QWidget, f"{param}-color-wheel").marker_offset(), 0.0, param)
 
 
 class PropertiesLabelTests(unittest.TestCase):
