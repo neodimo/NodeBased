@@ -3293,21 +3293,8 @@ class Viewer(PanZoomView):
                     painter.restore()
         if self.format_rect is None:
             return
-        painter.save()
-        pen = QPen(QColor("#6d6d78"))
-        pen.setStyle(Qt.PenStyle.DotLine)
-        pen.setCosmetic(True)  # a constant 1px dashed line regardless of zoom
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(self.format_rect)
-        painter.restore()
-        painter.save()
-        painter.resetTransform()  # switch to raw viewport pixels for constant-size text
-        corner = self.mapFromScene(self.format_rect.bottomRight())
-        painter.setPen(QColor("#9a9aa4"))
-        painter.drawText(corner.x() + 4, corner.y() + 14,
-                         f"{int(self.format_rect.width())} x {int(self.format_rect.height())}")
-        painter.restore()
+        # No dotted frame or size label around the canvas: the picture sits on the viewer's background
+        # and the size is in the bottom-left corner readout.
         self._draw_roi_and_masks(painter)
 
     def mousePressEvent(self, event):
@@ -7666,6 +7653,8 @@ class Window(QMainWindow):
         if start == self.playing:
             return
         self.playing = start
+        if hasattr(self, "state_word"):
+            self.refresh_state_word()
         self.play_button.setText("■" if start else "▶")
         self.play_button.setIcon(transport_icon(STOP_ICON if start else PLAY_ICON, filled=True, ink=True))
         if start:
@@ -8750,7 +8739,45 @@ class Window(QMainWindow):
             bar.addPermanentWidget(label)
             self.status_summary[name] = label
         self.status_summary["version"].setText(f"NodeBased {__version__}")
-        bar.showMessage("Ready")
+        # The state word sits at the far left, as in the mockup; the transient messages follow it.
+        # It is a child of the bar (a bar's own widgets hide while a message shows).
+        self.state_word = QLabel("Ready", bar)
+        self.state_word.setObjectName("status-state")
+        self._saving = False
+        self.state_timer = QTimer(self)
+        self.state_timer.setInterval(250)
+        self.state_timer.timeout.connect(self.refresh_state_word)
+        self.state_timer.start()
+        bar.installEventFilter(self)
+        self._place_state_word()
+
+    STATE_WORDS = ("Ready", "Rendering", "Playing", "Saving")
+
+    def current_state_word(self):
+        if getattr(self, "_saving", False):
+            return "Saving"
+        if self.render_progress.isVisible() or getattr(self, "_write_job", None) is not None:
+            return "Rendering"
+        if self.playing:
+            return "Playing"
+        return "Ready"
+
+    def refresh_state_word(self):
+        word = self.current_state_word()
+        if self.state_word.text() != word:
+            self.state_word.setText(word)
+            self.state_word.setProperty("state", word.lower())
+            self.state_word.style().unpolish(self.state_word)
+            self.state_word.style().polish(self.state_word)
+            self._place_state_word()
+
+    def _place_state_word(self):
+        bar = self.statusBar()
+        label = self.state_word
+        label.adjustSize()
+        width = max(label.sizeHint().width(), QFontMetrics(label.font()).horizontalAdvance("Rendering") + 20)
+        label.setGeometry(0, 0, width, bar.height())
+        bar.setContentsMargins(width, 0, 0, 0)
 
     def update_status_summary(self, frame=None):
         if not hasattr(self, "status_summary"):
@@ -11268,6 +11295,9 @@ class Window(QMainWindow):
         return self.command({"op": "batch", "commands": ops})
 
     def eventFilter(self, watched, event):
+        if (event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange) and hasattr(self, "state_word")
+                and watched is self.statusBar()):
+            self._place_state_word()
         if (event.type() == QEvent.Type.Wheel and isinstance(watched, (QComboBox, QAbstractSpinBox, QSlider))
                 and not watched.hasFocus() and self.properties_dock.isAncestorOf(watched)):
             # A wheel notch over an unfocused knob scrolls the Properties panel instead of
@@ -11551,7 +11581,15 @@ class Window(QMainWindow):
             return False
         if not Path(path).suffix:
             path += ".nbcomp"
-        if self.command({"op": "save", "path": path}, render=False) is None:
+        self._saving = True
+        self.refresh_state_word()
+        QApplication.processEvents()
+        try:
+            saved = self.command({"op": "save", "path": path}, render=False)
+        finally:
+            self._saving = False
+            self.refresh_state_word()
+        if saved is None:
             return False
         self.project_path = path
         self.preferences.set_last_project_directory(str(Path(path).parent))

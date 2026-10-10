@@ -1,5 +1,6 @@
 """End-to-end sprint stage 5: the new look's punch list from the 10/10 real-display QA
 (scratch/nb-qa/1010-e2e/FINDINGS.md), and real layouts for the Simulate and Render tabs."""
+import tempfile
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -9,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from nodebased.app import NodeSearch, Preferences
 from nodebased.core import SPECS
+from tests.waiting import wait_until
 import tests.isolation  # noqa: F401  (keeps the window's layout out of the real Qt settings)
 from tests.test_new_look_viewer_strip_nl5 import Base
 
@@ -276,6 +278,78 @@ class TopBarSearchTests(Base):
             w.node_search_from_topbar()
         settle()
         self.assertNotEqual(w.lock_panels_action.isChecked(), locked)
+
+
+class StatusStateWordTests(Base):
+    """Finding 5: a state word at the left of the status bar."""
+
+    def test_the_word_is_at_the_left_and_reads_ready(self):
+        w = self.open_window()
+        w.refresh_state_word()
+        self.assertEqual(w.state_word.text(), "Ready")
+        self.assertEqual(w.state_word.geometry().left(), 0)
+        for label in w.status_summary.values():
+            self.assertLess(w.state_word.geometry().right(), label.geometry().left())
+        w.statusBar().showMessage("a message", 0)
+        settle()
+        self.assertTrue(w.state_word.isVisible())
+        w.statusBar().clearMessage()
+
+    def test_playing_rendering_and_saving(self):
+        w = self.open_window()
+        w.toggle_playback(True)
+        self.assertEqual(w.state_word.text(), "Playing")
+        w.toggle_playback(False)
+        w.refresh_state_word()
+        self.assertEqual(w.state_word.text(), "Ready")
+        w.render_progress.show()
+        w.refresh_state_word()
+        self.assertEqual(w.state_word.text(), "Rendering")
+        w.render_progress.hide()
+        seen = []
+        original = w.command
+
+        def command(cmd, *args, **kwargs):
+            if cmd.get("op") == "save":
+                seen.append(w.state_word.text())
+            return original(cmd, *args, **kwargs)
+
+        w.project_path = None
+        target = Path(tempfile.mkdtemp(prefix="nb-e2e5-")) / "state.nbcomp"
+        with unittest.mock.patch.object(w, "command", command):
+            self.assertTrue(self.save(w, target))
+        self.assertEqual(seen, ["Saving"])
+        w.refresh_state_word()
+        self.assertEqual(w.state_word.text(), "Ready")
+
+    def save(self, w, target):
+        with unittest.mock.patch("nodebased.app.QFileDialog.getSaveFileName", return_value=(str(target), "")):
+            return w.save_project()
+
+
+class LetterboxTests(Base):
+    """Finding 6: no dotted rectangle around the canvas outside the picture."""
+
+    def test_the_canvas_edge_is_not_drawn(self):
+        w = self.open_window((1600, 960))
+        w.command({"op": "load", "path": str(SCENE)})
+        self.assertTrue(wait_until(lambda: w.frame is not None and w.viewer.format_rect is not None))
+        settle()
+        viewer = w.viewer
+        image = viewer.viewport().grab().toImage()
+        rect = viewer.mapFromScene(viewer.format_rect).boundingRect()
+        background = image.pixel(2, 2)
+        # a ring two pixels wide just outside the canvas holds nothing but the viewer's background
+        ring = []
+        for gap in (1, 2):
+            ring += [(x, rect.top() - gap) for x in range(rect.left(), rect.right() + 1)]
+            ring += [(x, rect.bottom() + gap) for x in range(rect.left(), rect.right() + 1)]
+            ring += [(rect.left() - gap, y) for y in range(rect.top(), rect.bottom() + 1)]
+            ring += [(rect.right() + gap, y) for y in range(rect.top(), rect.bottom() + 1)]
+        ring = [p for p in ring if 0 <= p[0] < image.width() and 0 <= p[1] < image.height()]
+        self.assertGreater(len(ring), 500)
+        odd = [p for p in ring if image.pixel(*p) != background]
+        self.assertEqual(odd, [])
 
 
 if __name__ == "__main__":
