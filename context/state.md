@@ -1,5 +1,27 @@
 ## Lane 6 P1 cached playback — complete (2026-10-09)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:46 PM on 2026-10-09 PDT)
+
+`main` moved `b9d7708` -> `b89c229` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 262 tests in 522.939 s, OK. Full suite on
+the stacked tip `b89c229` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1009-1826.log`, started 6:26 PM): **Ran 4876 tests in 11338.423 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step NL5 of 7: viewer strip and timeline.** Commits:
+  - `11c0ae5` Docs and screenshots for NL5; the "?" overlay lines up with the graph corner and sizes its key labels
+  - `dd29493` Graph "?" overlay in place of the cheat-line, and slim dock title bars (new look step 5, part 4)
+  - `b870663` Slim time row and timeline track (new look step 5, part 3)
+  - `f56b995` Viewer strip and corner readouts (new look step 5, parts 1 and 2)
+  Diff: 16 files changed, 1699 insertions(+), 244 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (6:16 PM on 2026-10-09 PDT)
 
 `main` moved `05b2658` -> `8cbaeef` (lane commits cherry-picked onto main in lane order) and then to this
