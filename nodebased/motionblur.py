@@ -228,7 +228,7 @@ def motion_vectors(scene, camera, later_scene, later_camera, width, height, fram
     for start in range(0, n, pt._CHUNK):
         sl = slice(start, min(start + pt._CHUNK, n))
         o = np.broadcast_to(eye, (sl.stop - sl.start, 3))
-        t, shape, prim, u, v = pt.closest(ps, o, d[sl], tmin[sl], tmax[sl])
+        t, shape, prim, u, v = pt.closest(ps, o, d[sl], tmin[sl], tmax[sl], camera=np.ones(len(o), bool))
         surface[sl] = np.where(shape >= 0, t * cos[sl], np.inf)
         mesh = np.flatnonzero((shape >= 0) & ~ps.is_splat(shape))
         if not len(mesh):

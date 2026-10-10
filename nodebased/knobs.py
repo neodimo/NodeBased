@@ -736,7 +736,11 @@ _MATERIAL_KNOBS = (KnobGroup("float_slider", ("spec_amount",), label="Specular",
 # Light linking (plan "Rendering 6", step R2): which lights reach a mesh, splat set or instance set.
 _LIGHT_LINK_KNOBS = (KnobGroup("enum", ("light_link",), label="Lights"),
                      KnobGroup("string", ("light_link_list",), label="Light names or groups"))
-_MATERIAL_KNOBS = (*_MATERIAL_KNOBS, *_LIGHT_LINK_KNOBS)
+# Per-object render switches (Rendering 7, step R1): shadows the mesh throws, shadows it takes, and whether the camera sees it.
+_RENDER_SWITCH_KNOBS = (KnobGroup("enum", ("cast_shadows",), label="Cast shadows"),
+                        KnobGroup("enum", ("receive_shadows",), label="Receive shadows"),
+                        KnobGroup("enum", ("visible_to_camera",), label="Visible to camera"))
+_MATERIAL_KNOBS = (*_MATERIAL_KNOBS, *_LIGHT_LINK_KNOBS, *_RENDER_SWITCH_KNOBS)
 _TARGET_KNOB = KnobGroup("xyz", ("target_x", "target_y", "target_z"), label="Look at")
 # Nuke's own knob names for polygon amount, shared by Card3D, Sphere3D and Cylinder3D.
 _ROWS_COLUMNS_KNOBS = (KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)))
@@ -762,7 +766,7 @@ KNOB_LAYOUT.update({
     "ReadUSDCamera3D": _groups(KnobGroup("string", ("usd_path",), label="USD file"),
                                KnobGroup("string", ("usd_camera",), label="Camera prim")),
     "ReadGLTF3D": _groups(KnobGroup("string", ("gltf_path",), label="glTF file"),
-                          KnobGroup("string", ("gltf_root",), label="Root node")),
+                          KnobGroup("string", ("gltf_root",), label="Root node"), *_RENDER_SWITCH_KNOBS),
     "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "LightMixer": _groups(
         *(KnobGroup(kind, params, label=f"{label} {n}", **extra)

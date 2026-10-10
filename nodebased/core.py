@@ -100,7 +100,10 @@ _LIQUID = {"material": "standard", "ior": 1.333, "absorption_red": 0.55, "absorp
 # "include" and "exclude" read `light_link_list`, comma-separated light node names or light groups. Meshes, splat
 # sets and instance sets carry it; an excluded light neither lights the object nor is shadowed by it.
 _LIGHT_LINK = {"light_link": "all", "light_link_list": ""}
-_SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0, **_LIGHT_LINK,
+# Per-object render switches (plan "Rendering 7", step R1): a mesh can be told not to cast shadows, not to take
+# shadows, or not to be seen by the camera (it still casts, reflects and bounces light). All on, as before they existed.
+_RENDER_SWITCHES = {"cast_shadows": "on", "receive_shadows": "on", "visible_to_camera": "on"}
+_SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0, **_LIGHT_LINK, **_RENDER_SWITCHES,
             "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0,
             # Physically based material (materials 1, R1): "pbr" on `material` switches the Cook-Torrance
             # GGX path on (docs/3D_FOUNDATION.md "Materials"); defaults reproduce the "standard"
@@ -983,7 +986,7 @@ SPECS = {
     "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
     "ReadUSD3D": {"inputs": [], "params": {"usd_path": "", "usd_root": "/"}},
     "ReadUSDCamera3D": {"inputs": [], "params": {"usd_path": "", "usd_camera": ""}},
-    "ReadGLTF3D": {"inputs": [], "params": {"gltf_path": "", "gltf_root": ""}},
+    "ReadGLTF3D": {"inputs": [], "params": {"gltf_path": "", "gltf_root": "", **_RENDER_SWITCHES}},
     "ReadGeo3D": {"inputs": [], "optional_inputs": ["image"],
                   "params": {"geo_path": "", **_XFORM, **_SURFACE}},
     # Environment lights read the optional image (an equirectangular map, scene-linear ACEScg through
@@ -1873,7 +1876,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            # Rect/Disc/Sphere (R2): real-area lights, soft shadows from `samples` light-surface
            # samples rather than the legacy `shadow_blur` angular disc.
            "area_normalize": ["off", "on"], "two_sided": ["off", "on"], "light_color_mode": ["RGB", "Kelvin"],
-           "visible_to_camera": ["off", "on"], "light_link": ["all", "include", "exclude"],
+           "visible_to_camera": ["off", "on"], "cast_shadows": ["off", "on"], "receive_shadows": ["off", "on"], "light_link": ["all", "include", "exclude"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
                              "multichannel"],
@@ -2276,6 +2279,13 @@ def upgrade_document(document):
                         for key in ("spec_amount", "spec_shininess", "emission",
                                     "metallic", "pbr_roughness", "pbr_specular", *_LIQUID, *_LIGHT_LINK):
                             params.setdefault(key, _SURFACE[key])
+                # Per-object render switches (Rendering 7 R1): an old mesh node casts, receives and shows as before.
+                if isinstance(node, dict) and node.get("type") in ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D",
+                                                                    "ReadGeo3D", "ReadGLTF3D"):
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        for key, value in _RENDER_SWITCHES.items():
+                            params.setdefault(key, value)
                 # Per-face fluid walls are additive. Older documents preserve their bilateral axis setting.
                 if isinstance(node, dict) and node.get("type") == "FluidSolver3D":
                     params = node.get("params")

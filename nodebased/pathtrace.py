@@ -353,6 +353,18 @@ class PathScene:
     # Light linking (scene3d.light_reaches): per shape (splats last), the bit mask of the lights it excludes. Light
     # `i` is bit `i` in the order point lights, area lights, environments; None when no shape excludes any light.
     excl: object = None
+    # Per-object render switches (scene3d.Geometry): per mesh shape, True where the mesh casts no shadow, takes no
+    # shadow, or is hidden from camera rays; each None when no shape has it off.
+    no_cast: object = None
+    no_receive: object = None
+    hidden: object = None
+
+    def receive_off(self, shape):
+        """Per entry of `shape` (-1 and splat shapes: no mesh), whether that mesh takes no shadow."""
+        shape = np.asarray(shape)
+        if self.no_receive is None:
+            return np.zeros(len(shape), bool)
+        return (shape >= 0) & (shape < self.shapes) & self.no_receive[np.clip(shape, 0, self.shapes - 1)]
 
     @property
     def shapes(self):
@@ -372,6 +384,10 @@ class PathScene:
         """The lights some shape excludes, as a bit mask (0 without light linking)."""
         if "_linked_bits" not in self.__dict__:
             bits = int(np.bitwise_or.reduce(self.excl)) if self.excl is not None else 0
+            if self.no_cast is not None or self.no_receive is not None:
+                # a mesh that casts or takes no shadow breaks the two sampling strategies' agreement for every light:
+                # shadow rays skip it, a BSDF ray that reaches the light cannot, so the lights are sampled by NEE alone
+                bits |= (1 << (len(self.point_lights) + len(self.area_lights) + len(self.envs))) - 1
             if self.volumes is not None and self.volumes.excl is not None:
                 bits |= int(np.bitwise_or.reduce(self.volumes.excl))
             self.__dict__["_linked_bits"] = bits
@@ -423,6 +439,12 @@ def _area_light(light):
                       visible_to_camera=bool(getattr(light, "visible_to_camera", False)))
 
 
+def _switch_flags(entries, name):
+    """Per mesh shape, True where the render switch `name` (scene3d.Geometry) is off; None when every shape has it on."""
+    off = np.array([not getattr(entry[0], name, True) for entry in entries], bool)
+    return off if off.any() else None
+
+
 def build_scene(scene, ambient=0.0, eye=None, volume=None):
     """Pack `scene` (instances kept as instances) for tracing; `eye` only feeds the splat normal smoothing and
     `volume` (`volumerender.VolumeSettings`) is the smoke knobs."""
@@ -436,7 +458,7 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
             blases.append(_blas_of(geometry))
         return cache[key]
 
-    entries = []   # (geometry, matrix, tint or None, light link)
+    entries = []   # (geometry, matrix, tint or None, light link); an instance copy takes its source's render switches
     for geometry in geometries:
         entries.append((geometry, geometry.world_matrix().astype(np.float64), None, geometry.light_link))
     for instance_set in scene.instances:
@@ -561,7 +583,9 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
                      area_lights, point_lights,
                      [_env_of(e) for e in scene.environments], float(ambient), extent,
                      1e-4 * max(1.0, extent), s.SHADOW_BIAS_DEFAULT * max(1.0, extent), tuple(geometries),
-                     splats=layer, volumes=smoke, excl=excl if excl.any() else None)
+                     splats=layer, volumes=smoke, excl=excl if excl.any() else None,
+                     no_cast=_switch_flags(entries, "cast_shadows"), no_receive=_switch_flags(entries, "receive_shadows"),
+                     hidden=_switch_flags(entries, "visible_to_camera"))
 
 
 # --- ray queries --------------------------------------------------------------------------------------------
@@ -611,14 +635,16 @@ def _slab(lo, hi, o, d, tmax):
 _SPLAT_DIM = 56             # the random dimension a splat hit's coin flips hash from (inside the vertex stride, unused otherwise)
 
 
-def closest(ps, o, d, tmin, tmax, cancel=None, stoch=None, skip=None):
+def closest(ps, o, d, tmin, tmax, cancel=None, stoch=None, skip=None, camera=None):
     """(t, shape, prim, u, v) of the nearest hit along each ray; shape -1 for a miss.
 
     Splats are hit stochastically when `stoch` is `(keys, dim)`: each candidate splat is present with its alpha,
     decided by a hash of the path key and the splat, and the nearest present one wins (front-to-back compositing
     in expectation). Without `stoch` the data passes' rule applies: the first splat where the accumulated
     opacity reaches one half. `skip` is `(splat, tmin, plane normals, plane thickness)` per ray, the surface
-    the ray just left, so a splat sheet does not hit itself. A splat hit is shape `ps.shapes + splat`."""
+    the ray just left, so a splat sheet does not hit itself. A splat hit is shape `ps.shapes + splat`.
+    `camera` (bool per ray, True for a camera ray) hides the meshes whose `visible_to_camera` is off from those rays;
+    every other ray (shadow, reflection, refraction, bounce) still sees them. Splats are always visible."""
     n = len(o)
     tmin = np.broadcast_to(np.asarray(tmin, np.float64), (n,))
     best = np.broadcast_to(np.asarray(tmax, np.float64), (n,)).copy()
@@ -628,6 +654,8 @@ def closest(ps, o, d, tmin, tmax, cancel=None, stoch=None, skip=None):
     for i in range(ps.shapes):
         raytrace._cancel(cancel)
         rays = np.flatnonzero(_slab(ps.world_lo[i], ps.world_hi[i], o, d, best))
+        if len(rays) and camera is not None and ps.hidden is not None and ps.hidden[i]:
+            rays = rays[~camera[rays]]
         if not len(rays):
             continue
         inverse = ps.inverse[i]
@@ -661,9 +689,11 @@ def closest(ps, o, d, tmin, tmax, cancel=None, stoch=None, skip=None):
     return best, shape, prim, us, vs
 
 
-def occluded(ps, o, d, tmax, cancel=None, bit=None):
+def occluded(ps, o, d, tmax, cancel=None, bit=None, receiver=None):
     """True where something opaque lies along (o, d) before `tmax`. Shapes with alpha < 0.5 never block. `bit` is
-    the light the shadow ray goes to: a shape that excludes that light (light linking) casts no shadow from it."""
+    the light the shadow ray goes to: a shape that excludes that light (light linking) casts no shadow from it. A mesh
+    with `cast_shadows` off never blocks; `receiver` (the shape each ray leaves) clears the rays of a mesh with
+    `receive_shadows` off."""
     n = len(o)
     blocked = np.zeros(n, bool)
     tmax = np.broadcast_to(np.asarray(tmax, np.float64), (n,))
@@ -671,6 +701,8 @@ def occluded(ps, o, d, tmax, cancel=None, bit=None):
         if ps.alpha[i] < 0.5:
             continue
         if bit is not None and ps.excl is not None and (int(ps.excl[i]) >> bit) & 1:
+            continue
+        if ps.no_cast is not None and ps.no_cast[i]:
             continue
         raytrace._cancel(cancel)
         rays = np.flatnonzero(~blocked & _slab(ps.world_lo[i], ps.world_hi[i], o, d, tmax))
@@ -686,6 +718,8 @@ def occluded(ps, o, d, tmax, cancel=None, bit=None):
         else:
             t, p, _, _ = blas.tris.closest_hit(blas.bvh, lo_o, lo_d, zero, tmax[rays])
         blocked[rays[p >= 0]] = True
+    if receiver is not None and ps.no_receive is not None:
+        blocked &= ~ps.receive_off(receiver)
     return blocked
 
 
@@ -801,6 +835,8 @@ def _splat_light(ps, origin, wi, dist, shape, ns, cancel=None, bit=None):
         out = ptsplats.transmittance(layer, origin, wi, tmin, dist, exclude, (ns, thickness), cancel, bit)
     if ps.volumes is not None:
         out = out * ptvolume.transmittance(ps.volumes, origin, wi, dist, bit)
+    if ps.no_receive is not None:
+        out = np.where(ps.receive_off(shape), 1.0, out)
     return out
 
 
@@ -1079,7 +1115,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         ro, rd = o[rows], d[rows]
         dim = _DIM_BASE + turn * _DIM_STRIDE
         t, shape, prim, u, v = closest(ps, ro, rd, tmin[rows], tmax[rows], cancel, stoch=(keys[rows], dim + _SPLAT_DIM),
-                                       skip=tuple(a[rows] for a in skip) if ps.splats is not None else None)
+                                       skip=tuple(a[rows] for a in skip) if ps.splats is not None else None,
+                                       camera=vertex_depth[rows] == 0 if ps.hidden is not None else None)
         tmin[:], tmax[:] = 0.0, np.inf
         vd = vertex_depth[rows]
         # emitters: the analytic area lights, seen by every ray but the camera's own
@@ -1448,7 +1485,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
             continue
         idx = np.flatnonzero(front)
         po = pos[idx] + ns[idx] * ps.shadow_eps
-        hidden = occluded(ps, po, wi[idx], dist[idx] - ps.shadow_eps, cancel, bit)
+        hidden = occluded(ps, po, wi[idx], dist[idx] - ps.shadow_eps, cancel, bit, sh[idx])
         idx = idx[~hidden]
         if not len(idx):
             continue
@@ -1473,7 +1510,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
             continue
         idx = np.flatnonzero(front)
         po = pos[idx] + ns[idx] * ps.shadow_eps
-        hidden = occluded(ps, po, wi[idx], dist[idx] * (1 - 1e-4) - ps.shadow_eps, cancel, bit)
+        hidden = occluded(ps, po, wi[idx], dist[idx] * (1 - 1e-4) - ps.shadow_eps, cancel, bit, sh[idx])
         idx = idx[~hidden]
         if not len(idx):
             continue
@@ -1496,7 +1533,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
             continue
         idx = np.flatnonzero(front)
         po = pos[idx] + ns[idx] * ps.shadow_eps
-        hidden = occluded(ps, po, wi[idx], np.inf, cancel, bit)
+        hidden = occluded(ps, po, wi[idx], np.inf, cancel, bit, sh[idx])
         idx = idx[~hidden]
         if not len(idx):
             continue
@@ -1675,7 +1712,8 @@ def render_data(ps, camera, width, height, output, cancel=None):
         raytrace._cancel(cancel)
         sl = slice(start, min(start + _CHUNK, n))
         o = np.broadcast_to(eye, (sl.stop - sl.start, 3))
-        t, shape, prim, u, v = closest(ps, o, d[sl], tmin[sl], tmax[sl], cancel)
+        t, shape, prim, u, v = closest(ps, o, d[sl], tmin[sl], tmax[sl], cancel,
+                                       camera=np.ones(len(o), bool) if ps.hidden is not None else None)
         got = shape >= 0
         # an alpha surface is a hit for the data passes, like every other renderer here
         ns, _, uv, _, _, _, _, _, _ = _surface_any(ps, shape[got], prim[got], u[got], v[got], d[sl][got])

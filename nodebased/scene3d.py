@@ -184,6 +184,12 @@ class Geometry:
     # blur (nodebased/motionblur.py) moves the vertices along it across the shutter; nothing else reads it.
     velocities: np.ndarray | None = None
     light_link: tuple = LIGHT_LINK_ALL   # which lights reach this mesh and which it shadows: `light_link_from_params`
+    # Per-object render switches (Rendering 7, step R1): `render_switches_from_params`. Off for `cast_shadows` leaves
+    # the mesh out of every shadow ray; off for `receive_shadows` lights it as if nothing shadowed it; off for
+    # `visible_to_camera` removes it from primary rays and every data pass, while it still casts, reflects and bounces.
+    cast_shadows: bool = True
+    receive_shadows: bool = True
+    visible_to_camera: bool = True
 
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
@@ -938,7 +944,8 @@ def geometry_from_node(node, texture=None):
                    metallic=float(p.get("metallic", 0.0)),
                    pbr_roughness=float(p.get("pbr_roughness", 0.5)),
                    pbr_specular=float(p.get("pbr_specular", 0.5)),
-                   name=name, asset=name, light_link=light_link_from_params(p), **material_fields(p))
+                   name=name, asset=name, light_link=light_link_from_params(p),
+                   **render_switches_from_params(p), **material_fields(p))
 
 
 def _geometry_from_node(node, texture=None):
@@ -1738,6 +1745,32 @@ def light_link_from_params(p):
         return LIGHT_LINK_ALL
     text = str(p.get("light_link_list", "")).replace(";", ",")
     return (mode, tuple(sorted({name.strip() for name in text.split(",") if name.strip()})))
+
+
+def has_shadow_links(scene):
+    """True when shadow casting is not simply "every mesh casts": a light link or a mesh with `cast_shadows` off."""
+    return has_light_links(scene) or any(not g.cast_shadows for g in scene.geometries)
+
+
+def render_switches_from_params(p):
+    """`cast_shadows`, `receive_shadows` and `visible_to_camera` for `Geometry` from a node's knobs ("on" unless "off";
+    a document saved before the switches existed has none and keeps all three on)."""
+    return {key: str(p.get(key, "on")) != "off" for key in ("cast_shadows", "receive_shadows", "visible_to_camera")}
+
+
+def has_render_switches(scene):
+    """True when any mesh of `scene` (instance sources included) has a render switch turned off."""
+    return any(not (g.cast_shadows and g.receive_shadows and g.visible_to_camera)
+               for g in (*scene.geometries, *(s for i in scene.instances for s in i.sources)))
+
+
+# A mesh with `cast_shadows` off throws no shadow from any light: for the caster sets it links to no light at all.
+_NO_LIGHTS = ("include", ())
+
+
+def caster_link(geometry):
+    """The light link that decides which lights `geometry` shadows: its `light_link`, or no light when it casts nothing."""
+    return geometry.light_link if getattr(geometry, "cast_shadows", True) else _NO_LIGHTS
 
 
 def light_reaches(link, light):
@@ -2987,7 +3020,7 @@ def _link_caster_sets(scene, primitives, owners, cancel, *, build_bvh):
     for light in scene.lights:
         if not (light.shadows and light.intensity > 0):
             continue
-        reach = np.array([light_reaches(g.light_link, light) for g in scene.geometries], bool)
+        reach = np.array([light_reaches(caster_link(g), light) for g in scene.geometries], bool)
         if reach.all():
             continue
         key = reach.tobytes()
@@ -3033,6 +3066,9 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
     environments = getattr(scene, 'environments', ())
     lit = (bool(lights) or bool(environments)) and not shade
     lights, environments = _link_lights(geometry, lights, environments)
+    particle_occluders = getattr(scene, "particles", ())
+    if not geometry.receive_shadows:       # Receive shadows off: nothing darkens this mesh
+        shadow_context, particle_occluders = None, ()
     source = np.broadcast_to(rgba, (len(position), 4)).copy()
     source[:, :3] *= source[:, 3:4]                          # premultiply the flat colour
     if mips is not None:
@@ -3199,7 +3235,7 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         diffuse_radiance, specular = _shade_pbr_mesh(
             position, normal, toward_eye, base_rgb, lights, ambient, environments,
             metallic, roughness, 0.08 * float(np.clip(geometry.pbr_specular, 0, 1)),
-            shadow_context, need_specular, particle_occluders=getattr(scene, "particles", ()))
+            shadow_context, need_specular, particle_occluders=particle_occluders)
         if occlusion_factor is not None:
             diffuse_radiance = diffuse_radiance * occlusion_factor
         source[:, :3] = base_rgb * diffuse_radiance * source[:, 3:4]
@@ -3274,11 +3310,13 @@ def _raytrace_budget(work):
 def _render_primary(scene, camera, width, height, out, depth, *, attributes, object_ids,
                     mip_levels, clipped_mips, materials, primitives, bvh, eye, view,
                     focal, aspect, lights, ambient, output, shade, shadow_context, cancel, mesh_layers=None, rows=None,
-                    liquid=None, lens=None):
+                    liquid=None, lens=None, object_visible=None):
     """Chunked primary visibility; shading is batched by geometry and mip level.
 
     `lens` is (ax, ay, focus): the rays start that far right and up of the eye and aim at the pixel's point on the
-    plane `focus` in front of the camera (one lens sample of the ray-traced depth of field)."""
+    plane `focus` in front of the camera (one lens sample of the ray-traced depth of field).
+    `object_visible` (bool per object id, index 0 unused) drops the hits of meshes whose `visible_to_camera` is off:
+    primary rays pass through them, while shadow, reflection and refraction rays keep seeing them."""
     flat, flat_depth = out.reshape(-1, 4), depth.ravel()
     projection_depth_maps = {}
     data_output = output in DATA_OUTPUTS
@@ -3322,6 +3360,8 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
             rays = np.repeat(active, counts)
             ids = object_ids[hits['primitive']]
             keep = ids > 0
+            if object_visible is not None:
+                keep &= object_visible[ids]
             edge = np.minimum.reduce((abs(hits['u']), abs(hits['v']),
                                       abs(1-hits['u']-hits['v']))) < 1e-10
             # Retain the previous RAW hit: exact ties and roundoff-separated
@@ -3550,6 +3590,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         return _render_depth_of_field(scene, camera, width, height, background, shade, return_depth, ambient,
                                       samples, output, cancel, shadows, progress, volume)
     links_active = has_light_links(scene)
+    caster_sets_active = has_shadow_links(scene)
     shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights)
     shadow_active = shadows and not shade and output in ("rgba", "diffuse", "specular", "relight") and shadow_count > 0
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
@@ -3716,7 +3757,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                         ray_mip_levels[primitive_index] = level
                     else:
                         clipped_mips[primitive_index] = (clipped, level)
-                else:
+                elif geometry.visible_to_camera:
                     queue.append((float(z.mean()), clipped, z, rgba, mips, projection, geometry, object_id))
     shadow_context = None
     if shadow_triangles or ray_mode:
@@ -3737,7 +3778,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if shadow_active:
             work = _shadow_cost(width*height, triangle_count) if ray_mode else shadow_work
             shadow_context = _ShadowContext(primitives, bvh, bias, cancel, triangle_count, work, ray_mode)
-            if links_active and shadow_owners:
+            if caster_sets_active and shadow_owners:
                 shadow_context.link_sets = _link_caster_sets(scene, primitives, np.concatenate(shadow_owners), cancel,
                                                              build_bvh=bvh is not None or ray_mode)
     splat_shadows = None
@@ -3746,8 +3787,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             primitives if triangle_count else None, bvh if triangle_count else None,
             bias if triangle_count else .001, cancel)
         splat_shadows.relit_shadows = splat_shadow_active
-        if links_active:
-            splat_shadows.mesh_links = tuple(g.light_link for g in scene.geometries)
+        if caster_sets_active:
+            splat_shadows.mesh_links = tuple(caster_link(g) for g in scene.geometries)
             if triangle_count and shadow_owners:
                 splat_shadows.mesh_sets = _link_caster_sets(scene, primitives, np.concatenate(shadow_owners), cancel,
                                                             build_bvh=bvh is not None)
@@ -3764,6 +3805,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                         primitives=primitives, bvh=bvh, eye=eye, view=view, focal=focal, aspect=aspect,
                         lights=lights, ambient=ambient, output=output, shade=shade,
                         shadow_context=shadow_context, cancel=cancel, lens=_lens)
+        if not all(g.visible_to_camera for g in scene.geometries):
+            primary_kwargs["object_visible"] = np.array([True] + [g.visible_to_camera for g in scene.geometries])
         if output == "rgba" and not shade and any(g.material == "liquid" for g in scene.geometries):
             from .liquid_render import LiquidTracer
             primary_kwargs["liquid"] = LiquidTracer(
@@ -4146,7 +4189,7 @@ def _volume_occluders(scene, cancel=None):
     splat_shadows = _SplatShadows(scene.splats, scene.lights, None, None, bias, cancel) if casting else None
     # light linking: per shadowing light that some mesh excludes, the triangles of the meshes that light reaches
     link_sets = (_link_caster_sets(scene, primitives, np.concatenate(owners), cancel, build_bvh=bvh is not None)
-                 if len(triangles) and any(g.light_link[0] != "all" for g in scene.geometries) else {})
+                 if len(triangles) and any(caster_link(g)[0] != "all" for g in scene.geometries) else {})
 
     def occluders(points, light):
         position, direction = light.world()

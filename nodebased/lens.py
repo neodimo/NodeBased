@@ -124,7 +124,8 @@ def pick_focus_distance(camera, scene, width, height, x, y):
     pin = replace(camera, fstop=0.0)
     ps = pathtrace.build_scene(scene, 0.0, eye=None)
     dirs, eye, cos, tmin, tmax = pathtrace.camera_rays(pin, width, height, np.array([x + 0.5]), np.array([y + 0.5]))
-    t, shape, _, _, _ = pathtrace.closest(ps, np.broadcast_to(eye, dirs.shape), dirs, tmin, tmax)
+    t, shape, _, _, _ = pathtrace.closest(ps, np.broadcast_to(eye, dirs.shape), dirs, tmin, tmax,
+                                        camera=np.ones(1, bool))
     if shape[0] < 0:
         return None
     return float(t[0] * cos[0])
