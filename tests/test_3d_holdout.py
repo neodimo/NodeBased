@@ -323,6 +323,40 @@ class GpuAgreesWithTheCpuTests(unittest.TestCase):
                                                atol=1e-3, rtol=1e-3)
 
 
+class ReturnedDepthTests(unittest.TestCase):
+    """`render(return_depth=True)` carries no depth where a holdout ends the view, in every CPU mode."""
+
+    def test_the_depth_buffer_is_empty_there_and_whole_elsewhere(self):
+        held = surrounded(card_area()) & surrounded(coverage(ball(0)))
+        clear = core_of(ball(0)) & ~coverage(replace(holdout(), holdout=False))
+        for mode in ("raster", "raytrace", "pathtrace"):
+            with self.subTest(mode=mode):
+                extra = dict(path=pt.PathSettings(samples=4, max_bounces=1, diffuse_bounces=1)) if mode == "pathtrace" else {}
+                _, depth = s.render(scene(cast_shadows=False), CAMERA, *SIZE, mode=mode, return_depth=True, ambient=AMBIENT, **extra)
+                self.assertGreater(int(held.sum()), 50)
+                self.assertFalse(np.isfinite(depth[held]).any())
+                self.assertTrue(np.isfinite(depth[clear]).all())
+
+
+class CpuRefusalTests(unittest.TestCase):
+    """What the CPU raster and ray-traced modes cannot keep a holdout out of they refuse, rather than draw it."""
+
+    def test_a_liquid_in_the_same_scene(self):
+        for mode in ("raster", "raytrace"):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "holdout"):
+                s.render(s.Scene((replace(ball(0), material="liquid"), holdout()), (SUN,)), CAMERA, *SIZE, mode=mode)
+
+    def test_splat_reflections_and_bounce_light(self):
+        sheet = instance(plane_cloud(n=12, size=2.0), relight=1.0, reflection_samples=2)
+        for mode in ("raster", "raytrace"):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "holdout"):
+                s.render(s.Scene((small_card(1.5),), (SPLAT_SUN,), splats=(sheet,)), SMOKE_CAMERA, *SMALL, mode=mode)
+        # the path tracer has no such limit
+        picture = pt.render(s.Scene((small_card(1.5),), (SPLAT_SUN,), splats=(instance(plane_cloud(n=12, size=2.0), relight=1.0),)),
+                            SMOKE_CAMERA, *SMALL, BLACK, .1, "rgba", SMALL_PATH, backend="cpu")
+        self.assertTrue(np.all(picture[RIGHT] == 0))
+
+
 class EdgeTests(unittest.TestCase):
     """The edge of a cut is antialiased: the ball's alpha beside the card edge is one minus the card's own coverage, and its
     colour is cut by the same fraction."""
