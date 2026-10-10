@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushB
 from .theme import SPACING, TOKENS
 
 WORKSPACE_TABS = ("Composite", "3D", "Simulate", "Render")
-SEARCH_PLACEHOLDER = "Search nodes…"
+SEARCH_PLACEHOLDER = "Search nodes, commands, settings…"
 
 
 class LogoMark(QWidget):
@@ -191,7 +191,7 @@ class SearchBox(QPushButton):
         self.setObjectName("topbar-search")
         self.setCursor(Qt.CursorShape.IBeamCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setToolTip("Search nodes (Tab in the node graph)")
+        self.setToolTip("Search nodes, commands and settings (Tab in the node graph searches nodes)")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(SPACING["md"], 0, SPACING["md"], 0)

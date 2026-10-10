@@ -1,12 +1,14 @@
 """End-to-end sprint stage 5: the new look's punch list from the 10/10 real-display QA
 (scratch/nb-qa/1010-e2e/FINDINGS.md), and real layouts for the Simulate and Render tabs."""
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from PySide6.QtCore import QRect, QSettings, Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
-from nodebased.app import Preferences
+from nodebased.app import NodeSearch, Preferences
+from nodebased.core import SPECS
 import tests.isolation  # noqa: F401  (keeps the window's layout out of the real Qt settings)
 from tests.test_new_look_viewer_strip_nl5 import Base
 
@@ -224,6 +226,56 @@ class TabLayoutTests(Base):
         self.assertEqual(w.workspace_tab, "Composite")
         self.assertTrue(w.graph_dock.isVisible())
         self.assertFalse(w.cache_inspector_dock.isVisible())
+
+
+class TopBarSearchTests(Base):
+    """Finding 4: one search box for node types, menu commands and settings."""
+
+    def picker(self, w, query=""):
+        picker = NodeSearch(w, list(SPECS), w.pos(), w.search_extras())
+        picker.query.setText(query)
+        return picker
+
+    def test_placeholder_names_all_three(self):
+        w = self.open_window()
+        self.assertEqual(w.topbar.search.hint.text(), "Search nodes, commands, settings…")
+        self.assertEqual(self.picker(w).query.placeholderText(), "Search nodes, commands, settings…")
+
+    def test_one_list_holds_nodes_commands_and_settings(self):
+        w = self.open_window()
+        picker = self.picker(w, "e")
+        groups = {picker.list.item(i).text().split("  ·  ", 1)[1].split(" ")[0] for i in range(picker.list.count())}
+        self.assertTrue({"Command", "Setting"} <= groups, groups)
+        self.assertTrue(any(isinstance(picker.list.item(i).data(Qt.ItemDataRole.UserRole), str)
+                            for i in range(picker.list.count())))
+        picker = self.picker(w, "lock panels")
+        self.assertTrue(any(t.startswith("Lock panels  ·  Command") for t in
+                            [picker.list.item(i).text() for i in range(picker.list.count())]))
+        picker = self.picker(w, "accent colour")
+        self.assertEqual(picker.list.item(0).text(), "Accent colour  ·  Setting")
+
+    def test_enter_runs_the_first_result(self):
+        w = self.open_window()
+        for query, expect in (("accent colour", "setting"), ("lock panels", "command"), ("grade", "node")):
+            picker = self.picker(w, query)
+            first = picker.list.item(0).data(Qt.ItemDataRole.UserRole)
+            picker.query.returnPressed.emit()
+            self.assertEqual(picker.selected_kind, first, query)
+            self.assertEqual(callable(first), expect != "node", query)
+        # a settings result opens the Settings dialog, a command result runs its menu action
+        with unittest.mock.patch.object(w, "project_settings") as settings:
+            picker = self.picker(w, "accent colour")
+            with unittest.mock.patch.object(NodeSearch, "choose",
+                                            return_value=picker.list.item(0).data(Qt.ItemDataRole.UserRole)):
+                w.node_search_from_topbar()
+        settings.assert_called_once()
+        locked = w.lock_panels_action.isChecked()
+        with unittest.mock.patch.object(NodeSearch, "choose",
+                                        return_value=self.picker(w, "lock panels").list.item(0).data(
+                                            Qt.ItemDataRole.UserRole)):
+            w.node_search_from_topbar()
+        settle()
+        self.assertNotEqual(w.lock_panels_action.isChecked(), locked)
 
 
 if __name__ == "__main__":

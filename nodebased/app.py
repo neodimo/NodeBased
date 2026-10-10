@@ -61,7 +61,7 @@ class GenerateSignals(QObject):
     message = Signal(object, object)
     finished = Signal(object, object)
 
-from .topbar import TopBar
+from .topbar import SEARCH_PLACEHOLDER, TopBar
 from .nodeshelf import NODE_KIND_MIME_TYPE, FAVOURITES as FAVOURITES_CATEGORY, RECENT as RECENT_CATEGORY, NodeShelf
 from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, grid_color,
                     valid_accent, TOKENS, FAMILY_COLORS, TYPE, theme_colors)
@@ -4846,15 +4846,20 @@ class NodeToolbar(QWidget):
 
 class NodeSearch(QDialog):
     """Small keyboard-first node picker, intentionally close to Nuke's Tab menu."""
-    def __init__(self, parent, choices, global_pos):
+    def __init__(self, parent, choices, global_pos, extras=()):
+        """`choices` are node types. `extras` are further results for the top bar's one search
+        box: (label, group, callable) for menu commands and settings; choosing one returns its
+        callable instead of a node type."""
         super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setObjectName("nodeSearch")
+        self.selected_kind = None
+        self.extras = list(extras)
         self.setWindowTitle("Create node")
         self.setMinimumWidth(260)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         self.query = QLineEdit()
-        self.query.setPlaceholderText("Search nodes…")
+        self.query.setPlaceholderText(SEARCH_PLACEHOLDER if extras else "Search nodes…")
         self.list = QListWidget()
         self.list.setMaximumHeight(280)
         layout.addWidget(self.query)
@@ -4892,7 +4897,7 @@ class NodeSearch(QDialog):
         # with the query, then names containing it, then only a description or category match
         # (so "blur" still finds Defocus and DirBlur, just after the nodes actually named Blur).
         needle = query.casefold().strip()
-        def rank(name):
+        def rank(name, is_node=True):
             if not needle:
                 return 0
             name_cf = name.casefold()
@@ -4902,16 +4907,20 @@ class NodeSearch(QDialog):
                 return 1
             if needle in name_cf:
                 return 2
-            if needle in node_description(name).casefold() or needle in node_category(name).casefold():
+            # Only a node has a description and category to match on.
+            if is_node and (needle in node_description(name).casefold()
+                            or needle in node_category(name).casefold()):
                 return 3
             return None
-        ranked = [(rank(name), name) for name in self.choices]
-        matches = [name for tier, name in sorted((pair for pair in ranked if pair[0] is not None),
-                                                   key=lambda pair: pair[0])]
+        entries = [(name, f"{name}  ·  {node_category(name)}", name) for name in self.choices]
+        entries += [(label, f"{label}  ·  {group}", action) for label, group, action in self.extras]
+        ranked = [(rank(label, isinstance(payload, str)), index, text, payload)
+                  for index, (label, text, payload) in enumerate(entries)]
+        matches = sorted((entry for entry in ranked if entry[0] is not None), key=lambda e: (e[0], e[1]))
         self.list.clear()
-        for name in matches:
-            item = QListWidgetItem(f"{name}  ·  {node_category(name)}")
-            item.setData(Qt.ItemDataRole.UserRole, name)
+        for _tier, _index, text, payload in matches:
+            item = QListWidgetItem(text)
+            item.setData(Qt.ItemDataRole.UserRole, payload)
             self.list.addItem(item)
         if matches:
             self.list.setCurrentRow(0)
@@ -4923,8 +4932,8 @@ class NodeSearch(QDialog):
             self.accept()
 
     @classmethod
-    def choose(cls, parent, choices, global_pos):
-        picker = cls(parent, choices, global_pos)
+    def choose(cls, parent, choices, global_pos, extras=()):
+        picker = cls(parent, choices, global_pos, extras)
         return picker.selected_kind if picker.exec() == QDialog.DialogCode.Accepted else None
 
 
@@ -6587,13 +6596,43 @@ class Window(QMainWindow):
         self._enter_tab_layout(self.TAB_LAYOUT[self.workspace_tab])
         self.topbar.tabs.set_current(self.workspace_tab)
 
+    # Names of the settings the top bar's search finds; each opens the Settings dialog.
+    SEARCHABLE_SETTINGS = ("Theme colour", "Accent colour", "Show thumbnails on nodes", "Max properties panels",
+                           "Display cache precision", "Default view", "Viewer background", "Working space",
+                           "OCIO config", "Switch the viewer to 3D when a 3D node is viewed")
+
+    def search_extras(self):
+        """The menu commands and settings the top bar's search offers next to the node types."""
+        extras, seen = [], set()
+        def walk(menu, path):
+            for action in menu.actions():
+                if action.isSeparator():
+                    continue
+                text = action.text().replace("&", "").strip()
+                if action.menu() is not None:
+                    walk(action.menu(), path + [text.rstrip("…")])
+                elif text and action.isEnabled() and (text, tuple(path)) not in seen:
+                    seen.add((text, tuple(path)))
+                    extras.append((text.rstrip("…") if text.endswith("…") else text,
+                                   "Command · " + " › ".join(path), action.trigger))
+        for action in self.menuBar().actions():
+            if action.menu() is not None:
+                walk(action.menu(), [action.text().replace("&", "")])
+        for name in self.SEARCHABLE_SETTINGS:
+            extras.append((name, "Setting", self.project_settings))
+        return extras
+
     def node_search_from_topbar(self):
-        """The top bar's search box opens the same search as Tab, under the box."""
+        """The top bar's search box: node types, menu commands and settings in one list, under the
+        box. Enter runs the first result."""
         bar = self.topbar.search
         graph_pos = self.graph.last_click_scene_pos
-        kind = NodeSearch.choose(self, SPECS, bar.mapToGlobal(bar.rect().bottomLeft()))
-        if kind:
-            self.add_node(kind, position=None if self.graph.selected_id() else graph_pos)
+        choice = NodeSearch.choose(self, SPECS, bar.mapToGlobal(bar.rect().bottomLeft()),
+                                   self.search_extras())
+        if callable(choice):
+            choice()
+        elif choice:
+            self.add_node(choice, position=None if self.graph.selected_id() else graph_pos)
 
     def _build_topbar_menu(self):
         """The compact menu button: the quick actions the old toolbar carried, then every menu of
