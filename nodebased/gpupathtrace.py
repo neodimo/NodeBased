@@ -46,7 +46,7 @@ SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: ban
 BAND_TARGET_SECONDS = 0.008   # a smoke or splat render grows its row bands until one dispatch takes about this long (0: fixed bands)
 BAND_MAX_PATHS = 1 << 22      # and never past this many paths in one dispatch, however fast the first bands were
 MAX_JOBS = 32                 # dispatches one submission may carry (one uniform slot and bind group each)
-SURFACE_PASS_SAMPLES = 8      # samples a surface-only fixed render takes per pixel in one dispatch when the settings leave it open
+SURFACE_PASS_SAMPLES = 4      # samples a surface-only fixed render takes per pixel in one dispatch when the settings leave it open (8 made X1 on the Radeon 1.4 times slower than 4 and left Z1 on the RTX 0.7 ms faster; 2 to 6 are slower on X1 and Y1 on both)
 SOFT_PASS_SAMPLES = 2         # and a smoke or splat render (more is slower on the RTX 3080 Ti and the Radeon, step R2)
 CACHE_LIMIT_BYTES = 128 << 20  # a scene whose buffers, host copies and image need more than this is not kept between frames
 # what the renderer built or reused since the process started (tests read the difference around a render)
