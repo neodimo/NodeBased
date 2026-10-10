@@ -1,5 +1,41 @@
 ## 2026-10-10 — Lane 6 P2 finish: production preview benchmark (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (10:06 AM on 2026-10-10 PDT)
+
+`main` moved `c020687` -> `6006290` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 321 tests in 592.110 s, OK. Full suite on
+the stacked tip `6006290` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1010-0636.log`, started 6:36 AM): **Ran 4919 tests in 11710.044 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Gonzo's GUI sprint: finish the new look against the mockup.** Commits:
+  - `998c68d` tests: viewer-look and region-drag tests wait for the window layout to settle before reading the viewer; the viewer now refits on resize, so a late default split moved the readout by a pixel (10/10 suite)
+  - `e225ddc` graph: framing fits the nodes above the corner's button row; status bar shows when the project file was last saved
+  - `e9077dc` ui: status bar summary (cache, frame, saved, version), colour wheels centred at neutral, views stay framed on resize until the artist zooms
+  - `10d4ac5` properties: size wrapping knob rows by the shown number, so a colour's four fields and xyz rows stay on one line instead of four squeezed lines
+  - `0f2dc80` viewer: show the input row only once two inputs are wired or a B buffer is set; the mockup has no row under a single picture
+  - `90e4127` ui: lock panels by default so docked panels have no title bars, as in the mockup; Workspace → Lock panels brings them back
+  Diff: 11 files changed, 320 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R1 of 3: each object can be told not to cast shadows, not to take shadows, or not to be seen by the camera.** Commits:
+  - `1f9494c` docs: R1 completion note in the task log and state
+  - `762c081` tests and docs: per-object render switches (golden pictures from the pre-switch tree, all three adapters), Per-object render switches section
+  - `a17ca25` viewport: shadow pass honours Cast shadows; meshes hidden from the camera stay drawn
+  - `dd2a100` render: the GPU raster, ray-traced and path-traced modes honour the per-object switches; the instanced GPU tracer falls back to the CPU
+  - `995117f` render: Cast shadows, Receive shadows and Visible to camera on every mesh node; CPU raster, ray-traced and path tracer honour them
+  Diff: 27 files changed, 781 insertions(+), 65 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step P2 of 2: interactive preview while scrubbing and playing (finish 1).** Commits:
+  - `d645f2d` docs: record production fluid preview miss
+  Diff: 5 files changed, 2319 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 **What was done (evidence).** Ran the full Hot pour preset on the AMD Radeon 8060S: 256³ liquid, 192³ steam, 120 frames. Bake took 1,725.5 s; playback at tier 1/4 measured 0.30 median FPS (3,187.8 ms median fetch, 83.7 ms draw). Full detail measured 0.09 FPS. The production target of 12 FPS is missed. Focused tests passed: proxy volume bounds and integrated density, liquid silhouette bounds, stop restoring full tier/refinement, proxy control, and documentation bundle parity. The viewer's one-second test uses a synthetic frame; production-cache settle remains unverified.
 
 **Artifacts.** Production measurements: `benchmarks/hot_pour/radeon-preview-production-2026-10-10.json` (committed with this note); Hot pour docs synchronized at `docs/FLUIDS_SPIKE.md` and `nodebased/data/docs/FLUIDS_SPIKE.md`. Raw run log and test log are at `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L6-production-preview.log` and `tests-L6-finish-1010.log`. The 36.8 GB baked cache is deliberate scratch at `/tmp/hot-pour-preview-production-L6` pending cleanup.
