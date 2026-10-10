@@ -339,6 +339,7 @@ class ParticleInstance:
     frame: int = 0
     surface: object | None = None    # a liquid's signed-distance Volume (FluidLiquidSolver3D): negative inside
     whitewater_type: np.ndarray | None = None  # uint8: 0 foam, 1 spray, 2 bubbles (FluidWhitewater3D)
+    proxy_tier: int = 1                    # pre-thinned simulation tier; display-only
     # Material and attribute ramps (R7 of 7, ParticleRender3D). "standard" keeps the old fake headlight
     # look on "spheres" pixel-identical; "pbr" shades every particle with the scene's own lights and
     # dome through the same Cook-Torrance GGX BRDF `_shade_pbr_mesh` shades meshes with.
@@ -403,6 +404,7 @@ class Volume:
     fuel: np.ndarray | None = None      # optional unburnt fuel carried for later combustion
     name: str = ""                       # source solver name, retained by scene exports
     light_link: tuple = LIGHT_LINK_ALL   # which lights scatter in this smoke and which it shadows (`light_link_from_params`)
+    proxy_tier: int = 1                  # pre-downsampled simulation tier; display-only
 
     @classmethod
     def from_sparse(cls, grid, voxel_size=1.0, origin=(0.0, 0.0, 0.0), matrix=None, stream=None, frame=0, name=""):
@@ -563,6 +565,9 @@ def proxy_scene(scene: Scene, tier: int) -> Scene:
 
     reduced = []
     for volume in scene.volumes:
+        if int(getattr(volume, "proxy_tier", 1)) >= tier:
+            reduced.append(volume)
+            continue
         source_density = np.asarray(volume.density, dtype=np.float32)
         density = reduce_field(source_density)
         factors = np.asarray(source_density.shape, dtype=np.float64) / np.asarray(density.shape, dtype=np.float64)
@@ -580,7 +585,7 @@ def proxy_scene(scene: Scene, tier: int) -> Scene:
             volume, density=density, temperature=reduce_field(volume.temperature),
             velocity=reduce_field(volume.velocity), flame=reduce_field(volume.flame),
             fuel=reduce_field(volume.fuel), voxel_size=volume.voxel_size, origin=(0.0, 0.0, 0.0),
-            matrix=matrix, sparse=None))
+            matrix=matrix, sparse=None, proxy_tier=tier))
     return replace(scene, volumes=tuple(reduced))
 
 

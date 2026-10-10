@@ -1,3 +1,7 @@
+## 2026-10-10 — Lane 6 P2 production follow-up (PARTIAL)
+
+The production 256³/192³, 120-frame Radeon run completed with 0.49 median FPS at tier 1/4 (1,974.7 ms fetch + 74.5 ms draw) and 0.14 FPS full detail (7,093.4 ms fetch + 59.0 ms draw). It remains below the 12 FPS goal; production stop-to-full-detail within one second was not measured. Persistent companion frame caches for liquid, whitewater, and volumes are in the local commit; 91 focused tests and 7 docs tests pass. Full evidence, paths, scratch status, and next owner: `TASKLOG.md` newest entry and `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L6.md`.
+
 ## 2026-10-10 — Lane 4 step R2 of 3: holdout objects (DONE)
 
 - **What was done (evidence):** the **Holdout** switch on every mesh node (off by default; `Geometry.holdout`). A holdout hides what

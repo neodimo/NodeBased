@@ -1030,6 +1030,33 @@ def solve_frame(stream, frame, cache, cancel=None):
                                    solver.initial_state, solver.step, cancel)
 
 
+def preview_cache_run(run, tier):
+    """Stable side-cache identity for display-only particle samples."""
+    from . import simcache
+    return simcache.run_key(run, {"preview_particles": 1, "tier": int(tier)})
+
+
+def preview_state(state, stream, tier):
+    """Thin a cached FLIP state once, retaining every particle attribute and silhouette extrema."""
+    from .simcache import State
+    tier = int(tier)
+    positions = np.asarray(state.arrays.get("position", ()))
+    if tier <= 1 or not len(positions):
+        return state
+    spacing = max(float(stream.spacing) * tier, 1e-9)
+    origin = np.asarray(state.meta.get("domain_origin", stream.origin), dtype=np.float64)
+    cells = np.floor((positions - origin) / spacing).astype(np.int64)
+    _, first = np.unique(cells, axis=0, return_index=True)
+    boundary = {int(np.argmin(positions[:, axis])) for axis in range(3)}
+    boundary.update(int(np.argmax(positions[:, axis])) for axis in range(3))
+    indices = np.asarray(sorted(set(first.tolist()) | boundary), dtype=np.int64)
+    if len(indices) >= len(positions):
+        return state
+    arrays = {name: (value[indices] if np.ndim(value) and len(value) == len(positions) else value)
+              for name, value in state.arrays.items()}
+    return State(arrays, {**state.meta, "preview_tier": tier}, copy=False)
+
+
 def signed_distance(stream, positions, smoothing=0, resolution=1, radius=None):
     """(phi float32, voxel) of the particle surface on the stream's grid subdivided `resolution` times."""
     from .liquid_surface import level_set
@@ -1063,6 +1090,8 @@ def instance_from_state(state, stream, frame):
 def proxy_instance(instance, tier):
     """Deterministically thin liquid particles for a display-only surface extraction."""
     tier = int(tier)
+    if int(getattr(instance, "proxy_tier", 1)) >= tier:
+        return instance
     positions = np.asarray(instance.positions)
     stream = getattr(instance, "stream", None)
     if tier <= 1 or len(positions) < 2 or stream is None:
@@ -1084,7 +1113,7 @@ def proxy_instance(instance, tier):
         value = getattr(instance, name, None)
         if value is not None and len(value) == len(positions):
             fields[name] = np.asarray(value)[indices]
-    return replace(instance, **fields)
+    return replace(instance, proxy_tier=tier, **fields)
 
 
 def apply_rigid_feedback(stream, frame, cache, bodies, solver_key, *, gravity=9.81, strength=0.04):

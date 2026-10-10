@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from nodebased import flip3d, scene3d
+from nodebased import flip3d, fluid3d, scene3d, simcache
 from nodebased.scene3d import ParticleInstance
 
 
@@ -38,6 +38,8 @@ class SceneProxyTests(unittest.TestCase):
         self.assertAlmostEqual(total(coarse), total(self.volume), delta=abs(total(self.volume)) * 1e-6)
         self.assertEqual(coarse.temperature.shape, coarse.density.shape)
         self.assertEqual(coarse.velocity.shape, coarse.density.shape + (3,))
+        self.assertEqual(coarse.proxy_tier, 4)
+        self.assertIs(scene3d.proxy_scene(scene3d.Scene(volumes=(coarse,)), 4).volumes[0], coarse)
 
     def test_full_detail_keeps_original_scene_and_volume(self):
         self.assertIs(scene3d.proxy_scene(self.scene, 1), self.scene)
@@ -52,3 +54,33 @@ class SceneProxyTests(unittest.TestCase):
         self.assertLess(len(preview.positions), len(instance.positions) // 8)
         np.testing.assert_allclose(preview.positions.min(axis=0), positions.min(axis=0))
         np.testing.assert_allclose(preview.positions.max(axis=0), positions.max(axis=0))
+
+    def test_preview_particle_state_is_a_compact_bounds_preserving_simcache_state(self):
+        axis = np.arange(12, dtype=np.float32) * 0.1
+        positions = np.stack(np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1).reshape(-1, 3)
+        state = simcache.State({"position": positions, "velocity": positions * 2,
+                                "id": np.arange(len(positions), dtype=np.int64)}, {"tag": "kept"})
+        stream = SimpleNamespace(spacing=0.1, origin=(0.0, 0.0, 0.0))
+        proxy = flip3d.preview_state(state, stream, 4)
+        self.assertLess(len(proxy.arrays["position"]), len(positions) // 8)
+        np.testing.assert_allclose(proxy.arrays["position"].min(axis=0), positions.min(axis=0))
+        np.testing.assert_allclose(proxy.arrays["position"].max(axis=0), positions.max(axis=0))
+        self.assertEqual(proxy.meta["tag"], "kept")
+        np.testing.assert_array_equal(proxy.arrays["velocity"], proxy.arrays["position"] * 2)
+
+    def test_cached_volume_prepopulates_and_reuses_the_proxy_side_cache(self):
+        density = np.arange(8 * 8 * 8, dtype=np.float32).reshape((8, 8, 8)) / 100
+        stream = SimpleNamespace(run="volume-run", backend="cpu", shape=density.shape,
+                                 origin=(-0.5, 0.25, 1.0), voxel=0.125)
+        store = simcache.SimCache()
+        out_run = simcache.run_key(stream.run, {"out": ["float32", "density"]})
+        store.put(out_run, 3, simcache.State({"density": density},
+                                              {"domain_shape": density.shape, "domain_origin": stream.origin}))
+        full = fluid3d.cached_volume(stream, 3, store, None, "float32", "density")
+        preview = fluid3d.cached_volume(stream, 3, store, None, "float32", "density", tier=4)
+        self.assertEqual(preview.proxy_tier, 4)
+        self.assertLess(np.prod(preview.density.shape), np.prod(full.density.shape))
+        np.testing.assert_allclose(world_bounds(preview), world_bounds(full), atol=1e-6, rtol=0)
+        total = lambda v: float(np.sum(v.density, dtype=np.float64) * v.voxel_size ** 3 *
+                                abs(np.linalg.det(v.matrix[:3, :3])))
+        self.assertAlmostEqual(total(preview), total(full), delta=abs(total(full)) * 1e-6)

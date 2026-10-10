@@ -1,3 +1,10 @@
+## 2026-10-10 — Lane 6 P2 production follow-up (PARTIAL)
+
+- **What was done (evidence):** Added persistent tier-specific companion caches for reduced liquid-particle, whitewater-particle, and cached-volume frames; proxy markers keep `proxy_scene` from reducing an already reduced volume twice. Preview and full scene bounds/density tests, proxy controls, and stop-tier UI tests pass (91 focused tests); documentation parity passes (7 tests). The 120-frame Radeon production run completed: full detail 0.14 median FPS; cold 1/4 preview 0.49 median FPS (1,974.7 ms fetch + 74.5 ms draw). The 12 FPS target remains missed. Production preview-to-full-detail stop latency was not directly captured; the 7,093.4 ms full-detail fetch median does not establish the one-second target. The synthetic stop test still passes.
+- **Artifacts:** Code/tests/docs and `benchmarks/hot_pour/radeon-preview-production-followup-2026-10-10.json` are committed locally on `openclaw/nb-fluids-spike`; not pushed. Detailed handoff: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L6.md`. Raw benchmark: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L6-production-preview-v2.log`; final test logs: `tests-L6-focused-final.log`, `tests-L6-knowledge-final.log`. `/tmp/hot-pour-preview-production-L6-v2` (about 35 GB, deliberate scratch) is retained for next measurement; cleanup handoff after it is no longer needed: `gio trash /tmp/hot-pour-preview-production-L6-v2`. The exploratory warm-repeat probe was interrupted at frame 100 after 29.9 s; it produced no warm/stop result and is not cited as performance evidence.
+- **State:** Partial. Cold production preview misses 12 FPS; production stop transition within one second remains unverified. Issue #6 stays unchecked.
+- **Next owner + artifact:** Gonzo owns the next optimization/measurement; use `tools/benchmark_hot_pour.py --reuse-cache --playback --preview-tier 4` with the retained production cache, then instrument a real tier-4-to-tier-1 stop at a representative frame. Do not mark P2 done until both acceptance targets pass.
+
 ## 2026-10-10 — Lane 4 step R2 of 3: holdout objects that cut CG out where something in the filmed plate is in front of it
 
 - **What was done (evidence):** a per-mesh **Holdout** switch (off by default) beside R1's switches on Card3D, Cube3D, Sphere3D,
@@ -32,4 +39,3 @@
 - **What was done:** `main` `c020687` -> `6006290` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `6006290`: Ran 4919 tests in 11710.044 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
-

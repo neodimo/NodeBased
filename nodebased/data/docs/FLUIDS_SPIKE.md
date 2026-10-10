@@ -1465,13 +1465,14 @@ link, and the scene that never held the excluded light; excluded from the overhe
 
 ### P2: interactive cached-simulation preview (2026-10-09)
 
-During playback or scrubbing, the viewer's existing proxy tier now reuses the full-resolution fluid
-simulation cache, thins liquid particles per coarse spatial cell before surface extraction, and
-area-averages cached volume fields for Render3D. A compensating transform preserves volume bounds;
-density is renormalized so integrated density agrees within 1e-6 relative error. The current tier
-remains visible in the viewer's `proxy 1/n` badge. Stopping restores the artist's tier and queues a
-full-detail render; the desktop test verifies refinement within one second. The 1/4 image tier
-renders 240 × 135 from the 960 × 540 benchmark viewport.
+During playback or scrubbing, the viewer's existing proxy tier reuses the full-resolution fluid
+simulation cache and bounded, persistent companion caches for reduced liquid particles, whitewater
+particles and cached volume fields. Liquid particles are thinned per coarse spatial cell before
+surface extraction; volumes are area-averaged for Render3D. A compensating transform preserves
+volume bounds; density is renormalized so integrated density agrees within 1e-6 relative error. The
+current tier remains visible in the viewer's `proxy 1/n` badge. Stopping restores the artist's tier
+and queues a full-detail render; the desktop test verifies refinement within one second on a
+synthetic frame. The 1/4 image tier renders 240 × 135 from the 960 × 540 benchmark viewport.
 
 Active Hot pour preview playback, 24 frames, median FPS:
 
@@ -1479,18 +1480,23 @@ Active Hot pour preview playback, 24 frames, median FPS:
 |---|---:|---:|---:|
 | AMD Radeon 8060S | 64³ / 48³ | 14.56 | 14.96 |
 | llvmpipe | 64³ / 48³ | 11.94 | 11.06 |
+| AMD Radeon 8060S, production | 256³ / 192³ | 0.14 | 0.49 |
 
 The Radeon preview exceeds the 12 FPS target on this active reduced scene. Peak playback content
 was 1,728 liquid particles, 10,412 surface triangles and 216 sparse steam tiles. The preview adds
-little speed at this small cache size. A production-size Radeon run on 2026-10-10 baked the full
-256³ / 192³, 120-frame preset in 1,725.5 s and measured 0.30 median FPS for whole-scene preview
-at tier 1/4 (3,187.8 ms median fetch, 83.7 ms draw); full-detail playback measured 0.09 FPS.
-The 12 FPS production target is missed. The separate viewer test verifies one-second refinement
-with a synthetic frame; production-cache refinement within one second remains unverified. The
-llvmpipe preview is below 12 FPS on the active 64³ / 48³, 24-frame scene. Benchmark records:
+little speed at this small cache size. The first production bake on 2026-10-10 measured 0.30 FPS
+preview. A follow-up run with persistent reduced-frame companions baked 256³ / 192³, 120 frames
+(36,721,516,895 cache bytes); full-detail playback measured 0.14 median FPS (7,093.4 ms median
+fetch, 59.0 ms draw), and cold tier-1/4 preview measured 0.49 median FPS (1,974.7 ms fetch,
+74.5 ms draw). One dense preview frame took 35.90 s. The 12 FPS production target remains missed.
+The separate viewer test verifies one-second refinement with a synthetic frame; a production
+preview-to-full-detail stop transition was not measured, and the 7.09 s median full-detail fetch
+does not establish the one-second target. The llvmpipe preview is below 12 FPS on the active 64³ /
+48³, 24-frame scene. Benchmark records:
 `benchmarks/hot_pour/radeon-preview-2026-10-09.json` and
 `benchmarks/hot_pour/llvmpipe-preview-2026-10-09.json`; production Radeon result:
-`benchmarks/hot_pour/radeon-preview-production-2026-10-10.json`. Targeted coverage is in
+`benchmarks/hot_pour/radeon-preview-production-2026-10-10.json`; follow-up:
+`benchmarks/hot_pour/radeon-preview-production-followup-2026-10-10.json`. Targeted coverage is in
 `tests.test_scene3d_proxy`, `tests.test_tiers` and `tests.test_desktop.PlaybackProxyToggleTests`.
 
 ## K2 rigid bodies — finish 1

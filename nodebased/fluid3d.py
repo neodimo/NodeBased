@@ -1770,31 +1770,16 @@ def placeholder_volume(stream, frame):
                   stream=stream, frame=int(frame))
 
 
-def cached_volume(stream, frame, store, cancel, precision, channels, name=""):
-    """The volume of `frame` through `store` (a SimCache): solver checkpoints under the run, and the served
-    channels at `precision` under a derived run, so a scrub is a cache read. What is served is always the quantised
-    copy, so a fresh solve and a cache hit are identical. A `resident_sparse` run serves sparse tiles (only the
-    tiles that hold smoke, heat or flow are stored) and builds the dense arrays here, when the volume is asked for."""
-    names = CHANNEL_SETS[channels]
-    sparse = getattr(stream, "backend", None) == "resident_sparse"
-    out_run = simcache.run_key(stream.run, {"out": [precision, channels] + (["sparse"] if sparse else [])})
-    got = store.get(out_run, int(frame))
-    if got is None:
-        state = solve_frame(stream, frame, store, cancel)
-        vol = volume_from_state(state, stream, frame)
-        dtype = np.float16 if precision == "float16" else np.float32
-        if sparse:
-            grid = _sparse_of(vol, names)
-            arrays = {"coords": grid.coords, **{name: grid.data[name].astype(dtype) for name in names}}
-        else:
-            arrays = {name: np.asarray(getattr(vol, name)).astype(dtype) for name in names}
-        meta = {"frame": int(frame)}
-        for key in ("domain_shape", "domain_origin"):
-            if key in state.meta:
-                meta[key] = state.meta[key]
-        got = simcache.State(arrays, meta, copy=False)
-        store.put(out_run, int(frame), got)
+def _cached_volume_value(got, stream, frame, name, sparse, store):
+    """Rebuild a volume value from the served cache entry."""
     from .scene3d import Volume
+    if got.meta.get("preview_tier"):
+        a = got.arrays
+        return Volume(a["density"].astype(np.float32), voxel_size=float(got.meta["voxel_size"]),
+                      origin=tuple(got.meta["origin"]), matrix=a["__matrix"],
+                      temperature=a.get("temperature"), velocity=a.get("velocity"),
+                      flame=a.get("flame"), fuel=a.get("fuel"), stream=stream, frame=int(frame), name=name,
+                      proxy_tier=int(got.meta["preview_tier"]))
     a = got.arrays
     domain_shape = tuple(got.meta.get("domain_shape", stream.shape))
     domain_origin = tuple(got.meta.get("domain_origin", stream.origin))
@@ -1804,7 +1789,67 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name=""):
         grid = SparseGrid.from_arrays(domain_shape, {k: (v if k == "coords" else v.astype(np.float32)) for k, v in a.items()})
         if store.profile is not None:
             store.profile["sparse_rebuild_s"] = store.profile.get("sparse_rebuild_s", 0.0) + time.perf_counter() - rebuild_started
-        return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=domain_origin, stream=stream, frame=int(frame), name=name)
+        return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=domain_origin, stream=stream,
+                                  frame=int(frame), name=name)
     return Volume(a["density"].astype(np.float32), voxel_size=stream.voxel, origin=domain_origin,
                   temperature=a.get("temperature"), velocity=a.get("velocity"), flame=a.get("flame"), fuel=a.get("fuel"),
                   stream=stream, frame=int(frame), name=name)
+
+
+def _volume_preview_state(volume, tier):
+    from . import scene3d
+    from .simcache import State
+    reduced = scene3d.proxy_scene(scene3d.Scene(volumes=(volume,)), tier).volumes[0]
+    arrays = {"density": np.asarray(reduced.density, np.float32), "__matrix": np.asarray(reduced.matrix, np.float32)}
+    for field in ("temperature", "velocity", "flame", "fuel"):
+        value = getattr(reduced, field)
+        if value is not None:
+            arrays[field] = np.asarray(value, np.float32)
+    return State(arrays, {"preview_tier": int(tier), "voxel_size": reduced.voxel_size,
+                          "origin": list(reduced.origin)}, copy=False)
+
+
+def cached_volume(stream, frame, store, cancel, precision, channels, name="", tier=1, preview_store=None):
+    """Read a served volume or its persistent, reduced-resolution display companion."""
+    names = CHANNEL_SETS[channels]
+    sparse = getattr(stream, "backend", None) == "resident_sparse"
+    preview_store = store if preview_store is None else preview_store
+    out_run = simcache.run_key(stream.run, {"out": [precision, channels] + (["sparse"] if sparse else [])})
+    preview_run = simcache.run_key(out_run, {"preview_volume": 1, "tier": 4})
+    tier = int(tier)
+    if tier > 1:
+        run = simcache.run_key(out_run, {"preview_volume": 1, "tier": tier})
+        preview = preview_store.get(run, int(frame))
+        if preview is not None:
+            return _cached_volume_value(preview, stream, frame, name, False, store)
+    else:
+        run = preview_run
+
+    got = store.get(out_run, int(frame))
+    if got is None:
+        state = solve_frame(stream, frame, store, cancel)
+        vol = volume_from_state(state, stream, frame)
+        dtype = np.float16 if precision == "float16" else np.float32
+        if sparse:
+            grid = _sparse_of(vol, names)
+            arrays = {"coords": grid.coords, **{n: grid.data[n].astype(dtype) for n in names}}
+        else:
+            arrays = {n: np.asarray(getattr(vol, n)).astype(dtype) for n in names}
+        meta = {"frame": int(frame)}
+        for key in ("domain_shape", "domain_origin"):
+            if key in state.meta:
+                meta[key] = state.meta[key]
+        got = simcache.State(arrays, meta, copy=False)
+        store.put(out_run, int(frame), got)
+
+    full = _cached_volume_value(got, stream, frame, name, sparse, store)
+    if tier <= 1:
+        if preview_store.get(preview_run, int(frame)) is None:
+            preview_store.put(preview_run, int(frame), _volume_preview_state(full, 4))
+        return full
+
+    # First access to an old cache lazily creates its proxy; subsequent scrubs fetch only the
+    # reduced arrays. Baking at tier 1 pre-populates the default quarter-resolution companion.
+    proxy = _volume_preview_state(full, tier)
+    preview_store.put(run, int(frame), proxy)
+    return _cached_volume_value(proxy, stream, frame, name, False, store)

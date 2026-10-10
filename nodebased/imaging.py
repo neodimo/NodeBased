@@ -566,6 +566,7 @@ class Evaluator:
         self.sim_template = sim
         self._sim_memory = simcache.SimCache(enabled=False)
         self._sim_stores = {}
+        self._sim_preview_stores = {}
         self._rigid_solvers = {}
         self._liquid_feedback_versions = {}
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
@@ -615,6 +616,23 @@ class Evaluator:
                                       profile=None if template is None else template.profile,
                                       legacy_root=template.root if enabled else None)
             self._sim_stores[key] = store
+        return store
+
+    def sim_preview_store(self, memory_mb, disk_mb):
+        """Small persistent namespace for reduced simulation frames; it never evicts authored frames."""
+        from . import simcache
+        key = (int(memory_mb), int(disk_mb))
+        store = self._sim_preview_stores.get(key)
+        if store is None:
+            base = self.sim_store(*key)
+            root = None if base.root is None else base.root / "preview-cache-v1"
+            enabled = bool(base.enabled and root is not None)
+            # Keep the proxy tier separate so adding it cannot evict full-detail simulation data.
+            budget = min(16 * 1024, max(256, key[1] // 4))
+            store = simcache.SimCache(root=root, memory_budget=min(key[0], 256) << 20,
+                                      disk_budget=budget << 20, enabled=enabled,
+                                      profile=None if self.sim_template is None else self.sim_template.profile)
+            self._sim_preview_stores[key] = store
         return store
 
     def clear(self):
@@ -1250,8 +1268,24 @@ class Evaluator:
                         value = particles.placeholder_instance(stream, frame)       # only the run is read
                     else:
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
-                        state = particles.solve_frame(stream, frame, store, cancel)
+                        preview_store = self.sim_preview_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        if isinstance(stream, flip3d.LiquidStream) and tier > 1:
+                            preview_run = flip3d.preview_cache_run(stream.run, tier)
+                            state = preview_store.get(preview_run, int(frame))
+                            if state is None:
+                                state = particles.solve_frame(stream, frame, store, cancel)
+                                state = flip3d.preview_state(state, stream, tier)
+                                preview_store.put(preview_run, int(frame), state)
+                            display_tier = tier
+                        else:
+                            state = particles.solve_frame(stream, frame, store, cancel)
+                            display_tier = 1
+                            if isinstance(stream, flip3d.LiquidStream):
+                                preview_run = flip3d.preview_cache_run(stream.run, 4)
+                                if preview_store.get(preview_run, int(frame)) is None:
+                                    preview_store.put(preview_run, int(frame), flip3d.preview_state(state, stream, 4))
                         value = replace(particles.instance_from_state(state, stream, frame),
+                                        proxy_tier=display_tier,
                                         matrix=incoming.matrix, render_as=incoming.render_as,
                                         size_scale=incoming.size_scale, texture=incoming.texture,
                                         foam_density=incoming.foam_density, spray_size=incoming.spray_size)
@@ -1313,6 +1347,7 @@ class Evaluator:
                         run = simcache.run_key(fluid.run, {"kind": "FluidWhitewater3D", "params": params,
                                                            "format": 1})
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        preview_store = self.sim_preview_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         def initial_whitewater(seed):
                             return _whitewater_cache_state(white_solver.initial_state(seed))
                         def whitewater_step(previous, solve_frame, substep, seed):
@@ -1321,17 +1356,35 @@ class Evaluator:
                             previous_state = _whitewater_state(previous)
                             result = white_solver.step(previous_state, liquid_frame, solve_frame, substep, seed)
                             return _whitewater_cache_state(result)
-                        solved = simcache.solve_to_frame(store, run, int(frame), fluid.start_frame, 1,
-                                                         int(params["seed"]), initial_whitewater, whitewater_step, cancel)
-                        value = whitewater.instance_from_state(_whitewater_state(solved), incoming, frame)
+                        if tier > 1:
+                            preview_run = simcache.run_key(run, {"preview_particles": 1, "tier": int(tier)})
+                            solved = preview_store.get(preview_run, int(frame))
+                        else:
+                            preview_run = None
+                            solved = None
+                        if solved is None:
+                            solved = simcache.solve_to_frame(store, run, int(frame), fluid.start_frame, 1,
+                                                             int(params["seed"]), initial_whitewater,
+                                                             whitewater_step, cancel)
+                            if tier > 1:
+                                solved = flip3d.preview_state(solved, fluid, tier)
+                                preview_store.put(preview_run, int(frame), solved)
+                            else:
+                                preview_run = simcache.run_key(run, {"preview_particles": 1, "tier": 4})
+                                if preview_store.get(preview_run, int(frame)) is None:
+                                    preview_store.put(preview_run, int(frame), flip3d.preview_state(solved, fluid, 4))
+                        value = replace(whitewater.instance_from_state(_whitewater_state(solved), incoming, frame),
+                                        proxy_tier=int(tier) if tier > 1 else 1)
                 elif kind == "FluidCache3D":
                     incoming = values[node["inputs"]["volume"]]
                     if node["disabled"] or fluid is None:
                         value = incoming
                     else:
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        preview_store = self.sim_preview_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         value = fluid3d.cached_volume(fluid, frame, store, cancel, params["cache_precision"],
-                                                      params["cache_channels"], node.get("name", ""))
+                                                      params["cache_channels"], node.get("name", ""), tier=tier,
+                                                      preview_store=preview_store)
                     link = scene3d.light_link_from_params(params)    # the smoke's light link rides this node
                     if not node["disabled"] and link != scene3d.LIGHT_LINK_ALL and isinstance(value, scene3d.Volume):
                         value = replace(value, light_link=link)
