@@ -1,3 +1,15 @@
+## 2026-10-10 — Lane 6 P2 finish: production preview benchmark (PARTIAL)
+
+**What was done (evidence).** Ran the full Hot pour preset on the AMD Radeon 8060S: 256³ liquid, 192³ steam, 120 frames. Bake took 1,725.5 s; playback at tier 1/4 measured 0.30 median FPS (3,187.8 ms median fetch, 83.7 ms draw). Full detail measured 0.09 FPS. The production target of 12 FPS is missed. Focused tests passed: proxy volume bounds and integrated density, liquid silhouette bounds, stop restoring full tier/refinement, proxy control, and documentation bundle parity. The viewer's one-second test uses a synthetic frame; production-cache settle remains unverified.
+
+**Artifacts.** Production measurements: `benchmarks/hot_pour/radeon-preview-production-2026-10-10.json` (committed with this note); Hot pour docs synchronized at `docs/FLUIDS_SPIKE.md` and `nodebased/data/docs/FLUIDS_SPIKE.md`. Raw run log and test log are at `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L6-production-preview.log` and `tests-L6-finish-1010.log`. The 36.8 GB baked cache is deliberate scratch at `/tmp/hot-pour-preview-production-L6` pending cleanup.
+
+**State.** PARTIAL. The production speed requirement is unmet; production-cache refinement within one second is unverified. Reduced 64³/48³ Radeon and llvmpipe rows remain in the P2 benchmark table.
+
+**Next owner + concrete artifact.** Needs Gonzo: plan cache-resident proxy frames to eliminate repeated full-cache fetch/rebuild, then rerun the exact 256³/192³ workload with `tools/benchmark_hot_pour.py` and measure stop refinement against the production cache. Do not mark issue #6 P2 complete until both targets pass.
+
+**Failure mode.** The previous partial handoff lacked the full production playback measurement. Proxying after evaluating each full-resolution cached frame does not make cache fetch/render fit the production target.
+
 ## 2026-10-10 — Lane 4 step R1 of 3: per-object render switches (Cast shadows, Receive shadows, Visible to camera)
 
 - **What was done (evidence):** every mesh node (Card3D, Cube3D, Sphere3D, Cylinder3D, ReadGeo3D, ReadGLTF3D) has the three

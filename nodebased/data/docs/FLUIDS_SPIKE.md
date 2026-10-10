@@ -1482,11 +1482,15 @@ Active Hot pour preview playback, 24 frames, median FPS:
 
 The Radeon preview exceeds the 12 FPS target on this active reduced scene. Peak playback content
 was 1,728 liquid particles, 10,412 surface triangles and 216 sparse steam tiles. The preview adds
-little speed at this small cache size; the full 256³ / 192³ Hot pour preset was not remeasured for
-P2, so its 12 FPS target and full-resolution Hot pour's one-second refinement remain unverified.
-The llvmpipe preview is below 12 FPS. Benchmark records:
+little speed at this small cache size. A production-size Radeon run on 2026-10-10 baked the full
+256³ / 192³, 120-frame preset in 1,725.5 s and measured 0.30 median FPS for whole-scene preview
+at tier 1/4 (3,187.8 ms median fetch, 83.7 ms draw); full-detail playback measured 0.09 FPS.
+The 12 FPS production target is missed. The separate viewer test verifies one-second refinement
+with a synthetic frame; production-cache refinement within one second remains unverified. The
+llvmpipe preview is below 12 FPS on the active 64³ / 48³, 24-frame scene. Benchmark records:
 `benchmarks/hot_pour/radeon-preview-2026-10-09.json` and
-`benchmarks/hot_pour/llvmpipe-preview-2026-10-09.json`. Targeted coverage is in
+`benchmarks/hot_pour/llvmpipe-preview-2026-10-09.json`; production Radeon result:
+`benchmarks/hot_pour/radeon-preview-production-2026-10-10.json`. Targeted coverage is in
 `tests.test_scene3d_proxy`, `tests.test_tiers` and `tests.test_desktop.PlaybackProxyToggleTests`.
 
 ## K2 rigid bodies — finish 1
