@@ -281,16 +281,24 @@ def playback(args, document, evaluator, gpu):
         for store in evaluator._sim_stores.values():
             store.profile = profile
         gpu["profile"] = profile
-    for label, node in (("steam volume alone", "steam_volume_scene"), ("whole scene", "scene")):
+    preview_tier = int(getattr(args, "preview_tier", 4))
+    workloads = [("steam volume alone", "steam_volume_scene", 1), ("whole scene", "scene", 1),
+                 (f"whole scene preview 1/{preview_tier}", "scene", preview_tier)]
+    for label, node, tier in workloads:
         times = []
         playback_frames = ([profile_frame] if getattr(args, "profile_only", False) else range(1, args.frames + 1))
         for f in playback_frames:
             if profile is not None and label == "steam volume alone" and f == profile_frame:
                 profile.clear()
             started = time.perf_counter()
-            scene = evaluator.evaluate_raster(document, node, frame=f, typed=True)
+            scene = evaluator.evaluate_raster(document, node, frame=f, tier=tier, typed=True)
+            if tier > 1:
+                from nodebased.scene3d import proxy_scene
+                scene = proxy_scene(scene, tier)
             fetched = time.perf_counter()
-            renderer.render(scene, camera, args.play_width, args.play_height, (0.02, 0.02, 0.025, 1.0), ambient=0.2)
+            width = max(1, -(-args.play_width // tier))
+            height = max(1, -(-args.play_height // tier))
+            renderer.render(scene, camera, width, height, (0.02, 0.02, 0.025, 1.0), ambient=0.2)
             done = time.perf_counter()
             times.append((fetched - started, done - fetched))
             if profile is not None and label == "steam volume alone" and f == profile_frame:
@@ -372,6 +380,8 @@ def main(argv=None):
     parser.add_argument("--playback", action="store_true")
     parser.add_argument("--play-width", type=int, default=960)
     parser.add_argument("--play-height", type=int, default=540)
+    parser.add_argument("--preview-tier", type=int, choices=(2, 4, 8), default=4,
+                        help="linear proxy tier measured in the additional preview-playback row")
     parser.add_argument("--stills", default=None)
     parser.add_argument("--still-frames", default="60,120")
     parser.add_argument("--still-size", default="1920x1080")
