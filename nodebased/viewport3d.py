@@ -998,8 +998,10 @@ class Viewport3D(QWidget):
         # captures outright, so the fallback renders the meshes and marks splat centres instead.
         had_volumes = bool(scene.volumes)
         scene = scene3d.resolve_instances(scene)   # Instance3D copies: the CPU fallback has no GPU instancing to draw them with
-        # The viewport draws a mesh hidden from the camera too (Visible to camera off), so that it can be picked.
-        shown = tuple(g if g.visible_to_camera else replace(g, visible_to_camera=True) for g in scene.geometries)
+        # The viewport draws a mesh hidden from the camera too (Visible to camera off) and a holdout as the stand-in it is,
+        # so that both can be picked.
+        shown = tuple(g if g.visible_to_camera and not g.holdout else replace(g, visible_to_camera=True, holdout=False)
+                      for g in scene.geometries)
         splats, scene = scene.splats, scene3d.Scene(shown, scene.lights, particles=scene.particles,
                                                     volumes=scene.volumes)
         sparse_volumes = any(getattr(volume, "sparse", None) is not None for volume in scene.volumes)

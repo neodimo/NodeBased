@@ -67,8 +67,8 @@ var<private> splat_near: f32 = -1.;
 var<private> exclude_id: i32 = -1;
 // Per-object render switches: the material record's last slot is 1 for a mesh that takes no shadow, and every shadow ray a
 // fragment of it would trace returns "unblocked" (`shadow_off`, set where the material is read). A mesh that casts no
-// shadow carries every bit in its triangles' `e1.w` (`gpu3d.NO_CAST_MASK`). A mesh hidden from the camera has `f.w` set in
-// its triangles' attributes, which only the primary rays of `main` read.
+// shadow carries every bit in its triangles' `e1.w` (`gpu3d.NO_CAST_MASK`). A mesh hidden from the camera has `f.w` 1 in
+// its triangles' attributes, a holdout 2; only the primary rays of `main` read it.
 var<private> shadow_off: bool = false;
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
 @group(0) @binding(1) var<storage, read> order: array<u32>;
@@ -500,7 +500,11 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
   // by ~1e-6 relative in t and barycentrics: the CPU's 1e-10 thresholds are widened to 1e-5 here.
   let duplicate=at.info.x==previous_object && edge && previous_edge && abs(hit.t-ct)<=1e-5*max(1.,abs(hit.t));
   ct=hit.t; cp=hit.id; previous_object=at.info.x; previous_edge=edge;
-  if (at.info.x<0. || duplicate || at.f.w>0.5) { continue; }
+  if (at.info.x<0. || duplicate || (at.f.w>0.5 && at.f.w<1.5)) { continue; }
+  if (at.f.w>1.5) {
+   // a holdout (`f.w` 2): the ray ends here with nothing added (the picture and the data stay empty, the backdrop shows)
+   break;
+  }
   surfaces++;
   if (surfaces>params.maxhits) { rays[r*4u+2u]=vec4<f32>(0.,0.,0.,-1.); return; }
   let w=vec3<f32>(1.-hit.u-hit.v,hit.u,hit.v);
@@ -759,7 +763,8 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
             attrs = np.concatenate((local[tri], world[tri], ns, uv[tri]), axis=1).astype('f4')
             at[:3, :3] = ns
             at[0, 3] = object_id
-            at[7, 3] = 0. if geometry.visible_to_camera else 1.     # primary rays pass through (the shader's main loop)
+            # 1: primary rays pass through (the shader's main loop); 2: a holdout ends them with nothing (hidden wins)
+            at[7, 3] = (2. if geometry.holdout else 0.) if geometry.visible_to_camera else 1.
             if tangent_map:
                 # scene3d._render_primary's flat UV-gradient tangent, kept in the spare .w of n1, n2 and e.
                 e1, e2 = world[tri[1]]-world[tri[0]], world[tri[2]]-world[tri[0]]

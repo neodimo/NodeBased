@@ -358,6 +358,9 @@ class PathScene:
     no_cast: object = None
     no_receive: object = None
     hidden: object = None
+    # Holdouts (step R2): per mesh shape, True where the mesh is a holdout (a camera ray that reaches it ends there with no
+    # light and no coverage; every other ray, shadow rays aside, passes through it); None when there is none.
+    holdout: object = None
 
     def receive_off(self, shape):
         """Per entry of `shape` (-1 and splat shapes: no mesh), whether that mesh takes no shadow."""
@@ -384,7 +387,7 @@ class PathScene:
         """The lights some shape excludes, as a bit mask (0 without light linking)."""
         if "_linked_bits" not in self.__dict__:
             bits = int(np.bitwise_or.reduce(self.excl)) if self.excl is not None else 0
-            if self.no_cast is not None or self.no_receive is not None:
+            if self.no_cast is not None or self.no_receive is not None or self.holdout is not None:
                 # a mesh that casts or takes no shadow breaks the two sampling strategies' agreement for every light:
                 # shadow rays skip it, a BSDF ray that reaches the light cannot, so the lights are sampled by NEE alone
                 bits |= (1 << (len(self.point_lights) + len(self.area_lights) + len(self.envs))) - 1
@@ -443,6 +446,12 @@ def _switch_flags(entries, name):
     """Per mesh shape, True where the render switch `name` (scene3d.Geometry) is off; None when every shape has it on."""
     off = np.array([not getattr(entry[0], name, True) for entry in entries], bool)
     return off if off.any() else None
+
+
+def _holdout_flags(entries):
+    """Per mesh shape, True where the mesh is a holdout; None when no shape is."""
+    on = np.array([bool(getattr(entry[0], "holdout", False)) for entry in entries], bool)
+    return on if on.any() else None
 
 
 def build_scene(scene, ambient=0.0, eye=None, volume=None):
@@ -585,7 +594,7 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
                      1e-4 * max(1.0, extent), s.SHADOW_BIAS_DEFAULT * max(1.0, extent), tuple(geometries),
                      splats=layer, volumes=smoke, excl=excl if excl.any() else None,
                      no_cast=_switch_flags(entries, "cast_shadows"), no_receive=_switch_flags(entries, "receive_shadows"),
-                     hidden=_switch_flags(entries, "visible_to_camera"))
+                     hidden=_switch_flags(entries, "visible_to_camera"), holdout=_holdout_flags(entries))
 
 
 # --- ray queries --------------------------------------------------------------------------------------------
@@ -644,7 +653,8 @@ def closest(ps, o, d, tmin, tmax, cancel=None, stoch=None, skip=None, camera=Non
     opacity reaches one half. `skip` is `(splat, tmin, plane normals, plane thickness)` per ray, the surface
     the ray just left, so a splat sheet does not hit itself. A splat hit is shape `ps.shapes + splat`.
     `camera` (bool per ray, True for a camera ray) hides the meshes whose `visible_to_camera` is off from those rays;
-    every other ray (shadow, reflection, refraction, bounce) still sees them. Splats are always visible."""
+    every other ray (shadow, reflection, refraction, bounce) still sees them. A holdout mesh is the other way round: only a
+    camera ray meets it. Splats are always visible."""
     n = len(o)
     tmin = np.broadcast_to(np.asarray(tmin, np.float64), (n,))
     best = np.broadcast_to(np.asarray(tmax, np.float64), (n,)).copy()
@@ -656,6 +666,8 @@ def closest(ps, o, d, tmin, tmax, cancel=None, stoch=None, skip=None, camera=Non
         rays = np.flatnonzero(_slab(ps.world_lo[i], ps.world_hi[i], o, d, best))
         if len(rays) and camera is not None and ps.hidden is not None and ps.hidden[i]:
             rays = rays[~camera[rays]]
+        if len(rays) and camera is not None and ps.holdout is not None and ps.holdout[i]:
+            rays = rays[camera[rays]]
         if not len(rays):
             continue
         inverse = ps.inverse[i]
@@ -1116,9 +1128,14 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         dim = _DIM_BASE + turn * _DIM_STRIDE
         t, shape, prim, u, v = closest(ps, ro, rd, tmin[rows], tmax[rows], cancel, stoch=(keys[rows], dim + _SPLAT_DIM),
                                        skip=tuple(a[rows] for a in skip) if ps.splats is not None else None,
-                                       camera=vertex_depth[rows] == 0 if ps.hidden is not None else None)
+                                       camera=vertex_depth[rows] == 0 if ps.hidden is not None or ps.holdout is not None else None)
         tmin[:], tmax[:] = 0.0, np.inf
         vd = vertex_depth[rows]
+        # a camera ray that reaches a holdout mesh ends there: no light, no coverage, no first-hit data
+        held = np.zeros(len(rows), bool)
+        if ps.holdout is not None:
+            held = (shape >= 0) & (shape < ps.shapes) & (vd == 0) & ps.holdout[np.clip(shape, 0, ps.shapes - 1)]
+            alive[rows[held]] = False
         # emitters: the analytic area lights, seen by every ray but the camera's own
         t_light = np.full(len(rows), np.inf)
         light_id = np.full(len(rows), -1)
@@ -1180,7 +1197,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
                 _add_class(acc, rows[sel[~first_seen]], cls[rows[sel[~first_seen]]], vd[sel[~first_seen]],
                           value[~first_seen])
             alive[rows[sel]] = False
-        gone = lit | evented
+        gone = lit | evented | held
         if evented.any():
             e = np.flatnonzero(evented)
             fresh = e[vd[e] == 0]
@@ -1701,8 +1718,10 @@ def _read_only(a):
     return a
 
 
-def render_data(ps, camera, width, height, output, cancel=None):
-    """The data passes: one un-jittered first-hit ray per pixel, coverage in alpha, never antialiased."""
+def render_data(ps, camera, width, height, output, cancel=None, through_holdouts=False):
+    """The data passes: one un-jittered first-hit ray per pixel, coverage in alpha, never antialiased. A pixel a holdout
+    ends carries nothing; with `through_holdouts` the holdout is a hit like any other (its depth is what the particles and
+    the smoke behind it are cut by)."""
     n = width * height
     out = np.zeros((n, 4), np.float32)
     pix = np.arange(n)
@@ -1713,8 +1732,10 @@ def render_data(ps, camera, width, height, output, cancel=None):
         sl = slice(start, min(start + _CHUNK, n))
         o = np.broadcast_to(eye, (sl.stop - sl.start, 3))
         t, shape, prim, u, v = closest(ps, o, d[sl], tmin[sl], tmax[sl], cancel,
-                                       camera=np.ones(len(o), bool) if ps.hidden is not None else None)
+                                       camera=np.ones(len(o), bool) if ps.hidden is not None or ps.holdout is not None else None)
         got = shape >= 0
+        if ps.holdout is not None and not through_holdouts:
+            got &= ~((shape < ps.shapes) & ps.holdout[np.clip(shape, 0, ps.shapes - 1)])
         # an alpha surface is a hit for the data passes, like every other renderer here
         ns, _, uv, _, _, _, _, _, _ = _surface_any(ps, shape[got], prim[got], u[got], v[got], d[sl][got])
         wo = -d[sl][got]
@@ -1841,7 +1862,8 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     if output in DATA_OUTPUTS:
         data = render_data(ps, camera, width, height, output, cancel)
         if ps.volumes is not None:
-            surface = data if output == "depth" else render_data(ps, camera, width, height, "depth", cancel)
+            surface = (data if output == "depth" and ps.holdout is None else
+                       render_data(ps, camera, width, height, "depth", cancel, through_holdouts=True))
             data = merge_volume_data(scene, camera, width, height, data, output, ps.volumes.settings, surface, cancel)
         return data
     npix = width * height
@@ -1948,7 +1970,7 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         eye, view = s._view_basis(camera)
         focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
         aspect = width / max(height, 1)
-        first_hit = render_data(ps, camera, width, height, "depth", cancel)
+        first_hit = render_data(ps, camera, width, height, "depth", cancel, through_holdouts=True)
         particle_depth = np.where(first_hit[..., 3] > 0, first_hit[..., 0], np.inf).astype(np.float32)
         lit = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
         s._draw_particles(scene, camera, width, height, image, particle_depth, eye, view, focal, aspect, cancel,
@@ -2137,7 +2159,7 @@ def _composite_gpu_particles(scene, gpu_scene, camera, width, height, ambient, i
     eye, view = s._view_basis(camera)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
     aspect = width / max(height, 1)
-    first_hit = render_data(ps, camera, width, height, "depth", cancel)
+    first_hit = render_data(ps, camera, width, height, "depth", cancel, through_holdouts=True)
     particle_depth = np.where(first_hit[..., 3] > 0, first_hit[..., 0], np.inf).astype(np.float32)
     lit = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
     out = np.array(image, copy=True)

@@ -536,12 +536,18 @@ struct Vertex {
     return v;
 }
 @fragment fn fs(v: Vertex) -> @location(0) vec4<f32> {
+    // `scales.w` is a bit set: 1 takes no shadow, 2 a holdout (opaque to the depth test, nothing in the picture or the data)
+    let flags = u32(v.scales.w + 0.5);
+    if ((flags & 2u) != 0u) {
+        if (PASS == 1u) { discard; }
+        return vec4<f32>(0.0);
+    }
     let flipped_uv = vec2<f32>(v.uv.x, 1.0-v.uv.y);
     var source = textureSampleLevel(tex, filtering, flipped_uv, v.lod) * v.colour;
     if (source.a <= 0.0) { discard; }
     if (PASS == 0u && source.a < 0.999) { discard; }
     if (PASS == 1u && source.a >= 0.999) { discard; }
-    shadow_off = v.scales.w > 0.5;
+    shadow_off = (flags & 1u) != 0u;
     var normal = v.normal / max(length(v.normal), 1e-8);
     if (v.maps.y > 0.5) {
         // Y3 of 3, part 1: tangent-space normal map (`scene3d._shade_fragments`'s normal-map block
@@ -895,8 +901,9 @@ def particle_data(scene, camera, width, height, limits, cancel, output='rgba'):
     return packed, texel_data, params
 
 
-def _pipeline(state, data, phase, bvh=False, smoke=False):
-    key = (data, phase, bvh, smoke)
+def _pipeline(state, data, phase, bvh=False, smoke=False, hold=False):
+    """`hold`: the variant that draws holdout triangles in the beauty's first pass, replacing what is under them with zero."""
+    key = (data, phase, bvh, smoke, hold)
     if key in state['pipelines']:
         return state['pipelines'][key]
     device = state['device']
@@ -910,7 +917,8 @@ def _pipeline(state, data, phase, bvh=False, smoke=False):
     module = device.create_shader_module(code=code)
     target = {'format': 'rgba32float' if data else state['format']}
     if not data:
-        blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
+        blend = ({'src_factor': 'zero', 'dst_factor': 'zero', 'operation': 'add'} if hold else
+                 {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'})
         target['blend'] = {'color': blend, 'alpha': blend}
     attributes = [dict(format=f, offset=o, shader_location=i) for i, (f, o) in enumerate(
         [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60), ('float32x3', 64), ('float32', 76), ('float32x4', 80),
@@ -929,6 +937,20 @@ def _cancel(event):
     if event is not None and event.is_set():
         from .cancellation import Cancelled
         raise Cancelled()
+
+
+def _check_holdouts(scene):
+    """The raster and ray-traced modes cut holdout meshes out of mesh pictures (beauty and data passes). What would let a
+    holdout be seen, or leave something behind it uncut, stays on the CPU (`Unsupported`)."""
+    if not any(g.holdout for g in scene.geometries):
+        return
+    if scene.splats or getattr(scene, 'particles', ()) or getattr(scene, 'volumes', ()):
+        raise Unsupported('holdouts together with splats, particles or smoke are CPU-only in the raster and ray-traced modes')
+    if any(g.material == 'liquid' for g in scene.geometries):
+        raise Unsupported('holdouts together with liquid surfaces are CPU-only (refraction would see them)')
+    if any(getattr(e, 'visible_to_camera', False) for e in getattr(scene, 'environments', ())) or any(
+            light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0 for light in scene.lights):
+        raise Unsupported('holdouts with an environment or area light that the camera sees are CPU-only here')
 
 
 def link_order(scene):
@@ -1001,7 +1023,8 @@ def _prepare(scene, camera, width, height, cancel):
                 1.0 if occlusion_texture is not None else 0.0, 1.0 if emissive_texture is not None else 0.0)
         emissive_color = np.asarray(geometry.emissive_color, 'f4') if geometry.material == 'pbr' else np.zeros(3, 'f4')
         scales = (float(geometry.normal_scale) if is_pbr else 0.0, float(geometry.occlusion_strength) if is_pbr else 0.0,
-                  link_mask(geometry.light_link, order), 0.0 if geometry.receive_shadows else 1.0)
+                  link_mask(geometry.light_link, order),
+                  (0.0 if geometry.receive_shadows else 1.0) + (2.0 if geometry.holdout else 0.0))
         for index, tri in enumerate(geometry.triangles):
             if index % 256 == 0:
                 _cancel(cancel)
@@ -1045,7 +1068,7 @@ def _prepare(scene, camera, width, height, cancel):
                 packed[:, 27:31] = maps
                 packed[:, 31:34] = emissive_color
                 packed[:, 34:38] = scales
-                queue.append((float(zs.mean()), len(vertices)*3, material))
+                queue.append((float(zs.mean()), len(vertices)*3, material, geometry.holdout))
                 vertices.append(packed)
     return eye, focal, vertices, sorted(queue, key=lambda q: q[0], reverse=True), materials
 
@@ -1127,6 +1150,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         raise Unsupported('GPU rendering of Instance3D instances needs raytrace mode and a scene made '
                           'entirely of instances (no ordinary geometry, splats, particles or volumes '
                           'alongside them); the CPU renderer draws every combination')
+    _check_holdouts(scene)
     pbr_geometries = [g for g in scene.geometries if g.material == 'pbr']
     # Y3 of 3 (docs/3D_FOUNDATION.md "Materials"): the wgpu rasterizer shades a `pbr` geometry's
     # metallic/roughness/specular factors with the same Cook-Torrance GGX as the CPU reference
@@ -1630,6 +1654,20 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
         depth = keep(device.create_texture(size=(width, height, 1), format='depth32float',
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | (wgpu.TextureUsage.TEXTURE_BINDING if has_volumes else 0)))
+        def bind(pipeline):
+            groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+                {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
+                {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
+                {'binding': 4, 'resource': {'buffer': shadow_buffer}},
+                {'binding': 7, 'resource': mr_tex}, {'binding': 8, 'resource': normal_tex},
+                {'binding': 9, 'resource': occlusion_tex}, {'binding': 10, 'resource': emissive_tex},
+                {'binding': 11, 'resource': {'buffer': area_light_buffer}},
+                {'binding': 12, 'resource': {'buffer': area_sample_buffer}}]
+                + bvh_entries) for texture, mr_tex, normal_tex, occlusion_tex, emissive_tex in textures]
+            env_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(2), entries=[
+                {'binding': 0, 'resource': {'buffer': env_buffer}}, {'binding': 1, 'resource': env_atlas},
+                {'binding': 2, 'resource': env_sampler}])
+            return groups, env_group
         passes = []
         used = set()
         # The smoke shadows meshes: the shadowed lights' rays are marched through the volumes' density (gpuvolume).
@@ -1643,19 +1681,12 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 from . import gpuvolume
                 smoke_groups.append(gpuvolume.mesh_shadow_group(state, pipeline, scene, volume, used, keep,
                                                                 [light for light, *_ in lights]))
-            groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
-                {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
-                {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
-                {'binding': 4, 'resource': {'buffer': shadow_buffer}},
-                {'binding': 7, 'resource': mr_tex}, {'binding': 8, 'resource': normal_tex},
-                {'binding': 9, 'resource': occlusion_tex}, {'binding': 10, 'resource': emissive_tex},
-                {'binding': 11, 'resource': {'buffer': area_light_buffer}},
-                {'binding': 12, 'resource': {'buffer': area_sample_buffer}}]
-                + bvh_entries) for texture, mr_tex, normal_tex, occlusion_tex, emissive_tex in textures]
-            env_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(2), entries=[
-                {'binding': 0, 'resource': {'buffer': env_buffer}}, {'binding': 1, 'resource': env_atlas},
-                {'binding': 2, 'resource': env_sampler}])
-            passes.append((pipeline, groups, env_group))
+            passes.append((pipeline, *bind(pipeline)))
+        hold_pass = None
+        if vertices and not data and any(entry[3] for entry in queue):
+            # holdout triangles are drawn by a pipeline that replaces the colour under them with zero (beauty, first pass)
+            pipeline = _pipeline(state, data, 0, bvh_data is not None, False, hold=True)
+            hold_pass = (pipeline, *bind(pipeline))
         particle_pass = None
         if sprites is not None:
             instance_data, texel_data, particle_params = sprites
@@ -1709,8 +1740,20 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                     rp.draw(6, len(instance_data), 0, 0)
                 else:
                     rp.set_vertex_buffer(0, vertex_buffer)
-                    for _, start, material in queue:
-                        rp.set_bind_group(0, groups[material])
+                    use_hold = hold_pass is not None and pass_number == 0
+                    drawing_holdout, current = False, groups
+                    for _, start, material, holdout in queue:
+                        if use_hold and holdout != drawing_holdout:
+                            drawing_holdout = holdout
+                            if holdout:
+                                rp.set_pipeline(hold_pass[0])
+                                rp.set_bind_group(2, hold_pass[2])
+                                current = hold_pass[1]
+                            else:
+                                rp.set_pipeline(pipeline)
+                                rp.set_bind_group(2, env_group)
+                                current = groups
+                        rp.set_bind_group(0, current[material])
                         rp.draw(3, 1, start, 0)
                 rp.end()
             if volume_pass is not None:

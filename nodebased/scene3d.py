@@ -190,6 +190,10 @@ class Geometry:
     cast_shadows: bool = True
     receive_shadows: bool = True
     visible_to_camera: bool = True
+    # Holdout (Rendering 7, step R2): the mesh still hides whatever lies behind it from the camera, but is itself drawn as
+    # zero colour, zero alpha and no data, cutting a hole in the picture. Shadow rays see it per `cast_shadows`; reflections
+    # and bounces pass through it.
+    holdout: bool = False
 
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
@@ -945,7 +949,7 @@ def geometry_from_node(node, texture=None):
                    pbr_roughness=float(p.get("pbr_roughness", 0.5)),
                    pbr_specular=float(p.get("pbr_specular", 0.5)),
                    name=name, asset=name, light_link=light_link_from_params(p),
-                   **render_switches_from_params(p), **material_fields(p))
+                   **render_switches_from_params(p), holdout=holdout_from_params(p), **material_fields(p))
 
 
 def _geometry_from_node(node, texture=None):
@@ -1758,9 +1762,19 @@ def render_switches_from_params(p):
     return {key: str(p.get(key, "on")) != "off" for key in ("cast_shadows", "receive_shadows", "visible_to_camera")}
 
 
+def holdout_from_params(p):
+    """`holdout` for `Geometry` from a node's knobs (off unless "on"; a document saved before it existed has none)."""
+    return str(p.get("holdout", "off")) == "on"
+
+
+def has_holdouts(scene):
+    """True when any mesh of `scene` (instance sources included) is a holdout."""
+    return any(g.holdout for g in (*scene.geometries, *(s for i in scene.instances for s in i.sources)))
+
+
 def has_render_switches(scene):
-    """True when any mesh of `scene` (instance sources included) has a render switch turned off."""
-    return any(not (g.cast_shadows and g.receive_shadows and g.visible_to_camera)
+    """True when any mesh of `scene` (instance sources included) has a render switch turned off or is a holdout."""
+    return any(not (g.cast_shadows and g.receive_shadows and g.visible_to_camera) or g.holdout
                for g in (*scene.geometries, *(s for i in scene.instances for s in i.sources)))
 
 
@@ -3307,17 +3321,36 @@ def _raytrace_budget(work):
                          "reduce resolution/samples/triangles")
 
 
+def _band_kwargs(kwargs, hold_depth, y0, y1):
+    """`_render_primary`'s keyword arguments for rows y0..y1 of the frame: the holdout depth buffer follows the band."""
+    return kwargs if hold_depth is None else {**kwargs, "hold": hold_depth[y0:y1]}
+
+
+def _check_holdouts(scene, reflect_active, indirect_active):
+    """Holdouts reach primary visibility, the data passes, splats, particles and smoke. What would let a holdout be seen by a
+    secondary ray of the CPU raster and ray-traced modes (liquid refraction, splat reflections and bounces) is refused."""
+    if any(g.holdout for g in scene.geometries) and any(g.material == "liquid" for g in scene.geometries):
+        raise ValueError("a holdout cannot be combined with a liquid in the raster and ray-traced modes (refraction would see it)")
+    if reflect_active or indirect_active:
+        raise ValueError("a holdout cannot be combined with splat reflections or splat bounce light in the raster and "
+                         "ray-traced modes (they would see it)")
+
+
 def _render_primary(scene, camera, width, height, out, depth, *, attributes, object_ids,
                     mip_levels, clipped_mips, materials, primitives, bvh, eye, view,
                     focal, aspect, lights, ambient, output, shade, shadow_context, cancel, mesh_layers=None, rows=None,
-                    liquid=None, lens=None, object_visible=None):
+                    liquid=None, lens=None, object_visible=None, object_holdout=None, hold=None):
     """Chunked primary visibility; shading is batched by geometry and mip level.
 
     `lens` is (ax, ay, focus): the rays start that far right and up of the eye and aim at the pixel's point on the
     plane `focus` in front of the camera (one lens sample of the ray-traced depth of field).
     `object_visible` (bool per object id, index 0 unused) drops the hits of meshes whose `visible_to_camera` is off:
-    primary rays pass through them, while shadow, reflection and refraction rays keep seeing them."""
+    primary rays pass through them, while shadow, reflection and refraction rays keep seeing them.
+    `object_holdout` (bool per object id) marks the holdout meshes: a primary ray that reaches one stops there with nothing
+    added (the picture and every data pass stay empty, the depth buffer holds the holdout's depth, the backdrop colour stays); `hold` (one float per
+    pixel of `out`, band-local like it) receives the depth of the holdout that ended each ray, for the splats behind it."""
     flat, flat_depth = out.reshape(-1, 4), depth.ravel()
+    flat_hold = hold.ravel() if hold is not None else None
     projection_depth_maps = {}
     data_output = output in DATA_OUTPUTS
     # Invert the actual float32 view basis, including roll, to undo _to_pixels.
@@ -3421,6 +3454,14 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
                 for object_id, level in np.unique(groups, axis=0):
                     take = (groups[:, 0] == object_id) & (groups[:, 1] == level)
                     r = rr[take]
+                    if object_holdout is not None and object_holdout[object_id]:
+                        zh = h['t'][take]
+                        if data_output:
+                            flat[start+r] = 0.0
+                        flat_depth[start+r] = zh
+                        flat_hold[start+r] = zh
+                        alive[r] = False
+                        continue
                     geometry, rgba, mips = materials[object_id-1]
                     position = attr[take, 3:6]
                     source, normal, uv = _shade_fragments(
@@ -3667,6 +3708,12 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         bg[:] = 0
     out = np.broadcast_to(bg, (height, width, 4)).copy()
     depth = np.full((height, width), np.inf, np.float32)
+    # Holdout meshes (step R2): the depth of the holdout that ends each pixel's view, inf elsewhere. The depth buffer holds it
+    # while the splats, particles and smoke are composited (so they are cut behind it) and is emptied again at the end.
+    holdouts = any(g.holdout for g in scene.geometries)
+    if holdouts:
+        _check_holdouts(scene, reflect_active, indirect_active)
+    hold_depth = np.full((height, width), np.inf, np.float32) if holdouts else None
     eye, view = _view_basis(camera)
     aspect = width / max(height, 1)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
@@ -3807,6 +3854,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                         shadow_context=shadow_context, cancel=cancel, lens=_lens)
         if not all(g.visible_to_camera for g in scene.geometries):
             primary_kwargs["object_visible"] = np.array([True] + [g.visible_to_camera for g in scene.geometries])
+        if holdouts:
+            primary_kwargs["object_holdout"] = np.array([False] + [g.holdout for g in scene.geometries])
+            primary_kwargs["hold"] = hold_depth
         if output == "rgba" and not shade and any(g.material == "liquid" for g in scene.geometries):
             from .liquid_render import LiquidTracer
             primary_kwargs["liquid"] = LiquidTracer(
@@ -3866,6 +3916,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         region_depth = depth[y0:y1+1, x0:x1+1]
         take = inside & (zbuf < region_depth) & (zbuf < camera.far)
         if not take.any():
+            continue
+        if geometry.holdout:
+            # Holdout: the fragment hides whatever lies behind it and is itself nothing (zero colour, zero alpha, no data).
+            if output == "relight":
+                for channel in channels.values():
+                    channel[y0:y1+1, x0:x1+1][take] = 0.0
+                first_hit_depth[y0:y1+1, x0:x1+1][take] = np.minimum(first_hit_depth[y0:y1+1, x0:x1+1][take], zbuf[take])
+            else:
+                out[y0:y1+1, x0:x1+1][take] = bg      # the backdrop colour only (empty for the default transparent one)
+            hold_depth[y0:y1+1, x0:x1+1][take] = zbuf[take]
+            region_depth[take] = zbuf[take]
             continue
         weights = (inverse / total[..., None])[take]            # (P,3)
         position = weights @ tri[:, 3:6]
@@ -3956,6 +4017,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if data_output:
             solid[take] = src_alpha > 0
         region_depth[solid] = zbuf[solid]
+        if hold_depth is not None:
+            hold_depth[y0:y1+1, x0:x1+1][solid] = np.inf     # a nearer solid surface ends the view instead
     if output == "relight":
         # Lighting components add in RGB; alpha remains shared surface coverage.
         out = channels["diffuse"].copy()
@@ -4020,15 +4083,16 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             band_out, band_depth = out[y0:y1], depth[y0:y1]
             if layered:
                 mesh_layers = _render_mesh_layers(scene, camera, width, height,
-                    band_out, band_depth, rows=band, **primary_kwargs)
+                    band_out, band_depth, rows=band, **_band_kwargs(primary_kwargs, hold_depth, y0, y1))
             elif data_output and ray_mode:
                 _render_primary(scene, camera, width, height, band_out, band_depth,
-                                rows=band, **primary_kwargs)
+                                rows=band, **_band_kwargs(primary_kwargs, hold_depth, y0, y1))
                 mesh_layers = (band_depth[..., None], band_out[..., None, :3], band_out[..., None, 3])
             splat_rgb, splat_alpha = accumulate_splats(
                 prepared, mesh_depth=None if mesh_layers is not None else band_depth, cancel=cancel,
                 mesh_layers=mesh_layers,
                 background_rgba=band_out if layered and output == "rgba" else None,
+                cut=hold_depth[y0:y1] if hold_depth is not None else None,
                 output=output,
                 hit_depth=band_depth if data_output else None, rows=band,
                 progress=band_progress)
@@ -4073,6 +4137,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         out[:] = 0
     if output == "rgba":
         _visible_background(scene, width, height, out, depth, eye, view, focal, aspect, float(bg[3]))
+    if hold_depth is not None:
+        depth[depth >= hold_depth] = np.inf      # a pixel the holdout ends carries no depth (a splat or smoke in front keeps its own)
     out.flags.writeable = False
     if return_depth:
         depth.flags.writeable = False

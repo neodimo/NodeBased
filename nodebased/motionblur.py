@@ -230,7 +230,10 @@ def motion_vectors(scene, camera, later_scene, later_camera, width, height, fram
         o = np.broadcast_to(eye, (sl.stop - sl.start, 3))
         t, shape, prim, u, v = pt.closest(ps, o, d[sl], tmin[sl], tmax[sl], camera=np.ones(len(o), bool))
         surface[sl] = np.where(shape >= 0, t * cos[sl], np.inf)
-        mesh = np.flatnonzero((shape >= 0) & ~ps.is_splat(shape))
+        mesh = (shape >= 0) & ~ps.is_splat(shape)
+        if ps.holdout is not None:
+            mesh &= ~ps.holdout[np.clip(shape, 0, ps.shapes - 1)]     # a holdout has no vector (its depth still cuts the smoke)
+        mesh = np.flatnonzero(mesh)
         if not len(mesh):
             continue
         hit_shape, hit_prim, hit_u, hit_v = shape[mesh], prim[mesh], u[mesh], v[mesh]

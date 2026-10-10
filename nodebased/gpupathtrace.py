@@ -181,7 +181,8 @@ fn rnd(key: u32, dim: u32) -> f32 { return f32(pcg(key ^ (dim * 2654435769u)) >>
 // ------------------------------------------------------------------------------------------- traversal
 var<private> tlas_stack: array<i32, 32>;
 var<private> blas_stack: array<i32, 64>;
-// Per-object render switches (a shape's `ids.yzw`: casts no shadow, hidden from the camera, takes no shadow). A mesh that casts
+// Per-object render switches (a shape's `ids.yzw`: casts no shadow, hidden from the camera (bit 0) or a holdout (bit 1), takes no
+// shadow). A holdout ends a camera ray that reaches it with no light and no coverage; every other ray passes through it. A mesh that casts
 // no shadow is skipped by shadow rays; a hidden one by the camera's own rays (`camera_ray`, set around that one intersect call);
 // a surface that takes no shadow (`shadow_free`, set while it is shaded) sees every shadow ray unblocked.
 var<private> shadow_free: bool = false;
@@ -272,7 +273,8 @@ fn intersect(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, any_hit: bool) 
       if (any_hit && sh.base.w < 0.5) { continue; }
 //#if LINKS
       if (any_hit && (excl_bit(u32(sh.sigma.w), shadow_bit) || sh.ids.y != 0u)) { continue; }
-      if (!any_hit && camera_ray && sh.ids.z != 0u) { continue; }
+      if (!any_hit && camera_ray && (sh.ids.z & 1u) != 0u) { continue; }
+      if (!any_hit && !camera_ray && (sh.ids.z & 2u) != 0u) { continue; }      // a holdout is met by camera rays and shadow rays only
 //#endif
       let lo = to_local_o(sh, o);
       let ld = to_local_d(sh, d);
@@ -1516,6 +1518,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         break;
       }
     }
+//#if LINKS
+    if (vdepth == 0u && h.shape >= 0 && splat_id < 0 && (shapes[h.shape].ids.z & 2u) != 0u) { break; }
+//#endif
     if (h.shape < 0) {
       if (vdepth >= 1u) {
         var sky = vec3<f32>(params.f.z);
@@ -2249,7 +2254,15 @@ def pack(ps, environment_size=None, cancel=None):
         shapes[i, 24:27] = ps.sigma[i]
         shapes[i, 28:29] = np.array([root_of_blas[ps.shape_blas[i]]], np.uint32).view("f4")
     # Per-object render switches in the spare words of `ids`: y casts no shadow, z hidden from the camera, w takes no shadow.
-    for column, flags in ((29, ps.no_cast), (30, ps.hidden), (31, ps.no_receive)):
+    # (z holds two bits: 1 hidden from the camera, 2 holdout)
+    z_bits = None
+    if ps.hidden is not None or ps.holdout is not None:
+        z_bits = np.zeros(n_shapes, np.uint32)
+        if ps.hidden is not None:
+            z_bits |= ps.hidden[:n_shapes].astype(np.uint32)
+        if ps.holdout is not None:
+            z_bits |= ps.holdout[:n_shapes].astype(np.uint32) << 1
+    for column, flags in ((29, ps.no_cast), (30, z_bits), (31, ps.no_receive)):
         if flags is not None:
             shapes[:n_shapes, column] = flags[:n_shapes].astype(np.uint32).view("f4")
     packed.shapes = shapes
@@ -2292,7 +2305,7 @@ def pack(ps, environment_size=None, cancel=None):
             packed.shapes[i, 27] = float(sum(1 << packed_of[b] for b in range(len(lights) + 1) if (mask >> b) & 1))
             packed.linked |= int(packed.shapes[i, 27])
     packed.lights = np.array(lights, "f4").reshape(-1, LIGHT_VECS * 4) if lights else np.zeros((1, LIGHT_VECS * 4), "f4")
-    if ps.no_cast is not None or ps.no_receive is not None:
+    if ps.no_cast is not None or ps.no_receive is not None or ps.holdout is not None:
         # the lights are then sampled by next-event estimation alone (`PathScene.linked_bits`), the environment's bit included
         packed.linked |= (1 << (len(lights) + 1)) - 1
     packed.light_count = len(lights)
@@ -3030,7 +3043,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             lanes = min(max(settings.min_samples, settings.adaptive_pass_size), 1024)
             sparse_threads = int(max(0, min(ADAPTIVE_SPARSE_THREADS, npix * lanes, (cap - accum_bytes) // 32)))
         accum = frame.accumulator(device, wgpu, npix * 32 + sparse_threads * 32)       # zeroed
-        links = bool(ps.linked_bits) or ps.hidden is not None
+        links = bool(ps.linked_bits) or ps.hidden is not None or ps.holdout is not None
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
         lap("upload")
@@ -3234,8 +3247,11 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     if data_pass and ps.volumes is not None and merge_volumes:
         # the smoke's first sample is found by the CPU raymarch for both tracers (it is one ray per pixel), cut at the
         # card's own surface depth
-        surface = result if output == "depth" else render(scene, camera, width, height, background, ambient, "depth",
-                                                           settings, cancel=cancel, volume=volume, merge_volumes=False)
+        if ps.holdout is not None:
+            surface = pt.render_data(ps, camera, width, height, "depth", cancel, through_holdouts=True)
+        else:
+            surface = result if output == "depth" else render(scene, camera, width, height, background, ambient, "depth",
+                                                               settings, cancel=cancel, volume=volume, merge_volumes=False)
         result = pt.merge_volume_data(scene, camera, width, height, result, output, ps.volumes.settings, surface, cancel)
     result.flags.writeable = False
     lap("postprocess")

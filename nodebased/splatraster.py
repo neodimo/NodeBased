@@ -290,13 +290,15 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
 
 def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
                       mesh_layers=None, background_rgba=None, output=None, hit_depth=None,
-                      progress=None):
+                      progress=None, cut=None):
     """Accumulate only tiles intersecting rows, with band-local mesh buffers.
 
     Preparation must use the same output pass; cancellation defaults to the
     preparation's token and is checked at entry and between tiles/chunks.
     progress(done_work, total_work) reports tile evaluations for this band, at
     most 200 times, including a final equal pair. Callback exceptions propagate.
+    `cut` (band-local, one depth per pixel, inf where none) is the depth of the holdout mesh that ends the view at that
+    pixel: with mesh layers, splats at or behind it are dropped.
     """
     from .scene3d import DATA_OUTPUTS
     output = prepared.output if output is None else output
@@ -384,6 +386,8 @@ def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
                     a, zp = fragments(pixels[start:stop], ix)
                     if mesh_depth is not None:
                         a[zp >= mesh_depth[py, px, None]] = 0
+                    if cut is not None:
+                        a[zp >= cut[py, px, None]] = 0
                     depths = np.concatenate((md[py, px], zp), axis=1)
                     alphas = np.concatenate((ma[py, px], a), axis=1)
                     sources = np.concatenate((mc[py, px], a[..., None]*colors[ix]), axis=1)

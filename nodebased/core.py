@@ -103,6 +103,8 @@ _LIGHT_LINK = {"light_link": "all", "light_link_list": ""}
 # Per-object render switches (plan "Rendering 7", step R1): a mesh can be told not to cast shadows, not to take
 # shadows, or not to be seen by the camera (it still casts, reflects and bounces light). All on, as before they existed.
 _RENDER_SWITCHES = {"cast_shadows": "on", "receive_shadows": "on", "visible_to_camera": "on"}
+# Holdout (step R2): "on" makes the mesh cut whatever lies behind it out of the picture (zero colour, zero alpha, no data).
+_RENDER_SWITCHES = {**_RENDER_SWITCHES, "holdout": "off"}
 _SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0, **_LIGHT_LINK, **_RENDER_SWITCHES,
             "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0,
             # Physically based material (materials 1, R1): "pbr" on `material` switches the Cook-Torrance
@@ -1876,7 +1878,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            # Rect/Disc/Sphere (R2): real-area lights, soft shadows from `samples` light-surface
            # samples rather than the legacy `shadow_blur` angular disc.
            "area_normalize": ["off", "on"], "two_sided": ["off", "on"], "light_color_mode": ["RGB", "Kelvin"],
-           "visible_to_camera": ["off", "on"], "cast_shadows": ["off", "on"], "receive_shadows": ["off", "on"], "light_link": ["all", "include", "exclude"],
+           "visible_to_camera": ["off", "on"], "cast_shadows": ["off", "on"], "receive_shadows": ["off", "on"], "holdout": ["off", "on"], "light_link": ["all", "include", "exclude"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
                              "multichannel"],

@@ -1413,8 +1413,8 @@ class Evaluator:
                     from . import gltfio
                     value = (scene3d.Scene() if node["disabled"] else
                              gltfio.load_scene(params["gltf_path"], params["gltf_root"]))
-                    switches = scene3d.render_switches_from_params(params)
-                    if not node["disabled"] and not all(switches.values()):
+                    switches = {**scene3d.render_switches_from_params(params), "holdout": scene3d.holdout_from_params(params)}
+                    if not node["disabled"] and (not all(v for k, v in switches.items() if k != "holdout") or switches["holdout"]):
                         value = replace(value, geometries=tuple(replace(g, **switches) for g in value.geometries))
                 elif kind in ("ReadAlembic3D", "ReadAlembicCamera3D"):
                     from . import alembicio
