@@ -183,7 +183,7 @@ class QueuePanel(QWidget):
             cumulative += float(attempt["spend"])
             row = self.attempts.rowCount(); self.attempts.insertRow(row)
             generated = attempt["outputs"].get("generated_sequence", "")
-            controls = ", ".join(attempt["inputs"])
+            controls = ", ".join(attempt["inputs"]) + f" · seed {attempt['seed']}"
             fields = (str(attempt["number"]), attempt["state"], controls, generated,
                       attempt["verdict"] or "—", f"{attempt['spend']} {attempt['spend_unit']}",
                       attempt["error"] or data["error"] or data["state"], attempt["queue_chain"])
@@ -213,7 +213,7 @@ class QueuePanel(QWidget):
             try: worker_log = self.queue.store.get(match.group(1)).decode("utf-8", "replace")[-4000:]
             except (OSError, ValueError): worker_log = "Worker log artifact is unavailable."
         detail = "\n".join([f"Attempt {attempt['number']} · {attempt['state']}",
-            f"Inputs: {', '.join(attempt['inputs'])}", f"Provider: {attempt['provider']} {attempt['version']}",
+            f"Inputs: {', '.join(attempt['inputs'])}", f"Provider: {attempt['provider']} {attempt['version']}", f"Seed: {attempt['seed']}",
             f"Options: {json.dumps(attempt['options'], sort_keys=True)}", f"Verdict: {attempt['verdict'] or '—'}",
             f"Estimated spend: {attempt['spend']} {attempt['spend_unit']}",
             f"Failure: {attempt['error'] or '—'}", f"Worker log: {worker_log or '—'}", "Queue links: " + "; ".join(

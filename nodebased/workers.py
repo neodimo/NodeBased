@@ -265,7 +265,12 @@ class Worker:
         listener = socket.create_server(("127.0.0.1", 0))
         address = f"127.0.0.1:{listener.getsockname()[1]}"
         token = secrets.token_hex(16)
-        env = dict(os.environ, **{TOKEN_ENV: token})
+        # The memory cap is an address-space limit, and a many-core machine spends it on thread
+        # stacks and per-thread malloc arenas before the first frame is written: OpenEXR then ran
+        # out of room mid-compression and left a header-only file that the next stage could not
+        # read (10/10, 3 of 4 runs at 160x120 on 32 cores). Two OIIO threads and two arenas leave
+        # the 2 GiB for the pixels.
+        env = dict(os.environ, **{TOKEN_ENV: token, "OPENIMAGEIO_THREADS": "2", "MALLOC_ARENA_MAX": "2"})
         windows_job = None
         if sys.platform == "win32":
             self.process = subprocess.Popen([sys.executable, "-m", "nodebased.workers", address, json.dumps(job)],

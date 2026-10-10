@@ -87,8 +87,8 @@ class GenerativeProviderTests(unittest.TestCase):
             state, bundle, plate = self._bundle(root)
             reproject = generate(bundle, state, root / "reproject.####.exr", "reproject")
             null = generate(bundle, state, root / "null.####.exr", "null")
-            self.assertEqual(reproject["honoured"], ["depth", "motion", "camera_pose"])
-            self.assertEqual(null["honoured"], [])
+            self.assertEqual(reproject["honoured"], ["depth", "motion", "camera_pose", "seed"])
+            self.assertEqual(null["honoured"], ["seed"])
             projected = self._read(root / "reproject.0001.exr")
             self.assertEqual(float(projected[3, 4, 0]), 4.0)
             self.assertEqual(float(projected[3, 0, 0]), 0.0)
@@ -128,7 +128,7 @@ class GenerativeProviderTests(unittest.TestCase):
             state, bundle, _plate = self._bundle(root)
             desc = json.loads((Path(__file__).parents[1] / "nodebased/providers/reproject.json").read_text())
             desc["accepts"]["motion"]["accepted"] = False
-            desc["returns"]["honoured"] = ["depth", "camera_pose"]
+            desc["returns"]["honoured"] = ["depth", "camera_pose", "seed"]
             path = root / "depth-only.json"
             path.write_text(json.dumps(desc))
             loaded = ProviderDescription.load(path)

@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 
 from .artifacts import ArtifactStore
-from .generative import PROVIDER_DIR, ProviderDescription
+from .generative import PROVIDER_DIR, ProviderDescription, normalize_sampler_settings, normalize_seed
 
 OPS = frozenset({"export_conditioning", "generate", "verify", "loop", "artifacts"})
 _ID = re.compile(r"[0-9a-f]{64}")
@@ -140,11 +140,16 @@ class Pipeline:
         if not isinstance(options, dict):
             raise ValueError("generate options must be an object")
         options = {k: v for k, v in options.items() if k in ("text",)}
+        options["seed"] = normalize_seed(cmd.get("seed", 0))
+        options["sampler_settings"] = normalize_sampler_settings(cmd.get("sampler_settings"))
         if isinstance(cmd.get("output_pattern"), str) and cmd["output_pattern"]:
             options["output_pattern"] = cmd["output_pattern"]
         options.update({"provider_id": provider, "_artifact_root": str(self.store.root)})
         result = generate_task(options, [scene, bundle], lambda *_: None, threading.Event())
-        return {"generated_sequence": result["artifact_id"], "provider": provider}
+        description = ProviderDescription.load(provider)
+        return {"generated_sequence": result["artifact_id"], "provider": provider,
+                "version": description.version, "seed": options["seed"],
+                "sampler_settings": options["sampler_settings"], "controls": description.control_report()}
 
     def verify(self, cmd):
         import json
@@ -157,7 +162,8 @@ class Pipeline:
         result = verify_task(options, [generated], lambda *_: None, threading.Event())
         report = json.loads(self.store.get(result["artifact_id"]))
         card = report.get("score_card", report)
-        return {"report": result["artifact_id"], "verdict": card.get("verdict"), "score_card": card}
+        return {"report": result["artifact_id"], "verdict": card.get("verdict"), "score_card": card,
+                "determinism": report.get("determinism")}
 
     # -- loops --------------------------------------------------------------------------------
     def loop(self, cmd):
@@ -195,7 +201,8 @@ class Pipeline:
             provider_id=provider, provider_options=options,
             max_attempts=cmd.get("max_attempts", 3), max_estimated_spend=cmd.get("spend_cap"),
             estimated_spend_per_attempt=cmd.get("estimate"), spend_unit=cmd.get("unit"),
-            feedback_controls=controls)
+            feedback_controls=controls, seed=cmd.get("seed", 0),
+            sampler_settings=cmd.get("sampler_settings"), vary_seed=cmd.get("vary_seed", False))
         if self.runner is not None:
             self.runner.submit(self.loops.run, loop_id)
         else:
@@ -207,7 +214,7 @@ class Pipeline:
             return {"loops": [{"loop": row["id"], "state": row["state"]}
                               for row in self.loops.list_snapshots()[:20]]}
         snap = self.loops.snapshot(loop_id)
-        attempts = [{"number": a["number"], "state": a["state"], "verdict": a["verdict"],
+        attempts = [{"number": a["number"], "state": a["state"], "verdict": a["verdict"], "seed": a["seed"],
                      "generated_sequence": a["outputs"].get("generated_sequence"),
                      "verification_report": a["outputs"].get("verification_report"),
                      "spend": a["spend"], "spend_unit": a["spend_unit"],
@@ -217,6 +224,10 @@ class Pipeline:
         return {"loop": loop_id, "state": snap["state"], "finished": done,
                 "stop_reason": snap["state"] if done else None, "error": snap["error"],
                 "cumulative_estimate": snap["cumulative"], "attempts": attempts,
+                "seed": snap["config"].get("seed", 0),
+                "sampler_settings": snap["config"].get("sampler_settings", {}),
+                "vary_seed": snap["config"].get("vary_seed", False),
+                "controls": ProviderDescription.load(snap["config"]["provider_id"]).control_report(),
                 "scene_state": snap["config"]["scene_state_id"],
                 "bundle": snap["config"]["control_bundle_id"]}
 

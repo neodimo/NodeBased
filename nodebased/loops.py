@@ -13,7 +13,7 @@ from pathlib import Path
 import zipfile
 from contextlib import contextmanager
 
-from .generative import ProviderDescription
+from .generative import ProviderDescription, normalize_sampler_settings, normalize_seed
 
 
 class LoopError(ValueError):
@@ -54,7 +54,8 @@ class LoopRun:
 
     def create(self, *, scene_state_id, control_bundle_id, provider_id, provider_options,
                max_attempts, max_estimated_spend, estimated_spend_per_attempt=None,
-               spend_unit=None, feedback_controls=(), loop_id=None):
+               spend_unit=None, feedback_controls=(), loop_id=None, seed=0, sampler_settings=None,
+               vary_seed=False):
         if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or max_attempts <= 0:
             raise LoopError("max_attempts must be a positive finite integer")
         if max_estimated_spend is None or float(max_estimated_spend) <= 0:
@@ -74,12 +75,15 @@ class LoopRun:
             raise LoopError("unsupported feedback control name")
         if "text" in controls and not options.get("text"):
             raise LoopError("text feedback was requested but provider_options has no text value")
+        seed=normalize_seed(seed); sampler_settings=normalize_sampler_settings(sampler_settings)
+        if not isinstance(vary_seed, bool): raise LoopError("vary_seed must be true or false")
         ident=loop_id or uuid.uuid4().hex
         config={"scene_state_id":scene_state_id,"control_bundle_id":control_bundle_id,
                 "provider_id":provider_id,"provider_name":provider.name,"provider_version":provider.version,
                 "provider_options":options,"max_attempts":max_attempts,
                 "max_estimated_spend":float(max_estimated_spend),"estimate":estimate,
-                "spend_unit":unit,"feedback_controls":controls}
+                "spend_unit":unit,"feedback_controls":controls,
+                "seed":seed,"sampler_settings":sampler_settings,"vary_seed":vary_seed}
         with self._db() as db:
             db.execute("INSERT OR IGNORE INTO loops(id,config,state) VALUES(?,?,'queued')",
                        (ident,json.dumps(config,sort_keys=True)))
@@ -121,7 +125,10 @@ class LoopRun:
                 inputs=[config["scene_state_id"],config["control_bundle_id"]]
                 if n>1 and requested: inputs.append(previous)
                 chain=f"loop-{loop_id}-{n}"; gen_id=f"{chain}-generate"; ver_id=f"{chain}-verify"
-                args={**config["provider_options"],"provider_id":config["provider_id"],"provider_version":config["provider_version"],
+                # Every attempt reuses the loop's seed (reproducible) unless vary_seed asks for seed+n-1.
+                attempt_seed=config.get("seed",0)+(n-1 if config.get("vary_seed") else 0)
+                args={**config["provider_options"],"seed":attempt_seed,
+                      "sampler_settings":config.get("sampler_settings",{}),"provider_id":config["provider_id"],"provider_version":config["provider_version"],
                       "feedback_controls":requested,"attempt":n,"estimated_spend":config["estimate"],"spend_unit":config["spend_unit"]}
                 links=[{"id":gen_id,"name":"Generate","operation":self.generate_operation,
                         "options":args,"inputs":inputs,"provider":config["provider_id"]},
@@ -176,6 +183,7 @@ class LoopRun:
             attempts=[dict(x) for x in db.execute("SELECT * FROM attempts WHERE loop_id=? ORDER BY number",(loop_id,))]
         for row in attempts:
             row["inputs"]=json.loads(row["inputs"]); row["outputs"]=json.loads(row["outputs"]); row["options"]=json.loads(row["options"])
+            row["seed"]=row["options"].get("seed",0)
         return {**dict(loop),"config":json.loads(loop["config"]),"attempts":attempts}
 
     def list_snapshots(self):
@@ -209,7 +217,8 @@ def generate_task(options, input_ids, progress, cancelled):
         from .workers import Job, Worker
         worker_options = {"manifest_path": str(manifest_path), "scene_state_path": str(scene_path),
             "output_pattern": pattern, "text": options.get("text"),
-            "reference_frames": reference_frames or None}
+            "reference_frames": reference_frames or None,
+            "seed": options.get("seed", 0), "sampler_settings": options.get("sampler_settings")}
         worker = Worker(Job(options["provider_id"], bundle_id, worker_options))
         watcher_done = threading.Event()
         def watch_cancel():
@@ -235,18 +244,24 @@ def generate_task(options, input_ids, progress, cancelled):
 
 
 def verify_task(options, input_ids, progress, cancelled):
-    """Verify generated frames against their exact SceneState with the CPU score-card verifier."""
+    """Verify generated frames against their exact SceneState with the CPU score-card verifier.
+
+    The verifier is given beauty and every pass the sequence carries (depth, motion, IDs, normals)
+    together with the exported reference for it. A check whose pass is absent is labelled
+    "not conditioned" and left out of the verdict.
+    """
     from .artifacts import ArtifactStore
     from .conditioning_verify import verify_conditioning
-    from .conditioned_read import _read_rgba
+    from .conditioned_read import _read_rgba, read_generated_passes
+    from .generative import GENERATION_MANIFEST
     from .scene_state import read_scene_state
     store=ArtifactStore(options.get("_artifact_root"))
     scene_id=options["scene_state_id"]; bundle_id=options["control_bundle_id"]
     generated_id=input_ids[-1]
     if cancelled.is_set(): raise RuntimeError("cancelled")
     with tempfile.TemporaryDirectory(prefix="nodebased-loop-verify-") as temporary:
-        root=Path(temporary); scene_dir=root/"scene"; sequence_dir=root/"sequence"
-        scene_dir.mkdir(); sequence_dir.mkdir()
+        root=Path(temporary); scene_dir=root/"scene"; sequence_dir=root/"sequence"; bundle_dir=root/"bundle"
+        scene_dir.mkdir(); sequence_dir.mkdir(); bundle_dir.mkdir()
         scene_path=_unpack_artifact(store.get(scene_id),scene_dir)
         _unpack_artifact(store.get(generated_id),sequence_dir)
         scene_path.with_suffix(scene_path.suffix+".artifact.json").write_text(json.dumps({"artifact_id":scene_id}))
@@ -254,12 +269,58 @@ def verify_task(options, input_ids, progress, cancelled):
         frames=[int(row["frame"]) for row in state["frames"]]
         files=sorted(sequence_dir.glob("*.exr"))
         if len(files)!=len(frames): raise ValueError("generated sequence frame count does not match SceneState")
-        observations={frame:{"beauty":_read_rgba(path)[0]} for frame,path in zip(frames,files)}
+        observations={}; carried=set(); references={}
+        for frame,path in zip(frames,files):
+            observations[frame]={"beauty":_read_rgba(path)[0]}
+            passes=read_generated_passes(path)
+            if passes:
+                if not references:
+                    from .control_bundle import read_control_bundle
+                    manifest=_unpack_artifact(store.get(bundle_id),bundle_dir)
+                    manifest.with_suffix(".artifact.json").write_text(json.dumps({"artifact_id":bundle_id}))
+                    references={c.frame:c for c in read_control_bundle(manifest,scene_path)}
+                _attach_passes(observations[frame],passes,references[frame],
+                               [row for row in state["frames"] if int(row["frame"])==frame][0])
+            carried.update(passes)
+        missing=sorted(("objects" if name=="ids" else name) for name in {"depth","motion","normals","ids"}-carried)
+        for row in observations.values(): row["not_conditioned"]=missing
+        determinism=_determinism(sequence_dir/GENERATION_MANIFEST)
         report_path=root/"verification.json"
         report=verify_conditioning(scene_path,observations,report_path,
-            artifact_ids=[bundle_id,generated_id],artifact_store=store)
+            artifact_ids=[bundle_id,generated_id],artifact_store=store,determinism=determinism)
         if cancelled.is_set(): raise RuntimeError("cancelled")
         return {"artifact_id":report["artifact_id"]}
+
+
+def _determinism(manifest_path):
+    """The determinism section of a verification report, read from the sequence's manifest."""
+    from .generative import ProviderDescription
+    if not manifest_path.is_file():
+        return {"provider": None, "version": None, "seed": None, "sampler_settings": None,
+                "seed_honoured": None, "note": "sequence has no generation manifest"}
+    data=json.loads(manifest_path.read_text(encoding="utf-8"))
+    return {"provider": data.get("provider"), "version": data.get("version"), "seed": data.get("seed"),
+            "sampler_settings": data.get("sampler_settings"), "seed_honoured": bool(data.get("seed_honoured"))}
+
+
+def _attach_passes(observation, passes, reference, frame_row):
+    """Turn generated passes and the exported reference into verifier observations."""
+    import numpy as np
+    if "depth" in passes:
+        generated=passes["depth"][...,0]; exported=np.asarray(reference.depth.values)[...,0]
+        valid=np.argwhere(np.isfinite(exported)&(exported>0)&np.isfinite(generated))
+        step=max(1,len(valid)//64)
+        observation["depth_landmarks"]={f"{y},{x}":{"pixel":(int(x),int(y)),"expected":float(exported[y,x]),
+                                                    "observed":float(generated[y,x])} for y,x in valid[::step]}
+    if "motion" in passes:
+        observation["motion_observed"]=passes["motion"]
+        observation["motion_reference"]=np.asarray(reference.motion_forward.values)[...,:2]
+    if "normals" in passes:
+        observation["normals"]=passes["normals"]
+        observation["normals_reference"]=np.asarray(reference.normals.values)[...,:3]
+    if "ids" in passes:
+        bits=np.ascontiguousarray(passes["ids"][...,0]).view(np.uint32)
+        observation["object_ids"]={row["id"]:bits==int(row["id"],16) for row in frame_row["objects"]}
 
 
 def _unpack_artifact(data, destination):

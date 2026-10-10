@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,7 +12,42 @@ from .control_bundle import read_control_bundle
 from .media import sequence_path
 
 
-CONTROL_NAMES = ("depth", "normals", "motion", "ids", "camera_pose", "text", "reference_frames")
+CONDITIONING_NAMES = ("depth", "normals", "motion", "ids", "camera_pose", "text", "reference_frames")
+# `seed` and `sampler_settings` are controls like the rest: a description says whether it honours
+# them. Descriptions written before they existed may omit them, which reads as "ignored".
+SAMPLING_NAMES = ("seed", "sampler_settings")
+CONTROL_NAMES = CONDITIONING_NAMES + SAMPLING_NAMES
+MAX_SEED = 2**63 - 1
+MAX_SAMPLER_SETTINGS_BYTES = 4096
+
+
+def normalize_seed(value):
+    """Return `value` as a non-negative integer seed (None means the default, 0)."""
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_SEED:
+        raise ValueError(f"seed must be an integer from 0 to {MAX_SEED}")
+    return value
+
+
+def normalize_sampler_settings(value):
+    """Return `value` as a small JSON object (None or empty means no settings)."""
+    if value in (None, ""):
+        return {}
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError as error:
+            raise ValueError(f"sampler_settings is not valid JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise ValueError("sampler_settings must be a JSON object")
+    try:
+        text = json.dumps(value, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"sampler_settings must be plain JSON: {error}") from error
+    if len(text.encode("utf-8")) > MAX_SAMPLER_SETTINGS_BYTES:
+        raise ValueError(f"sampler_settings is larger than {MAX_SAMPLER_SETTINGS_BYTES} bytes")
+    return json.loads(text)
 PROVIDER_DIR = Path(__file__).with_name("providers")
 
 
@@ -32,10 +68,11 @@ class ProviderDescription:
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("schema") != 1:
             raise ValueError("Unsupported provider description schema")
-        if set(data["accepts"]) != set(CONTROL_NAMES):
+        declared_names = set(data["accepts"])
+        if not set(CONDITIONING_NAMES) <= declared_names <= set(CONTROL_NAMES):
             raise ValueError("Provider description must declare every conditioning control")
         declared = list(data["returns"].get("honoured", []))
-        actual = [name for name in CONTROL_NAMES if ProviderDescription._accepted(data["accepts"][name])]
+        actual = [name for name in CONTROL_NAMES if ProviderDescription._accepted(data["accepts"].get(name, False))]
         if declared != actual:
             raise ValueError("Provider honoured controls must match its accepted capabilities")
         if data.get("locality") not in ("local", "remote"):
@@ -45,17 +82,22 @@ class ProviderDescription:
                    tuple(data["color_spaces"]), data["locality"], data["returns"])
 
     def accepted(self, control):
-        return self._accepted(self.accepts[control])
+        return self._accepted(self.accepts.get(control, False))
 
     @staticmethod
     def _accepted(value):
         return bool(value.get("accepted")) if isinstance(value, dict) else bool(value)
+
+    def control_report(self):
+        """Every control as "used" or "ignored", for the panel, the MCP tools and the docs."""
+        return {name: "used" if self.accepted(name) else "ignored" for name in CONTROL_NAMES}
 
     def panel_lines(self):
         return tuple(f"{name.replace('_', ' ').title()}: {'used' if self.accepted(name) else 'ignored'}"
                      for name in CONTROL_NAMES)
 
 
+GENERATION_MANIFEST = "generation.json"
 GENERATED_FRAME_DATETIME = "1980:01:01 00:00:00"
 
 
@@ -76,9 +118,31 @@ def _write_frame(path, rgba, color_space):
         raise ValueError(f"Cannot write generated frame: {path}")
     try:
         if not output.write_image(np.ascontiguousarray(pixels)):
-            raise ValueError(f"Cannot write generated frame: {path}")
+            raise ValueError(f"Cannot write generated frame: {path}: {output.geterror()}")
     finally:
-        output.close()
+        closed = output.close()
+    if not closed:
+        raise ValueError(f"Cannot write generated frame: {path}: {output.geterror()}")
+    _check_frame_readable(path, pixels.shape[1], pixels.shape[0])
+
+
+def _check_frame_readable(path, width, height):
+    """Read the last scanline back: a short write must fail here, not in the next stage.
+
+    Before this check an out-of-memory EXR write left a header-only file and reported success
+    (10/10); the verifier then failed with "cannot reshape array of size 1".
+    """
+    import OpenImageIO as oiio
+    image = oiio.ImageInput.open(str(path))
+    if image is None:
+        raise ValueError(f"Generated frame is unreadable after writing: {path}")
+    try:
+        spec = image.spec()
+        tail = image.read_scanlines(0, 0, height - 1, height, 0, spec.nchannels, oiio.FLOAT)
+        if (spec.width, spec.height) != (width, height) or tail is None:
+            raise ValueError(f"Generated frame is incomplete after writing: {path}")
+    finally:
+        image.close()
 
 
 def _reproject(frame):
@@ -111,9 +175,18 @@ def _bundle_color_space(frame):
 
 
 def generate(manifest_path, scene_state_path, output_pattern, provider="reproject", *, description=None,
-             text=None, reference_frames=None, progress=None, artifact_store=None):
-    """Validate capabilities before work, then emit a sequence and honoured-control manifest."""
+             text=None, reference_frames=None, seed=0, sampler_settings=None, progress=None,
+             artifact_store=None):
+    """Validate capabilities before work, then emit a sequence and honoured-control manifest.
+
+    The sequence's artifact id covers a `generation.json` manifest stored beside the frames:
+    provider name and version, seed, sampler settings, the SceneState and ControlBundle ids and
+    every option. Two runs that differ in any of them get different ids even when a provider
+    that ignores the difference writes identical frames.
+    """
     desc = ProviderDescription.load(description if description is not None else provider)
+    seed = normalize_seed(seed)
+    sampler_settings = normalize_sampler_settings(sampler_settings)
     controls = read_control_bundle(manifest_path, scene_state_path)
     spaces = {_bundle_color_space(frame) for frame in controls}
     unsupported_spaces = sorted(spaces - set(desc.color_spaces))
@@ -127,7 +200,8 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
         raise ValueError(f"Provider {desc.name} resolution limit {desc.max_resolution} exceeded")
     # Bundle layers are always available; unsupported ones remain explicitly visible as ignored.
     # Fail before work only when the artist actively supplies an unsupported optional control.
-    supplied = {"text": text is not None, "reference_frames": reference_frames is not None}
+    supplied = {"text": text is not None, "reference_frames": reference_frames is not None,
+                "seed": seed != 0, "sampler_settings": bool(sampler_settings)}
     ignored = [name for name, active in supplied.items() if active and not desc.accepted(name)]
     if ignored:
         raise ValueError(f"Provider {desc.name} cannot honour controls: {', '.join(ignored)}")
@@ -146,7 +220,8 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
         outputs.append(str(path))
         if progress:
             progress(((index + 1) / max(1, len(controls)), f"Frame {frame.frame}: complete"))
-    result = {"provider": desc.name, "version": desc.version,
+    result = {"provider": desc.name, "version": desc.version, "seed": seed,
+              "sampler_settings": sampler_settings,
               "frames": [c.frame for c in controls],
               "honoured": [name for name in CONTROL_NAMES if desc.accepted(name)],
               "outputs": outputs}
@@ -163,10 +238,24 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
     provider_id = store.put(provider_path if provider_path.exists() else json.dumps({"name":desc.name,"version":desc.version}).encode(),
         "provider_description", {"producer":"ProviderDescription", "version":desc.version, "inputs":[],
         "document":str(scene_state_path), "frame_range":result["frames"], "time":__import__("time").time()})
-    sequence_id = store.put_files({Path(output).name: output for output in outputs}, "generated_sequence", {
+    scene_sidecar = Path(str(scene_state_path) + ".artifact.json")
+    scene_id = json.loads(scene_sidecar.read_text())["artifact_id"] if scene_sidecar.exists() else None
+    generation = {"schema": 1, "provider": desc.name, "version": desc.version,
+                  "provider_description": provider_id, "seed": seed, "sampler_settings": sampler_settings,
+                  "seed_honoured": desc.accepted("seed"),
+                  "sampler_settings_honoured": desc.accepted("sampler_settings"),
+                  "scene_state": scene_id, "control_bundle": bundle_id, "frames": result["frames"],
+                  "options": {"text": text,
+                              "reference_frames": [hashlib.sha256(Path(item).read_bytes()).hexdigest()
+                                                   for item in (reference_frames or [])]}}
+    sequence_files = {Path(output).name: output for output in outputs}
+    sequence_files[GENERATION_MANIFEST] = (json.dumps(generation, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    sequence_id = store.put_files(sequence_files, "generated_sequence", {
         "producer":"Generate", "version":desc.version, "inputs":[{"id":bundle_id},{"id":provider_id}],
         "document":str(scene_state_path), "frame_range":result["frames"], "time":__import__("time").time(),
-        "pattern":str(output_pattern)})
+        "pattern":str(output_pattern), "provider":desc.name, "provider_version":desc.version,
+        "seed":seed, "sampler_settings":sampler_settings, "seed_honoured":desc.accepted("seed"),
+        "scene_state":scene_id, "control_bundle":bundle_id})
     result["artifact_id"] = sequence_id
     manifest_output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result

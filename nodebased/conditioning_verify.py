@@ -29,6 +29,7 @@ class Tolerances:
     motion_mean_pixels: float = 1.0
     motion_p95_pixels: float = 3.0
     depth_rank_correlation: float = 0.8
+    normals_mean_degrees: float = 10.0
 
 
 def _rotation_error(a, b):
@@ -474,12 +475,18 @@ def _motion_measurement(observation, tolerances):
                 "status": "not conditioned", "reason": "provider does not honour motion"}
     expected = observation.get("motion_reference")
     first, second = observation.get("beauty"), observation.get("next_beauty")
+    if observation.get("motion_observed") is not None and expected is not None:
+        measured = np.asarray(observation["motion_observed"], dtype=np.float32)[..., :2]
+        return _motion_error(measured, np.asarray(expected, dtype=np.float32)[..., :2], tolerances)
     if expected is None or first is None or second is None:
         return {"mean_error_pixels": None, "p95_error_pixels": None, "pass": False,
                 "reason": "generated frame pair or exported motion vectors missing"}
     from .opticalflow import flow_pair
     measured, _backward, _occlusion = flow_pair(first, second, backend="cpu")
-    expected = np.asarray(expected, dtype=np.float32)
+    return _motion_error(measured, np.asarray(expected, dtype=np.float32), tolerances)
+
+
+def _motion_error(measured, expected, tolerances):
     if expected.shape != measured.shape:
         return {"mean_error_pixels": None, "p95_error_pixels": None, "pass": False,
                 "reason": "generated flow and exported motion dimensions differ"}
@@ -521,8 +528,29 @@ def _depth_measurement(observation, tolerances):
             **({} if correlation is not None else {"reason": "tracked landmark depth observations missing"})}
 
 
+def _not_conditioned(reason):
+    return {"pass": None, "status": "not conditioned", "reason": reason}
+
+
+def _normals_measurement(observation, tolerances):
+    """Mean angle between the generated normals pass and the exported one, over covered pixels."""
+    observed, expected = observation.get("normals"), observation.get("normals_reference")
+    if observed is None or expected is None:
+        return {"mean_error_degrees": None, "pass": False, "reason": "generated or exported normals missing"}
+    a, b = np.asarray(observed, np.float64)[..., :3], np.asarray(expected, np.float64)[..., :3]
+    if a.shape != b.shape:
+        return {"mean_error_degrees": None, "pass": False, "reason": "generated and exported normals differ in size"}
+    na, nb = np.linalg.norm(a, axis=-1), np.linalg.norm(b, axis=-1)
+    covered = (nb > 1e-6) & (na > 1e-6)
+    if not covered.any():
+        return {"mean_error_degrees": None, "pass": False, "reason": "no pixels carry normals"}
+    cosine = np.clip(np.sum(a[covered] * b[covered], axis=-1) / (na[covered] * nb[covered]), -1.0, 1.0)
+    mean = float(np.degrees(np.arccos(cosine)).mean())
+    return {"mean_error_degrees": mean, "pass": mean <= tolerances.normals_mean_degrees}
+
+
 def verify_conditioning(scene_state_path, observations, output_path, *, tolerances=None, artifact_ids=None,
-                       artifact_store=None):
+                       artifact_store=None, determinism=None):
     """Write ``.json`` and ``.txt`` shot reports.
 
     `observations` is keyed by integer frame. A row contains `beauty` (HxWxRGBA float
@@ -530,15 +558,25 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
     exported ID), lock-state fields, or explicit solved-camera/direction measurements.
     Missing camera and object measurements are derived with NodeBased Tracker when the
     scene has enough visible features. Lighting estimation uses a fresh CPU scene render.
+
+    A row may list `not_conditioned` checks (``depth``, ``motion``, ``objects``, ``normals``):
+    the generated sequence carries no such pass, so the check is labelled "not conditioned" and
+    left out of the verdict. `determinism` (provider, version, seed, sampler settings, whether the
+    provider declared seed honoured) is copied into the report and never changes the verdict.
     """
     tolerances = tolerances or Tolerances()
     state = read_scene_state(scene_state_path)
     report = {"schema_version": 1, "scene_state": Path(scene_state_path).name,
               "intensity_checked": False, "frames": []}
+    if determinism is not None:
+        report["determinism"] = dict(determinism)
     solved_cameras, solve_failures = _track_camera_sequence(
         state, observations, *state["frames"][0].get("resolution", (1920, 1080)))
     tracked_objects = _track_object_positions(
         state, observations, *state["frames"][0].get("resolution", (1920, 1080)))
+    # The normals check exists only for callers that supply or explicitly skip a normals pass.
+    check_normals = any("normals" in row or "normals" in row.get("not_conditioned", ())
+                        for row in observations.values())
     for frame in state["frames"]:
         number = int(frame["frame"]); observation = observations.get(number, {})
         reference_camera = frame.get("camera")
@@ -572,8 +610,11 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
                                          **observation.get("object_tracks", {})}, active_camera,
                                         int(width), int(height))
                    if isinstance(active_camera, scene3d.Camera) else [])
+        skipped = set(observation.get("not_conditioned", ()))
         for item in objects:
             item["pass"] = item["error_pixels"] is not None and item["error_pixels"] <= tolerances.object_pixels
+            if item["error_pixels"] is None and "objects" in skipped:
+                item.update(_not_conditioned("no ID pass in the generated sequence and no tracked point"))
         lighting = {"intensity_checked": False}
         if (isinstance(active_camera, scene3d.Camera) and observation.get("beauty") is not None
                 and isinstance(frame.get("scene"), scene3d.Scene)):
@@ -618,18 +659,33 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
                 lighting["colour_balance_error"] = _colour_balance(reference_beauty, observation["beauty"])
         lighting_metrics = ("light_direction_error_degrees", "shadow_direction_error_degrees",
                             "colour_balance_error")
+        # A SceneState with no light has no key direction or shadow to compare: only colour
+        # balance can be answered, and the other two are not demanded of the sequence.
+        scene_row = frame.get("scene")
+        no_key_light = (isinstance(scene_row, scene3d.Scene) and _main_direction(scene_row) is None
+                        and "light_direction_error_degrees" not in lighting
+                        and observation.get("dominant_light_direction") is None)
+        required = ("colour_balance_error",) if no_key_light else lighting_metrics
+        if no_key_light:
+            lighting["direction_checked"] = False
         complete_metrics = all(key in lighting and lighting[key] is not None
-                               and np.isfinite(lighting[key]) for key in lighting_metrics)
+                               and np.isfinite(lighting[key]) for key in required)
         lighting["pass"] = complete_metrics and all((
-            lighting["light_direction_error_degrees"] <= tolerances.light_direction_degrees,
-            lighting["shadow_direction_error_degrees"] <= tolerances.shadow_direction_degrees,
+            no_key_light or lighting["light_direction_error_degrees"] <= tolerances.light_direction_degrees,
+            no_key_light or lighting["shadow_direction_error_degrees"] <= tolerances.shadow_direction_degrees,
             lighting["colour_balance_error"] <= tolerances.colour_balance))
         if not lighting["pass"] and not complete_metrics:
             lighting["reason"] = "light direction, shadow direction, or colour evidence missing"
         for key in lighting_metrics:
             lighting.setdefault(key, None)
-        motion = _motion_measurement(observation, tolerances)
-        depth = _depth_measurement(observation, tolerances)
+        motion = (_not_conditioned("generated sequence carries no motion pass") | {
+                      "mean_error_pixels": None, "p95_error_pixels": None}
+                  if "motion" in skipped else _motion_measurement(observation, tolerances))
+        depth = (_not_conditioned("generated sequence carries no depth pass") | {"rank_correlation": None,
+                 "landmarks": 0} if "depth" in skipped else _depth_measurement(observation, tolerances))
+        normals = (_not_conditioned("generated sequence carries no normals pass") | {"mean_error_degrees": None}
+                   if "normals" in skipped or observation.get("normals") is None
+                   else _normals_measurement(observation, tolerances))
         bindings = {
             "camera": {"lock_state": _lock_state(observation.get("camera_lock_state")), **camera}
                       if camera else {"lock_state": _lock_state(observation.get("camera_lock_state")),
@@ -640,9 +696,11 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
             "motion": {"lock_state": _lock_state(observation.get("motion_lock_state")), **motion},
             "depth": {"lock_state": _lock_state(observation.get("depth_lock_state")), **depth},
         }
+        if check_normals:
+            bindings["normals"] = {"lock_state": _lock_state(observation.get("normals_lock_state")), **normals}
         report["frames"].append({"frame": number, "bindings": bindings})
     # One per-shot score card, aggregating each requirement across the frame range.
-    categories = ("camera", "objects", "lighting", "motion", "depth")
+    categories = ("camera", "objects", "lighting", "motion", "depth") + (("normals",) if check_normals else ())
     score = {}
     for category in categories:
         values = []
@@ -688,7 +746,7 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
         bindings = item["bindings"]
         lines.append(f"Frame {item['frame']}: camera {bindings['camera']['lock_state']}="
                      f"{'PASS' if bindings['camera']['pass'] else 'FAIL'}, "
-                     f"objects={'PASS' if all(x['pass'] for x in bindings['objects']) else 'FAIL'}, "
+                     f"objects={'PASS' if all(x['pass'] in (True, None) for x in bindings['objects']) else 'FAIL'}, "
                      f"lighting {bindings['lighting']['lock_state']}="
                      f"{'PASS' if bindings['lighting']['pass'] else 'FAIL'}")
         c = bindings["camera"]
@@ -701,13 +759,18 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
             error = metric(obj["error_pixels"], "px")
             lines.append(f"  Object {obj['object_id']} {obj['lock_state']}: {error} "
                          f"({obj.get('measurement_source') or 'no observation'}), "
-                         f"{'PASS' if obj['pass'] else 'FAIL'}")
+                         f"{obj.get('status', 'PASS' if obj['pass'] else 'FAIL')}")
         light = bindings["lighting"]
         lines.append("  Lighting errors: "
                      f"direction {metric(light['light_direction_error_degrees'], 'degrees')}, "
                      f"shadow {metric(light['shadow_direction_error_degrees'], 'degrees')}, "
                      f"colour balance {metric(light['colour_balance_error'], 'normalised RGB')}; "
                      "intensity not checked")
+    if "determinism" in report:
+        d = report["determinism"]
+        lines.append(f"Determinism: provider {d.get('provider')} {d.get('version')}, seed {d.get('seed')}, "
+                     f"sampler settings {json.dumps(d.get('sampler_settings'), sort_keys=True)}, "
+                     f"seed {'honoured' if d.get('seed_honoured') else 'not honoured'} by the provider")
     path.with_suffix(".txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return report
 

@@ -227,6 +227,10 @@ def main(argv=None):
     for row in rows:
         p=row["provenance"]
         print(f"{row['kind']} {row['id']} ({row['size']} bytes)")
+        if "seed" in p:
+            print(f"  provider: {p.get('provider')} {p.get('provider_version')}; seed: {p['seed']}"
+                  f" ({'honoured' if p.get('seed_honoured') else 'not honoured'}); "
+                  f"sampler settings: {json.dumps(p.get('sampler_settings', {}), sort_keys=True)}")
         print(f"  producer: {p.get('producer','unknown')} {p.get('version','')}; document: {p.get('document','unknown')}; frames: {p.get('frame_range','unknown')}; time: {p.get('time','unknown')}")
 
 if __name__ == "__main__": main()

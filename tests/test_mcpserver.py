@@ -1,4 +1,6 @@
+import io
 import json
+import zipfile
 import os
 import tempfile
 import unittest
@@ -195,7 +197,7 @@ class MCPPipelineTests(unittest.TestCase):
             {"op": "create", "id": "scene", "type": "Scene3D"},
             {"op": "create", "id": "camera", "type": "Camera3D", "params": {"tz": 7}},
             {"op": "create", "id": "render", "type": "Render3D",
-             "params": {"width": 16, "height": 12, "samples": 1}},
+             "params": {"width": 160, "height": 120, "samples": 1}},
             {"op": "connect", "id": "scene", "input": "object0", "source": "cube"},
             {"op": "connect", "id": "render", "input": "scene", "source": "scene"},
             {"op": "connect", "id": "render", "input": "camera", "source": "camera"}]})
@@ -219,12 +221,15 @@ class MCPPipelineTests(unittest.TestCase):
                                    "provider": "null", "max_attempts": 2, "spend_cap": 0.02,
                                    "estimate": 0.01, "unit": "credits (estimate)"})
         status = self.wait_loop(started["loop"])
-        # The loop's CPU verifier is given the beauty frames only, so depth, motion, lighting and
-        # object bindings have nothing to check and the score card is FAIL: both attempts run and
-        # the attempt cap stops the loop, inside the 0.02 spend cap (2 x 0.01).
-        self.assertEqual(status["stop_reason"], "attempts_exhausted")
-        self.assertEqual([a["state"] for a in status["attempts"]], ["failed_verification"] * 2)
-        self.assertAlmostEqual(status["cumulative_estimate"], 0.02)
+        # The unconditioned null baseline carries beauty only: the checks it can answer pass, the
+        # depth, motion and normals checks are labelled "not conditioned", and the first attempt
+        # passes, so the loop stops after one attempt and one estimate.
+        self.assertEqual(status["stop_reason"], "pass")
+        self.assertEqual([a["state"] for a in status["attempts"]], ["pass"])
+        self.assertEqual([a["seed"] for a in status["attempts"]], [0])
+        self.assertAlmostEqual(status["cumulative_estimate"], 0.01)
+        self.assertEqual(status["controls"]["seed"], "used")
+        self.assertEqual(status["controls"]["sampler_settings"], "ignored")
         generated = status["attempts"][-1]["generated_sequence"]
         used = self.ok("loop", {"action": "use_result", "loop": started["loop"]})
         self.assertEqual(used["path"], generated)
@@ -239,6 +244,50 @@ class MCPPipelineTests(unittest.TestCase):
         listed = self.ok("artifacts", {"action": "list", "kind": "generated_sequence"})["artifacts"]
         self.assertIn(generated, [row["id"] for row in listed])
         self.ok("view", {"id": "result"})
+
+    def test_same_brief_twice_is_byte_identical_and_only_the_seed_changes_the_id(self):
+        """Stage 2 determinism proof through the tools: the same brief gives the same artifact id and
+        the same frame bytes; changing only the seed changes the id. The stand-ins ignore the
+        seed's value, so the frames stay identical; the id differs because the hashed generation
+        manifest records the seed."""
+        scene_id, bundle_id = self.export()
+        for provider in ("null", "reproject"):
+            brief = {"scene_state": scene_id, "bundle": bundle_id, "provider": provider, "seed": 1234}
+            first, second = self.ok("generate", brief), self.ok("generate", brief)
+            self.assertEqual(first["generated_sequence"], second["generated_sequence"])
+            self.assertEqual((first["seed"], first["version"]), (1234, "1.0"))
+            self.assertEqual(first["controls"]["seed"], "used")
+            self.assertEqual(first["controls"]["sampler_settings"], "ignored")
+            other = self.ok("generate", {**brief, "seed": 1235})
+            self.assertNotEqual(first["generated_sequence"], other["generated_sequence"])
+            store = self.window.queue_panel.queue.store
+            def frames(result):
+                with zipfile.ZipFile(io.BytesIO(store.get(result["generated_sequence"]))) as archive:
+                    return {n: archive.read(n) for n in archive.namelist() if n.endswith(".exr")}
+            self.assertEqual(frames(first), frames(second))
+            self.assertEqual(frames(first), frames(other))
+            chain = self.ok("artifacts", {"action": "provenance", "id": first["generated_sequence"]})["chain"]
+            self.assertEqual((chain[-1]["provenance"]["seed"], chain[-1]["provenance"]["provider"]),
+                             (1234, provider))
+            verdict = self.ok("verify", {"scene_state": scene_id, "bundle": bundle_id,
+                                         "generated_sequence": first["generated_sequence"]})
+            self.assertEqual(verdict["determinism"], {"provider": provider, "version": "1.0", "seed": 1234,
+                                                      "sampler_settings": {}, "seed_honoured": True})
+        refused = self.call("generate", {"scene_state": scene_id, "bundle": bundle_id, "provider": "null",
+                                         "sampler_settings": {"steps": 4}})
+        self.assertTrue(refused["isError"])
+        self.assertIn("sampler_settings", refused["content"][0]["text"])
+        self.assertTrue(self.call("generate", {"scene_state": scene_id, "bundle": bundle_id,
+                                               "provider": "null", "seed": -1})["isError"])
+
+    def test_loop_reports_seed_per_attempt(self):
+        scene_id, bundle_id = self.export()
+        started = self.ok("loop", {"action": "start", "scene_state": scene_id, "bundle": bundle_id,
+                                   "provider": "null", "max_attempts": 1, "spend_cap": 1, "estimate": 0.5,
+                                   "unit": "credits (estimate)", "seed": 77, "vary_seed": True})
+        status = self.wait_loop(started["loop"])
+        self.assertEqual((status["seed"], status["vary_seed"]), (77, True))
+        self.assertEqual([a["seed"] for a in status["attempts"]], [77])
 
     def test_generate_and_verify_are_synchronous(self):
         scene_id, bundle_id = self.export()

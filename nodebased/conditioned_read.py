@@ -50,7 +50,10 @@ def _read_rgba(path, expected_space=None):
     try:
         spec = image.spec()
         names = list(spec.channelnames)
-        raw = np.asarray(image.read_image(oiio.FLOAT), dtype=np.float32).reshape(spec.height, spec.width, spec.nchannels)
+        raw = image.read_image(oiio.FLOAT)
+        if raw is None:
+            raise ValueError(f"Generated frame is unreadable (truncated or corrupt): {path}: {image.geterror()}")
+        raw = np.asarray(raw, dtype=np.float32).reshape(spec.height, spec.width, spec.nchannels)
         indices = {name: i for i, name in enumerate(names)}
         rgb_names = [indices[name] for name in ("R", "G", "B") if name in indices]
         if len(rgb_names) != 3:
@@ -62,6 +65,38 @@ def _read_rgba(path, expected_space=None):
         if expected_space and space != expected_space:
             raise ValueError(f"Generated frame colour-space tag {tag!r} resolves to {space}, expected {expected_space}")
         return to_working(rgba, space, associated=False), space
+    finally:
+        image.close()
+
+
+GENERATED_PASS_CHANNELS = {"depth": ("depth.Z",), "normals": ("normals.X", "normals.Y", "normals.Z"),
+                           "motion": ("motion_forward.X", "motion_forward.Y"), "ids": ("object_id.id",)}
+
+
+def read_generated_passes(path):
+    """Return the conditioning passes a provider wrote beside RGBA in one EXR, by name.
+
+    Names follow the ControlBundle layers: depth.Z, normals.X/Y/Z, motion_forward.X/Y and
+    object_id.id. A pass is returned only when all of its channels are present, so a provider
+    that wrote none (every stand-in today) gives an empty dict.
+    """
+    import OpenImageIO as oiio
+    image = oiio.ImageInput.open(str(path))
+    if image is None:
+        raise ValueError(f"Cannot open generated frame: {path}")
+    try:
+        spec = image.spec()
+        names = list(spec.channelnames)
+        wanted = {name: channels for name, channels in GENERATED_PASS_CHANNELS.items()
+                  if all(channel in names for channel in channels)}
+        if not wanted:
+            return {}
+        raw = image.read_image(oiio.FLOAT)
+        if raw is None:
+            raise ValueError(f"Cannot read generated frame: {path}")
+        raw = np.asarray(raw, dtype=np.float32).reshape(spec.height, spec.width, spec.nchannels)
+        return {name: raw[..., [names.index(channel) for channel in channels]].copy()
+                for name, channels in wanted.items()}
     finally:
         image.close()
 
@@ -80,7 +115,9 @@ def read_conditioned_sequence(generated_pattern, manifest_path, scene_state_path
             archive = Path(folder) / "sequence.zip"
             archive.write_bytes(payload)
             with zipfile.ZipFile(archive) as zf: zf.extractall(folder)
-            names = [Path(name).name for name in zipfile.ZipFile(archive).namelist()]
+            # The archive also carries generation.json (provider, seed, settings); frames are the EXRs.
+            names = [Path(name).name for name in zipfile.ZipFile(archive).namelist()
+                     if name.lower().endswith(".exr")]
             # Preserve frame numbering from the archived generated paths.
             if names:
                 filename = Path(names[0]); match = re.search(r"\d+$", filename.stem)

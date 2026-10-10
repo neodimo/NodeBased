@@ -821,7 +821,7 @@ SPECS = {
     # Generate is an explicit provider-write tap: its plate input passes through unchanged while
     # the panel action writes a generated sequence for ConditionedRead. Bundle/provider settings
     # remain part of the node params and therefore of both evaluator and tile content digests.
-    "Generate": {"inputs": ["image"], "params": {"provider": "reproject", "manifest": "", "scene_state": "", "output_path": "generated.%04d.exr", "text": ""}},
+    "Generate": {"inputs": ["image"], "params": {"provider": "reproject", "manifest": "", "scene_state": "", "output_path": "generated.%04d.exr", "text": "", "seed": 0, "sampler_settings": ""}},
     # Bounded 3D foundation. Geometry/camera nodes are typed scene data; Render3D is the
     # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
     # Every 3D parameter has its own name (tx, card_width, ...) because LIMITS and CHOICES are

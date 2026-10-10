@@ -11948,11 +11948,20 @@ class Window(QMainWindow):
         params = self.dispatcher.document["nodes"][key]["params"]
         if key in self._generate_workers:
             return
+        from .generative import normalize_sampler_settings, normalize_seed
+        try:
+            seed = normalize_seed(params.get("seed", 0))
+            sampler_settings = normalize_sampler_settings(params.get("sampler_settings"))
+        except ValueError as error:
+            self._generate_progress_text[key] = str(error)
+            self.statusBar().showMessage(f"Generate: {error}", 15000)
+            self._refresh_generate_panel(key)
+            return
         sidecar = Path(params["manifest"]).with_suffix(".artifact.json")
         bundle_id = json.loads(sidecar.read_text())["artifact_id"] if sidecar.exists() else ""
         job = Job(params["provider"], bundle_id, {"manifest_path": params["manifest"],
                    "scene_state_path": params["scene_state"], "output_pattern": params["output_path"],
-                   "text": params.get("text") or None})
+                   "text": params.get("text") or None, "seed": seed, "sampler_settings": sampler_settings})
         worker = Worker(job)
         self._generate_workers[key] = worker
         self._generate_progress_text[key] = "Starting isolated provider"

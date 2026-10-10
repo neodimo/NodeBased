@@ -696,7 +696,9 @@ KNOB_LAYOUT = {
                         KnobGroup("string", ("manifest",), label="Control manifest"),
                         KnobGroup("string", ("scene_state",), label="Scene state"),
                         KnobGroup("string", ("output_path",), label="Generated sequence"),
-                        KnobGroup("string", ("text",), label="Text prompt")),
+                        KnobGroup("string", ("text",), label="Text prompt"),
+                        KnobGroup("int", ("seed",), label="Seed"),
+                        KnobGroup("string", ("sampler_settings",), label="Sampler settings (JSON)")),
 }
 
 # 3D panels follow Nuke: a vector is one row of typed fields, a size or a distance is a typed
