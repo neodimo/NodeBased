@@ -1,0 +1,13 @@
+Samples per dispatch for surface scenes (step R2 finish pass, October 9, 2026): median frame in ms at 640 by 360, 7 timed
+renders after 2 warm-up, `tools/profile_host_phases.py --pass-samples N`, one run per setting, each in an exclusive GPU lock turn.
+
+adapter      case         N=1     N=2     N=3     N=4     N=5     N=6     N=8
+AMD 8060S    X1-fixed64   79.05   78.13   80.9    77.12   80.43   87.8    111.91
+AMD 8060S    Y1-fixed64   90.38   88.18   87.33   86.15   90.77   92.44   98.72
+AMD 8060S    Z1-fixed64   15.19   14.56   -       14.74   -       -       13.58
+RTX 3080 Ti  X1-fixed64   56.48   51.2    55.33   50.47   51.4    53.58   58.08
+RTX 3080 Ti  Y1-fixed64   52.51   47.6    47.63   45.98   46.38   48.09   46.65
+RTX 3080 Ti  Z1-fixed64   15.68   11.56   -       9.1     -       -       8.45
+
+N=3, 5 and 6 were run for X1 and Y1 only, in a second sweep (the N=2 and N=4 cells of that sweep repeat the first within about 3 ms).
+4 is the best or level-best everywhere except Z1, where 8 is 0.65 ms (RTX) and 1.2 ms (Radeon) faster.

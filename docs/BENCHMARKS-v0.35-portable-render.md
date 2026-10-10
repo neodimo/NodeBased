@@ -18,34 +18,34 @@ PYTHONPATH=$PWD QT_QPA_PLATFORM=offscreen python tools/benchmark_portable_render
 
 ## Measurements and next recommendation
 
-The six X1, Y1 and Z1 case pairs were re-measured on October 8 in step Q1 (renderer commit `a6c04e2`) and the two X1 cases on October 9 in step R1 (renderer commit `6007642`); the smoke rows were re-measured in step Q2 (renderer commit `c94b4eb`; the P1 smoke times are in the Q2 section). Median of three timed renders after one warm-up. "Passes" is the number of render passes the adaptive loop or fixed loop ran; "mean spp" is the mean samples per pixel. PSNR and max error compare each adapter with the CPU path tracer at the same settings and seed (clipped sRGB RGB). Only the smoke grid cases (74 to 75 dB) and the RTX X1 adaptive row (90.1 dB, one pixel; see step R1) carry noticeable GPU-to-CPU differences; everything else is above 97 dB. Before step R1, X1 read 54 to 55 dB on all three adapters (max error 0.014 to 0.064) because the CPU path tracer mishandled the occlusion map, and the P1 and Q1 sections below quote those older X1 numbers as measured then.
+**The table is the step R2 rerun** (October 9, 2026, renderer commit `d4f01c3`, raw rows in `benchmarks/portable_render/r2/`, each case in its own exclusive lock turn, CPU references re-rendered by the step with the step R1 CPU path tracer, which has not changed since): the "passes" column of a fixed row is now the number of dispatch passes, not samples, because a pass carries 4 samples per pixel on a surface scene and 2 on smoke after step R2 (the 64-sample rows read 16, the 32-sample smoke rows 16); the bullets below quote the times measured in the earlier steps, as written then, and step R2's own before-and-after is in its section at the end. The images are the same as before the step (the PSNR and error columns equal the earlier rows on every adapter and case). The six X1, Y1 and Z1 case pairs were re-measured on October 8 in step Q1 (renderer commit `a6c04e2`) and the two X1 cases on October 9 in step R1 (renderer commit `6007642`); the smoke rows were re-measured in step Q2 (renderer commit `c94b4eb`; the P1 smoke times are in the Q2 section). Median of three timed renders after one warm-up. "Passes" is the number of render passes the adaptive loop or fixed loop ran; "mean spp" is the mean samples per pixel. PSNR and max error compare each adapter with the CPU path tracer at the same settings and seed (clipped sRGB RGB). Only the smoke grid cases (74 to 75 dB) and the RTX X1 adaptive row (90.1 dB, one pixel; see step R1) carry noticeable GPU-to-CPU differences; everything else is above 97 dB. Before step R1, X1 read 54 to 55 dB on all three adapters (max error 0.014 to 0.064) because the CPU path tracer mishandled the occlusion map, and the P1 and Q1 sections below quote those older X1 numbers as measured then.
 
 | adapter | backend | case | status | median | passes | mean spp | PSNR vs CPU | max error |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| llvmpipe | Vulkan | X1-adaptive0.003 | ok | 263 ms | 7 | 19.0 | 105.3 dB | 0.001 |
-| llvmpipe | Vulkan | X1-fixed64 | ok | 619 ms | 64 | 64.0 | 109.4 dB | 0.000 |
-| llvmpipe | Vulkan | Y1-adaptive0.003 | ok | 763 ms | 7 | 38.0 | 104.3 dB | 0.002 |
-| llvmpipe | Vulkan | Y1-fixed64 | ok | 1251 ms | 64 | 64.0 | 104.6 dB | 0.002 |
-| llvmpipe | Vulkan | Z1-adaptive0.003 | ok | 147 ms | 7 | 18.3 | 159.2 dB | 0.000 |
-| llvmpipe | Vulkan | Z1-fixed64 | ok | 374 ms | 64 | 64.0 | 122.6 dB | 0.000 |
-| llvmpipe | Vulkan | smoke-box | ok | 1025 ms | 32 | 32.0 | 84.8 dB | 0.028 |
-| llvmpipe | Vulkan | smoke-grid | ok | 367 ms | 32 | 32.0 | 75.2 dB | 0.053 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-adaptive0.003 | ok | 43 ms | 7 | 19.0 | 90.1 dB | 0.022 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-fixed64 | ok | 87 ms | 64 | 64.0 | 110.3 dB | 0.001 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | Y1-adaptive0.003 | ok | 53 ms | 7 | 38.0 | 97.4 dB | 0.006 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | Y1-fixed64 | ok | 90 ms | 64 | 64.0 | 97.6 dB | 0.006 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | Z1-adaptive0.003 | ok | 20 ms | 7 | 18.3 | 156.2 dB | 0.000 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | Z1-fixed64 | ok | 44 ms | 64 | 64.0 | 127.4 dB | 0.000 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-box | ok | 71 ms | 32 | 32.0 | 84.8 dB | 0.028 |
-| NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-grid | ok | 59 ms | 32 | 32.0 | 73.6 dB | 0.053 |
-| AMD Radeon 8060S | Vulkan | X1-adaptive0.003 | ok | 55 ms | 7 | 19.0 | 104.8 dB | 0.002 |
-| AMD Radeon 8060S | Vulkan | X1-fixed64 | ok | 101 ms | 64 | 64.0 | 106.9 dB | 0.001 |
-| AMD Radeon 8060S | Vulkan | Y1-adaptive0.003 | ok | 90 ms | 7 | 38.0 | 101.9 dB | 0.003 |
-| AMD Radeon 8060S | Vulkan | Y1-fixed64 | ok | 115 ms | 64 | 64.0 | 102.2 dB | 0.003 |
-| AMD Radeon 8060S | Vulkan | Z1-adaptive0.003 | ok | 17 ms | 7 | 18.3 | 151.5 dB | 0.000 |
-| AMD Radeon 8060S | Vulkan | Z1-fixed64 | ok | 39 ms | 64 | 64.0 | 127.4 dB | 0.000 |
-| AMD Radeon 8060S | Vulkan | smoke-box | ok | 102 ms | 32 | 32.0 | 84.8 dB | 0.028 |
-| AMD Radeon 8060S | Vulkan | smoke-grid | ok | 61 ms | 32 | 32.0 | 73.9 dB | 0.053 |
+| llvmpipe | Vulkan | X1-adaptive0.003 | ok | 252 ms | 7 | 19.0 | 105.3 dB | 0.001 |
+| llvmpipe | Vulkan | X1-fixed64 | ok | 550 ms | 16 | 64.0 | 109.4 dB | 0.000 |
+| llvmpipe | Vulkan | Y1-adaptive0.003 | ok | 692 ms | 7 | 38.0 | 104.3 dB | 0.002 |
+| llvmpipe | Vulkan | Y1-fixed64 | ok | 921 ms | 16 | 64.0 | 104.6 dB | 0.002 |
+| llvmpipe | Vulkan | Z1-adaptive0.003 | ok | 106 ms | 7 | 18.3 | 159.2 dB | 0.000 |
+| llvmpipe | Vulkan | Z1-fixed64 | ok | 251 ms | 16 | 64.0 | 122.6 dB | 0.000 |
+| llvmpipe | Vulkan | smoke-box | ok | 1002 ms | 16 | 32.0 | 84.8 dB | 0.028 |
+| llvmpipe | Vulkan | smoke-grid | ok | 385 ms | 16 | 32.0 | 75.2 dB | 0.053 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-adaptive0.003 | ok | 34 ms | 7 | 19.0 | 90.1 dB | 0.022 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | X1-fixed64 | ok | 58 ms | 16 | 64.0 | 110.3 dB | 0.001 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | Y1-adaptive0.003 | ok | 43 ms | 7 | 38.0 | 97.4 dB | 0.006 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | Y1-fixed64 | ok | 55 ms | 16 | 64.0 | 97.6 dB | 0.006 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | Z1-adaptive0.003 | ok | 11 ms | 7 | 18.3 | 156.2 dB | 0.000 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | Z1-fixed64 | ok | 11 ms | 16 | 64.0 | 127.4 dB | 0.000 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-box | ok | 44 ms | 16 | 32.0 | 84.8 dB | 0.028 |
+| NVIDIA GeForce RTX 3080 Ti | Vulkan | smoke-grid | ok | 36 ms | 16 | 32.0 | 73.6 dB | 0.053 |
+| AMD Radeon 8060S | Vulkan | X1-adaptive0.003 | ok | 46 ms | 7 | 19.0 | 104.8 dB | 0.002 |
+| AMD Radeon 8060S | Vulkan | X1-fixed64 | ok | 82 ms | 16 | 64.0 | 106.9 dB | 0.001 |
+| AMD Radeon 8060S | Vulkan | Y1-adaptive0.003 | ok | 84 ms | 7 | 38.0 | 101.9 dB | 0.003 |
+| AMD Radeon 8060S | Vulkan | Y1-fixed64 | ok | 89 ms | 16 | 64.0 | 102.2 dB | 0.003 |
+| AMD Radeon 8060S | Vulkan | Z1-adaptive0.003 | ok | 10 ms | 7 | 18.3 | 151.5 dB | 0.000 |
+| AMD Radeon 8060S | Vulkan | Z1-fixed64 | ok | 15 ms | 16 | 64.0 | 127.4 dB | 0.000 |
+| AMD Radeon 8060S | Vulkan | smoke-box | ok | 84 ms | 16 | 32.0 | 84.8 dB | 0.028 |
+| AMD Radeon 8060S | Vulkan | smoke-grid | ok | 43 ms | 16 | 32.0 | 73.9 dB | 0.053 |
 
 What the numbers show (measured):
 
@@ -217,3 +217,57 @@ Five of the six rows are above the 97 dB the other scenes read. The RTX adaptive
 **Tests** (`tests/test_3d_occlusion_lobe.py`): two CPU tests that the occlusion scales the diffuse colour of the lobe (a dielectric hit with occlusion 0.5 evaluates exactly like the same hit with half the base colour: both responses and the `pdf`; and an occlusion of 1 leaves it unchanged), and a regression test that renders X1 at 160 by 90 and 32 samples on the CPU and the default GPU adapter and compares the sphere's crop: it measured 48.4 dB (largest error 0.0136) on llvmpipe before the change and 102.3 dB after, and the test asks for more than 85 dB and 0.004. Before the change all three tests fail; after it they pass. The test modules `test_3d_occlusion_lobe`, `test_3d_pbr_textures`, `test_3d_pathtrace`, `test_3d_pathtrace_gpu_soft` and `test_benchmark_portable_render` (148 tests) passed on the default adapter (the RTX), on the Radeon through `force-adapter.py integrated` and on llvmpipe through `force-adapter.py cpu`; the splat, volume, denoise, progressive, sparse and GPU ray-trace modules (126 tests) passed on the default adapter.
 
 Unverified or limited: one resolution and seed per scene; the RTX adaptive row's one-pixel explanation is an inference from the sample counts; Windows and the real display were not checked; the 1024-sample quality rows of the Q1 section (X1 46.68, 44.99 and 44.74 dB) were measured against the old CPU reference and have not been re-measured.
+
+## Step R2: the host work around every GPU render
+
+Lane 4, step R2, October 9, 2026, written in the step's finish pass. Tool: `tools/profile_host_phases.py` (one JSON line per case; `benchmarks/host_phases/`). It reads the renderer's own laps (`stats["phases"]`) at 640 by 360, median of 7 to 11 renders after two warm-ups, each run in an exclusive GPU lock turn. "Host cost" is the sum of the laps other than `dispatch` (the submit and the wait for the card, which holds the shader's own time). The profile asks as the viewport's progressive render does (no variance and noise maps); the last column of the table below asks for them too.
+
+**Before any change** (renderer `4a3406e`, the commit that added the laps; `t1-*-before.jsonl`). Host phases in ms per frame:
+
+| adapter | case | scene build | pack | upload | mask update | encode | final readback | convert | stats | host cost |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| RTX 3080 Ti | smoke grid | 0.3 | 0.8 | 2.3 | 2.0 | 5.5 | 2.8 | 3.2 | 1.8 | 21.2 |
+| RTX 3080 Ti | smoke box | 0.3 | 0.2 | 2.3 | 2.8 | 10.9 | 2.9 | 3.2 | 1.9 | 24.9 |
+| RTX 3080 Ti | Z1 fixed 64 | 0.5 | 0.3 | 0.3 | 2.4 | 9.1 | 2.7 | 3.0 | 1.8 | 21.7 |
+| RTX 3080 Ti | Z1 adaptive | 0.5 | 0.3 | 0.2 | 0.0 | 1.7 | 2.9 | 3.4 | 1.9 | 12.8 |
+| AMD Radeon 8060S | smoke grid | 0.3 | 0.8 | 0.3 | 1.5 | 3.9 | 0.5 | 2.7 | 1.9 | 12.6 |
+| AMD Radeon 8060S | smoke box | 0.3 | 0.2 | 0.3 | 1.6 | 3.9 | 0.5 | 2.7 | 2.1 | 13.3 |
+| AMD Radeon 8060S | Z1 fixed 64 | 0.5 | 0.3 | 0.2 | 2.1 | 6.6 | 0.4 | 2.8 | 1.7 | 16.2 |
+| AMD Radeon 8060S | Z1 adaptive | 0.4 | 0.3 | 0.2 | 0.0 | 1.1 | 0.6 | 2.8 | 2.2 | 8.7 |
+
+Reading it (measured): the host cost is 9 to 25 ms of a 14 to 99 ms frame on the two GPUs, far above the 12 ms the step brief started from, and on a light scene (Z1 fixed 64 on the RTX: 41 ms frame) over half the frame. The largest parts were the per-submission work (a uniform buffer write, a new bind group and a command encoder for each of the 33 to 64 waits on the smoke and Z1 fixed cases; the `mask update` and `encode` columns, 7 to 14 ms on the RTX), the float32 sums converted to the image on the host (`convert`, 3 ms) and the variance and noise maps nobody in the viewport reads (`stats`, 2 ms), then the scene buffers made again every frame (`upload`, 2.3 ms for smoke). The image readback (2.7 to 2.9 ms on the RTX, 0.4 to 0.6 on the Radeon) is 32 bytes a pixel crossing from the card.
+
+**The change** (commits `1b05e11`, `032f6b3`, `290abf0`, `d4f01c3` on `nodebased/gpupathtrace.py`):
+
+- The scene's buffers, the image accumulator, the bind groups, the uniform buffer and the readback buffers stay on the device between frames of the same scene (the host arrays decide: identical bytes reuse the buffers; any difference uploads new ones). The accumulator is cleared on the card instead of made.
+- Several fixed-sampling passes share one submission, and a submission writes all its dispatches' uniforms with one buffer write; each dispatch binds its slice of that buffer.
+- A caller that sets `stats["skip_noise_maps"]` (the progressive viewport render does) gets the finished image from the card, divided and laid over the background, and 16 bytes a pixel cross to the host instead of 32; the host conversion and the variance and noise maps are skipped. A caller that asks for the maps gets them as before.
+- A surface scene takes 4 samples per dispatch and a smoke or splat scene 2 (`SURFACE_PASS_SAMPLES`, `SOFT_PASS_SAMPLES`). The first pass of the step set 8 samples per dispatch for surface scenes, which cuts Z1 on the RTX and made X1 on the Radeon 1.4 times slower (112 against 77 ms); the finish pass's sweep in `benchmarks/host_phases/exp-passsamples-surface.txt` puts the best setting at 4 on both cards for X1 and Y1.
+- The volume grids are copied once into the scene buffer instead of twice (smoke pack 0.85 to 0.66 ms, single box 0.30 to 0.09 ms).
+
+**After** (`final-*.jsonl`, renderer `d4f01c3`; frame and host cost in ms, median):
+
+| adapter | case | frame before | frame after | host before | host after | host after, noise maps asked for |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| RTX 3080 Ti | smoke grid | 58 | 33 | 21.2 | 4.2 | 12.1 |
+| RTX 3080 Ti | smoke box | 70 | 40 | 24.9 | 4.2 | 10.3 |
+| RTX 3080 Ti | Z1 fixed 64 | 41 | 10 | 21.7 | 3.0 | 9.5 |
+| RTX 3080 Ti | Z1 adaptive | 17 | 8 | 12.8 | 4.3 | 10.5 |
+| AMD Radeon 8060S | smoke grid | 57 | 41 | 12.6 | 3.0 | 8.8 |
+| AMD Radeon 8060S | smoke box | 99 | 83 | 13.3 | 2.9 | 8.9 |
+| AMD Radeon 8060S | Z1 fixed 64 | 37 | 14 | 16.2 | 1.4 | 6.7 |
+| AMD Radeon 8060S | Z1 adaptive | 14 | 7 | 8.7 | 2.5 | 7.2 |
+| llvmpipe | smoke grid | 367 | 388 | 26.0 | 5.3 | 9.8 |
+| llvmpipe | smoke box | 1039 | 1031 | 40.7 | 6.7 | 11.1 |
+| llvmpipe | Z1 fixed 64 | 351 | 252 | 24.1 | 3.3 | 9.2 |
+| llvmpipe | Z1 adaptive | 132 | 111 | 123.9 | 101.4 | 107.9 |
+
+The llvmpipe adaptive row is dominated by the adaptive passes' own work, which that adapter runs on the CPU inside the laps (its dispatch lap does not hold it), so its host cost reads as the frame; the other llvmpipe rows are host costs of the same kind as the GPUs'. Frame times are single profile runs; the benchmark rows in the table at the top (full matrix, same code) read: RTX smoke grid 36, smoke box 44, Z1 fixed 11, Z1 adaptive 11 ms; Radeon 43, 84, 15 and 10 ms.
+
+**The RTX target** (host cost under 4 ms per frame, smoke and Z1, images unchanged). Z1 fixed 64 meets it: 3.0 ms. The smoke cases read 4.2 ms in this run and Z1 adaptive 4.3 ms, so they miss it by 0.2 to 0.3 ms; in an earlier run of the same smoke code (before the 4-sample setting, which does not touch smoke) the smoke cases read 6.1 and 5.9 ms, so the run-to-run spread on the RTX is larger than the miss (the image readback alone ranged from 1.8 to 2.9 ms between runs). Measured: of the 4.2 ms, the image crossing from the card is 1.8 to 2.0 ms; a bare copy of the same 3.7 MB to a mappable buffer on this machine takes 1.2 to 1.3 ms (the RTX is a USB4 eGPU, about 2.8 GB/s), so about 1.3 ms of the host cost is the link and no change to the renderer's own code removes it. The Radeon, which shares memory with the host, meets the target on every case (1.4 to 3.0 ms). Inference, not built: reading each row band back as soon as its last sample is done, instead of the whole image after the last wait, would hide most of that transfer behind the remaining bands of a smoke render (6 submissions); it needs a per-band resolve and one staging buffer per band, a larger change than this step took on. With noise maps asked for the host cost is 9.5 to 12.1 ms on the RTX, which is what the viewport avoids by skipping them.
+
+**Images unchanged.** The PSNR against the CPU path tracer and the maximum error in the table at the top are equal to the earlier rows to the printed digits on all 24 adapter and case rows (largest change 0.000), so every case is within the 0.5 dB bound. The pixels were not compared bit for bit with the older renderer; the PSNR and error columns are the evidence.
+
+**Tests.** `tests/test_gpu_frame_reuse.py` counts what a second render of an unchanged scene builds (`gpupathtrace.reuse_counters`): zero new scene uploads, accumulators, pipelines, bind groups, uniform buffers and staging buffers, one scene reuse and one accumulator reuse, and an identical image; a changed knob changes the image and keeps the static buffers; a changed scene uploads new buffers and renders the new scene; a new image size makes a new accumulator; the card-finished image matches the host conversion; passes sharing submissions, progress, time limits, cancellation and two threads. `tests/test_profile_host_phases.py` checks the profile's phases and that the timed frames reuse what the first built. The render and benchmark modules (515 tests: frame reuse, band growth, adaptive sampling, soft and sparse path tracing, splats, volumes, majorant grid, light linking, lens, PBR textures, occlusion lobe, motion blur, denoise, progressive render, viewport render mode, VRAM budget, the benchmark and the profile) all passed at `d4f01c3` on the default adapter (the RTX 3080 Ti), on the Radeon through `force-adapter.py integrated` and on llvmpipe through `force-adapter.py cpu`.
+
+Unverified or limited: one resolution (640 by 360) and seed per case; single profile runs, with the RTX spread named above; the link figure comes from a throw-away copy probe that is not in the repository; Windows and a real display were not checked; the X1 and Y1 host costs (11 to 13 ms on the RTX, mostly texture and mesh packing and the scene build) were not part of this step and were not reduced.
