@@ -106,6 +106,20 @@ class RotoPaintViewerTests(unittest.TestCase):
         self.assertEqual(items[0]["name"], "shape1")
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
 
+    def test_existing_roto_paint_shape_point_remains_editable_in_the_viewer(self):
+        points=[(10,10),(90,10),(50,90)]
+        shape={"name":"shape1","mode":"union","opacity":1.0,"feather":0.0,
+               "points":[{"x":float(x),"y":float(y),"in_x":0.0,"in_y":0.0,"out_x":0.0,"out_y":0.0} for x,y in points],
+               "blend":"over","visible":True}
+        self.window.command({"op":"set_paint_items","id":"paint","items":[{"kind":"shape",**shape}]})
+        viewer=self.window.viewer; context=viewer._roto_context()
+        viewer.roto_drag={"point":(0,0),"kind":"point","scene":viewer.mapToScene(self.position(30,30))}
+        self.assertTrue(viewer._commit_roto_drag())
+        item=self.window.dispatcher.document["node_data"]["paint"]["items"][0]
+        self.assertAlmostEqual(item["points"][0]["x"],30.0,delta=.2)
+        self.assertEqual(len(self.window.dispatcher.undo_stack),2)
+        self.assertEqual(item["kind"],"shape")
+
 
 class RotoPaintLayerEditorTests(unittest.TestCase):
     """A dedicated per-layer editor: fixing an already-drawn shape or stroke without redrawing it."""

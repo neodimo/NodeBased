@@ -135,6 +135,78 @@ class RotoOverlayTests(unittest.TestCase):
         context = viewer._roto_context()
         self.assertEqual(viewer._roto_data_point(QPointF(30, 40), context[1], 2), [30.0, 40.0])
 
+    def test_drag_draws_a_smooth_point_and_closes_by_clicking_the_first(self):
+        viewer=self.window.viewer
+        self.assertTrue(self.window.begin_roto_draw("r"))
+        start=self.scene_pos(10,10); handle=self.scene_pos(20,10)
+        QTest.mousePress(viewer.viewport(),Qt.MouseButton.LeftButton,pos=start)
+        QTest.mouseMove(viewer.viewport(),handle,20)
+        QTest.mouseRelease(viewer.viewport(),Qt.MouseButton.LeftButton,pos=handle)
+        for x,y in ((90,10),(50,90)):
+            QTest.mouseClick(viewer.viewport(),Qt.MouseButton.LeftButton,pos=self.scene_pos(x,y))
+        QTest.mouseClick(viewer.viewport(),Qt.MouseButton.LeftButton,pos=start)
+        self.assertTrue(wait_until(lambda: "r" in self.window.dispatcher.document["node_data"]))
+        points=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
+        self.assertEqual(len(points),3)
+        self.assertAlmostEqual(points[0]["out_x"],10.0,delta=.2)
+        self.assertAlmostEqual(points[0]["in_x"],-10.0,delta=.2)
+        self.assertEqual(len(self.window.dispatcher.undo_stack),1)
+
+    def test_ctrl_alt_outline_insert_preserves_rendered_matte_and_is_one_undo(self):
+        from nodebased import roto
+        shape=triangle()
+        self.window.close(); APP.processEvents()
+        self.window=Window(roto_document([shape])); self.window.show()
+        self.assertTrue(wait_until(lambda:self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True); APP.processEvents()
+        viewer=self.window.viewer; context=viewer._roto_context()
+        before=roto.rasterise([shape],100,100)
+        self.assertTrue(viewer._insert_roto_point(viewer.mapToScene(self.scene_pos(50,10)),context))
+        after=roto.rasterise(self.window.dispatcher.document["node_data"]["r"]["shapes"],100,100)
+        self.assertLess(float(abs(before-after).max()),1e-4)
+        self.assertEqual(len(self.window.dispatcher.undo_stack),1)
+
+    def test_handle_drag_mirrors_unless_ctrl_breaks_it_and_undoes_once(self):
+        shape=triangle(); shape["points"][0].update(out_x=5.0,out_y=0.0,in_x=-5.0,in_y=0.0)
+        self.window.close(); APP.processEvents(); self.window=Window(roto_document([shape])); self.window.show()
+        self.assertTrue(wait_until(lambda:self.window.frame is not None)); self.window.graph.items_by_id["r"].setSelected(True)
+        viewer=self.window.viewer; context=viewer._roto_context()
+        viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(20,10)),"broken":False}
+        viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertAlmostEqual(point["out_x"],10.0,delta=.2); self.assertAlmostEqual(point["in_x"],-10.0,delta=.2)
+        self.assertEqual(len(self.window.dispatcher.undo_stack),1)
+        viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(30,10)),"broken":True}
+        viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertAlmostEqual(point["out_x"],20.0,delta=.2); self.assertAlmostEqual(point["in_x"],-10.0,delta=.2)
+        self.assertEqual(len(self.window.dispatcher.undo_stack),2)
+
+    def test_deleting_selected_point_enforces_minimum_and_is_one_undo(self):
+        shape=triangle(); shape["points"].append({"x":10.,"y":90.,"in_x":0.,"in_y":0.,"out_x":0.,"out_y":0.})
+        self.window.close(); APP.processEvents(); self.window=Window(roto_document([shape])); self.window.show()
+        self.assertTrue(wait_until(lambda:self.window.frame is not None)); self.window.graph.items_by_id["r"].setSelected(True); viewer=self.window.viewer
+        viewer.roto_selected_points={(0,0)}
+        self.assertTrue(viewer._delete_roto_points()); self.assertEqual(len(self.window.dispatcher.undo_stack),1)
+        self.assertEqual(len(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]),3)
+        viewer.roto_selected_points={(0,0)}
+        self.assertFalse(viewer._delete_roto_points()); self.assertEqual(len(self.window.dispatcher.undo_stack),1)
+
+    def test_animated_outline_insert_preserves_each_key_frame_render(self):
+        from nodebased import roto, shapes
+        shape=triangle()
+        for point in shape["points"]:
+            for field,value in tuple(point.items()):
+                point[field]={"value":value,"curve":{"interpolation":"linear","keys":[{"frame":1,"value":value},{"frame":2,"value":value}]}}
+        self.window.close(); APP.processEvents(); self.window=Window(roto_document([shape],frame=1)); self.window.show()
+        self.assertTrue(wait_until(lambda:self.window.frame is not None)); self.window.graph.items_by_id["r"].setSelected(True)
+        viewer=self.window.viewer; context=viewer._roto_context(); before={f:roto.rasterise(shapes.resolve_shapes({"shapes":[shape]},f),100,100) for f in (1,2)}
+        self.assertTrue(viewer._insert_roto_point(viewer.mapToScene(self.scene_pos(50,10)),context))
+        updated=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
+        self.assertEqual([k["frame"] for k in updated["points"][1]["x"]["curve"]["keys"]],[1,2])
+        for f in (1,2):
+            after=roto.rasterise(shapes.resolve_shapes({"shapes":[updated]},f),100,100)
+            self.assertLess(float(abs(before[f]-after).max()),1e-4)
+        self.assertEqual(len(self.window.dispatcher.undo_stack),1)
+
 
 if __name__ == "__main__":
     unittest.main()

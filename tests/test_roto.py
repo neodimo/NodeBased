@@ -444,5 +444,21 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(first.display, second.display)
 
 
+class BezierSubdivisionTests(unittest.TestCase):
+    def test_de_casteljau_split_preserves_the_cubic(self):
+        a = {"x": 0., "y": 0., "in_x": 0., "in_y": 0., "out_x": 12., "out_y": 25.}
+        b = {"x": 30., "y": 4., "in_x": -8., "in_y": 11., "out_x": 0., "out_y": 0.}
+        left, middle, right = shapes.split_cubic_point(a, b, .37)
+        def cubic(p, q, t):
+            u=1-t
+            return tuple(u**3*p[k]+3*u*u*t*(p[k]+p["out_"+k])+3*u*t*t*(q[k]+q["in_"+k])+t**3*q[k] for k in ("x","y"))
+        for i in range(101):
+            t=i/100
+            expected=cubic(a,b,t)
+            actual=cubic(left,middle,t/.37) if t <= .37 else cubic(middle,right,(t-.37)/.63)
+            self.assertAlmostEqual(expected[0],actual[0],places=8)
+            self.assertAlmostEqual(expected[1],actual[1],places=8)
+
+
 if __name__ == "__main__":
     unittest.main()

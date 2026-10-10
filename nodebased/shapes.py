@@ -372,6 +372,25 @@ def resolve_shapes(payload, frame):
     return shapes
 
 
+def split_cubic_point(start, end, t):
+    """Return De Casteljau's exact subdivision point and replacement adjacent handles."""
+    t = min(1.0, max(0.0, float(t)))
+    p0 = (float(start["x"]), float(start["y"]))
+    p1 = (p0[0] + float(start["out_x"]), p0[1] + float(start["out_y"]))
+    p3 = (float(end["x"]), float(end["y"]))
+    p2 = (p3[0] + float(end["in_x"]), p3[1] + float(end["in_y"]))
+    lerp = lambda a, b: (a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t)
+    a, b, c = lerp(p0, p1), lerp(p1, p2), lerp(p2, p3)
+    d, e = lerp(a, b), lerp(b, c)
+    f = lerp(d, e)
+    new_start, new_end = dict(start), dict(end)
+    new_start["out_x"], new_start["out_y"] = a[0]-p0[0], a[1]-p0[1]
+    new_end["in_x"], new_end["in_y"] = c[0]-p3[0], c[1]-p3[1]
+    point = {"x": f[0], "y": f[1], "in_x": d[0]-f[0], "in_y": d[1]-f[1],
+             "out_x": e[0]-f[0], "out_y": e[1]-f[1]}
+    return new_start, point, new_end
+
+
 def resolve_tracks(payload, frame):
     """Resolve a Tracker payload at `frame`. `enabled` resolves then thresholds at >= 0.5."""
     tracks = []
