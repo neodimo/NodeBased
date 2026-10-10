@@ -255,6 +255,30 @@ class HoldoutTests:
             np.testing.assert_allclose(none[beside], clear_floor[beside], atol=r.atol)  # cast_shadows off: none
 
 
+    def test_a_holdout_is_opaque_whatever_its_own_alpha_or_texture(self):
+        faint = holdout(color=(.2, .9, .2, .25))
+        textured = replace(holdout(), texture=np.zeros((2, 2, 4), np.float32), uvs=np.array([[0, 0], [1, 0], [1, 1], [0, 1]], "f4"))
+        for r in self.each():
+            solid = r(scene(cast_shadows=False))
+            for label, card in (("faint", faint), ("textured", textured)):
+                geometry = (ball(0), ground(), replace(card, cast_shadows=False))
+                np.testing.assert_allclose(r(s.Scene(geometry, (SUN, LAMP))), solid, atol=r.atol, err_msg=label)
+
+    def test_a_pane_of_glass_in_front_of_the_holdout_still_shows(self):
+        pane = quad(-1.0, 3.2, -2.0, 2.0, 3.5, color=(.2, .3, .9, .5), name="Pane")
+        area = surrounded(card_area()) & surrounded(coverage(pane))
+        self.assertGreater(int(area.sum()), 100)
+        for r in self.each():
+            both = r(s.Scene((replace(holdout(), cast_shadows=False), pane), (SUN, LAMP)))
+            alone = r(s.Scene((pane,), (SUN, LAMP)))
+            if r.name.endswith("path tracer"):       # a pane of alpha .5 is hit or missed by chance, per sample
+                np.testing.assert_allclose(both[area].mean(axis=0), alone[area].mean(axis=0), atol=.03)
+            else:
+                np.testing.assert_allclose(both[area], alone[area], atol=max(r.atol, 2e-3))   # the pane over the hole, as over nothing
+            self.assertAlmostEqual(float(both[area][..., 3].mean()), float(alone[area][..., 3].mean()), delta=.03)
+            self.assertGreater(float(both[area][..., 3].mean()), .2)
+
+
 class CpuHoldoutTests(HoldoutTests, unittest.TestCase):
     RENDERERS = CPU
 
@@ -262,6 +286,41 @@ class CpuHoldoutTests(HoldoutTests, unittest.TestCase):
 @unittest.skipUnless(gpu3d.available(), "no GPU adapter")
 class GpuHoldoutTests(HoldoutTests, unittest.TestCase):
     RENDERERS = GPU
+
+
+@unittest.skipUnless(gpu3d.available(), "no GPU adapter")
+class GpuAgreesWithTheCpuTests(unittest.TestCase):
+    """The GPU raster and ray-traced modes match the CPU's mode (the existing tolerance), the GPU path tracer the CPU's."""
+    PATH = pt.PathSettings(samples=48, max_bounces=3, diffuse_bounces=2)
+
+    def cases(self):
+        glass = quad(-1.0, 3.2, -2.0, 2.0, 3.5, color=(.2, .3, .9, .5))
+        return {"ball behind the card": scene(), "no shadow from the card": scene(cast_shadows=False),
+                "behind glass": s.Scene((ball(0), ground(), holdout(cast_shadows=False), glass), (SUN, LAMP)),
+                "card alone": s.Scene((holdout(),), (SUN, LAMP)), "no holdout": scene(card=False)}
+
+    def test_raster_and_ray_traced(self):
+        for label, case in self.cases().items():
+            for mode in ("raster", "raytrace"):
+                with self.subTest(case=label, mode=mode):
+                    cpu, gpu = _cpu(mode)(case, "rgba"), _gpu(mode)(case, "rgba")
+                    wrong = (np.abs(gpu - cpu) > 5e-4).any(axis=-1)
+                    # a silhouette pixel on an exact triangle edge may fall either way on the two rasterizers
+                    self.assertLessEqual(int(wrong.sum()), 1 + cpu.shape[0] * cpu.shape[1] // 2000, int(wrong.sum()))
+                    self.assertLess(float(np.abs(gpu - cpu).mean()), 2e-4)
+                    for output in ("depth", "position", "normals", "object_id", "uv"):
+                        np.testing.assert_allclose(_gpu(mode)(case, output), _cpu(mode)(case, output), atol=1e-3, rtol=2e-3)
+
+    def test_the_path_tracer(self):
+        for label, case in self.cases().items():
+            with self.subTest(case=label):
+                cpu = pt.render(case, CAMERA, *SIZE, BLACK, 0.0, "rgba", self.PATH, backend="cpu")
+                gpu = pt.render(case, CAMERA, *SIZE, BLACK, 0.0, "rgba", self.PATH, backend="gpu")
+                self.assertLess(float(np.abs(cpu - gpu).mean()), .01 * float(cpu.mean()) + .002)
+                for output in ("depth", "object_id"):
+                    np.testing.assert_allclose(pt.render(case, CAMERA, *SIZE, BLACK, 0.0, output, self.PATH, backend="gpu"),
+                                               pt.render(case, CAMERA, *SIZE, BLACK, 0.0, output, self.PATH, backend="cpu"),
+                                               atol=1e-3, rtol=1e-3)
 
 
 class EdgeTests(unittest.TestCase):
@@ -357,7 +416,7 @@ class DataPassTests(unittest.TestCase):
         return total
 
     def test_the_balls_coverage_is_reduced_by_the_holdouts(self):
-        for mode in ("raster", "raytrace"):
+        for mode in ("raster", "raytrace", "pathtrace"):
             with self.subTest(mode=mode):
                 def crypto(card):
                     geometry = (ball(0, name="Ball"),) + ((replace(holdout(holdout=card == "hold"), name="Card"),) if card else ())
