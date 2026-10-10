@@ -1,3 +1,7 @@
+## Lane 4 R2 finish 1 — host work around GPU renders (2026-10-09, 6:40 PM)
+
+Branch `openclaw/nb-3d-astra-lane` at the commit after `05cc689`. GPU path-traced renders keep scene buffers, accumulator, bind groups and readback buffers between frames; surface scenes take 4 samples per dispatch, smoke and splats 2; callers that set `stats["skip_noise_maps"]` get the image finished on the card. RTX host cost per frame (640 by 360): Z1 fixed 3.0 ms (target met), smoke 4.2 ms, Z1 adaptive 4.3 ms; Radeon 1.4 to 3.0 ms. Details, before/after by phase and the open per-band readback idea: R2 section of `docs/BENCHMARKS-v0.35-portable-render.md`. Tools: `tools/profile_host_phases.py`; data: `benchmarks/host_phases/`, `benchmarks/portable_render/r2/`.
+
 ## Lane 6 P1 cached playback — complete (2026-10-09)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:46 PM on 2026-10-09 PDT)
