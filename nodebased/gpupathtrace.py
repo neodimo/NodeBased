@@ -2325,10 +2325,12 @@ def _pack_aux(packed, ps):
         return start
 
     def add_floats(flat):
-        flat = np.asarray(flat, "f4").reshape(-1)
-        padded = np.zeros(-(-len(flat) // 4) * 4, "f4")
-        padded[:len(flat)] = flat
-        return add(padded) * 4
+        flat = np.ascontiguousarray(flat, "f4").reshape(-1)
+        if len(flat) % 4:           # only a ragged end is copied to pad it; the rest is copied once, into the buffer
+            padded = np.zeros(-(-len(flat) // 4) * 4, "f4")
+            padded[:len(flat)] = flat
+            flat = padded
+        return add(flat) * 4
 
     packed.splat_count, packed.splat_base = 0, 0
     packed.volume_count, packed.volume_base, packed.fire_base, packed.flags = 0, 0, 0, 0
