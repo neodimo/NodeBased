@@ -3391,15 +3391,16 @@ class Viewer(PanZoomView):
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 event.accept()
                 return
-            # A selected Roto node with nothing to drag starts drawing on the click itself,
-            # instead of silently starting a ScrollHandDrag pan ("clicking drew nothing" --
-            # QA pass 1, finding 13, 2026-09-30). "Draw shape..." stays the explicit alternative.
+            # A selected Roto node with nothing to drag starts drawing on the press. The
+            # release below places the first point, and a drag from this press gives it handles.
             # RotoPaint is excluded: an unclaimed click there is a paint-tool stroke, handled
             # further down by `_paint_context()`, not a new shape.
             if context[1]["type"] == "Roto":
-                self.roto_drag={"kind":"marquee","scene":scene_pos,"start":scene_pos,"moved":False}
-                event.accept()
-                return
+                if self.begin_roto_draw(context[0]):
+                    self.roto_draw_cursor = scene_pos
+                    self.roto_draw_press = scene_pos
+                    event.accept()
+                    return
         warp_context = self._warp_context()
         if event.button() == Qt.MouseButton.LeftButton and warp_context is not None:
             if self.warp_drawing:
