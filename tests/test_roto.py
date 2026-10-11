@@ -9,6 +9,7 @@ import unittest
 import tempfile
 import copy
 import math
+import time
 from pathlib import Path
 
 import numpy as np
@@ -425,6 +426,8 @@ class RenderTests(unittest.TestCase):
     def test_negative_edge_feather_moves_the_solid_edge_inward(self):
         alpha = roto.rasterise([square(10, 10, 30, 30, feather=-4.0, feather_model="edge")], 40, 40)[20, :, 3]
         self.assertEqual(float(alpha[16]), 1.0)
+        self.assertEqual(float(alpha[14]), 1.0)
+        self.assertLess(alpha[13], 1.0)
         self.assertLess(alpha[10], 0.5)
 
     def test_wide_feather_does_not_thin_a_narrow_shape(self):
@@ -443,6 +446,22 @@ class RenderTests(unittest.TestCase):
             alpha = roto.rasterise([square(10, 10, 30, 30, feather=10.0, feather_model="edge",
                                             feather_falloff=falloff)], 50, 50)[15, 30:, 3]
             self.assertTrue(np.all(np.diff(alpha) <= 1e-6), falloff)
+
+    def test_1080p_edge_feather_50_completes_within_quarter_second(self):
+        shape = square(400, 200, 1100, 900, feather=50.0, feather_model="edge")
+        start = time.perf_counter()
+        result = roto.rasterise([shape], 1920, 1080)
+        elapsed = time.perf_counter() - start
+        self.assertEqual(result.shape, (1080, 1920, 4))
+        self.assertLess(elapsed, 0.25, f"edge feather render took {elapsed:.4f}s")
+
+    def test_uniform_shape_transform_scales_feather_outline_and_point_offsets(self):
+        shape = square(10, 10, 30, 30, feather=5.0, feather_model="edge",
+                       transform={"scale_x": 2.0, "scale_y": 2.0, "center_x": 20.0, "center_y": 20.0})
+        shape["points"][0].update(feather_x=3.0, feather_y=4.0)
+        resolved = shapes.resolve_shapes({"shapes": [shape]}, 1)[0]
+        self.assertEqual(resolved["feather"], 10.0)
+        self.assertEqual((resolved["points"][0]["feather_x"], resolved["points"][0]["feather_y"]), (6.0, 8.0))
 
     def test_pre_edge_documents_migrate_to_box_feather(self):
         doc = empty_document()

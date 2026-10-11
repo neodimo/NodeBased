@@ -208,7 +208,7 @@ Deterministic, CPU, NumPy:
    Gaussian choices shape that ramp. Per-point X/Y offsets are interpolated
    along each flattened span and alter its feather distance locally. Older
    documents retain their original separable box-blur model through the
-   `feather_model` migration field; the panel offers a one-click switch. The
+   schema v22 `feather_model` migration field; the panel offers a one-click switch. The
    selected shape draws a dashed feather outline with per-point handles; drag
    a handle or Ctrl-drag a point, and use **Reset feather on selected points**
    to clear offsets. These edits are one undo step and key animated offsets at

@@ -421,8 +421,8 @@ and D65/D60/DCI.
 
 ### R7: edge feather model
 
-Newly drawn shapes use an outward signed-distance feather; older saved shapes
-keep their box-blur output until switched in the Roto panel. Feather offsets are
+Newly drawn shapes use an outward signed-distance feather; schema 22 assigns
+older saved shapes the box-blur model until switched in the Roto panel. Feather offsets are
 stored per point and interpolate across the outline. The selected shape has a
 dashed feather outline, draggable per-point handles, Ctrl-drag from a point,
 and a selected-points reset action; edits are undoable and key animated offsets
