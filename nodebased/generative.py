@@ -220,13 +220,30 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
     if refused:
         raise ValueError(f"Provider {desc.name} cannot honour controls: {', '.join(refused)}")
     ignored = ["text"] if text is not None and not desc.accepted("text") else []
-    if desc.name not in ("reproject", "null"):
+    if desc.name == "sdxl_controlnet":
+        from .providers import sdxl_controlnet
+        sdxl_controlnet.resolve_settings(sampler_settings)  # an unknown key or a bad value refuses before any work
+    if desc.name not in ("reproject", "null", "sdxl_controlnet"):
         raise ValueError(f"No local implementation for provider {desc.name}")
+    pictures, run_info = None, None
+    if desc.name == "sdxl_controlnet":
+        # The model runs in its own interpreter (see providers/sdxl_controlnet.py); every frame is made from that
+        # frame's own depth and normals with the same seed. The recorded settings are the resolved ones, so a
+        # change of default shows in the artifact id.
+        from .providers import sdxl_controlnet
+        sampler_settings = sdxl_controlnet.resolve_settings(sampler_settings)
+        import tempfile
+        Path(output_pattern).parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="sdxl-controlnet-", dir=Path(output_pattern).parent) as work:
+            pictures, run_info = sdxl_controlnet.run_frames(
+                controls, text=text, seed=seed, sampler_settings=sampler_settings, workdir=work, progress=progress)
     outputs = []
     for index, frame in enumerate(controls):
         if progress:
             progress((index / max(1, len(controls)), f"Frame {frame.frame}: preparing"))
-        if desc.name == "null":
+        if pictures is not None:
+            pixels = pictures[index]
+        elif desc.name == "null":
             pixels = frame.beauty.values
         else:
             before = controls[index - 1] if index and controls[index - 1].frame == frame.frame - 1 else None
@@ -275,5 +292,7 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
         "seed":seed, "sampler_settings":sampler_settings, "seed_honoured":desc.accepted("seed"),
         "ignored_controls":ignored, "scene_state":scene_id, "control_bundle":bundle_id})
     result["artifact_id"] = sequence_id
+    if run_info is not None:
+        result["run"] = run_info  # timings and peak VRAM: reported, never part of the artifact
     manifest_output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result
