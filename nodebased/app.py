@@ -11404,10 +11404,10 @@ class Window(QMainWindow):
                 record = json.loads(ArtifactStore().get(solve_id))
             except (OSError, ValueError, KeyError):
                 record = None   # a solve id from another machine: the node still works, the summary just says less
-        summary = QLabel("\n".join(camera_solve.panel_lines(node["params"], record)))
+        summary = QLabel("\n".join(camera_solve.panel_lines(node["params"], record, include_survey=False)))
         summary.setObjectName("cameraSolveSummary")
         summary.setWordWrap(True)
-        form.addRow("Last solve", summary)
+        form.addRow("Solve result", summary)
         form.addRow(build_survey_panel(self, key))
 
     def begin_survey_pick(self, key):

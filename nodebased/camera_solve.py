@@ -492,13 +492,17 @@ def solve_camera_op(evaluator, dispatcher, cmd, store=None, solver=None, workdir
             "cloud_points": int(len(points)), "run": info}
 
 
-def panel_lines(params, record=None):
-    """The sentences the CameraSolve3D panel shows: the survey's state before a solve, the last solve's lens and scale after."""
-    try:
-        plan = survey_plan(parse_survey(params.get("survey", "")))
-        lines = [plan["message"]]
-    except ValueError as error:
-        lines = [f"Survey unreadable: {error}"]
+def panel_lines(params, record=None, include_survey=True):
+    """The sentences the CameraSolve3D panel shows: the survey's state (unless the Survey list shows it already) and
+    the last solve's lens and scale."""
+    lines = []
+    if include_survey:
+        try:
+            lines.append(survey_plan(parse_survey(params.get("survey", "")))["message"])
+        except ValueError as error:
+            lines.append(f"Survey unreadable: {error}")
+    if not record and not include_survey:
+        lines.append("No solve yet.")
     if record:
         lens = record.get("lens")
         if lens:
@@ -521,5 +525,5 @@ def panel_lines(params, record=None):
             lines.extend(lens.get("warnings", []))
         alignment = record.get("alignment")
         if alignment:
-            lines.append("Last solve: " + alignment["message"])
+            lines.append("Scale: " + alignment["message"])
     return lines

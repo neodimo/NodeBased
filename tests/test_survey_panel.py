@@ -42,7 +42,7 @@ class SurveyPanelTests(unittest.TestCase):
         panel = self.panel()
         self.assertIn("Up to scale (no picks yet)", panel.findChild(QLabel, "survey-status").text())
         summary = self.window.properties.widget().findChild(QLabel, "cameraSolveSummary")
-        self.assertIn("Up to scale", summary.text())
+        self.assertEqual(summary.text(), "No solve yet.")
         self.assertFalse(panel.findChild(QPushButton, "survey-pick-delete").isEnabled())
 
     def test_picks_are_added_on_the_current_frame_and_positions_and_distances_edit_the_survey(self):

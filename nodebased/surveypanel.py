@@ -111,7 +111,7 @@ def build_panel(window, key):
         distances.addItem(f"{entry['a']} – {entry['b']}: {entry['distance']:g}")
     layout.addWidget(distances)
     names = [pick["name"] for pick in survey["picks"]]
-    form = QHBoxLayout()
+    names_row, value_row = QHBoxLayout(), QHBoxLayout()
     first, second = QComboBox(), QComboBox()
     first.setObjectName("survey-distance-a")
     second.setObjectName("survey-distance-b")
@@ -125,7 +125,7 @@ def build_panel(window, key):
     value.setRange(0.0, 1000000.0)
     value.setValue(1.0)
     value.setToolTip("The real distance between the two picks, in scene units")
-    add_distance = QPushButton("Add distance")
+    add_distance = QPushButton("Add")
     add_distance.setObjectName("survey-distance-add")
     add_distance.setEnabled(len(names) > 1)
 
@@ -139,9 +139,12 @@ def build_panel(window, key):
         updated["distances"].append({"a": a, "b": b, "distance": value.value()})
         commit(updated)
     add_distance.clicked.connect(new_distance)
-    for widget in (first, second, value, add_distance):
-        form.addWidget(widget)
-    layout.addLayout(form)
+    for widget in (first, second):
+        names_row.addWidget(widget)
+    value_row.addWidget(value, 1)
+    value_row.addWidget(add_distance)
+    layout.addLayout(names_row)
+    layout.addLayout(value_row)
     drop = QPushButton("Delete distance")
     drop.setObjectName("survey-distance-delete")
     drop.setEnabled(bool(survey["distances"]))
