@@ -136,6 +136,103 @@ def feather(cover, radius):
     return Evaluator._box_blur_axis(Evaluator._box_blur_axis(cover, radius, axis=1), radius, axis=0)
 
 
+def edge_feather(points, cover, feather, falloff="linear"):
+    """Rasterise a signed-distance feather with linearly interpolated vertex offsets.
+
+    Work is restricted to each segment's feather-expanded bounds. This keeps the common small-shape
+    case proportional to outline length rather than image area and requires only NumPy.
+    """
+    height, width = cover.shape
+    vertices = flatten_points(points)
+    if len(vertices) < 3 or feather == 0 and not any(
+            p.get("feather_x", 0) or p.get("feather_y", 0) for p in points):
+        return cover
+    # Match the adaptive Bezier flattening above; offsets follow the corresponding outline spans.
+    offsets = []
+    area = float(np.sum(vertices[:, 0] * np.roll(vertices[:, 1], -1) -
+                        np.roll(vertices[:, 0], -1) * vertices[:, 1]))
+    winding = 1.0 if area >= 0 else -1.0
+    for i, point in enumerate(points):
+        end = points[(i + 1) % len(points)]
+        x0, y0 = point["x"], point["y"]
+        x1, y1 = x0 + point["out_x"], y0 + point["out_y"]
+        x2, y2 = end["x"] + end["in_x"], end["y"] + end["in_y"]
+        x3, y3 = end["x"], end["y"]
+        control = (math.hypot(x1-x0, y1-y0) + math.hypot(x2-x1, y2-y1) + math.hypot(x3-x2, y3-y2))
+        n = 1 if point["out_x"] == point["out_y"] == end["in_x"] == end["in_y"] == 0 else min(max(int(math.ceil(control / SEGMENT_PIXELS)), MIN_SEGMENTS), MAX_SEGMENTS)
+        a = float(point.get("feather_x", 0.0)); b = float(point.get("feather_y", 0.0))
+        c = float(end.get("feather_x", 0.0)); d = float(end.get("feather_y", 0.0))
+        # The pair is an artist-space vector; its projection onto the local normal changes the
+        # signed offset. Segment normals are computed below so x/y handles remain intuitive.
+        for step in range(n):
+            t = step / n
+            u = 1.0 - t
+            if n == 1:
+                q = np.asarray((x0, y0), dtype=np.float64)
+                q2 = np.asarray((x3, y3), dtype=np.float64)
+            else:
+                q = np.asarray((u**3*x0+3*u*u*t*x1+3*u*t*t*x2+t**3*x3,
+                                u**3*y0+3*u*u*t*y1+3*u*t*t*y2+t**3*y3))
+                v = (step+1)/n; z = 1-v
+                q2 = np.asarray((z**3*x0+3*z*z*v*x1+3*z*v*v*x2+v**3*x3,
+                                 z**3*y0+3*z*z*v*y1+3*z*v*v*y2+v**3*y3))
+            tangent = q2-q
+            length = float(np.linalg.norm(tangent))
+            if length < 1e-10:
+                continue
+            normal = winding * np.asarray((tangent[1], -tangent[0])) / length
+            start_t, end_t = step / n, (step + 1) / n
+            start_delta = float(np.dot(np.asarray((a*(1-start_t)+c*start_t,
+                                                    b*(1-start_t)+d*start_t)), normal))
+            end_delta = float(np.dot(np.asarray((a*(1-end_t)+c*end_t,
+                                                  b*(1-end_t)+d*end_t)), normal))
+            offsets.append((q, q2, start_delta, end_delta))
+    if not offsets:
+        return cover
+    radius = abs(float(feather)) + max(max(abs(item[2]), abs(item[3])) for item in offsets)
+    if radius <= 0:
+        return cover
+    best = np.full((height, width), np.inf, dtype=np.float32)
+    local_radius = np.full((height, width), float(feather), dtype=np.float32)
+    for p0, p1, delta0, delta1 in offsets:
+        left = max(0, int(math.floor(min(p0[0], p1[0])-radius-1)))
+        right = min(width, int(math.ceil(max(p0[0], p1[0])+radius+1)))
+        top = max(0, int(math.floor(min(p0[1], p1[1])-radius-1)))
+        bottom = min(height, int(math.ceil(max(p0[1], p1[1])+radius+1)))
+        if left >= right or top >= bottom:
+            continue
+        yy, xx = np.mgrid[top:bottom, left:right]
+        vx, vy = p1-p0
+        denom = vx*vx+vy*vy
+        t = np.clip(((xx+.5-p0[0])*vx+(yy+.5-p0[1])*vy)/denom, 0.0, 1.0)
+        dx = xx+.5-(p0[0]+t*vx); dy = yy+.5-(p0[1]+t*vy)
+        dist2 = dx*dx+dy*dy
+        view = best[top:bottom,left:right]
+        take = dist2 < view
+        np.copyto(view, dist2, where=take)
+        rv = local_radius[top:bottom,left:right]
+        np.copyto(rv, float(feather)+delta0+(delta1-delta0)*t, where=take)
+    distance = np.sqrt(best, dtype=np.float32)
+    signed = np.where(cover > 0.0, -distance, distance)
+    positive = local_radius >= 0
+    alpha = np.zeros_like(cover, dtype=np.float32)
+    ramp = np.zeros_like(cover, dtype=np.float32)
+    np.divide(signed, local_radius, out=ramp, where=positive & (local_radius > 0))
+    alpha[positive] = np.clip(1.0-ramp[positive], 0.0, 1.0)
+    negative = ~positive
+    np.divide(signed, np.abs(local_radius), out=ramp, where=negative & (local_radius < 0))
+    alpha[negative] = np.clip(-ramp[negative], 0.0, 1.0)
+    if falloff == "smooth":
+        alpha = alpha*alpha*(3.0-2.0*alpha)
+    elif falloff == "gaussian":
+        alpha = np.exp(-4.0*np.square(1.0-alpha)).astype(np.float32)
+    alpha[positive & (signed >= np.abs(local_radius))] = 0.0
+    alpha[negative & (signed >= 0.0)] = 0.0
+    # Preserve subpixel coverage on the original contour; the feather interior is fully solid.
+    alpha = np.where(positive & (distance < 0.75) & (cover > 0), np.maximum(alpha, cover), alpha)
+    return alpha.astype(np.float32)
+
+
 def rasterise(shapes, width, height, invert=False):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
     h, w = int(height), int(width)
@@ -148,12 +245,15 @@ def rasterise(shapes, width, height, invert=False):
         samples = shape.get("_motion_samples", ())
         if samples:
             cover = (cover + sum(coverage(points, w, h) for points in samples)) / (len(samples) + 1)
-        cover = np.clip(feather(cover, shape["feather"]), 0.0, 1.0)
         falloff = shape.get("feather_falloff", "linear")
-        if falloff == "smooth":
-            cover = cover * cover * (3.0 - 2.0 * cover)
-        elif falloff == "gaussian":
-            cover = np.exp(-4.0 * np.square(1.0 - cover)).astype(np.float32)
+        if shape.get("feather_model", "box") == "edge":
+            cover = edge_feather(shape["points"], cover, shape["feather"], falloff)
+        else:
+            cover = np.clip(feather(cover, shape["feather"]), 0.0, 1.0)
+            if falloff == "smooth":
+                cover = cover * cover * (3.0 - 2.0 * cover)
+            elif falloff == "gaussian":
+                cover = np.exp(-4.0 * np.square(1.0 - cover)).astype(np.float32)
         if shape.get("invert", False):
             cover = 1.0 - cover
         color = np.asarray(shape.get("color", [1, 1, 1, 1]), dtype=np.float32)

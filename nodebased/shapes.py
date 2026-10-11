@@ -39,7 +39,8 @@ SHAPE_LIMITS = {
     "x": (-65536.0, 65536.0), "y": (-65536.0, 65536.0),
     "in_x": (-65536.0, 65536.0), "in_y": (-65536.0, 65536.0),
     "out_x": (-65536.0, 65536.0), "out_y": (-65536.0, 65536.0),
-    "opacity": (0.0, 1.0), "feather": (0.0, 500.0), "enabled": (0.0, 1.0),
+    "feather_x": (-500.0, 500.0), "feather_y": (-500.0, 500.0),
+    "opacity": (0.0, 1.0), "feather": (-500.0, 500.0), "enabled": (0.0, 1.0),
     "error": (0.0, 1.0),
     "translate_x": (-65536.0, 65536.0), "translate_y": (-65536.0, 65536.0),
     "rotate": (-360000.0, 360000.0), "scale_x": (-1000.0, 1000.0),
@@ -49,6 +50,7 @@ SHAPE_LIMITS = {
 TRANSFORM_DEFAULTS = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                      "scale_x": 1.0, "scale_y": 1.0, "center_x": 0.0, "center_y": 0.0}
 POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
+FEATHER_POINT_FIELDS = ("feather_x", "feather_y")
 
 # Payload shape per node type. A node type absent from this table may not appear in `node_data`.
 NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks", "RotoPaint": "items",
@@ -119,7 +121,7 @@ def resolve_scalar(value, frame, name=None):
 
 def validate_shape(shape, where):
     required = {"name", "mode", "opacity", "feather", "points"}
-    optional = {"visible", "locked", "invert", "feather_falloff", "color", "blend_mode", "motion_blur", "track_link", "transform", "track_follow"}
+    optional = {"visible", "locked", "invert", "feather_falloff", "feather_model", "color", "blend_mode", "motion_blur", "track_link", "transform", "track_follow"}
     if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
         raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
     if not isinstance(shape["name"], str) or not 1 <= len(shape["name"]) <= 128:
@@ -128,6 +130,8 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.mode must be one of {list(SHAPE_MODES)}")
     validate_scalar(shape["opacity"], "opacity", where)
     validate_scalar(shape["feather"], "feather", where)
+    if shape.get("feather_model", "box") not in ("box", "edge"):
+        raise ValueError(f"{where}.feather_model is unsupported")
     if any(k in shape and type(shape[k]) is not bool for k in ("visible", "locked", "invert", "motion_blur")):
         raise ValueError(f"{where}: visibility, lock, invert and motion blur flags must be booleans")
     if shape.get("feather_falloff", "linear") not in ("linear", "smooth", "gaussian"):
@@ -159,9 +163,12 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.points must hold between {MINIMUM_SHAPE_POINTS} and "
                          f"{MAXIMUM_SHAPE_POINTS} points; open splines are not representable")
     for index, point in enumerate(points):
-        if not isinstance(point, dict) or set(point) != set(POINT_FIELDS):
-            raise ValueError(f"{where}.points[{index}] defines exactly {list(POINT_FIELDS)}")
-        for field in POINT_FIELDS:
+        if (not isinstance(point, dict) or not set(POINT_FIELDS).issubset(point)
+                or set(point) - set(POINT_FIELDS) - set(FEATHER_POINT_FIELDS)):
+            raise ValueError(f"{where}.points[{index}] defines {list(POINT_FIELDS)} and optional feather offsets")
+        for field in (*POINT_FIELDS, *FEATHER_POINT_FIELDS):
+            if field not in point:
+                continue
             validate_scalar(point[field], field, f"{where}.points[{index}]")
 
 
@@ -363,7 +370,9 @@ def resolve_shapes(payload, frame):
     shapes = []
     for shape in (payload or {}).get("shapes", []):
         def points_at(at_frame):
-            return [{field: resolve_scalar(point[field], at_frame, field) for field in POINT_FIELDS}
+            return [{**{field: resolve_scalar(point[field], at_frame, field) for field in POINT_FIELDS},
+                     **{field: resolve_scalar(point.get(field, 0.0), at_frame, field)
+                        for field in FEATHER_POINT_FIELDS}}
                     for point in shape["points"]]
         resolved_points = points_at(frame)
         center_x = (min(p["x"] for p in resolved_points) + max(p["x"] for p in resolved_points)) / 2.0
@@ -373,6 +382,7 @@ def resolve_shapes(payload, frame):
             "mode": shape["mode"],
             "opacity": resolve_scalar(shape["opacity"], frame, "opacity"),
             "feather": resolve_scalar(shape["feather"], frame, "feather"),
+            "feather_model": shape.get("feather_model", "box"),
             "points": resolved_points,
             "transform": {field: resolve_scalar(shape.get("transform", {}).get(field,
                               center_x if field == "center_x" else center_y if field == "center_y" else default), frame, field)

@@ -413,6 +413,48 @@ class TilePathTests(unittest.TestCase):
 
 
 class RenderTests(unittest.TestCase):
+    def test_edge_feather_keeps_interior_solid_and_ends_at_the_outline_distance(self):
+        shape = square(10, 10, 30, 30, feather=10.0, feather_model="edge")
+        alpha = roto.rasterise([shape], 50, 50)[15, :, 3]
+        self.assertEqual(float(alpha[15]), 1.0)
+        self.assertEqual(float(alpha[40]), 0.0)
+        self.assertGreater(alpha[30], alpha[34])
+        self.assertGreater(alpha[34], alpha[39])
+        self.assertEqual(float(alpha[41]), 0.0)
+
+    def test_negative_edge_feather_moves_the_solid_edge_inward(self):
+        alpha = roto.rasterise([square(10, 10, 30, 30, feather=-4.0, feather_model="edge")], 40, 40)[20, :, 3]
+        self.assertEqual(float(alpha[16]), 1.0)
+        self.assertLess(alpha[10], 0.5)
+
+    def test_wide_feather_does_not_thin_a_narrow_shape(self):
+        alpha = roto.rasterise([square(10, 10, 16, 30, feather=20.0, feather_model="edge")], 40, 40)[20, :, 3]
+        self.assertEqual(float(alpha[13]), 1.0)
+
+    def test_vertex_feather_offset_is_local_to_its_outline_span(self):
+        shape = square(10, 10, 30, 30, feather=4.0, feather_model="edge")
+        shape["points"][0]["feather_y"] = -12.0
+        alpha = roto.rasterise([shape], 45, 45)[:, :, 3]
+        self.assertGreater(alpha[6, 11], alpha[6, 25])
+        self.assertEqual(float(alpha[25, 11]), 1.0)
+
+    def test_all_edge_falloffs_are_monotonic(self):
+        for falloff in ("linear", "smooth", "gaussian"):
+            alpha = roto.rasterise([square(10, 10, 30, 30, feather=10.0, feather_model="edge",
+                                            feather_falloff=falloff)], 50, 50)[15, 30:, 3]
+            self.assertTrue(np.all(np.diff(alpha) <= 1e-6), falloff)
+
+    def test_pre_edge_documents_migrate_to_box_feather(self):
+        doc = empty_document()
+        doc["version"] = SCHEMA_VERSION - 1
+        doc["node_data"] = {"r": {"shapes": [square(8, 8, 24, 24, feather=3.0)]}}
+        migrated = upgrade_document(doc)
+        self.assertEqual(migrated["node_data"]["r"]["shapes"][0]["feather_model"], "box")
+        legacy = square(8, 8, 24, 24, feather=3.0)
+        expected = roto.rasterise([legacy], 36, 36)
+        actual = roto.rasterise(shapes.resolve_shapes(migrated["node_data"]["r"], 1), 36, 36)
+        np.testing.assert_array_equal(actual, expected)
+
     def render(self, doc, key, frame=1):
         return Evaluator().evaluate_raster(doc, key, frame=frame)
 

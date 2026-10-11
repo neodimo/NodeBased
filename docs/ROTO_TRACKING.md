@@ -202,11 +202,13 @@ Deterministic, CPU, NumPy:
    therefore quantised to `1/SUBSAMPLES` while horizontal is continuous. This
    asymmetry is a known limitation of the reference implementation, recorded
    rather than hidden.
-4. Feather is a separable box blur of that shape's coverage by the feather
-   radius. This is an approximation of a true offset-curve feather: it softens
-   symmetrically about the edge instead of growing the shape outward, and a
-   feather wider than a thin shape's waist will thin it. Nuke's roto does not
-   behave this way. Recorded as a deliberate reference-implementation choice.
+4. New shapes use the edge-distance feather: the interior remains solid to the
+   outline, then coverage falls to zero at the feather distance along the
+   outline normal. Negative values move the feather inward. Linear, smooth and
+   Gaussian choices shape that ramp. Per-point X/Y offsets are interpolated
+   along each flattened span and alter its feather distance locally. Older
+   documents retain their original separable box-blur model through the
+   `feather_model` migration field; the panel offers a one-click switch.
 5. Combine into the accumulated matte per `mode`, scaled by `opacity`.
 
 ## Tracker
@@ -350,10 +352,9 @@ stored payload, exactly as `docs/ANIMATION.md` specifies for parameters:
 
 Roto, Tracker and Stabilize are deliberately **absent** from `tiles.SUPPORTED_TILED_KINDS`,
 so a graph containing one reports `supports_tiled() == False` and falls back to
-the reference `Evaluator` through the existing explicit telemetry. Two reasons:
-roto feather is a box blur that needs halo handling a tile boundary does not yet
-provide, and `Tracker`'s region is data-dependent, so the tile scheduler would
-have to solve before it could plan.
+the reference `Evaluator` through the existing explicit telemetry. Tracker's
+region is data-dependent, so the tile scheduler would have to solve before it
+could plan; roto's distance field currently evaluates the full outline.
 
 The tile digest carries no `node_data` term. That is safe only while the two
 sets stay disjoint, so `tests/test_roto.py` asserts the disjointness directly —
@@ -393,7 +394,7 @@ first (see "Paint strokes" below).
   code path. Until then, keying a point means sending the whole shape list
   through `set_shapes`.
 * Tracking is supported by the analysis workflow above; planar tracking remains outside this node.
-* No open/stroked splines, no per-point feather, no motion blur, no planar tracking, no ROI-limited or tiered execution —
+* No open/stroked splines, no feather-handle editing in the viewer, no planar tracking, no ROI-limited or tiered execution —
   the evaluator still runs full frame; this pass only declares its rules.
 
 ## Transform viewer handle

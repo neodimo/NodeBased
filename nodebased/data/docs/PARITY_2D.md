@@ -52,7 +52,7 @@ Today's 2D node set is the 164 kinds above (the node catalogue's Image through O
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Roto | supported | `Roto` rasterises Bezier/B-spline shapes with feather and mode (`docs/ROTO_TRACKING.md`). Like Nuke's own Roto it is a shapes-only generator; the paint tools live on the `RotoPaint` node (row 7 below), which stores shapes and strokes in one ordered list. Built there: Brush (colour, opacity, hardness with a soft falloff, size, per-point pressure, spacing), Eraser, Clone (source offset and source frame, relative or absolute), Reveal (from input2), Blur, Sharpen, Smear, Dodge and Burn, each stroke with a frame lifetime (all frames, single frame, from/to range, from the current frame), a blend mode, a Tracker-follow option, and hide, reorder and delete in the Layers list. Not built: Nuke's per-stroke colour correction and its onion-skin. |
+| 1 | Roto | supported | `Roto` rasterises Bezier/B-spline shapes with an outward edge feather, per-point feather offsets and mode (`docs/ROTO_TRACKING.md`); pre-existing documents preserve the historical box-blur model until switched in the panel. Like Nuke's own Roto it is a shapes-only generator; the paint tools live on the `RotoPaint` node (row 7 below), which stores shapes and strokes in one ordered list. Built there: Brush (colour, opacity, hardness with a soft falloff, size, per-point pressure, spacing), Eraser, Clone (source offset and source frame, relative or absolute), Reveal (from input2), Blur, Sharpen, Smear, Dodge and Burn, each stroke with a frame lifetime (all frames, single frame, from/to range, from the current frame), a blend mode, a Tracker-follow option, and hide, reorder and delete in the Layers list. Not built: Nuke's per-stroke colour correction and its onion-skin. |
 | 2 | Text | supported | `Text`, rendered through Qt's own text rasteriser offscreen (no new dependency); font availability is a machine property, not something NodeBased embeds or controls. |
 | 3 | Rectangle | supported | `Rectangle`, an area box with fractional softness, colour and an optional image input the box is composited over. |
 | 4 | Ramp | supported | `Ramp`, a linear gradient between two points and two colours, Nuke's own knob names. |
@@ -418,6 +418,14 @@ and D65/D60/DCI.
 **2026-10-11, step L1 of 3 (Rendering 13).** `Undistort` and `Redistort` apply a camera's Brown-Conrady lens (or a node preset) with overscan: undistorting a checker and redistorting it returns it within a pixel-filter tolerance away from the border, a known distortion of a render is undone against the undistorted render, and proxy tiers and the full-frame fallback agree. Tests: `tests/test_lens_l1.py`.
 
 ## Lane 8 step notes
+
+### R7: edge feather model
+
+Newly drawn shapes use an outward signed-distance feather; older saved shapes
+keep their box-blur output until switched in the Roto panel. Feather offsets are
+stored per point and interpolate across the outline. Pixel tests cover solid
+interiors, negative feather, narrow shapes and falloff monotonicity. A 1920 ×
+1080 square with feather 50 rendered in 0.1083 seconds on this machine.
 
 **2026-10-07, step Q2 (complete).** HueCorrect now exposes Nuke’s `sat_thrsh`: zero preserves legacy output; a positive value holds low-saturation pixels unchanged and smoothly fades correction in across the next threshold-width. MinColor and Sampler expose frame ranges and analyze the region at each frame, storing their existing and average RGBA results as animation keys; CurveTool also reads its interpolated box and other analysis controls per frame. Tests include thresholded grey/colour pixels, tile parity, legacy defaults and hand-checked moving-region values.
 

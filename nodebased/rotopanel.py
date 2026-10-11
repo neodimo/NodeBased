@@ -202,7 +202,7 @@ def build_panel(window, key):
         layout.addWidget(follow_mode)
         for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
             cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
-        for field, label, lo, hi, step in (("feather", "Feather", 0, 500, 0.5),
+        for field, label, lo, hi, step in (("feather", "Feather", -500, 500, 0.5),
                                           ("opacity", "Opacity", 0, 1, 0.05)):
             spin = QDoubleSpinBox()
             spin.setObjectName("roto-shape-" + field)
@@ -252,6 +252,12 @@ def build_panel(window, key):
             for val in values: combo.addItem(val.title(),val)
             combo.setCurrentIndex(combo.findData(shape.get(field,"linear" if field=="feather_falloff" else "over")))
             combo.currentIndexChanged.connect(lambda idx,f=field,c=combo:edit(f,c.itemData(idx))); layout.addWidget(QLabel(field.replace("_"," ").title())); layout.addWidget(combo)
+        if shape.get("feather_model", "box") == "box":
+            switch = QPushButton("Switch to edge feather")
+            switch.setObjectName("roto-shape-edge-feather")
+            switch.setToolTip("Use the outward Nuke-style feather for this shape")
+            switch.clicked.connect(lambda: edit("feather_model", "edge"))
+            layout.addWidget(switch)
         color_row = QHBoxLayout()
         color=QPushButton("Choose colour…"); color.setObjectName("roto-shape-color")
         color.setToolTip("Choose the shape colour")

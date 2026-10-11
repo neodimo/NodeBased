@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -2303,6 +2303,13 @@ def upgrade_document(document):
                 for name, value in _LENS.items():
                     params.setdefault(name, value)
         doc["version"] = 21
+    if isinstance(doc, dict) and doc.get("version") == 21:
+        # v21 -> v22 preserves the historical symmetric blur on every stored shape. Shapes created
+        # after this migration explicitly select the edge-distance model.
+        for payload in doc.get("node_data", {}).values():
+            for shape in payload.get("shapes", []):
+                shape.setdefault("feather_model", "box")
+        doc["version"] = 22
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

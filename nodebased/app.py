@@ -2715,7 +2715,7 @@ class Viewer(PanZoomView):
             index += 1
         shapes = copy.deepcopy(payload.get("shapes", []))
         shape = {"name": f"shape{index}", "mode": "union", "opacity": 1.0,
-                 "feather": 0.0, "points": points}
+                 "feather": 0.0, "feather_model": "edge", "points": points}
         shapes.append(shape)
         self.cancel_roto_edit()
         # Whole-payload replacement is the Dispatcher validation/undo boundary.  The local frame
