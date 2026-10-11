@@ -64,6 +64,16 @@ for one worker step (a few hours), reviewed and display-checked by Gonzo.
    or are removed; Agent panel and Conditioning Queue restyled to the new look since the demo lives
    in them.
 6. **Release with the demo.** Tag, then a short capture of the two runs appended to the release.
+7. **Real-time camera tracking.** Today's solve needs survey points (`examples/demo_shot/solve_camera.py`
+   fits the camera to 2D tracks of known points) and cannot work on a plate with no survey. The target
+   is a learned monocular SLAM that returns per-frame poses, intrinsics and a sparse point cloud at or
+   near frame rate on the RTX 3080 Ti, as a `CameraSolve3D` node backed by a GPU subprocess like the
+   model provider. Candidates: DROID-SLAM (dense bundle adjustment, the accuracy reference, heavy),
+   DPVO / DPV-SLAM (its successor from the same group, several times faster and a fraction of the
+   memory, real-time on consumer cards, the first to run), MASt3R-SLAM (real-time dense SLAM on a 3D
+   reconstruction prior, no fixed camera model, the one to watch). Benchmark on the demo plate, then on
+   a filmed plate from DiMo. Measured: pose error against truth, frames per second, VRAM, and whether
+   the result drives the conditioning export unchanged.
 
 ## Order and cost
 
