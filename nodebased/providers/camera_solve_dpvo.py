@@ -109,27 +109,29 @@ def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progre
     job_path.write_text(json.dumps(job, indent=1), encoding="utf-8")
     env = dict(os.environ, PYTHONUNBUFFERED="1", CUBLAS_WORKSPACE_CONFIG=":4096:8")
     # No address-space cap: CUDA reserves terabytes of virtual address space (workers.py, local_gpu).
-    process = subprocess.Popen([provider_python(), "-I", str(Path(__file__).resolve()), "run", str(job_path)],
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
-    tail = []
-    try:
-        for line in process.stdout:
-            line = line.rstrip()
-            tail = (tail + [line])[-40:]
-            if line.startswith("progress "):
-                _, done, total = line.split()
-                if progress:
-                    progress((int(done) / int(total), f"Frame {int(done)}: tracked"))
-            if cancelled is not None and cancelled.is_set():
+    from ..gpulock import gpu_job  # the solver side of this file runs in another interpreter, so import here
+    with gpu_job(cancelled):
+        process = subprocess.Popen([provider_python(), "-I", str(Path(__file__).resolve()), "run", str(job_path)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+        tail = []
+        try:
+            for line in process.stdout:
+                line = line.rstrip()
+                tail = (tail + [line])[-40:]
+                if line.startswith("progress "):
+                    _, done, total = line.split()
+                    if progress:
+                        progress((int(done) / int(total), f"Frame {int(done)}: tracked"))
+                if cancelled is not None and cancelled.is_set():
+                    process.kill()
+                    raise RuntimeError("Job cancelled")
+            code = process.wait()
+        finally:
+            if process.poll() is None:
                 process.kill()
-                raise RuntimeError("Job cancelled")
-        code = process.wait()
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait()
-    if code:
-        raise RuntimeError(f"{PROVIDER_NAME} solver process failed (exit {code}): " + " | ".join(tail[-8:])[-1200:])
+                process.wait()
+        if code:
+            raise RuntimeError(f"{PROVIDER_NAME} solver process failed (exit {code}): " + " | ".join(tail[-8:])[-1200:])
     with np.load(job["result"]) as result:
         solved = {"c2w": np.array(result["c2w"], np.float64), "points": np.array(result["points"], np.float64),
                   "colors": np.array(result["colors"], np.uint8)}

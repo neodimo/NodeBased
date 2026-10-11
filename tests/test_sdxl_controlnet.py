@@ -16,6 +16,7 @@ from unittest import mock
 
 import numpy as np
 
+import tests.isolation  # noqa: F401  (a private GPU lock file, so a stub provider does not wait for the suite)
 from nodebased.artifacts import ArtifactStore
 from nodebased.generative import GENERATION_MANIFEST, ProviderDescription, generate
 from nodebased.providers import sdxl_controlnet as sdxl

@@ -31,3 +31,12 @@ if not hasattr(Preferences.workspace, "real_workspace"):
 
     _no_saved_workspace.real_workspace = _REAL_WORKSPACE
     unittest.mock.patch.object(Preferences, "workspace", _no_saved_workspace).start()
+
+# Jobs that use the whole GPU take an exclusive lock on /tmp/nb-gpu.lock (nodebased/gpulock.py), and the
+# suite wrapper holds that file locked for its own run; a stubbed provider launched inside the suite
+# would wait for its own parent. Tests get a private lock file instead (tests/test_gpulock.py checks the
+# real locking against one).
+import os  # noqa: E402
+
+_GPU_LOCK = tempfile.NamedTemporaryFile(prefix="nodebased-test-gpu-", suffix=".lock")
+os.environ["NODEBASED_GPU_LOCK"] = _GPU_LOCK.name

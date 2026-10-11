@@ -172,29 +172,31 @@ def run_frames(controls, *, text, seed, sampler_settings, workdir, progress=None
     env = dict(os.environ, CUBLAS_WORKSPACE_CONFIG=":4096:8", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
                PYTHONUNBUFFERED="1", TOKENIZERS_PARALLELISM="false")
     # No address-space cap here: CUDA reserves terabytes of virtual address space (see workers.py, local_gpu).
-    process = subprocess.Popen([provider_python(), "-I", str(Path(__file__).resolve()), "run", str(job_path)],
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
-    tail = []
-    try:
-        for line in process.stdout:
-            line = line.rstrip()
-            tail = (tail + [line])[-40:]
-            if line.startswith("progress "):
-                _, done, total = line.split()
-                if progress:
-                    progress((int(done) / int(total), f"Frame {rows[min(int(done), len(rows)) - 1]['frame']}: generated"))
-            else:
-                print(line, flush=True)
-            if cancelled is not None and cancelled.is_set():
+    from ..gpulock import gpu_job  # the model side of this file runs in another interpreter, so import here
+    with gpu_job(cancelled):
+        process = subprocess.Popen([provider_python(), "-I", str(Path(__file__).resolve()), "run", str(job_path)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+        tail = []
+        try:
+            for line in process.stdout:
+                line = line.rstrip()
+                tail = (tail + [line])[-40:]
+                if line.startswith("progress "):
+                    _, done, total = line.split()
+                    if progress:
+                        progress((int(done) / int(total), f"Frame {rows[min(int(done), len(rows)) - 1]['frame']}: generated"))
+                else:
+                    print(line, flush=True)
+                if cancelled is not None and cancelled.is_set():
+                    process.kill()
+                    raise RuntimeError("Job cancelled")
+            code = process.wait()
+        finally:
+            if process.poll() is None:
                 process.kill()
-                raise RuntimeError("Job cancelled")
-        code = process.wait()
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait()
-    if code:
-        raise RuntimeError(f"sdxl_controlnet model process failed (exit {code}): " + " | ".join(tail[-8:])[-1200:])
+                process.wait()
+        if code:
+            raise RuntimeError(f"sdxl_controlnet model process failed (exit {code}): " + " | ".join(tail[-8:])[-1200:])
     info = json.loads(Path(job["info"]).read_text(encoding="utf-8"))
     if os.environ.get(RUN_INFO_ENV):  # the run's timings and peak VRAM, for a caller that wants them (never in the artifact)
         Path(os.environ[RUN_INFO_ENV]).write_text(json.dumps(info, indent=1), encoding="utf-8")

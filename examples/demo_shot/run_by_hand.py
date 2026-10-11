@@ -19,6 +19,7 @@ Run it twice and the ids and the output frames are identical.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -32,6 +33,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import shot  # noqa: E402
 
 REPO = shot.HERE.parents[1]
+sys.path.insert(0, str(REPO))
+from nodebased.gpulock import gpu_job  # noqa: E402
+
+CPU_PROVIDERS = ("reproject", "null")
 
 
 class Agent:
@@ -105,6 +110,14 @@ def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, lo
     last = frames or document["time"]["last"]
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
+    # A run that uses the card holds the GPU lock for its whole length; its providers see
+    # NODEBASED_GPU_LOCK_HELD and do not wait for it again. The default reproject run never touches the card.
+    uses_gpu = solver == "dpvo" or provider not in CPU_PROVIDERS
+    with gpu_job(log=log) if uses_gpu else contextlib.nullcontext():
+        return _run(plate, out, cache, graph, document, generate, provider, last, log, solver)
+
+
+def _run(plate, out, cache, graph, document, generate, provider, last, log, solver):
     agent = Agent(graph, cache)
     try:
         agent.call(op="set", id="plate", param="path", value=shot.plate_pattern(plate))
