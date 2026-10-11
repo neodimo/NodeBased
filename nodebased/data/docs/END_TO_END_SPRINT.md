@@ -123,3 +123,43 @@ Built before the real model exists, so stage 3 only swaps the provider. Files an
   not the layers. (3) A camera held to 1 cm cannot be verified from pixels at 480 by 270 for a provider
   whose output is not pixel-exact; stage 3's real model will need either a larger plate or a looser,
   stated camera tolerance for pixel-solved cameras, DiMo's call.
+
+## Stage 4b: the same shot by an attached agent (10/10)
+
+- **The scripted agent** (`examples/demo_shot/run_by_agent.py`, built on the reusable headless client
+  `nodebased/mcpclient.py`): an offscreen NodeBased window with the `--agent` bridge on the shot graph, the
+  stdio MCP server attached, and a fixed plan with no model in the loop. It gets the one-sentence brief and the
+  plate folder and reaches the written frames through MCP tools alone (`knowledge`, `describe`, `inspect`,
+  `edit`, `export_conditioning`, `generate`, `verify`, `edit` for the generated read, grade input and Write
+  path, `edit` `render` per frame, `artifacts`). Its exact sequence is the worked example in
+  docs/SHOT_WORKFLOW.md. The test is of the tools and the contract.
+- **The comparison** (`compare_runs.py`, both runs with fresh stores, 309 s at full size): SceneState,
+  ControlBundle, generated sequence, verification report, verdict, determinism section and the written
+  frames' pixel digest all match, and equal the Stage 4a ids above. The graph needed no change: the hand run
+  and the agent plan already build the same document. The written frames have no artifact id (they leave the
+  store, and the EXR header holds a write time), so that row compares the SHA-256 of the pixels and says so.
+- **Two bugs the scripted agent and the real one found.** (1) The desktop bridge had no `render` op: `edit`
+  with a render command failed with "cannot run inside a group" (the headless dispatcher had it; both now
+  share `agent.render_op`). (2) The MCP server dropped the connection after 30 s while the window was still
+  exporting 24 frames; export, generate, verify, loop, artifacts and render replies now wait up to an hour.
+- **A real agent, once** (`run_by_claude.py`: Claude Code 2.1, model claude-opus-5-5, `claude -p` with the
+  nodebased MCP server registered the way the Agent panel does, a fresh store, given the brief, the plate
+  folder and the output folder). 22 nodebased tool calls and 221 s, about 1.02 US dollars. Sequence:
+  `knowledge` shot_workflow, `inspect`, `knowledge` protocol, `knowledge` limits, `edit` (plate and Write paths,
+  view), `errors`, `export_conditioning` (on `render`, not `export`: same ids), `generate` (provider, seed and
+  the graph's text verbatim), `verify`, `edit` (a ConditionedRead made from the reply, connected to `grade`),
+  render of frame 1, one `edit` holding the other 23 renders, then `errors`, `artifacts` provenance and a few
+  viewing calls. **Its ids matched the hand run's**: SceneState, ControlBundle, generated sequence and report,
+  and the written frames' pixel digest, all equal to the Stage 4a values.
+  - Where it went wrong: the live viewer reported "NameError: name 'self' is not defined" on the
+    ConditionedRead chain, and the agent spent eight calls (`errors`, extra `view`, a temporary Read node,
+    `reference_context`) deciding whether its frames were good. The cause was a real bug: the tile executor's
+    canvas-size walk used `self` and a wrong variable inside a module function when a chain started at a
+    ConditionedRead (fixed, with a test in tests/test_conditioned_read.py). It also said plainly that the
+    rainy street was not generated, which is true of the `reproject` stand-in.
+  - What SHOT_WORKFLOW.md now says so it would not wander: the worked example names the node ids of the demo
+    graph and that `render` and `export` give the same ids, says to send the brief character for character,
+    says to report `text` as ignored rather than describe a street, and lists the five expected ids to check
+    against. Still open: the topic does not tell an agent how to confirm a result when the viewer shows an
+    error (compare the written frames' pixels, not the viewer); worth one sentence once the viewer is clean
+    on a full run.

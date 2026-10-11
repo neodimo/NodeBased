@@ -15,6 +15,9 @@ real model comes in stage 3 and only swaps the provider.
 | `diagnose_verdict.py` | Measures the verifier on the shot: each check's worst value, its threshold, and the same measurement for the plate against its own SceneState. |
 | `demo_shot.nbcomp` | The shot graph. |
 | `run_by_hand.py` | Headless run through the `nodebased.agent` dispatcher; prints artifact ids and the verdict. |
+| `run_by_agent.py` | The same shot through MCP tools only: a scripted agent on an offscreen window (stage 4b). |
+| `compare_runs.py` | Runs the hand run and the agent run with fresh stores and compares every id and the output pixels. |
+| `run_by_claude.py` | One real Claude Code session on the brief over MCP (needs the `claude` CLI and a login; network). |
 | `BRIEF.md` | The one-sentence brief and the MCP tool sequence for the agent run (stage 4b). |
 | `shot.py` | Shared scene, camera move and graph builder. |
 

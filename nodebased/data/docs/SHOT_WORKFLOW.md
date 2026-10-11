@@ -58,7 +58,51 @@ A loop started from the GUI runs in the background and appears in the Conditioni
 `status`. The headless dispatcher (`python -m nodebased.agent`) runs a loop to completion before it
 replies. `workspace` needs the window and is refused headless.
 
-## Worked example: the smoke demo
+## Worked example: the demo shot
+
+`examples/demo_shot` (README.md there) holds a 24-frame plate rendered by NodeBased, a solved camera and
+the shot graph `demo_shot.nbcomp`, which already has the layout, the export node `export` (WriteGeo3D),
+`generate` (Generate, provider `reproject`, seed 7), `grade`, `merge` and `write`. The brief is one
+sentence: "replace the backdrop with a rainy street, keep the cube and sphere, match the camera". The
+scripted agent `run_by_agent.py` does the shot with exactly these calls, in this order, and
+`compare_runs.py` checks that the hand run reaches the same ids.
+
+1. `knowledge` `{"topic": "shot_workflow"}`, `describe`, `inspect`. Find the `Read`, `WriteGeo3D`,
+   `Generate`, `Grade` and `Write` nodes in the document and read the provider and seed from the
+   `Generate` node.
+2. `edit` `[{"op": "set", "id": "plate", "param": "path", "value": "<plate folder>/plate.%04d.exr"}]`.
+3. `export_conditioning` `{"id": "export", "first": 1, "last": 24}`.
+4. `generate` `{"scene_state": ..., "bundle": ..., "provider": "reproject", "seed": 7, "options": {"text":
+   "<the brief, character for character>"}}`. The text is part of the generated sequence's id. The reply
+   lists `text` under `ignored`: `reproject` carries the layout render forward by its motion vectors and
+   paints no street. Say so in your report; do not describe the result as a rainy street.
+5. `verify` `{"scene_state": ..., "bundle": ..., "generated_sequence": ...}`.
+6. `edit` `[{"op": "create", "id": "generated", "type": "ConditionedRead", "params": <the reply's node.params>},
+   {"op": "connect", "id": "grade", "input": "image", "source": "generated"}, {"op": "set", "id": "write",
+   "param": "path", "value": "<out folder>/shot.%04d.exr"}]`.
+7. One `edit` per frame, `[{"op": "render", "id": "write", "path": "<out folder>/shot.0001.exr", "frame": 1,
+   "bits": "half"}]`, frames 1 to 24 (needs the disk setting; a single call can hold several render ops,
+   and `bits` defaults to half).
+8. `artifacts` `{"action": "provenance", "id": <generated_sequence>}`: the chain holds the generated
+   sequence, the provider description, the SceneState and the ControlBundle.
+
+Expected from the demo plate (full size, 480 by 270, 24 frames; the first four ids are also what the
+hand run gives):
+
+| Result | Value |
+| --- | --- |
+| SceneState | `b52bc6b3536b15eca47d8c96c2d4d46c4d75532c516e5a09f31e3ea172cfdec7` |
+| ControlBundle | `e734808faf740d55be8ab7429532227e08fe3810b9aacdacc25c6d2474a3c708` |
+| Generated sequence | `47fdd43adee5f8bddc061dc9b9509802e8caadf1476d6e6c305ef1bc9440877d` |
+| Verification report | `3f49adfa081dfcf1d5f6d3121cc4ae62319528f3bd06f7554c970a3993994db1` (verdict PASS) |
+| Written frames, pixel digest | `ab52e1da767e59065ccfc024cd1e21397e3690fea87918a39475e8a5e260e766` |
+
+The written frames are not an artifact (they live in the folder you chose and the EXR header holds a
+write time), so they are compared by the SHA-256 of their pixels. Export from `render` or from `export`:
+both give the same SceneState and ControlBundle. A different text, seed or provider gives a different
+generated-sequence id.
+
+## Worked example: a smaller one, the smoke demo
 
 The same repeatable demo as "Artist workflow and repeatable local demo" in
 `docs/GENERATIVE_CONDITIONING.md`, driven through tools only. No paid provider, model download or
