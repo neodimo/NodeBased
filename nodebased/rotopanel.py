@@ -84,7 +84,8 @@ def build_panel(window, key):
         for field, default in shape_model.TRANSFORM_DEFAULTS.items():
             transform[field] = keyed(transform.get(field, resolved_transform[field]), field)
         for point in shape["points"]:
-            for field in shape_model.POINT_FIELDS:
+            for field in (*shape_model.POINT_FIELDS, *shape_model.FEATHER_POINT_FIELDS):
+                point.setdefault(field, 0.0)
                 point[field] = keyed(point[field], field)
         save(entries, index)
         window.rebuild_properties_dock()
@@ -173,6 +174,8 @@ def build_panel(window, key):
                     old = old or [1.0,1.0,1.0,1.0]
                     entries[i][field]=[value_at_frame(channel, replacement, "opacity")
                                        for channel,replacement in zip(old,value)]
+                elif field == "feather_model":
+                    entries[i][field] = value
                 else:
                     entries[i][field]=value_at_frame(old,value,field)
                 save(entries,i)
@@ -258,6 +261,22 @@ def build_panel(window, key):
             switch.setToolTip("Use the outward Nuke-style feather for this shape")
             switch.clicked.connect(lambda: edit("feather_model", "edge"))
             layout.addWidget(switch)
+        reset_feather = QPushButton("Reset feather on selected points")
+        reset_feather.setObjectName("roto-reset-feather-points")
+        reset_feather.setEnabled(not shape.get("locked") and any(si == i for si, _ in window.viewer.roto_selected_points))
+        def reset_selected_feather():
+            entries = current()
+            if i >= len(entries) or entries[i].get("locked"):
+                return
+            for si, pi in window.viewer.roto_selected_points:
+                if si != i or pi >= len(entries[i]["points"]):
+                    continue
+                point = entries[i]["points"][pi]
+                for field in shape_model.FEATHER_POINT_FIELDS:
+                    point[field] = value_at_frame(point.get(field, 0.0), 0.0, field)
+            save(entries, i)
+        reset_feather.clicked.connect(reset_selected_feather)
+        layout.addWidget(reset_feather)
         color_row = QHBoxLayout()
         color=QPushButton("Choose colour…"); color.setObjectName("roto-shape-color")
         color.setToolTip("Choose the shape colour")

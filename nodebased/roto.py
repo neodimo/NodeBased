@@ -241,14 +241,17 @@ def rasterise(shapes, width, height, invert=False):
     for shape in shapes:
         if not shape.get("visible", True):
             continue
-        cover = coverage(shape["points"], w, h)
         samples = shape.get("_motion_samples", ())
-        if samples:
-            cover = (cover + sum(coverage(points, w, h) for points in samples)) / (len(samples) + 1)
         falloff = shape.get("feather_falloff", "linear")
         if shape.get("feather_model", "box") == "edge":
-            cover = edge_feather(shape["points"], cover, shape["feather"], falloff)
+            layers = [shape["points"], *samples]
+            covers = [edge_feather(points, coverage(points, w, h), shape["feather"], falloff)
+                      for points in layers]
+            cover = sum(covers) / len(covers)
         else:
+            cover = coverage(shape["points"], w, h)
+            if samples:
+                cover = (cover + sum(coverage(points, w, h) for points in samples)) / (len(samples) + 1)
             cover = np.clip(feather(cover, shape["feather"]), 0.0, 1.0)
             if falloff == "smooth":
                 cover = cover * cover * (3.0 - 2.0 * cover)

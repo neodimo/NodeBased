@@ -243,6 +243,21 @@ class RotoArtistPanelTests(unittest.TestCase):
         self.window.command({"op":"redo"})
         self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["feather"],7.0)
 
+    def test_old_shape_can_switch_model_and_reset_selected_point_offsets(self):
+        entries = copy.deepcopy(self.shapes)
+        entries[0]["points"][0].update(feather_x=5.0, feather_y=-2.0)
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": entries})
+        self.window.viewer.roto_selected_points = {(0, 0)}
+        self.window.rebuild_properties_dock(); APP.processEvents()
+        panel = self.panel()
+        panel.findChild(QPushButton, "roto-shape-edge-feather").click()
+        self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["feather_model"], "edge")
+        panel = self.panel()
+        panel.findChild(QPushButton, "roto-reset-feather-points").click()
+        point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertEqual((point["feather_x"], point["feather_y"]), (0.0, 0.0))
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 3)
+
     def test_viewer_pick_updates_shape_list_selection(self):
         self.window.viewer.roto_selected_shape_index=0
         self.window.rebuild_properties_dock(); APP.processEvents()

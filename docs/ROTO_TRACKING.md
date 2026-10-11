@@ -208,7 +208,12 @@ Deterministic, CPU, NumPy:
    Gaussian choices shape that ramp. Per-point X/Y offsets are interpolated
    along each flattened span and alter its feather distance locally. Older
    documents retain their original separable box-blur model through the
-   `feather_model` migration field; the panel offers a one-click switch.
+   `feather_model` migration field; the panel offers a one-click switch. The
+   selected shape draws a dashed feather outline with per-point handles; drag
+   a handle or Ctrl-drag a point, and use **Reset feather on selected points**
+   to clear offsets. These edits are one undo step and key animated offsets at
+   the current frame. Shape transforms and full Tracker follow transform the
+   edge outline together with its control points.
 5. Combine into the accumulated matte per `mode`, scaled by `opacity`.
 
 ## Tracker
@@ -394,7 +399,7 @@ first (see "Paint strokes" below).
   code path. Until then, keying a point means sending the whole shape list
   through `set_shapes`.
 * Tracking is supported by the analysis workflow above; planar tracking remains outside this node.
-* No open/stroked splines, no feather-handle editing in the viewer, no planar tracking, no ROI-limited or tiered execution —
+* No open/stroked splines, no planar tracking, no ROI-limited or tiered execution —
   the evaluator still runs full frame; this pass only declares its rules.
 
 ## Transform viewer handle

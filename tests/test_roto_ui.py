@@ -74,6 +74,44 @@ class RotoOverlayTests(unittest.TestCase):
     def scene_pixel_tolerance(self):
         return 1.0 / max(abs(self.window.viewer.transform().m11()), 0.05) + 0.05
 
+    def _open_edge_shape(self):
+        shape = triangle(); shape.update(feather=6.0, feather_model="edge")
+        self.window.close(); APP.processEvents()
+        self.window = Window(roto_document([shape])); self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True); APP.processEvents()
+        return shape
+
+    def test_dragged_feather_handle_sets_offset_and_undoes_once(self):
+        from nodebased.shapes import feather_handle_points
+        shape = self._open_edge_shape(); viewer = self.window.viewer
+        handle = feather_handle_points(shape["points"], shape["feather"])[0]
+        start = self.scene_pos(handle["x"], handle["y"])
+        target = self.scene_pos(handle["x"]+4.0, handle["y"]+3.0)
+        QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(viewer.viewport(), target, 20)
+        QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=target)
+        point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertAlmostEqual(point["feather_x"], 4.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point["feather_y"], 3.0, delta=self.scene_pixel_tolerance())
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
+        self.window.command({"op": "undo"})
+        self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0].get("feather_x", 0), 0)
+
+    def test_ctrl_drag_point_sets_feather_vector_and_undoes_once(self):
+        self._open_edge_shape(); viewer = self.window.viewer
+        start = self.scene_pos(10, 10); target = self.scene_pos(14, 7)
+        QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton,
+                         Qt.KeyboardModifier.ControlModifier, pos=start)
+        QTest.mouseMove(viewer.viewport(), target, 20)
+        QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=target)
+        point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertAlmostEqual(point["feather_x"], 4.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point["feather_y"], -3.0, delta=self.scene_pixel_tolerance())
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
+        self.window.command({"op": "undo"})
+        self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0].get("feather_y", 0), 0)
+
     def test_drawing_commits_one_validated_payload_and_keeps_scene_bounds(self):
         viewer = self.window.viewer
         original_bounds = viewer.scene().itemsBoundingRect()

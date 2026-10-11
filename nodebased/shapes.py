@@ -60,6 +60,7 @@ NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks"
 # `tiers.PIXEL_UNIT_PARAMS`, or a shape keys a different part of the frame at tier 2.
 # See docs/EVALUATION_TIERS.md clause C3.
 PIXEL_UNIT_SCALARS = frozenset({"x", "y", "in_x", "in_y", "out_x", "out_y", "feather",
+                                "feather_x", "feather_y",
                                 "translate_x", "translate_y", "center_x", "center_y"})
 
 
@@ -242,8 +243,8 @@ def validate_payload(kind, payload, where):
             if not isinstance(item, dict) or item.get("kind") not in ("shape", "stroke"):
                 raise ValueError(f"{at}: expected a shape or stroke item")
             if item["kind"] == "shape":
-                expected = {"kind", "name", "mode", "opacity", "feather", "points", "blend", "visible"}
-                if set(item) != expected:
+                required_shape = {"kind", "name", "mode", "opacity", "feather", "points", "blend", "visible"}
+                if set(item) != required_shape:
                     raise ValueError(f"{at}: malformed layered shape")
                 shape = {k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
                 validate_shape(shape, at)
@@ -411,15 +412,38 @@ def apply_shape_transform(shape):
     sx, sy = t["scale_x"], t["scale_y"]
     angle = math.radians(t["rotate"])
     c, s = math.cos(angle), math.sin(angle)
+    if shape.get("feather_model") == "edge":
+        shape["feather"] *= math.sqrt(abs(sx * sy))
     def vector(x, y):
         x, y = x * sx, y * sy
         return c * x - s * y, s * x + c * y
-    for point in shape["points"]:
-        x, y = vector(point["x"] - cx, point["y"] - cy)
-        point["x"] = cx + x + t["translate_x"]
-        point["y"] = cy + y + t["translate_y"]
-        for xfield, yfield in (("in_x", "in_y"), ("out_x", "out_y")):
-            point[xfield], point[yfield] = vector(point[xfield], point[yfield])
+    point_sets = [shape["points"]]
+    if shape.get("feather_model") == "edge":
+        point_sets.extend(shape.get("_motion_samples", []))
+    for point_set in point_sets:
+        for point in point_set:
+            x, y = vector(point["x"] - cx, point["y"] - cy)
+            point["x"] = cx + x + t["translate_x"]
+            point["y"] = cy + y + t["translate_y"]
+            for xfield, yfield in (("in_x", "in_y"), ("out_x", "out_y"), ("feather_x", "feather_y")):
+                point[xfield], point[yfield] = vector(point.get(xfield, 0.0), point.get(yfield, 0.0))
+
+
+def feather_handle_points(points, feather):
+    """Return viewer handle centres: outline normal offset plus each point's X/Y delta."""
+    coords = [(float(p["x"]), float(p["y"])) for p in points]
+    area = sum(coords[i][0]*coords[(i+1)%len(coords)][1] -
+               coords[(i+1)%len(coords)][0]*coords[i][1] for i in range(len(coords)))
+    winding = 1.0 if area >= 0 else -1.0
+    result = []
+    for i, point in enumerate(points):
+        prev = coords[(i-1) % len(coords)]; nxt = coords[(i+1) % len(coords)]
+        tx, ty = nxt[0]-prev[0], nxt[1]-prev[1]
+        length = math.hypot(tx, ty) or 1.0
+        nx, ny = winding*ty/length, -winding*tx/length
+        result.append({"x": coords[i][0]+nx*feather+float(point.get("feather_x", 0.0)),
+                       "y": coords[i][1]+ny*feather+float(point.get("feather_y", 0.0))})
+    return result
 
 
 def transform_point_group(points, *, center, scale_x=1.0, scale_y=1.0,
@@ -437,6 +461,8 @@ def transform_point_group(points, *, center, scale_x=1.0, scale_y=1.0,
         for xf, yf in (("in_x", "in_y"), ("out_x", "out_y")):
             x, y = float(point[xf]) * scale_x, float(point[yf]) * scale_y
             point[xf], point[yf] = c*x - s*y, s*x + c*y
+        x, y = float(point.get("feather_x", 0.0))*scale_x, float(point.get("feather_y", 0.0))*scale_y
+        point["feather_x"], point["feather_y"] = c*x-s*y, s*x+c*y
         result.append(point)
     return result
 
@@ -488,6 +514,27 @@ def unresolve_roto_point(point, shape, document, frame, tier=1):
     return result
 
 
+def unresolve_feather_vector(vector, shape, document, frame):
+    """Invert the shape and full-Tracker linear transforms for a feather handle vector."""
+    x, y = map(float, vector)
+    link = shape.get("track_link")
+    if link and shape.get("track_follow", "translate") == "full":
+        tracker_node = document.get("nodes", {}).get(link["tracker_id"])
+        if tracker_node is not None:
+            from .tracker import solve
+            tracked = solve(document.get("node_data", {}).get(link["tracker_id"], {}), frame,
+                            tracker_node["params"])
+            scale = float(tracked["scale"])
+            if abs(scale) > 1e-12:
+                angle = math.radians(tracked["rotate"]); c, s = math.cos(angle), math.sin(angle)
+                x, y = (c*x+s*y)/scale, (-s*x+c*y)/scale
+    t = resolve_shapes({"shapes": [shape]}, frame)[0]["transform"]
+    angle = math.radians(t["rotate"]); c, s = math.cos(angle), math.sin(angle)
+    if abs(t["scale_x"]) > 1e-12 and abs(t["scale_y"]) > 1e-12:
+        x, y = (c*x+s*y)/t["scale_x"], (-s*x+c*y)/t["scale_y"]
+    return x, y
+
+
 def resolve_roto_shapes(payload, frame, document=None, tier=1):
     """Resolve transforms and tracker links for both the evaluator and viewer overlay."""
     resolved = resolve_shapes(payload, frame)
@@ -512,12 +559,18 @@ def resolve_roto_shapes(payload, frame, document=None, tier=1):
             c, s = math.cos(angle), math.sin(angle)
             cx, cy = shape["transform"]["center_x"], shape["transform"]["center_y"]
             dx, dy = solved["translate_x"] / tier, solved["translate_y"] / tier
-            for point in shape["points"]:
-                x, y = (point["x"] - cx) * sx, (point["y"] - cy) * sy
-                point["x"], point["y"] = cx + c*x - s*y + dx, cy + s*x + c*y + dy
-                for xf, yf in (("in_x", "in_y"), ("out_x", "out_y")):
-                    point[xf], point[yf] = (point[xf]*sx*c-point[yf]*sy*s,
-                                             point[xf]*sx*s+point[yf]*sy*c)
+            if shape.get("feather_model") == "edge":
+                shape["feather"] *= abs(sx)
+            point_sets = [shape["points"]]
+            if shape.get("feather_model") == "edge":
+                point_sets.extend(shape.get("_motion_samples", []))
+            for point_set in point_sets:
+                for point in point_set:
+                    x, y = (point["x"] - cx) * sx, (point["y"] - cy) * sy
+                    point["x"], point["y"] = cx + c*x - s*y + dx, cy + s*x + c*y + dy
+                    for xf, yf in (("in_x", "in_y"), ("out_x", "out_y"), ("feather_x", "feather_y")):
+                        point[xf], point[yf] = (point.get(xf, 0.0)*sx*c-point.get(yf, 0.0)*sy*s,
+                                                 point.get(xf, 0.0)*sx*s+point.get(yf, 0.0)*sy*c)
         else:
             track = next((item for item in tracker_payload.get("tracks", [])
                           if item["name"] == link["track_name"]), None)

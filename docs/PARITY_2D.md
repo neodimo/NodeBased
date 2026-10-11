@@ -423,9 +423,13 @@ and D65/D60/DCI.
 
 Newly drawn shapes use an outward signed-distance feather; older saved shapes
 keep their box-blur output until switched in the Roto panel. Feather offsets are
-stored per point and interpolate across the outline. Pixel tests cover solid
-interiors, negative feather, narrow shapes and falloff monotonicity. A 1920 ×
-1080 square with feather 50 rendered in 0.1083 seconds on this machine.
+stored per point and interpolate across the outline. The selected shape has a
+dashed feather outline, draggable per-point handles, Ctrl-drag from a point,
+and a selected-points reset action; edits are undoable and key animated offsets
+at the current frame. Shape transforms and full Tracker follow include the
+outline. Pixel tests cover solid interiors, negative feather, narrow shapes
+and falloff monotonicity. A 1920 × 1080 square with feather 50 rendered in
+0.1083 seconds on this machine.
 
 **2026-10-07, step Q2 (complete).** HueCorrect now exposes Nuke’s `sat_thrsh`: zero preserves legacy output; a positive value holds low-saturation pixels unchanged and smoothly fades correction in across the next threshold-width. MinColor and Sampler expose frame ranges and analyze the region at each frame, storing their existing and average RGBA results as animation keys; CurveTool also reads its interpolated box and other analysis controls per frame. Tests include thresholded grey/colour pixels, tile parity, legacy defaults and hand-checked moving-region values.
 

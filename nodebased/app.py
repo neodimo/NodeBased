@@ -2639,6 +2639,16 @@ class Viewer(PanZoomView):
             vals={f:per_frame[f][1][field] for f in frames}
             new_point[field]=({"value":vals.get(frame, vals[frames[0]]),"curve":{"interpolation":"linear","keys":[{"frame":f,"value":v} for f,v in vals.items()]}}
                               if len(frames)>1 else vals[frames[0]])
+        for field in shape_model.FEATHER_POINT_FIELDS:
+            vals = {}
+            for f in frames:
+                a = shape_model.resolve_scalar(original[start_i].get(field, 0.0), f, field)
+                b = shape_model.resolve_scalar(original[end_i].get(field, 0.0), f, field)
+                vals[f] = a*(1.0-t)+b*t
+            new_point[field] = ({"value": vals.get(frame, vals[frames[0]]),
+                                 "curve": {"interpolation": "linear", "keys": [{"frame": f, "value": v}
+                                                                              for f, v in vals.items()]}}
+                                if len(frames) > 1 else vals[frames[0]])
         shape["points"].insert(insertion_i,new_point)
         self._commit_roto_shapes(key,node,shapes)
         self.roto_selected_points={(si,insertion_i)}; self.viewport().update(); return True
@@ -2723,7 +2733,8 @@ class Viewer(PanZoomView):
         if items is None:
             self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
         else:
-            items.append({"kind": "shape", **shape, "blend": "over", "visible": True})
+            paint_shape = {k: shape[k] for k in ("name", "mode", "opacity", "feather", "points")}
+            items.append({"kind": "shape", **paint_shape, "blend": "over", "visible": True})
             self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
 
@@ -2823,6 +2834,25 @@ class Viewer(PanZoomView):
                        for value in (shape.get("opacity"), shape.get("feather"), *shape.get("color", [])))
         animated = animated or any(isinstance(value, dict) and value.get("curve")
                                    for p in shape["points"] for value in p.values())
+        if drag.get("kind") in ("feather_handle", "feather_point"):
+            resolved_shape = self._roto_resolved(context)[shape_index]
+            resolved_point = resolved_shape["points"][point_index]
+            if drag["kind"] == "feather_handle":
+                base_handles = shape_model.feather_handle_points(
+                    [{**p, "feather_x": 0.0, "feather_y": 0.0} for p in resolved_shape["points"]],
+                    resolved_shape["feather"])
+                desired_world = (x-base_handles[point_index]["x"],
+                                 y-base_handles[point_index]["y"])
+            else:
+                desired_world = (x-resolved_point["x"], y-resolved_point["y"])
+            desired_local = shape_model.unresolve_feather_vector(
+                desired_world, shape, self.window.dispatcher.document, frame)
+            for field, value in zip(shape_model.FEATHER_POINT_FIELDS, desired_local):
+                point[field] = self._roto_scalar_at_frame(point.get(field, 0.0), frame, value, animated)
+            self.roto_drag = None
+            self._commit_roto_shapes(key, node, shapes)
+            self.viewport().update()
+            return True
         if drag.get("kind") == "tangent":
             hx, hy = (("in_x", "in_y") if drag["handle"] == "in" else ("out_x", "out_y"))
             px = shape_model.resolve_scalar(point["x"], frame, "x")
@@ -3335,6 +3365,21 @@ class Viewer(PanZoomView):
                             handle = self._roto_scene_point({"x": point["x"]+point[hx], "y": point["y"]+point[hy]}, tier)
                             painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawLine(center, handle)
                             painter.setBrush(QColor("#f4ce63")); painter.drawEllipse(handle, radius*.7, radius*.7)
+                if (shape_index == self.roto_selected_shape_index and shape.get("feather_model") == "edge"
+                        and (shape["feather"] != 0 or any(p.get("feather_x", 0) or p.get("feather_y", 0) for p in points))):
+                    feather_points = shape_model.feather_handle_points(points, shape["feather"])
+                    feather_path = QPainterPath(self._roto_scene_point(feather_points[0], tier))
+                    for feather_point in feather_points[1:]:
+                        feather_path.lineTo(self._roto_scene_point(feather_point, tier))
+                    feather_path.closeSubpath()
+                    feather_pen = QPen(QColor("#d6a7ff"), 1)
+                    feather_pen.setCosmetic(True); feather_pen.setStyle(Qt.PenStyle.DashLine)
+                    painter.setPen(feather_pen); painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawPath(feather_path)
+                    painter.setPen(QPen(QColor("#d6a7ff"), 1)); painter.setBrush(QColor("#382345"))
+                    for feather_point in feather_points:
+                        center = self._roto_scene_point(feather_point, tier)
+                        painter.drawEllipse(center, radius*.75, radius*.75)
             geometry = self._roto_box_geometry(resolved, tier)
             if geometry is not None:
                 _, bounds, _, box_pivot = geometry
@@ -3585,6 +3630,19 @@ class Viewer(PanZoomView):
             if 0 <= self.roto_selected_shape_index < len(resolved):
                 shape_index = self.roto_selected_shape_index
                 radius = 12.0 / max(abs(self.transform().m11()), .05)
+                selected_shape = resolved[shape_index]
+                if (not selected_shape.get("locked") and selected_shape.get("feather_model") == "edge"
+                        and (selected_shape["feather"] != 0 or any(p.get("feather_x", 0) or p.get("feather_y", 0)
+                                                                      for p in selected_shape["points"]))):
+                    handles = shape_model.feather_handle_points(selected_shape["points"], selected_shape["feather"])
+                    for point_index, handle in enumerate(handles):
+                        scene_handle = self._roto_scene_point(handle, context[3])
+                        if math.hypot(scene_handle.x()-scene_pos.x(), scene_handle.y()-scene_pos.y()) <= radius:
+                            hit = (shape_index, point_index)
+                            self.roto_selected_points.add(hit)
+                            self.roto_drag = {"point": hit, "kind": "feather_handle", "scene": scene_pos,
+                                              "start": scene_pos, "moved": False}
+                            self.setCursor(Qt.CursorShape.ClosedHandCursor); event.accept(); return
                 for point_index, point in enumerate(resolved[shape_index]["points"]):
                     for hx, hy, label in (("in_x", "in_y", "in"), ("out_x", "out_y", "out")):
                         if point[hx] == 0 and point[hy] == 0: continue
@@ -3598,12 +3656,15 @@ class Viewer(PanZoomView):
                             self.setCursor(Qt.CursorShape.ClosedHandCursor); event.accept(); return
             hit = self._roto_hit_point(scene_pos, resolved, context[3])
             if hit is not None:
+                if resolved[hit[0]].get("locked"):
+                    event.accept(); return
                 self.roto_selected_shape_index = hit[0]
                 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier: self.roto_selected_points.add(hit)
                 else: self.roto_selected_points = {hit}
                 self.window.rebuild_properties_dock()
                 self.roto_key = context[0]
-                self.roto_drag = {"point": hit, "kind": "point", "scene": scene_pos, "start": scene_pos,
+                self.roto_drag = {"point": hit, "kind": "feather_point" if event.modifiers() & Qt.KeyboardModifier.ControlModifier else "point",
+                                  "scene": scene_pos, "start": scene_pos,
                                   "moved": False}
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 event.accept()
