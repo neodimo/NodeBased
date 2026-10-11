@@ -1,3 +1,13 @@
+## 2026-10-11 3:20 PM PDT — Lane 6 P3 of 3 (PARTIAL)
+
+The preview cache now serves a 48³, 8-bit density/temperature artifact, plus liquid and whitewater point artifacts capped at 20,000 points with radii. Playback passes the cached liquid points directly to the viewport, avoiding surface reconstruction during motion. Disk reload does not consult the full-volume store; bounds and density integral survive within the test's 1% quantization tolerance.
+
+Production Hot pour (256³ / 192³, 120 frames) on the AMD Radeon 8060S: cold preview 4.07 FPS, warm preview 4.32 FPS; cold load+draw 245.7 ms. Frame 60 tier-4 to full-detail took 375.1 s to fetch/rebuild and 61 ms to draw. The preview misses the 80 ms budget, and full-detail stop misses the one-second target. P2 acceptance remains unchecked. llvmpipe was queued behind a full suite and an earlier exclusive GPU benchmark; its P3 row remains unmeasured.
+
+Code/doc commits: `01a298a`, `215d022`, `9ce5ef8`. Focused tests: proxy/cache and fixed point-budget coverage, liquid surface graph behavior, playback proxy control/stop refinement, and bundled-doc parity all passed. The production JSON is in `benchmarks/hot_pour/radeon-preview-P3-2026-10-11.json`; the 48.8 GB benchmark cache and logs are deliberate temporary scratch to remove before handoff.
+
+**Next owner:** Needs Gonzo to bring full-detail surface refinement below one second and the preview fetch+draw under 80 ms, then run the same playback benchmark on llvmpipe.
+
 ## 2026-10-10 — Lane 4 step R3 of 3: shadow catcher floor (DONE)
 
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (7:46 PM on 2026-10-11 PDT)
