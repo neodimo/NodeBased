@@ -375,10 +375,12 @@ frames are picked by count and spacing, the loss stages are fixed). DPV-SLAM its
 millimetre of camera position between seeded runs), and the recovered lens inherits that: two solves of one plate
 give two slightly different focal lengths.
 
+<!-- lens-benchmark:start -->
 **Measured.** Not recorded yet: the camera solve holds the GPU lock and a full suite held it for hours on 10/11, so
 the matrix (`solve_camera.py --solver dpvo --matrix`, 960 and 1920 wide, the plain plate and the k1 lens plate,
 typed focal length 1.2 times the truth) is queued behind it. The CPU tests prove the arithmetic on synthetic tracks
 with known truth: focal length within 1 percent at 1920 wide, k1 within 10 percent.
+<!-- lens-benchmark:end -->
 
 ## Stage 8: temporal coherence (10/11)
 

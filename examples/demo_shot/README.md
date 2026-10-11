@@ -86,7 +86,9 @@ The typed focal length is 1.2 times the truth in the estimate rows, the first-fr
 compared with the rendering camera after a similarity fit (rotation from the camera orientations, scale and shift from
 the positions: the solve is monocular).
 
+<!-- lens-benchmark:start -->
 Measured errors: not recorded yet, see docs/END_TO_END_SPRINT.md, "Stage 7, step L2" (the run waits for the GPU lock).
+<!-- lens-benchmark:end -->
 
 ## The shot graph
 
