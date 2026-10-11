@@ -1,5 +1,29 @@
 ## 2026-10-10 — Lane 4 step R3 of 3: shadow catcher floor (DONE)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (2:26 PM on 2026-10-11 PDT)
+
+`main` moved `6b83f1fd` -> `9e2bfcbd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 145 tests in 356.854 s, OK. Full suite on
+the stacked tip `9e2bfcbd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1011-0956.log`, started 9:56 AM): **Ran 5170 tests in 15407.340 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step L1 of 3: a lens model on the camera, and Undistort and Redistort nodes that share it.** Commits:
+  - `8c988f11` tests: pin the FluidSolver3D auto_resize migration test to schema 19; it derived the version from SCHEMA_VERSION - 1 and skipped the v19 step once the lens work moved the schema to 21
+  - `cf7f4922` Lens model on the camera and Undistort/Redistort nodes: Brown-Conrady distortion on Camera3D and imported cameras (schema 21), Undistort with overscan and Redistort sharing it, Project3D, the tracker rays and the SceneState export read the lens
+  Diff: 19 files changed, 970 insertions(+), 24 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step R6 of 3: Roto shapes move, scale and rotate as a whole, and follow the whole track (finish 1).** Commits:
+  - `4a25677a` roto: finish transform box gestures
+  Diff: 8 files changed, 499 insertions(+), 36 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (5:16 AM on 2026-10-11 PDT)
 
 `main` moved `7f7f6081` -> `badda6bc` (lane commits cherry-picked onto main in lane order) and then to this
