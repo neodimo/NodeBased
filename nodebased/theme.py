@@ -120,6 +120,9 @@ TOKENS = {
     "ch_r": "#ff6b6b", "ch_g": "#7be07b", "ch_b": "#6cc4ff",                    # the R, G and B channel buttons
 }
 
+# The area around the viewer's picture (2D and 3D): black in every theme, as in Nuke.
+VIEWER_SURROUND = "#000000"
+
 # The thirteen node families (UI-SPEC.md). No yellow: dark yellow reads brown and dirty.
 FAMILY_COLORS = {
     "Image": "#a3acb7", "Draw": "#7cc8f2", "Time": "#ff8a65", "Channel": "#f2849e",

@@ -35,7 +35,7 @@ TEXTURE_TIER = 4
 DRAG_SCALE = 0.5  # CPU fallback only: half size while the mouse is down, full size on release
 CPU_SPLATS = 200_000  # CPU fallback only: splat centres drawn per cloud
 HOME = (35.0, 20.0, 7.0)
-BACKGROUND = (0.025, 0.025, 0.03, 1.0)
+BACKGROUND = (0.0, 0.0, 0.0, 1.0)   # the viewer's surround is pure black in every theme
 SELECT_COLOR = (0.98, 0.7, 0.15, 1.0)
 PICK_DRAG_THRESHOLD = 3  # pixels of motion before a left-button press is a navigation drag, not a click
 

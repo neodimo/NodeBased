@@ -64,7 +64,7 @@ class GenerateSignals(QObject):
 from .topbar import SEARCH_PLACEHOLDER, TopBar
 from .nodeshelf import NODE_KIND_MIME_TYPE, FAVOURITES as FAVOURITES_CATEGORY, RECENT as RECENT_CATEGORY, NodeShelf
 from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, grid_color,
-                    valid_accent, TOKENS, FAMILY_COLORS, TYPE, theme_colors)
+                    valid_accent, TOKENS, FAMILY_COLORS, TYPE, theme_colors, VIEWER_SURROUND)
 from .color import VIEWS
 from . import gpudisplay
 from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE, VIEWER_INPUT_COUNT,
@@ -1273,6 +1273,9 @@ class Viewer(PanZoomView):
         self._initial_fit_pending = True
         self._image_rect = QRectF()
         super().__init__(QGraphicsScene())
+        # The surround of the picture is pure black in every theme, as in Nuke's viewer, so the
+        # image's own black letterbox and the surround read as one.
+        self.setBackgroundBrush(QColor(VIEWER_SURROUND))
         self.set_image_rect(QRectF(0, 0, 0, 0))
         self.last_scale = 1
         self.last_render_region = None
