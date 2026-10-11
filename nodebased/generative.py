@@ -61,6 +61,8 @@ class ProviderDescription:
     color_spaces: tuple[str, ...]
     locality: str
     returns: dict
+    # A provider whose subprocess drives the GPU (CUDA reserves terabytes of address space): no worker memory cap.
+    local_gpu: bool = False
 
     @classmethod
     def load(cls, source):
@@ -79,7 +81,7 @@ class ProviderDescription:
             raise ValueError("Provider locality must be local or remote")
         return cls(data["name"], data["version"], data["accepts"],
                    tuple(data["limits"]["max_resolution"]), int(data["limits"]["max_frames"]),
-                   tuple(data["color_spaces"]), data["locality"], data["returns"])
+                   tuple(data["color_spaces"]), data["locality"], data["returns"], bool(data.get("local_gpu", False)))
 
     def accepted(self, control):
         return self._accepted(self.accepts.get(control, False))

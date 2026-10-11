@@ -44,6 +44,17 @@ def job_memory_bytes(options):
     except (KeyError, TypeError, ValueError, OSError):
         return DEFAULT_MEMORY_BYTES
     return max(DEFAULT_MEMORY_BYTES, BASE_MEMORY_BYTES + WORKING_COPIES * pixels * BUNDLE_CHANNELS * 4)
+def _declares_local_gpu(provider_id):
+    """True when the provider's description says its subprocess uses the GPU (`local_gpu`)."""
+    if ":" in provider_id:
+        return False
+    try:
+        from .generative import ProviderDescription
+        return ProviderDescription.load(provider_id).local_gpu
+    except (OSError, ValueError, KeyError):
+        return False
+
+
 DEFAULT_WALL_SECONDS = 30 * 60
 CANCEL_GRACE_SECONDS = 1.0
 MAX_MESSAGE = 16 * 1024 * 1024
@@ -224,6 +235,9 @@ class Worker:
         self.job = job
         # None sizes the cap from the job (job_memory_bytes); an explicit value is used as given.
         self.memory_bytes = int(job_memory_bytes(job.options) if memory_bytes is None else memory_bytes)
+        # A provider that declares `local_gpu` drives CUDA from a subprocess, and CUDA reserves terabytes of
+        # address space at start-up: the address-space cap would kill it, so the job runs without one.
+        self.local_gpu = _declares_local_gpu(job.provider_id)
         self.wall_seconds = float(wall_seconds)
         self.cancel_grace = float(cancel_grace)
         self.process = None
@@ -302,7 +316,7 @@ class Worker:
             self.process = subprocess.Popen([sys.executable, "-m", "nodebased.workers", address, json.dumps(job)],
                                             stdout=log, stderr=subprocess.STDOUT, env=env)
             try:
-                windows_job = _windows_memory_job(self.process, self.memory_bytes)
+                windows_job = None if self.local_gpu else _windows_memory_job(self.process, self.memory_bytes)
             except OSError:
                 self.process.kill(); self.process.wait(); listener.close(); raise
         else:
@@ -310,7 +324,8 @@ class Worker:
                 import resource
                 resource.setrlimit(resource.RLIMIT_AS, (self.memory_bytes, self.memory_bytes))
             self.process = subprocess.Popen([sys.executable, "-m", "nodebased.workers", address, json.dumps(job)],
-                                            stdout=log, stderr=subprocess.STDOUT, env=env, preexec_fn=limit_memory)
+                                            stdout=log, stderr=subprocess.STDOUT, env=env,
+                                            preexec_fn=None if self.local_gpu else limit_memory)
         try:
             parent = self._accept(listener, token)
         except EOFError as exc:
