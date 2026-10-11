@@ -1,16 +1,28 @@
 """Solve the camera from the plate alone and compare it with the camera that rendered it.
 
-Survey points of the set (known world coordinates) are clicked in the first frame (here: the true
-projection rounded to a whole pixel, the precision of a click), tracked through the plate with
-nodebased.tracker, and the camera is fitted to the tracks on every frame starting from a generic
-guess that is not the true camera. The same fit and the same error measures are the ones the
-conditioning verifier uses (nodebased.conditioning_verify).
+`--solver survey` (the default): survey points of the set (known world coordinates) are clicked in the first
+frame (here: the true projection rounded to a whole pixel, the precision of a click), tracked through the plate
+with nodebased.tracker, and the camera is fitted to the tracks on every frame starting from a generic guess that
+is not the true camera. The same fit and the same error measures are the ones the conditioning verifier uses
+(nodebased.conditioning_verify).
+
+`--solver dpvo` solves the plate with no survey at all, through the CameraSolve3D node (the GPU; DPV-SLAM), and
+`--lens estimate` lets the node recover the focal length (and `--distortion k1` the radial lens) from the
+solver's own tracked points. The plate is rendered by make_plate.py at `--width` (a plain one, or the lens plate
+with `--plate-k1`), the typed focal length is `--typed-focal-scale` times the truth, and the recovered lens and
+camera are compared with the camera that rendered it. `--matrix` runs every combination and writes
+lens_benchmark.json:
+
+    python examples/demo_shot/solve_camera.py --solver dpvo --lens estimate --distortion k1 --width 960 --plate-k1 -0.03
+    python examples/demo_shot/solve_camera.py --solver dpvo --matrix
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -120,10 +132,122 @@ def read_plate(folder, frames=shot.FRAMES):
     return out
 
 
+# ----------------------------------------------------------------------------- the DPVO lens benchmark
+
+BENCHMARK = shot.HERE / "lens_benchmark.json"
+WIDTHS = (960, 1920)
+# (typed focal as a multiple of the truth, the node's focal mode, its distortion): what the artist could ask for
+SETTINGS = ((1.0, "known", "none"), (1.0, "known", "k1"), (1.2, "estimate", "none"), (1.2, "estimate", "k1"),
+            (1.2, "estimate", "k1 k2"))
+
+
+def lens_plate_folder(cache, width, k1):
+    """The plate at `width` (16:9), rendered once into `cache` by make_plate.py; with `k1` the lens plate."""
+    import make_plate
+    folder = Path(cache) / "lens_plates" / f"w{width}_k1_{k1:g}"
+    if not (folder / (shot.plate_pattern(".").split("/")[-1] % shot.FRAMES)).exists():
+        make_plate.render_plate(folder, (width, width * 9 // 16), shot.FRAMES, k1=k1)
+    return folder
+
+
+def similarity_errors(document, camera_id, first, last):
+    """How far the solved camera is from the rendering camera once the solve is fitted to it by a similarity.
+
+    Returns the fitted scale, the root mean square position error (scene units: metres) and the mean and maximum
+    rotation error in degrees. The solve is monocular, so scale and placement are not the thing under test."""
+    from nodebased import camera_solve as cs
+    curves = document["animation"]["curves"][camera_id]
+    frames = range(first, last + 1)
+    solved = [cs.pose_from_keys(*(np.interp(f, [k["frame"] for k in curves[name]["keys"]], [k["value"] for k in curves[name]["keys"]])
+                                 for name in cs.CAMERA_PARAMS)) for f in frames]
+    truth = [cs.pose_from_keys(*(shot.camera_at(f)[n] for n in ("tx", "ty", "tz", "target_x", "target_y", "target_z")), 0.0)
+             for f in frames]
+    scale, rotation, shift = cs.similarity_transform([p[:3, 3] for p in solved], [p[:3, 3] for p in truth])
+    position = np.array([scale * rotation @ s[:3, 3] + shift - t[:3, 3] for s, t in zip(solved, truth)])
+    angles = [math.degrees(math.acos(float(np.clip((np.trace((rotation @ s[:3, :3]).T @ t[:3, :3]) - 1) / 2, -1, 1))))
+              for s, t in zip(solved, truth)]
+    return {"fitted_scale": float(scale), "position_rms_m": float(np.sqrt(np.mean(np.sum(position ** 2, axis=1)))),
+            "rotation_mean_deg": float(np.mean(angles)), "rotation_max_deg": float(np.max(angles))}
+
+
+def run_dpvo(width, plate_k1, settings, cache, folder=None, log=print):
+    """Solve the demo plate at `width` with each of `settings`; returns one result row per setting.
+
+    The plate comes from `folder` or is rendered into `cache`. DPV-SLAM runs once per typed focal length (the
+    refinement is a separate, deterministic step on what it returns), under the GPU lock."""
+    from nodebased import camera_solve as cs, filmback
+    from nodebased.artifacts import ArtifactStore
+    from nodebased.core import Dispatcher
+    from nodebased.gpulock import gpu_job
+    from nodebased.imaging import Evaluator
+    from nodebased.providers import camera_solve_dpvo as dpvo
+    reason = dpvo.available()
+    if reason:
+        raise SystemExit(f"cannot run the camera solve: {reason}")
+    folder = Path(folder) if folder else lens_plate_folder(cache, width, plate_k1)
+    height = width * 9 // 16
+    dispatcher = Dispatcher()
+    start = shot.CAMERA_START
+    dispatcher.execute({"op": "batch", "commands": [
+        {"op": "create", "id": "plate", "type": "Read", "params": {"path": shot.plate_pattern(folder)}},
+        {"op": "create", "id": "solve", "type": "CameraSolve3D", "params": {
+            "seed": 0, "anchor_tx": start["tx"], "anchor_ty": start["ty"], "anchor_tz": start["tz"],
+            "anchor_target_x": start["target_x"], "anchor_target_y": start["target_y"], "anchor_target_z": start["target_z"]}},
+        {"op": "connect", "id": "solve", "input": "image", "source": "plate"},
+        {"op": "time", "first": 1, "last": shot.FRAMES, "current": 1}]})
+    evaluator, store = Evaluator(), ArtifactStore(Path(cache) / "store")
+    solves, rows = {}, []
+
+    def solver(frames, intrinsics, **kwargs):
+        key = round(intrinsics[1], 3)
+        if key not in solves:
+            started = time.perf_counter()
+            solves[key] = dpvo.run_solve(frames, intrinsics, **kwargs)
+            solves[key]["info"]["wall_s"] = round(time.perf_counter() - started, 1)
+            log(f"  DPVO at focal {intrinsics[1]:.1f} px: {solves[key]['info']['wall_s']} s, "
+                f"{len(solves[key]['points'])} points, {len(solves[key]['tracks']['frame'])} tracked positions")
+        return solves[key]
+
+    with gpu_job(log=log):
+        for scale, mode, distortion in settings:
+            typed = shot.FOCAL * scale
+            for name, value in (("focal", typed), ("solve_focal", mode), ("solve_distortion", distortion)):
+                dispatcher.execute({"op": "set", "id": "solve", "param": name, "value": value})
+            reply = cs.solve_camera_op(evaluator, dispatcher, {"op": "solve_camera", "id": "solve", "camera": "camera"},
+                                       store=store, solver=solver)
+            lens = reply["lens"]
+            camera = dispatcher.document["nodes"]["camera"]["params"]
+            row = {"width": width, "plate_k1": plate_k1, "typed_focal_scale": scale, "focal_mode": mode,
+                   "distortion": distortion, "true_focal_mm": round(shot.FOCAL, 4),
+                   "recovered_focal_mm": round(camera["focal"], 4), "recovered_k1": camera["lens_k1"],
+                   "recovered_k2": camera["lens_k2"], "dpvo_wall_s": solves[round(dpvo.focal_pixels(typed, filmback.DEFAULT_VAPERTURE, height), 3)]["info"]["wall_s"],
+                   "focal_error_percent": round(100.0 * (camera["focal"] / shot.FOCAL - 1.0), 3),
+                   "k1_error": None if not plate_k1 and distortion == "none" else round(camera["lens_k1"] - plate_k1, 5),
+                   "lens": lens, **{k: round(v, 5) for k, v in similarity_errors(
+                       dispatcher.document, "camera", 1, shot.FRAMES).items()}}
+            rows.append(row)
+            log(f"  typed {scale:.2f}x {mode}/{distortion}: focal {row['recovered_focal_mm']} mm "
+                f"({row['focal_error_percent']:+.2f}%), k1 {row['recovered_k1']:.4f} (plate {plate_k1:g}), "
+                f"position {row['position_rms_m'] * 100:.1f} cm, rotation {row['rotation_mean_deg']:.3f} deg")
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--plate", help="folder holding plate.%%04d.exr (default: the NodeBased cache)")
+    parser.add_argument("--solver", choices=("survey", "dpvo"), default="survey")
+    parser.add_argument("--lens", choices=("known", "estimate"), default="known", help="dpvo: type the focal length or recover it")
+    parser.add_argument("--distortion", choices=("none", "k1", "k1 k2"), default=None,
+                        help="dpvo: radial terms to recover (default: k1 with --lens estimate, otherwise none)")
+    parser.add_argument("--width", type=int, default=960, help="dpvo: plate width (16:9)")
+    parser.add_argument("--plate-k1", type=float, default=0.0, help="dpvo: render the lens plate with this radial distortion")
+    parser.add_argument("--typed-focal-scale", type=float, default=1.2, help="dpvo: the typed focal length over the truth")
+    parser.add_argument("--matrix", action="store_true", help="dpvo: every plate, width and setting; writes lens_benchmark.json")
+    parser.add_argument("--cache", default=str(shot.default_cache()), help="dpvo: where plates and the artifact store go")
+    parser.add_argument("--out", help="dpvo: write the result rows here (default with --matrix: lens_benchmark.json)")
     args = parser.parse_args()
+    if args.solver == "dpvo":
+        return main_dpvo(args)
     frames = read_plate(Path(args.plate) if args.plate else shot.plate_dir())
     height, width = frames[1].shape[:2]
     report, solved = solve(frames, width, height)
@@ -134,6 +258,24 @@ def main():
                                                       indent=1) + "\n")
     shot.save_graph(shot.HERE / "demo_shot.nbcomp", width, height, keys)
     print(json.dumps(summary))
+    return 0
+
+
+def main_dpvo(args):
+    if args.matrix:
+        runs = [(width, k1, SETTINGS) for k1 in (0.0, shot.LENS_K1) for width in WIDTHS]
+    else:
+        distortion = args.distortion or ("k1" if args.lens == "estimate" else "none")
+        runs = [(args.width, args.plate_k1, ((args.typed_focal_scale if args.lens == "estimate" else 1.0, args.lens, distortion),))]
+    rows = []
+    for width, k1, settings in runs:
+        print(f"plate {width} x {width * 9 // 16}, k1 {k1:g}")
+        rows += run_dpvo(width, k1, settings, args.cache, folder=args.plate)
+    out = Path(args.out) if args.out else (BENCHMARK if args.matrix else None)
+    if out:
+        out.write_text(json.dumps({"schema": 1, "shot": "demo_shot", "frames": shot.FRAMES, "true_focal_mm": shot.FOCAL,
+                                   "lens_plate_k1": shot.LENS_K1, "rows": rows}, indent=1) + "\n")
+        print(f"wrote {out}")
     return 0
 
 

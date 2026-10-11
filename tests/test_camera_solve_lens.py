@@ -385,5 +385,82 @@ class TrackedPickTests(unittest.TestCase):
             cs.track_pick(frames, {"name": "A", "frame": 20, "x": 30.0, "y": 30.0}, 1, 8)
 
 
+DEMO = Path(__file__).resolve().parent.parent / "examples" / "demo_shot"
+
+
+class DemoPlateTests(unittest.TestCase):
+    """The lens plate and the benchmark's plumbing, with a fake solver that hands over the true camera."""
+
+    @classmethod
+    def setUpClass(cls):
+        import sys
+        sys.path.insert(0, str(DEMO))
+        cls.shot = __import__("shot")
+        cls.make_plate = __import__("make_plate")
+        cls.solve_camera = __import__("solve_camera")
+
+    def test_the_lens_plate_is_the_redistort_node_applied_to_the_ideal_image(self):
+        """`make_plate.distort_frame` and the Redistort node are the same warp (the L1 lens model), edge pixels aside."""
+        dispatcher = Dispatcher()
+        dispatcher.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "ramp", "type": "Checker", "params": {"width": 96, "height": 54, "size": 6}},
+            {"op": "create", "id": "bend", "type": "Redistort", "params": {"lens_k1": -0.03}},
+            {"op": "connect", "id": "bend", "input": "image", "source": "ramp"}]})
+        evaluator = Evaluator()
+        ideal = np.array(evaluator.evaluate_raster(dispatcher.document, "ramp", frame=1).to_display(), np.float32)
+        node = np.array(evaluator.evaluate_raster(dispatcher.document, "bend", frame=1).to_display(), np.float32)
+        script = self.make_plate.distort_frame(ideal, (96, 54), -0.03)
+        inner = (slice(4, -4), slice(4, -4))
+        self.assertLess(float(np.abs(script - node)[inner].mean()), 0.01)
+
+    def test_a_lens_plate_has_no_black_corners_and_is_not_the_plain_plate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plain = self.make_plate.render_plate(Path(temp) / "plain", (96, 54), 2)
+            bent = self.make_plate.render_plate(Path(temp) / "bent", (96, 54), 2, k1=self.shot.LENS_K1)
+            from nodebased.media import read_media_raster
+            image = np.array(read_media_raster(str(Path(temp) / "bent" / "plate.0001.exr")).to_display(), np.float32)
+        self.assertNotEqual(plain[1], bent[1])
+        self.assertGreater(float(image[0, 0, :3].sum()), 0.05)      # the corner shows the set, not the outside of the render
+        self.assertGreater(float(image[-1, -1, :3].sum()), 0.05)
+
+    def test_benchmark_rows_carry_the_recovered_lens_and_the_pose_errors(self):
+        shot, solve_camera = self.shot, self.solve_camera
+        landmarks = np.array(shot.landmarks(), np.float64)
+        world_scale = 0.5
+
+        def fake_solver(frames, intrinsics, **kwargs):
+            height, width = frames[0].shape[:2]
+            truth = [solve_camera.truth_camera(f) for f in range(1, len(frames) + 1)]
+            c2w = np.stack([cs.pose_from_keys(*shot_params(f)) for f in range(1, len(frames) + 1)])
+            c2w[:, :3, 3] *= world_scale
+            points = landmarks * world_scale
+            fr, pt, xy = [], [], []
+            for i, camera in enumerate(truth):
+                camera = scene3d.Camera(camera.transform, camera.target, camera.fov, lens_k1=shot.LENS_K1)
+                pixels, depth = scene3d.project_lens(camera, width, height, landmarks)
+                for p in range(len(landmarks)):
+                    if depth[p] > 0.5 and 3 < pixels[p, 0] < width - 3 and 3 < pixels[p, 1] < height - 3:
+                        fr.append(i); pt.append(p); xy.append(pixels[p])
+            tracks = {"frame": np.array(fr), "point": np.array(pt), "xy": np.array(xy, np.float64), "weight": np.ones(len(fr))}
+            return {"c2w": c2w, "points": points, "colors": np.full((len(points), 3), 128, np.uint8), "tracks": tracks,
+                    "info": {"frames": len(frames)}}
+
+        def shot_params(frame):
+            p = shot.camera_at(frame)
+            return (p["tx"], p["ty"], p["tz"], p["target_x"], p["target_y"], p["target_z"], 0.0)
+
+        with tempfile.TemporaryDirectory() as temp, \
+                mock.patch.object(dpvo, "available", return_value=""), mock.patch.object(dpvo, "run_solve", fake_solver):
+            rows = solve_camera.run_dpvo(192, shot.LENS_K1, ((1.2, "estimate", "k1"), (1.0, "known", "none")), temp,
+                                         log=lambda *a: None)
+        estimated, ignored = rows
+        self.assertLess(abs(estimated["focal_error_percent"]), 1.0)
+        self.assertLess(abs(estimated["recovered_k1"] - shot.LENS_K1), 0.1 * abs(shot.LENS_K1))
+        self.assertLess(estimated["position_rms_m"], 0.01)
+        self.assertEqual(ignored["recovered_k1"], 0.0)
+        self.assertEqual(estimated["lens"]["frames"], shot.FRAMES)
+        self.assertGreater(estimated["lens"]["rms_px_before"], estimated["lens"]["rms_px_after"])
+
+
 if __name__ == "__main__":
     unittest.main()

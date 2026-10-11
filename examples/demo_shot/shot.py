@@ -18,6 +18,10 @@ PASSES = "beauty,normals,depth,motion,object_id"
 CAMERA_START = dict(tx=0.0, ty=1.1, tz=8.0, target_x=-0.2, target_y=0.0, target_z=0.0)
 CAMERA_END = dict(tx=0.45, ty=1.1, tz=6.6, target_x=0.25, target_y=0.0, target_z=0.0)
 FOCAL = 22.539097818315216
+# The lens plate (make_plate.py --k1): the ideal render is made this much larger in each direction and bent into the
+# plate's format with the Camera3D lens model, so the barrel-distorted corners show the set and not black.
+LENS_K1 = -0.03
+OVERSCAN = 1.35
 
 
 def camera_at(frame, move=FRAMES):
