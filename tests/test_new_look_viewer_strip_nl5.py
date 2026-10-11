@@ -25,6 +25,9 @@ class Base(unittest.TestCase):
         finally:
             nodebased_app_module.DEFAULT_WINDOW_SIZE = original
         w = self.window
+        # A test may open a second window (it replaces self.window); tearDown closes every one, since a
+        # window left open keeps the keyboard focus and breaks the radial menu tests that run after it.
+        self.__dict__.setdefault("_opened_windows", []).append(w)
         self._base_font = w.font()
         if scale:
             font = QFont(self._base_font)
@@ -37,8 +40,8 @@ class Base(unittest.TestCase):
         return w
 
     def tearDown(self):
-        window = self.__dict__.pop("window", None)
-        if window is not None:
+        self.__dict__.pop("window", None)
+        for window in reversed(self.__dict__.pop("_opened_windows", [])):
             overlay = getattr(window, "shortcut_overlay", None)
             if overlay is not None:
                 overlay.close()

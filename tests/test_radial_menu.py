@@ -311,6 +311,10 @@ class RadialMenuGestureTests(unittest.TestCase):
         cls.window = Window(agent_name='nodebased-test-' + uuid.uuid4().hex)
         cls.window.show()
         assert wait_until(lambda: cls.window.frame is not None)
+        # A window an earlier module left open would take the key events and keep a ring open.
+        assert not cls.window.graph.radial_menu.is_open(), "the radial menu must start closed"
+        assert [w for w in APP.topLevelWidgets() if isinstance(w, Window) and w.isVisible()] == [cls.window], \
+            "another main window is still open"
         # New look (NL2): the wire toggle, zoom control and minimap sit in the graph's bottom-right
         # corner and take mouse moves there. These tests flick to scene positions that can land on that
         # corner of the small docked graph, so the controls stay out of the way here; the controls have
