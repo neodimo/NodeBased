@@ -86,12 +86,16 @@ by its motion vectors; it does not paint a street.
 
 ## Running it
 
-    python examples/demo_shot/run_by_hand.py [--plate DIR] [--out DIR] [--cache DIR]
+    python examples/demo_shot/run_by_hand.py [--plate DIR] [--out DIR] [--cache DIR] [--solver survey|dpvo]
 
 It starts `python -m nodebased.agent` on the graph and sends the same commands an attached agent sends
 (`export_conditioning`, `generate`, `verify`, `edit`-style creates, `render`, `artifacts`), then prints
 the artifact ids, the controls used and ignored, the per-check verdict and the provenance length. Output
 frames go to `$NODEBASED_CACHE/demo_shot/out`, the artifact store to `.../demo_shot/store`.
+
+`--solver dpvo` swaps the survey-point camera for one solved from the plate alone by a `CameraSolve3D` node (DPVO on
+the NVIDIA card; set up with `projects/nb-providers/slam/setup.sh`, interpreter in `NODEBASED_SLAM_PYTHON`). The first-frame
+camera is the node's anchor and two surveyed points fix the scale. Results and ids: `docs/END_TO_END_SPRINT.md`, stage 7.
 
 Result on this machine's CPU (32 cores, no GPU used): **155 s** for the whole run at full size
 (24 frames, 480 by 270), identical on a second run with a fresh store and output folder: same four

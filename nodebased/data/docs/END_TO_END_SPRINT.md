@@ -219,3 +219,97 @@ Things found on the way:
   turns it off for a card to itself, about twice as fast, peak about 10.4 GiB).
 - Nothing was downloaded for this step; every model came from the local Hugging Face cache.
 
+
+## Stage 7: real-time camera tracking, the spike (10/10)
+
+Question: can a learned monocular SLAM replace the survey-point solve, in real time on the RTX 3080 Ti, and
+can its camera drive the conditioning export unchanged? Answer on the demo plate: yes for DPV-SLAM, with
+conditions below. Not tried on a filmed plate: the demo plate is a clean synthetic render with exact ground
+truth, so every number is a best case.
+
+**Setup** (`projects/nb-providers/slam/setup.sh`, rerunnable; the sizes are in its header): no `nvcc` exists
+here and the pip package `nvidia-cuda-nvcc-cu12` ships only `ptxas`, so the real nvcc 12.6.85 comes from NVIDIA's
+redistributable archive (52 MB with cudart and cccl) and gcc 13 from conda-forge through micromamba (0.9 GB on
+disk); the system gcc 16.2 breaks nvcc ("false_type is undefined"), and `-allow-unsupported-compiler` does not
+help. Both repositories use torch's removed `Tensor.type()` in their dispatch macros (one `sed`). DPVO and
+DROID-SLAM both install a `lietorch_backends`, so DROID-SLAM lives in its own folder. Downloads: DPVO 230 MB,
+DROID-SLAM 169 MB, weights `dpvo.pth` 14 MB and `droid.pth` 16 MB, Eigen 3.6 MB. Torch 2.14 cu126 is shared
+with the SDXL environment through a `.pth` file.
+
+**Measured**, demo plate (24 frames, camera dolly 1.47 m), estimated camera centres aligned to truth with a
+similarity transform (rotation from the camera orientations, because the path is nearly a straight line and
+positions alone leave the roll about it free; scale and shift from positions). Frame rate is the per-frame
+tracking after the 8-frame warm-up; peak VRAM is the solver process's own allocation.
+
+| run | translation RMS / worst | rotation mean / worst | frames per second | peak VRAM |
+|---|---|---|---|---|
+| DPVO, 480 x 270 | 8.5 cm (5.8% of the path) / 16.8 cm | 0.15 / 0.28 deg | 251 (49 with the final optimisation) | 0.19 GB |
+| DPVO, 960 x 540 | 2.3 cm (1.6%) / 5.9 cm | 0.09 / 0.15 deg | 45 (30) | 0.50 GB |
+| DPV-SLAM (loop closure), 480 x 270 | 7.7 cm / 15.7 cm | 0.10 / 0.24 deg | 248 (48) | 0.47 GB |
+| DPV-SLAM (loop closure), 960 x 540 | 1.8 cm (1.2%) / 5.3 cm | 0.05 / 0.10 deg | 45 (29) | 0.77 GB |
+| DROID-SLAM, 960 x 540 (resized to 584 x 328) | 1.3 cm (0.9%) / 2.3 cm | 0.09 / 0.16 deg | 335 tracking only (30 with the final optimisation) | 3.2 GB |
+| DROID-SLAM, 480 x 270 | 34.6 cm (24%) / 57 cm | 3.1 / 6.4 deg | same | 3.2 GB |
+
+- **Resolution decides accuracy.** DROID-SLAM resizes both plates to the same 584 x 328, yet the 480 plate gives
+  a 24% error and the 960 plate 0.9%: the 480 plate is too coarse for it. DPVO is the same story at a smaller
+  gap. Use the plate at 960 wide or more.
+- **The focal length is not recovered.** DPVO and DROID-SLAM both take the intrinsics they are given (square
+  pixels, centre principal point). A focal length 15% too long or 13% too short moved DPVO's error from 2.0 cm to
+  2.6 and 2.9 cm, so the lens does not need to be exact, but it has to come from the plate (the node's focal and
+  vertical aperture). MASt3R-SLAM, which estimates the camera model, is the candidate that would fix this.
+- **Loop closure** changes nothing measurable on a 24-frame dolly (there is no loop); it costs 0.27 GB.
+- **DROID-SLAM keeps 3 keyframes** of the 24 (its motion filter); DPVO tracks every frame.
+- **Determinism.** Two DROID-SLAM runs were bit-identical. DPVO is not: unseeded runs differ by up to 0.1 solve
+  unit (random patch choice); seeded runs (`seed` on the node: torch, numpy, CUDA) differ by about 3e-4 solve
+  units, because the bundle adjustment kernel adds floats with CUDA atomics. After placement that is about 1 mm
+  of camera position, and two full hand runs of the shot with `--solver dpvo` gave different artifact ids
+  (below). Rounding the keys to 1 mm makes equal keys likely (74% of the keys matched in a test, 96% at 1 cm),
+  never certain. So the camera that feeds the export is the one solve kept in the document: the op runs on
+  request, never when the graph evaluates, and a re-solve replaces the keys and the ids on purpose.
+
+**The integration.** `nodebased/providers/camera_solve_dpvo.py` (numpy side plus the DPVO side, started as a
+subprocess with `NODEBASED_SLAM_PYTHON`, `local_gpu` declared in `providers/solvers/camera_solve_dpvo.json`;
+the description sits in its own folder so `generate` does not offer a solver as a conditioning provider), the
+`CameraSolve3D` node (plate passes through, like `Generate`) and the agent op `solve_camera`
+(`nodebased/camera_solve.py`; also served by the desktop bridge). The op reads the plate through the display
+transform, runs the provider, places the solve in the world and writes into the document: a `Camera3D` with a
+key on every frame (position, target and roll, rounded to 0.001), a `ReadSplat3D` holding the sparse cloud as
+tiny coloured splats (the nearest existing scene type for points), and the id of the solve record (a new
+artifact kind, `camera_solve`: provider and version, seed, scale and its source, every key) in the node's
+`solve` parameter. The solve is up to scale and in its own frame, so two controls place it:
+
+- **Anchor:** the camera on the first frame (position, target and roll on the node), the camera an artist sets
+  by eye with the Camera3D handles; the solved motion is applied from there.
+- **Scale:** the node's `unit_scale` (scene units per solve unit), or `survey` on the op: two points with their
+  real distance and their pixel positions on two or more frames, triangulated with the solved cameras. Picking
+  the survey pixels in the viewer is not built; the op takes them as numbers.
+
+**The shot with that camera** (`run_by_hand.py --solver dpvo`, 480 x 270 committed plate, `reproject` 1.1, seed
+7, the first-frame camera equal to the plate's true one and the two survey points clicked to a whole pixel):
+verdict **PASS**, the same checks as the survey run (the camera check reads "not conditioned" for `reproject`,
+so the verdict does not judge the camera; the ids show that the export did take it).
+
+| | survey solve (stage 4a) | DPVO solve, first run |
+|---|---|---|
+| camera against the plate's: position mean / worst | 2.8 / 5.2 cm | 8.2 / 25.6 cm |
+| rotation mean / worst | 0.15 / 0.32 deg | 0.17 / 0.41 deg |
+| scene_state | `b52bc6b3536b15eca47d8c96c2d4d46c4d75532c516e5a09f31e3ea172cfdec7` | `93b0d86d3465ac158a6fc9bb840b9498b427a11cb16ae2255006b4592912a301` |
+| control_bundle | `e734808faf740d55be8ab7429532227e08fe3810b9aacdacc25c6d2474a3c708` | `970a607815f782f9ea0501094ac75ee04cb7d5e28f848cbdbac0bd7b814436e5` |
+| generated_sequence | `47fdd43adee5f8bddc061dc9b9509802e8caadf1476d6e6c305ef1bc9440877d` | `21a5ae37677942e8ef6b520d33fc4de830db984cc57e2cabc00ca1e401e45e0e` |
+| report | `3f49adfa081dfcf1d5f6d3121cc4ae62319528f3bd06f7554c970a3993994db1` | `909872e0f516915919363aec8b63f04842f4557e3d4c3066e9520e640dcdeffb` |
+| solve record | | `dc5ecaf2a007238dc3a60f5643454d5d7c02a6259d599172b824765c28c17fd9` |
+
+A second full run gave scene_state `392bd71bba8425b454ebc2a469096e334ed4d71f56512a27300ac150bc3f546b` and a PASS
+verdict: the camera keys moved by 1 mm, so every id after the solve differs (the survey run reproduces its ids
+exactly). On the 960 x 540 re-render the same op, anchor and survey placement gives camera error 1.4 cm mean and
+6.5 cm worst, 0.04 and 0.07 deg: better than the survey solve in rotation and mean position. The 480 run's 8 cm
+is mostly the scale: two clicked points a pixel off at 480 wide put it 9% off; at 960 it is 1%. Run it on the
+real card with `NODEBASED_SLAM_TEST=1 python -m unittest tests.test_camera_solve`.
+
+**Recommendation.** DPV-SLAM first. It runs at 45 frames per second on a 960 x 540 plate in half a gigabyte, so
+it is real time with room for the model provider next to it, and it is within a centimetre or two of DROID-SLAM
+on this plate. DROID-SLAM is the more accurate and the only repeatable one, but uses six times the memory (3.2 GB) for the same
+30 frames per second end to end on this short plate; keep it as the reference and a second provider. Neither is proven
+beyond a clean synthetic render: the next step is a filmed plate from DiMo, and MASt3R-SLAM for lens recovery.
+Not built: viewer picking of the survey points, a tile-path or queue job for the solve, and an automatic
+ground-plane alignment (the anchor is typed by hand).
