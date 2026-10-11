@@ -1300,6 +1300,11 @@ class Evaluator:
                     incoming = values[node["inputs"]["particles"]]
                     if node["disabled"] or incoming is None:
                         value = scene3d.empty_geometry()
+                    elif tier > 1 and int(getattr(incoming, "proxy_tier", 1)) >= tier:
+                        # The cached playback artifact is already a bounded point cloud with
+                        # radii. Keep it as particles in the display scene; surface extraction
+                        # belongs to the stopped/full-detail request.
+                        value = incoming
                     else:
                         if tier > 1:
                             incoming = flip3d.proxy_instance(incoming, tier)
