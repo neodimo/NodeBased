@@ -27,6 +27,7 @@ import numpy as np
 PROVIDER_NAME = "sdxl_controlnet"
 DEFAULT_PYTHON = "/var/home/omid/.openclaw/workspace/projects/nb-providers/sdxl/.venv/bin/python"
 PYTHON_ENV = "NODEBASED_SDXL_PYTHON"
+RUN_INFO_ENV = "NODEBASED_SDXL_RUN_INFO"
 BASE_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 VAE_MODEL = "madebyollin/sdxl-vae-fp16-fix"
 CONTROLNET_MODEL = "xinsir/controlnet-union-sdxl-1.0"
@@ -194,6 +195,8 @@ def run_frames(controls, *, text, seed, sampler_settings, workdir, progress=None
     if code:
         raise RuntimeError(f"sdxl_controlnet model process failed (exit {code}): " + " | ".join(tail[-8:])[-1200:])
     info = json.loads(Path(job["info"]).read_text(encoding="utf-8"))
+    if os.environ.get(RUN_INFO_ENV):  # the run's timings and peak VRAM, for a caller that wants them (never in the artifact)
+        Path(os.environ[RUN_INFO_ENV]).write_text(json.dumps(info, indent=1), encoding="utf-8")
     pictures = [srgb_to_acescg(np.load(row["result"])) for row in rows]
     return pictures, info
 

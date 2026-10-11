@@ -3,10 +3,11 @@
 Loads demo_shot.nbcomp into the `nodebased.agent` dispatcher (JSON lines, no window), then exports
 the SceneState and ControlBundle, generates with the provider and seed the graph's Generate node
 carries, verifies, brings the result back as a ConditionedRead, grades and merges it over the plate
-and writes the EXR sequence. Prints the artifact ids and the verification verdict. Nothing here
-needs a GPU, a model or a network; the provider is the local `reproject` stand-in.
+and writes the EXR sequence. Prints the artifact ids and the verification verdict. By default nothing here
+needs a GPU, a model or a network; the provider is the local `reproject` stand-in. `--provider sdxl_controlnet`
+runs the shot through the real model instead (NVIDIA card, see docs/GENERATIVE_CONDITIONING.md).
 
-    python examples/demo_shot/run_by_hand.py [--plate DIR] [--out DIR] [--cache DIR] [--graph FILE]
+    python examples/demo_shot/run_by_hand.py [--plate DIR] [--out DIR] [--cache DIR] [--graph FILE] [--provider NAME]
 
 Run it twice and the ids and the output frames are identical.
 """
@@ -52,9 +53,10 @@ class Agent:
         self.process.stdout.close()
 
 
-def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, log=print):
+def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, log=print, provider=None):
     document = json.loads(Path(graph).read_text())
     generate = document["nodes"]["generate"]["params"]
+    provider = provider or generate["provider"]
     last = frames or document["time"]["last"]
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -66,7 +68,7 @@ def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, lo
         # The Generate node's own controls drive the call, brief text included. `reproject` does not use a
         # text brief: the call still runs the shot and records the text as ignored.
         result = agent.call(op="generate", scene_state=exported["scene_state"], bundle=exported["control_bundle"],
-                            provider=generate["provider"], seed=generate["seed"],
+                            provider=provider, seed=generate["seed"],
                             options={"text": generate["text"]})
         log(f"generate: generated_sequence {result['generated_sequence']}  seed {result['seed']}")
         log(f"  controls: {json.dumps(result['controls'])}  ignored in this call: {result['ignored']}")
@@ -108,9 +110,17 @@ def main():
     parser.add_argument("--cache", default=str(shot.default_cache() / "store"),
                         help="artifact store root (NODEBASED_CACHE for the agent process)")
     parser.add_argument("--graph", default=str(shot.HERE / "demo_shot.nbcomp"))
+    parser.add_argument("--provider", default=None,
+                        help="provider for the Generate step (default: the graph's own, reproject); "
+                             "sdxl_controlnet runs the real model on the NVIDIA card")
     args = parser.parse_args()
     started = time.perf_counter()
-    summary = run(args.plate, args.out, args.cache, args.graph)
+    info_file = Path(args.cache).parent / "sdxl-run-info.json"
+    os.environ["NODEBASED_SDXL_RUN_INFO"] = str(info_file)  # the SDXL provider writes its timings and peak VRAM here
+    info_file.unlink(missing_ok=True)
+    summary = run(args.plate, args.out, args.cache, args.graph, provider=args.provider)
+    if info_file.exists():
+        summary["model_run"] = json.loads(info_file.read_text())
     summary["output_pixel_digest"] = output_digest(args.out, summary["frames"])
     print(json.dumps(summary, indent=1))
     print(f"took {time.perf_counter() - started:.1f} s")
