@@ -29,6 +29,8 @@ import numpy as np
 job = json.load(open(sys.argv[-1]))
 for row in job["frames"]:
     depth = np.load(row["depth"]); normals = np.load(row["normals"])
+    assert np.load(row["motion_backward"]).shape == (job["height"], job["width"], 2)
+    assert np.load(row["z"]).shape == np.load(row["ids"]).shape == (job["height"], job["width"])
     out = np.zeros((job["height"], job["width"], 3), np.uint8)
     out[..., 0] = depth[..., 0]; out[..., 1] = normals[..., 1]; out[..., 2] = job["seed"] % 256
     np.save(row["result"], out)
@@ -67,10 +69,12 @@ class ConversionTests(unittest.TestCase):
 
     def test_settings_have_defaults_and_refuse_unknown_keys_and_bad_values(self):
         self.assertEqual(sdxl.resolve_settings(None), sdxl.DEFAULT_SETTINGS)
+        self.assertEqual(sdxl.resolve_settings(None)["denoise_strength"], 0.5)
         merged = sdxl.resolve_settings({"steps": 12, "guidance": 7})
         self.assertEqual((merged["steps"], merged["guidance"], merged["control_mode"]), (12, 7.0, "depth_normals"))
         for bad in ({"sampler": "ddim"}, {"steps": 0}, {"steps": 2.5}, {"guidance": 99}, {"steps": True},
-                    {"controlnet_conditioning_scale": -1}, {"control_mode": "canny"}):
+                    {"controlnet_conditioning_scale": -1}, {"control_mode": "canny"}, {"denoise_strength": 0},
+                    {"denoise_strength": 1.5}):
             with self.assertRaises(ValueError, msg=str(bad)):
                 sdxl.resolve_settings(bad)
 
@@ -97,7 +101,7 @@ class ProviderPlumbingTests(unittest.TestCase):
         progress = []
         result = generate(self.bundle, self.state, self.root / "a" / "out.####.exr", "sdxl_controlnet",
                           text="a rainy street", seed=5, sampler_settings={"steps": 9}, progress=progress.append)
-        self.assertEqual(result["honoured"], ["depth", "normals", "text", "seed", "sampler_settings"])
+        self.assertEqual(result["honoured"], ["depth", "normals", "motion", "ids", "text", "seed", "sampler_settings"])
         self.assertEqual(result["ignored"], [])
         self.assertEqual(result["frames"], [1, 2])
         self.assertEqual(result["run"]["seen_prompt"], "a rainy street")
@@ -106,6 +110,7 @@ class ProviderPlumbingTests(unittest.TestCase):
         self.assertEqual(generation["seed"], 5)
         self.assertEqual(generation["sampler_settings"]["steps"], 9)
         self.assertEqual(generation["sampler_settings"]["control_mode"], "depth_normals")
+        self.assertEqual(generation["sampler_settings"]["denoise_strength"], 0.5)
         self.assertEqual(generation["options"]["text"], "a rainy street")
         self.assertTrue(generation["seed_honoured"] and generation["sampler_settings_honoured"])
         self.assertEqual(sorted(name for name in files if name.endswith(".exr")), ["out.0001.exr", "out.0002.exr"])
@@ -120,6 +125,10 @@ class ProviderPlumbingTests(unittest.TestCase):
         other = generate(self.bundle, self.state, self.root / "c" / "out.####.exr", "sdxl_controlnet", seed=4, text="x")
         self.assertEqual(first["artifact_id"], second["artifact_id"])
         self.assertNotEqual(first["artifact_id"], other["artifact_id"])
+        # the denoising strength is part of the result's identity like the seed
+        weaker = generate(self.bundle, self.state, self.root / "s" / "out.####.exr", "sdxl_controlnet", seed=3,
+                          text="x", sampler_settings={"denoise_strength": 0.3})
+        self.assertNotEqual(first["artifact_id"], weaker["artifact_id"])
 
     def test_bad_settings_refuse_before_any_model_process_starts(self):
         with mock.patch.object(sdxl.subprocess, "Popen") as popen:
@@ -150,6 +159,46 @@ class ProviderPlumbingTests(unittest.TestCase):
         self.assertTrue(cancelled.is_set())
 
 
+class GuideImageTests(unittest.TestCase):
+    """The model side's reprojection step, run here with numpy (it needs no torch)."""
+
+    def rows(self, root, motion_x=0.0, ids_after=0.0):
+        h, w = 9, 16
+        rows = []
+        for frame, ids in ((1, 0.0), (2, ids_after)):
+            motion = np.zeros((h, w, 2), np.float32); motion[..., 0] = motion_x if frame == 2 else 0.0
+            identity = np.zeros((h, w), np.float32); identity[:3, :3] = ids
+            paths = {key: str(root / f"{frame}.{key}.npy") for key in ("motion_backward", "z", "ids")}
+            np.save(paths["motion_backward"], motion)
+            np.save(paths["z"], np.full((h, w), 2.0, np.float32))
+            np.save(paths["ids"], identity)
+            rows.append({"frame": frame, **paths})
+        return rows
+
+    def test_still_frame_is_carried_exactly_and_a_changed_object_is_a_hole(self):
+        temporal = sdxl._load_temporal()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            before, after = self.rows(root)
+            picture = np.random.default_rng(1).integers(0, 255, (18, 32, 3)).astype(np.uint8)
+            warped, mask = sdxl.guide_image(temporal, picture, after, before, 32, 18)
+            np.testing.assert_array_equal(warped, picture.astype(np.float32))
+            self.assertTrue(mask.all())
+            before, after = self.rows(root, ids_after=7.0)
+            _, mask = sdxl.guide_image(temporal, picture, after, before, 32, 18)
+            self.assertFalse(mask[:6, :6].any())
+            self.assertTrue(mask[6:, 6:].all())
+
+    def test_motion_is_rescaled_to_the_working_size(self):
+        temporal = sdxl._load_temporal()
+        with tempfile.TemporaryDirectory() as temp:
+            before, after = self.rows(Path(temp), motion_x=-1.0)  # one plate pixel is two working pixels
+            picture = np.random.default_rng(2).integers(0, 255, (18, 32, 3)).astype(np.uint8)
+            warped, mask = sdxl.guide_image(temporal, picture, after, before, 32, 18)
+            np.testing.assert_array_equal(warped[:, 2:], picture[:, :30].astype(np.float32))
+            self.assertFalse(mask[:, :2].any())
+
+
 def cuda_unavailable():
     if not Path(sdxl.provider_python()).exists():
         return f"provider interpreter {sdxl.provider_python()} is missing (set {sdxl.PYTHON_ENV})"
@@ -174,6 +223,31 @@ class RealModelTests(unittest.TestCase):
         self.assertEqual(sorted(frames[0]), ["out.0001.exr", "out.0002.exr"])
         self.assertEqual(frames[0], frames[1])
         self.assertGreater(runs[0]["run"]["peak_vram_allocated_mib"], 1000)
+        self.assertEqual(runs[0]["run"]["denoise_strength"], 0.5)  # frame 2 went through image-to-image
+
+    def test_image_to_image_frame_is_pinned_by_seed_and_strength(self):
+        """Frame 2 starts from frame 1 warped: the same seed and strength give the same bytes; another strength
+        leaves frame 1 (text-to-image as before) alone and changes frame 2 and the id."""
+        reason = cuda_unavailable()
+        if reason:
+            self.skipTest(reason)
+        from nodebased.conditioned_read import _read_rgba
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with mock.patch.dict(os.environ, {"NODEBASED_CACHE": str(root / "cache")}):
+                state, _, bundle, _ = make_shot(root, width=96, height=64, frames=(1, 2))
+                runs = [generate(bundle, state, root / name / "out.####.exr", "sdxl_controlnet", text="a stone wall",
+                                 seed=4, sampler_settings={"steps": 6, "denoise_strength": strength})
+                        for name, strength in (("a", 0.4), ("b", 0.4), ("c", 0.8))]
+                frames = [{k: v for k, v in unpack(ArtifactStore(), run["artifact_id"]).items() if k.endswith(".exr")}
+                          for run in runs]
+                pixels = {(name, frame): _read_rgba(str(root / name / f"out.{frame:04d}.exr"))[0]
+                          for name in ("a", "c") for frame in (1, 2)}
+        self.assertEqual(runs[0]["artifact_id"], runs[1]["artifact_id"])
+        self.assertEqual(frames[0], frames[1])
+        self.assertNotEqual(runs[0]["artifact_id"], runs[2]["artifact_id"])
+        np.testing.assert_array_equal(pixels["a", 1], pixels["c", 1])
+        self.assertFalse(np.array_equal(pixels["a", 2], pixels["c", 2]))
 
 
 if __name__ == "__main__":

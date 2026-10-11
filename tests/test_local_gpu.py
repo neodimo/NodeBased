@@ -12,16 +12,16 @@ from nodebased.workers import Job, Worker
 class DescriptionTests(unittest.TestCase):
     def test_description_declares_what_it_honours(self):
         desc = ProviderDescription.load("sdxl_controlnet")
-        self.assertEqual((desc.name, desc.version, desc.locality, desc.local_gpu), ("sdxl_controlnet", "1.0", "local", True))
+        self.assertEqual((desc.name, desc.version, desc.locality, desc.local_gpu), ("sdxl_controlnet", "1.1", "local", True))
         self.assertEqual(desc.max_resolution, (1024, 1024))
         self.assertEqual(desc.max_frames, 240)
         self.assertEqual(desc.color_spaces, ("ACEScg",))
         report = desc.control_report()
-        for used in ("depth", "normals", "text", "seed", "sampler_settings"):
+        for used in ("depth", "normals", "motion", "ids", "text", "seed", "sampler_settings"):
             self.assertEqual(report[used], "used", used)
-        for ignored in ("motion", "ids", "camera_pose", "reference_frames"):
+        for ignored in ("camera_pose", "reference_frames"):
             self.assertEqual(report[ignored], "ignored", ignored)
-        self.assertIn("no temporal model", desc.accepts["motion"]["note"])
+        self.assertIn("motion is honoured", desc.accepts["motion"]["role"])
         self.assertFalse(ProviderDescription.load("reproject").local_gpu)
 
 

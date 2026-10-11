@@ -1,23 +1,23 @@
 {
   "schema": 1,
   "name": "sdxl_controlnet",
-  "version": "1.0",
+  "version": "1.1",
   "locality": "local",
   "local_gpu": true,
   "accepts": {
     "depth": {"accepted": true, "role": "ControlNet-Union depth control image: inverse depth normalised over the whole sequence's nearest and farthest depth, near white, far and empty black, 8 bit"},
     "normals": {"accepted": true, "role": "ControlNet-Union normal control image: camera-space unit normals as (n * 0.5 + 0.5) * 255; pixels with no normal get the flat colour (128, 128, 255)"},
-    "motion": {"accepted": false, "note": "frames are generated one by one; there is no temporal model, so frame-to-frame flicker is expected and the motion check reads not conditioned"},
-    "ids": {"accepted": false},
+    "motion": {"accepted": true, "role": "motion is honoured: each frame after the first starts from the previous generated picture warped into it with the exported backward motion, then an image-to-image pass at denoise_strength; the generated EXRs carry beauty only, so the verifier's motion check reads not conditioned and its temporal line measures the flicker"},
+    "ids": {"accepted": true, "role": "with the exported depth, masks the warp: a pixel whose object ID changed or that was hidden on the frame before is filled from that frame's own text-to-image picture"},
     "camera_pose": {"accepted": false, "note": "the camera is only implied by the depth and normals images; the picture is not held to the verifier's camera tolerance"},
     "text": {"accepted": true, "role": "positive prompt, sent character for character; SDXL reads a description, not an instruction, and a fixed negative prompt is added"},
     "reference_frames": {"accepted": false},
     "seed": {"accepted": true, "role": "CUDA generator seed, the same for every frame of an attempt (the loop's vary_seed changes it per attempt, never per frame)"},
-    "sampler_settings": {"accepted": true, "role": "steps (1 to 100, default 30), guidance (0 to 20, default 5.0), controlnet_conditioning_scale (0 to 2, default 0.8), control_mode (depth_normals, depth or normals; default depth_normals); any other key is refused"}
+    "sampler_settings": {"accepted": true, "role": "steps (1 to 100, default 30), guidance (0 to 20, default 5.0), controlnet_conditioning_scale (0 to 2, default 0.8), control_mode (depth_normals, depth or normals; default depth_normals), denoise_strength (0.05 to 1, default 0.5: how much of each guided frame is made anew; 1 makes every frame on its own as in version 1.0); any other key is refused"}
   },
   "limits": {"max_resolution": [1024, 1024], "max_frames": 240},
   "color_spaces": ["ACEScg"],
   "color": "Input and output colour space ACEScg. The model works in display sRGB: depth and normals are converted to 8-bit control images (their own rules, listed above; they carry no colour), and the model's 8-bit sRGB pictures are converted to scene-linear ACEScg (inverse sRGB encoding and the Rec.709 to ACEScg matrix, through the fixed OCIO config) with alpha 1. The beauty plate is not an input. The longer side is resampled to 1024 for the model and the picture is resampled back to the plate size.",
   "environment": {"interpreter_variable": "NODEBASED_SDXL_PYTHON", "gpu": "NVIDIA card through CUDA only (RTX 3080 Ti, 12 GB); the AMD adapter and llvmpipe are not used", "models": ["stabilityai/stable-diffusion-xl-base-1.0 (fp16)", "madebyollin/sdxl-vae-fp16-fix", "xinsir/controlnet-union-sdxl-1.0 (promax)"]},
-  "returns": {"frames": "OpenEXR RGBA sequence", "honoured": ["depth", "normals", "text", "seed", "sampler_settings"]}
+  "returns": {"frames": "OpenEXR RGBA sequence", "honoured": ["depth", "normals", "motion", "ids", "text", "seed", "sampler_settings"]}
 }

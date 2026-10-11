@@ -10,8 +10,12 @@ Two halves in one file, so the provider description, the conversions and the mod
   loads SDXL base, the fp16-fix VAE and ControlNet-Union (promax) from the local Hugging Face cache and
   never reaches the network. It imports nothing from NodeBased.
 
-Frames are generated one by one, each from that frame's own depth and normals, with the same seed. There is
-no temporal model: frame-to-frame flicker is expected and motion is not conditioned.
+Frames are generated in order with the same seed. The first is text-to-image from its own depth and normals.
+Every later one is guided by the one before (reprojection, version 1.1): the previous picture is warped into this
+frame with the exported backward motion (`nodebased.temporal`, loaded by path on the model side), the pixels the
+warp cannot supply (disocclusions, objects that appear, the edges, by the exported depth and IDs) are filled from
+this frame's plain text-to-image picture, and the result is the starting image of an image-to-image pass at the
+pinned `denoise_strength`. A strength of 1 turns the guidance off: every frame is made on its own, as in 1.0.
 """
 from __future__ import annotations
 
@@ -39,8 +43,9 @@ CONTROL_TYPE_DEPTH, CONTROL_TYPE_NORMAL = 1, 4
 CONTROL_MODES = {"depth_normals": (CONTROL_TYPE_DEPTH, CONTROL_TYPE_NORMAL),
                  "depth": (CONTROL_TYPE_DEPTH,), "normals": (CONTROL_TYPE_NORMAL,)}
 DEFAULT_SETTINGS = {"steps": 30, "guidance": 5.0, "controlnet_conditioning_scale": 0.8,
-                    "control_mode": "depth_normals"}
-SETTING_RANGES = {"steps": (1, 100), "guidance": (0.0, 20.0), "controlnet_conditioning_scale": (0.0, 2.0)}
+                    "control_mode": "depth_normals", "denoise_strength": 0.5}
+SETTING_RANGES = {"steps": (1, 100), "guidance": (0.0, 20.0), "controlnet_conditioning_scale": (0.0, 2.0),
+                  "denoise_strength": (0.05, 1.0)}
 DEFAULT_PROMPT = "a photograph"
 NEGATIVE_PROMPT = "blurry, low quality, watermark, text, deformed"
 MIN_VALID_NORMAL_LENGTH = 0.5
@@ -64,6 +69,7 @@ def resolve_settings(sampler_settings):
         raise ValueError("sdxl_controlnet steps must be a whole number")
     settings["guidance"] = float(settings["guidance"])
     settings["controlnet_conditioning_scale"] = float(settings["controlnet_conditioning_scale"])
+    settings["denoise_strength"] = float(settings["denoise_strength"])
     if settings["control_mode"] not in CONTROL_MODES:
         raise ValueError(f"sdxl_controlnet control_mode must be one of {', '.join(CONTROL_MODES)}")
     return settings
@@ -147,6 +153,11 @@ def available():
     return ""
 
 
+def _single_plane(values):
+    values = np.asarray(values, np.float32)
+    return values[..., 0] if values.ndim == 3 else values
+
+
 def run_frames(controls, *, text, seed, sampler_settings, workdir, progress=None, cancelled=None):
     """Generate one picture per frame; returns (list of ACEScg RGBA arrays, run info).
 
@@ -163,7 +174,12 @@ def run_frames(controls, *, text, seed, sampler_settings, workdir, progress=None
         base = workdir / f"frame_{frame.frame:04d}"
         np.save(f"{base}.depth.npy", depth_control_image(frame.depth.values, near, far))
         np.save(f"{base}.normals.npy", normals_control_image(frame.normals.values))
+        # What the reprojection needs, at the plate size: backward motion, metric depth and object IDs.
+        np.save(f"{base}.motion.npy", np.asarray(frame.motion_backward.values, np.float32)[..., :2])
+        np.save(f"{base}.z.npy", _single_plane(frame.depth.values))
+        np.save(f"{base}.ids.npy", _single_plane(frame.object_ids.values))
         rows.append({"frame": frame.frame, "depth": f"{base}.depth.npy", "normals": f"{base}.normals.npy",
+                     "motion_backward": f"{base}.motion.npy", "z": f"{base}.z.npy", "ids": f"{base}.ids.npy",
                      "result": f"{base}.result.npy"})
     job = {"frames": rows, "width": width, "height": height, "prompt": text or DEFAULT_PROMPT,
            "seed": int(seed), "settings": settings, "info": str(workdir / "info.json")}
@@ -233,6 +249,38 @@ def _load_pipeline(torch):
     return pipe
 
 
+def _load_temporal():
+    """`nodebased/temporal.py` by path: the model side imports nothing from the NodeBased package."""
+    import importlib.util
+    path = Path(__file__).resolve().parents[1] / "temporal.py"
+    spec = importlib.util.spec_from_file_location("nodebased_temporal", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _to_working(plane, work_w, work_h, motion=False):
+    """A plate-size plane at the working size by nearest sampling (IDs and depth must not blend across edges);
+    motion vectors are also rescaled to working-size pixels."""
+    h, w = plane.shape[:2]
+    rows = np.minimum(((np.arange(work_h) + 0.5) * h / work_h).astype(np.int64), h - 1)
+    cols = np.minimum(((np.arange(work_w) + 0.5) * w / work_w).astype(np.int64), w - 1)
+    out = np.asarray(plane, np.float32)[rows][:, cols]
+    if motion:
+        out = out * np.array([work_w / w, work_h / h], np.float32)
+    return out
+
+
+def guide_image(temporal, previous_picture, row, previous_row, work_w, work_h):
+    """The previous working-size picture warped into this frame, and the mask of the pixels it can supply."""
+    motion = _to_working(np.load(row["motion_backward"]), work_w, work_h, motion=True)
+    depth, ids = (_to_working(np.load(row[key]), work_w, work_h) for key in ("z", "ids"))
+    before_depth, before_ids = (_to_working(np.load(previous_row[key]), work_w, work_h) for key in ("z", "ids"))
+    warped, _ = temporal.warp(np.asarray(previous_picture, np.float32), motion)
+    mask = temporal.valid_mask(motion, depth, ids, before_depth, before_ids)
+    return warped, mask
+
+
 def _model_main(job_path):
     # Deterministic algorithms need this before cuBLAS starts (the parent sets it too).
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -254,6 +302,14 @@ def _model_main(job_path):
     work_w, work_h = working_size(width, height)
     started = time.perf_counter()
     pipe = _load_pipeline(torch)
+    strength = settings.get("denoise_strength", 1.0)
+    guided = strength < 1.0
+    if guided:
+        from diffusers import StableDiffusionXLControlNetUnionImg2ImgPipeline
+        # The same components; made before the offload so both pipelines run through the same hooks.
+        refine = StableDiffusionXLControlNetUnionImg2ImgPipeline.from_pipe(pipe)
+        refine.set_progress_bar_config(disable=True)
+        temporal = _load_temporal()
     # Model CPU offload always, unless NODEBASED_SDXL_OFFLOAD=never. The whole pipeline fits the 12 GB card only
     # when nothing else uses it, and a fallback after an out-of-memory error leaves the pipeline in a different
     # state (the same seed then gave different pixels), so the memory strategy never depends on what else runs.
@@ -266,6 +322,7 @@ def _model_main(job_path):
     torch.cuda.reset_peak_memory_stats()
     names = {"depth": "depth", "normals": "normals"}
     total = len(job["frames"])
+    previous_row, previous_picture, filled_fractions = None, None, []
     for index, row in enumerate(job["frames"]):
         images = []
         for mode in modes:
@@ -277,8 +334,22 @@ def _model_main(job_path):
             controlnet_conditioning_scale=[settings["controlnet_conditioning_scale"]] * len(modes),
             num_inference_steps=settings["steps"], guidance_scale=settings["guidance"],
             width=work_w, height=work_h, output_type="pil")
-        generator = torch.Generator("cuda").manual_seed(job["seed"])
-        picture = pipe(generator=generator, **arguments).images[0]
+        follows = previous_row is not None and row["frame"] == previous_row["frame"] + 1
+        if guided and follows:
+            warped, mask = guide_image(temporal, previous_picture, row, previous_row, work_w, work_h)
+            start = warped
+            if not mask.all():  # the holes come from this frame's own text-to-image picture
+                generator = torch.Generator("cuda").manual_seed(job["seed"])
+                plain = np.asarray(pipe(generator=generator, **arguments).images[0], np.float32)
+                start = np.where(mask[..., None], warped, plain)
+            filled_fractions.append(round(1.0 - float(mask.mean()), 4))
+            start = Image.fromarray(np.rint(np.clip(start, 0, 255)).astype(np.uint8))
+            generator = torch.Generator("cuda").manual_seed(job["seed"])
+            picture = refine(generator=generator, image=start, strength=strength, **arguments).images[0]
+        else:
+            generator = torch.Generator("cuda").manual_seed(job["seed"])
+            picture = pipe(generator=generator, **arguments).images[0]
+        previous_row, previous_picture = row, np.asarray(picture)
         np.save(row["result"], np.asarray(picture.resize((width, height), Image.LANCZOS), dtype=np.uint8))
         print(f"progress {index + 1} {total}", flush=True)
     import diffusers
@@ -286,7 +357,8 @@ def _model_main(job_path):
             "peak_vram_allocated_mib": round(torch.cuda.max_memory_allocated() / 2**20),
             "peak_vram_reserved_mib": round(torch.cuda.max_memory_reserved() / 2**20),
             "cpu_offload": offloaded, "working_size": [work_w, work_h], "device": torch.cuda.get_device_name(0),
-            "torch": torch.__version__, "diffusers": diffusers.__version__, "frames": total}
+            "torch": torch.__version__, "diffusers": diffusers.__version__, "frames": total,
+            "denoise_strength": strength, "filled_fraction_per_frame": filled_fractions}
     Path(job["info"]).write_text(json.dumps(info, indent=1), encoding="utf-8")
 
 
