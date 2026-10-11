@@ -234,7 +234,7 @@ class FluidDomainViewportTests(unittest.TestCase):
 class FluidDomainDefaultsTests(unittest.TestCase):
     def test_v19_migration_and_new_nodes_keep_explicit_bounds_fixed_by_default(self):
         legacy = core.empty_document()
-        legacy["version"] = core.SCHEMA_VERSION - 1
+        legacy["version"] = 19   # the literal: the auto_resize step is v19 -> v20, whatever the current schema is
         old_params = dict(core.SPECS["FluidSolver3D"]["params"])
         old_params.pop("auto_resize")
         old_params.pop("padding")
