@@ -500,14 +500,14 @@ class PropertiesSwitch(QCheckBox):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         checked = self.isChecked()
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#5ee0b5" if checked else "#1c2127"))
+        painter.setBrush(QColor(TOKENS["acc"] if checked else "#1c2127"))
         painter.drawRoundedRect(QRectF(0, 0, 34, 20), 10, 10)
         if not checked:
             painter.setPen(QPen(QColor("#2c333b"), 1))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(QRectF(0.5, 0.5, 33, 19), 9.5, 9.5)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#05231a" if checked else "#7d8793"))
+        painter.setBrush(QColor(TOKENS["acc_ink"] if checked else "#7d8793"))
         painter.drawEllipse(QPointF(24 if checked else 10, 10), 7, 7)
 
 
@@ -9405,7 +9405,7 @@ class Window(QMainWindow):
             reset_controls = QPushButton("Reset")
             reset_controls.setObjectName("properties-controls-reset")
             reset_controls.setFlat(True)
-            reset_controls.setStyleSheet("QPushButton { color: #5ee0b5; background: transparent; "
+            reset_controls.setStyleSheet(f"QPushButton {{ color: {TOKENS['acc']}; background: transparent; "
                                          "border: 0; padding: 0; font-size: 11px; }")
             reset_controls.clicked.connect(lambda checked=False, k=key, defaults=SPECS[node["type"]]["params"]:
                 self.command({"op": "batch", "commands": [
@@ -9456,7 +9456,7 @@ class Window(QMainWindow):
                 reset = QPushButton("Reset")
                 reset.setObjectName("balance-reset")
                 reset.setFlat(True)
-                reset.setStyleSheet("QPushButton { color: #5ee0b5; background: transparent; "
+                reset.setStyleSheet(f"QPushButton {{ color: {TOKENS['acc']}; background: transparent; "
                                     "border: 0; padding: 0; font-size: 11px; }")
                 reset.clicked.connect(lambda checked=False, k=key, kind=node["type"]:
                     self.command({"op": "batch", "commands": [
@@ -10623,7 +10623,7 @@ class Window(QMainWindow):
             tabs = QTabWidget()
             tabs.setObjectName("node-tabs")
             tabs.setStyleSheet("QTabBar::tab { padding: 6px 10px; color: #7d8793; border: 0; }"
-                               "QTabBar::tab:selected { color: #edf1f5; border-bottom: 2px solid #5ee0b5; }")
+                               f"QTabBar::tab:selected {{ color: #edf1f5; border-bottom: 2px solid {TOKENS['acc']}; }}")
             tabs.addTab(top_aligned(content), "Knobs")
             user_knobs = node.get("user_knobs") or (self.graph_document().get("node_data", {}).get(key, {}).get("user_knobs", []))
             if user_knobs:

@@ -200,5 +200,55 @@ class PlayheadTests(unittest.TestCase):
         self.assertEqual(back, [2, 1, 2, 3, 4, 3])
 
 
+def _hsl(value):
+    import colorsys
+    r, g, b = (int(value[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    return h * 360, s, l
+
+
+def _contrast(a, b):
+    def luminance(value):
+        channels = [int(value[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        r, g, b = (c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    hi, lo = sorted((luminance(a), luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+class AccentTests(unittest.TestCase):
+    def test_the_default_accent_is_calmer_than_the_old_mint(self):
+        tokens = theme.TOKENS
+        _, old_s, old_l = _hsl("#5ee0b5")
+        _, s, l = _hsl(tokens["acc"])
+        self.assertTrue(0.55 <= l <= 0.65, l)
+        self.assertLess(s, old_s * 0.65)
+        self.assertLessEqual(l, old_l)
+        self.assertGreaterEqual(_contrast(tokens["acc"], tokens["acc_ink"]), 4.5)
+        self.assertGreaterEqual(_contrast(tokens["acc2"], tokens["acc_ink"]), 3.0)
+        # The washes follow the accent.
+        rgb = ", ".join(str(int(tokens["acc"][i:i + 2], 16)) for i in (1, 3, 5))
+        self.assertIn(rgb, tokens["accbg"])
+        self.assertIn(rgb, tokens["acc_ring"])
+        self.assertEqual(theme.theme_colors("NodeBased")["accent"], tokens["acc"])
+
+    def test_the_old_mint_is_still_a_named_choice(self):
+        self.assertEqual(theme.ACCENTS["Mint"], "#5ee0b5")
+        self.assertEqual(len(theme.ACCENTS), 11)
+        self.assertEqual(len(set(theme.ACCENTS.values())), 11)
+        for name, value in theme.ACCENTS.items():
+            if value is not None:
+                self.assertEqual(theme.valid_accent(value), value, name)
+        self.assertIn("#5ee0b5", theme.build_style("NodeBased", theme.ACCENTS["Mint"]))
+
+    def test_no_source_file_hard_codes_the_old_accent(self):
+        import pathlib
+        for path in pathlib.Path(theme.__file__).parent.glob("*.py"):
+            text = path.read_text()
+            if path.name == "theme.py":
+                continue
+            self.assertNotIn("5ee0b5", text.lower(), path.name)
+
+
 if __name__ == "__main__":
     unittest.main()
