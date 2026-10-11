@@ -1551,7 +1551,7 @@ def _canvas_size_for_chain(document, target, frame, tier):
             pixels = raster.pixels if int(tier) == 1 else Evaluator._decimate(raster.pixels, int(tier))
             return int(pixels.shape[1]), int(pixels.shape[0])
         if node["type"] == "ConditionedRead":
-            raster = self.evaluator.evaluate_raster(document, node_id, frame=frame, tier=tier)
+            raster = Evaluator().evaluate_raster(document, cursor, frame=frame, tier=tier)
             return int(raster.pixels.shape[1]), int(raster.pixels.shape[0])
         if node["type"] == "Render3D":
             params = tiers.scale_params("Render3D", node["params"], tier)

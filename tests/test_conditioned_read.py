@@ -60,6 +60,12 @@ class ConditionedReadTests(unittest.TestCase):
             raster = Evaluator().evaluate_raster(graph.document, "read", frame=1)
             self.assertEqual(raster.pixels.shape, (8, 8, 4))
             self.assertIn("motion_forward", raster.layers)
+            # the live viewer asks the tile executor for the canvas size of a chain that starts here
+            # (a real Claude Code session met `NameError: name 'self' is not defined` on exactly this)
+            from nodebased import tileexec
+            graph.execute({"op": "create", "id": "grade", "type": "Grade", "params": {}})
+            graph.execute({"op": "connect", "id": "grade", "input": "image", "source": "read"})
+            self.assertEqual(tileexec._canvas_size_for_chain(graph.document, "grade", 1, 1)[:2], (8, 8))
 
     def test_wrong_generated_colour_space_tag_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
