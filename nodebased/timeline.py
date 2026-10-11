@@ -26,10 +26,15 @@ from __future__ import annotations
 from PySide6.QtCore import QByteArray, QEvent, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QToolTip, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QToolTip, QVBoxLayout, QWidget
 
 from .theme import TOKENS
 
+
+# The playback unit's rhythm, in pixels: every control is 28 tall and sits on an 8 px grid.
+UNIT_CONTROL = 28
+UNIT_GAP = 8
+UNIT_SIDE = 16
 
 # A frame is cached when its post-view-transform image is resident; it is keyed when some curve
 # in scope has a key on it. Green is the accent of the new look, the key blue matches Properties.
@@ -67,6 +72,42 @@ STEP_BACK_ICON = '<path d="M6 5v14M19 5 9 12l10 7z"/>'
 STEP_FORWARD_ICON = '<path d="M18 5v14M5 5l10 7-10 7z"/>'
 PLAY_ICON = '<path d="M8 5.5v13l11-6.5z"/>'
 STOP_ICON = '<rect x="7" y="7" width="10" height="10" rx="1.5"/>'
+# The rest of the transport, drawn in the left column's language: 24 x 24, 1.8 px round strokes.
+START_ICON = '<path d="M5 5v14M19 6l-5 6 5 6M13 6l-5 6 5 6"/>'
+END_ICON = '<path d="M19 5v14M5 6l5 6-5 6M11 6l5 6-5 6"/>'
+PREV_KEY_ICON = '<path d="M11 7l-5 5 5 5M19 12l-3.5-3.5L12 12l3.5 3.5z"/>'
+NEXT_KEY_ICON = '<path d="M13 7l5 5-5 5M5 12l3.5-3.5L12 12l-3.5 3.5z"/>'
+STEP_BACK_ONE_ICON = '<path d="M14 6l-6 6 6 6"/>'
+STEP_FORWARD_ONE_ICON = '<path d="M10 6l6 6-6 6"/>'
+PLAY_BACK_ICON = '<path d="M16 5.5v13L5 12z"/>'
+LOOP_ICONS = {
+    "once": '<path d="M4 12h12M12 8l4 4-4 4M20 6v12"/>',
+    "loop": '<path d="M17 7H9a4 4 0 0 0-4 4v1M7 17h8a4 4 0 0 0 4-4v-1M14 4l3 3-3 3M10 14l-3 3 3 3"/>',
+    "pingpong": '<path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/>',
+}
+# The loop toggle cycles through these; "loop" is what playback has always done.
+LOOP_MODES = ("once", "loop", "pingpong")
+LOOP_LABELS = {"once": "Play once", "loop": "Loop", "pingpong": "Ping-pong"}
+
+
+def playhead_at(first, last, origin, offset, direction, mode):
+    """Where playback that started on ``origin`` has reached after ``offset`` frames, going
+    ``direction`` (+1 or -1) in ``mode``. Returns ``(frame, finished)``; ``finished`` is True only
+    in "once" mode, once the end of the range has been reached."""
+    span = last - first + 1
+    if span <= 1:
+        return first, mode == "once" and offset > 0
+    if mode == "once":
+        target = origin + direction * offset
+        frame = min(max(target, first), last)
+        return frame, offset > 0 and frame == (last if direction > 0 else first)
+    if mode == "pingpong":
+        period = 2 * (span - 1)
+        at = origin - first
+        start = at if direction > 0 else (period - at) % period
+        index = (start + offset) % period
+        return first + (index if index <= span - 1 else period - index), False
+    return first + (origin - first + direction * offset) % span, False
 
 
 def transport_icon(shapes, filled=False, ink=False, side=18):
@@ -352,27 +393,42 @@ class TimelineBar(QWidget):
 
 
 class TimeRow(QWidget):
-    """The slim row under the viewer. `add` places a widget; `optional` names the widgets it may
-    hide, in the order it hides them, when the row would otherwise be wider than the viewer: a
-    narrow dock or a wide font loses the status text and the light's words before anything that
-    is being edited is cut off."""
+    """The playback unit under the viewer: a ruler across the full width, and under it one row of
+    28 px controls on an 8 px rhythm (the frame field, the transport, the range and the rate).
+    `add` places a control in that row; `set_optional` names the controls it may hide, first to go
+    first, when the row would otherwise be wider than the viewer: a narrow dock or a wide font
+    loses the status text and the rate presets before anything that is being edited is cut off."""
 
     def __init__(self):
         super().__init__()
         self.setObjectName("time-row")
-        self.row = QHBoxLayout(self)
-        self.row.setContentsMargins(16, 0, 16, 0)
-        self.row.setSpacing(8)
+        self.column = QVBoxLayout(self)
+        self.column.setContentsMargins(0, 0, 0, 0)
+        self.column.setSpacing(0)
+        self.controls = QHBoxLayout()
+        self.controls.setContentsMargins(UNIT_SIDE, UNIT_GAP, UNIT_SIDE, UNIT_GAP)
+        self.controls.setSpacing(UNIT_GAP)
+        self.row = self.controls
+        self.column.addLayout(self.controls)
         self._optional = []
         self._fitting = False
 
+    def add_ruler(self, widget):
+        """The ruler sits above the controls and spans the whole unit."""
+        self.column.insertWidget(0, widget)
+        return widget
+
     def add(self, widget, stretch=0):
-        self.row.addWidget(widget, stretch)
+        self.controls.addWidget(widget, stretch)
         return widget
 
     def set_optional(self, widgets):
         """Widgets the row may hide, first to go first."""
         self._optional = list(widgets)
+
+    def _needed(self):
+        margins = self.controls.contentsMargins()
+        return self.controls.minimumSize().width() + margins.left() + margins.right()
 
     def fit(self):
         if self._fitting or not self._optional:
@@ -381,12 +437,12 @@ class TimeRow(QWidget):
         try:
             for widget in self._optional:
                 widget.setVisible(True)
-            self.row.activate()
+            self.column.activate()
             for widget in self._optional:
-                if self.row.minimumSize().width() <= self.width():
+                if self._needed() <= self.width():
                     break
                 widget.setVisible(False)
-                self.row.activate()
+                self.column.activate()
         finally:
             self._fitting = False
 

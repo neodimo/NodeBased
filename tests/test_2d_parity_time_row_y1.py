@@ -55,14 +55,14 @@ class TimeRowTests(unittest.TestCase):
 
     def test_field_order_and_labels_at_1440x920(self):
         w = self.open_window()
-        order = [w.frame_current_label, w.frame_current, w.frame_slider, w.frame_first_label,
+        order = [w.frame_current, w.play_button, w.frame_first_label,
                  w.frame_first, w.frame_last_label, w.frame_last, w.frame_fps, w.fps_presets]
         edges = [self.left_edge(widget) for widget in order]
         self.assertEqual(edges, sorted(edges), "the time row is out of reading order")
         self.assertEqual(len(set(edges)), len(edges))
-        self.assertEqual([w.frame_current_label.text(), w.frame_first_label.text(),
-                          w.frame_last_label.text()], ["Frame", "In", "Out"])
-        for label in (w.frame_current_label, w.frame_first_label, w.frame_last_label):
+        # The frame field carries no caption: the transport icons beside it already say it is the frame.
+        self.assertEqual([w.frame_first_label.text(), w.frame_last_label.text()], ["In", "Out"])
+        for label in (w.frame_first_label, w.frame_last_label):
             self.assertTrue(label.isVisible())
         spins = (w.frame_first, w.frame_last, w.frame_fps)
         self.assertTrue(all(w.frame_current.width() > spin.width() for spin in spins),
@@ -170,7 +170,7 @@ class TimeRowTests(unittest.TestCase):
                         "the time row starts inside the viewer panel")
         self.assertLessEqual(row.width(), panel.width())
         checked = 0
-        for widget in row.findChildren(QLabel) + row.findChildren(QSpinBox) + [w.frame_fps, w.fps_presets, w.play_button]:
+        for widget in row.findChildren(QLabel) + row.findChildren(QSpinBox) + [w.frame_fps, w.play_button]:
             if widget.parentWidget() is not row or widget is w.frame_info:
                 continue
             checked += 1
@@ -178,8 +178,9 @@ class TimeRowTests(unittest.TestCase):
             self.assertTrue(bounds.contains(widget.geometry()), f"{widget.geometry()} outside {bounds}")
             self.assertGreaterEqual(widget.width(), widget.minimumSizeHint().width(),
                                     f"{type(widget).__name__} is squeezed below its minimum")
-        # Nine: the TIME caption is gone and the transport buttons sit in their own group (new look, step 5).
-        self.assertGreaterEqual(checked, 9)
+        # Seven: the TIME and Frame captions are gone, the transport buttons sit in their own group, and the
+        # rate presets are the first thing a narrow row drops after the status text.
+        self.assertGreaterEqual(checked, 7)
         self.assertGreaterEqual(w.frame_slider.width(), 140, "the timeline keeps usable width")
 
     def test_no_time_row_widget_is_clipped_at_1280x720(self):

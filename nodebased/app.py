@@ -84,7 +84,8 @@ from .tiers import PROXY_TIERS, auto_playback_tier
 from .artisttools import CacheInspectorPanel, SliceView
 from . import cachecontext
 from .timeline import (PLAY_ICON, STEP_BACK_ICON, STEP_FORWARD_ICON, STOP_ICON, TimelineBar, TimeRow, KEY_COLOR,
-                       transport_icon)
+                       transport_icon, UNIT_CONTROL, START_ICON, END_ICON, PREV_KEY_ICON, NEXT_KEY_ICON, STEP_BACK_ONE_ICON,
+                       STEP_FORWARD_ONE_ICON, PLAY_BACK_ICON, LOOP_ICONS, LOOP_MODES, LOOP_LABELS, playhead_at)
 from .topbar import StatusDot
 from .shortcuthelp import ShortcutOverlay
 from .outputpreview import OutputPreview
@@ -121,6 +122,7 @@ SHORTCUT_SECTIONS = (
               ("Ctrl+E", "Export image"))),
     ("Edit", (("Ctrl+Z", "Undo"), ("Ctrl+Shift+Z", "Redo"), ("Ctrl+,", "Settings"))),
     ("Time", (("Left", "previous frame"), ("Right", "next frame"),
+               ("Alt+Left", "previous keyframe"), ("Alt+Right", "next keyframe"),
                ("Home", "first frame"), ("End", "last frame"), ("Space", "play/stop"))),
     ("Node graph", (("Tab", "node search"), ("R/G/M/T/B/C/S/O/P/U/W", "create node (Read/Grade/Merge/Transform/Blur/ColorCorrect/Shuffle/Roto/Premult/Unpremult/Write)"),
                     ("Ctrl+F", "focus the NODES dock's search box"),
@@ -140,7 +142,8 @@ SHORTCUT_SECTIONS = (
     ("Viewer", (("Tab (pointer over the viewer)", "switch between the 2D viewer and the 3D viewport"),
                 ("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
-                ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
+                ("J", "play backwards (while playing forwards: stop and step back)"), ("K", "stop"),
+                ("L", "play forwards"),
                 ("1-9", "show viewer input 1-9 (the A buffer; empty inputs are ignored)"),
                 ("Alt+1-9", "set viewer input 1-9 as the B buffer (Alt+0 clears B)"),
                 ("Shift+W", "reset the wipe to the centre, vertical"),
@@ -713,6 +716,16 @@ class Preferences:
 
     def set_node_toolbar_compact(self, enabled):
         self._store.setValue(self.NODE_TOOLBAR_COMPACT, bool(enabled))
+        self._store.sync()
+
+    LOOP_MODE = "interface/loop_mode"
+
+    def loop_mode(self):
+        value = self._store.value(self.LOOP_MODE, "loop")
+        return value if value in LOOP_MODES else "loop"
+
+    def set_loop_mode(self, mode):
+        self._store.setValue(self.LOOP_MODE, mode if mode in LOOP_MODES else "loop")
         self._store.sync()
 
     def reduce_motion(self):
@@ -2985,13 +2998,18 @@ class Viewer(PanZoomView):
             self.window.channels.setCurrentText("RGB" if self.window.channels.currentText() == channel else channel)
             event.accept()
         elif event.key() == Qt.Key.Key_L and not event.modifiers():
-            self.window.toggle_playback(True)
+            self.window.play(1)
             event.accept()
         elif event.key() == Qt.Key.Key_K and not event.modifiers():
             self.window.toggle_playback(False)
             event.accept()
         elif event.key() == Qt.Key.Key_J and not event.modifiers():
-            self.window.step_frame(-1)
+            # Nuke's J plays backwards. While playing forwards it keeps its older meaning: stop and
+            # step back one frame.
+            if self.window.playing and self.window.play_direction > 0:
+                self.window.step_frame(-1)
+            else:
+                self.window.play(-1)
             event.accept()
         elif event.key() in (Qt.Key.Key_F, Qt.Key.Key_H) and not event.modifiers():
             # F is the direct fit command. H is the familiar home/frame alias: with a
@@ -7133,6 +7151,10 @@ class Window(QMainWindow):
         self.timer.setInterval(35)
         self.timer.timeout.connect(self.start_preview)
         self.playing = False
+        # +1 plays forwards, -1 backwards; loop_mode is "once", "loop" or "pingpong" (a preference).
+        self.play_direction = 1
+        self.loop_mode = self.preferences.loop_mode()
+        self.keyed_frames = []
         self.playback_origin_frame = 0
         self.playback_origin_time = 0.0
         self.playback_elapsed_frames = 0
@@ -7656,32 +7678,48 @@ class Window(QMainWindow):
         transport.setObjectName("transport")
         transport_row = QHBoxLayout(transport)
         transport_row.setContentsMargins(0, 0, 0, 0)
-        transport_row.setSpacing(2)
+        transport_row.setSpacing(0)
 
-        def transport_button(name, icon, tip):
+        def transport_button(name, icon, tip, callback, checkable=False):
             button = QToolButton()
             button.setObjectName(name)
             button.setIcon(icon)
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             button.setToolTip(tip)
+            button.setAccessibleName(tip.split("  (")[0])
+            button.setCheckable(checkable)
+            button.setFixedSize(UNIT_CONTROL, UNIT_CONTROL)
+            button.clicked.connect(lambda _checked=False, fn=callback: fn())
             transport_row.addWidget(button)
             return button
 
-        self.step_back_button = transport_button("transport-back", transport_icon(STEP_BACK_ICON),
-                                                 "Previous frame (Left)")
-        self.step_back_button.clicked.connect(lambda: self.step_frame(-1))
+        # In this order: start, previous key, step back, play backwards, stop, play, step forward,
+        # next key, end, then the loop mode.
+        self.start_button = transport_button("transport-start", transport_icon(START_ICON),
+                                             "Go to start  (Home)", self.go_to_start)
+        self.prev_key_button = transport_button("transport-prev-key", transport_icon(PREV_KEY_ICON),
+                                                "Previous keyframe  (Alt+Left)", lambda: self.step_key(-1))
+        self.step_back_button = transport_button("transport-back", transport_icon(STEP_BACK_ONE_ICON),
+                                                 "Previous frame  (Left)", lambda: self.step_frame(-1))
+        self.play_back_button = transport_button("transport-play-back", transport_icon(PLAY_BACK_ICON, filled=True),
+                                                 "Play backwards  (J)", lambda: self.play(-1, toggle=True))
+        self.stop_button = transport_button("transport-stop", transport_icon(STOP_ICON, filled=True),
+                                            "Stop  (K)", lambda: self.toggle_playback(False))
         # The play button keeps its glyph as its text (the tests and the agent read "▶" and "■")
         # and shows the icon beside it; icon-only style paints the icon and not the text.
         self.play_button = transport_button("transport-play", transport_icon(PLAY_ICON, filled=True, ink=True),
-                                            "Play / stop (Space)")
+                                            "Play / stop  (Space, L)", lambda: self.play(1, toggle=True))
         self.play_button.setText("▶")
-        self.play_button.clicked.connect(lambda: self.toggle_playback())
-        self.step_forward_button = transport_button("transport-forward", transport_icon(STEP_FORWARD_ICON),
-                                                    "Next frame (Right)")
-        self.step_forward_button.clicked.connect(lambda: self.step_frame(1))
-        row.add(transport)
-        self.frame_current_label = caption("Frame", "The frame on screen")
+        self.step_forward_button = transport_button("transport-forward", transport_icon(STEP_FORWARD_ONE_ICON),
+                                                    "Next frame  (Right)", lambda: self.step_frame(1))
+        self.next_key_button = transport_button("transport-next-key", transport_icon(NEXT_KEY_ICON),
+                                                "Next keyframe  (Alt+Right)", lambda: self.step_key(1))
+        self.end_button = transport_button("transport-end", transport_icon(END_ICON),
+                                           "Go to end  (End)", self.go_to_end)
+        self.loop_button = transport_button("transport-loop", transport_icon(LOOP_ICONS[self.loop_mode]),
+                                            "", self.cycle_loop_mode)
+        self.refresh_loop_button()
         self.frame_current = FrameSpinBox()
         self.frame_current.setObjectName("frame-current")
         self.frame_current.setRange(*TIME_LIMITS["current"])
@@ -7692,12 +7730,15 @@ class Window(QMainWindow):
         self.frame_current.setToolTip("Current frame. Type a number to go there, or +10 / -5 to move "
                                       "relative to it. Press Enter to apply.")
         row.add(self.frame_current)
+        row.controls.addStretch(1)
+        row.add(transport)
+        row.controls.addStretch(1)
         # TimelineBar keeps the QSlider surface this row was built against (setRange/setValue/
         # value/valueChanged), and adds the tick marks, frame numbers, the cached range and the
         # key diamonds. Everything below wires to it unchanged.
         self.frame_slider = TimelineBar()
-        self.frame_slider.setMinimumWidth(140)
-        row.add(self.frame_slider, 1)
+        self.frame_slider.setMinimumWidth(96)
+        row.add_ruler(self.frame_slider)
         self.frame_first_label = caption("In", "First frame of the comp's range")
         self.frame_first = FittedSpinBox()
         self.frame_first.setObjectName("time-field")
@@ -7739,7 +7780,7 @@ class Window(QMainWindow):
         self.frame_info = ShrinkableLabel("")
         self.frame_info.setObjectName("muted")
         row.add(self.frame_info)
-        row.set_optional([self.frame_info, self.realtime_label, self.fps_presets])
+        row.set_optional([self.frame_info, self.fps_presets, self.realtime_label])
         # Commit on Enter or focus-out rather than per keystroke: one undoable edit per typed value.
         for spin in (self.frame_first, self.frame_last, self.frame_current, self.frame_fps):
             spin.setKeyboardTracking(False)
@@ -7900,6 +7941,7 @@ class Window(QMainWindow):
                         for child in value: add_shape_keys(child)
                 add_shape_keys(shape)
         keyed = set(labels)
+        self.keyed_frames = sorted(keyed)
         self.frame_slider.set_marks(cached, keyed, labels)
 
     def apply_fps_preset(self, index):
@@ -7948,20 +7990,79 @@ class Window(QMainWindow):
         time_range = self.dispatcher.document["time"]
         first, last = time_range["first"], time_range["last"]
         span = last - first + 1
-        return [first + ((frame - first + offset) % span)
+        step = -1 if getattr(self, "play_direction", 1) < 0 else 1
+        return [first + ((frame - first + step * offset) % span)
                 for offset in range(1, min(count, max(0, span - 1)) + 1)]
 
-    def toggle_playback(self, checked=None):
+    def play(self, direction, toggle=False):
+        """Play forwards (+1) or backwards (-1). Playing the way it already plays does nothing, or
+        stops when `toggle` is set (the buttons and Space); the other way turns round from here."""
+        if self.playing and self.play_direction == direction:
+            if toggle:
+                self.toggle_playback(False)
+            return
+        if self.playing:
+            self.toggle_playback(False)
+        self.toggle_playback(True, direction)
+
+    def go_to_start(self):
+        self.set_time(current=self.dispatcher.document["time"]["first"])
+
+    def go_to_end(self):
+        self.set_time(current=self.dispatcher.document["time"]["last"])
+
+    def step_key(self, direction):
+        """Jump to the previous (-1) or next (+1) keyframe in view; stays put when there is none."""
+        if self.playing:
+            self.toggle_playback(False)
+        current = self.dispatcher.document["time"]["current"]
+        frames = [f for f in self.keyed_frames if (f < current if direction < 0 else f > current)]
+        if frames:
+            self.set_time(current=max(frames) if direction < 0 else min(frames))
+        else:
+            self.statusBar().showMessage("No " + ("previous" if direction < 0 else "next") + " keyframe", 3000)
+
+    def cycle_loop_mode(self):
+        self.set_loop_mode(LOOP_MODES[(LOOP_MODES.index(self.loop_mode) + 1) % len(LOOP_MODES)])
+
+    def set_loop_mode(self, mode):
+        self.loop_mode = mode if mode in LOOP_MODES else "loop"
+        self.preferences.set_loop_mode(self.loop_mode)
+        self.refresh_loop_button()
+
+    def refresh_loop_button(self):
+        mode = self.loop_mode
+        self.loop_button.setIcon(transport_icon(LOOP_ICONS[mode]))
+        self.loop_button.setProperty("mode", mode)
+        self.loop_button.setToolTip(f"Playback: {LOOP_LABELS[mode]}. Click to change (play once, loop, ping-pong).")
+        self.loop_button.setAccessibleName(f"Loop mode: {LOOP_LABELS[mode]}")
+        self.loop_button.style().unpolish(self.loop_button)
+        self.loop_button.style().polish(self.loop_button)
+
+    def toggle_playback(self, checked=None, direction=1):
         start = (not self.playing) if checked is None else bool(checked)
         if start == self.playing:
             return
         self.playing = start
+        if start:
+            self.play_direction = -1 if direction < 0 else 1
         if hasattr(self, "state_word"):
             self.refresh_state_word()
-        self.play_button.setText("■" if start else "▶")
-        self.play_button.setIcon(transport_icon(STOP_ICON if start else PLAY_ICON, filled=True, ink=True))
+        forward = start and self.play_direction > 0
+        backward = start and self.play_direction < 0
+        self.play_button.setText("■" if forward else "▶")
+        self.play_button.setIcon(transport_icon(STOP_ICON if forward else PLAY_ICON, filled=True, ink=True))
+        self.play_back_button.setIcon(transport_icon(STOP_ICON if backward else PLAY_BACK_ICON, filled=True))
+        self.play_button.setChecked(forward)
+        self.play_back_button.setChecked(backward)
         if start:
             time_range = self.dispatcher.document["time"]
+            # Playing once from the far end starts again from the other end, as Nuke does.
+            if self.loop_mode == "once":
+                end = time_range["last"] if self.play_direction > 0 else time_range["first"]
+                if time_range["current"] == end and time_range["first"] != time_range["last"]:
+                    self.set_time(current=time_range["first"] if self.play_direction > 0 else time_range["last"])
+                    time_range = self.dispatcher.document["time"]
             self.playback_origin_frame = time_range["current"]
             self.playback_origin_time = time.monotonic()
             self.playback_elapsed_frames = 0
@@ -8009,7 +8110,6 @@ class Window(QMainWindow):
         up, playback_frames_rendered climbs at least as fast as elapsed_frames, so this is
         identical to plain wall-clock-following."""
         time_range = self.dispatcher.document["time"]
-        span = time_range["last"] - time_range["first"] + 1
         elapsed_frames = int((time.monotonic() - self.playback_origin_time) * time_range["fps"])
         advanced = elapsed_frames - self.playback_elapsed_frames
         if advanced > 1:
@@ -8017,10 +8117,12 @@ class Window(QMainWindow):
             self.update_realtime_light()
         self.playback_elapsed_frames = elapsed_frames
         bounded_frames = min(elapsed_frames, self.playback_frames_rendered)
-        target = time_range["first"] + (
-            (self.playback_origin_frame - time_range["first"] + bounded_frames) % span)
+        target, finished = playhead_at(time_range["first"], time_range["last"], self.playback_origin_frame,
+                                       bounded_frames, self.play_direction, self.loop_mode)
         if target != time_range["current"]:
             self.set_time(transient=True, playhead_only=True, current=target)
+        if finished:
+            self.toggle_playback(False)
 
     def _menus(self):
         file = self.menuBar().addMenu("File")
@@ -8048,10 +8150,10 @@ class Window(QMainWindow):
             (edit, "Settings…", "Edit", "Settings", self.project_settings),
             (time_menu, "Previous frame", "Time", "previous frame", lambda: self.step_frame(-1)),
             (time_menu, "Next frame", "Time", "next frame", lambda: self.step_frame(1)),
-            (time_menu, "First frame", "Time", "first frame",
-             lambda: self.set_time(current=self.dispatcher.document["time"]["first"])),
-            (time_menu, "Last frame", "Time", "last frame",
-             lambda: self.set_time(current=self.dispatcher.document["time"]["last"])),
+            (time_menu, "Previous keyframe", "Time", "previous keyframe", lambda: self.step_key(-1)),
+            (time_menu, "Next keyframe", "Time", "next keyframe", lambda: self.step_key(1)),
+            (time_menu, "First frame", "Time", "first frame", self.go_to_start),
+            (time_menu, "Last frame", "Time", "last frame", self.go_to_end),
             (time_menu, "Play / Stop", "Time", "play/stop", self.toggle_playback)]:
             action = QAction(name, self)
             action.setShortcut(QKeySequence(shortcut(section, description)))
