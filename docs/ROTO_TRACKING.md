@@ -380,18 +380,28 @@ first (see "Paint strokes" below).
   window. Proxy tiers map screen coordinates back to the node's pixel space.
   Dragging an animated point updates/adds the current-frame key in its v8 scalar
   envelope instead of removing the curve. Shape mode, opacity and feather
-  remain command-editable payload fields.
+  remain command-editable payload fields. The shape list supports a Nuke-style per-shape
+  transform with animatable translate X/Y, rotate, scale X/Y and centre X/Y. The default
+  identity transform preserves existing documents. The shape's centre defaults to the
+  point centroid; transforming scales and rotates tangent vectors along with their points.
+  Tracker-linked shapes default to translation-only follow, preserving the prior behavior;
+  choosing **Full Tracker solve** applies the Tracker's enabled translate/rotate/scale
+  solution about the shape centre. Render and overlay call the same shape resolver.
 * No `roto_set_key` convenience op. v6 is merged now, so the stated blocker is
   gone; the op is simply not written. When it is, it reuses
   `nodebased.animation.merge_key` rather than growing a second key-insertion
   code path. Until then, keying a point means sending the whole shape list
   through `set_shapes`.
 * Tracking is supported by the analysis workflow above; planar tracking remains outside this node.
-* No open/stroked splines, no per-point feather, no motion blur, no shape
-  linking to a Tracker, no planar tracking, no ROI-limited or tiered execution —
+* No open/stroked splines, no per-point feather, no motion blur, no planar tracking, no ROI-limited or tiered execution —
   the evaluator still runs full frame; this pass only declares its rules.
 
 ## Transform viewer handle
+
+With multiple points selected, the overlay bounds the set and dragging inside it moves
+all selected points in one undoable edit. Ctrl+A selects every point in the shape chosen
+in the Roto list. The current handle exposes the bounds and corners visually; corner and
+edge scaling, rotation, and pivot dragging are not wired yet.
 
 ## RotoPaint and DustBust (schema v13)
 

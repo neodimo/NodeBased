@@ -90,6 +90,26 @@ class RotoOverlayTests(unittest.TestCase):
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
         self.assertEqual(viewer.scene().itemsBoundingRect(), original_bounds)
 
+    def test_control_a_selects_all_points_and_group_move_is_one_undo(self):
+        shape = triangle()
+        self.window.close(); APP.processEvents()
+        self.window = Window(roto_document([shape])); self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True); APP.processEvents()
+        viewer = self.window.viewer; viewer.setFocus()
+        QTest.keyClick(viewer, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(viewer.roto_selected_points, {(0, 0), (0, 1), (0, 2)})
+        start = viewer.mapToScene(self.scene_pos(40, 40))
+        finish = viewer.mapToScene(self.scene_pos(45, 47))
+        viewer.roto_drag = {"kind": "group_move", "point": (0, 0),
+            "selected": set(viewer.roto_selected_points), "start": start, "scene": finish,
+            "start_data": viewer._roto_data_point(start, viewer._roto_context()[1], 1.0), "moved": True}
+        viewer._commit_roto_drag()
+        moved = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
+        self.assertAlmostEqual(moved[0]["x"], 15.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(moved[0]["y"], 17.0, delta=self.scene_pixel_tolerance())
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
+
     def test_dragging_a_point_auto_keys_it_when_another_point_in_the_shape_is_animated(self):
         shape = triangle()
         for point in shape["points"][:1]:

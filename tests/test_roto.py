@@ -87,6 +87,37 @@ class ShapeValidationTests(unittest.TestCase):
             shapes.validate_node_data({"ghost": {"shapes": []}}, {})
 
 
+class ShapeTransformTests(unittest.TestCase):
+    def test_shape_transform_scales_points_and_tangents_and_rotates_about_center(self):
+        shape = square(0, 0, 2, 2, transform={"center_x": 1.0, "center_y": 1.0,
+                                             "scale_x": 2.0, "scale_y": 2.0,
+                                             "rotate": 90.0})
+        resolved = shapes.resolve_shapes({"shapes": [shape]}, 1)[0]
+        self.assertAlmostEqual(resolved["points"][0]["x"], 3.0)
+        self.assertAlmostEqual(resolved["points"][0]["y"], -1.0)
+        shape["points"][0]["out_x"] = 3.0
+        resolved = shapes.resolve_shapes({"shapes": [shape]}, 1)[0]
+        self.assertAlmostEqual(resolved["points"][0]["out_y"], 6.0)
+
+    def test_animated_shape_translate_interpolates_at_midpoint(self):
+        shape = square(0, 0, 2, 2, transform={"translate_x": keyed(0, [(1, 0), (3, 10)])})
+        resolved = shapes.resolve_shapes({"shapes": [shape]}, 2)[0]
+        self.assertAlmostEqual(resolved["points"][0]["x"], 5.0)
+
+    def test_full_tracker_follow_applies_rotation_and_scale(self):
+        shape = square(0, 0, 2, 2, track_link={"tracker_id": "t", "track_name": "a"},
+                       track_follow="full", transform={"center_x": 1.0, "center_y": 1.0})
+        tracks = [track("a", keyed(0, [(1, 0), (2, 10)]), keyed(0, [(1, 0), (2, 10)])),
+                  track("b", keyed(2, [(1, 2), (2, 10)]), keyed(0, [(1, 0), (2, 14)]))]
+        doc = {"nodes": {"t": {"type": "Tracker", "params": {"reference_frame": 1,
+                    "apply_rotate": 1, "apply_scale": 1, "apply_translate": 1, "smoothing": 0,
+                    "mode": "match_move"}}}, "node_data": {"t": {"tracks": tracks}}}
+        resolved = shapes.resolve_roto_shapes({"shapes": [shape]}, 2, doc)[0]
+        # 90 degrees and 2x scale about the shape centre, then centroid translation (9, 12).
+        self.assertAlmostEqual(resolved["points"][0]["x"], 12.0, places=6)
+        self.assertAlmostEqual(resolved["points"][0]["y"], 11.0, places=6)
+
+
 class ScalarResolutionTests(unittest.TestCase):
     def test_a_plain_number_resolves_to_itself_at_every_frame(self):
         self.assertEqual(shapes.resolve_scalar(4.5, 1, "x"), 4.5)

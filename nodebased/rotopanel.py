@@ -79,6 +79,9 @@ def build_panel(window, key):
         shape["opacity"] = keyed(shape["opacity"], "opacity")
         shape["feather"] = keyed(shape["feather"], "feather")
         shape["color"] = [keyed(c, "opacity") for c in shape.get("color", [1, 1, 1, 1])]
+        transform = shape.setdefault("transform", {})
+        for field, default in shape_model.TRANSFORM_DEFAULTS.items():
+            transform[field] = keyed(transform.get(field, default), field)
         for point in shape["points"]:
             for field in shape_model.POINT_FIELDS:
                 point[field] = keyed(point[field], field)
@@ -92,22 +95,33 @@ def build_panel(window, key):
         shape = entries[index]
         names = ["color"] if field == "color" else [field]
         for name in names:
-            old = shape.get(name, [1, 1, 1, 1] if name == "color" else None)
+            target = shape
+            leaf = name
+            if name.startswith("transform."):
+                target = shape.setdefault("transform", {})
+                leaf = name.split(".", 1)[1]
+            old = target.get(leaf, [1, 1, 1, 1] if name == "color" else shape_model.TRANSFORM_DEFAULTS.get(leaf, None))
             if name == "color":
                 shape[name] = [{"value": shape_model.resolve_scalar(c, frame, "opacity"),
                                 "curve": {"interpolation": "smooth", "keys": [{"frame": frame, "value": shape_model.resolve_scalar(c, frame, "opacity")}]}}
                                for c in old]
             else:
-                resolved = shape_model.resolve_scalar(old, frame, name)
+                resolved = shape_model.resolve_scalar(old, frame, leaf)
                 curve = copy.deepcopy(old.get("curve")) if isinstance(old, dict) and old.get("curve") else {"interpolation": "smooth", "keys": []}
                 curve["keys"] = [k for k in curve["keys"] if k["frame"] != frame] + [{"frame": frame, "value": resolved}]
                 curve["keys"].sort(key=lambda k: k["frame"])
-                shape[name] = {"value": resolved, "curve": curve}
+                target[leaf] = {"value": resolved, "curve": curve}
         save(entries, index)
         window.rebuild_properties_dock()
     def row_edit(index, field, value):
         entries=current()
         if index < len(entries): entries[index][field]=value; save(entries,index)
+    def edit_transform(index, field, value):
+        entries = current()
+        if index < len(entries):
+            transform = entries[index].setdefault("transform", {})
+            transform[field] = value_at_frame(transform.get(field, shape_model.TRANSFORM_DEFAULTS[field]), value, field)
+            save(entries, index)
     def save(entries, select=None):
         window.command({"op": "set_shapes", "id": key, "shapes": entries})
         if select is not None: window.viewer.roto_selected_shape_index = select
@@ -175,6 +189,11 @@ def build_panel(window, key):
                 else: entries[i]["track_link"]=follow.itemData(index)
                 save(entries,i)
         follow.currentIndexChanged.connect(set_follow); layout.addWidget(QLabel("Transform follows")); layout.addWidget(follow)
+        follow_mode=QComboBox(); follow_mode.setObjectName(f"roto-shape-track-follow-{i}")
+        follow_mode.addItem("Translate only", "translate"); follow_mode.addItem("Full Tracker solve", "full")
+        follow_mode.setCurrentIndex(follow_mode.findData(shape.get("track_follow", "translate")))
+        follow_mode.currentIndexChanged.connect(lambda index, idx=i, box=follow_mode: row_edit(idx, "track_follow", box.itemData(index)))
+        layout.addWidget(follow_mode)
         for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
             cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
         for field, label, lo, hi, step in (("feather", "Feather", 0, 500, 0.5),
@@ -200,6 +219,27 @@ def build_panel(window, key):
             key_button.setAccessibleName(f"{label} key")
             row.addWidget(key_button)
             layout.addLayout(row)
+        transform = shape.get("transform", {})
+        for field, label, lo, hi, step in (
+                ("translate_x", "Translate X", -65536, 65536, 1),
+                ("translate_y", "Translate Y", -65536, 65536, 1),
+                ("rotate", "Rotate", -360000, 360000, 1),
+                ("scale_x", "Scale X", -1000, 1000, .01),
+                ("scale_y", "Scale Y", -1000, 1000, .01),
+                ("center_x", "Center X", -65536, 65536, 1),
+                ("center_y", "Center Y", -65536, 65536, 1)):
+            spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-transform-{field}-{i}")
+            spin.setRange(lo, hi); spin.setSingleStep(step); spin.setKeyboardTracking(False)
+            spin.setValue(shape_model.resolve_scalar(transform.get(field, shape_model.TRANSFORM_DEFAULTS[field]), frame, field))
+            spin.editingFinished.connect(lambda f=field, w=spin: edit_transform(i, f, float(w.value())))
+            row = QHBoxLayout(); row.addWidget(spin, 1)
+            raw = transform.get(field)
+            curve = raw.get("curve") if isinstance(raw, dict) else None
+            button = window.make_key_button(key, f"shape-{i}-transform-{field}", spin,
+                curve_override=curve, on_toggle=lambda f=field: key_field(i, "transform." + f),
+                object_name=f"roto-shape-key-transform-{field}-{i}")
+            button.setAccessibleName(f"{label} key"); row.addWidget(button)
+            layout.addWidget(QLabel(label)); layout.addLayout(row)
         for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",("over","plus","minus","multiply"))):
             combo=QComboBox(); combo.setObjectName("roto-shape-"+field)
             for val in values: combo.addItem(val.title(),val)

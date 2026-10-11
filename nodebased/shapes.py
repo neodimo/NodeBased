@@ -41,7 +41,13 @@ SHAPE_LIMITS = {
     "out_x": (-65536.0, 65536.0), "out_y": (-65536.0, 65536.0),
     "opacity": (0.0, 1.0), "feather": (0.0, 500.0), "enabled": (0.0, 1.0),
     "error": (0.0, 1.0),
+    "translate_x": (-65536.0, 65536.0), "translate_y": (-65536.0, 65536.0),
+    "rotate": (-360000.0, 360000.0), "scale_x": (-1000.0, 1000.0),
+    "scale_y": (-1000.0, 1000.0), "center_x": (-65536.0, 65536.0),
+    "center_y": (-65536.0, 65536.0),
 }
+TRANSFORM_DEFAULTS = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
+                     "scale_x": 1.0, "scale_y": 1.0, "center_x": 0.0, "center_y": 0.0}
 POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
 
 # Payload shape per node type. A node type absent from this table may not appear in `node_data`.
@@ -51,7 +57,8 @@ NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks"
 # Pixel-unit scalars inside a payload — these must be scaled by a proxy tier change alongside
 # `tiers.PIXEL_UNIT_PARAMS`, or a shape keys a different part of the frame at tier 2.
 # See docs/EVALUATION_TIERS.md clause C3.
-PIXEL_UNIT_SCALARS = frozenset({"x", "y", "in_x", "in_y", "out_x", "out_y", "feather"})
+PIXEL_UNIT_SCALARS = frozenset({"x", "y", "in_x", "in_y", "out_x", "out_y", "feather",
+                                "translate_x", "translate_y", "center_x", "center_y"})
 
 
 def _is_number(value):
@@ -112,7 +119,7 @@ def resolve_scalar(value, frame, name=None):
 
 def validate_shape(shape, where):
     required = {"name", "mode", "opacity", "feather", "points"}
-    optional = {"visible", "locked", "invert", "feather_falloff", "color", "blend_mode", "motion_blur", "track_link"}
+    optional = {"visible", "locked", "invert", "feather_falloff", "color", "blend_mode", "motion_blur", "track_link", "transform", "track_follow"}
     if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
         raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
     if not isinstance(shape["name"], str) or not 1 <= len(shape["name"]) <= 128:
@@ -132,6 +139,13 @@ def validate_shape(shape, where):
                              or not isinstance(link["tracker_id"], str) or not link["tracker_id"]
                              or not isinstance(link["track_name"], str) or not link["track_name"]):
         raise ValueError(f"{where}.track_link must identify a Tracker and track name")
+    if shape.get("track_follow", "translate") not in ("translate", "full"):
+        raise ValueError(f"{where}.track_follow must be translate or full")
+    transform = shape.get("transform", {})
+    if not isinstance(transform, dict) or set(transform) - set(TRANSFORM_DEFAULTS):
+        raise ValueError(f"{where}.transform contains unsupported fields")
+    for field in TRANSFORM_DEFAULTS:
+        validate_scalar(transform.get(field, TRANSFORM_DEFAULTS[field]), field, f"{where}.transform")
     color = shape.get("color", [1.0, 1.0, 1.0, 1.0])
     if not isinstance(color, list) or len(color) != 4:
         raise ValueError(f"{where}.color must be RGBA values between 0 and 1")
@@ -357,6 +371,11 @@ def resolve_shapes(payload, frame):
             "opacity": resolve_scalar(shape["opacity"], frame, "opacity"),
             "feather": resolve_scalar(shape["feather"], frame, "feather"),
             "points": points_at(frame),
+            "transform": {field: resolve_scalar(shape.get("transform", {}).get(field,
+                              (sum(p["x"] for p in points_at(frame)) / len(shape["points"]) if field == "center_x" else
+                               sum(p["y"] for p in points_at(frame)) / len(shape["points"]) if field == "center_y" else default)), frame, field)
+                          for field, default in TRANSFORM_DEFAULTS.items()},
+            "track_follow": shape.get("track_follow", "translate"),
         }
         for field, default in (("visible", True), ("locked", False), ("invert", False),
                                ("feather_falloff", "linear"), ("color", [1, 1, 1, 1]),
@@ -368,8 +387,70 @@ def resolve_shapes(payload, frame):
             # A compact one-frame shutter centered on the current frame. Static shapes naturally
             # collapse to one sample; keyed shapes acquire temporal coverage in the same raster path.
             resolved["_motion_samples"] = [points_at(int(frame) - 1), points_at(int(frame) + 1)]
+        apply_shape_transform(resolved)
         shapes.append(resolved)
     return shapes
+
+
+def apply_shape_transform(shape):
+    """Apply the resolved Nuke-style shape transform to points and tangent vectors in place."""
+    t = shape.get("transform", TRANSFORM_DEFAULTS)
+    cx, cy = t["center_x"], t["center_y"]
+    sx, sy = t["scale_x"], t["scale_y"]
+    angle = math.radians(t["rotate"])
+    c, s = math.cos(angle), math.sin(angle)
+    def vector(x, y):
+        x, y = x * sx, y * sy
+        return c * x - s * y, s * x + c * y
+    for point in shape["points"]:
+        x, y = vector(point["x"] - cx, point["y"] - cy)
+        point["x"] = cx + x + t["translate_x"]
+        point["y"] = cy + y + t["translate_y"]
+        for xfield, yfield in (("in_x", "in_y"), ("out_x", "out_y")):
+            point[xfield], point[yfield] = vector(point[xfield], point[yfield])
+
+
+def resolve_roto_shapes(payload, frame, document=None, tier=1):
+    """Resolve transforms and tracker links for both the evaluator and viewer overlay."""
+    resolved = resolve_shapes(payload, frame)
+    if document is None:
+        return resolved
+    from . import tracker as tracker_model
+    raw_shapes = (payload or {}).get("shapes", [])
+    nodes = document.get("nodes", {})
+    for index, shape in enumerate(resolved):
+        link = raw_shapes[index].get("track_link") if index < len(raw_shapes) else None
+        tracker_node = nodes.get(link["tracker_id"]) if link else None
+        if tracker_node is None:
+            continue
+        tracker_payload = document.get("node_data", {}).get(link["tracker_id"], {})
+        reference = int(tracker_node["params"].get("reference_frame", 1))
+        if shape.get("track_follow", "translate") == "full":
+            solved = tracker_model.solve(tracker_payload, frame, tracker_node["params"])
+            # Solve maps the plate about its own centroid; transfer that similarity about the
+            # Roto shape's centre, then apply the track translation.
+            sx = sy = solved["scale"]
+            angle = math.radians(solved["rotate"])
+            c, s = math.cos(angle), math.sin(angle)
+            cx, cy = shape["transform"]["center_x"], shape["transform"]["center_y"]
+            dx, dy = solved["translate_x"] / tier, solved["translate_y"] / tier
+            for point in shape["points"]:
+                x, y = (point["x"] - cx) * sx, (point["y"] - cy) * sy
+                point["x"], point["y"] = cx + c*x - s*y + dx, cy + s*x + c*y + dy
+                for xf, yf in (("in_x", "in_y"), ("out_x", "out_y")):
+                    point[xf], point[yf] = (point[xf]*sx*c-point[yf]*sy*s,
+                                             point[xf]*sx*s+point[yf]*sy*c)
+        else:
+            track = next((item for item in tracker_payload.get("tracks", [])
+                          if item["name"] == link["track_name"]), None)
+            if track is None:
+                continue
+            dx = (resolve_scalar(track["x"], frame, "x") - resolve_scalar(track["x"], reference, "x")) / tier
+            dy = (resolve_scalar(track["y"], frame, "y") - resolve_scalar(track["y"], reference, "y")) / tier
+            for point in shape["points"]:
+                point["x"] += dx
+                point["y"] += dy
+    return resolved
 
 
 def split_cubic_point(start, end, t):
