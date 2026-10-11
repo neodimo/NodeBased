@@ -163,3 +163,49 @@ Built before the real model exists, so stage 3 only swaps the provider. Files an
     against. Still open: the topic does not tell an agent how to confirm a result when the viewer shows an
     error (compare the written frames' pixels, not the viewer); worth one sentence once the viewer is clean
     on a full run.
+
+## Stage 3: the first real model, SDXL with ControlNet-Union (10/10)
+
+DiMo chose a local model. `sdxl_controlnet` 1.0 is in (see `docs/GENERATIVE_CONDITIONING.md` section 8):
+SDXL base, the fp16-fix VAE and ControlNet-Union (promax), run per frame on the RTX 3080 Ti through CUDA only,
+in its own interpreter (`NODEBASED_SDXL_PYTHON`), so the repository environment still has no torch. It
+honours depth, normals, text, seed and sampler settings; it ignores motion, IDs, camera pose and reference
+frames. No temporal model: each frame is made from its own depth and normals with the same seed, so flicker
+between frames is expected and the motion check reads "not conditioned".
+
+**The demo shot through it** (`python examples/demo_shot/run_by_hand.py --provider sdxl_controlnet`): the
+480 by 270 plate is resampled to the model's 1024 by 576 working size and back (the plate is not re-rendered).
+Brief: "replace the backdrop with a rainy street, keep the cube and sphere, match the camera"; seed 7; defaults
+30 steps, guidance 5.0, ControlNet scale 0.8, depth and normals together.
+
+| | |
+|---|---|
+| Generation | about 340 s for 24 frames (about 14 s a frame), model load about 5 s; whole run about 540 s |
+| Peak VRAM | 7.8 GiB allocated, 8.2 GiB reserved (model CPU offload on) |
+| Verdict | FAIL: camera, depth, motion and normals "not conditioned" (the generated EXRs carry beauty only); lighting FAIL; objects FAIL |
+| generated_sequence | `f06915babb08173436a06e03227a6a5be7a5694b4f5c74708501fb8c5cd45caf` |
+| scene_state | `b52bc6b3536b15eca47d8c96c2d4d46c4d75532c516e5a09f31e3ea172cfdec7` |
+| control_bundle | `e734808faf740d55be8ab7429532227e08fe3810b9aacdacc25c6d2474a3c708` |
+| verification report | `f06177b1a6faf90bcfc75908456583a1f62f4d6f8352a84f8f9147bb90ff906e` |
+
+The run was repeated once: the same four ids and the same output pixel digest. Stills (first, middle, last
+frame of the graded output): `docs/images/demo_shot/sdxl_controlnet_frame_0001.png`, `_0012.png`, `_0024.png`.
+What they show: the cubes, the sphere and the pillar stay where the exported depth and normals put them, the
+lighting and the surfaces change from frame to frame (flicker), and the backdrop becomes a dark textured wall,
+not a rainy street: SDXL reads the sentence as a description and the control images fix the layout. The verdict
+is FAIL because the lighting and object checks measure the picture against the layout render and SDXL
+restyles it; this is an honest result, not a tuning target for this step.
+
+Things found on the way:
+
+- The worker's address-space cap would kill CUDA, so a description may declare `local_gpu` and its job runs
+  without the cap (tests: `tests/test_local_gpu.py`). Every other provider keeps the cap.
+- A bug older than this stage: a `ConditionedRead` whose path is a generated-sequence artifact id rendered
+  frame 1 for every frame (the cache key did not include the frame), so the demo's written shot (stand-in
+  `reproject` too, checked on this branch's head) was one frame repeated. Fixed in the evaluator and the tile executor, with a regression test.
+- Determinism on this card needed one rule: the memory strategy must not depend on free VRAM. A run that fell
+  back to CPU offload after an out-of-memory error (another program was holding 1 GB of the card) gave other
+  bytes than the same run without the fallback, so offload is now always on (`NODEBASED_SDXL_OFFLOAD=never`
+  turns it off for a card to itself, about twice as fast, peak about 10.4 GiB).
+- Nothing was downloaded for this step; every model came from the local Hugging Face cache.
+

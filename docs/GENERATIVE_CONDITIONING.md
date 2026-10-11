@@ -214,9 +214,45 @@ Two deterministic CPU stand-ins establish the contract without a model or networ
 - **null 1.0** has the same local limits and colour space, copies beauty unchanged, and honours only `seed`
   (recorded, no effect on the pixels). It is the deliberately unconditioned baseline.
 
+The first real model is **sdxl_controlnet 1.0** (`nodebased/providers/sdxl_controlnet.py` and `.json`):
+Stable Diffusion XL base with the fp16-fix VAE and ControlNet-Union (promax), local, on the NVIDIA card through
+CUDA only (the RTX 3080 Ti; the AMD adapter and llvmpipe are not used). It honours depth, normals, text, `seed`
+and `sampler_settings` (`steps` 1 to 100 default 30, `guidance` 0 to 20 default 5.0,
+`controlnet_conditioning_scale` 0 to 2 default 0.8, `control_mode` `depth_normals`, `depth` or `normals`; any
+other key is refused, and the artifact records the settings with their defaults filled in). It ignores motion,
+IDs, camera pose and reference frames. Limits are 1024 by 1024 and 240 frames; input and output colour space
+is ACEScg.
+
+- **No temporal model.** Every frame is generated alone from that frame's own depth and normals with the same
+  seed (the loop's `vary_seed` changes the seed per attempt, never per frame). Frame-to-frame flicker is
+  expected, and the motion check reads "not conditioned" (so do the depth, normals and camera checks, because
+  the generated EXRs carry beauty only).
+- **Colour.** The model works in display sRGB. Depth and normals become 8-bit control images with their own
+  rules: depth is inverse depth normalised with the nearest and farthest valid depth of the whole sequence
+  (`255 * (1/d - 1/far) / (1/near - 1/far)`, near white, far and empty pixels black, so a surface keeps its grey
+  from frame to frame); normals are camera-space unit vectors as `(n * 0.5 + 0.5) * 255`, with pixels that have
+  no normal set to the flat colour (128, 128, 255). The longer side is resampled to 1024 for the model (both
+  sides on the latent grid of 8) and the picture is resampled back to the plate size. The model's 8-bit sRGB
+  picture is converted to scene-linear ACEScg (inverse sRGB encoding, then the Rec.709 to ACEScg matrix, through
+  the fixed OCIO config) with alpha 1.
+- **Process.** The model runs in its own interpreter, `NODEBASED_SDXL_PYTHON` (default: the provider
+  environment kept outside the repository); the repository environment has no torch and never imports it. The
+  entry point speaks the usual `generate` protocol and starts the model process with the job on disk. Weights
+  come from the local Hugging Face cache, offline. The description declares `local_gpu`, so the worker does not
+  put the address-space cap on the job (CUDA reserves terabytes of address space at start-up).
+- **Determinism.** Fixed seed on a CUDA generator, deterministic algorithms on, TF32 off, no xformers. The same
+  manifest twice gives byte-identical EXR frames on the RTX 3080 Ti (a test proves it and is skipped with a
+  reason where there is no CUDA device). The fp16 pipeline runs with model CPU offload by default: the whole pipeline peaks near 10.4 GiB at the
+  1024 by 576 working size, which fits the 12 GB card only when no other program holds it, and a fallback after
+  an out-of-memory error changed the pixels, so the memory strategy never depends on what else runs
+  (`NODEBASED_SDXL_OFFLOAD=never` keeps everything on the card, about twice as fast, for a card to itself).
+  Reproducibility holds for the same card, driver and library versions; another GPU generation may differ in
+  the last bits.
+
 A real provider implements this Python entry point and supplies a description that accurately reports its
-capabilities and honoured controls. A real model is a later, separately approved step; DiMo decides which
-provider comes first. These stand-ins establish plumbing and reporting only, not model quality.
+capabilities and honoured controls. These stand-ins establish plumbing and reporting only, not model quality;
+`sdxl_controlnet` is the first model, and a hosted video model with camera control is the next, separately
+approved step.
 
 ### Workers
 
@@ -226,7 +262,7 @@ and priority. The worker announces `submit`, streams `progress` (fraction and sh
 accepts `cancel`, then returns `result` with an artifact ID or `failed` with a named error and log tail. The
 UI remains responsive and keeps the previous successful artifact until the replacement completes.
 
-The default worker limits are 2 GiB virtual address space and 30 minutes wall time per job. Cancellation is
+The default worker limits are 2 GiB virtual address space (sized up from the frame size) and 30 minutes wall time per job; a provider whose description declares `local_gpu` runs without the address-space cap, since CUDA needs it. Cancellation is
 cooperative; a process that ignores it is killed after a 1-second grace period. Worker stdout and stderr are
 captured as a `worker_log` artifact and linked from the generated sequence provenance. Output frames are staged
 and promoted only after success, so failed work does not replace the previous output.
