@@ -22,16 +22,16 @@ def response(dispatch, request):
         return {"id": request.get("request_id") if isinstance(request, dict) else None, "ok": False, "error": str(error)}
 
 
-def render_op(evaluator, document, cmd):
+def render_op(evaluator, dispatcher, cmd):
     """The `render` op: evaluate node `id` (at `frame`, else the document's current frame) and write
     it to `path` (EXR with `bits` and `compression`, anything else as PNG). One implementation for
     the headless dispatcher and the desktop bridge, so a render means the same through both."""
     from .imaging import write_png
     from .media import DEFAULT_EXR_BITS, DEFAULT_EXR_COMPRESSION, write_exr
     at = cmd.get("frame")
-    pixels = evaluator.evaluate(document, cmd.get("id"), frame=at)
+    pixels = evaluator.evaluate(dispatcher.document, cmd.get("id"), frame=at)
     written = {"path": cmd["path"], "width": pixels.shape[1], "height": pixels.shape[0],
-               "frame": int(at if at is not None else document["time"]["current"])}
+               "frame": int(at if at is not None else dispatcher.document["time"]["current"])}
     if str(cmd["path"]).lower().endswith(".exr"):
         # An agent rendering a data pass needs to say so; write_exr rejects anything outside the
         # supported sets rather than quietly substituting.
@@ -134,7 +134,7 @@ def main():
                 if cmd.get("op") == "render":
                     from .imaging import Evaluator
                     evaluator = evaluator or Evaluator()
-                    return render_op(evaluator, dispatcher.document, cmd)
+                    return render_op(evaluator, dispatcher, cmd)
                 if cmd.get("op") == "solve_camera":
                     from .camera_solve import solve_camera_op
                     from .imaging import Evaluator

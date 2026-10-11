@@ -8459,7 +8459,7 @@ class Window(QMainWindow):
             from .agent import render_op
             from .imaging import Evaluator
             self._agent_evaluator = getattr(self, "_agent_evaluator", None) or Evaluator()
-            return render_op(self._agent_evaluator, self.dispatcher.document, cmd)
+            return render_op(self._agent_evaluator, self.dispatcher, cmd)
         if cmd.get("op") == "solve_camera":
             from .camera_solve import solve_camera_op
             from .imaging import Evaluator
