@@ -860,11 +860,20 @@ KNOB_LAYOUT.update({
                              KnobGroup("int", ("seed",), label="Seed"),
                              KnobGroup("float", ("focal",), label="Focal length (mm)"),
                              KnobGroup("float", ("vaperture",), label="Vertical aperture (mm)"),
+                             KnobGroup("enum", ("solve_focal",), label="Focal length is", section="Lens",
+                                       help="Known uses the typed focal length. Estimate refines it after the solve from the "
+                                            "points the solver tracked; the typed value is the starting guess."),
+                             KnobGroup("enum", ("solve_distortion",), label="Distortion", section="Lens",
+                                       help="None assumes a straight-line lens. k1, or k1 and k2, estimate the radial bend of "
+                                            "the plate's lens and write it to the solved camera."),
                              KnobGroup("float", ("unit_scale",), label="Scene units per solve unit"),
                              KnobGroup("xyz", ("anchor_tx", "anchor_ty", "anchor_tz"), label="First frame position"),
                              KnobGroup("xyz", ("anchor_target_x", "anchor_target_y", "anchor_target_z"), label="First frame target"),
                              KnobGroup("float", ("anchor_roll",), label="First frame roll (degrees)"),
-                             KnobGroup("string", ("solve",), label="Last solve")),
+                             KnobGroup("string", ("solve",), label="Last solve"),
+                             KnobGroup("multiline", ("survey",), label="Survey data", section="Survey",
+                                       help="Points picked in the viewer, with a position for each or a distance between "
+                                            "two, written as JSON. The Survey list below edits it.")),
     "Project3D": _groups(KnobGroup("enum", ("project_outside",), label="Outside"),
                          KnobGroup("enum", ("project_backfaces",), label="Backfaces"),
                          KnobGroup("enum", ("project_occlusion",), label="Occlusion")),

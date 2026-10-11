@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -844,7 +844,11 @@ SPECS = {
         "provider": "camera_solve_dpvo", "loop_closure": 0, "seed": 0,
         "focal": filmback.DEFAULT_FOCAL, "vaperture": filmback.DEFAULT_VAPERTURE, "unit_scale": 1.0,
         "anchor_tx": 0.0, "anchor_ty": 0.0, "anchor_tz": 5.0, "anchor_target_x": 0.0, "anchor_target_y": 0.0,
-        "anchor_target_z": 0.0, "anchor_roll": 0.0, "solve": ""}},
+        "anchor_target_z": 0.0, "anchor_roll": 0.0, "solve": "",
+        # Rendering 13 step L2: the lens the solve is made with (the typed focal, or estimated from the solver's own
+        # tracked points, with k1 and k2 radial terms) and the Survey, JSON written by the panel: picked pixels
+        # with optional positions and distances between picks (camera_solve.parse_survey).
+        "solve_focal": "known", "solve_distortion": "none", "survey": ""}},
     # Bounded 3D foundation. Geometry/camera nodes are typed scene data; Render3D is the
     # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
     # Every 3D parameter has its own name (tx, card_width, ...) because LIMITS and CHOICES are
@@ -1950,6 +1954,7 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"],
                 "vdb_write_compression": ["zip", "none", "blosc"]})
 CHOICES.update({"rigid_shape": ["box", "sphere", "convex", "compound"], "floor": ["on", "off"]})
+CHOICES.update({"solve_focal": ["known", "estimate"], "solve_distortion": ["none", "k1", "k1 k2"]})
 CHOICES["lens_preset"] = ["custom", "none", "mild barrel", "strong barrel", "pincushion", "wide angle", "fisheye"]
 CHOICES["upres_factor"] = ["1", "2", "4"]
 CHOICES["upres_backend"] = ["auto", "cpu", "gpu"]
@@ -2310,6 +2315,15 @@ def upgrade_document(document):
             for shape in payload.get("shapes", []):
                 shape.setdefault("feather_model", "box")
         doc["version"] = 22
+    if isinstance(doc, dict) and doc.get("version") == 22:
+        # v22 -> v23 gives CameraSolve3D its lens estimation and Survey (Rendering 13 step L2). The typed focal
+        # length and no survey are what an older node did.
+        for node in doc.get("nodes", {}).values():
+            if isinstance(node, dict) and node.get("type") == "CameraSolve3D":
+                params = node.setdefault("params", {})
+                for name, value in (("solve_focal", "known"), ("solve_distortion", "none"), ("survey", "")):
+                    params.setdefault(name, value)
+        doc["version"] = 23
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

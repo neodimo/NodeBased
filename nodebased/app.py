@@ -1268,6 +1268,7 @@ class Viewer(PanZoomView):
         self.track3d_picking = None
         self.tracker_drag = None
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
+        self.survey_picking = None   # the CameraSolve3D node whose Survey a click adds a pick to
         self.zdefocus_picking = None
         self.focus_picking = None   # the Camera3D node whose focus distance a click sets
         # A/B compare. The wipe geometry is display state only (not in the document): the split
@@ -2354,6 +2355,34 @@ class Viewer(PanZoomView):
             painter.drawEllipse(center, marker, marker)
         painter.restore()
 
+    def _draw_survey_overlay(self, painter):
+        """The Survey's picks of the viewed CameraSolve3D node that sit on the current frame."""
+        document = self.window.dispatcher.document
+        key = document.get("view")
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] != "CameraSolve3D" or self.format_rect is None:
+            return
+        from . import camera_solve
+        try:
+            picks = camera_solve.parse_survey(node["params"].get("survey", ""))["picks"]
+        except ValueError:
+            return
+        frame = int(document["time"]["current"])
+        zoom = max(abs(self.transform().m11()), 0.05)
+        arm = 7.0 / zoom
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        for pick in picks:
+            if pick["frame"] != frame:
+                continue
+            center = self._roto_scene_point(pick, 1)
+            colour = QColor("#7be0a0" if pick["position"] else "#f4ce63")
+            pen = QPen(colour, 2); pen.setCosmetic(True); painter.setPen(pen)
+            painter.drawLine(QPointF(center.x() - arm, center.y()), QPointF(center.x() + arm, center.y()))
+            painter.drawLine(QPointF(center.x(), center.y() - arm), QPointF(center.x(), center.y() + arm))
+            painter.drawText(QPointF(center.x() + arm * 1.2, center.y() - arm * 0.6), pick["name"])
+        painter.restore()
+
     def _draw_reconcile_overlay(self, painter):
         """Draw a selected Reconcile3D result as a screen-space track."""
         graph = getattr(self.window, "graph", None)
@@ -2907,9 +2936,13 @@ class Viewer(PanZoomView):
                 self.roto_selected_points = {(shape_index, point_index)
                     for point_index in range(len(context[2]["shapes"][shape_index]["points"]))}
                 self.viewport().update(); event.accept(); return
-        if event.key() == Qt.Key.Key_Escape and (self.crypto_picking or self.zdefocus_picking or self.focus_picking or self.track3d_picking):
+        if event.key() == Qt.Key.Key_Escape and (self.crypto_picking or self.zdefocus_picking or self.focus_picking
+                                                 or self.track3d_picking or self.survey_picking):
             what = ("PointsTo3D" if self.track3d_picking else "Focus" if self.focus_picking
-                    else "ZDefocus" if self.zdefocus_picking else "Cryptomatte")
+                    else "ZDefocus" if self.zdefocus_picking else "Survey" if self.survey_picking else "Cryptomatte")
+            self.survey_picking = None
+            self.window.statusBar().clearMessage()
+            self.hide_prompt()
             self.zdefocus_picking = None
             self.crypto_picking = None
             self.focus_picking = None
@@ -3460,6 +3493,7 @@ class Viewer(PanZoomView):
             painter.restore()
         self._draw_warp_overlay(painter)
         self._draw_tracker_overlay(painter)
+        self._draw_survey_overlay(painter)
         transform_context = self._transform_context()
         if transform_context is not None:
             _, node = transform_context
@@ -3584,6 +3618,11 @@ class Viewer(PanZoomView):
                                           math.floor(scene_pos.x()), math.floor(scene_pos.y()))
             self.track3d_picking = None
             self.unsetCursor()
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.survey_picking:
+            # Each click adds a survey pick on the current frame; picking stays on until Esc.
+            self.window.survey_pick(self.survey_picking, *self._tracker_data_point(scene_pos))
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self.crypto_picking:
@@ -10819,6 +10858,8 @@ class Window(QMainWindow):
                 button.clicked.connect(lambda checked=False, k=key: self.cancel_generate(k) if active
                                        else self.generate_sequence(k))
                 form.addRow(button)
+            if node["type"] == "CameraSolve3D":
+                self.add_camera_solve_view(form, key, node)
             if node["type"] == "ConditionedRead":
                 artifact_path = node["params"].get("path", "")
                 if len(artifact_path) == 64:
@@ -11349,6 +11390,65 @@ class Window(QMainWindow):
             return False
         self.command({"op": "set", "id": key, "param": "focus_distance", "value": distance})
         self.statusBar().showMessage(f"Camera3D focus distance: {distance:.4g}")
+        return True
+
+    def add_camera_solve_view(self, form, key, node):
+        """CameraSolve3D panel: the last solve's lens and scale in words, then the Survey list."""
+        from . import camera_solve
+        from .surveypanel import build_panel as build_survey_panel
+        record = None
+        solve_id = node["params"].get("solve", "")
+        if solve_id:
+            try:
+                from .artifacts import ArtifactStore
+                record = json.loads(ArtifactStore().get(solve_id))
+            except (OSError, ValueError, KeyError):
+                record = None   # a solve id from another machine: the node still works, the summary just says less
+        summary = QLabel("\n".join(camera_solve.panel_lines(node["params"], record)))
+        summary.setObjectName("cameraSolveSummary")
+        summary.setWordWrap(True)
+        form.addRow("Last solve", summary)
+        form.addRow(build_survey_panel(self, key))
+
+    def begin_survey_pick(self, key):
+        """Rendering 13 step L2: pick the Survey's points in the viewer, on whichever frame is showing."""
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "CameraSolve3D":
+            self._show_command_error(ValueError("Survey picking needs a CameraSolve3D node"))
+            return False
+        if not node["inputs"].get("image"):
+            self._show_command_error(ValueError("Connect the plate to the CameraSolve3D image input first"))
+            return False
+        if self.dispatcher.document.get("view") != key:
+            self.command({"op": "view", "id": key})
+        self.viewer.survey_picking = key
+        self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+        prompt = "Survey: click a surveyed point on any frame; Esc ends"
+        self.statusBar().showMessage(prompt)
+        self.viewer.show_prompt(prompt)
+        return True
+
+    def survey_pick(self, key, x, y):
+        """Add the pixel (x, y) of the current frame to `key`'s Survey as the next unused pick name."""
+        import json
+        from . import camera_solve
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "CameraSolve3D":
+            return False
+        try:
+            survey = camera_solve.parse_survey(node["params"].get("survey", ""))
+        except ValueError as error:
+            self._show_command_error(error)
+            return False
+        used = {pick["name"] for pick in survey["picks"]}
+        number = 1
+        while f"S{number}" in used:
+            number += 1
+        survey["picks"].append({"name": f"S{number}", "frame": int(self.dispatcher.document["time"]["current"]),
+                                "x": round(float(x), 2), "y": round(float(y), 2), "position": None})
+        self.command({"op": "set", "id": key, "param": "survey", "value": json.dumps(survey, separators=(",", ":"))})
+        self.statusBar().showMessage(f"Survey: S{number} picked on frame {survey['picks'][-1]['frame']}")
+        self.viewer.viewport().update()
         return True
 
     def begin_crypto_pick(self, key):

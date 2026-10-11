@@ -81,10 +81,14 @@ def intrinsics_for(width, height, focal_mm, vaperture_mm):
 
 
 def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progress=None, cancelled=None):
-    """Solve the camera of a plate; returns {"c2w": (N,4,4), "points": (M,3), "colors": (M,3) uint8, "info": dict}.
+    """Solve the camera of a plate; returns {"c2w": (N,4,4), "points": (M,3), "colors": (M,3) uint8, "tracks": dict, "info": dict}.
 
     `frames` are N display-sRGB uint8 (H, W, 3) arrays, `intrinsics` is (fx, fy, cx, cy) in pixels. The poses
     are camera-to-world in OpenCV axes (x right, y down, z forward), up to scale, one per frame in order.
+    `tracks` holds the solver's own measurements, for `nodebased.lensrefine`: `frame` (index into the poses),
+    `point` (index into the points), `xy` (pixel position on the plate, top-left origin, at the plate's size) and
+    `weight` (0 to 1). Each point has the position it was born at (weight 1) and one row per frame the network
+    followed it to.
     """
     if len(frames) < MIN_FRAMES:
         raise ValueError(f"{PROVIDER_NAME} needs at least {MIN_FRAMES} frames (got {len(frames)})")
@@ -135,6 +139,9 @@ def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progre
     with np.load(job["result"]) as result:
         solved = {"c2w": np.array(result["c2w"], np.float64), "points": np.array(result["points"], np.float64),
                   "colors": np.array(result["colors"], np.uint8)}
+        if "track_frame" in result.files:   # where the network found each point on the other frames
+            solved["tracks"] = {"frame": np.array(result["track_frame"], np.int64), "point": np.array(result["track_point"], np.int64),
+                                "xy": np.array(result["track_xy"], np.float64), "weight": np.array(result["track_weight"], np.float64)}
     solved["info"] = json.loads(Path(job["info"]).read_text(encoding="utf-8"))
     if os.environ.get(RUN_INFO_ENV):   # timings and peak VRAM for a caller that wants them (never in the artifact)
         Path(os.environ[RUN_INFO_ENV]).write_text(json.dumps(solved["info"], indent=1), encoding="utf-8")
@@ -142,6 +149,25 @@ def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progre
 
 
 # ----------------------------------------------------------------------------- solver side
+
+def _tracks(slam, torch):
+    """What the network measured: every patch where it was born, and where the update operator put it on each
+    frame it was followed to (active and retired edges both), in full-resolution pixels. A patch is a point
+    of `points_`, so `point` indexes the returned points; a keyframe's time stamp is the frame number."""
+    pg, res, count = slam.pg, float(slam.RES), slam.m
+    stamps = np.asarray(pg.tstamps_)
+    ii, jj, kk = (torch.cat((a, b)).cpu().numpy() for a, b in ((pg.ii_inac, pg.ii), (pg.jj_inac, pg.jj), (pg.kk_inac, pg.kk)))
+    target = torch.cat((pg.target_inac.float(), pg.target.float()), dim=1)[0].cpu().numpy()
+    weight = torch.cat((pg.weight_inac.float(), pg.weight.float()), dim=1)[0].cpu().numpy().mean(axis=1)
+    keep = (kk < count) & (stamps[ii] != stamps[jj]) & np.isfinite(target).all(axis=1)
+    born = pg.patches_[:, :, :2, 1, 1].cpu().numpy()                      # (keyframe, patch, xy) in feature-map pixels
+    patch = np.arange(count)
+    born_xy = born[patch // pg.M, patch % pg.M] * res
+    return {"frame": np.concatenate((stamps[patch // pg.M], stamps[jj[keep]])).astype(np.int64),
+            "point": np.concatenate((patch, kk[keep])).astype(np.int64),
+            "xy": np.concatenate((born_xy, target[keep] * res)).astype(np.float64),
+            "weight": np.concatenate((np.ones(count), weight[keep])).astype(np.float64)}
+
 
 def _solve(job):
     import warnings
@@ -181,6 +207,7 @@ def _solve(job):
         terminate = time.perf_counter() - started
         points = slam.pg.points_.cpu().numpy()[:slam.m]
         colors = slam.pg.colors_.view(-1, 3).cpu().numpy()[:slam.m]
+    tracks = _tracks(slam, torch)
     c2w = np.tile(np.eye(4), (len(poses), 1, 1))
     c2w[:, :3, :3] = Rotation.from_quat(poses[:, 3:7]).as_matrix()   # x y z qx qy qz qw, camera to world
     c2w[:, :3, 3] = poses[:, :3]
@@ -189,7 +216,8 @@ def _solve(job):
             "fps_total": float(total / (sum(times) + terminate)), "terminate_s": terminate,
             "peak_vram_mb": torch.cuda.max_memory_allocated() / 2 ** 20, "loop_closure": job["loop_closure"],
             "seed": seed, "torch": torch.__version__, "gpu": torch.cuda.get_device_name(0)}
-    np.savez(job["result"], c2w=c2w, points=points, colors=np.clip(colors, 0, 255).astype(np.uint8))
+    np.savez(job["result"], c2w=c2w, points=points, colors=np.clip(colors, 0, 255).astype(np.uint8),
+             **{f"track_{name}": value for name, value in tracks.items()})
     Path(job["info"]).write_text(json.dumps(info, indent=1), encoding="utf-8")
 
 
