@@ -1128,6 +1128,14 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if scene3d.has_shadow_catchers(scene):
+        # Shadow catcher (step R3): the picture with the catchers as holdouts, the shadow layer under it (nodebased/shadowcatch.py)
+        from . import shadowcatch
+        bound = dict(background=background, ambient=ambient, samples=samples, output=output, cancel=cancel,
+                     adapter=adapter, mode=mode, volume=volume)
+        return shadowcatch.render(lambda sc, **more: render(sc, camera, width, height, **{**bound, **more}), scene, camera,
+                                  width, height, background=background, output=output, ambient=ambient, engine='raster',
+                                  samples=samples, volume=volume, cancel=cancel)
     if getattr(scene, 'instances', ()):
         # gpuinstance traces InstanceSet items on a two-level GPU BVH without flattening them
         # (docs/3D_ROADMAP.md "Instancing"); everything else here reads only scene.geometries,

@@ -42,7 +42,9 @@ def _names(scene, kind):
     followed by one per `scene.splats`, in `object_id`'s own index order."""
     names = [""]
     for i, g in enumerate(scene.geometries, 1):
-        if kind == "material":
+        if g.shadow_catcher:        # a shadow catcher is not part of the picture's objects (step R3): never an id, never in the manifest
+            names.append("")
+        elif kind == "material":
             names.append(g.material or "standard")
         elif kind == "asset":
             names.append(g.asset or g.name or f"object{i}")

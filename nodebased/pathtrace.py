@@ -1810,6 +1810,20 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         raise ValueError("Render dimensions must be positive")
     raytrace._cancel(cancel)
     check_scene(scene)
+    if s.has_shadow_catchers(scene):
+        # Shadow catcher (step R3): the picture with the catchers as holdouts, the shadow layer under it (nodebased/shadowcatch.py)
+        from . import shadowcatch
+        bound = dict(background=background, ambient=ambient, output=output, settings=settings, cancel=cancel,
+                     progress=progress, stats=stats, backend=backend, pass_hook=pass_hook, volume=volume, moments=moments,
+                     denoise_settings=denoise_settings, history_key=history_key)
+
+        def again(sc, **more):
+            keep = {**bound, **more}
+            if keep["moments"] is not None:
+                keep["moments"] = [(shadowcatch.hold_scene(m), cam) for m, cam in keep["moments"]]
+            return render(sc, camera, width, height, **keep)
+        return shadowcatch.render(again, scene, camera, width, height, background=background, output=output,
+                                  ambient=ambient, engine="path", samples=settings.samples, volume=volume, cancel=cancel)
     if scene.particles:
         # R7 of 7 finish: an emissive particle lights its surroundings through the same next-event
         # estimation and shadow ray as any Light3D (`_particle_lights`); the particle itself is not a

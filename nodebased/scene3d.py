@@ -194,6 +194,10 @@ class Geometry:
     # zero colour, zero alpha and no data, cutting a hole in the picture. Shadow rays see it per `cast_shadows`; reflections
     # and bounces pass through it.
     holdout: bool = False
+    # Shadow catcher (Rendering 7, step R3): the mesh renders no colour of its own; its alpha is how much of the scene's light the
+    # other objects take away from it (nodebased/shadowcatch.py), so merging over the plate darkens it where the shadow falls.
+    # Secondary rays (reflections, bounces, shadow rays) meet it as an ordinary surface.
+    shadow_catcher: bool = False
 
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
@@ -954,7 +958,8 @@ def geometry_from_node(node, texture=None):
                    pbr_roughness=float(p.get("pbr_roughness", 0.5)),
                    pbr_specular=float(p.get("pbr_specular", 0.5)),
                    name=name, asset=name, light_link=light_link_from_params(p),
-                   **render_switches_from_params(p), holdout=holdout_from_params(p), **material_fields(p))
+                   **render_switches_from_params(p), holdout=holdout_from_params(p),
+                   shadow_catcher=shadow_catcher_from_params(p), **material_fields(p))
 
 
 def _geometry_from_node(node, texture=None):
@@ -1772,6 +1777,16 @@ def holdout_from_params(p):
     return str(p.get("holdout", "off")) == "on"
 
 
+def shadow_catcher_from_params(p):
+    """`shadow_catcher` for `Geometry` from a node's knobs (off unless "on"; a document saved before it existed has none)."""
+    return str(p.get("shadow_catcher", "off")) == "on"
+
+
+def has_shadow_catchers(scene):
+    """True when any mesh of `scene` (instance sources included) is a shadow catcher."""
+    return any(g.shadow_catcher for g in (*scene.geometries, *(s for i in getattr(scene, "instances", ()) for s in i.sources)))
+
+
 def has_holdouts(scene):
     """True when any mesh of `scene` (instance sources included) is a holdout."""
     return any(g.holdout for g in (*scene.geometries, *(s for i in scene.instances for s in i.sources)))
@@ -1779,7 +1794,7 @@ def has_holdouts(scene):
 
 def has_render_switches(scene):
     """True when any mesh of `scene` (instance sources included) has a render switch turned off or is a holdout."""
-    return any(not (g.cast_shadows and g.receive_shadows and g.visible_to_camera) or g.holdout
+    return any(not (g.cast_shadows and g.receive_shadows and g.visible_to_camera) or g.holdout or g.shadow_catcher
                for g in (*scene.geometries, *(s for i in scene.instances for s in i.sources)))
 
 
@@ -3605,6 +3620,16 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                                         progress, return_depth, path, volume, denoise, history_key)
     if output == "denoise":
         raise ValueError("the denoise output needs Render3D's path tracer mode (render_mode pathtrace)")
+    if has_shadow_catchers(scene):
+        # Shadow catcher (step R3): the picture with the catchers as holdouts, the shadow layer under it (nodebased/shadowcatch.py)
+        from . import shadowcatch
+        bound = dict(background=background, shade=shade, return_depth=return_depth, ambient=ambient, samples=samples,
+                     output=output, cancel=cancel, shadows=shadows, mode=mode, progress=progress, volume=volume, path=path,
+                     _lens=_lens, denoise=denoise, history_key=history_key)
+        return shadowcatch.render(lambda sc, **more: render(sc, camera, width, height, **{**bound, **more}), scene, camera,
+                                  width, height, background=background, output=output, return_depth=return_depth,
+                                  ambient=ambient, engine="raster", samples=samples, volume=volume, cancel=cancel,
+                                  shadows=shadows, shade=shade)
     scene = resolve_instances(scene)
     if output == "relight":
         if mode != "raster":

@@ -2974,6 +2974,15 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     `merge_volumes` False leaves the smoke out of a data pass (its surface depth)."""
     if output not in _OUTPUT_CODES:
         raise gpu3d.Unsupported(f"the GPU path tracer does not produce the {output!r} output")
+    if s.has_shadow_catchers(scene):
+        # Shadow catcher (step R3): the picture with the catchers as holdouts, the shadow layer under it (nodebased/shadowcatch.py)
+        from . import shadowcatch
+        bound = dict(cancel=cancel, progress=progress, stats=stats, volume=volume, merge_volumes=merge_volumes,
+                     background=background, output=output)
+        return shadowcatch.render(lambda sc, **more: render(sc, camera, width, height, ambient=ambient, settings=settings,
+                                                            **{**bound, **more}),
+                                  scene, camera, width, height, background=background, output=output, ambient=ambient,
+                                  engine="path", samples=settings.samples, volume=volume, cancel=cancel)
     state = gpu3d._state()
     reason = check_capability(state)
     if reason:

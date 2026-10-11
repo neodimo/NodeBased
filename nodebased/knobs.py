@@ -742,7 +742,8 @@ _LIGHT_LINK_KNOBS = (KnobGroup("enum", ("light_link",), label="Lights"),
 _RENDER_SWITCH_KNOBS = (KnobGroup("enum", ("cast_shadows",), label="Cast shadows"),
                         KnobGroup("enum", ("receive_shadows",), label="Receive shadows"),
                         KnobGroup("enum", ("visible_to_camera",), label="Visible to camera"),
-                        KnobGroup("enum", ("holdout",), label="Holdout"))
+                        KnobGroup("enum", ("holdout",), label="Holdout"),
+                        KnobGroup("enum", ("shadow_catcher",), label="Shadow catcher"))
 _MATERIAL_KNOBS = (*_MATERIAL_KNOBS, *_LIGHT_LINK_KNOBS, *_RENDER_SWITCH_KNOBS)
 _TARGET_KNOB = KnobGroup("xyz", ("target_x", "target_y", "target_z"), label="Look at")
 # Nuke's own knob names for polygon amount, shared by Card3D, Sphere3D and Cylinder3D.

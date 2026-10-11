@@ -260,7 +260,7 @@ def _check_scope(scene):
                 raise gpu3d.Unsupported('liquid instance sources are CPU-only')
             if source.projection is not None:
                 raise gpu3d.Unsupported('camera-projected instance sources are CPU-only')
-            if source.holdout or not (source.cast_shadows and source.receive_shadows and source.visible_to_camera):
+            if source.holdout or source.shadow_catcher or not (source.cast_shadows and source.receive_shadows and source.visible_to_camera):
                 raise gpu3d.Unsupported('per-object render switches on instance sources are CPU-only for now')
 
 
