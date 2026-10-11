@@ -67,13 +67,13 @@ class Connection:
         self.timeout_ms = timeout_ms
         self._buffer = bytearray()
 
-    def request(self, cmd):
+    def request(self, cmd, timeout_ms=None):
         payload = json.dumps(cmd).encode() + b"\n"
         if len(payload) > MAX_REQUEST:
             raise ProtocolError("Request exceeds 1 MiB")
         self.socket.write(payload)
         self.socket.flush()
-        deadline = time.monotonic() + self.timeout_ms / 1000
+        deadline = time.monotonic() + (timeout_ms or self.timeout_ms) / 1000
         # A plain blocking waitForReadyRead() only watches this socket's own file descriptor; in
         # a real --connect process that is enough because the GUI process pumps its own event
         # loop independently. In an offscreen test the GUI's LocalBridge server lives in this

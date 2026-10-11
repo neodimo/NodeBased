@@ -91,7 +91,7 @@ class HeadlessSession:
     render from the agent" setting in a private settings home, so the user's real settings are
     untouched."""
 
-    def __init__(self, project, cache, disk_ops=True, timeout=120):
+    def __init__(self, project, cache, disk_ops=True, timeout=120, attach_client=True):
         self.project, self.cache, self.timeout = Path(project), Path(cache), timeout
         self.home = tempfile.TemporaryDirectory(prefix="nodebased-agent-home-")
         settings = Path(self.home.name) / ".config" / "NodeBased"
@@ -105,10 +105,12 @@ class HeadlessSession:
         self.window = subprocess.Popen([sys.executable, "-m", "nodebased", str(self.project),
                                         "--agent", self.endpoint], env=self.env, cwd=str(REPO),
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.client = McpClient([sys.executable, "-m", "nodebased.mcpserver", "--endpoint", self.endpoint,
-                                 "--agent-name", "scripted-agent"], env=self.env, cwd=str(REPO))
-        self.client.initialize()
-        self._wait_for_window()
+        self.client = None
+        if attach_client:  # False: another client (a real Claude Code session) attaches to the endpoint itself
+            self.client = McpClient([sys.executable, "-m", "nodebased.mcpserver", "--endpoint", self.endpoint,
+                                     "--agent-name", "scripted-agent"], env=self.env, cwd=str(REPO))
+            self.client.initialize()
+            self._wait_for_window()
 
     def _wait_for_window(self):
         deadline = time.monotonic() + self.timeout
@@ -129,7 +131,8 @@ class HeadlessSession:
         self.close()
 
     def close(self):
-        self.client.close()
+        if self.client:
+            self.client.close()
         self.window.terminate()
         try:
             self.window.wait(timeout=30)

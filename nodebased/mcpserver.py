@@ -14,6 +14,9 @@ from . import agentloop, issues, knowledge
 
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 DISK_OPS = frozenset({"save", "load", "render"})
+# The window answers these only when the work is done (a 24-frame export at full size took over a
+# minute, the 30 s default dropped the connection while the window kept working), so they wait longer.
+LONG_TIMEOUT_MS = 60 * 60 * 1000
 
 
 def _schema(properties=None, required=()):
@@ -106,8 +109,9 @@ class MCPServer:
         return self.connection
 
     def _request_bridge(self, command):
+        long = command.get("op") in PIPELINE_TOOLS or command.get("op") == "render"
         try:
-            return self._bridge().request(command)
+            return self._bridge().request(command, LONG_TIMEOUT_MS if long else None)
         except Exception:
             if self.connection is not None:
                 try:
