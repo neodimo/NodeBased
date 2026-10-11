@@ -260,7 +260,7 @@ tracking after the 8-frame warm-up; peak VRAM is the solver process's own alloca
 - **Resolution decides accuracy.** DROID-SLAM resizes both plates to the same 584 x 328, yet the 480 plate gives
   a 24% error and the 960 plate 0.9%: the 480 plate is too coarse for it. DPVO is the same story at a smaller
   gap. Use the plate at 960 wide or more.
-- **The focal length is not recovered.** DPVO and DROID-SLAM both take the intrinsics they are given (square
+- **The focal length is not recovered by the solvers** (step L2 below recovers it afterwards). DPVO and DROID-SLAM both take the intrinsics they are given (square
   pixels, centre principal point). A focal length 15% too long or 13% too short moved DPVO's error from 2.0 cm to
   2.6 and 2.9 cm, so the lens does not need to be exact, but it has to come from the plate (the node's focal and
   vertical aperture). MASt3R-SLAM, which estimates the camera model, is the candidate that would fix this.
@@ -288,8 +288,8 @@ artifact kind, `camera_solve`: provider and version, seed, scale and its source,
 - **Anchor:** the camera on the first frame (position, target and roll on the node), the camera an artist sets
   by eye with the Camera3D handles; the solved motion is applied from there.
 - **Scale:** the node's `unit_scale` (scene units per solve unit), or `survey` on the op: two points with their
-  real distance and their pixel positions on two or more frames, triangulated with the solved cameras. Picking
-  the survey pixels in the viewer is not built; the op takes them as numbers.
+  real distance and their pixel positions on two or more frames, triangulated with the solved cameras. The node's
+  own Survey list, with viewer picking, replaces the numbers (step L2 below).
 
 **The shot with that camera** (`run_by_hand.py --solver dpvo`, 480 x 270 committed plate, `reproject` 1.1, seed
 7, the first-frame camera equal to the plate's true one and the two survey points clicked to a whole pixel):
@@ -318,8 +318,67 @@ it is real time with room for the model provider next to it, and it is within a 
 on this plate. DROID-SLAM is the more accurate and the only repeatable one, but uses six times the memory (3.2 GB) for the same
 30 frames per second end to end on this short plate; keep it as the reference and a second provider. Neither is proven
 beyond a clean synthetic render: the next step is a filmed plate from DiMo, and MASt3R-SLAM for lens recovery.
-Not built: viewer picking of the survey points, a tile-path or queue job for the solve, and an automatic
-ground-plane alignment (the anchor is typed by hand).
+Viewer picking of the survey points and the lens recovery are built since (step L2 below). Not built: a tile-path
+or queue job for the solve, and an automatic ground-plane alignment (the anchor is typed by hand).
+
+## Stage 7, step L2: the lens and the survey (10/11)
+
+Stage 7 left two gaps: a monocular solve takes the focal length it is given, and its scale comes from two numbers
+typed into an op. Step L2 of the lens plan (Rendering 13) closes both inside the `CameraSolve3D` node. Nothing
+about the solver changed; the new work happens after it.
+
+**The lens.** Two knobs under "Lens": `Focal length is` (`known`, the typed value, as before, or `estimate`, the
+typed value is only the starting guess) and `Distortion` (`none`, `k1`, or `k1 k2`, the radial terms of the
+Camera3D lens model). With either asked for, the op refines the solve after DPV-SLAM returns: `solve_camera` now
+gets, besides the poses and the point cloud, the solver's own measurements (`providers/camera_solve_dpvo.py`
+`_tracks`: where the network put each patch on every frame it followed it to, with its confidence), and
+`nodebased/lensrefine.py` runs a bundle adjustment over them. The unknowns are the focal length (as a log), the
+radial terms, the keyframe poses (at most 120, evenly spaced) and the points (at most 3000, the most-seen);
+the data are the tracked pixel positions, with a Huber loss that tightens over three stages (24, 6 and 1.5 pixels
+at 960 wide, scaled with the width: a start whose lens is off has residuals of several pixels, which the final
+threshold would treat as outliers and crawl through). It is a Levenberg-Marquardt written with numpy, points
+eliminated by a Schur complement, the same damped reprojection least squares as the verifier's
+`_fit_camera` taken to many cameras (there is no scipy in the project). The first pose stays where it was; the
+other frames follow; afterwards the path is scaled back to the length the solver gave it, so a unit scale means
+what it did. Frames the solver did not keep as keyframes keep their motion relative to the keyframe before them.
+The principal point stays at the image centre and pixels are square; tangential terms and `k3` are not estimated.
+
+What comes out: the solved `Camera3D` gets the recovered `focal` and `lens_k1` / `lens_k2` (a rerun with the lens
+known sets them back), and the solve record (`solve.json` as the artifact of kind `camera_solve`, schema 2) has a
+`lens` block with the typed and recovered focal length, k1 and k2, the formal one-sigma of each (a lower bound:
+the tracked positions are not independent), the median and root-mean-square reprojection error before and after,
+the share of tracked positions within 6 pixels (at 960 wide), the counts and the iterations. The node's panel
+shows the same in words under "Last solve" and warns when the points fit the lens badly, when the focal length
+lands far from the typed one, or when its formal error is above 5 percent: a move without parallax cannot tell a
+long lens from a near subject.
+
+**The survey.** The knob `Survey data` holds JSON written by the panel's Survey list: picks, each a pixel
+clicked in the viewer on whichever frame is showing ("Pick point in viewer…", the Cryptomatte pick pattern: stays on
+until Esc, crosses drawn in the viewer, the node is viewed for you), optionally with a position `X Y Z`, and
+distances between two picks. At solve time each pick is followed through the plate with the tracker (normalised
+cross-correlation, at most 12 confident frames) and triangulated with the solved cameras, through the lens just
+recovered. Then:
+
+- three or more picks with positions, not on one line: a similarity (Umeyama), so scale, orientation and position
+  come from the survey and the first-frame anchor is not used;
+- a distance between two picks, or positions for two: the scale alone (least squares over all the distances), the
+  anchor still places the solve;
+- anything less: the solve stays up to scale, `Scene units per solve unit` applies, and the panel and the record
+  say so in words ("Up to scale (1 pick): the survey needs a distance between two picks, or positions for three
+  picks.").
+
+The op's `survey` argument (two points, one distance, observations given as numbers) still works and replaces the
+node's list.
+
+**Determinism.** The refinement is deterministic given what the solver returned (no random choices; points and
+frames are picked by count and spacing, the loss stages are fixed). DPV-SLAM itself is not (stage 7: about a
+millimetre of camera position between seeded runs), and the recovered lens inherits that: two solves of one plate
+give two slightly different focal lengths.
+
+**Measured.** Not recorded yet: the camera solve holds the GPU lock and a full suite held it for hours on 10/11, so
+the matrix (`solve_camera.py --solver dpvo --matrix`, 960 and 1920 wide, the plain plate and the k1 lens plate,
+typed focal length 1.2 times the truth) is queued behind it. The CPU tests prove the arithmetic on synthetic tracks
+with known truth: focal length within 1 percent at 1920 wide, k1 within 10 percent.
 
 ## Stage 8: temporal coherence (10/11)
 

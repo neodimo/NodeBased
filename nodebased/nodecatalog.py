@@ -204,7 +204,7 @@ NODE_CATEGORIES = {
         "ReadGLTF3D": "Meshes from a glTF .glb or .gltf file.",
         "Light3D": "A directional, point, spot or environment light.",
         "Camera3D": "A camera with position, target and film-back lens knobs.",
-        "CameraSolve3D": "Solves a moving camera and a sparse point cloud from the plate alone, passing the plate through.",
+        "CameraSolve3D": "Solves a moving camera and a sparse point cloud from the plate alone, recovers its lens and scale, passing the plate through.",
         "Project3D": "Projects an image through a camera onto geometry.",
         "WriteGeo3D": "Exports OBJ, USD or versioned SceneState JSON and arrays on request.",
         "WriteSplat3D": "Exports the scene's splats to a 3DGS .ply on request.",

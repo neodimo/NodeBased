@@ -2362,6 +2362,10 @@ Where the lens is used:
   `reconcile` (`PointsTo3D`, `Reconcile3D`) treat their pixels as plate pixels.
 - The SceneState export writes `camera_data.lens` (docs/GENERATIVE_CONDITIONING.md section 2).
 - `Undistort` and `Redistort` (docs/PARITY_2D.md, Transform) apply the inverse and forward model to an image.
+- `CameraSolve3D` can recover the lens: with `Focal length is` set to estimate and/or `Distortion` set to k1 or
+  k1 k2, the solved `Camera3D` gets the focal length and `lens_k1` / `lens_k2` that fit the solver's own tracked
+  points (docs/END_TO_END_SPRINT.md, "Stage 7, step L2"). The recovered radial terms are in the units above, so
+  they can be typed into any other camera.
 
 The workflow is Nuke's: `Undistort` the plate (the data window grows so nothing is cropped), comp or generate on
 the undistorted image with the ideal camera, then `Redistort` back into the plate's format.
@@ -3150,3 +3154,11 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   `Undistort` and `Redistort`, and `Project3D`, the tracker paths and the SceneState export reading the lens. See
   "Lens distortion". Schema bumped from 20 to 21. Left out: the viewport and `Render3D` still draw through the
   ideal camera; `conditioning_verify` still reprojects with the ideal projection.
+- Step L2 of 3 (Rendering 13, lens and film-back): `CameraSolve3D` recovers the focal length and the radial lens
+  from the solver's own tracked points (`nodebased/lensrefine.py`, a numpy bundle adjustment; the DPVO provider now
+  hands back its tracked positions) and takes its scale, or scale and placement, from a Survey of points picked in
+  the viewer (`nodebased/surveypanel.py`). Both are described in docs/END_TO_END_SPRINT.md, "Stage 7, step L2", with the
+  measured errors on the demo plate at 960 and 1920 wide and on a lens plate (`examples/demo_shot/make_plate.py
+  --k1`). Schema bumped from 22 to 23 (three new `CameraSolve3D` knobs). Left out: tangential terms, `k3` and a
+  shifted principal point are not estimated; the GPU solve itself is a recorded run (`solve_camera.py --solver dpvo
+  --matrix`), not a suite test.

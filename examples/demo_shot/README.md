@@ -10,8 +10,9 @@ real model comes in stage 3 and only swaps the provider.
 
 | File | What it is |
 | --- | --- |
-| `make_plate.py` | Renders the 24-frame plate to EXR and checks it against `plate.sha256.json`. |
-| `solve_camera.py` | Tracks the plate, solves the camera from it, compares with the rendering camera, writes `solve.json` and `demo_shot.nbcomp`. |
+| `make_plate.py` | Renders the 24-frame plate to EXR and checks it against `plate.sha256.json`; `--k1` renders the lens plate instead (hashes in `plate_k1.sha256.json`). |
+| `solve_camera.py` | Tracks the plate, solves the camera from it, compares with the rendering camera, writes `solve.json` and `demo_shot.nbcomp`; `--solver dpvo --lens estimate` solves with DPV-SLAM and recovers the lens (below). |
+| `lens_benchmark.json` | The recorded focal length and k1 recovery runs (`solve_camera.py --solver dpvo --matrix`). |
 | `diagnose_verdict.py` | Measures the verifier on the shot: each check's worst value, its threshold, and the same measurement for the plate against its own SceneState. |
 | `demo_shot.nbcomp` | The shot graph. |
 | `run_by_hand.py` | Headless run through the `nodebased.agent` dispatcher; prints artifact ids and the verdict. |
@@ -62,6 +63,30 @@ Error against the camera that rendered the plate, 24 frames (`solve.json`, same 
 The verifier's camera tolerance is 1 cm and 0.25 degrees, so the solved camera is close but outside
 it on position. That does not enter the verdict: the verifier judges the generated pictures against
 the exported camera (the solved one), not the solve against the rendering camera.
+
+## The lens plate and the recovered lens
+
+The plain plate has no distortion, and the solvers take the focal length they are given. Step L2 of the lens plan makes
+`CameraSolve3D` recover both after the solve (docs/END_TO_END_SPRINT.md, "Stage 7, step L2"), and this folder is
+its benchmark.
+
+**The lens plate.** `make_plate.py --k1 -0.03 --size 960x540` renders the same camera move through a lens with
+radial distortion `k1` (the Camera3D lens model, `nodebased/lensmodel.py`, units of half the frame height).
+The set is rendered 1.35 times larger in each direction through the ideal camera and read through the lens model
+into the plate's format (what Redistort does; `tests/test_camera_solve_lens.py` checks the two agree), so the
+barrel-distorted corners show the set and not black. Beauty only: the data passes stay undistorted and are not
+written. Any 16:9 size works; the benchmark uses 960 and 1920 wide.
+
+**The benchmark.** Needs the NVIDIA card (it holds the GPU lock for the whole run, so it waits for a running suite):
+
+    python examples/demo_shot/solve_camera.py --solver dpvo --lens estimate --distortion k1 --width 960 --plate-k1 -0.03
+    python examples/demo_shot/solve_camera.py --solver dpvo --matrix        # writes lens_benchmark.json
+
+The typed focal length is 1.2 times the truth in the estimate rows, the first-frame camera is the true one, and the solve is
+compared with the rendering camera after a similarity fit (rotation from the camera orientations, scale and shift from
+the positions: the solve is monocular).
+
+Measured errors: not recorded yet, see docs/END_TO_END_SPRINT.md, "Stage 7, step L2" (the run waits for the GPU lock).
 
 ## The shot graph
 

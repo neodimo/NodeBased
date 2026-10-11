@@ -5,7 +5,6 @@ positions) built from a known camera, lens and scene, so the truth is known. The
 a recorded run (examples/demo_shot/README.md), not a test.
 """
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path

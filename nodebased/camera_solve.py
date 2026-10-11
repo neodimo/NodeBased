@@ -32,7 +32,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import filmback, lensmodel, lensrefine, scene3d, track3d
+from . import filmback, lensrefine, scene3d, track3d
 from .providers import camera_solve_dpvo as dpvo
 
 KEY_DECIMALS = 3
@@ -89,7 +89,7 @@ def fov_from_intrinsics(height, fy):
     return math.degrees(2 * math.atan(height / (2.0 * fy)))
 
 
-def solve_camera_object(c2w, fov, roll_keys=None, lens=(0.0, 0.0)):
+def solve_camera_object(c2w, fov, lens=(0.0, 0.0)):
     """A scene3d.Camera at the pose `c2w` with the given vertical field of view and radial lens (k1, k2)."""
     keys = keys_from_pose(np.asarray(c2w, np.float64))
     return scene3d.Camera(scene3d.Transform3D(scene3d.Vec3(keys["tx"], keys["ty"], keys["tz"])),
