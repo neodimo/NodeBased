@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -160,6 +160,11 @@ VIEWER_MASKS = ("format", "1.33", "1.66", "1.78", "1.85", "2.35", "2.40")
 VIEWER_MASK_MODES = ("none", "lines", "half", "full")
 VIEWER_MASKS_DEFAULT = {"mask": "format", "mode": "none"}
 VIEWER_EXTRA_KEYS = ("look", "roi", "proxy", "masks")
+# Lens distortion (Rendering 13 step L1): Brown-Conrady radial and tangential terms about a principal point,
+# in film-back units (nodebased/lensmodel.py). Zeros are no lens, which is what every older camera was.
+_LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p2": 0.0,
+         "lens_cx": 0.0, "lens_cy": 0.0}
+
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
     # be a padded sequence pattern (plate.%04d.exr / plate.####.exr) or a still; "frame_offset"
@@ -422,6 +427,13 @@ SPECS = {
                             "to1_x": 0.0, "to1_y": 0.0, "to2_x": 960.0, "to2_y": 0.0,
                             "to3_x": 0.0, "to3_y": 540.0, "to4_x": 960.0, "to4_y": 540.0,
                             "direction": "forward", "filter": "bilinear", "mix": 1.0}},
+    # Undistort / Redistort (Rendering 13 step L1): Nuke's LensDistortion round trip. The optional camera input
+    # supplies the lens; unwired, `lens_preset` picks a named lens ("custom" reads the node's own knobs).
+    # Undistort grows the data window to hold the straightened plate; Redistort returns to the format.
+    "Undistort": {"inputs": ["image"], "optional_inputs": ["camera"],
+                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "bilinear"}},
+    "Redistort": {"inputs": ["image"], "optional_inputs": ["camera"],
+                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "bilinear"}},
     # STMap / IDistort / VectorBlur (step 5c): the 2D side of the control loop. Each takes the image,
     # an optional `uv` image (a map or a vector field) and an optional mask. `uv_layer` names a
     # layer of the `uv` input when it is wired, otherwise of the image input itself, so a
@@ -996,9 +1008,9 @@ SPECS = {
         "splat_indirect_samples": 0, "splat_indirect_distance": 1.0, "splat_denoise": 0.0, "splat_quality": "medium",
         **_XFORM}},
     "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
-    "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
+    "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": "", **_LENS}},
     "ReadUSD3D": {"inputs": [], "params": {"usd_path": "", "usd_root": "/"}},
-    "ReadUSDCamera3D": {"inputs": [], "params": {"usd_path": "", "usd_camera": ""}},
+    "ReadUSDCamera3D": {"inputs": [], "params": {"usd_path": "", "usd_camera": "", **_LENS}},
     "ReadGLTF3D": {"inputs": [], "params": {"gltf_path": "", "gltf_root": "", **_RENDER_SWITCHES}},
     "ReadGeo3D": {"inputs": [], "optional_inputs": ["image"],
                   "params": {"geo_path": "", **_XFORM, **_SURFACE}},
@@ -1029,7 +1041,8 @@ SPECS = {
                                           "near": 0.1, "far": 1000.0,
                                           # Thin-lens depth of field (R5): fstop 0 is a pinhole, as before.
                                           "fstop": 0.0, "focus_distance": 5.0, "aperture_blades": 0,
-                                          "blade_rotation": 0.0, "anamorphic_squeeze": 1.0}},
+                                          "blade_rotation": 0.0, "anamorphic_squeeze": 1.0,
+                                          **_LENS}},
     "Project3D": {"inputs": ["image", "camera", "geometry"],
                   "params": {"project_outside": "transparent", "project_backfaces": "project", "project_occlusion": "off"}},
     "WriteGeo3D": {"inputs": ["scene"], "optional_inputs": ["camera"],
@@ -1746,6 +1759,8 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "motion_blur": (0, 1), "motion_samples": (1, 64),
                "fstop": (0.0, 128.0), "focus_distance": (0.001, 1000000.0), "aperture_blades": (0, 16),
                "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0),
+               "lens_k1": (-10.0, 10.0), "lens_k2": (-10.0, 10.0), "lens_k3": (-10.0, 10.0),
+               "lens_p1": (-1.0, 1.0), "lens_p2": (-1.0, 1.0), "lens_cx": (-2.0, 2.0), "lens_cy": (-2.0, 2.0),
                "denoiser_strength": (0.0, 1.0), "denoise_color_sensitivity": (0.0, 10.0),
                "denoise_normal_sensitivity": (0.0, 10.0), "denoise_depth_sensitivity": (0.0, 10.0),
                "denoise_iterations": (0, 16), "denoise_temporal": (0, 1),
@@ -1935,6 +1950,7 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"],
                 "vdb_write_compression": ["zip", "none", "blosc"]})
 CHOICES.update({"rigid_shape": ["box", "sphere", "convex", "compound"], "floor": ["on", "off"]})
+CHOICES["lens_preset"] = ["custom", "none", "mild barrel", "strong barrel", "pincushion", "wide angle", "fisheye"]
 CHOICES["upres_factor"] = ["1", "2", "4"]
 CHOICES["upres_backend"] = ["auto", "cpu", "gpu"]
 CHOICES["whitewater_backend"] = ["auto", "cpu", "gpu"]
@@ -2278,6 +2294,15 @@ def upgrade_document(document):
             params.setdefault("padding", 8)
             params.setdefault("max_size", 256)
         doc["version"] = 20
+    if isinstance(doc, dict) and doc.get("version") == 20:
+        # v20 -> v21 gives every camera a lens (Rendering 13 step L1). Zero distortion is what an older camera
+        # was, so no projection moves; Camera3D and the imported-camera readers gain the knobs.
+        for node in doc.get("nodes", {}).values():
+            if isinstance(node, dict) and node.get("type") in ("Camera3D", "ReadAlembicCamera3D", "ReadUSDCamera3D"):
+                params = node.setdefault("params", {})
+                for name, value in _LENS.items():
+                    params.setdefault(name, value)
+        doc["version"] = 21
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

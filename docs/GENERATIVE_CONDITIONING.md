@@ -26,6 +26,12 @@ per frame; a static item says so once.
 - lens: vertical field of view, focal length in millimetres, horizontal and vertical aperture in millimetres
   (Nuke's film-back model, `nodebased/filmback.py`), near and far planes;
 - depth of field: f-stop, focus distance, aperture blade count;
+- lens distortion (`camera_data.lens`): `model` `brown_conrady`, `units` `film_back_half_height` (1.0 is half the
+  format's height, origin at the format's centre, x right and y up), radial `k1` `k2` `k3`, tangential `p1` `p2`,
+  `principal_point` `[cx, cy]`, `anamorphic_squeeze` (the model runs on the squeezed image) and `distorted`,
+  false when every coefficient is zero. The pixels of the passes are those of the ideal camera, so a provider
+  conditions on undistorted images and redistorts what it returns with this lens to land on the plate. The
+  equations are in docs/3D_FOUNDATION.md "Lens distortion";
 - output resolution and pixel aspect.
 
 **Objects**, per frame, for every geometry and every instance of an InstanceSet:

@@ -565,6 +565,8 @@ REGION_RULES = {
     "Crop": _crop_rule,
     "CornerPin": _cornerpin_rule,
     "STMap": _uv_lookup_rule,
+    # Undistort / Redistort read the image wherever the lens throws the pixel; excluded from the tile path.
+    "Undistort": _uv_lookup_rule, "Redistort": _uv_lookup_rule,
     "IDistort": _uv_lookup_rule,
     "VectorBlur": _vector_blur_rule,
     "SplineWarp": _identity,

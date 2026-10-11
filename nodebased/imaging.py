@@ -1447,6 +1447,7 @@ class Evaluator:
                                      usdio.load_camera(params["usd_path"], frame, params["usd_camera"]))
                     except RuntimeError as error:
                         raise ValueError(str(error)) from None
+                    value = scene3d.with_node_lens(value, params)
                 elif kind == "ReadGLTF3D":
                     from . import gltfio
                     value = (scene3d.Scene() if node["disabled"] else
@@ -1464,6 +1465,7 @@ class Evaluator:
                     else:
                         value = (scene3d.Camera() if node["disabled"] else
                                  alembicio.load_camera(params["abc_path"], seconds, params["abc_camera"]))
+                    value = scene3d.with_node_lens(value, params)
                 elif kind == "ReadVDB3D":
                     # Disabled is an empty scene (a read has no input to pass through).
                     if node["disabled"]:
@@ -3023,6 +3025,8 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.pixels, filtered,
                                                None if mask is None else mask.fit(source.data), p.get("mix", 1.0))
             return Raster(pixels, source.data, source.display, source.layers, source.meta)
+        if kind in ("Undistort", "Redistort"):
+            return Evaluator._lens_warp(kind, p, inputs)
         if kind in UV_KINDS:
             return Evaluator._uv_node(kind, p, inputs)
         if kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
@@ -3328,6 +3332,40 @@ class Evaluator:
         return Raster(source.pixels, source.data, source.display, merged_layers, merged_meta)
 
     _UV_SLOT = {"R": 0, "G": 1, "B": 2, "A": 3}
+
+    @staticmethod
+    def _lens_warp(kind, p, inputs):
+        """Undistort / Redistort: the Brown-Conrady lens of the wired camera (or of the node's preset and
+        knobs) applied to the image about the centre of its display window (nodebased/lensmodel.py).
+
+        Undistort's output is the ideal image: its data window grows to hold the straightened plate (joined
+        with the display window), so nothing is cropped and the overscan is the data window beyond the format.
+        Redistort's output is the plate again, in the input's display window. A lens that bends nothing
+        passes the image through. Mask and mix do not exist here, as on Nuke's LensDistortion."""
+        from . import lensmodel, scene3d
+        source = inputs[0]
+        camera = inputs[1] if len(inputs) > 1 else None
+        if source is None:
+            raise ValueError(f"{kind}: connect an image")
+        if isinstance(camera, scene3d.Camera):
+            lens = lensmodel.from_camera(camera)
+        elif p.get("lens_preset", "custom") == "custom":
+            lens = lensmodel.from_params(p, p.get("anamorphic_squeeze", 1.0))
+        else:
+            lens = lensmodel.Lens(**{name[5:]: value for name, value in lensmodel.PRESETS[p["lens_preset"]].items()},
+                                  squeeze=float(p.get("anamorphic_squeeze", 1.0)) or 1.0)
+        if lens.is_identity:
+            return source
+        display = source.display
+        if kind == "Undistort":
+            x, y, w, h = lensmodel.undistorted_window(lens, source.data, display)
+            out = Region(x, y, w, h)
+        else:
+            out = display
+        sx, sy = lensmodel.sample_coordinates(lens, out, display, source.data,
+                                              "undistort" if kind == "Undistort" else "redistort")
+        pixels = Evaluator._resample(source.pixels, sx, sy, p["filter"]).astype(np.float32)
+        return Raster(pixels, out, display, source.layers, source.meta)
 
     @staticmethod
     def _uv_node(kind, p, inputs):

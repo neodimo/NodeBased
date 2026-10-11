@@ -9337,11 +9337,41 @@ class Window(QMainWindow):
                                if node["type"] == "RotoPaint" else None)
             for held in (rotopaint_holds or {}).values():
                 held.setContentsMargins(0, 0, 0, 0)
+            help_rows = []        # (form, first row, last row, text) of knobs that carry a plain description
+            last_section = None
+
+            def describe_rows():
+                """Put each described knob's sentence under its row and on the row's widgets as a tooltip."""
+                for held, first, text in help_rows:
+                    for index in range(first, min(first + 1, held.rowCount())):
+                        for role in (QFormLayout.ItemRole.LabelRole, QFormLayout.ItemRole.FieldRole):
+                            item = held.itemAt(index, role)
+                            if item is not None and item.widget() is not None:
+                                item.widget().setToolTip(text)
+                    caption = QLabel(text)
+                    caption.setWordWrap(True)
+                    caption.setObjectName("knob-caption")
+                    caption.setStyleSheet("color: #8a8f98; font-size: 11px")
+                    held.insertRow(first + 1, caption)
+                help_rows.clear()
+
             for group in knob_layout(node["type"]):
+                if group.help or group.section:
+                    # Rows are added by many branches below; the caption goes in at the next iteration.
+                    describe_rows()
                 if rotopaint_holds is not None:
                     form = rotopaint_holds["mix" if group.params == ("mix",) else "advanced"]
                 if group.kind == "legacy":
                     continue
+                if group.section != last_section:
+                    last_section = group.section
+                    if group.section:
+                        heading = QLabel(group.section.upper())
+                        heading.setObjectName("knob-section")
+                        heading.setStyleSheet("color: #56606b; font-size: 11px; margin-top: 8px")
+                        form.addRow(heading)
+                if group.help:
+                    help_rows.append((form, form.rowCount(), group.help))
                 if node["type"] == "Flare" and set(group.params) & {"tracker_id", "track_index"}:
                     # The two stored link fields are presented as one validated track picker below.
                     continue
@@ -9481,6 +9511,7 @@ class Window(QMainWindow):
                         form.addRow(group.label, animated)
                 else:
                     add_legacy_param(param, value, group.kind, label=group.label)
+            describe_rows()
             form = main_form
             if node["type"] == "CurveTool":
                 progress = QProgressDialog("Analyzing frames…", "Cancel", 0, 1, self)

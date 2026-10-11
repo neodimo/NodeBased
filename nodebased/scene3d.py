@@ -29,6 +29,7 @@ import numpy as np
 
 from .raytrace import Bvh, TriangleSet, SplatSet
 from .splats import SplatCloud, C0
+from . import lensmodel as _lensmodel
 from .envlight import Environment
 from . import filmback as _fb
 from . import lens as _lens_module
@@ -264,6 +265,16 @@ class Camera:
     aperture_blades: int = 0           # 0 (or fewer than 3) is a round aperture, else a regular polygon
     blade_rotation: float = 0.0        # degrees
     anamorphic_squeeze: float = 1.0    # 2 makes the bokeh twice as tall as wide
+    # Lens distortion (nodebased/lensmodel.py): Brown-Conrady radial k1..k3 and tangential p1, p2 about the principal point
+    # (cx, cy), all in film-back units. Render3D draws through the ideal camera, so these only change `project_lens`,
+    # the tracker, Project3D and the exports; the squeeze above also scales the model's x. Zeros are no lens.
+    lens_k1: float = 0.0
+    lens_k2: float = 0.0
+    lens_k3: float = 0.0
+    lens_p1: float = 0.0
+    lens_p2: float = 0.0
+    lens_cx: float = 0.0
+    lens_cy: float = 0.0
 
     @property
     def focal(self):
@@ -668,7 +679,7 @@ def apply_projection(scene_or_geometry: Scene | Geometry, projection: Projection
 def _projection_uv(projection, points):
     """World positions to bottom-up UVs and projection-camera view depths."""
     h, w = projection.texture.shape[:2]
-    pixels, depth = project(projection.camera, w, h, points)
+    pixels, depth = project_lens(projection.camera, w, h, points)
     return np.column_stack((pixels[:, 0] / w, 1 - pixels[:, 1] / h)), depth
 
 
@@ -1894,7 +1905,16 @@ def camera_from_node(node):
                   p["roll"], float(p["haperture"]), float(p["vaperture"]),
                   float(p.get("fstop", 0.0)), float(p.get("focus_distance", 5.0)),
                   int(p.get("aperture_blades", 0)), float(p.get("blade_rotation", 0.0)),
-                  float(p.get("anamorphic_squeeze", 1.0)))
+                  float(p.get("anamorphic_squeeze", 1.0)),
+                  *(float(p.get(name, 0.0)) for name in _lensmodel.KNOBS))
+
+
+def with_node_lens(camera, params):
+    """An imported camera with the lens the reader node carries (a file has no distortion of its own)."""
+    if not isinstance(camera, Camera):
+        return camera
+    lens = {name: float(params.get(name, 0.0)) for name in _lensmodel.KNOBS}
+    return replace(camera, **lens) if any(lens.values()) else camera
 
 
 def scene_from_node(node, members):
@@ -1974,6 +1994,26 @@ def project(camera: Camera, width: int, height: int, points):
     z = -local[:, 2]
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
     return _to_pixels(local, z, focal, width / max(height, 1), width, height), z
+
+
+def project_lens(camera: Camera, width: int, height: int, points):
+    """Like `project`, but through the camera's lens: where the point lands on a plate shot with it.
+
+    Equal to `project` when the camera has no distortion."""
+    xy, z = project(camera, width, height, points)
+    if _lensmodel.active(camera):
+        x, y = _lensmodel.distort_pixels(_lensmodel.from_camera(camera), xy[:, 0], xy[:, 1], width, height)
+        xy = np.column_stack((x, y)).astype(np.float32)
+    return xy, z
+
+
+def unproject_lens(camera: Camera, width: int, height: int, pixels):
+    """Plate pixels (N,2) to the pixels of the ideal image `project` and `Render3D` use."""
+    pixels = np.asarray(pixels, np.float64).reshape(-1, 2)
+    if not _lensmodel.active(camera):
+        return pixels
+    x, y = _lensmodel.undistort_pixels(_lensmodel.from_camera(camera), pixels[:, 0], pixels[:, 1], width, height)
+    return np.column_stack((x, y))
 
 
 def frustum_lines(camera: Camera, aspect: float, length: float = 1.5):

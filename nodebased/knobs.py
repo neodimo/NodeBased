@@ -27,10 +27,36 @@ class KnobGroup:
     params: tuple[str, ...]
     label: str | None = None
     soft_range: tuple[float, float] | None = None
+    section: str | None = None     # a heading shown above the first knob of a run that shares it
+    help: str | None = None        # one plain sentence shown under the knob and as its tooltip
 
     def __post_init__(self):
         if self.label is None:
             object.__setattr__(self, "label", _default_label(self.params))
+
+
+LENS_HELP = {
+    "lens_k1": "Radial distortion, first term. Negative bows straight lines outward (barrel, wide lenses); "
+               "positive pulls them inward (pincushion, long lenses).",
+    "lens_k2": "Radial distortion, second term. Shapes the bend toward the corners of the frame.",
+    "lens_k3": "Radial distortion, third term. Only needed for strong wide-angle and fisheye lenses.",
+    "lens_p1": "Tangential distortion, first term. Corrects a lens that sits slightly tilted over the sensor.",
+    "lens_p2": "Tangential distortion, second term. The same tilt along the other direction.",
+    "lens_cx": "Principal point, across. Where the lens axis meets the sensor, in film-back units "
+               "(1 is half the frame height; 0 is the centre).",
+    "lens_cy": "Principal point, up. The same, vertically.",
+    "anamorphic_squeeze": "How much the lens squeezes the image sideways; 2 for a two times anamorphic lens. "
+                          "The distortion is applied to the squeezed image.",
+}
+
+
+def _lens_knobs(section="Lens"):
+    """The lens knobs of a camera or of an Undistort / Redistort node, under one section heading."""
+    labels = {"lens_k1": "Radial k1", "lens_k2": "Radial k2", "lens_k3": "Radial k3",
+              "lens_p1": "Tangential p1", "lens_p2": "Tangential p2",
+              "lens_cx": "Principal point x", "lens_cy": "Principal point y"}
+    return tuple(KnobGroup("float", (name,), label=label, section=section, help=LENS_HELP[name])
+                 for name, label in labels.items())
 
 
 def _groups(*groups):
@@ -367,6 +393,14 @@ KNOB_LAYOUT = {
         KnobGroup("string", ("layer",)),
         KnobGroup("enum", ("red_from",)), KnobGroup("enum", ("green_from",)),
         KnobGroup("enum", ("blue_from",)), KnobGroup("enum", ("alpha_from",))),
+    "Undistort": _groups(KnobGroup("enum", ("lens_preset",), label="Lens preset"),
+                         KnobGroup("float", ("anamorphic_squeeze",), label="Anamorphic squeeze",
+                                   section="Lens", help=LENS_HELP["anamorphic_squeeze"]),
+                         *_lens_knobs(), KnobGroup("enum", ("filter",))),
+    "Redistort": _groups(KnobGroup("enum", ("lens_preset",), label="Lens preset"),
+                         KnobGroup("float", ("anamorphic_squeeze",), label="Anamorphic squeeze",
+                                   section="Lens", help=LENS_HELP["anamorphic_squeeze"]),
+                         *_lens_knobs(), KnobGroup("enum", ("filter",))),
     "STMap": _groups(
         KnobGroup("string", ("uv_layer",), label="UV layer"),
         KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),
@@ -764,11 +798,13 @@ KNOB_LAYOUT.update({
     "ReadAlembic3D": _groups(KnobGroup("string", ("abc_path",), label="Alembic file"),
                              KnobGroup("string", ("abc_root",), label="Root object")),
     "ReadAlembicCamera3D": _groups(KnobGroup("string", ("abc_path",), label="Alembic file"),
-                                   KnobGroup("string", ("abc_camera",), label="Camera object")),
+                                   KnobGroup("string", ("abc_camera",), label="Camera object"),
+                                   *_lens_knobs()),
     "ReadUSD3D": _groups(KnobGroup("string", ("usd_path",), label="USD file"),
                          KnobGroup("string", ("usd_root",), label="Root prim")),
     "ReadUSDCamera3D": _groups(KnobGroup("string", ("usd_path",), label="USD file"),
-                               KnobGroup("string", ("usd_camera",), label="Camera prim")),
+                               KnobGroup("string", ("usd_camera",), label="Camera prim"),
+                               *_lens_knobs()),
     "ReadGLTF3D": _groups(KnobGroup("string", ("gltf_path",), label="glTF file"),
                           KnobGroup("string", ("gltf_root",), label="Root node"), *_RENDER_SWITCH_KNOBS),
     "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
@@ -816,7 +852,9 @@ KNOB_LAYOUT.update({
                         KnobGroup("float", ("focus_distance",), label="Focus distance"),
                         KnobGroup("int", ("aperture_blades",), label="Aperture blades (0 = round)"),
                         KnobGroup("float", ("blade_rotation",), label="Blade rotation (degrees)"),
-                        KnobGroup("float", ("anamorphic_squeeze",), label="Anamorphic squeeze")),
+                        KnobGroup("float", ("anamorphic_squeeze",), label="Anamorphic squeeze",
+                                  section="Lens", help=LENS_HELP["anamorphic_squeeze"]),
+                        *_lens_knobs()),
     "CameraSolve3D": _groups(KnobGroup("string", ("provider",), label="Solver"),
                              KnobGroup("bool", ("loop_closure",), label="Loop closure"),
                              KnobGroup("int", ("seed",), label="Seed"),

@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from . import cryptomatte
-from . import envlight, scene3d
+from . import envlight, lensmodel, scene3d
 from .splats import SplatCloud
 
 SCHEMA_VERSION = 1
@@ -145,6 +145,14 @@ def _object_manifest(scene):
     return out
 
 
+def _lens_data(camera):
+    """The camera's lens distortion for a provider: undistort the plate with it to get the conditioning's pixels,
+    redistort a generated image with it to return to the plate (docs/GENERATIVE_CONDITIONING.md)."""
+    lens = lensmodel.from_camera(camera).as_dict()
+    return {"model": "brown_conrady", "units": "film_back_half_height",
+            **lens, "distorted": lensmodel.active(camera)}
+
+
 def write_scene_state(path, samples, *, first_frame=None, last_frame=None, fps=24.0,
                       resolution=(1920, 1080), pixel_aspect=1.0, working_color_space="ACEScg",
                       simulations=None, return_artifact_id=False):
@@ -186,6 +194,7 @@ def write_scene_state(path, samples, *, first_frame=None, last_frame=None, fps=2
                 "depth_of_field": {"f_stop": camera.fstop,
                                    "focus_distance_metres": camera.focus_distance,
                                    "aperture_blade_count": camera.aperture_blades},
+                "lens": _lens_data(camera),
                 "resolution": list(r), "pixel_aspect": float(pixel_aspect),
             }
         records.append({

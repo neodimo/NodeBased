@@ -10,9 +10,11 @@ MIN_RAY_ANGLE_DEGREES = 1.0
 
 
 def pixel_ray(camera, width, height, xy):
-    """Return a normalized world-space ray for a top-left-origin pixel coordinate."""
+    """Return a normalized world-space ray for a top-left-origin pixel coordinate on the plate.
+
+    The pixel is a position on the filmed plate, so it goes back through the camera's lens first."""
     eye, view = scene3d._view_basis(camera)
-    x, y = map(float, xy)
+    x, y = map(float, scene3d.unproject_lens(camera, width, height, [xy])[0])
     focal = 1.0 / np.tan(np.deg2rad(camera.fov) / 2.0)
     aspect = float(width) / max(float(height), 1.0)
     local = np.array(((2*x/max(width, 1)-1) * aspect/focal,
@@ -46,18 +48,18 @@ def triangulate(cameras, points, width, height, min_angle_degrees=MIN_RAY_ANGLE_
         xyz = np.linalg.solve(lhs, rhs)
     except np.linalg.LinAlgError as exc:
         raise ValueError("too_parallel_rays: least-squares system is singular") from exc
-    projected, depths = scene3d.project(cameras[0], width, height, xyz[None, :])
+    projected, depths = scene3d.project_lens(cameras[0], width, height, xyz[None, :])
     # Residuals use the actual camera per frame, not one reference camera.
     residuals = []
     for camera, point in zip(cameras, points):
-        pixels, _ = scene3d.project(camera, width, height, xyz[None, :])
+        pixels, _ = scene3d.project_lens(camera, width, height, xyz[None, :])
         residuals.append(float(np.linalg.norm(pixels[0].astype(np.float64) - np.asarray(point))))
     return xyz, residuals
 
 
 def reconcile(camera, point, width, height):
-    """Project one world-space point, retaining off-screen and behind-camera status."""
-    pixels, depth = scene3d.project(camera, width, height, np.asarray(point, dtype=np.float64)[None, :])
+    """Project one world-space point through the camera's lens, retaining off-screen and behind-camera status."""
+    pixels, depth = scene3d.project_lens(camera, width, height, np.asarray(point, dtype=np.float64)[None, :])
     x, y = map(float, pixels[0])
     z = float(depth[0])
     return {"x": x, "y": y, "depth": z,

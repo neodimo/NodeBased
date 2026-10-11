@@ -49,7 +49,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `WriteSplat3D` | scene | Passes its scene through and writes its splats to a 3DGS `.ply` on request, transforms baked in. See "Exporting splats". |
 | `WriteVDB3D` | scene | Passes its scene through and writes its one `Volume`, or its one liquid surface, to an OpenVDB `.vdb` on request. See "Volumes" ("Exporting to VDB"). |
 | `Light3D` | light | Directional, point, spot or environment light. A point or spot light is aimed from its position at its target and has cone and falloff knobs; an environment light reads an optional image (an equirectangular map) and lights meshes and splats from all around. See below and "Environment light". |
-| `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes, and a thin lens for depth of field (`fstop`, `focus_distance`, `aperture_blades`, `blade_rotation`, `anamorphic_squeeze`); the field of view is derived. See below and "Depth of field". |
+| `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes, and a thin lens for depth of field (`fstop`, `focus_distance`, `aperture_blades`, `blade_rotation`, `anamorphic_squeeze`), and a lens distortion model (`lens_k1` to `lens_p2`, `lens_cx`, `lens_cy`); the field of view is derived. See below, "Depth of field" and "Lens distortion". |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
 | `RigidBody3D` | rigidbody | A physical body descriptor with `rigid_shape` box, sphere, convex (convex hull of the connected mesh), or compound (convex hull per connected part); `density` derives mass from volume unless `mass` is set, with `friction`, `restitution`, initial linear/angular velocity and torque. |
 | `RigidSolver3D` | scene | Solves up to eight bodies with gravity, ground plane, contact friction/restitution, angular motion, torque and sleeping, returning their animated geometry. An optional FLIP liquid input supplies a waterline and gets a bounded equal-and-opposite velocity impulse in the returned scene; the upstream FLIP checkpoint remains unchanged. Its scene can connect to `FluidCollide3D.geometry` with `animated` on to stir smoke. |
@@ -251,6 +251,9 @@ may differ from the render camera and animates like any other camera.
   depth render per render call (only when some geometry asks for it) and is CPU-only: a projected
   scene with `Backend` `auto` renders on the CPU, and `gpu` reports it as unsupported. Default `off`.
 - The geometry's own UVs and texture are ignored while projected; the colour still tints.
+- The projection camera's lens applies ("Lens distortion"): the image is a plate, so a surface point is
+  looked up where the lens put it on the plate, not where an ideal camera would. A camera without a lens
+  projects exactly as before.
 
 ## Exporting geometry
 
@@ -2329,6 +2332,40 @@ f << S approximation. Focus breathing (the field of view changing as the lens fo
   tracer, 8 percent ray traced); polygon bokeh has the analytic second moment of its blade count; rotation turns
   it; squeeze 2 makes it twice as tall; the GPU matches the CPU.
 
+## Lens distortion
+
+A filmed plate carries the distortion of the lens that shot it. A render through an ideal camera cannot sit on
+it until the plate is straightened (or the render bent), and a tracker or projection that ignores the lens is
+wrong by the distortion. `Camera3D` therefore carries a Brown-Conrady lens model next to its film back
+(`nodebased/lensmodel.py`; not to be confused with `nodebased/lens.py`, the thin lens for depth of field):
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `lens_k1`, `lens_k2`, `lens_k3` | 0 | Radial terms. Negative `lens_k1` bows straight lines outward (barrel, wide lenses); positive pulls them in (pincushion). |
+| `lens_p1`, `lens_p2` | 0 | Tangential terms, for a lens tilted slightly over the sensor. |
+| `lens_cx`, `lens_cy` | 0 | Principal point, where the lens axis meets the sensor. |
+| `anamorphic_squeeze` | 1 | The existing squeeze knob. The model runs on the squeezed image: x is divided by it before and multiplied after. |
+
+Units are film-back units about the centre of the format: 1.0 is half the format's height, so the numbers do not
+change with image size, proxy tier or overscan (a 16:9 frame corner sits at a radius of about 2). The pixel aspect
+is taken as 1 (the evaluator's images are square-pixel). With all of it zero the camera is ideal, which is what
+every earlier camera was; the schema step from version 20 to 21 adds the zeros. The knobs animate like the others,
+are in the camera's Properties under a "Lens" section with a sentence per knob, and the Alembic and USD camera
+readers carry the same knobs (a file has no distortion of its own, so the node supplies it).
+
+Where the lens is used:
+
+- `scene3d.project_lens` / `unproject_lens` take a world point to the pixel it lands on the plate and a plate
+  pixel to the ideal image's pixel. `scene3d.project` stays the ideal projection that `Render3D` draws with, so
+  the viewport, handles and renders do not move.
+- `Project3D` looks the projected image up through `project_lens`; `track3d.pixel_ray`, `triangulate` and
+  `reconcile` (`PointsTo3D`, `Reconcile3D`) treat their pixels as plate pixels.
+- The SceneState export writes `camera_data.lens` (docs/GENERATIVE_CONDITIONING.md section 2).
+- `Undistort` and `Redistort` (docs/PARITY_2D.md, Transform) apply the inverse and forward model to an image.
+
+The workflow is Nuke's: `Undistort` the plate (the data window grows so nothing is cropped), comp or generate on
+the undistorted image with the ideal camera, then `Redistort` back into the plate's format.
+
 ## Motion blur
 
 Step R5's second half. `Render3D` blurs what moves across a shutter in the path tracer, the ray-traced mode and raster mode.
@@ -3109,3 +3146,7 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   floors" and "Putting CG onto a plate". Left out: catching the CG object's coloured light bounce onto the floor as a tinted
   layer (stated limit above). Tests: `tests/test_3d_shadow_catcher.py` on the RTX 3080 Ti, the Radeon 8060S
   (`force-adapter.py integrated`) and llvmpipe (`force-adapter.py cpu`).
+- Step L1 of 3 (Rendering 13, lens and film-back): the lens model on `Camera3D` and the imported-camera readers,
+  `Undistort` and `Redistort`, and `Project3D`, the tracker paths and the SceneState export reading the lens. See
+  "Lens distortion". Schema bumped from 20 to 21. Left out: the viewport and `Render3D` still draw through the
+  ideal camera; `conditioning_verify` still reprojects with the ideal projection.

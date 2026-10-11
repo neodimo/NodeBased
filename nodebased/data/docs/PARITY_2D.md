@@ -242,6 +242,7 @@ same helper, with each channel value standing in for its own alpha.
 | 16 | PointsTo3D | supported | Camera input plus two or three frame-numbered pixel positions triangulate one world point by least-squares ray intersection. `min_ray_angle` defaults to 1 degree; near-parallel rays raise the named `too_parallel_rays` error. With 0.5-pixel coordinate noise the recovered point stays within 0.01 world units on the synthetic fixture. The 3D viewport marks the point and reports each frame's pixel residual (the exact synthetic solve is below 0.01 px). It can parent an optional object and its point metadata follows Axis3D transforms. The viewer has a pick action for the currently selected sample frame; the numeric knobs remain available for exact entry. |
 | 17 | Reconcile3D | supported | Projects an Axis3D/PointsTo3D world point or a selected mesh vertex through the camera over `frame_start`..`frame_end` (`vertex_index=-1` uses the centroid). It returns a Tracker-shaped animated x/y track, marks behind-camera and off-screen samples, and draws the 2D path when selected. No clamping is applied. Wire its track output into Tracker's `track` input to drive the 2D image branch. |
 | 18 | TVIScale | supported | `TVIScale`, Nuke's legacy power-of-two up/down scaler: `power` is a signed count of doublings (positive doubles the format that many times, negative halves it, zero the identity), the shared `filter` (nearest, bilinear, cubic) is the resample kernel, plus mask + mix. Like `Reformat` it changes the *display* window itself, not just the data window, and shares its `_reformat`/`_resample` placement math with a `distort`-fit target exactly `2**power` times the source in both axes (so the aspect never drifts); a 2x up and a 2x down against hand-worked values with the `nearest` filter (pixel replication up, every-other-pixel down) and a bilinear case are asserted, tiles equal to full frame. Unlike Reformat, whose own target size needs the input's live display size the tile executor's canvas walk does not have, doubling or halving whatever size arrives needs no such lookup, so `tileexec._canvas_size_for_chain` states it directly and it joins `TimeBlur`/`TimeEcho`/`Inpaint`'s "solve once, slice many" tile path instead of Reformat's full-frame exclusion. |
+| 19 | LensDistortion (Undistort / Redistort) | supported | `Undistort` and `Redistort`, Nuke's LensDistortion round trip as two nodes. The lens is the optional `camera` input's Brown-Conrady model (`lens_k1` to `lens_k3`, `lens_p1`, `lens_p2`, principal point `lens_cx`, `lens_cy`, `anamorphic_squeeze`; docs/3D_FOUNDATION.md "Lens distortion"), or, unwired, the node's `lens_preset` (`custom` reads the node's own knobs; `mild barrel`, `strong barrel`, `pincushion`, `wide angle`, `fisheye` are typical-magnitude presets, not measured lenses). A wired camera wins over the node's knobs. Coordinates are film-back units about the display window's centre (1.0 is half the height), so nothing depends on resolution. `Undistort` samples the plate where the lens put each ideal pixel and its data window grows to hold the whole straightened plate, joined with the display window and capped at twice the format on each side; the display window stays the format, so the overscan is the data window beyond it (docs/BOUNDING_BOX.md). `Redistort` fills the display window by inverting the model (Newton's method) from the undistorted image, however far its overscan reaches. `filter` is `Transform`'s (`nearest`, `bilinear`, `cubic`); a lens that bends nothing passes the image through; bypass passes the image. No mask or mix, as in Nuke. Full-frame evaluator only: each output pixel reads the image wherever the lens throws it, so the tier rule requests the whole image, like STMap, and a graph containing one leaves the tile path. CPU only: the 2D warps (Transform, STMap) have no GPU kernels yet, so there is no WGSL twin to keep in step. Proxy tiers work unchanged because the model is resolution-free (the overscan scales with the tier, within a pixel). Not covered: Nuke's displacement-map output type and per-frame lens file import. |
 
 ## Metadata
 
@@ -300,10 +301,10 @@ Recomputed from the tables above on 2026-10-06; `tests/test_2d_parity_step_w3.py
 | Filter | 20 | 0 | 0 | 0 | 20 |
 | Keyer | 5 | 2 | 1 | 0 | 8 |
 | Merge | 12 | 0 | 0 | 2 | 14 |
-| Transform | 18 | 0 | 0 | 0 | 18 |
+| Transform | 19 | 0 | 0 | 0 | 19 |
 | Metadata | 5 | 0 | 0 | 0 | 5 |
 | Other | 9 | 0 | 4 | 2 | 15 |
-| **All** | **121** | **3** | **7** | **5** | **136** |
+| **All** | **122** | **3** | **7** | **5** | **137** |
 
 ### History
 
@@ -411,6 +412,10 @@ and D65/D60/DCI.
 **2026-09-28, step V3 (partial).** Procedural Flare, Glint, Sparkles, GodRays and VolumeRays kernels plus ScannedGrain from a plate shipped with node specs, knobs, mask/mix, bypass, catalog, theme and region rules. Effects use the full-frame evaluator.
 
 **2026-09-29, step V3 (finish 1).** Flare position can be dragged in the Viewer, keyed over time and linked to a Tracker point; the link offsets the flare from the track's reference-frame position. Glint now spreads only above-tolerance source channels along the configured number of star axes. Evaluator-path tests cover draggable/keyed controls, tracker motion, ray count and orientation, and 256×256 scanned-plate variance for all RGB channels within 10%, including frame offsets. Full-frame fallback remains the documented tile exclusion for these canvas-relative or nonlocal effects.
+
+## Lane 4 step notes
+
+**2026-10-11, step L1 of 3 (Rendering 13).** `Undistort` and `Redistort` apply a camera's Brown-Conrady lens (or a node preset) with overscan: undistorting a checker and redistorting it returns it within a pixel-filter tolerance away from the border, a known distortion of a render is undone against the undistorted render, and proxy tiers and the full-frame fallback agree. Tests: `tests/test_lens_l1.py`.
 
 ## Lane 8 step notes
 

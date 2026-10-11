@@ -174,6 +174,8 @@ NODE_CATEGORIES = {
         "AdjustBBox": "Grows or shrinks the data window without moving pixels.",
         "BlackOutside": "Adds a one-pixel black border outside the data window.",
         "STMap": "Remaps pixels using an absolute UV map.",
+        "Undistort": "Straightens a plate by a camera's lens, growing the frame so nothing is cropped.",
+        "Redistort": "Puts a camera's lens distortion back on an undistorted image, in the plate's format.",
         "IDistort": "Offsets pixels using a relative UV displacement map.",
         "SplineWarp": "Moves a source curve onto a destination curve.",
         "GridWarp": "Warps an image between editable source and destination grids.",
