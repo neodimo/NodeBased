@@ -74,6 +74,13 @@ for one worker step (a few hours), reviewed and display-checked by Gonzo.
    reconstruction prior, no fixed camera model, the one to watch). Benchmark on the demo plate, then on
    a filmed plate from DiMo. Measured: pose error against truth, frames per second, VRAM, and whether
    the result drives the conditioning export unchanged.
+8. **Temporal coherence.** Stage 3 makes each frame on its own, so the backdrop, materials and lighting drift
+   from frame to frame where the scene says nothing changed. The generated frames must agree with each other
+   there, measured, and the fix must stay deterministic: a flicker measure in the verification report (the
+   previous generated frame warped into the next with the exported motion, occlusions and changed objects masked
+   with the exported depth and IDs), then reprojection-guided generation in the SDXL provider (each frame after
+   the first made image-to-image from the warped frame before it, at a pinned strength that is part of the
+   result's identity), with the measure before and after.
 
 ## Order and cost
 
@@ -313,6 +320,18 @@ on this plate. DROID-SLAM is the more accurate and the only repeatable one, but 
 beyond a clean synthetic render: the next step is a filmed plate from DiMo, and MASt3R-SLAM for lens recovery.
 Not built: viewer picking of the survey points, a tile-path or queue job for the solve, and an automatic
 ground-plane alignment (the anchor is typed by hand).
+
+## Stage 8: temporal coherence (10/11)
+
+**The measure.** `nodebased/temporal.py`, called by the verifier for every generated sequence. For each pair of
+consecutive frames, generated frame N-1 is warped into frame N with frame N's exported backward motion
+(bilinear). A pixel is compared only when the four frame N-1 pixels it samples lie inside the picture, carry the
+same object ID as the pixel, and agree with its depth within 10% (empty background must be empty on both
+frames); disocclusions, objects that appear or leave and the picture's edges are left out. The difference is
+the mean absolute RGB difference per pixel in 8-bit display steps (ACEScg through the working OCIO config to
+display sRGB). All compared pixels of all pairs are pooled into one mean and one 95th percentile, written to
+the report as `temporal` and in the text report as the "Temporal" line. Pass threshold: mean at most 4 and
+95th percentile at most 12 steps. Like the determinism line, it stays out of the score card's verdict.
 
 ## Heavy runs and the integrator's suite (10/10)
 

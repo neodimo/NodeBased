@@ -637,7 +637,7 @@ def _normals_measurement(observation, tolerances):
 
 
 def verify_conditioning(scene_state_path, observations, output_path, *, tolerances=None, artifact_ids=None,
-                       artifact_store=None, determinism=None):
+                       artifact_store=None, determinism=None, temporal=None):
     """Write ``.json`` and ``.txt`` shot reports.
 
     `observations` is keyed by integer frame. A row contains `beauty` (HxWxRGBA float
@@ -650,6 +650,8 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
     the generated sequence carries no such pass, so the check is labelled "not conditioned" and
     left out of the verdict. `determinism` (provider, version, seed, sampler settings, whether the
     provider declared seed honoured) is copied into the report and never changes the verdict.
+    `temporal` (the flicker measure of `nodebased.temporal.flicker`) is copied into the report with its own
+    pass threshold and, like determinism, stays out of the score card's verdict.
     """
     tolerances = tolerances or Tolerances()
     state = read_scene_state(scene_state_path)
@@ -657,6 +659,8 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
               "intensity_checked": False, "frames": []}
     if determinism is not None:
         report["determinism"] = dict(determinism)
+    if temporal is not None:
+        report["temporal"] = dict(temporal)
     solved_cameras, solve_failures, tracked_objects = _track_sequence(
         state, observations, *state["frames"][0].get("resolution", (1920, 1080)))
     # The normals check exists only for callers that supply or explicitly skip a normals pass.
@@ -870,8 +874,21 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
         lines.append(f"Determinism: provider {d.get('provider')} {d.get('version')}, seed {d.get('seed')}, "
                      f"sampler settings {json.dumps(d.get('sampler_settings'), sort_keys=True)}, "
                      f"seed {'honoured' if d.get('seed_honoured') else 'not honoured'} by the provider")
+    if "temporal" in report:
+        lines.append(temporal_line(report["temporal"]))
     path.with_suffix(".txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return report
+
+
+def temporal_line(temporal):
+    """The report's one-line flicker summary."""
+    t = temporal
+    if t.get("mean") is None:
+        return "Temporal: unavailable (no consecutive frames with comparable pixels)"
+    return (f"Temporal: flicker mean {t['mean']:.2f}, 95th percentile {t['p95']:.2f} (8-bit display steps) over "
+            f"{t['pairs_measured']} frame pairs, {100 * t['compared_fraction']:.0f}% of pixels compared; "
+            f"threshold mean {t['threshold_mean']:g}, 95th percentile {t['threshold_p95']:g}: "
+            f"{'PASS' if t['pass'] else 'FAIL'}")
 
 
 def main(argv=None):

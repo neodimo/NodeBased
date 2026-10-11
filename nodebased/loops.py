@@ -269,16 +269,15 @@ def verify_task(options, input_ids, progress, cancelled):
         frames=[int(row["frame"]) for row in state["frames"]]
         files=sorted(sequence_dir.glob("*.exr"))
         if len(files)!=len(frames): raise ValueError("generated sequence frame count does not match SceneState")
-        observations={}; carried=set(); references={}
+        observations={}; carried=set()
+        from .control_bundle import read_control_bundle
+        manifest=_unpack_artifact(store.get(bundle_id),bundle_dir)
+        manifest.with_suffix(".artifact.json").write_text(json.dumps({"artifact_id":bundle_id}))
+        references={c.frame:c for c in read_control_bundle(manifest,scene_path)}
         for frame,path in zip(frames,files):
             observations[frame]={"beauty":_read_rgba(path)[0]}
             passes=read_generated_passes(path)
             if passes:
-                if not references:
-                    from .control_bundle import read_control_bundle
-                    manifest=_unpack_artifact(store.get(bundle_id),bundle_dir)
-                    manifest.with_suffix(".artifact.json").write_text(json.dumps({"artifact_id":bundle_id}))
-                    references={c.frame:c for c in read_control_bundle(manifest,scene_path)}
                 _attach_passes(observations[frame],passes,references[frame],
                                [row for row in state["frames"] if int(row["frame"])==frame][0])
             carried.update(passes)
@@ -288,11 +287,31 @@ def verify_task(options, input_ids, progress, cancelled):
         if honoured is not None and "camera_pose" not in honoured: missing.append("camera")
         for row in observations.values(): row["not_conditioned"]=missing
         determinism=_determinism(sequence_dir/GENERATION_MANIFEST)
+        temporal=temporal_measure(frames,{frame:row["beauty"] for frame,row in observations.items()},references)
         report_path=root/"verification.json"
         report=verify_conditioning(scene_path,observations,report_path,
-            artifact_ids=[bundle_id,generated_id],artifact_store=store,determinism=determinism)
+            artifact_ids=[bundle_id,generated_id],artifact_store=store,determinism=determinism,temporal=temporal)
         if cancelled.is_set(): raise RuntimeError("cancelled")
         return {"artifact_id":report["artifact_id"]}
+
+
+def temporal_measure(frames, generated, references):
+    """The flicker measure of a generated sequence (`nodebased.temporal.flicker`) against its ControlBundle.
+
+    Each generated frame N-1 is warped into frame N with N's exported backward motion, occlusions and changed
+    objects are masked with the exported depth and IDs, and the colour difference is taken in display sRGB.
+    """
+    import numpy as np
+    from . import color, temporal
+    to_srgb=color.processor(color.WORKING,color.INPUT_SPACES["sRGB"])
+    def to_display(rgb):
+        rgba=np.ones((*np.shape(rgb)[:-1],4),np.float32); rgba[...,:3]=rgb
+        flat=np.ascontiguousarray(rgba.reshape(-1,4)); to_srgb.applyRGBA(flat)
+        return np.clip(flat[:,:3].reshape(rgba[...,:3].shape),0.0,1.0)*255.0
+    controls={c.frame:{"motion_backward":c.motion_backward.values,"depth":c.depth.values,"ids":c.object_ids.values}
+              for c in references.values()}
+    present=[frame for frame in frames if frame in controls and frame in generated]
+    return temporal.flicker(present,generated,controls,to_display=to_display)
 
 
 def _manifest_honoured(manifest_path):
