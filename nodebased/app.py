@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 
-from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
+from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QVariantAnimation, QSize, QByteArray, QMimeData
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 
 from . import __version__
 from .updater import Updater
+from .core import _downstream_of
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES)
@@ -3950,6 +3951,7 @@ class Port(QGraphicsEllipseItem):
         # A socket is a small dot in the node's family colour with a faint glow round it.
         accent = getattr(node, "accent", QColor(TOKENS["tx2"]))
         glow = QGraphicsEllipseItem(-8, -8, 16, 16, self)
+        self._glow = glow
         glow.setBrush(graphlook.with_alpha(accent, 60))
         glow.setPen(QPen(Qt.PenStyle.NoPen))
         glow.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
@@ -3957,13 +3959,16 @@ class Port(QGraphicsEllipseItem):
         visible.setBrush(accent)
         visible.setPen(QPen(QColor(TOKENS["bg0"]), 1.2))
         visible.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self._visible = visible
+        self._hot, self._lit = False, False
         self._press_scene = None
         self._dragging = False
         self._rewire_input = None
         self.setToolTip("Output: drag to an input, or click then click an input" if slot is None else
                          f"Input {slot}: drag to an output; drag an output here; click to pick up and rewire; right-click disconnects")
+        self.label = None
         if (slot or label_text) and not node.is_dot:
-            label = QGraphicsSimpleTextItem(label_text or slot, node)
+            label = self.label = QGraphicsSimpleTextItem(label_text or slot, node)
             label.setBrush(QColor(TOKENS["tx1"]))
             if label_center is None:
                 label.setPos(x + 9, y - 18)
@@ -3982,12 +3987,36 @@ class Port(QGraphicsEllipseItem):
             path = path.subtracted(body)
         return path
 
+    def set_hot(self, on):
+        """The socket a press would grab draws a little larger so the target reads."""
+        self._hot = on
+        self._restyle()
+
+    def set_lit(self, on):
+        """The socket a dragged wire would connect to: larger still, in the bright insert-hint tone."""
+        self._lit = on
+        self._restyle()
+
+    def _restyle(self):
+        scale = 1.7 if self._lit else 1.35 if self._hot else 1.0
+        self._glow.setScale(scale)
+        self._visible.setScale(scale)
+        accent = getattr(self.node, "accent", QColor(TOKENS["tx2"]))
+        bright = graphlook.mix(accent, QColor("#ffffff"), 0.55)
+        self._visible.setBrush(bright if self._lit else accent)
+        self._glow.setBrush(graphlook.with_alpha(bright if self._lit else accent, 120 if self._lit else 60))
+
     def mousePressEvent(self, event):
-        graph = self.node.graph
         self._press_scene = event.scenePos()
         self._dragging = False
         self._rewire_input = None
-        if event.button() == Qt.MouseButton.RightButton and self.slot is not None:
+        self.press(event.scenePos(), event.button() == Qt.MouseButton.RightButton)
+        event.accept()
+
+    def press(self, scene_pos, right=False):
+        """What pressing this socket does. The graph calls it too, for a press that only came near."""
+        graph = self.node.graph
+        if right and self.slot is not None:
             graph.cancel_wire()
             graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": None})
         elif self.slot is None:
@@ -3997,7 +4026,7 @@ class Port(QGraphicsEllipseItem):
                 graph.start_wire(self.node.key, output=self.output_name)
                 graph.window.statusBar().showMessage("Connect: drag to an input port · Esc cancels")
         elif graph.wire_source:
-            graph.finish_wire_at(event.scenePos())
+            graph.finish_wire_at(scene_pos)
         else:
             current_source = graph.window.graph_nodes()[self.node.key]["inputs"][self.slot]
             if current_source:
@@ -4009,7 +4038,6 @@ class Port(QGraphicsEllipseItem):
             else:
                 graph.start_input_wire(self.node.key, self.slot)
                 graph.window.statusBar().showMessage("Connect: drag to an output port · Esc cancels")
-        event.accept()
 
     def mouseMoveEvent(self, event):
         if self._press_scene is not None and (event.scenePos() - self._press_scene).manhattanLength() > 4:
@@ -4247,7 +4275,7 @@ class NodeHalo(QGraphicsItem):
     def pixmap(self):
         """The glow drawn once per node shape, colour and selection state: it is the same every repaint,
         and a graph of hundreds of nodes repaints it on every pan and drag."""
-        node, selected = self.node, self.node.isSelected()
+        node, selected = self.node, self.node.isSelected() or self.node.wire_lit
         key = (node.form, node.rect().size().toTuple(), node.accent.rgb(), selected)
         cached = NodeHalo._cache.get(key)
         if cached is None:
@@ -4291,6 +4319,7 @@ class NodeItem(QGraphicsRectItem):
         self.is_dot = self.form == "dot"
         self.is_backdrop = self.form == "backdrop"
         self.thumbnail = None
+        self.wire_lit = False   # a dragged wire is about to connect here: lit like the insert hint
         width, height = node_size(node, graph.window.show_thumbnails)
         super().__init__(0, 0, width, height)
         self.graph, self.key = graph, key
@@ -4468,6 +4497,12 @@ class NodeItem(QGraphicsRectItem):
             self.halo.update()
         return super().itemChange(change, value)
 
+    def set_wire_lit(self, on):
+        if on != self.wire_lit:
+            self.wire_lit = on
+            self.update()
+            self.halo.update()
+
     def outline(self, inset=0.0):
         """The node's silhouette: what is painted, and what a click has to land inside. `inset`
         shrinks it evenly, for the strokes drawn inside the edge."""
@@ -4609,6 +4644,13 @@ class NodeItem(QGraphicsRectItem):
             return
         if not self.is_dot:
             self.paint_family_body(painter, option)
+            if self.wire_lit:
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(QPen(graphlook.mix(self.accent, QColor("#ffffff"), 0.55), NODE_OUTLINE + 0.5))
+                painter.drawPath(self.outline())
+                painter.restore()
             if self.error:
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -5691,6 +5733,26 @@ class SequenceBrowser(QDialog):
         return dialog.chosen if dialog.exec() == QDialog.DialogCode.Accepted else None
 
 
+# Wiring feel (new look). Every radius is in screen pixels, so wiring feels the same at 40 and 150 percent.
+WIRE_REACH = 40      # a dragged wire snaps to the nearest compatible socket this close to the pointer
+GRAB_REACH = 20      # pressing this close to a socket (card edge, label, empty space) starts a wire
+GRAB_EDGE = 8        # a press deeper than this inside a card is a node drag, never a wire
+OUTPUT_BAND = 10     # the bottom strip of a card is its output: pressing there starts an output wire
+SNAP_MS = 80         # how long the pending wire's end takes to jump onto the socket
+
+
+def upstream_of(nodes, key):
+    """Every node that feeds `key`, directly or through others (the nodes `key` can not feed back into)."""
+    reached, pending = set(), [key]
+    while pending:
+        node = nodes.get(pending.pop())
+        for source in (node["inputs"].values() if node else ()):
+            if source and source not in reached:
+                reached.add(source)
+                pending.append(source)
+    return reached
+
+
 class Graph(PanZoomView):
     def __init__(self, window):
         self.window = window
@@ -5707,6 +5769,19 @@ class Graph(PanZoomView):
         self.wire_input = None
         self.picked_input = None
         self.pending_edge = None
+        self.wire_snap = None        # the socket the pending wire has jumped onto
+        self.wire_cursor = QPointF(0, 0)
+        self.wire_blocked = None     # nodes a dragged wire may not reach without closing a cycle
+        self.wire_press = QPoint(0, 0)
+        self.wire_grabbed = False    # the wire was started by the graph (a near miss), not by a socket
+        self.hot_port = None         # the socket a press would grab, drawn larger
+        self.snap_progress = 1.0
+        self.snap_from = QPointF(0, 0)
+        self.snap_animation = QVariantAnimation(self)
+        self.snap_animation.setDuration(SNAP_MS)
+        self.snap_animation.setStartValue(0.0)
+        self.snap_animation.setEndValue(1.0)
+        self.snap_animation.valueChanged.connect(self._snap_step)
         self.inserting_edge = None
         self.dot_preview = None
         self.insert_target = None   # the wire a dragged free node would be inserted into (see wire_to_insert_into)
@@ -5773,8 +5848,11 @@ class Graph(PanZoomView):
         self.pending_edge = self._new_pending_edge()
 
     def cancel_wire(self):
+        self.clear_wire_snap()
         if self.pending_edge is not None:
             self.scene().removeItem(self.pending_edge)
+        self.wire_grabbed = False
+        self.wire_blocked = None
         self.wire_source = None
         self.wire_output = "rgba"
         self.wire_input = None
@@ -5806,38 +5884,190 @@ class Graph(PanZoomView):
         if self.dot_preview is not None:
             self.dot_preview.setPos(scene_pos)
 
-    def update_pending_edge(self, scene_pos):
-        if self.pending_edge is None:
-            return
-        if self.wire_source in self.items_by_id:
-            port = self.items_by_id[self.wire_source].outputs[self.wire_output]
-            self.pending_edge.set_route(port.scenePos(), scene_pos, graphlook.UP, port.facing)
-        elif self.wire_input and self.wire_input[0] in self.items_by_id:
+    # ------------------------------------------------------------------------------------------
+    # Wiring feel: the nearest compatible socket takes the wire, anywhere near it.
+    def view_scale(self):
+        return max(self.transform().m11(), 0.05)
+
+    def wire_ports(self, outputs):
+        for node in self.items_by_id.values():
+            if not node.is_backdrop:
+                yield from (node.outputs.values() if outputs else node.inputs.values())
+
+    def wire_compatible(self, port):
+        """Whether the wire being dragged may end at `port`: the right direction, another node, a type the
+        socket takes and no cycle."""
+        nodes = self.window.graph_nodes()
+        if self.wire_source:
+            if port.slot is None or port.node.key == self.wire_source:
+                return False
+            if self.wire_blocked is None:
+                self.wire_blocked = upstream_of(nodes, self.wire_source)
+            produced = OUTPUT_TYPES.get(nodes[self.wire_source]["type"], "image")
+            return port.node.key not in self.wire_blocked and produced in INPUT_TYPES.get(port.slot, ("image",))
+        if self.wire_input:
             key, slot = self.wire_input
-            port = self.items_by_id[key].inputs[slot]
-            self.pending_edge.set_route(scene_pos, port.scenePos(), port.facing)
+            if port.slot is not None or port.node.key == key:
+                return False
+            if self.wire_blocked is None:
+                self.wire_blocked = _downstream_of(nodes, key)
+            produced = OUTPUT_TYPES.get(nodes[port.node.key]["type"], "image")
+            return port.node.key not in self.wire_blocked and produced in INPUT_TYPES.get(slot, ("image",))
+        return False
 
-    def nearest_port(self, scene_pos, input_port):
-        ports = [port for node in self.items_by_id.values() if not node.is_backdrop
-                 for port in (node.inputs.values() if input_port else node.outputs.values())]
-        return min(ports, key=lambda port: math.hypot(port.scenePos().x() - scene_pos.x(),
-                                                       port.scenePos().y() - scene_pos.y()), default=None)
-
-    def _snap_port(self, scene_pos, input_port):
-        port = self.nearest_port(scene_pos, input_port)
-        radius = 24 / max(self.transform().m11(), 0.05)  # 24 physical pixels
-        if port and math.hypot(port.scenePos().x() - scene_pos.x(), port.scenePos().y() - scene_pos.y()) <= radius:
+    def port_near(self, scene_pos, outputs):
+        """The input (or output) socket nearest `scene_pos` within WIRE_REACH screen pixels, whatever its type."""
+        ports = list(self.wire_ports(outputs))
+        port = min(ports, key=lambda port: QLineF(port.scenePos(), scene_pos).length(), default=None)
+        if port is not None and QLineF(port.scenePos(), scene_pos).length() <= WIRE_REACH / self.view_scale():
             return port
         return None
 
     def input_at(self, scene_pos):
-        return self._snap_port(scene_pos, input_port=True)
+        return self.port_near(scene_pos, outputs=False)
 
     def output_at(self, scene_pos):
-        return self._snap_port(scene_pos, input_port=False)
+        return self.port_near(scene_pos, outputs=True)
+
+    def card_at(self, scene_pos):
+        """The node card under `scene_pos` (the topmost), or None. Backdrops are frames and never count."""
+        for item in self.scene().items(scene_pos):
+            while item is not None and not isinstance(item, NodeItem):
+                item = item.parentItem()
+            if item is not None and not item.is_backdrop:
+                return item
+        return None
+
+    def card_port(self, card, scene_pos):
+        """The socket a wire dropped on the body of `card` connects to: the first free input that takes it
+        (a mask input only when nothing else is free), or for an input being dragged the output nearest."""
+        if self.wire_source:
+            free = [port for slot, port in card.inputs.items()
+                    if not self.window.graph_nodes()[card.key]["inputs"].get(slot) and self.wire_compatible(port)]
+            return next((port for port in free if port.slot != "mask"), free[0] if free else None)
+        ports = [port for port in card.outputs.values() if self.wire_compatible(port)]
+        return min(ports, key=lambda port: QLineF(port.scenePos(), scene_pos).length(), default=None)
+
+    def wire_target(self, scene_pos):
+        """Where the wire being dragged would connect if released at `scene_pos`: the nearest compatible
+        socket within WIRE_REACH screen pixels, else the socket of the card under the pointer, else None."""
+        if not (self.wire_source or self.wire_input):
+            return None
+        reach = WIRE_REACH / self.view_scale()
+        near = sorted(((QLineF(port.scenePos(), scene_pos).length(), index, port)
+                       for index, port in enumerate(self.wire_ports(outputs=bool(self.wire_input)))),
+                      key=lambda entry: entry[:2])
+        for distance, _index, port in near:
+            if distance > reach:
+                break
+            if self.wire_compatible(port):
+                return port
+        card = self.card_at(scene_pos)
+        return self.card_port(card, scene_pos) if card is not None else None
+
+    def grab_port_at(self, scene_pos):
+        """The socket a press at `scene_pos` starts a wire from, or None. Near a socket is enough: a press
+        on its label, on the card edge beside it or on empty space within GRAB_REACH screen pixels grabs the
+        nearest one, and a press in the bottom band of a card grabs its output. Deep inside a card the press
+        is a node drag, as ever."""
+        scale = self.view_scale()
+        nodes = [node for node in self.items_by_id.values() if not node.is_backdrop]
+        for node in nodes:
+            for port in node.inputs.values():
+                if port.label is not None and port.label.sceneBoundingRect().adjusted(-3, -3, 3, 3).contains(scene_pos):
+                    return port
+        card = self.card_at(scene_pos)
+        if card is not None:
+            rect = card.mapRectToScene(card.rect())
+            if (not card.is_dot and card.outputs and rect.contains(scene_pos)
+                    and scene_pos.y() >= rect.bottom() - OUTPUT_BAND / scale):
+                return min(card.outputs.values(), key=lambda port: QLineF(port.scenePos(), scene_pos).length())
+            edge = GRAB_EDGE / scale
+            if not card.is_dot and rect.adjusted(edge, edge, -edge, -edge).contains(scene_pos):
+                return None
+        best, best_distance = None, GRAB_REACH / scale
+        for node in nodes:
+            for port in (*node.inputs.values(), *node.outputs.values()):
+                distance = QLineF(port.scenePos(), scene_pos).length()
+                if distance <= best_distance:
+                    best, best_distance = port, distance
+        return best
+
+    def set_hot_port(self, port):
+        if port is not self.hot_port:
+            if self.hot_port is not None:
+                self.hot_port.set_hot(False)
+            self.hot_port = port
+            if port is not None:
+                port.set_hot(True)
+
+    def target_name(self, port):
+        key = port.node.key
+        name = self.window.graph_nodes()[key]["name"]
+        if port.slot is not None:
+            return f"{name}.{port.slot}"
+        return name if port.output_name == "rgba" else f"{name}.{port.output_name}"
+
+    def set_wire_snap(self, port):
+        """Snap the pending wire onto `port` (None lets it follow the pointer again) and light the target up."""
+        if port is self.wire_snap:
+            return
+        self.clear_wire_snap()
+        if port is None:
+            return
+        self.wire_snap = port
+        port.set_lit(True)
+        port.node.set_wire_lit(True)
+        if self.pending_edge is not None:
+            self.pending_edge.set_highlight(True)
+        self.snap_from = QPointF(self.wire_cursor)
+        self.snap_progress = 0.0
+        self.snap_animation.stop()
+        self.snap_animation.start()
+        self.window.statusBar().showMessage(f"to {self.target_name(port)}")
+
+    def clear_wire_snap(self):
+        self.snap_animation.stop()
+        port, self.wire_snap = self.wire_snap, None
+        if port is not None:
+            try:
+                port.set_lit(False)
+                port.node.set_wire_lit(False)
+            except RuntimeError:   # the scene was rebuilt under the drag and the socket is gone
+                pass
+        if self.pending_edge is not None:
+            self.pending_edge.set_highlight(False)
+
+    def _snap_step(self, value):
+        self.snap_progress = float(value)
+        self.route_pending_edge()
+
+    def update_pending_edge(self, scene_pos):
+        if self.pending_edge is None:
+            return
+        self.wire_cursor = scene_pos
+        self.set_wire_snap(self.wire_target(scene_pos))
+        self.route_pending_edge()
+
+    def route_pending_edge(self):
+        if self.pending_edge is None:
+            return
+        snap, end, direction = self.wire_snap, self.wire_cursor, None
+        if snap is not None:
+            end = snap.scenePos()
+            if self.snap_progress < 1.0:
+                end = self.snap_from + (end - self.snap_from) * self.snap_progress
+            direction = snap.facing
+        if self.wire_source in self.items_by_id:
+            port = self.items_by_id[self.wire_source].outputs[self.wire_output]
+            self.pending_edge.set_route(port.scenePos(), end, direction or graphlook.UP, port.facing)
+        elif self.wire_input and self.wire_input[0] in self.items_by_id:
+            key, slot = self.wire_input
+            port = self.items_by_id[key].inputs[slot]
+            self.pending_edge.set_route(end, port.scenePos(), port.facing, direction or graphlook.DOWN)
 
     def finish_wire_at(self, scene_pos):
-        destination = self.input_at(scene_pos)
+        destination = self.wire_target(scene_pos)
         if destination is None:
             self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
@@ -5865,9 +6095,9 @@ class Graph(PanZoomView):
             self.window.defer_command(command)
 
     def finish_input_wire_at(self, scene_pos):
-        output = self.output_at(scene_pos)
+        output = self.wire_target(scene_pos)
         if output:
-                self.finish_input_wire(output.node.key, output.output_name)
+            self.finish_input_wire(output.node.key, output.output_name)
         else:
             self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
@@ -5965,6 +6195,8 @@ class Graph(PanZoomView):
         self.items_by_id = {}
         self.scene().clear()
         self.pending_edge = None  # scene().clear() already deleted the previous item, if any.
+        self.snap_animation.stop()
+        self.wire_snap = self.hot_port = None   # their sockets went with the scene
         doc = self.window.graph_document()
         for key, node in doc["nodes"].items():
             item = NodeItem(self, key, node)
@@ -6154,10 +6386,21 @@ class Graph(PanZoomView):
         if event.button() == Qt.MouseButton.LeftButton:
             self.last_click_scene_pos = self.mapToScene(event.position().toPoint())
         if (self.wire_source or self.wire_input) and event.button() == Qt.MouseButton.LeftButton and self.port_item_at(event.position().toPoint()) is None:
-            self.cancel_wire()
-            self.window.statusBar().showMessage("Wire dropped", 3000)
+            # A click-click wire ends where the second click lands, with the same reach as a drag.
+            where = self.mapToScene(event.position().toPoint())
+            (self.finish_wire_at if self.wire_source else self.finish_input_wire_at)(where)
             event.accept()
             return
+        if (event.button() == Qt.MouseButton.LeftButton and not event.modifiers() and self.inserting_edge is None
+                and self.port_item_at(event.position().toPoint()) is None):
+            near = self.grab_port_at(self.mapToScene(event.position().toPoint()))
+            if near is not None:
+                self.wire_press = event.position().toPoint()
+                near.press(self.mapToScene(self.wire_press))
+                self.wire_grabbed = bool(self.wire_source or self.wire_input)
+                self.set_hot_port(None)
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
@@ -6208,13 +6451,25 @@ class Graph(PanZoomView):
             return
         super().mouseMoveEvent(event)
         if self.wire_source or self.wire_input:
+            self.set_hot_port(None)
             self.update_pending_edge(self.mapToScene(event.position().toPoint()))
+        elif not event.buttons():
+            self.set_hot_port(self.grab_port_at(self.last_hover_scene_pos))
         elif event.buttons() & Qt.MouseButton.LeftButton and len(self.scene().selectedItems()) == 1:
             self.set_insert_target(self.wire_to_insert_into(self.drag_item()))
 
     def mouseReleaseEvent(self, event):
         if self.pan is not None:
             PanZoomView.mouseReleaseEvent(self, event)
+            return
+        if self.wire_grabbed and event.button() == Qt.MouseButton.LeftButton:
+            # A wire the graph started from a near miss ends like one a socket started: a drag drops it
+            # where it lands, a plain click leaves it hanging for the second click.
+            self.wire_grabbed = False
+            if (event.position().toPoint() - self.wire_press).manhattanLength() > 4 and (self.wire_source or self.wire_input):
+                where = self.mapToScene(event.position().toPoint())
+                (self.finish_wire_at if self.wire_source else self.finish_input_wire_at)(where)
+            event.accept()
             return
         if self.inserting_edge is not None and event.button() == Qt.MouseButton.LeftButton:
             edge, source, destination, slot = self.inserting_edge
