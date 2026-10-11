@@ -4,7 +4,7 @@ The preview cache now serves a 48³, 8-bit density/temperature artifact, plus li
 
 Production Hot pour (256³ / 192³, 120 frames) on the AMD Radeon 8060S: cold preview 4.07 FPS, warm preview 4.32 FPS; cold load+draw 245.7 ms. Frame 60 tier-4 to full-detail took 375.1 s to fetch/rebuild and 61 ms to draw. The preview misses the 80 ms budget, and full-detail stop misses the one-second target. P2 acceptance remains unchecked. llvmpipe was queued behind a full suite and an earlier exclusive GPU benchmark; its P3 row remains unmeasured.
 
-Code/doc commits: `01a298a`, `215d022`, `9ce5ef8`. Focused tests: proxy/cache and fixed point-budget coverage, liquid surface graph behavior, playback proxy control/stop refinement, and bundled-doc parity all passed. The production JSON is in `benchmarks/hot_pour/radeon-preview-P3-2026-10-11.json`; the 48.8 GB benchmark cache and logs are deliberate temporary scratch to remove before handoff.
+Code/doc commits: `01a298a`, `215d022`, `9ce5ef8`, `019f6564`. Focused tests: proxy/cache and fixed point-budget coverage, liquid surface graph behavior, playback proxy control/stop refinement, and bundled-doc parity all passed. The production JSON is in `benchmarks/hot_pour/radeon-preview-P3-2026-10-11.json`. The 46 GB benchmark cache was moved to recoverable Trash; small logs remain in scratch. The llvmpipe benchmark never started: the active full suite and an earlier exclusive benchmark held the GPU lock past the lane's work window.
 
 **Next owner:** Needs Gonzo to bring full-detail surface refinement below one second and the preview fetch+draw under 80 ms, then run the same playback benchmark on llvmpipe.
 
