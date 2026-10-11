@@ -79,9 +79,10 @@ def build_panel(window, key):
         shape["opacity"] = keyed(shape["opacity"], "opacity")
         shape["feather"] = keyed(shape["feather"], "feather")
         shape["color"] = [keyed(c, "opacity") for c in shape.get("color", [1, 1, 1, 1])]
+        resolved_transform = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"]
         transform = shape.setdefault("transform", {})
         for field, default in shape_model.TRANSFORM_DEFAULTS.items():
-            transform[field] = keyed(transform.get(field, default), field)
+            transform[field] = keyed(transform.get(field, resolved_transform[field]), field)
         for point in shape["points"]:
             for field in shape_model.POINT_FIELDS:
                 point[field] = keyed(point[field], field)
@@ -100,7 +101,10 @@ def build_panel(window, key):
             if name.startswith("transform."):
                 target = shape.setdefault("transform", {})
                 leaf = name.split(".", 1)[1]
-            old = target.get(leaf, [1, 1, 1, 1] if name == "color" else shape_model.TRANSFORM_DEFAULTS.get(leaf, None))
+            default = shape_model.TRANSFORM_DEFAULTS.get(leaf, None)
+            if name.startswith("transform.") and leaf in ("center_x", "center_y"):
+                default = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"][leaf]
+            old = target.get(leaf, [1, 1, 1, 1] if name == "color" else default)
             if name == "color":
                 shape[name] = [{"value": shape_model.resolve_scalar(c, frame, "opacity"),
                                 "curve": {"interpolation": "smooth", "keys": [{"frame": frame, "value": shape_model.resolve_scalar(c, frame, "opacity")}]}}
@@ -120,7 +124,9 @@ def build_panel(window, key):
         entries = current()
         if index < len(entries):
             transform = entries[index].setdefault("transform", {})
-            transform[field] = value_at_frame(transform.get(field, shape_model.TRANSFORM_DEFAULTS[field]), value, field)
+            default = (shape_model.resolve_shapes({"shapes": [entries[index]]}, frame)[0]["transform"][field]
+                       if field in ("center_x", "center_y") else shape_model.TRANSFORM_DEFAULTS[field])
+            transform[field] = value_at_frame(transform.get(field, default), value, field)
             save(entries, index)
     def save(entries, select=None):
         window.command({"op": "set_shapes", "id": key, "shapes": entries})
@@ -230,7 +236,8 @@ def build_panel(window, key):
                 ("center_y", "Center Y", -65536, 65536, 1)):
             spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-transform-{field}-{i}")
             spin.setRange(lo, hi); spin.setSingleStep(step); spin.setKeyboardTracking(False)
-            spin.setValue(shape_model.resolve_scalar(transform.get(field, shape_model.TRANSFORM_DEFAULTS[field]), frame, field))
+            default = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"][field]
+            spin.setValue(shape_model.resolve_scalar(transform.get(field, default), frame, field))
             spin.editingFinished.connect(lambda f=field, w=spin: edit_transform(i, f, float(w.value())))
             row = QHBoxLayout(); row.addWidget(spin, 1)
             raw = transform.get(field)

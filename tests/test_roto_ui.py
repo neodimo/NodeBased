@@ -11,7 +11,7 @@ from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPointF, QSettings, Qt
+from PySide6.QtCore import QPointF, QRectF, QSettings, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -109,6 +109,113 @@ class RotoOverlayTests(unittest.TestCase):
         self.assertAlmostEqual(moved[0]["x"], 15.0, delta=self.scene_pixel_tolerance())
         self.assertAlmostEqual(moved[0]["y"], 17.0, delta=self.scene_pixel_tolerance())
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
+
+    def test_transform_box_scales_rotates_moves_pivot_and_alt_edits_shape_transform(self):
+        shape = triangle()
+        shape["points"][0]["out_x"] = 3.0
+        self.window.close(); APP.processEvents()
+        self.window = Window(roto_document([shape])); self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True); APP.processEvents()
+        viewer = self.window.viewer; viewer.roto_selected_points = {(0, i) for i in range(3)}
+        context = viewer._roto_context(); resolved = viewer._roto_resolved(context)
+        selected, bounds, _, pivot = viewer._roto_box_geometry(resolved, context[3])
+        start = bounds.bottomRight()
+        action = viewer._roto_box_action(start, bounds, abs(viewer.transform().m11()), pivot)[0]
+        self.assertIn(action, ("scale_nw", "scale_ne", "scale_sw", "scale_se"))
+        finish = QPointF(pivot.x() + 2*(start.x()-pivot.x()), pivot.y() + 2*(start.y()-pivot.y()))
+        viewer.roto_drag = {"kind":"box", "kind_name":action, "handle":action[6:], "selected":selected,
+            "bounds":bounds, "pivot":pivot, "start":start, "scene":finish, "tier":context[3],
+            "initial":{(si,pi):dict(resolved[si]["points"][pi]) for si,pi in selected}, "alt_shape":None}
+        viewer._commit_roto_drag()
+        points = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
+        self.assertEqual((points[0]["x"], points[0]["y"]), (-30.0, -30.0))
+        self.assertEqual(points[0]["out_x"], 6.0)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
+
+        context = viewer._roto_context(); resolved = viewer._roto_resolved(context)
+        selected, bounds, _, pivot = viewer._roto_box_geometry(resolved, context[3])
+        start = QPointF(pivot.x()+20, pivot.y())
+        finish = QPointF(pivot.x(), pivot.y()+20)
+        initial = {(si,pi):dict(resolved[si]["points"][pi]) for si,pi in selected}
+        viewer.roto_drag = {"kind":"box", "kind_name":"rotate", "selected":selected,
+            "bounds":bounds, "pivot":pivot, "start":start, "scene":finish, "tier":context[3],
+            "initial":initial, "alt_shape":None}
+        viewer._commit_roto_drag()
+        points = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
+        self.assertAlmostEqual(points[0]["x"], 130.0, places=6)
+        self.assertAlmostEqual(points[0]["y"], -30.0, places=6)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 2)
+
+        before = [dict(p) for p in points]
+        context = viewer._roto_context(); resolved = viewer._roto_resolved(context)
+        selected, bounds, _, pivot = viewer._roto_box_geometry(resolved, context[3])
+        start = QPointF(pivot.x()+20, pivot.y()); finish = QPointF(pivot.x(), pivot.y()+20)
+        viewer.roto_drag = {"kind":"box", "kind_name":"rotate", "selected":selected,
+            "bounds":bounds, "pivot":pivot, "start":start, "scene":finish, "tier":context[3],
+            "initial":{(si,pi):dict(resolved[si]["points"][pi]) for si,pi in selected}, "alt_shape":0}
+        viewer._commit_roto_drag()
+        stored = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
+        self.assertEqual(stored["points"], before)
+        self.assertAlmostEqual(stored["transform"]["rotate"], 90.0, places=6)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 3)
+
+        before = [dict(p) for p in stored["points"]]
+        context = viewer._roto_context(); resolved = viewer._roto_resolved(context)
+        before_resolved = [dict(p) for p in resolved[0]["points"]]
+        selected, bounds, _, pivot = viewer._roto_box_geometry(resolved, context[3])
+        viewer.roto_drag = {"kind":"box", "kind_name":"pivot", "selected":selected,
+            "bounds":bounds, "pivot":pivot, "start":pivot, "scene":QPointF(pivot.x()+12,pivot.y()+9),
+            "tier":context[3], "initial":{(si,pi):dict(resolved[si]["points"][pi]) for si,pi in selected},
+            "alt_shape":None}
+        viewer._commit_roto_drag()
+        stored = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
+        self.assertEqual(stored["points"], before)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 4)
+        after_resolved = viewer._roto_resolved(viewer._roto_context())[0]["points"]
+        # Moving the pivot compensates translate: every rendered control point remains fixed.
+        for actual, previous in zip(after_resolved, before_resolved):
+            self.assertAlmostEqual(actual["x"], previous["x"], places=5)
+            self.assertAlmostEqual(actual["y"], previous["y"], places=5)
+
+    def test_corner_handle_mouse_gesture_scales_and_undoes_once(self):
+        shape = triangle()
+        self.window.close(); APP.processEvents()
+        self.window = Window(roto_document([shape])); self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True); APP.processEvents()
+        viewer = self.window.viewer; viewer.roto_selected_points = {(0, i) for i in range(3)}
+        context = viewer._roto_context(); resolved = viewer._roto_resolved(context)
+        _, bounds, _, pivot = viewer._roto_box_geometry(resolved, context[3])
+        start = bounds.bottomRight()
+        finish = QPointF(pivot.x() + 1.5*(start.x()-pivot.x()),
+                         pivot.y() + 1.5*(start.y()-pivot.y()))
+        QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton,
+                         pos=viewer.mapFromScene(start))
+        QTest.mouseMove(viewer.viewport(), viewer.mapFromScene(finish), 20)
+        QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton,
+                           pos=viewer.mapFromScene(finish))
+        APP.processEvents()
+        points = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
+        self.assertAlmostEqual(points[0]["x"], -10.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(points[0]["y"], -10.0, delta=self.scene_pixel_tolerance())
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
+        self.window.command({"op": "undo"})
+        self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0], shape)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 0)
+
+    def test_edge_scales_one_axis_and_shift_corner_keeps_aspect(self):
+        viewer = self.window.viewer
+        bounds = QRectF(0.0, 0.0, 100.0, 60.0); pivot = bounds.center()
+        start = QPointF(50.0, 0.0); finish = QPointF(50.0, -30.0)
+        drag = {"kind":"box", "kind_name":"scale_n", "handle":"n", "bounds":bounds,
+                "pivot":pivot, "start":start, "tier":1.0}
+        _, sx, sy, _, _, _ = viewer._roto_box_result(drag, finish)
+        self.assertEqual((sx, sy), (1.0, 2.0))
+        start = QPointF(100.0, 60.0); finish = QPointF(150.0, 75.0)
+        drag.update(kind_name="scale_se", handle="se", start=start)
+        _, sx, sy, _, _, _ = viewer._roto_box_result(drag, finish, shift=True)
+        self.assertEqual((sx, sy), (2.0, 2.0))
 
     def test_dragging_a_point_auto_keys_it_when_another_point_in_the_shape_is_animated(self):
         shape = triangle()

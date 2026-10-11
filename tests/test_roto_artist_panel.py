@@ -101,6 +101,21 @@ class RotoArtistPanelTests(unittest.TestCase):
         self.assertEqual(plain_key.property("keyState"), transform_key.property("keyState"))
         self.assertEqual(plain_field.styleSheet(), transform_field.styleSheet())
 
+    def test_shape_transform_knobs_show_bounds_center_and_key_that_default(self):
+        panel = self.panel(); self.assertIsNotNone(panel)
+        center = panel.findChild(QDoubleSpinBox, "roto-shape-transform-center_x-0")
+        scale = panel.findChild(QDoubleSpinBox, "roto-shape-transform-scale_x-0")
+        self.assertIsNotNone(center); self.assertIsNotNone(scale)
+        self.assertEqual(center.value(), 35.0)
+        scale.setValue(2.0); scale.editingFinished.emit()
+        stored = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
+        self.assertEqual(stored["transform"]["scale_x"], 2.0)
+        button = panel.findChild(QPushButton, "roto-shape-key-transform-center_x-0")
+        self.assertIsNotNone(button); button.click()
+        stored = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
+        self.assertEqual(stored["transform"]["center_x"]["value"], 35.0)
+        self.assertEqual(stored["transform"]["center_x"]["curve"]["keys"][0]["value"], 35.0)
+
     def test_shape_list_names_fit_and_controls_are_labeled_and_described(self):
         listing = self.panel().findChild(QListWidget, "roto-shape-list")
         settle_layout(self.window, listing)

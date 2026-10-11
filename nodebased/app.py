@@ -2435,6 +2435,104 @@ class Viewer(PanZoomView):
                     best_distance = distance
         return best
 
+    def _roto_box_geometry(self, resolved, tier):
+        selected = {(si, pi) for si, pi in self.roto_selected_points
+                    if si < len(resolved) and pi < len(resolved[si]["points"])}
+        if len(selected) < 2:
+            return None
+        points = [self._roto_scene_point(resolved[si]["points"][pi], tier) for si, pi in selected]
+        bounds = QRectF(points[0], points[0])
+        for point in points[1:]:
+            bounds = bounds.united(QRectF(point, point))
+        bounds = bounds.normalized()
+        shape_indices = {si for si, _ in selected}
+        pivot = bounds.center()
+        if len(shape_indices) == 1:
+            si = next(iter(shape_indices))
+            if len(selected) == len(resolved[si]["points"]):
+                t = resolved[si].get("transform", {})
+                pivot = self._roto_scene_point({"x": t.get("center_x", bounds.center().x()) + t.get("translate_x", 0.0),
+                                                "y": t.get("center_y", bounds.center().y()) + t.get("translate_y", 0.0)}, tier)
+        return selected, bounds, points, pivot
+
+    def _roto_box_action(self, position, bounds, zoom, pivot=None):
+        radius = 8.0 / max(zoom, .05)
+        corners = {"nw": bounds.topLeft(), "ne": bounds.topRight(),
+                   "sw": bounds.bottomLeft(), "se": bounds.bottomRight()}
+        edges = {"n": QPointF(bounds.center().x(), bounds.top()),
+                 "s": QPointF(bounds.center().x(), bounds.bottom()),
+                 "w": QPointF(bounds.left(), bounds.center().y()),
+                 "e": QPointF(bounds.right(), bounds.center().y())}
+        pivot = bounds.center() if pivot is None else pivot
+        rotate = QPointF(pivot.x(), bounds.top() - 28.0 / max(zoom, .05))
+        if math.hypot(position.x()-pivot.x(), position.y()-pivot.y()) <= radius:
+            return "pivot", pivot
+        if math.hypot(position.x()-rotate.x(), position.y()-rotate.y()) <= radius:
+            return "rotate", rotate
+        for name, point in corners.items():
+            if math.hypot(position.x()-point.x(), position.y()-point.y()) <= radius:
+                return "scale_" + name, point
+        for name, point in edges.items():
+            if math.hypot(position.x()-point.x(), position.y()-point.y()) <= radius:
+                return "scale_" + name, point
+        if bounds.contains(position):
+            return "move", position
+        return None, None
+
+    def _roto_box_result(self, drag, scene_pos, shift=False):
+        kind, bounds, pivot = drag.get("kind_name", drag["kind"]), drag["bounds"], drag["pivot"]
+        start = drag["start"]
+        if kind == "move":
+            delta = scene_pos - start
+            dx = delta.x()
+            dy = delta.y()
+            sx = sy = 1.0; angle = 0.0
+        elif kind == "rotate":
+            a0 = math.atan2(start.y()-pivot.y(), start.x()-pivot.x())
+            a1 = math.atan2(scene_pos.y()-pivot.y(), scene_pos.x()-pivot.x())
+            angle = math.degrees(a1-a0); dx = dy = 0.0; sx = sy = 1.0
+        else:
+            handle = drag.get("handle", "")
+            horizontal = handle in ("nw", "ne", "sw", "se", "w", "e")
+            vertical = handle in ("nw", "ne", "sw", "se", "n", "s")
+            anchor_x, anchor_y = pivot.x(), pivot.y()
+            sx = ((scene_pos.x()-anchor_x)/(start.x()-anchor_x)) if horizontal and abs(start.x()-anchor_x) > 1e-6 else 1.0
+            sy = ((scene_pos.y()-anchor_y)/(start.y()-anchor_y)) if vertical and abs(start.y()-anchor_y) > 1e-6 else 1.0
+            if shift and horizontal and vertical:
+                factor = sx if abs(sx-1.0) >= abs(sy-1.0) else sy
+                sx = sy = factor
+            dx = dy = 0.0; angle = 0.0
+        return pivot, sx, sy, angle, dx, dy
+
+    def _roto_pivot_updates(self, shape, cx, cy, frame):
+        values = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"]
+        dx, dy = cx - values["center_x"], cy - values["center_y"]
+        angle = math.radians(values["rotate"]); c, s = math.cos(angle), math.sin(angle)
+        s00, s01 = c*values["scale_x"], -s*values["scale_y"]
+        s10, s11 = s*values["scale_x"], c*values["scale_y"]
+        t00 = t11 = 1.0; t01 = t10 = 0.0
+        if shape.get("track_follow", "translate") == "full" and shape.get("track_link"):
+            from .tracker import solve
+            link = shape["track_link"]
+            tracker_node = self.window.dispatcher.document["nodes"].get(link["tracker_id"])
+            if tracker_node is not None:
+                tracker_data = self.window.dispatcher.document.get("node_data", {}).get(link["tracker_id"], {})
+                tracked = solve(tracker_data, frame, tracker_node["params"])
+                ta = math.radians(tracked["rotate"]); tc, ts = math.cos(ta), math.sin(ta)
+                t00, t01 = tracked["scale"]*tc, -tracked["scale"]*ts
+                t10, t11 = tracked["scale"]*ts, tracked["scale"]*tc
+        determinant = t00*t11-t01*t10
+        if abs(determinant) < 1e-12:
+            inv00 = inv11 = 1.0; inv01 = inv10 = 0.0
+        else:
+            inv00, inv01 = t11/determinant, -t01/determinant
+            inv10, inv11 = -t10/determinant, t00/determinant
+        m00, m01 = s00-inv00, s01-inv01
+        m10, m11 = s10-inv10, s11-inv11
+        return {"center_x": cx, "center_y": cy,
+                "translate_x": values["translate_x"] + m00*dx + m01*dy,
+                "translate_y": values["translate_y"] + m10*dx + m11*dy}
+
     def _commit_roto_shapes(self, key, node, shapes):
         if node["type"] == "RotoPaint":
             items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
@@ -2648,12 +2746,69 @@ class Viewer(PanZoomView):
                 if si >= len(shapes) or pi >= len(shapes[si]["points"]) or shapes[si].get("locked"):
                     continue
                 point = shapes[si]["points"][pi]
-                animated = any(isinstance(value, dict) and value.get("curve") for value in point.values())
+                animated = any(isinstance(value, dict) and value.get("curve")
+                               for p in shapes[si]["points"] for value in p.values())
                 for field, delta in (("x", dx), ("y", dy)):
                     value = shape_model.resolve_scalar(point[field], frame, field) + delta
                     point[field] = self._roto_scalar_at_frame(point[field], frame, value, animated)
             self.roto_drag = None
-            self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
+            self._commit_roto_shapes(key, node, shapes)
+            return True
+        if drag.get("kind") == "box":
+            shapes = copy.deepcopy(payload.get("shapes", []))
+            frame = int(self.window.dispatcher.document["time"]["current"])
+            pivot, sx, sy, angle, dx, dy = self._roto_box_result(
+                drag, drag["scene"], bool(drag.get("shift")))
+            selected = drag["selected"]
+            shape_indices = {si for si, _ in selected}
+            if drag.get("alt_shape") is not None:
+                si = drag["alt_shape"]
+                transform = shapes[si].setdefault("transform", {})
+                animated = (any(isinstance(v, dict) and v.get("curve") for v in transform.values()) or
+                            any(isinstance(v, dict) and v.get("curve") for p in shapes[si]["points"] for v in p.values()))
+                if drag["kind_name"] == "pivot":
+                    cx, cy = self._roto_data_point(drag["scene"], node, tier)
+                    updates = self._roto_pivot_updates(shapes[si], cx, cy, frame)
+                elif drag["kind_name"] == "rotate":
+                    updates = {"rotate": shape_model.resolve_scalar(transform.get("rotate", 0.0), frame, "rotate") + angle}
+                elif drag["kind_name"].startswith("scale"):
+                    updates = {"scale_x": shape_model.resolve_scalar(transform.get("scale_x", 1.0), frame, "scale_x") * sx,
+                               "scale_y": shape_model.resolve_scalar(transform.get("scale_y", 1.0), frame, "scale_y") * sy}
+                else:
+                    updates = {"translate_x": shape_model.resolve_scalar(transform.get("translate_x", 0.0), frame, "translate_x") + dx,
+                               "translate_y": shape_model.resolve_scalar(transform.get("translate_y", 0.0), frame, "translate_y") + dy}
+                for field, value in updates.items():
+                    old = transform.get(field, shape_model.TRANSFORM_DEFAULTS[field])
+                    transform[field] = self._roto_scalar_at_frame(old, frame, value, animated)
+            elif drag["kind_name"] == "pivot":
+                if len(shape_indices) == 1:
+                    si = next(iter(shape_indices)); transform = shapes[si].setdefault("transform", {})
+                    cx, cy = self._roto_data_point(drag["scene"], node, tier)
+                    updates = self._roto_pivot_updates(shapes[si], cx, cy, frame)
+                    for field, value in updates.items():
+                        old = transform.get(field, shape_model.TRANSFORM_DEFAULTS[field])
+                        animated = any(isinstance(v, dict) and v.get("curve") for v in transform.values())
+                        transform[field] = self._roto_scalar_at_frame(old, frame, value, animated)
+            else:
+                initial = [drag["initial"][(si, pi)] for si, pi in selected]
+                pivot_data = self._roto_data_point(pivot, node, tier)
+                transformed = shape_model.transform_point_group(
+                    initial, center=pivot_data, scale_x=sx, scale_y=sy,
+                    rotate=angle, translate_x=dx, translate_y=dy)
+                for (si, pi), resolved_point in zip(selected, transformed):
+                    if si >= len(shapes) or pi >= len(shapes[si]["points"]) or shapes[si].get("locked"):
+                        continue
+                    target = shapes[si]["points"][pi]
+                    local_point = shape_model.unresolve_roto_point(
+                        resolved_point, shapes[si], self.window.dispatcher.document, frame, tier)
+                    animated = any(isinstance(value, dict) and value.get("curve")
+                                   for p in shapes[si]["points"] for value in p.values())
+                    for field in shape_model.POINT_FIELDS:
+                        target[field] = self._roto_scalar_at_frame(target[field], frame,
+                                                                   local_point[field], animated)
+            self.roto_drag = None
+            self._commit_roto_shapes(key, node, shapes)
+            self.viewport().update()
             return True
         shape_index, point_index = drag["point"]
         shapes = copy.deepcopy(payload.get("shapes", []))
@@ -2871,6 +3026,7 @@ class Viewer(PanZoomView):
         if event.button() == Qt.MouseButton.LeftButton and self.roto_drag is not None:
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
+            self.roto_drag["shift"] = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             if self.roto_drag.get("kind") == "marquee":
                 drag=self.roto_drag; self.roto_drag=None
                 if drag["moved"]:
@@ -3121,11 +3277,24 @@ class Viewer(PanZoomView):
                 # Keep the wireframe responsive while the document remains unchanged.  The
                 # payload is only replaced on release, so a cancelled drag cannot leave a partial
                 # command behind.
-                shape_index, point_index = self.roto_drag["point"]
-                if shape_index < len(resolved) and point_index < len(resolved[shape_index]["points"]):
-                    x, y = self._roto_data_point(self.roto_drag["scene"], context[1], tier)
-                    resolved[shape_index]["points"][point_index]["x"] = x
-                    resolved[shape_index]["points"][point_index]["y"] = y
+                if self.roto_drag.get("kind") == "box":
+                    drag = self.roto_drag
+                    if drag["kind_name"] != "pivot" and drag.get("alt_shape") is None:
+                        pivot, sx, sy, angle, dx, dy = self._roto_box_result(drag, drag["scene"], drag.get("shift", False))
+                        pivot_data = self._roto_data_point(pivot, context[1], tier)
+                        transformed = shape_model.transform_point_group(
+                            [drag["initial"][(si, pi)] for si, pi in drag["selected"]],
+                            center=pivot_data, scale_x=sx, scale_y=sy, rotate=angle,
+                            translate_x=dx, translate_y=dy)
+                        for (si, pi), point in zip(drag["selected"], transformed):
+                            if si < len(resolved) and pi < len(resolved[si]["points"]):
+                                resolved[si]["points"][pi].update(point)
+                else:
+                    shape_index, point_index = self.roto_drag["point"]
+                    if shape_index < len(resolved) and point_index < len(resolved[shape_index]["points"]):
+                        x, y = self._roto_data_point(self.roto_drag["scene"], context[1], tier)
+                        resolved[shape_index]["points"][point_index]["x"] = x
+                        resolved[shape_index]["points"][point_index]["y"] = y
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             for shape_index, shape in enumerate(resolved):
@@ -3166,21 +3335,22 @@ class Viewer(PanZoomView):
                             handle = self._roto_scene_point({"x": point["x"]+point[hx], "y": point["y"]+point[hy]}, tier)
                             painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawLine(center, handle)
                             painter.setBrush(QColor("#f4ce63")); painter.drawEllipse(handle, radius*.7, radius*.7)
-            if len(self.roto_selected_points) >= 2:
-                selected_scene = [self._roto_scene_point(resolved[si]["points"][pi], tier)
-                                  for si, pi in self.roto_selected_points
-                                  if si < len(resolved) and pi < len(resolved[si]["points"])]
-                if selected_scene:
-                    bounds = QRectF(selected_scene[0], selected_scene[0])
-                    for point in selected_scene[1:]: bounds = bounds.united(QRectF(point, point))
-                    pad = 8.0 / max(abs(self.transform().m11()), .05)
-                    bounds.adjust(-pad, -pad, pad, pad)
-                    box_pen = QPen(QColor("#f4ce63"), 1); box_pen.setCosmetic(True)
-                    box_pen.setStyle(Qt.PenStyle.DashLine); painter.setPen(box_pen)
-                    painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(bounds)
-                    painter.setBrush(QColor("#f4ce63")); painter.setPen(Qt.PenStyle.NoPen)
-                    for point in (bounds.topLeft(), bounds.topRight(), bounds.bottomLeft(), bounds.bottomRight()):
-                        painter.drawEllipse(point, pad * .45, pad * .45)
+            geometry = self._roto_box_geometry(resolved, tier)
+            if geometry is not None:
+                _, bounds, _, box_pivot = geometry
+                pad = 6.0 / max(abs(self.transform().m11()), .05)
+                box_pen = QPen(QColor("#f4ce63"), 1); box_pen.setCosmetic(True)
+                box_pen.setStyle(Qt.PenStyle.DashLine); painter.setPen(box_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(bounds)
+                painter.setPen(Qt.PenStyle.NoPen); painter.setBrush(QColor("#f4ce63"))
+                for point in (bounds.topLeft(), bounds.topRight(), bounds.bottomLeft(), bounds.bottomRight(),
+                              QPointF(bounds.center().x(), bounds.top()), QPointF(bounds.center().x(), bounds.bottom()),
+                              QPointF(bounds.left(), bounds.center().y()), QPointF(bounds.right(), bounds.center().y())):
+                    painter.drawEllipse(point, pad*.55, pad*.55)
+                rotate = QPointF(box_pivot.x(), bounds.top()-28.0/max(abs(self.transform().m11()),.05))
+                painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawLine(QPointF(box_pivot.x(), bounds.top()), rotate)
+                painter.setBrush(QColor("#202127")); painter.drawEllipse(rotate, pad*.7, pad*.7)
+                painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawEllipse(box_pivot, pad*.7, pad*.7)
             if self.roto_drawing:
                 origin_x = self.format_rect.left() if self.format_rect is not None else 0.0
                 origin_y = self.format_rect.top() if self.format_rect is not None else 0.0
@@ -3378,6 +3548,23 @@ class Viewer(PanZoomView):
             if (event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier)) == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier):
                 if self._insert_roto_point(scene_pos, context): event.accept(); return
             resolved = self._roto_resolved(context)
+            geometry = self._roto_box_geometry(resolved, context[3])
+            if geometry is not None:
+                selected, bounds, _, box_pivot = geometry
+                action, handle = self._roto_box_action(scene_pos, bounds, abs(self.transform().m11()), box_pivot)
+                if action is not None:
+                    shape_indices = {si for si, _ in selected}
+                    alt_shape = None
+                    if event.modifiers() & Qt.KeyboardModifier.AltModifier and len(shape_indices) == 1:
+                        candidate = next(iter(shape_indices))
+                        if selected == {(candidate, pi) for pi in range(len(resolved[candidate]["points"]))}:
+                            alt_shape = candidate
+                    self.roto_drag = {"kind": "box", "kind_name": action, "handle": action[6:] if action.startswith("scale_") else None,
+                        "selected": selected, "bounds": bounds, "pivot": box_pivot,
+                        "start": scene_pos, "scene": scene_pos, "tier": context[3],
+                        "initial": {(si, pi): dict(resolved[si]["points"][pi]) for si, pi in selected},
+                        "alt_shape": alt_shape, "moved": False}
+                    self.setCursor(Qt.CursorShape.ClosedHandCursor); event.accept(); return
             if len(self.roto_selected_points) >= 2:
                 selected = {(si, pi) for si, pi in self.roto_selected_points
                             if si < len(resolved) and pi < len(resolved[si]["points"])}
@@ -3594,6 +3781,7 @@ class Viewer(PanZoomView):
         if self.roto_drag is not None and self.pan is None:
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
+            self.roto_drag["shift"] = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             self.viewport().update()
             self._update_pixel_readout(event)
             event.accept()

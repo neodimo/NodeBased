@@ -365,15 +365,17 @@ def resolve_shapes(payload, frame):
         def points_at(at_frame):
             return [{field: resolve_scalar(point[field], at_frame, field) for field in POINT_FIELDS}
                     for point in shape["points"]]
+        resolved_points = points_at(frame)
+        center_x = (min(p["x"] for p in resolved_points) + max(p["x"] for p in resolved_points)) / 2.0
+        center_y = (min(p["y"] for p in resolved_points) + max(p["y"] for p in resolved_points)) / 2.0
         resolved = {
             "name": shape["name"],
             "mode": shape["mode"],
             "opacity": resolve_scalar(shape["opacity"], frame, "opacity"),
             "feather": resolve_scalar(shape["feather"], frame, "feather"),
-            "points": points_at(frame),
+            "points": resolved_points,
             "transform": {field: resolve_scalar(shape.get("transform", {}).get(field,
-                              (sum(p["x"] for p in points_at(frame)) / len(shape["points"]) if field == "center_x" else
-                               sum(p["y"] for p in points_at(frame)) / len(shape["points"]) if field == "center_y" else default)), frame, field)
+                              center_x if field == "center_x" else center_y if field == "center_y" else default), frame, field)
                           for field, default in TRANSFORM_DEFAULTS.items()},
             "track_follow": shape.get("track_follow", "translate"),
         }
@@ -408,6 +410,72 @@ def apply_shape_transform(shape):
         point["y"] = cy + y + t["translate_y"]
         for xfield, yfield in (("in_x", "in_y"), ("out_x", "out_y")):
             point[xfield], point[yfield] = vector(point[xfield], point[yfield])
+
+
+def transform_point_group(points, *, center, scale_x=1.0, scale_y=1.0,
+                          rotate=0.0, translate_x=0.0, translate_y=0.0):
+    """Return transformed copies of selected points, including their tangent vectors."""
+    angle = math.radians(float(rotate))
+    c, s = math.cos(angle), math.sin(angle)
+    cx, cy = map(float, center)
+    result = []
+    for original in points:
+        point = dict(original)
+        x, y = (float(point["x"]) - cx) * scale_x, (float(point["y"]) - cy) * scale_y
+        point["x"] = cx + c*x - s*y + translate_x
+        point["y"] = cy + s*x + c*y + translate_y
+        for xf, yf in (("in_x", "in_y"), ("out_x", "out_y")):
+            x, y = float(point[xf]) * scale_x, float(point[yf]) * scale_y
+            point[xf], point[yf] = c*x - s*y, s*x + c*y
+        result.append(point)
+    return result
+
+
+def unresolve_roto_point(point, shape, document, frame, tier=1):
+    """Invert the shape and Tracker transforms so a viewer edit stays in local point space."""
+    result = dict(point)
+    t = resolve_shapes({"shapes": [shape]}, frame)[0]["transform"]
+    link = shape.get("track_link")
+    nodes = document.get("nodes", {})
+    track_node = nodes.get(link["tracker_id"]) if link else None
+    if track_node is not None:
+        data = document.get("node_data", {}).get(link["tracker_id"], {})
+        reference = int(track_node["params"].get("reference_frame", 1))
+        if shape.get("track_follow", "translate") == "full":
+            from .tracker import solve
+            solved = solve(data, frame, track_node["params"])
+            angle = math.radians(solved["rotate"]); c, s = math.cos(angle), math.sin(angle)
+            scale = solved["scale"]
+            cx, cy = t["center_x"], t["center_y"]
+            for xf, yf in (("x", "y"), ("in_x", "in_y"), ("out_x", "out_y")):
+                if xf == "x":
+                    x, y = result["x"] - cx - solved["translate_x"]/tier, result["y"] - cy - solved["translate_y"]/tier
+                else:
+                    x, y = result[xf], result[yf]
+                if abs(scale) > 1e-12:
+                    result[xf] = (c*x + s*y) / scale
+                    result[yf] = (-s*x + c*y) / scale
+            result["x"] += cx; result["y"] += cy
+        else:
+            track = next((item for item in data.get("tracks", [])
+                          if item["name"] == link["track_name"]), None)
+            if track is not None:
+                dx = (resolve_scalar(track["x"], frame, "x") - resolve_scalar(track["x"], reference, "x")) / tier
+                dy = (resolve_scalar(track["y"], frame, "y") - resolve_scalar(track["y"], reference, "y")) / tier
+                result["x"] -= dx; result["y"] -= dy
+    angle = math.radians(t["rotate"]); c, s = math.cos(angle), math.sin(angle)
+    sx, sy = t["scale_x"], t["scale_y"]
+    cx, cy = t["center_x"], t["center_y"]
+    tx, ty = t["translate_x"], t["translate_y"]
+    x, y = result["x"] - cx - tx, result["y"] - cy - ty
+    if abs(sx) > 1e-12 and abs(sy) > 1e-12:
+        result["x"] = (c*x + s*y) / sx + cx
+        result["y"] = (-s*x + c*y) / sy + cy
+        for xf, yf in (("in_x", "in_y"), ("out_x", "out_y")):
+            x, y = result[xf], result[yf]
+            result[xf] = (c*x + s*y) / sx
+            result[yf] = (-s*x + c*y) / sy
+    return result
 
 
 def resolve_roto_shapes(payload, frame, document=None, tier=1):

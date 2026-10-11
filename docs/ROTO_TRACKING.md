@@ -383,7 +383,7 @@ first (see "Paint strokes" below).
   remain command-editable payload fields. The shape list supports a Nuke-style per-shape
   transform with animatable translate X/Y, rotate, scale X/Y and centre X/Y. The default
   identity transform preserves existing documents. The shape's centre defaults to the
-  point centroid; transforming scales and rotates tangent vectors along with their points.
+  bounds centre; transforming scales and rotates tangent vectors along with their points.
   Tracker-linked shapes default to translation-only follow, preserving the prior behavior;
   choosing **Full Tracker solve** applies the Tracker's enabled translate/rotate/scale
   solution about the shape centre. Render and overlay call the same shape resolver.
@@ -400,8 +400,11 @@ first (see "Paint strokes" below).
 
 With multiple points selected, the overlay bounds the set and dragging inside it moves
 all selected points in one undoable edit. Ctrl+A selects every point in the shape chosen
-in the Roto list. The current handle exposes the bounds and corners visually; corner and
-edge scaling, rotation, and pivot dragging are not wired yet.
+in the Roto list. Corner handles scale both axes; edge handles scale one axis, and Shift
+keeps a corner scale uniform. The rotate handle turns the selection around its centre.
+Dragging the centre moves the pivot while compensating translation so the shape stays put.
+Alt-dragging a whole-shape box edits its animated transform; ordinary box gestures edit
+selected points, including their tangent vectors. Each drag is one undo step.
 
 ## RotoPaint and DustBust (schema v13)
 

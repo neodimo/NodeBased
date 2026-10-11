@@ -7,6 +7,8 @@ asserted numerically rather than by eyeball.
 """
 import unittest
 import tempfile
+import copy
+import math
 from pathlib import Path
 
 import numpy as np
@@ -88,6 +90,41 @@ class ShapeValidationTests(unittest.TestCase):
 
 
 class ShapeTransformTests(unittest.TestCase):
+    def test_group_scale_doubles_distance_and_tangent_and_ninety_degree_rotate_is_exact(self):
+        source = [{"x": 2.0, "y": 1.0, "in_x": 1.0, "in_y": 0.0,
+                   "out_x": 0.0, "out_y": 2.0}]
+        scaled = shapes.transform_point_group(source, center=(1.0, 1.0), scale_x=2, scale_y=2)
+        self.assertEqual((scaled[0]["x"], scaled[0]["y"]), (3.0, 1.0))
+        self.assertEqual((scaled[0]["in_x"], scaled[0]["in_y"]), (2.0, 0.0))
+        rotated = shapes.transform_point_group(source, center=(1.0, 1.0), rotate=90)
+        self.assertAlmostEqual(rotated[0]["x"], 1.0, places=12)
+        self.assertAlmostEqual(rotated[0]["y"], 2.0, places=12)
+        self.assertAlmostEqual(rotated[0]["out_x"], -2.0, places=12)
+        self.assertAlmostEqual(rotated[0]["out_y"], 0.0, places=12)
+
+    def test_identity_transform_raster_is_byte_identical(self):
+        plain = square(4, 5, 28, 31)
+        explicit = copy.deepcopy(plain)
+        explicit["transform"] = dict(shapes.TRANSFORM_DEFAULTS)
+        a = roto.rasterise(shapes.resolve_shapes({"shapes": [plain]}, 1), 40, 40)
+        b = roto.rasterise(shapes.resolve_shapes({"shapes": [explicit]}, 1), 40, 40)
+        self.assertEqual(a.tobytes(), b.tobytes())
+
+    def test_viewer_edit_inverse_round_trips_shape_and_full_tracker_transforms(self):
+        shape = square(0, 0, 2, 2, track_link={"tracker_id": "t", "track_name": "a"},
+                       track_follow="full", transform={"translate_x": 3.0, "rotate": 17.0,
+                           "scale_x": 1.2, "scale_y": .8, "center_x": 1.0, "center_y": 1.0})
+        tracks = [track("a", keyed(0, [(1, 0), (2, 4)]), keyed(0, [(1, 0), (2, 3)])),
+                  track("b", keyed(2, [(1, 2), (2, 4+3*math.cos(math.radians(30)))]),
+                        keyed(0, [(1, 0), (2, 3+3*math.sin(math.radians(30)))]))]
+        doc = {"nodes": {"t": {"type": "Tracker", "params": {"reference_frame": 1,
+                    "apply_rotate": 1, "apply_scale": 1, "apply_translate": 1, "smoothing": 0,
+                    "mode": "match_move"}}}, "node_data": {"t": {"tracks": tracks}}}
+        view = shapes.resolve_roto_shapes({"shapes": [shape]}, 2, doc)[0]["points"][0]
+        local = shapes.unresolve_roto_point(view, shape, doc, 2)
+        for field in shapes.POINT_FIELDS:
+            self.assertAlmostEqual(local[field], shape["points"][0][field], places=9)
+
     def test_shape_transform_scales_points_and_tangents_and_rotates_about_center(self):
         shape = square(0, 0, 2, 2, transform={"center_x": 1.0, "center_y": 1.0,
                                              "scale_x": 2.0, "scale_y": 2.0,
@@ -116,6 +153,22 @@ class ShapeTransformTests(unittest.TestCase):
         # 90 degrees and 2x scale about the shape centre, then centroid translation (9, 12).
         self.assertAlmostEqual(resolved["points"][0]["x"], 12.0, places=6)
         self.assertAlmostEqual(resolved["points"][0]["y"], 11.0, places=6)
+
+    def test_full_tracker_follow_matches_hand_derived_thirty_degree_similarity(self):
+        shape = square(0, 0, 2, 2, track_link={"tracker_id": "t", "track_name": "a"},
+                       track_follow="full", transform={"center_x": 1.0, "center_y": 1.0})
+        cosine, sine = math.cos(math.radians(30)), math.sin(math.radians(30))
+        tracks = [track("a", keyed(0, [(1, 0), (2, 4)]), keyed(0, [(1, 0), (2, 3)])),
+                  track("b", keyed(2, [(1, 2), (2, 4+3*cosine)]),
+                        keyed(0, [(1, 0), (2, 3+3*sine)]))]
+        doc = {"nodes": {"t": {"type": "Tracker", "params": {"reference_frame": 1,
+                    "apply_rotate": 1, "apply_scale": 1, "apply_translate": 1, "smoothing": 0,
+                    "mode": "match_move"}}}, "node_data": {"t": {"tracks": tracks}}}
+        result = shapes.resolve_roto_shapes({"shapes": [shape]}, 2, doc)[0]["points"][0]
+        expected_x = 1.0 + 1.5*(-cosine + sine) + (4.0+3*cosine/2-1.0)
+        expected_y = 1.0 - 1.5*(sine + cosine) + (3.0+3*sine/2)
+        self.assertAlmostEqual(result["x"], expected_x, delta=1e-3)
+        self.assertAlmostEqual(result["y"], expected_y, delta=1e-3)
 
 
 class ScalarResolutionTests(unittest.TestCase):
@@ -421,6 +474,25 @@ class RenderTests(unittest.TestCase):
         tiled = executor.compose(d.document, "r", frame=24)
         self.assertTrue(tiled.tiled)
         np.testing.assert_allclose(tiled.pixels, full, atol=1e-6)
+
+    def test_full_follow_render_matches_the_shared_resolved_overlay_points(self):
+        d = Dispatcher(empty_document())
+        moving = square(16, 16, 24, 24, track_link={"tracker_id": "t", "track_name": "a"},
+                        track_follow="full", transform={"center_x": 20.0, "center_y": 20.0})
+        cosine, sine = math.cos(math.radians(30)), math.sin(math.radians(30))
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "r", "type": "Roto"}, *sets("r", width=64, height=64),
+            {"op": "create", "id": "t", "type": "Tracker"},
+            {"op": "set_tracks", "id": "t", "tracks": [
+                track("a", keyed(0, [(1,0),(2,4)]), keyed(0, [(1,0),(2,3)])),
+                track("b", keyed(2, [(1,2),(2,4+3*cosine)]),
+                      keyed(0, [(1,0),(2,3+3*sine)]))]},
+            {"op": "set_shapes", "id": "r", "shapes": [moving]}]})
+        resolved = shapes.resolve_roto_shapes(d.document["node_data"]["r"], 2, d.document)
+        expected = roto.rasterise(resolved, 64, 64)
+        actual = self.render(d.document, "r", 2).pixels
+        np.testing.assert_allclose(actual[..., 3], expected[..., 3], atol=1e-3)
+        np.testing.assert_allclose(actual[..., :3], expected[..., :3], atol=1e-3)
 
     def test_channel_shuffle_routes_an_alpha_from_b_into_a(self):
         d = Dispatcher(empty_document())
