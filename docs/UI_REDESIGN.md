@@ -271,3 +271,30 @@ Screenshots (offscreen, 1920 x 1080, `examples/mixed_scene`): `docs/images/ui-re
   cached-frames line, a 1 px playhead with a small flag); under it one row: the frame field, the transport
   centred, and In, Out, rate and the real-time light. The status text and the rate presets go first when the
   row is narrow.
+
+## Wiring (10/11, DiMo: connecting a noodle must feel natural, never fussy)
+
+Every radius is in screen pixels, converted through the view transform, so wiring feels the same at 40 and
+150 percent. The constants live next to `Graph` in `nodebased/app.py`.
+
+- **Dropping a wire** (`WIRE_REACH` = 40 px). The target is the nearest compatible socket within 40 px of the
+  pointer; if none, the first socket of the card under the pointer. Dragging an output onto a card takes its
+  first free input that accepts the wire (a mask input only when nothing else is free); dragging an input onto a
+  card takes the card's output. A card with no free input takes nothing. Compatible means the right direction,
+  another node, a socket type that accepts the wire and no cycle. With nothing compatible in range the wire is
+  dropped ("Wire dropped") and every existing connection stays.
+- **The snap.** As soon as a target is in range the pending wire's end glides onto the socket (80 ms), the wire,
+  the socket (drawn larger, brighter) and the card light up in the same tone as the insert hint, and the status
+  bar says "to Merge1.B". Leaving the range lets the wire follow the pointer again. Esc cancels and clears it.
+- **Starting a wire** (`GRAB_REACH` = 20 px). Pressing within 20 px of a socket starts a wire from it: on its
+  label, on the card edge beside it, or on empty space. Pressing in the bottom 10 px band of a card
+  (`OUTPUT_BAND`) starts an output wire. Pressing deeper than 8 px inside a card is a node drag, as ever
+  (`GRAB_EDGE`). The socket a press would grab draws a little larger as the pointer nears it. Dragging from a
+  connected input still picks it up and keeps the old connection until a valid drop. A click-click wire ends at
+  the second click with the same reach.
+- Start reach is 20 px and not 40 px: with 40 px every press on a card title would start a wire instead of
+  moving the node.
+
+Captures (offscreen, `docs/images/ui-redesign/wire-*.png`): `wire-1a/1b/1c` a drop 34 px off the socket (following,
+snapped, connected); `wire-2a/2b` a drop on a card's body; `wire-3a/3b/3c` hover, larger socket, a wire started
+from a near miss; `wire-4-zoom40` and `-zoom150` the same snap at 40 and 150 percent.
