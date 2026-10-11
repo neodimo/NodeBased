@@ -109,7 +109,10 @@ def triangulate_points(c2w, intrinsics, width, height, points, lens=(0.0, 0.0)):
             raise ValueError("each survey point needs observations on at least two frames")
         cameras = [solve_camera_object(c2w[int(row["frame"])], fov, lens=lens) for row in observations]
         pixels = [(float(row["x"]), float(row["y"])) for row in observations]
-        xyz, _residuals = track3d.triangulate(cameras, pixels, width, height)
+        try:
+            xyz, _residuals = track3d.triangulate(cameras, pixels, width, height)
+        except ValueError as error:
+            raise ValueError(f"survey point could not be triangulated: {error}") from error
         found.append(xyz)
     return found
 
@@ -356,7 +359,9 @@ def lens_record(result, typed_focal_mm, params, height):
              "focal_typed_mm": round(typed_focal_mm, 4), "focal_mm": round(mm(result["focal_px"]), 4),
              "focal_px": round(result["focal_px"], 3), "k1": round(result["k1"], 6), "k2": round(result["k2"], 6),
              "rms_px_before": round(result["rms_px_before"], 4), "rms_px_after": round(result["rms_px_after"], 4),
-             "median_px_after": round(result["median_px_after"], 4), "observations": result["observations"],
+             "median_px_before": round(result["median_px_before"], 4), "median_px_after": round(result["median_px_after"], 4),
+             "inliers_before": round(result["inliers_before"], 4), "inliers_after": round(result["inliers_after"], 4),
+             "observations": result["observations"],
              "points": result["points_used"], "frames": result["frames_used"], "iterations": result["iterations"]}
     if result.get("focal_px_sigma") is not None:
         block["focal_mm_sigma"] = round(mm(result["focal_px_sigma"]), 4)
@@ -510,8 +515,9 @@ def panel_lines(params, record=None):
                 if lens["distortion"] == "k1 k2":
                     line += f", k2 {lens['k2']:.5f}"
             lines.append(line + ".")
-            lines.append(f"Reprojection error {lens['rms_px_before']:.2f} px before, {lens['rms_px_after']:.2f} px after "
-                         f"({lens['observations']} observations of {lens['points']} points on {lens['frames']} frames).")
+            lines.append(f"Reprojection error, median {lens['median_px_before']:.2f} px before and {lens['median_px_after']:.2f} px "
+                         f"after (rms {lens['rms_px_before']:.2f} and {lens['rms_px_after']:.2f}); "
+                         f"{lens['observations']} tracked positions of {lens['points']} points on {lens['frames']} frames.")
             lines.extend(lens.get("warnings", []))
         alignment = record.get("alignment")
         if alignment:

@@ -377,8 +377,9 @@ def estimate_lens(c2w, points, tracks, width, height, focal_px, *, estimate_foca
         cloud, chosen = cloud[~behind], chosen[~behind]
     base = (float(focal_px), 0.0, 0.0)
     free = (bool(estimate_focal), terms >= 1, terms >= 2)
-    before = _rms(_Problem(len(rotation), len(cloud), obs_frame, obs_point, obs_xy, obs_weight, width, height, base, free,
-                           1.0, 0).residual(rotation, translation, cloud, np.zeros(sum(free))), width)
+    residual_before = _Problem(len(rotation), len(cloud), obs_frame, obs_point, obs_xy, obs_weight, width, height, base,
+                               free, 1.0, 0).residual(rotation, translation, cloud, np.zeros(sum(free)))
+    before = _rms(residual_before, width)
     fit = _staged_adjust(rotation, translation, cloud, obs_frame, obs_point, obs_xy, obs_weight, width, height, base, free,
                          iterations)
     focal, k1, k2 = fit["intrinsics"]
@@ -387,7 +388,9 @@ def estimate_lens(c2w, points, tracks, width, height, focal_px, *, estimate_foca
            "focal_px_sigma": focal * sigma["focal"] if "focal" in sigma else None,
            "k1_sigma": sigma.get("k1"), "k2_sigma": sigma.get("k2"),
            "rms_px_before": before, "rms_px_after": _rms(fit["residual"], width),
+           "median_px_before": float(np.median(np.linalg.norm(residual_before, axis=1))),
            "median_px_after": float(np.median(np.linalg.norm(fit["residual"], axis=1))),
+           "inliers_before": _inlier_fraction(residual_before, width), "inliers_after": _inlier_fraction(fit["residual"], width),
            "observations": int(len(obs_frame)), "points_used": int(len(cloud)), "frames_used": int(len(frames)),
            "iterations": int(fit["iterations"]), "point_index": chosen, "points": fit["points"]}
     refined = camera_to_world(fit["rotation"], fit["translation"])
@@ -412,11 +415,19 @@ def _staged_adjust(rotation, translation, cloud, obs_frame, obs_point, obs_xy, o
     return fit
 
 
+def _inlier_threshold(width):
+    return 4.0 * HUBER_PX * width / 960.0
+
+
 def _rms(residual, width):
-    """Root mean square pixel distance of the inliers (those within a few pixels at 960 wide)."""
+    """Root mean square pixel distance of the inliers (those within 6 px at 960 wide, the same bound before and after)."""
     distance = np.linalg.norm(residual, axis=1)
-    inside = distance < 4.0 * HUBER_PX * width / 960.0
+    inside = distance < _inlier_threshold(width)
     return float(np.sqrt(np.mean(distance[inside] ** 2))) if inside.any() else float("nan")
+
+
+def _inlier_fraction(residual, width):
+    return float(np.mean(np.linalg.norm(residual, axis=1) < _inlier_threshold(width)))
 
 
 def _carry_unused_frames(c2w, used, refined):

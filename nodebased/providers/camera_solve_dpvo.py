@@ -152,9 +152,11 @@ def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progre
 
 def _tracks(slam, torch):
     """What the network measured: every patch where it was born, and where the update operator put it on each
-    frame it was followed to (active and retired edges both), in full-resolution pixels. A patch is a point
+    frame it was followed to (active and retired edges both), in full-resolution pixels (continuous coordinates, a
+    pixel's centre at half an integer, as `lensmodel` has them). A patch is a point
     of `points_`, so `point` indexes the returned points; a keyframe's time stamp is the frame number."""
     pg, res, count = slam.pg, float(slam.RES), slam.m
+    centre = 0.5     # feature j sits on plate pixel 4j (two stride-2 convolutions), whose centre is at 4j + 0.5
     stamps = np.asarray(pg.tstamps_)
     ii, jj, kk = (torch.cat((a, b)).cpu().numpy() for a, b in ((pg.ii_inac, pg.ii), (pg.jj_inac, pg.jj), (pg.kk_inac, pg.kk)))
     target = torch.cat((pg.target_inac.float(), pg.target.float()), dim=1)[0].cpu().numpy()
@@ -162,10 +164,10 @@ def _tracks(slam, torch):
     keep = (kk < count) & (stamps[ii] != stamps[jj]) & np.isfinite(target).all(axis=1)
     born = pg.patches_[:, :, :2, 1, 1].cpu().numpy()                      # (keyframe, patch, xy) in feature-map pixels
     patch = np.arange(count)
-    born_xy = born[patch // pg.M, patch % pg.M] * res
+    born_xy = born[patch // pg.M, patch % pg.M] * res + centre
     return {"frame": np.concatenate((stamps[patch // pg.M], stamps[jj[keep]])).astype(np.int64),
             "point": np.concatenate((patch, kk[keep])).astype(np.int64),
-            "xy": np.concatenate((born_xy, target[keep] * res)).astype(np.float64),
+            "xy": np.concatenate((born_xy, target[keep] * res + centre)).astype(np.float64),
             "weight": np.concatenate((np.ones(count), weight[keep])).astype(np.float64)}
 
 
