@@ -524,8 +524,8 @@ the door their results come through.
   (`gpuinstance.py`) raises `gpu3d.Unsupported` for an instance source with a switch off, so `auto` renders that scene on the
   CPU; Cryptomatte's manifest still lists a hidden mesh's name (its id simply never has coverage). The interactive viewport
   draws a mesh that is not visible to the camera (so it can be selected) and its shadow pass honours **Cast shadows**; it does
-  not preview **Receive shadows**. Holdouts (see "Holdouts" below) build on these switches; a shadow catcher for putting CG onto
-  a filmed plate is the next step of the plan.
+  not preview **Receive shadows**. Holdouts (see "Holdouts" below) and the shadow catcher ("Shadow catcher floors", "Putting CG onto
+  a plate") build on these switches.
 - **Mode.** `Render3D` has a `Mode` knob: `raster` (default, what every existing document uses) or
   `raytrace`, a CPU-only alternative that finds visibility by casting one ray per sub-sample through the
   bounding volume hierarchy instead of rasterizing triangles. It shares the shading code with the rasterizer
@@ -994,6 +994,79 @@ What a holdout does and does not do:
   see it); the path tracers have no such limit. The `denoise` output follows the path tracer's first hit, so it is empty there too.
 - **The viewport** draws a holdout as the stand-in it is (so it can be picked and moved), like a mesh that is not visible to
   the camera. It shows no cut.
+
+### Shadow catcher floors (Rendering 7, step R3)
+
+A CG object put on a filmed floor or street floats unless the floor takes its shadow. The artist models the ground (a card is
+enough, from the same tracked camera) and turns **Shadow catcher** on for it (the knob sits beside **Holdout** on every mesh
+node and `ReadGLTF3D`; off by default). A catcher renders no colour of its own: its **alpha** is how much light the scene's other
+objects take away from it, and its colour is black premultiplied by that alpha. Merged **over** the plate, the plate is
+darkened exactly where the shadow falls and is untouched everywhere else.
+
+![The plate on the left, the render of a ball on a catcher road with a holdout card where the real post stands in the middle
+(the checkerboard is empty alpha; the soft black patch on the road is the catcher's alpha, the slice out of the ball is the
+holdout), and the render merged over the plate on the right](images/shadow_catcher_recipe.png)
+
+How the alpha is measured: it is one minus the light the surface gets with the scene's objects over the light it gets with none,
+both taken with the same samples, for a white diffuse surface lit by the **ambient** term, the environments and every light. An
+ambient fill therefore dilutes a shadow the way it does in a plate (with an ambient a quarter as strong as the key lights the
+floor, the deepest shadow is alpha 0.8), a light that does not cast shadows adds to both, and a
+catcher nothing shadows is fully transparent: colour 0 and alpha 0.
+
+- **Casters.** Meshes (per **Cast shadows**), splats (per **Cast shadows** of the splat set), smoke and light links shadow a
+  catcher exactly as they shadow any mesh. A catcher casts no shadow on another catcher, since the plate already holds the real
+  world's own shadows; it does shadow CG objects like any mesh, per its own **Cast shadows**. **Receive shadows** off turns a
+  catcher into nothing (alpha 0).
+- **Soft light.** Point and Directional lights give the same hard shadow (with `shadow_blur` where the raster modes use it);
+  Rect, Disc and Sphere lights give a soft alpha edge. In the path tracers the shadow also takes the sky: an HDRI or an
+  ambient sky blocked by the object gives a soft contact shadow, and the shadow rays carry the splat and smoke transmittance. The
+  raster and ray-traced modes light a surface from an environment without shadowing it (as they always did), so an
+  environment alone leaves the catcher clear there.
+- **Passes.** Depth, normals, position and uv see a catcher as the floor it is (so depth-based 2D work, such as fog or a
+  depth of field in compositing, still sees the ground; the returned depth buffer holds it too). The object-id pass and
+  Cryptomatte do not know it (no id, no coverage, no entry in the manifest). The beauty alpha follows `alpha + (1 - alpha) *
+  catcher coverage * shadow`: a translucent object in front of a catcher lets its shadow show through, an opaque one hides it,
+  a **Holdout** nearer than the catcher cuts it, and edges antialias with `samples` (the raster modes) or the path samples.
+- **Secondary rays** meet a catcher as an ordinary surface: reflections of the floor in a mirror ball and light bouncing off it onto
+  the object are those of a real floor of the catcher's colour.
+- **Where it runs.** Every renderer reaches it through `nodebased/shadowcatch.py`: the picture is drawn with each catcher as a
+  holdout (step R2), then the shadow layer is laid under it. The shadow layer is measured on the CPU for every renderer (the
+  raster and ray-traced modes with the CPU raster's own shadow code, the path-traced modes with the path tracer's own light
+  sampling; the camera sees the floor through the CPU raster's position, normal and id passes at the sample grid), so the GPU
+  raster, ray-traced and path-traced pictures carry the same catcher the CPU does. A catcher alongside what a holdout cannot
+  be combined with raises as a holdout does (`gpu3d.Unsupported` on the GPU for splats, particles, smoke, a liquid or a camera-seen
+  environment or area light, so `auto` renders those on the CPU; `ValueError` in the CPU raster and ray-traced modes for a liquid or
+  splat reflections and bounce light). `Instance3D` copies take their source's switch (a scene with a catcher has its instances expanded
+  first, so the GPU instanced ray tracer is not used for it). The motion blurred path tracer measures one shadow
+  layer per time (the GPU twin) or at the middle of the shutter (the CPU reference).
+- **Not caught (limit).** The CG object's coloured light bounce onto the floor (colour bleed and reflection) is not caught as a
+  tinted layer in this step: the catcher takes only the shadow. A floor that should carry the object's reflection stays in the
+  plate; a mirror ball's reflection of the floor in the CG itself is still the floor's own surface.
+- **The viewport** draws a catcher as the ordinary floor it models, so that it can be picked and lined up with the plate.
+
+The splat set's own **Shadow catch** knob (the "GPU shadows on relit splats and shadow catching" section) is a different
+feature: it lets meshes shadow the *captured colour* of a splat scene; **Shadow catcher** is for a mesh that stands in for the
+real ground of a plate.
+
+### Putting CG onto a plate
+
+The usual job: a CG object standing on the ground of a filmed shot, behind something real, lit to match. The project
+`examples/shadow_catcher/shadow_catcher.nbcomp` (rebuilt by `tools/make_shadow_catcher_example.py`; the picture above is
+`tools/render_shadow_catcher_reference.py`) does all of it on the generated plate `examples/holdout_plate.png`. Go through it in
+this order, one switch at a time:
+
+1. **Shadow catcher on the ground.** The `Road` card lies on the plate's road at the object's feet and carries
+   **Shadow catcher**. Render: the ball's shadow is the only thing the road adds (black, with alpha).
+2. **Holdout on what stands in front.** The `Lamppost stand-in` card, put where the real post is in the same camera, carries
+   **Holdout**. Render: the post cuts the ball, and it cuts the road's shadow behind it too.
+3. **Cast shadows off on the stand-in.** The plate already holds the real post's own shadow, so the stand-in must not add one:
+   its **Cast shadows** is off (it stays on for a stand-in whose real counterpart casts no shadow in the plate).
+
+Then match the light (the project's key and fill lights take the colours of the plate's sky; give the key **Shadow** on and
+match its direction to the plate's real shadows), render with a transparent background and put it over the plate with a
+`Merge` node: the render as A, the plate as B, operation **over**. Check the shadow's depth against the plate's: the catcher's
+alpha follows the lights' strengths and the **Ambient** knob, so a shadow that is too black wants more ambient or a weaker key.
+Everything else about the render, a Cryptomatte pass, a depth pass for fog, motion blur, goes on as usual.
 
 ### Splats with meshes: what runs where (Rendering 7)
 
@@ -3027,3 +3100,12 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   Tests: `tests/test_3d_holdout.py` on the RTX 3080 Ti, the Radeon 8060S (`force-adapter.py integrated`) and llvmpipe
   (`force-adapter.py cpu`). Added `examples/holdout_plate.png`, the plate step R3 reuses. Needs Gonzo: the shadow catcher (R3) can
   read `Geometry.holdout` for the stand-in's shadow on the plate.
+- Step R3 of 3: **Shadow catcher** on every mesh node (`Geometry.shadow_catcher`, off by default). The catcher renders black with
+  alpha = 1 - shadowed/unshadowed light (ambient, environments and every light of a white diffuse surface); every renderer reaches
+  it through `nodebased/shadowcatch.py` (picture with the catcher as a holdout, shadow layer under it), which is why the CPU and
+  GPU raster, ray-traced and path-traced modes all honour it. Depth, normals, position and uv see the floor; the object-id pass and
+  Cryptomatte do not. Added `examples/shadow_catcher/` (rebuilt by `tools/make_shadow_catcher_example.py`), the recipe picture
+  `docs/images/shadow_catcher_recipe.png` (from `tools/render_shadow_catcher_reference.py`) and the sections "Shadow catcher
+  floors" and "Putting CG onto a plate". Left out: catching the CG object's coloured light bounce onto the floor as a tinted
+  layer (stated limit above). Tests: `tests/test_3d_shadow_catcher.py` on the RTX 3080 Ti, the Radeon 8060S
+  (`force-adapter.py integrated`) and llvmpipe (`force-adapter.py cpu`).

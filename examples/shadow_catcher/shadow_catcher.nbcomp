@@ -1,0 +1,497 @@
+{
+  "version": 20,
+  "nodes": {
+    "plate": {
+      "type": "Read",
+      "name": "Plate",
+      "params": {
+        "path": "../holdout_plate.png",
+        "colorspace": "Auto",
+        "alpha_mode": "Auto",
+        "layer": "",
+        "subimage": 0,
+        "frame_offset": 0,
+        "missing": "error"
+      },
+      "inputs": {},
+      "pos": [
+        -480,
+        -360
+      ],
+      "disabled": false
+    },
+    "ball": {
+      "type": "Sphere3D",
+      "name": "CG ball",
+      "params": {
+        "sphere_radius": 1.1,
+        "segments": 32,
+        "rows": 32,
+        "columns": 64,
+        "tx": 0.0,
+        "ty": 0.9,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.9,
+        "green": 0.35,
+        "blue": 0.15,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "off",
+        "shadow_catcher": "off",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.28,
+        "pbr_specular": 0.9,
+        "material": "pbr",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        -480,
+        -260
+      ],
+      "disabled": false
+    },
+    "road": {
+      "type": "Card3D",
+      "name": "Road (shadow catcher)",
+      "params": {
+        "card_width": 60.0,
+        "card_height": 60.0,
+        "rows": 1,
+        "columns": 1,
+        "tx": 0.0,
+        "ty": -0.2,
+        "tz": -20.0,
+        "rx": -90.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.05,
+        "green": 0.05,
+        "blue": 0.05,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "off",
+        "shadow_catcher": "on",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        -480,
+        -160
+      ],
+      "disabled": false
+    },
+    "post": {
+      "type": "Card3D",
+      "name": "Lamppost stand-in (holdout)",
+      "params": {
+        "card_width": 0.25,
+        "card_height": 3.8,
+        "rows": 1,
+        "columns": 1,
+        "tx": 0.325,
+        "ty": 0.7,
+        "tz": 2.2,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.6,
+        "green": 0.2,
+        "blue": 0.2,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "off",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "on",
+        "shadow_catcher": "off",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        -480,
+        -60
+      ],
+      "disabled": false
+    },
+    "key": {
+      "type": "Light3D",
+      "name": "Key light",
+      "params": {
+        "light_type": "Directional",
+        "tx": -5.0,
+        "ty": 6.0,
+        "tz": 4.0,
+        "target_x": 0.0,
+        "target_y": 0.9,
+        "target_z": 0.0,
+        "red": 1.0,
+        "green": 0.85,
+        "blue": 0.7,
+        "intensity": 2.4,
+        "shadows": "on",
+        "cone_angle": 30.0,
+        "cone_penumbra_angle": 5.0,
+        "cone_falloff": 1.0,
+        "falloff_type": "No falloff",
+        "shadow_bias": 0.001,
+        "shadow_blur": 0.0,
+        "shadow_samples": 1,
+        "env_rotation": 0.0,
+        "env_blur": 0.0,
+        "area_width": 1.0,
+        "area_height": 1.0,
+        "area_radius": 0.5,
+        "area_normalize": "off",
+        "two_sided": "off",
+        "light_samples": 4,
+        "exposure": 0.0,
+        "light_color_mode": "RGB",
+        "kelvin": 6500.0,
+        "visible_to_camera": "on",
+        "light_group": ""
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        -480,
+        40
+      ],
+      "disabled": false
+    },
+    "fill": {
+      "type": "Light3D",
+      "name": "Fill light",
+      "params": {
+        "light_type": "Directional",
+        "tx": 5.0,
+        "ty": 2.0,
+        "tz": 3.0,
+        "target_x": 0.0,
+        "target_y": 0.9,
+        "target_z": 0.0,
+        "red": 0.35,
+        "green": 0.5,
+        "blue": 0.9,
+        "intensity": 0.7,
+        "shadows": "on",
+        "cone_angle": 30.0,
+        "cone_penumbra_angle": 5.0,
+        "cone_falloff": 1.0,
+        "falloff_type": "No falloff",
+        "shadow_bias": 0.001,
+        "shadow_blur": 0.0,
+        "shadow_samples": 1,
+        "env_rotation": 0.0,
+        "env_blur": 0.0,
+        "area_width": 1.0,
+        "area_height": 1.0,
+        "area_radius": 0.5,
+        "area_normalize": "off",
+        "two_sided": "off",
+        "light_samples": 4,
+        "exposure": 0.0,
+        "light_color_mode": "RGB",
+        "kelvin": 6500.0,
+        "visible_to_camera": "on",
+        "light_group": ""
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        -480,
+        140
+      ],
+      "disabled": false
+    },
+    "camera": {
+      "type": "Camera3D",
+      "name": "Camera",
+      "params": {
+        "tx": 0.0,
+        "ty": 1.5,
+        "tz": 7.0,
+        "roll": 0.0,
+        "target_x": 0.0,
+        "target_y": 0.9,
+        "target_z": 0.0,
+        "focal": 28.73325350306817,
+        "haperture": 24.576,
+        "vaperture": 18.672,
+        "near": 0.1,
+        "far": 1000.0,
+        "fstop": 0.0,
+        "focus_distance": 5.0,
+        "aperture_blades": 0,
+        "blade_rotation": 0.0,
+        "anamorphic_squeeze": 1.0
+      },
+      "inputs": {},
+      "pos": [
+        -200,
+        40
+      ],
+      "disabled": false
+    },
+    "scene": {
+      "type": "Scene3D",
+      "name": "Scene",
+      "params": {
+        "tx": 0.0,
+        "ty": 0.0,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0
+      },
+      "inputs": {
+        "object0": "ball",
+        "object1": "road",
+        "object2": "post",
+        "object3": "key",
+        "object4": "fill",
+        "object5": null,
+        "object6": null,
+        "object7": null
+      },
+      "pos": [
+        -200,
+        -120
+      ],
+      "disabled": false
+    },
+    "render": {
+      "type": "Render3D",
+      "name": "Render CG",
+      "params": {
+        "width": 480,
+        "height": 270,
+        "red": 0.0,
+        "green": 0.0,
+        "blue": 0.0,
+        "alpha": 0.0,
+        "ambient": 0.12,
+        "samples": 2,
+        "render_output": "rgba",
+        "render_backend": "cpu",
+        "render_mode": "raytrace",
+        "passes": "beauty,normals,depth",
+        "cryptomatte": 0,
+        "cryptomatte_levels": 6,
+        "volumes": "on",
+        "volume_step_size": 0.05,
+        "volume_density_scale": 1.0,
+        "volume_shadow_density": 1.0,
+        "volume_shadow_steps": 16,
+        "volume_scattering": 1.0,
+        "volume_absorption": 0.2,
+        "volume_red": 1.0,
+        "volume_green": 1.0,
+        "volume_blue": 1.0,
+        "volume_fps": 24.0,
+        "volume_depth_threshold": 0.1,
+        "volume_motion_blur": 0.0,
+        "volume_motion_samples": 8,
+        "volume_anisotropy": 0.0,
+        "volume_multi_scatter": 0.0,
+        "volume_multi_scatter_blur": 0.5,
+        "volume_fire_intensity": 0.0,
+        "volume_temperature_scale": 1500.0,
+        "volume_fire_threshold": 600.0,
+        "volume_fire_light": 1.0,
+        "volume_fire_ramp": "",
+        "volume_quality": "custom",
+        "pt_samples": 64,
+        "max_bounces": 8,
+        "diffuse_bounces": 4,
+        "specular_bounces": 8,
+        "transmission_bounces": 8,
+        "time_limit": 0.0,
+        "noise_threshold": 0.0,
+        "pt_seed": 1,
+        "sampling": "fixed",
+        "min_samples": 16,
+        "max_samples": 256,
+        "adaptive_pass_size": 8,
+        "motion_blur": 0,
+        "shutter": 0.5,
+        "shutter_offset": "centred",
+        "custom_offset": 0.0,
+        "motion_samples": 8,
+        "denoiser_strength": 1.0,
+        "denoise_color_sensitivity": 1.0,
+        "denoise_normal_sensitivity": 1.0,
+        "denoise_depth_sensitivity": 1.0,
+        "denoise_iterations": 4,
+        "denoise_temporal": 0,
+        "denoise": "off",
+        "beauty_raw": 0
+      },
+      "inputs": {
+        "scene": "scene",
+        "camera": "camera"
+      },
+      "pos": [
+        80,
+        -120
+      ],
+      "disabled": false
+    },
+    "merge": {
+      "type": "Merge",
+      "name": "CG over plate",
+      "params": {
+        "operation": "over",
+        "mix": 1.0
+      },
+      "inputs": {
+        "A": "render",
+        "B": "plate",
+        "mask": null
+      },
+      "pos": [
+        360,
+        -240
+      ],
+      "disabled": false
+    }
+  },
+  "view": "merge",
+  "time": {
+    "first": 1,
+    "last": 1,
+    "current": 1,
+    "fps": 24.0
+  },
+  "animation": {
+    "curves": {}
+  },
+  "settings": {
+    "color": {
+      "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
+      "working_space": "ACEScg",
+      "display": "sRGB - Display",
+      "view": "ACES 2.0"
+    },
+    "viewer": {
+      "background": "black"
+    },
+    "formats": {
+      "HD_1080": {
+        "width": 1920,
+        "height": 1080,
+        "pixel_aspect": 1.0
+      },
+      "HD_720": {
+        "width": 1280,
+        "height": 720,
+        "pixel_aspect": 1.0
+      },
+      "UHD_4K": {
+        "width": 3840,
+        "height": 2160,
+        "pixel_aspect": 1.0
+      },
+      "2K_DCP": {
+        "width": 2048,
+        "height": 1080,
+        "pixel_aspect": 1.0
+      },
+      "Square_1K": {
+        "width": 1024,
+        "height": 1024,
+        "pixel_aspect": 1.0
+      }
+    }
+  },
+  "node_data": {},
+  "expressions": {},
+  "references": []
+}
