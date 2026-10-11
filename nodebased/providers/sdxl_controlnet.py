@@ -306,16 +306,30 @@ def _model_main(job_path):
     guided = strength < 1.0
     if guided:
         from diffusers import StableDiffusionXLControlNetUnionImg2ImgPipeline
-        # The same components; made before the offload so both pipelines run through the same hooks.
-        refine = StableDiffusionXLControlNetUnionImg2ImgPipeline.from_pipe(pipe)
+        import inspect
+        # The same model objects, through the constructor: `from_pipe` left the second pipeline's models on the
+        # card after an offloaded call (the first frame ran out of memory on the 12 GB card).
+        keys = set(inspect.signature(StableDiffusionXLControlNetUnionImg2ImgPipeline.__init__).parameters) - {"self"}
+        refine = StableDiffusionXLControlNetUnionImg2ImgPipeline(
+            **{key: value for key, value in pipe.components.items() if key in keys})
         refine.set_progress_bar_config(disable=True)
         temporal = _load_temporal()
     # Model CPU offload always, unless NODEBASED_SDXL_OFFLOAD=never. The whole pipeline fits the 12 GB card only
     # when nothing else uses it, and a fallback after an out-of-memory error leaves the pipeline in a different
     # state (the same seed then gave different pixels), so the memory strategy never depends on what else runs.
     offloaded = os.environ.get(OFFLOAD_ENV) != "never"
+    active = [None]
+
+    def ready(pipeline):
+        """The pipeline about to run, with the offload hooks armed for it. The two pipelines share their models,
+        and one pipeline's hooks never release the models after the other runs (the card ran out of memory), so
+        the hooks are re-armed at every switch; the order of switches is fixed, so the pixels are too."""
+        if offloaded and active[0] is not pipeline:
+            pipeline.enable_model_cpu_offload()
+            active[0] = pipeline
+        return pipeline
     if offloaded:
-        pipe.enable_model_cpu_offload()
+        ready(pipe)
     else:
         pipe.to("cuda")
     loaded = time.perf_counter()
@@ -340,15 +354,15 @@ def _model_main(job_path):
             start = warped
             if not mask.all():  # the holes come from this frame's own text-to-image picture
                 generator = torch.Generator("cuda").manual_seed(job["seed"])
-                plain = np.asarray(pipe(generator=generator, **arguments).images[0], np.float32)
+                plain = np.asarray(ready(pipe)(generator=generator, **arguments).images[0], np.float32)
                 start = np.where(mask[..., None], warped, plain)
             filled_fractions.append(round(1.0 - float(mask.mean()), 4))
             start = Image.fromarray(np.rint(np.clip(start, 0, 255)).astype(np.uint8))
             generator = torch.Generator("cuda").manual_seed(job["seed"])
-            picture = refine(generator=generator, image=start, strength=strength, **arguments).images[0]
+            picture = ready(refine)(generator=generator, image=start, strength=strength, **arguments).images[0]
         else:
             generator = torch.Generator("cuda").manual_seed(job["seed"])
-            picture = pipe(generator=generator, **arguments).images[0]
+            picture = ready(pipe)(generator=generator, **arguments).images[0]
         previous_row, previous_picture = row, np.asarray(picture)
         np.save(row["result"], np.asarray(picture.resize((width, height), Image.LANCZOS), dtype=np.uint8))
         print(f"progress {index + 1} {total}", flush=True)

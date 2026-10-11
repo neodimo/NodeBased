@@ -23,10 +23,11 @@ activity log, and shares one undo stack. Read this with the `knowledge` topic `s
    reason; `cancel` stops it. Providers today are the local stand-ins `null` (returns the beauty
    unchanged) and `reproject`, and the real model `sdxl_controlnet` (SDXL with ControlNet-Union on the NVIDIA
    card; pick it when the brief asks for a new picture, not a copy of the layout render). It honours depth,
-   normals, text, seed and `sampler_settings` (`steps`, `guidance`, `controlnet_conditioning_scale`,
-   `control_mode`) and ignores motion, IDs, camera pose and reference frames. It makes each frame on its own
-   with the same seed, so expect flicker between frames and a motion check that reads "not conditioned"; text
-   is a description of the picture, not an instruction. A 24-frame shot at 480 by 270 takes about six minutes
+   normals, motion, IDs, text, seed and `sampler_settings` (`steps`, `guidance`, `controlnet_conditioning_scale`,
+   `control_mode`, `denoise_strength`) and ignores camera pose and reference frames. Each frame after the first
+   starts from the one before, carried along the exported motion, so the backdrop and lighting hold between
+   frames; the verification report's "Temporal" line measures what flicker is left. `denoise_strength` 1 makes
+   every frame on its own. Text is a description of the picture, not an instruction. A 24-frame shot at 480 by 270 takes about six minutes
    to generate on the 3080 Ti (about nine for the whole demo run), and the same brief and seed give the same ids. Pass a `seed` (default 0) and, if the provider uses them,
    `sampler_settings`; the reply's `controls` map says which the provider used or ignored. A text brief goes in
    `options` `{"text": ...}`; a provider that does not use text still runs the shot and the reply's `ignored` list

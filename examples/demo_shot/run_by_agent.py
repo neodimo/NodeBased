@@ -10,7 +10,10 @@ NodeBased window on demo_shot.nbcomp with the agent bridge open and the MCP serv
 (nodebased.mcpclient), and every step below is a tool call over that server: no call into the
 document, the evaluator or the pipeline from this script.
 
-    python examples/demo_shot/run_by_agent.py [--plate DIR] [--out DIR] [--cache DIR] [--graph FILE]
+    python examples/demo_shot/run_by_agent.py [--plate DIR] [--out DIR] [--cache DIR] [--graph FILE] [--provider NAME]
+
+`--provider sdxl_controlnet` has the agent generate with the real model (NVIDIA card); the provider holds the
+GPU lock for the length of its job.
 
 Plan: knowledge shot_workflow, describe, inspect, edit (plate path), export_conditioning, generate,
 verify, edit (the generated read, its connection, the Write path), edit render per frame,
@@ -38,7 +41,7 @@ def find(document, kind):
     return [key for key, node in document["nodes"].items() if node["type"] == kind]
 
 
-def run(plate, out, cache, graph=HERE / "demo_shot.nbcomp", frames=None, brief=BRIEF, log=print):
+def run(plate, out, cache, graph=HERE / "demo_shot.nbcomp", frames=None, brief=BRIEF, log=print, provider=None):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     with HeadlessSession(graph, cache) as mcp:
@@ -61,7 +64,7 @@ def run(plate, out, cache, graph=HERE / "demo_shot.nbcomp", frames=None, brief=B
         # 5. Generate: provider and seed from the Generate node, the brief as the text. The stand-in does
         #    not use text; the reply records it as ignored.
         result = mcp.call("generate", scene_state=exported["scene_state"], bundle=exported["control_bundle"],
-                          provider=settings["provider"], seed=settings["seed"], options={"text": brief})
+                          provider=provider or settings["provider"], seed=settings["seed"], options={"text": brief})
         log(f"generate: generated_sequence {result['generated_sequence']}  seed {result['seed']}")
         log(f"  controls: {json.dumps(result['controls'])}  ignored in this call: {result['ignored']}")
         # 6. Verify.
@@ -97,9 +100,11 @@ def main():
     parser.add_argument("--cache", default=str(shot.default_cache() / "store-agent"),
                         help="artifact store root (NODEBASED_CACHE for the window)")
     parser.add_argument("--graph", default=str(HERE / "demo_shot.nbcomp"))
+    parser.add_argument("--provider", default=None,
+                        help="provider for the generate call (default: the graph's Generate node's, reproject)")
     args = parser.parse_args()
     started = time.perf_counter()
-    summary = run(args.plate, args.out, args.cache, args.graph)
+    summary = run(args.plate, args.out, args.cache, args.graph, provider=args.provider)
     summary["output_pixel_digest"] = output_digest(args.out, summary["frames"])
     summary["tool_sequence"] = [f"{name} x{summary['tool_sequence'].count(name)}"
                                 for name in dict.fromkeys(summary["tool_sequence"])]
