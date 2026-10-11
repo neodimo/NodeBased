@@ -1,5 +1,65 @@
 ## 2026-10-10 — Lane 4 step R3 of 3: shadow catcher floor (DONE)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (5:16 AM on 2026-10-11 PDT)
+
+`main` moved `7f7f6081` -> `badda6bc` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 307 tests in 375.646 s, OK. Full suite on
+the stacked tip `badda6bc` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1011-0059.log`, started 12:59 AM): **Ran 5128 tests in 14819.570 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Gonzo's end-to-end sprint, stages 1 to 5 and 7: an attached agent gets the whole generative pipeline over MCP, seed and sampler settings are part of every result's identity, the first real model runs the demo shot, the shot runs by hand and by an agent to the same bytes, the new look's punch list is fixed, and a camera is solved from the plate alone at frame rate.** Commits:
+  - `1aa0bf6c` Tests: every window a test opens is closed (the tab layout test replaced its first window with a second and left it open, which kept the keyboard and left the radial menu ring open for the radial menu tests); the radial fixture checks it starts closed with one main window
+  - `e9b28d71` Docs: heavy sprint runs must not overlap the integrator's suite; the GPU lock
+  - `41a88a39` GPU jobs take an exclusive flock on the shared GPU lock: SDXL and DPVO camera-solve launchers and the demo script's GPU runs wait for a running suite and hold off new ones; tests use a private lock file
+  - `cc9684c4` Agent render: render_op takes the dispatcher and evaluates dispatcher.document at tier 1, so the render contract reads the same in the shared helper and the proxy purity test passes again
+  - `94e95111` Docs: stage 7 notes (DPVO and DROID-SLAM measured on the demo plate, integration, determinism, ids), demo README for --solver dpvo
+  - `03c0c748` CameraSolve3D node and solve_camera op: DPVO camera solve as a GPU subprocess provider, anchor and scale controls, Camera3D keys and point cloud written into the document; run_by_hand --solver dpvo
+  - `df533898` Docs: end-to-end sprint stage 7, real-time camera tracking (DPV-SLAM, DROID-SLAM, MASt3R-SLAM candidates)
+  - `51cc0d9e` SDXL provider: default interpreter path is built from the home folder, no home path in the source
+  - `3e4bffae` Docs: sdxl_controlnet in the provider contract, how an agent picks it, Stage 3 notes with the demo run, ids and three stills
+  - `8b333dfd` SDXL provider: model CPU offload by default so the pixels never depend on how much of the card other programs hold (a fallback after out-of-memory gave different bytes); NODEBASED_SDXL_OFFLOAD=never keeps it all on the card
+  - `ccfa8051` run_by_hand.py --provider NAME; the SDXL provider can hand its timings and peak VRAM to a caller through NODEBASED_SDXL_RUN_INFO
+  - `9687ee43` Fix ConditionedRead cache key: a generated-sequence artifact id is one path for every frame, so every frame rendered as frame 1; the frame joins the key (evaluator and tile executor), regression test
+  - `7e5bf3a6` SDXL ControlNet-Union provider: control images from depth and normals, model subprocess in its own interpreter, per-frame generation with a fixed seed; deterministic on the RTX 3080 Ti
+  - `c5a0ca13` Provider descriptions carry local_gpu; the worker leaves the address-space cap off for a GPU provider; providers is a package with its JSON as package data
+  - `2712bf00` Stage 4b notes: agent run, comparison and the real Claude Code run; worked example of the demo shot in SHOT_WORKFLOW
+  - `b8e855a2` Fix tile executor canvas size for a ConditionedRead chain (module function used self and node_id); regression test
+  - `2b176e03` MCP bridge waits an hour for export, generate, verify, loop and render replies; run_by_claude.py for one real Claude Code run
+  - `36525179` Scripted MCP agent for the demo shot, run comparison with the hand run; the desktop bridge serves the render op
+  - `cb1f9fb5` Agent panel and Conditioning Queue restyled to the new look, Render layout hides the other layouts' panels, stage 5 notes and screenshots
+  - `acda44f2` status bar state word at the left (Ready, Rendering, Playing, Saving); viewer no longer draws a dotted frame and size label around the canvas
+  - `c3c978f3` top bar search: node types, menu commands and settings in one list, Enter runs the first result
+  - `00be1978` Simulate and Render get their own dock layouts (saved and restored per tab in QSettings; Composite returns exactly), output preview panel, viewport lines clear of the viewer strip, 2D corner readouts hidden over the 3D viewport
+  - `06a2f724` family panel: opaque panel, no blurred backdrop (the timeline's green cache bar and playhead no longer ghost over the list rows); test opens every family panel
+  - `33b0bc4c` demo shot: layout holds the whole plate and named meshes, one generate call, diagnose_verdict.py, verdict PASS with ids and run time; README, BRIEF, sprint and conditioning docs
+  - `c74881c5` verify: score the plate against its own SceneState (render-seeded landmarks, ambient in the export, corner-only landmarks, no-shadow lighting), reproject 1.1 lines each frame up with its own camera and does not claim camera pose; generate records an unhonoured text brief as ignored and returns the ConditionedRead node; provider worker limits numpy threads and sizes its cap from the job
+  - `6d0e787c` demo shot: headless hand run through the agent dispatcher, repeatability test, README, agent BRIEF, stage 4a notes
+  - `81e6f0b5` demo shot: rendered plate generator with pixel hashes, camera solve from the plate, shot graph with the solved camera
+  - `12685d12` docs: seed contract, verifier pass handling and per-attempt seeds in the agent protocol, shot workflow and generative conditioning
+  - `197b24c7` Generate: seed and sampler_settings in the artifact identity; loop verifier judges every pass the sequence carries; fix header-only EXR from the capped worker
+  - `caef39e2` docs: shot_workflow knowledge topic and pipeline tools in the agent protocol
+  - `bc4d3e4f` MCP: export_conditioning, generate, verify, loop, artifacts and workspace tools for an attached agent
+  - `89bb827b` docs: end-to-end sprint plan (one shot, by hand and by an agent)
+  Diff: 84 files changed, 8866 insertions(+), 298 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R3 of 3: a shadow catcher floor that puts the CG object's shadow onto the filmed plate.** Commits:
+  - `411072c1` docs: R3 completion note in the task log and state
+  - `05a1544a` docs and example: Shadow catcher floors and Putting CG onto a plate sections, the recipe picture, and examples/shadow_catcher (a CG ball on the plate with a catcher road, a holdout post and a Merge)
+  - `dda69ae1` render: Shadow catcher switch on every mesh node; a catcher renders black with the shadow the scene's other objects throw on it as alpha, in the CPU and GPU raster, ray-traced and path-traced modes; depth sees the floor, the object-id pass and Cryptomatte do not
+  Diff: 19 files changed, 1835 insertions(+), 12 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step R6 of 3: Roto shapes move, scale and rotate as a whole, and follow the whole track.** Commits:
+  - `27a17d4e` roto: add shape transforms and multi-point move
+  Diff: 8 files changed, 262 insertions(+), 44 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** **Shadow catcher** on every mesh node (`Geometry.shadow_catcher`, off by default): black colour, alpha = how much
   light the other objects take from the floor (1 - shadowed/unshadowed; ambient, environments and all lights). All six renderers (CPU and GPU
   raster, ray-traced, path tracer) reach it through `nodebased/shadowcatch.py` (picture with the catcher as a holdout, shadow layer under it). Held to the
