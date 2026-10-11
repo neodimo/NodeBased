@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 
 PROVIDER_NAME = "sdxl_controlnet"
-DEFAULT_PYTHON = "/var/home/omid/.openclaw/workspace/projects/nb-providers/sdxl/.venv/bin/python"
+DEFAULT_PYTHON = str(Path.home() / ".openclaw/workspace/projects/nb-providers/sdxl/.venv/bin/python")
 PYTHON_ENV = "NODEBASED_SDXL_PYTHON"
 RUN_INFO_ENV = "NODEBASED_SDXL_RUN_INFO"
 OFFLOAD_ENV = "NODEBASED_SDXL_OFFLOAD"  # "never" keeps the whole pipeline on the card (faster, needs the card to itself)
