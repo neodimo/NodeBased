@@ -33,5 +33,29 @@ class ViewerSurroundTests(Base):
         self.assertEqual(image.pixelColor(2, image.height() // 2).name(), "#000000")
 
 
+class EmptyPropertiesTests(Base):
+    def test_no_text_in_the_panel_with_nothing_selected(self):
+        from PySide6.QtWidgets import QAbstractButton, QLabel, QLineEdit, QTextEdit
+        w = self.open_window((1440, 920))
+        w.graph.scene().clearSelection()
+        w.inspect(None)
+        settle()
+        panel = w.properties.widget()
+        self.assertIsNotNone(panel)
+        for label in panel.findChildren(QLabel):
+            self.assertEqual(label.text(), "", label.objectName())
+        for kind in (QAbstractButton, QLineEdit, QTextEdit):
+            self.assertEqual(panel.findChildren(kind), [])
+        self.assertIsNone(panel.findChild(QLabel, "properties-family-badge"))
+
+    def test_selecting_a_node_brings_the_badge_and_name_back(self):
+        from PySide6.QtWidgets import QLabel
+        w = self.open_window((1440, 920))
+        key = next(k for k, n in w.graph_nodes().items() if n["type"] == "Blur" or n["type"] == "Grade")
+        w.inspect(key)
+        settle()
+        self.assertIsNotNone(w.properties.widget().findChild(QLabel, "properties-family-badge"))
+
+
 if __name__ == "__main__":
     unittest.main()

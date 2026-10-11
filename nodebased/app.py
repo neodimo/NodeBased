@@ -9177,12 +9177,8 @@ class Window(QMainWindow):
         form = QFormLayout()
         form.setContentsMargins(16, 16, 16, 16)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        if key not in self.graph_nodes():
-            label = QLabel("Select a node to edit its controls.\n\nLinear ACEScg · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n2D compositing, 3D scenes and\nGPU rendering are all available today.")
-            label.setObjectName("muted")
-            form.addRow(label)
-            panel_layout.addWidget(label)
-        else:
+        # Nothing selected: an empty panel (DiMo, 10/11), no hint, no format lines, no blurb.
+        if key in self.graph_nodes():
             node = self.graph_nodes()[key]
             # One reusable properties template owns the editable title and its compact action
             # cluster.  The graph's label is the only other place the node name is repeated.
