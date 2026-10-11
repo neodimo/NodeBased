@@ -1759,7 +1759,8 @@ class Evaluator:
                 from . import bundle
                 fingerprint = bundle.fingerprint(params, frame)
             if kind == "ConditionedRead" and not node["disabled"]:
-                fingerprint = []
+                # The frame is part of the key: a generated-sequence artifact id is one path for every frame.
+                fingerprint = [int(frame) + int(params.get("frame_offset", 0))]
                 from .media import sequence_path
                 generated_path = sequence_path(params["path"],
                                                int(frame) + int(params.get("frame_offset", 0)))

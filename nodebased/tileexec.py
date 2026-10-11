@@ -174,6 +174,7 @@ def _compute_node_digests(document, tier, frame, solve=None):
             from .media import sequence_path
             generated_path = sequence_path(params["path"],
                                            int(frame) + int(params.get("frame_offset", 0)))
+            fingerprint = [int(frame) + int(params.get("frame_offset", 0))]  # an artifact id is one path for every frame
             for name, source_path in (("path", generated_path),
                                       ("manifest", params.get("manifest", "")),
                                       ("scene_state", params.get("scene_state", ""))):

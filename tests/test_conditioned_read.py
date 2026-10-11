@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -66,6 +68,20 @@ class ConditionedReadTests(unittest.TestCase):
             graph.execute({"op": "create", "id": "grade", "type": "Grade", "params": {}})
             graph.execute({"op": "connect", "id": "grade", "input": "image", "source": "read"})
             self.assertEqual(tileexec._canvas_size_for_chain(graph.document, "grade", 1, 1)[:2], (8, 8))
+
+    def test_artifact_id_path_renders_each_frame_not_the_first_one_again(self):
+        """A generated-sequence artifact id is one path for every frame; the cache key must still follow the frame."""
+        frames = [SimpleNamespace(frame=f, beauty=np.full((4, 4, 4), f / 10, np.float32), layers={}) for f in (1, 2, 3)]
+        graph = Dispatcher()
+        graph.execute({"op": "create", "id": "read", "type": "ConditionedRead",
+                       "params": {"path": "a" * 64, "manifest": "m.json", "scene_state": "s.json"}})
+        with mock.patch("nodebased.conditioned_read.read_conditioned_sequence", return_value=frames):
+            evaluator = Evaluator()
+            values = [float(evaluator.evaluate_raster(graph.document, "read", frame=f).pixels[0, 0, 0]) for f in (1, 2, 3)]
+            from nodebased import tileexec
+            digests = [tileexec._compute_node_digests(graph.document, 1, f)["read"] for f in (1, 2, 3)]
+        np.testing.assert_allclose(values, [0.1, 0.2, 0.3], atol=1e-6)
+        self.assertEqual(len(set(digests)), 3)
 
     def test_wrong_generated_colour_space_tag_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
