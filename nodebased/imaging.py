@@ -1342,7 +1342,8 @@ class Evaluator:
                             result = white_solver.step(previous_state, liquid_frame, solve_frame, substep, seed)
                             return _whitewater_cache_state(result)
                         if tier > 1:
-                            preview_run = simcache.run_key(run, {"preview_particles": 1, "tier": int(tier)})
+                            preview_run = simcache.run_key(run, {"preview_particles": 2, "tier": int(tier),
+                                                                  "point_budget": flip3d.PREVIEW_POINT_BUDGET})
                             solved = preview_store.get(preview_run, int(frame))
                         else:
                             preview_run = None
@@ -1355,7 +1356,8 @@ class Evaluator:
                                 solved = flip3d.preview_state(solved, fluid, tier)
                                 preview_store.put(preview_run, int(frame), solved)
                             else:
-                                preview_run = simcache.run_key(run, {"preview_particles": 1, "tier": 4})
+                                preview_run = simcache.run_key(run, {"preview_particles": 2, "tier": 4,
+                                                                      "point_budget": flip3d.PREVIEW_POINT_BUDGET})
                                 if preview_store.get(preview_run, int(frame)) is None:
                                     preview_store.put(preview_run, int(frame), flip3d.preview_state(solved, fluid, 4))
                         value = replace(whitewater.instance_from_state(_whitewater_state(solved), incoming, frame),

@@ -1809,18 +1809,90 @@ def _volume_preview_state(volume, tier):
                           "origin": list(reduced.origin)}, copy=False)
 
 
+# Playback artifacts have a fixed memory and decode budget, independent of solver resolution.
+PREVIEW_VOLUME_EDGE = 48
+
+
+def _fixed_preview_volume_state(volume):
+    """Encode a compact 48-cubed density/temperature frame for playback-only reads."""
+    from .simcache import State
+
+    edge = PREVIEW_VOLUME_EDGE
+    source = np.asarray(volume.density, dtype=np.float32)
+    factors = np.asarray(source.shape, dtype=np.float64) / edge
+    def sample(field):
+        if field is None:
+            return None
+        arr = np.asarray(field, dtype=np.float32)
+        for axis in range(3):
+            size = arr.shape[axis]
+            coordinate = np.clip((np.arange(edge, dtype=np.float64) + 0.5) * size / edge - 0.5, 0, size - 1)
+            low = np.floor(coordinate).astype(np.intp)
+            high = np.minimum(low + 1, size - 1)
+            weight = (coordinate - low).astype(np.float32)
+            shape = [1] * arr.ndim
+            shape[axis] = edge
+            arr = (np.take(arr, low, axis=axis) * (1.0 - weight.reshape(shape))
+                   + np.take(arr, high, axis=axis) * weight.reshape(shape)).astype(np.float32, copy=False)
+        return arr
+
+    density = np.maximum(sample(source), 0.0)
+    full_sum = float(np.sum(source, dtype=np.float64))
+    reduced_sum = float(np.sum(density, dtype=np.float64))
+    cell_factor = float(np.prod(factors))
+    if reduced_sum > 0.0 and full_sum > 0.0:
+        density *= np.float32(full_sum / (reduced_sum * cell_factor))
+    peak = float(np.max(density, initial=0.0))
+    density_scale = peak / 255.0 if peak else 1.0
+    arrays = {"density_u8": np.clip(np.rint(density / density_scale), 0, 255).astype(np.uint8)}
+    temperature = sample(volume.temperature)
+    if temperature is not None:
+        tmin = float(np.min(temperature, initial=0.0))
+        tmax = float(np.max(temperature, initial=0.0))
+        tscale = (tmax - tmin) / 255.0 if tmax > tmin else 1.0
+        arrays["temperature_u8"] = np.clip(np.rint((temperature - tmin) / tscale), 0, 255).astype(np.uint8)
+    transform = np.eye(4, dtype=np.float64)
+    transform[:3, :3] = np.diag(factors)
+    origin_matrix = np.eye(4, dtype=np.float64)
+    origin_matrix[:3, 3] = volume.origin
+    arrays["__matrix"] = np.asarray(volume.matrix, dtype=np.float32) @ origin_matrix.astype(np.float32) @ transform.astype(np.float32)
+    return State(arrays, {"preview_artifact": 1, "preview_tier": 4, "voxel_size": float(volume.voxel_size),
+                          "origin": [0.0, 0.0, 0.0], "density_scale": density_scale,
+                          "density_sum": full_sum, "cell_factor": cell_factor,
+                          "temperature_min": 0.0 if temperature is None else tmin,
+                          "temperature_scale": 1.0 if temperature is None else tscale}, copy=False)
+
+
+def _fixed_preview_volume_value(state, stream, frame, name=""):
+    from .scene3d import Volume
+    density = state.arrays["density_u8"].astype(np.float32) * float(state.meta["density_scale"])
+    factor = float(state.meta["cell_factor"])
+    total = float(np.sum(density, dtype=np.float64)) * factor
+    target = float(state.meta["density_sum"])
+    if total > 0.0 and target > 0.0:
+        density *= np.float32(target / total)
+    temp = state.arrays.get("temperature_u8")
+    temperature = None if temp is None else (temp.astype(np.float32) * float(state.meta["temperature_scale"])
+                                               + float(state.meta["temperature_min"]))
+    return Volume(density, voxel_size=float(state.meta["voxel_size"]), origin=(0.0, 0.0, 0.0),
+                  matrix=state.arrays["__matrix"], temperature=temperature, stream=stream, frame=int(frame),
+                  name=name, proxy_tier=4)
+
+
 def cached_volume(stream, frame, store, cancel, precision, channels, name="", tier=1, preview_store=None):
     """Read a served volume or its persistent, reduced-resolution display companion."""
     names = CHANNEL_SETS[channels]
     sparse = getattr(stream, "backend", None) == "resident_sparse"
     preview_store = store if preview_store is None else preview_store
     out_run = simcache.run_key(stream.run, {"out": [precision, channels] + (["sparse"] if sparse else [])})
-    preview_run = simcache.run_key(out_run, {"preview_volume": 1, "tier": 4})
+    preview_run = simcache.run_key(out_run, {"preview_artifact": 1, "volume_edge": PREVIEW_VOLUME_EDGE})
     tier = int(tier)
     if tier > 1:
-        run = simcache.run_key(out_run, {"preview_volume": 1, "tier": tier})
+        run = preview_run if tier == 4 else simcache.run_key(out_run, {"preview_volume": 1, "tier": tier})
         preview = preview_store.get(run, int(frame))
         if preview is not None:
+            if preview.meta.get("preview_artifact"):
+                return _fixed_preview_volume_value(preview, stream, frame, name)
             return _cached_volume_value(preview, stream, frame, name, False, store)
     else:
         run = preview_run
@@ -1845,11 +1917,12 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name="", ti
     full = _cached_volume_value(got, stream, frame, name, sparse, store)
     if tier <= 1:
         if preview_store.get(preview_run, int(frame)) is None:
-            preview_store.put(preview_run, int(frame), _volume_preview_state(full, 4))
+            preview_store.put(preview_run, int(frame), _fixed_preview_volume_state(full))
         return full
 
     # First access to an old cache lazily creates its proxy; subsequent scrubs fetch only the
     # reduced arrays. Baking at tier 1 pre-populates the default quarter-resolution companion.
-    proxy = _volume_preview_state(full, tier)
+    proxy = _fixed_preview_volume_state(full) if tier == 4 else _volume_preview_state(full, tier)
     preview_store.put(run, int(frame), proxy)
-    return _cached_volume_value(proxy, stream, frame, name, False, store)
+    return (_fixed_preview_volume_value(proxy, stream, frame, name) if proxy.meta.get("preview_artifact")
+            else _cached_volume_value(proxy, stream, frame, name, False, store))

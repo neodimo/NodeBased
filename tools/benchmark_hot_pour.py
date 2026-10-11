@@ -282,8 +282,7 @@ def playback(args, document, evaluator, gpu):
             store.profile = profile
         gpu["profile"] = profile
     preview_tier = int(getattr(args, "preview_tier", 4))
-    workloads = [("steam volume alone", "steam_volume_scene", 1), ("whole scene", "scene", 1),
-                 (f"whole scene preview 1/{preview_tier}", "scene", preview_tier)]
+    workloads = [("steam volume alone", "steam_volume_scene", 1), ("whole scene", "scene", 1)]
     for label, node, tier in workloads:
         times = []
         playback_frames = ([profile_frame] if getattr(args, "profile_only", False) else range(1, args.frames + 1))
@@ -315,6 +314,54 @@ def playback(args, document, evaluator, gpu):
                           "draw_ms_median": round(statistics.median(draw) * 1000, 1)}
     if frame_profile is not None:
         results["frame_profile"] = frame_profile
+
+    # A separate evaluator proves playback uses only persistent preview artifacts: its first
+    # scene evaluation starts with empty in-memory caches and does not inherit the full-frame
+    # values loaded above by the full-detail rows.
+    from nodebased import simcache
+    from nodebased.imaging import Evaluator
+    sim_root = evaluator.sim_template.root
+    def fresh_preview_evaluator():
+        return Evaluator(sim=simcache.SimCache(root=sim_root, memory_budget=2 << 30,
+                                               disk_budget=400_000 << 20))
+
+    preview_eval = fresh_preview_evaluator()
+    playback_frames = ([profile_frame] if getattr(args, "profile_only", False) else range(1, args.frames + 1))
+    def preview_pass(label):
+        times = []
+        for f in playback_frames:
+            started = time.perf_counter()
+            scene = preview_eval.evaluate_raster(document, "scene", frame=f, tier=preview_tier, typed=True)
+            from nodebased.scene3d import proxy_scene
+            scene = proxy_scene(scene, preview_tier)
+            fetched = time.perf_counter()
+            image = renderer.render(scene, camera, max(1, -(-args.play_width // preview_tier)),
+                                    max(1, -(-args.play_height // preview_tier)),
+                                    (0.02, 0.02, 0.025, 1.0), ambient=0.2)
+            done = time.perf_counter()
+            times.append((fetched - started, done - fetched))
+            if args.progress and f % 10 == 0:
+                print(f"  playback {label} frame {f}: {(done - started):.2f} s", flush=True)
+        fetch, draw = [x[0] for x in times], [x[1] for x in times]
+        total = [a + b for a, b in times]
+        results[label] = {"fps_median": round(1.0 / statistics.median(total), 2),
+                          "fps_mean": round(len(total) / sum(total), 2),
+                          "fetch_ms_median": round(statistics.median(fetch) * 1000, 1),
+                          "draw_ms_median": round(statistics.median(draw) * 1000, 1)}
+
+    preview_pass(f"whole scene preview 1/{preview_tier} cold")
+    preview_pass(f"whole scene preview 1/{preview_tier} warm")
+    stop_eval = fresh_preview_evaluator()
+    stop_frame = max(1, args.frames // 2)
+    stop_eval.evaluate_raster(document, "scene", frame=stop_frame, tier=preview_tier, typed=True)
+    start = time.perf_counter()
+    scene = stop_eval.evaluate_raster(document, "scene", frame=stop_frame, tier=1, typed=True)
+    fetched = time.perf_counter()
+    renderer.render(scene, camera, args.play_width, args.play_height, (0.02, 0.02, 0.025, 1.0), ambient=0.2)
+    done = time.perf_counter()
+    results["stop_to_full_detail"] = {"frame": stop_frame, "fetch_ms": round((fetched - start) * 1000, 1),
+                                      "draw_ms": round((done - fetched) * 1000, 1),
+                                      "total_ms": round((done - start) * 1000, 1)}
     return results
 
 

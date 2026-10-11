@@ -1033,16 +1033,24 @@ def solve_frame(stream, frame, cache, cancel=None):
 def preview_cache_run(run, tier):
     """Stable side-cache identity for display-only particle samples."""
     from . import simcache
-    return simcache.run_key(run, {"preview_particles": 1, "tier": int(tier)})
+    return simcache.run_key(run, {"preview_particles": 2, "tier": int(tier),
+                                  "point_budget": PREVIEW_POINT_BUDGET})
+
+
+PREVIEW_POINT_BUDGET = 20_000
 
 
 def preview_state(state, stream, tier):
-    """Thin a cached FLIP state once, retaining every particle attribute and silhouette extrema."""
+    """Thin a cached FLIP/whitewater state once, retaining attributes and bounds within a fixed budget."""
     from .simcache import State
     tier = int(tier)
     positions = np.asarray(state.arrays.get("position", ()))
-    if tier <= 1 or not len(positions):
+    if tier <= 1:
         return state
+    if not len(positions):
+        arrays = dict(state.arrays)
+        arrays.setdefault("radius", np.zeros(0, np.float32))
+        return State(arrays, {**state.meta, "preview_tier": tier}, copy=False)
     spacing = max(float(stream.spacing) * tier, 1e-9)
     origin = np.asarray(state.meta.get("domain_origin", stream.origin), dtype=np.float64)
     cells = np.floor((positions - origin) / spacing).astype(np.int64)
@@ -1050,10 +1058,20 @@ def preview_state(state, stream, tier):
     boundary = {int(np.argmin(positions[:, axis])) for axis in range(3)}
     boundary.update(int(np.argmax(positions[:, axis])) for axis in range(3))
     indices = np.asarray(sorted(set(first.tolist()) | boundary), dtype=np.int64)
+    if len(indices) > PREVIEW_POINT_BUDGET:
+        # Uniform deterministic sampling bounds both cache size and draw work. Reinsert all
+        # six extrema, then fill the remaining slots at even intervals through spatial order.
+        mandatory = np.asarray(sorted(boundary), dtype=np.int64)
+        candidates = np.setdiff1d(indices, mandatory, assume_unique=True)
+        slots = max(0, PREVIEW_POINT_BUDGET - len(mandatory))
+        chosen = candidates[np.linspace(0, len(candidates) - 1, slots, dtype=np.int64)] if slots else np.empty(0, np.int64)
+        indices = np.sort(np.concatenate((mandatory, chosen)))
     if len(indices) >= len(positions):
-        return state
+        indices = np.arange(len(positions), dtype=np.int64)
     arrays = {name: (value[indices] if np.ndim(value) and len(value) == len(positions) else value)
               for name, value in state.arrays.items()}
+    if "radius" not in arrays:
+        arrays["radius"] = np.asarray(arrays.get("size", np.ones(len(indices), np.float32)), dtype=np.float32)
     return State(arrays, {**state.meta, "preview_tier": tier}, copy=False)
 
 
