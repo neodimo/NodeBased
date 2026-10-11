@@ -101,8 +101,9 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "ConditionedRead": "#d9b87
           "FluidWhitewater3D": "#a9d8d0",
           "RigidBody3D": "#b7a1e8", "RigidSolver3D": "#9a83d1"}
 
-# The accent (10/11, punch list 2): the first mint, #5ee0b5, was too bright against the charcoal
-# surfaces; the default is now a muted teal (HSL 172, 36, 56) and the old one is the "Mint" choice below.
+# The accent (10/11, punch list 2): the first mint, #5ee0b5, was too bright against the charcoal surfaces.
+# DiMo 10/11 2:55 PM: an orangish amber like Nuke's selection colour. The mint and the muted teal that was
+# tried in between stay as the "Mint" and "Muted teal" choices below.
 # ---- Design tokens of the new look (approved 10/8; values from the main-window mockup's :root) ----
 # Everything the stylesheet and the chrome widgets paint with comes from here, so a colour, a
 # radius or a type size changes in exactly one place. Widget code reads TOKENS / FAMILY_COLORS /
@@ -111,13 +112,13 @@ TOKENS = {
     "bg0": "#0b0d10", "bg1": "#111418", "bg2": "#161a1f", "bg3": "#1c2127",     # surfaces, deepest first
     "line": "#232930", "line2": "#2c333b",                                      # 1 px hairlines
     "tx0": "#e9edf1", "tx1": "#b4bcc6", "tx2": "#7d8793", "tx3": "#56606b",     # text, strongest first
-    "acc": "#66b7ac", "acc2": "#4da397", "acc_ink": "#0e1f1d",                  # accent, deeper accent, text on it
-    "accbg": "rgba(102, 183, 172, 0.12)",                                       # accent wash (hover, selection)
+    "acc": "#e0a24a", "acc2": "#c0842f", "acc_ink": "#2a1a05",                  # accent, deeper accent, text on it
+    "accbg": "rgba(224, 162, 74, 0.12)",                                         # accent wash (hover, selection)
     "mark_b": "#56c2ff", "mark_c": "#9aa8ff",                                   # logo rim colours
     "bar_top": "#12161a", "bar_bottom": "#0f1215",                              # top bar gradient
     "danger": "#ff6b6b", "warn": "#f39a4c", "shadow": "rgba(0, 0, 0, 0.4)",
     "glass": "rgba(17, 20, 24, 0.85)",                                          # panels floating over the graph
-    "acc_ring": "rgba(102, 183, 172, 0.40)",                                     # accent outline on a checked chip
+    "acc_ring": "rgba(224, 162, 74, 0.40)",                                       # accent outline on a checked chip
     "hud": "rgba(17, 20, 24, 0.94)",                                            # the viewer's floating strip
     "ch_r": "#ff6b6b", "ch_g": "#7be07b", "ch_b": "#6cc4ff",                    # the R, G and B channel buttons
 }
@@ -185,7 +186,7 @@ THEMES = {
 DEFAULT_THEME = "NodeBased"
 
 # Accent choices layered over any theme. "Theme default" (None) keeps the theme's own accent.
-ACCENTS = {"Theme default": None, "Mint": "#5ee0b5", "Teal": "#83cbb7", "Sky": "#7fc4d9", "Blue": "#89aff0",
+ACCENTS = {"Theme default": None, "Mint": "#5ee0b5", "Muted teal": "#66b7ac", "Teal": "#83cbb7", "Sky": "#7fc4d9", "Blue": "#89aff0",
            "Violet": "#b59cf0", "Pink": "#e592c0", "Red": "#e67c7c", "Orange": "#e89a5b",
            "Amber": "#e0b06a", "Lime": "#a9cf6e"}
 

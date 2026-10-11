@@ -24,7 +24,7 @@ class ThemeTokenTests(unittest.TestCase):
         self.assertEqual((t["line"], t["line2"]), ("#232930", "#2c333b"))
         self.assertEqual([t[k] for k in ("tx0", "tx1", "tx2", "tx3")],
                          ["#e9edf1", "#b4bcc6", "#7d8793", "#56606b"])
-        self.assertEqual(t["acc"], "#66b7ac")
+        self.assertEqual(t["acc"], "#e0a24a")
 
     def test_the_thirteen_family_colours_have_no_yellow(self):
         self.assertEqual(theme.FAMILY_COLORS, {

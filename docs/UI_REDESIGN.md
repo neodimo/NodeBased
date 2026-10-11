@@ -261,11 +261,11 @@ Screenshots (offscreen, 1920 x 1080, `examples/mixed_scene`): `docs/images/ui-re
   left column's stroke language. Keys: Left / Right step, Alt+Left / Alt+Right previous / next keyframe,
   Home / End, Space play / stop, in the viewer L plays, J plays backwards (while playing forwards J still
   stops and steps back, as before) and K stops.
-- **Accent.** The default accent is a muted teal, `#66b7ac` (HSL 172, 36, 56; the old `#5ee0b5` was 160, 68, 62),
-  with `acc2` `#4da397`, ink `#0e1f1d` (8:1 on the accent) and washes at 12 and 40 percent. The old mint is the
-  "Mint" choice in Settings. The other themes' own accents were already pastel and are unchanged.
-  Candidates compared in `pl2-4-accent-candidates.png`: A muted teal (chosen: keeps the product's teal),
-  B slate blue (reads like the Merge family blue), C dusk cyan.
+- **Accent.** The default accent is an amber in the family of Nuke's selection orange, `#e0a24a` (HSL 35, 71, 58;
+  the old mint `#5ee0b5` was 160, 68, 62), with `acc2` `#c0842f`, ink `#2a1a05` and washes at 12 and 40 percent.
+  DiMo chose it on 10/11 over the muted teal `#66b7ac` first proposed; both the mint and the muted teal stay as
+  named choices in Settings. The other themes' own accents were already pastel and are unchanged.
+  The first candidates are compared in `pl2-4-accent-candidates.png`; the amber is in `pl2-4-accent-amber.png`.
 - **Playback unit.** The viewer strip and the timeline are one quiet unit: one tone (`bg1`), 28 px controls on an
   8 px rhythm, no drawn separators. The ruler spans the full width on top (1 px ticks, thin key ticks, a 2 px
   cached-frames line, a 1 px playhead with a small flag); under it one row: the frame field, the transport

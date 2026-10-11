@@ -222,9 +222,12 @@ class AccentTests(unittest.TestCase):
         tokens = theme.TOKENS
         _, old_s, old_l = _hsl("#5ee0b5")
         _, s, l = _hsl(tokens["acc"])
+        # DiMo 10/11 2:55 PM: a Nuke-like amber. Lightness stays in the band and under the old mint's; the hue
+        # is the change, so saturation is not bounded.
         self.assertTrue(0.55 <= l <= 0.65, l)
-        self.assertLess(s, old_s * 0.65)
         self.assertLessEqual(l, old_l)
+        h, _, _ = _hsl(tokens["acc"])
+        self.assertTrue(25 <= h <= 45, h)   # orange to amber, in degrees
         self.assertGreaterEqual(_contrast(tokens["acc"], tokens["acc_ink"]), 4.5)
         self.assertGreaterEqual(_contrast(tokens["acc2"], tokens["acc_ink"]), 3.0)
         # The washes follow the accent.
@@ -235,8 +238,9 @@ class AccentTests(unittest.TestCase):
 
     def test_the_old_mint_is_still_a_named_choice(self):
         self.assertEqual(theme.ACCENTS["Mint"], "#5ee0b5")
-        self.assertEqual(len(theme.ACCENTS), 11)
-        self.assertEqual(len(set(theme.ACCENTS.values())), 11)
+        self.assertEqual(theme.ACCENTS["Muted teal"], "#66b7ac")
+        self.assertEqual(len(theme.ACCENTS), 12)
+        self.assertEqual(len(set(theme.ACCENTS.values())), 12)
         for name, value in theme.ACCENTS.items():
             if value is not None:
                 self.assertEqual(theme.valid_accent(value), value, name)
