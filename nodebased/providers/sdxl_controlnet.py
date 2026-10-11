@@ -28,6 +28,7 @@ PROVIDER_NAME = "sdxl_controlnet"
 DEFAULT_PYTHON = "/var/home/omid/.openclaw/workspace/projects/nb-providers/sdxl/.venv/bin/python"
 PYTHON_ENV = "NODEBASED_SDXL_PYTHON"
 RUN_INFO_ENV = "NODEBASED_SDXL_RUN_INFO"
+OFFLOAD_ENV = "NODEBASED_SDXL_OFFLOAD"  # "never" keeps the whole pipeline on the card (faster, needs the card to itself)
 BASE_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 VAE_MODEL = "madebyollin/sdxl-vae-fp16-fix"
 CONTROLNET_MODEL = "xinsir/controlnet-union-sdxl-1.0"
@@ -251,14 +252,14 @@ def _model_main(job_path):
     work_w, work_h = working_size(width, height)
     started = time.perf_counter()
     pipe = _load_pipeline(torch)
-    offloaded = False
-    try:
-        pipe.to("cuda")
-    except torch.cuda.OutOfMemoryError:
-        pipe.to("cpu")
-        torch.cuda.empty_cache()
+    # Model CPU offload always, unless NODEBASED_SDXL_OFFLOAD=never. The whole pipeline fits the 12 GB card only
+    # when nothing else uses it, and a fallback after an out-of-memory error leaves the pipeline in a different
+    # state (the same seed then gave different pixels), so the memory strategy never depends on what else runs.
+    offloaded = os.environ.get(OFFLOAD_ENV) != "never"
+    if offloaded:
         pipe.enable_model_cpu_offload()
-        offloaded = True
+    else:
+        pipe.to("cuda")
     loaded = time.perf_counter()
     torch.cuda.reset_peak_memory_stats()
     names = {"depth": "depth", "normals": "normals"}
@@ -275,17 +276,7 @@ def _model_main(job_path):
             num_inference_steps=settings["steps"], guidance_scale=settings["guidance"],
             width=work_w, height=work_h, output_type="pil")
         generator = torch.Generator("cuda").manual_seed(job["seed"])
-        try:
-            picture = pipe(generator=generator, **arguments).images[0]
-        except torch.cuda.OutOfMemoryError:
-            if offloaded:
-                raise
-            pipe.to("cpu")
-            torch.cuda.empty_cache()
-            pipe.enable_model_cpu_offload()
-            offloaded = True
-            generator = torch.Generator("cuda").manual_seed(job["seed"])
-            picture = pipe(generator=generator, **arguments).images[0]
+        picture = pipe(generator=generator, **arguments).images[0]
         np.save(row["result"], np.asarray(picture.resize((width, height), Image.LANCZOS), dtype=np.uint8))
         print(f"progress {index + 1} {total}", flush=True)
     import diffusers
