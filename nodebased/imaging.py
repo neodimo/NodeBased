@@ -977,8 +977,8 @@ class Evaluator:
             # slots — like the new "mask" input on image-filter nodes — are allowed to be None and
             # the kernel treats that as identity (mask.a = 1, no extra gating).
             required = set(_SPECS.get(kind, {}).get("inputs", []))
-            if kind == "Generate" and active_inputs.get("image") is None:
-                raise ValueError("Generate: connect a source plate image")
+            if kind in ("Generate", "CameraSolve3D") and active_inputs.get("image") is None:
+                raise ValueError(f"{kind}: connect a source plate image")
             missing = [slot for slot, source in active_inputs.items() if source is None and slot in required]
             if kind == "Merge" and not node["disabled"] and len(missing) == 1:
                 # Nuke's Merge: an empty A passes B through; an empty B is transparent black.
@@ -2688,10 +2688,10 @@ class Evaluator:
             if match is None:
                 raise ValueError(f"ConditionedRead has no exported frame {frame}")
             return Raster(match.beauty, layers=match.layers)
-        if kind == "Generate":
+        if kind in ("Generate", "CameraSolve3D"):
             source = inputs[0] if inputs else None
             if source is None:
-                raise ValueError("Generate: connect a source plate image")
+                raise ValueError(f"{kind}: connect a source plate image")
             # Provider execution is an explicit panel action. The node itself is a Write-like tap
             # so evaluating the graph never launches a model or changes the live plate.
             return source

@@ -469,6 +469,7 @@ REGION_RULES = {
     "ReadBundle": _generator,   # whole-image path only: it has no tile-native implementation
     "ConditionedRead": _generator,  # bundle alignment is a whole-sequence read
     "Generate": _identity,  # provider-write tap keeps the plate flowing through the graph
+    "CameraSolve3D": _identity,  # the solve is an explicit op; the plate flows through unchanged
     "Constant": _generator,
     "Checker": _generator,
     "Roto": _identity,   # its only input, the optional bg plate, is read pointwise

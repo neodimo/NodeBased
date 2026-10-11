@@ -14,7 +14,7 @@ import threading
 
 from .pids import pid_alive
 
-KINDS = {"scene_state", "control_bundle", "generated_sequence", "verification_report", "provider_description", "worker_log"}
+KINDS = {"scene_state", "control_bundle", "generated_sequence", "verification_report", "provider_description", "worker_log", "camera_solve"}
 _THREAD_LOCKS = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
 

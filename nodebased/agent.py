@@ -135,6 +135,11 @@ def main():
                     from .imaging import Evaluator
                     evaluator = evaluator or Evaluator()
                     return render_op(evaluator, dispatcher.document, cmd)
+                if cmd.get("op") == "solve_camera":
+                    from .camera_solve import solve_camera_op
+                    from .imaging import Evaluator
+                    evaluator = evaluator or Evaluator()
+                    return solve_camera_op(evaluator, dispatcher, cmd)
                 return dispatcher.execute(cmd)
             result = response(dispatch, request)
         except (ValueError, UnicodeError) as error:

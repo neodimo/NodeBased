@@ -8460,6 +8460,13 @@ class Window(QMainWindow):
             from .imaging import Evaluator
             self._agent_evaluator = getattr(self, "_agent_evaluator", None) or Evaluator()
             return render_op(self._agent_evaluator, self.dispatcher.document, cmd)
+        if cmd.get("op") == "solve_camera":
+            from .camera_solve import solve_camera_op
+            from .imaging import Evaluator
+            self._agent_evaluator = getattr(self, "_agent_evaluator", None) or Evaluator()
+            result = solve_camera_op(self._agent_evaluator, self.dispatcher, cmd)
+            self.after_command()
+            return result
         if cmd.get("op") == "workspace":
             self.select_workspace_tab(cmd.get("tab"))
             return {"tab": self.workspace_tab}

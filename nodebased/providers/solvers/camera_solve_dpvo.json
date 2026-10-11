@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "kind": "camera_solve",
+  "name": "camera_solve_dpvo",
+  "version": "1.0",
+  "locality": "local",
+  "local_gpu": true,
+  "accepts": {
+    "images": {"accepted": true, "role": "the plate as 8-bit display sRGB frames (the node's image input through the working-to-sRGB display transform), at least 8 frames; the longer the move the better DPVO initialises"},
+    "intrinsics": {"accepted": true, "role": "focal length in pixels, square pixels and the image centre as the principal point; DPVO does not estimate them, it uses what it is given"},
+    "seed": {"accepted": true, "role": "torch, numpy and CUDA seed; fixes the random patch choice (unseeded runs differ by about 0.1 solve unit, seeded runs by about 3e-4 because the bundle adjustment kernel adds floats with CUDA atomics, so two solves are never guaranteed bit-identical: the solve is kept in the document, not recomputed)"},
+    "loop_closure": {"accepted": true, "role": "DPV-SLAM proximity loop closure on (1) or off (0)"}
+  },
+  "limits": {"max_resolution": [1920, 1080], "max_frames": 2000, "min_frames": 12},
+  "returns": {"poses": "camera-to-world 4x4 per frame, OpenCV axes (x right, y down, z forward), up to scale, first frame is not the identity",
+              "points": "sparse patch cloud, solve units, with an 8-bit colour per point",
+              "scale": "the solve is monocular: scale comes from the node's unit_scale or two surveyed points"},
+  "environment": {"interpreter_variable": "NODEBASED_SLAM_PYTHON", "directory_variable": "NODEBASED_DPVO_DIR",
+                  "gpu": "NVIDIA card through CUDA only (RTX 3080 Ti, 12 GB); about 0.5 GB for a 960x540 plate",
+                  "setup": "projects/nb-providers/slam/setup.sh",
+                  "models": ["princeton-vl/DPVO dpvo.pth (14 MB)"]},
+  "measured": {"plate": "demo shot, 24 frames, 960x540, seed 0",
+               "translation_rms_after_similarity": "about 2 cm of a 1.47 m path", "rotation_mean_deg": 0.03,
+               "frames_per_second_after_warmup": 45, "peak_vram_mb": 500}
+}

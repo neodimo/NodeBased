@@ -822,6 +822,15 @@ SPECS = {
     # the panel action writes a generated sequence for ConditionedRead. Bundle/provider settings
     # remain part of the node params and therefore of both evaluator and tile content digests.
     "Generate": {"inputs": ["image"], "params": {"provider": "reproject", "manifest": "", "scene_state": "", "output_path": "generated.%04d.exr", "text": "", "seed": 0, "sampler_settings": ""}},
+    # CameraSolve3D is a provider tap like Generate (the plate passes through unchanged). The `solve_camera` op
+    # runs the learned monocular SLAM on the plate and writes a Camera3D with a key on every frame and a point
+    # cloud into the document (nodebased/camera_solve.py). The solve is up to scale: `unit_scale` is scene units
+    # per solve unit, or the op takes two surveyed points; the anchor_* knobs are the camera on the first frame.
+    "CameraSolve3D": {"inputs": ["image"], "params": {
+        "provider": "camera_solve_dpvo", "loop_closure": 0, "seed": 0,
+        "focal": filmback.DEFAULT_FOCAL, "vaperture": filmback.DEFAULT_VAPERTURE, "unit_scale": 1.0,
+        "anchor_tx": 0.0, "anchor_ty": 0.0, "anchor_tz": 5.0, "anchor_target_x": 0.0, "anchor_target_y": 0.0,
+        "anchor_target_z": 0.0, "anchor_roll": 0.0, "solve": ""}},
     # Bounded 3D foundation. Geometry/camera nodes are typed scene data; Render3D is the
     # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
     # Every 3D parameter has its own name (tx, card_width, ...) because LIMITS and CHOICES are
@@ -1587,6 +1596,9 @@ LIMITS.update({"reflections": (0.0, 1.0)})
 LIMITS.update({"indirect": (0.0, 1.0)})
 LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
 LIMITS.update({"voxel_scale": (0.0001, 10000.0)})
+LIMITS.update({"loop_closure": (0, 1), "unit_scale": (0.000001, 1000000.0),
+               **{name: (-1000000.0, 1000000.0) for name in
+                  ("anchor_tx", "anchor_ty", "anchor_tz", "anchor_target_x", "anchor_target_y", "anchor_target_z", "anchor_roll")}})
 LIMITS.update({"vdb_write_overwrite": (0, 1), "vdb_write_half": (0, 1), "vdb_write_narrow_band": (0.5, 20.0),
                "cache_resolution": (0.05, 1.0)})
 LIMITS.update({"wrap_resolution": (2, 128), "wrap_offset": (-1000000.0, 1000000.0),
