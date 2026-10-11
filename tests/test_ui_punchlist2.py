@@ -8,7 +8,8 @@ from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 
 import tests.isolation  # noqa: F401  (keeps the window's layout out of the real Qt settings)
 from nodebased import theme, viewport3d
-from nodebased.timeline import playhead_at
+from nodebased.timeline import PLAYHEAD_WIDTH, TimelineBar, playhead_at
+from nodebased.theme import TOKENS
 from tests.test_new_look_viewer_strip_nl5 import Base
 
 APP = QApplication.instance() or QApplication([])
@@ -248,6 +249,63 @@ class AccentTests(unittest.TestCase):
             if path.name == "theme.py":
                 continue
             self.assertNotIn("5ee0b5", text.lower(), path.name)
+
+
+class PlaybackUnitTests(Base):
+    def test_every_control_in_the_unit_is_28_px_and_on_the_8_px_grid(self):
+        from PySide6.QtWidgets import QAbstractSpinBox, QComboBox
+        w = self.open_window((1440, 920))
+        settle()
+        controls = [c for c in w.time_row.findChildren(QToolButton) + w.time_row.findChildren(QAbstractSpinBox)
+                    if c.isVisible()]
+        self.assertGreaterEqual(len(controls), 12)
+        for control in controls:
+            expected = 28 if isinstance(control, QToolButton) else 28
+            self.assertLessEqual(abs(control.height() - expected), 2, control.objectName())
+        strip = w.viewer_strip
+        for control in strip.findChildren(QToolButton) + strip.findChildren(QAbstractSpinBox):
+            if control.isVisible():
+                self.assertEqual(control.height(), 28, control.objectName() or type(control).__name__)
+        gaps = w.time_row.controls.spacing()
+        self.assertEqual(gaps % 8, 0)
+        self.assertEqual(w.time_row.controls.contentsMargins().left() % 8, 0)
+
+    def test_the_unit_is_one_tone_with_no_separator_or_box(self):
+        from PySide6.QtWidgets import QFrame
+        w = self.open_window((1440, 920))
+        settle()
+        image = w.time_row.grab().toImage()
+        ruler = w.frame_slider
+        bar_y = ruler.mapTo(w.time_row, ruler.rect().topLeft()).y()
+        tone = TOKENS["bg1"]
+        # The ruler, the controls and the gaps between them all sit on the one tone (bg1).
+        samples = [(w.time_row.width() - 4, bar_y + 18), (w.time_row.width() - 4, w.time_row.height() - 4),
+                   (4, w.time_row.height() - 4)]
+        for x, y in samples:
+            self.assertEqual(image.pixelColor(x, y).name(), tone, (x, y))
+        self.assertEqual([f for f in w.time_row.findChildren(QFrame) if f.isVisible() and f.frameShape() != QFrame.Shape.NoFrame
+                          and not isinstance(f, TimelineBar)], [])
+        strip_separators = w.viewer_strip.findChildren(QFrame, "strip-separator")
+        self.assertTrue(strip_separators)
+        self.assertEqual({f.width() for f in strip_separators}, {8})
+
+    def test_the_ruler_has_thin_lines(self):
+        bar = TimelineBar()
+        bar.resize(800, 32)
+        bar.setRange(1, 100)
+        bar.setValue(50)
+        bar.set_marks(set(range(1, 40)), {20, 70})
+        bar.show()
+        settle()
+        self.assertLessEqual(bar.cache_band_rect().height(), 2)
+        self.assertEqual(PLAYHEAD_WIDTH, 1)
+        self.assertLessEqual(bar.key_mark_rect(20).width(), 2)
+        image = bar.grab().toImage()
+        mid = bar.height() // 2
+        playhead_x = round(bar.frame_x(50) + min(bar.frame_width(), 6.0) / 2)
+        self.assertEqual(image.pixelColor(playhead_x, mid).name(), TOKENS["acc"])
+        self.assertNotEqual(image.pixelColor(playhead_x + 3, mid).name(), TOKENS["acc"])
+        bar.close()
 
 
 if __name__ == "__main__":

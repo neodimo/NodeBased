@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QAbstractSpinBox, QButtonGroup, QFrame, QHBoxLayo
 
 from .graphcorner import svg_icon
 from .theme import TOKENS
+from .timeline import UNIT_CONTROL, UNIT_GAP
 from .topbar import ElidedLabel
 
 STRIP_TOP = 14        # distance from the top of the viewer, as in the mockup
@@ -104,7 +105,8 @@ class ChannelButtons(QWidget):
 def separator():
     line = QFrame()
     line.setObjectName("strip-separator")
-    line.setFixedWidth(1)
+    # No drawn rule: a gap on the strip's 8 px rhythm separates the groups.
+    line.setFixedWidth(UNIT_GAP)
     line.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
     return line
 
@@ -199,8 +201,8 @@ class ViewerStrip(QFrame):
         self.setObjectName("viewer-strip")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.row = QHBoxLayout(self)
-        self.row.setContentsMargins(6, 3, 6, 3)
-        self.row.setSpacing(4)
+        self.row.setContentsMargins(UNIT_GAP // 2, UNIT_GAP // 2, UNIT_GAP // 2, UNIT_GAP // 2)
+        self.row.setSpacing(UNIT_GAP // 2)
         self.compact = False
 
         for mode in ("2d", "3d"):
@@ -242,6 +244,9 @@ class ViewerStrip(QFrame):
         self.more_menu.aboutToShow.connect(self.fill_more_menu)
         self.more_button.setMenu(self.more_menu)
         self.row.addWidget(self.more_button)
+        # Every control on the strip is 28 px tall, like the playback unit's.
+        for control in self.findChildren(QToolButton) + self.findChildren(QAbstractSpinBox):
+            control.setFixedHeight(UNIT_CONTROL)
         parent.installEventFilter(self)
         self.show()
 

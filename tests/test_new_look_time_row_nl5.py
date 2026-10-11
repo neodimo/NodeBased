@@ -74,15 +74,14 @@ class CachedRangeTests(unittest.TestCase):
         self.assertEqual(self.band_color(bar, 20).name(), TRACK_COLOR.name(), "nothing cached: the quiet track")
         bar.set_marks(set(range(1, 51)), set())
         cached = self.band_color(bar, 20)
-        self.assertGreater(cached.green(), 150)
-        self.assertGreater(cached.green(), cached.red() + 40, "a cached frame is green")
+        self.assertEqual(cached.name(), TOKENS["acc2"], "a cached frame is the accent line")
         self.assertEqual(self.band_color(bar, 80).name(), TRACK_COLOR.name(), "frame 80 is not cached")
         bar.set_marks(set(range(60, 101)), set())
         self.assertEqual(self.band_color(bar, 20).name(), TRACK_COLOR.name(), "eviction clears the green")
-        self.assertGreater(self.band_color(bar, 80).green(), 150)
+        self.assertEqual(self.band_color(bar, 80).name(), TOKENS["acc2"])
         bar.close()
 
-    def test_a_key_is_a_diamond_in_the_key_colour_and_the_playhead_has_a_frame_tab(self):
+    def test_a_key_is_a_tick_in_the_key_colour_and_the_playhead_is_a_thin_accent_line(self):
         from nodebased.timeline import KEY_COLOR
         bar = TimelineBar()
         bar.resize(800, 40)
@@ -94,8 +93,9 @@ class CachedRangeTests(unittest.TestCase):
         image = bar.grab().toImage()
         centre = bar.key_mark_rect(20).center()
         self.assertEqual(image.pixelColor(int(centre.x()), int(centre.y())).name(), KEY_COLOR.name())
-        tab_x = int(bar.frame_x(70) + min(bar.frame_width(), 6.0) / 2)
-        self.assertEqual(image.pixelColor(tab_x - 6, 2).name(), TOKENS["acc"], "the frame tab hangs from the playhead")
+        line_x = round(bar.frame_x(70) + min(bar.frame_width(), 6.0) / 2)
+        self.assertEqual(image.pixelColor(line_x, bar.height() // 2).name(), TOKENS["acc"], "the playhead line")
+        self.assertNotEqual(image.pixelColor(line_x + 4, bar.height() // 2).name(), TOKENS["acc"], "and it is thin")
         bar.close()
 
     def test_the_window_pushes_the_cache_into_the_bar(self):

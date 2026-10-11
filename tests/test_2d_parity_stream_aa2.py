@@ -128,15 +128,15 @@ class StreamPlacementTests(unittest.TestCase):
 
 
 class KeyMarkTests(unittest.TestCase):
-    def test_key_marks_are_diamonds_wider_than_the_playhead_inside_the_track(self):
-        # New look, step 5: a key is a diamond between the frame numbers and the cached range,
-        # not a bottom-standing tick. It must still read at a glance next to the playhead.
+    def test_key_marks_are_ticks_wider_than_the_playhead_inside_the_track(self):
+        # Punch list 2: a key is a thin tick between the frame numbers and the cached line. It
+        # must still read at a glance next to the 1 px playhead.
         bar = TimelineBar()
         bar.resize(600, 34)
         bar.setRange(1, 100)
         bar.set_marks([], [10, 50])
         rect = bar.key_mark_rect(10)
-        self.assertGreater(bar.key_diamond_size(), PLAYHEAD_WIDTH * 2)
+        self.assertGreaterEqual(rect.height(), 4)
         self.assertGreater(rect.width(), PLAYHEAD_WIDTH)
         self.assertGreaterEqual(rect.top(), 0)
         self.assertLessEqual(rect.bottom(), bar.cache_band_rect().top())

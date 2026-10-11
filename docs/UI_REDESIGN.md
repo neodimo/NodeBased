@@ -246,3 +246,28 @@ From the real-display QA of the new look (`FINDINGS.md`, findings 1 to 6), plus 
   unchanged.
 - **Screenshots** (offscreen, 1920 x 1080, `examples/mixed_scene`): `docs/images/ui-redesign/`
   `stage5-composite.png`, `stage5-simulate.png`, `stage5-render.png`, `stage5-agent.png`, `stage5-queue.png`.
+
+## New look, punch list 2 (10/11, DiMo's review of the stage 5 screenshots)
+
+Screenshots (offscreen, 1920 x 1080, `examples/mixed_scene`): `docs/images/ui-redesign/pl2-*.png`, each part with a
+`-before` and an `-after`.
+
+- **Viewer surround.** The area around the picture is pure black (`theme.VIEWER_SURROUND`, and the 3D
+  viewport's clear colour) in every theme, as in Nuke. The grid and the corner readouts are unchanged.
+- **Properties empty state.** With nothing selected the panel is empty: no hint, no format lines, no blurb.
+  The family badge and the title appear with a selection.
+- **Transport.** Start, previous keyframe, step back, play backwards, stop, play, step forward, next
+  keyframe, end, and a loop mode toggle (play once, loop, ping-pong; remembered per machine). Icon-only, in the
+  left column's stroke language. Keys: Left / Right step, Alt+Left / Alt+Right previous / next keyframe,
+  Home / End, Space play / stop, in the viewer L plays, J plays backwards (while playing forwards J still
+  stops and steps back, as before) and K stops.
+- **Accent.** The default accent is a muted teal, `#66b7ac` (HSL 172, 36, 56; the old `#5ee0b5` was 160, 68, 62),
+  with `acc2` `#4da397`, ink `#0e1f1d` (8:1 on the accent) and washes at 12 and 40 percent. The old mint is the
+  "Mint" choice in Settings. The other themes' own accents were already pastel and are unchanged.
+  Candidates compared in `pl2-4-accent-candidates.png`: A muted teal (chosen: keeps the product's teal),
+  B slate blue (reads like the Merge family blue), C dusk cyan.
+- **Playback unit.** The viewer strip and the timeline are one quiet unit: one tone (`bg1`), 28 px controls on an
+  8 px rhythm, no drawn separators. The ruler spans the full width on top (1 px ticks, thin key ticks, a 2 px
+  cached-frames line, a 1 px playhead with a small flag); under it one row: the frame field, the transport
+  centred, and In, Out, rate and the real-time light. The status text and the rate presets go first when the
+  row is narrow.
