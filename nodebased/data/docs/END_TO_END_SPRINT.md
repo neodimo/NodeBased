@@ -313,3 +313,19 @@ on this plate. DROID-SLAM is the more accurate and the only repeatable one, but 
 beyond a clean synthetic render: the next step is a filmed plate from DiMo, and MASt3R-SLAM for lens recovery.
 Not built: viewer picking of the survey points, a tile-path or queue job for the solve, and an automatic
 ground-plane alignment (the anchor is typed by hand).
+
+## Heavy runs and the integrator's suite (10/10)
+
+The full suite of the evening of 10/10 took 5 hours 5 minutes against a norm of 75 to 95 minutes, and its
+GPU frame-rate benchmark missed 30 fps, because the sprint's SDXL runs, DPV-SLAM builds and background
+demo runs shared the card and the processors with it. Sprint workers' heavy runs must not overlap the
+integrator's suite.
+
+- GPU jobs share the lock the suite wrapper already uses, `/tmp/nb-gpu.lock` (`NODEBASED_GPU_LOCK`
+  names another file). The suite holds it shared; the SDXL provider, the DPVO camera-solve provider and
+  `examples/demo_shot/run_by_hand.py` (for a GPU provider or `--solver dpvo`) hold it exclusive for the
+  length of the job (`nodebased/gpulock.py`). A job waits for a running suite and a suite waits for a job.
+  A job started from inside another job (the demo script starting a provider) is told through
+  `NODEBASED_GPU_LOCK_HELD` and does not wait for its parent.
+- Model builds, SLAM builds and other long processor-heavy runs have no lock of their own: start them
+  only while no suite is running, and take `flock /tmp/nb-gpu.lock` around any run that uses the card.
