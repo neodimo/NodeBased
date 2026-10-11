@@ -1,3 +1,16 @@
+## 2026-10-10 — Lane 4 step R3 of 3: shadow catcher floor (DONE)
+
+- **What was done (evidence):** **Shadow catcher** on every mesh node (`Geometry.shadow_catcher`, off by default): black colour, alpha = how much
+  light the other objects take from the floor (1 - shadowed/unshadowed; ambient, environments and all lights). All six renderers (CPU and GPU
+  raster, ray-traced, path tracer) reach it through `nodebased/shadowcatch.py` (picture with the catcher as a holdout, shadow layer under it). Held to the
+  "render the floor twice and divide" reference: mean alpha difference 0.0000 (raster, ray-traced) and 0.0005 to 0.003 (path tracer).
+  `tests/test_3d_shadow_catcher.py` (52 tests) and `tests.test_3d_splat_shadow_catch` OK on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.
+- **Artifacts:** `nodebased/shadowcatch.py`, `tests/test_3d_shadow_catcher.py`, `examples/shadow_catcher/` (with `examples/holdout_plate.png`),
+  `docs/images/shadow_catcher_recipe.png`, docs/3D_FOUNDATION.md "Shadow catcher floors" and "Putting CG onto a plate". All committed.
+- **State:** done. Left out (stated limit): catching the CG object's coloured light bounce onto the floor. The depth pass sees the floor; the id
+  pass and Cryptomatte do not. Unverified: Windows, CI, the knob on a real display.
+- **Next owner:** Gonzo integrates.
+
 ## 2026-10-10 — Lane 6 P2 production follow-up (PARTIAL)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (5:46 PM on 2026-10-10 PDT)
