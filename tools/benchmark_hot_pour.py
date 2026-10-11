@@ -282,7 +282,8 @@ def playback(args, document, evaluator, gpu):
             store.profile = profile
         gpu["profile"] = profile
     preview_tier = int(getattr(args, "preview_tier", 4))
-    workloads = [("steam volume alone", "steam_volume_scene", 1), ("whole scene", "scene", 1)]
+    workloads = [] if getattr(args, "preview_only", False) else [
+        ("steam volume alone", "steam_volume_scene", 1), ("whole scene", "scene", 1)]
     for label, node, tier in workloads:
         times = []
         playback_frames = ([profile_frame] if getattr(args, "profile_only", False) else range(1, args.frames + 1))
@@ -425,6 +426,8 @@ def main(argv=None):
     parser.add_argument("--no-steam", action="store_true")
     parser.add_argument("--no-whitewater", action="store_true")
     parser.add_argument("--playback", action="store_true")
+    parser.add_argument("--preview-only", action="store_true",
+                        help="skip full-detail playback sweeps; retain cold/warm preview and stop refinement measurements")
     parser.add_argument("--play-width", type=int, default=960)
     parser.add_argument("--play-height", type=int, default=540)
     parser.add_argument("--preview-tier", type=int, choices=(2, 4, 8), default=4,

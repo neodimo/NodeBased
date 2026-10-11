@@ -1499,6 +1499,33 @@ does not establish the one-second target. The llvmpipe preview is below 12 FPS o
 `benchmarks/hot_pour/radeon-preview-production-followup-2026-10-10.json`. Targeted coverage is in
 `tests.test_scene3d_proxy`, `tests.test_tiers` and `tests.test_desktop.PlaybackProxyToggleTests`.
 
+### P3: fixed-budget cached preview (2026-10-11, partial)
+
+The playback artifact now stores density and temperature as 8-bit fields in a fixed 48³ volume
+and stores liquid/whitewater points with radii, capped at 20,000 points per set. Volume bounds
+and integrated density are restored on decode (the test tolerance is 1% after 8-bit quantization).
+The artifact is written alongside the served volume frame and lazily built for older caches; a
+reload test clears its memory copy and forbids access to the full-volume cache. During playback,
+`FluidSurface3D` passes the bounded liquid points directly to the display scene. The stop request
+still computes full liquid surface detail.
+
+Production Hot pour, 256³ liquid / 192³ steam, 120 frames, tier 1/4 at 240 × 135 on the Radeon:
+
+| Adapter | Cold preview FPS | Warm preview FPS | Cold load + draw | Stop to full detail |
+|---|---:|---:|---:|---:|
+| AMD Radeon 8060S | 4.07 | 4.32 | 245.7 ms (234.1 fetch + 11.6 draw) | 375.1 s (frame 60) |
+| llvmpipe | not measured: queued behind the active shared GPU suite and earlier exclusive benchmark | — | — | — |
+
+The Radeon result proves the preview path is substantially lighter than P2's 0.49 FPS result,
+but misses the 80 ms load-plus-draw budget. Its full-detail stop also misses the one-second bar;
+fetching and rebuilding the liquid surface took 375.1 s, followed by a 61 ms draw. The cold/warm
+preview rows and stop measurement are in `benchmarks/hot_pour/radeon-preview-P3-2026-10-11.json`.
+The production bake cache (48,755,923,288 bytes) was generated under deliberate scratch and is
+removed after the adapter runs. Focused proxy, liquid-surface, and playback-control tests pass.
+P2 acceptance remains unchecked. **Needs Gonzo:** persist or otherwise make production liquid
+surface refinement bounded, then reduce the preview evaluation from 245.7 ms to under 80 ms and
+measure the same three rows on llvmpipe.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up

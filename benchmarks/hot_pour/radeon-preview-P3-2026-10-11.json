@@ -1,0 +1,74 @@
+{
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "adapter_request": "integrated",
+ "liquid_cells": 256,
+ "smoke_cells": 192,
+ "frames": 120,
+ "passes": {
+  "bake": "reused existing cache; bake metrics unavailable",
+  "playback": "complete"
+ },
+ "cache": {
+  "runs": {
+   "5ff19609a0": {
+    "kind": "steam volume (sparse tiles)",
+    "frames": 118,
+    "bytes": 18828641541
+   },
+   "c7fcc62738": {
+    "kind": "steam solver checkpoints",
+    "frames": 120,
+    "bytes": 22641496420
+   },
+   "47761c2f50": {
+    "kind": "other: __matrix,density_u8,temperature_u8",
+    "frames": 120,
+    "bytes": 26612523
+   },
+   "ac309eed05": {
+    "kind": "liquid particles",
+    "frames": 151,
+    "bytes": 7042785711
+   },
+   "7ffb6e5123": {
+    "kind": "whitewater",
+    "frames": 121,
+    "bytes": 66872296
+   },
+   "26a7ab690d": {
+    "kind": "liquid particles",
+    "frames": 30,
+    "bytes": 131417100
+   },
+   "6e80744e8f": {
+    "kind": "whitewater",
+    "frames": 118,
+    "bytes": 18097697
+   }
+  },
+  "total_bytes": 48755923288,
+  "steam_sparse_bytes": 18828641541,
+  "steam_dense_equivalent_bytes": 19597627392
+ },
+ "playback": {
+  "whole scene preview 1/4 cold": {
+   "fps_median": 4.07,
+   "fps_mean": 3.61,
+   "fetch_ms_median": 234.1,
+   "draw_ms_median": 11.6
+  },
+  "whole scene preview 1/4 warm": {
+   "fps_median": 4.32,
+   "fps_mean": 4.23,
+   "fetch_ms_median": 220.4,
+   "draw_ms_median": 11.1
+  },
+  "stop_to_full_detail": {
+   "frame": 60,
+   "fetch_ms": 375052.9,
+   "draw_ms": 61.0,
+   "total_ms": 375113.9
+  }
+ },
+ "completed_pass": "playback"
+}
