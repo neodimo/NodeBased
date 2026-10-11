@@ -1,5 +1,39 @@
 ## 2026-10-10 — Lane 6 P2 production follow-up (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (5:46 PM on 2026-10-10 PDT)
+
+`main` moved `baa86c1` -> `3a059dd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 138 tests in 319.998 s, OK. Full suite on
+the stacked tip `3a059dd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1010-1357.log`, started 1:57 PM): **Ran 4974 tests in 12909.718 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R2 of 3: holdout objects that cut CG out where something in the filmed plate is in front of it.** Commits:
+  - `11bc6a5` docs: R2 completion note in the task log and state
+  - `e6b02da` tests: the returned depth buffer is empty behind a holdout; what the CPU modes refuse
+  - `b35c8db` tests: holdout opacity, glass in front of a holdout, GPU raster, ray-traced and path tracer against the CPU, Cryptomatte in the path tracer
+  - `6dc5ea4` tests and docs: holdouts behind splats, particles and smoke, mirrors and shadows, edges with lens and shutter, all three adapters; Holdouts section, recipe picture and the generated plate in examples/
+  - `9ac7e5f` render: Holdout switch on every mesh node; the CPU raster, ray-traced and path-traced modes and the GPU raster, ray-traced and path-traced modes cut it out of the picture and the data passes
+  Diff: 22 files changed, 1170 insertions(+), 67 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step P2 of 2: interactive preview while scrubbing and playing (finish 1).** Commits:
+  - `969cf8d` preview: persist reduced fluid frames and report production miss
+  Diff: 10 files changed, 2538 insertions(+), 59 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step R5 fix: a click on a selected Roto node starts drawing again.** Commits:
+  - `b1d1ffa` test: scale Roto drag tolerances with viewer zoom
+  - `ab3a057` fix: begin Roto drawing on viewer press
+  - `6d989d8` docs: describe Roto Bezier viewer editing
+  - `6117d70` roto: draw and edit bezier curves in viewer
+  Diff: 7 files changed, 359 insertions(+), 36 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The production 256³/192³, 120-frame Radeon run completed with 0.49 median FPS at tier 1/4 (1,974.7 ms fetch + 74.5 ms draw) and 0.14 FPS full detail (7,093.4 ms fetch + 59.0 ms draw). It remains below the 12 FPS goal; production stop-to-full-detail within one second was not measured. Persistent companion frame caches for liquid, whitewater, and volumes are in the local commit; 91 focused tests and 7 docs tests pass. Full evidence, paths, scratch status, and next owner: `TASKLOG.md` newest entry and `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L6.md`.
 
 ## 2026-10-10 — Lane 4 step R2 of 3: holdout objects (DONE)
