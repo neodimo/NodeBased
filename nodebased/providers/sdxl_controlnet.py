@@ -11,11 +11,12 @@ Two halves in one file, so the provider description, the conversions and the mod
   never reaches the network. It imports nothing from NodeBased.
 
 Frames are generated in order with the same seed. The first is text-to-image from its own depth and normals.
-Every later one is guided by the one before (reprojection, version 1.1): the previous picture is warped into this
-frame with the exported backward motion (`nodebased.temporal`, loaded by path on the model side), the pixels the
-warp cannot supply (disocclusions, objects that appear, the edges, by the exported depth and IDs) are filled from
-this frame's plain text-to-image picture, and the result is the starting image of an image-to-image pass at the
-pinned `denoise_strength`. A strength of 1 turns the guidance off: every frame is made on its own, as in 1.0.
+Every later one is guided by a canvas carried from the one before (reprojection, version 1.2): the canvas (frame 1's
+picture at first) is warped into this frame with the exported backward motion (`nodebased.temporal`, loaded by path
+on the model side), the pixels the warp cannot supply (disocclusions, objects that appear, the edges, by the exported
+depth and IDs) are filled from this frame's plain text-to-image picture, and the result is the next canvas and the
+starting image of an image-to-image pass at the pinned `denoise_strength`. Image-to-image results never go back into
+the canvas (1.1 chained them, and the picture broke up within a few frames). A strength of 1 turns the guidance off: every frame is made on its own, as in 1.0.
 """
 from __future__ import annotations
 
@@ -336,7 +337,10 @@ def _model_main(job_path):
     torch.cuda.reset_peak_memory_stats()
     names = {"depth": "depth", "normals": "normals"}
     total = len(job["frames"])
-    previous_row, previous_picture, filled_fractions = None, None, []
+    # The guide canvas: frame 1's picture carried forward by the warp, its holes filled from each frame's own
+    # text-to-image picture. Image-to-image results never enter it (chaining them compounded the model's contrast
+    # and texture gain until the picture broke up by frame 6, version 1.1).
+    previous_row, canvas, filled_fractions = None, None, []
     for index, row in enumerate(job["frames"]):
         images = []
         for mode in modes:
@@ -350,20 +354,21 @@ def _model_main(job_path):
             width=work_w, height=work_h, output_type="pil")
         follows = previous_row is not None and row["frame"] == previous_row["frame"] + 1
         if guided and follows:
-            warped, mask = guide_image(temporal, previous_picture, row, previous_row, work_w, work_h)
-            start = warped
+            warped, mask = guide_image(temporal, canvas, row, previous_row, work_w, work_h)
+            canvas = warped
             if not mask.all():  # the holes come from this frame's own text-to-image picture
                 generator = torch.Generator("cuda").manual_seed(job["seed"])
                 plain = np.asarray(ready(pipe)(generator=generator, **arguments).images[0], np.float32)
-                start = np.where(mask[..., None], warped, plain)
+                canvas = np.where(mask[..., None], warped, plain)
             filled_fractions.append(round(1.0 - float(mask.mean()), 4))
-            start = Image.fromarray(np.rint(np.clip(start, 0, 255)).astype(np.uint8))
+            start = Image.fromarray(np.rint(np.clip(canvas, 0, 255)).astype(np.uint8))
             generator = torch.Generator("cuda").manual_seed(job["seed"])
             picture = ready(refine)(generator=generator, image=start, strength=strength, **arguments).images[0]
         else:
             generator = torch.Generator("cuda").manual_seed(job["seed"])
             picture = ready(pipe)(generator=generator, **arguments).images[0]
-        previous_row, previous_picture = row, np.asarray(picture)
+            canvas = np.asarray(picture, np.float32)
+        previous_row = row
         np.save(row["result"], np.asarray(picture.resize((width, height), Image.LANCZOS), dtype=np.uint8))
         print(f"progress {index + 1} {total}", flush=True)
     import diffusers

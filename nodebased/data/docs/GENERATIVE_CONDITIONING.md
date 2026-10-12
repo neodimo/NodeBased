@@ -220,7 +220,7 @@ Two deterministic CPU stand-ins establish the contract without a model or networ
 - **null 1.0** has the same local limits and colour space, copies beauty unchanged, and honours only `seed`
   (recorded, no effect on the pixels). It is the deliberately unconditioned baseline.
 
-The first real model is **sdxl_controlnet 1.1** (`nodebased/providers/sdxl_controlnet.py` and `.json`):
+The first real model is **sdxl_controlnet 1.2** (`nodebased/providers/sdxl_controlnet.py` and `.json`):
 Stable Diffusion XL base with the fp16-fix VAE and ControlNet-Union (promax), local, on the NVIDIA card through
 CUDA only (the RTX 3080 Ti; the AMD adapter and llvmpipe are not used). It honours depth, normals, motion, IDs,
 text, `seed` and `sampler_settings` (`steps` 1 to 100 default 30, `guidance` 0 to 20 default 5.0,
@@ -229,13 +229,16 @@ text, `seed` and `sampler_settings` (`steps` 1 to 100 default 30, `guidance` 0 t
 their defaults filled in). It ignores camera pose and reference frames. Limits are 1024 by 1024 and 240 frames; input and output colour space
 is ACEScg.
 
-- **Reprojection between frames (1.1).** Frames are made in order with the same seed (the loop's `vary_seed`
-  changes the seed per attempt, never per frame). The first is text-to-image from its own depth and normals.
-  Each later frame starts from the previous generated picture warped into it with the exported backward motion
-  (`nodebased/temporal.py`, the same warp and mask the verifier's temporal line uses); pixels the warp cannot
-  supply (disocclusions, an object ID that changed, the picture's edges, by the exported depth and IDs) are
-  filled from that frame's own text-to-image picture, and the result goes through an image-to-image pass at
-  `denoise_strength`, with the same depth and normals control. `denoise_strength` 1 turns the guidance off and
+- **Reprojection between frames (1.2).** Frames are made in order with the same seed (the loop's `vary_seed`
+  changes the seed per attempt, never per frame). The first is text-to-image from its own depth and normals,
+  and its picture starts a guide canvas. For each later frame the canvas is warped into it with the exported
+  backward motion (`nodebased/temporal.py`, the same warp and mask the verifier's temporal line uses); pixels
+  the warp cannot supply (disocclusions, an object ID that changed, the picture's edges, by the exported depth
+  and IDs) are filled from that frame's own text-to-image picture, that becomes the canvas, and the canvas goes
+  through an image-to-image pass at `denoise_strength`, with the same depth and normals control. The
+  image-to-image results never go back into the canvas: in 1.1 each frame started from the previous generated
+  picture, and the model's contrast and texture gain compounded over the passes until the picture broke up
+  (flicker mean 19.0 against 15.4 without guidance). `denoise_strength` 1 turns the guidance off and
   makes every frame on its own, as 1.0 did. The verifier's motion, depth, normals and camera checks still read
   "not conditioned" (the generated EXRs carry beauty only); the temporal line measures the flicker.
 - **Colour.** The model works in display sRGB. Depth and normals become 8-bit control images with their own

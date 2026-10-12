@@ -12,7 +12,7 @@ from nodebased.workers import Job, Worker
 class DescriptionTests(unittest.TestCase):
     def test_description_declares_what_it_honours(self):
         desc = ProviderDescription.load("sdxl_controlnet")
-        self.assertEqual((desc.name, desc.version, desc.locality, desc.local_gpu), ("sdxl_controlnet", "1.1", "local", True))
+        self.assertEqual((desc.name, desc.version, desc.locality, desc.local_gpu), ("sdxl_controlnet", "1.2", "local", True))
         self.assertEqual(desc.max_resolution, (1024, 1024))
         self.assertEqual(desc.max_frames, 240)
         self.assertEqual(desc.color_spaces, ("ACEScg",))

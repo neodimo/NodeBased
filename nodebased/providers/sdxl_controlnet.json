@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "name": "sdxl_controlnet",
-  "version": "1.1",
+  "version": "1.2",
   "locality": "local",
   "local_gpu": true,
   "accepts": {
     "depth": {"accepted": true, "role": "ControlNet-Union depth control image: inverse depth normalised over the whole sequence's nearest and farthest depth, near white, far and empty black, 8 bit"},
     "normals": {"accepted": true, "role": "ControlNet-Union normal control image: camera-space unit normals as (n * 0.5 + 0.5) * 255; pixels with no normal get the flat colour (128, 128, 255)"},
-    "motion": {"accepted": true, "role": "motion is honoured: each frame after the first starts from the previous generated picture warped into it with the exported backward motion, then an image-to-image pass at denoise_strength; the generated EXRs carry beauty only, so the verifier's motion check reads not conditioned and its temporal line measures the flicker"},
+    "motion": {"accepted": true, "role": "motion is honoured: each frame after the first starts from a guide canvas (frame 1's picture, carried by the exported backward motion, holes filled from each frame's own text-to-image picture) warped into it, then an image-to-image pass at denoise_strength; the generated EXRs carry beauty only, so the verifier's motion check reads not conditioned and its temporal line measures the flicker"},
     "ids": {"accepted": true, "role": "with the exported depth, masks the warp: a pixel whose object ID changed or that was hidden on the frame before is filled from that frame's own text-to-image picture"},
     "camera_pose": {"accepted": false, "note": "the camera is only implied by the depth and normals images; the picture is not held to the verifier's camera tolerance"},
     "text": {"accepted": true, "role": "positive prompt, sent character for character; SDXL reads a description, not an instruction, and a fixed negative prompt is added"},
