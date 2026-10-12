@@ -333,6 +333,23 @@ display sRGB). All compared pixels of all pairs are pooled into one mean and one
 the report as `temporal` and in the text report as the "Temporal" line. Pass threshold: mean at most 4 and
 95th percentile at most 12 steps. Like the determinism line, it stays out of the score card's verdict.
 
+**Next: a local video model (assessment, nothing downloaded).** Checked in the brief's order, from each model's own
+documentation. CogVideoX-2B and 5B (with the community depth ControlNets or the CogVideoX-Fun control variants)
+generate only at 720 by 480 and 8 frames a second, 49 frames; the 2B card says diffusers fp16 needs "from 4 GB"
+with every offload and tiling option on (about three times that without) and about 90 s for 50 steps on an
+A100, so several minutes on the 3080 Ti, and the fixed 3:2 size does not match the 16:9 plate. AnimateDiff-SDXL
+would reuse this provider's SDXL and ControlNet-Union, but diffusers calls its SDXL motion adapter an
+experimental beta, and its 16-frame window still needs overlapping windows for a longer shot. **Try Wan2.1
+VACE-1.3B next.** It is one 1.3B model that takes a control video (depth among its documented conditions), a
+mask video and reference images together, which is exactly what this export gives (depth per frame, the
+occlusion mask from the temporal module, and this provider's frame 1 as the reference), it is in diffusers
+(`WanVACEPipeline`, the provider environment's version already has it) and it works at 832 by 480, 16:9 like the
+plate, at 16 frames a second. Wan's own figures for the 1.3B model: 8.19 GB of card memory, and a 5-second
+480p clip in about 4 minutes on an RTX 4090 with model offload and the text encoder on the processor; expect
+roughly twice that on the 3080 Ti, about 2 minutes for this 24-frame shot. Wan2.1-Fun-1.3B-Control (depth,
+canny, pose and trajectory control, 81 frames at 16 fps, a 19 GB download) is the fallback if VACE's depth
+control proves too loose.
+
 ## Heavy runs and the integrator's suite (10/10)
 
 The full suite of the evening of 10/10 took 5 hours 5 minutes against a norm of 75 to 95 minutes, and its
