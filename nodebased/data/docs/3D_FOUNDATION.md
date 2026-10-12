@@ -3159,6 +3159,6 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   hands back its tracked positions) and takes its scale, or scale and placement, from a Survey of points picked in
   the viewer (`nodebased/surveypanel.py`). Both are described in docs/END_TO_END_SPRINT.md, "Stage 7, step L2", with the
   measured errors on the demo plate at 960 and 1920 wide and on a lens plate (`examples/demo_shot/make_plate.py
-  --k1`). Schema bumped from 22 to 23 (three new `CameraSolve3D` knobs). Left out: tangential terms, `k3` and a
+  --k1`). Schema bumped from 21 to 22 (three new `CameraSolve3D` knobs). Left out: tangential terms, `k3` and a
   shifted principal point are not estimated; the GPU solve itself is a recorded run (`solve_camera.py --solver dpvo
   --matrix`), not a suite test.
