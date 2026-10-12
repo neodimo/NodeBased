@@ -1,5 +1,40 @@
 ## 2026-10-11 3:20 PM PDT — Lane 6 P3 of 3 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (1:46 AM on 2026-10-12 PDT)
+
+`main` moved `9a22287e` -> `e0510940` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 111 tests in 214.664 s, OK. Full suite on
+the stacked tip `e0510940` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1011-1956.log`, started 7:56 PM): **Ran 5220 tests in 17956.768 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Gonzo's new-look punch list 2: black viewer surround, empty properties panel, full transport, amber accent, one quiet playback unit (DiMo's review of 10/11).** Commits:
+  - `1a50ac78` Wiring feel captures: starting from a near miss, and the same snap at 40 and 150 percent
+  - `d127ea6b` Wiring feel captures: magnetic drop and body drop, and the Wiring section of the redesign notes
+  - `69b7ea57` Wiring feel: a dragged wire snaps to the nearest compatible socket within 40 screen pixels or the card under the pointer, lights target and card, starts from a near miss, and scales with zoom
+  - `aabca9f6` Accent is an amber like Nuke's selection colour (#e0a24a), DiMo's call of 10/11 2:55 PM; the mint and the muted teal stay as named choices; tests bound the hue instead of the saturation
+  - `ab54c5e1` Playback unit: one tone, 28 px controls on an 8 px rhythm, thin-line ruler with key ticks and cache line, frame field and range as inline numbers
+  - `fe5ecf21` Calmer default accent: muted teal #66b7ac with matching washes and ink, the old mint kept as the Mint choice; three candidates compared
+  - `c02b5c9c` Full transport: start, previous keyframe, step, play backwards, stop, play, next keyframe, end and a loop mode toggle, with Nuke keys and a two-row playback unit
+  - `072585f9` Properties panel is empty with nothing selected: no hint, format lines or blurb
+  - `3634e998` Viewer surround is pure black in every theme, 2D and 3D, with before and after screenshots
+  Diff: 36 files changed, 1275 insertions(+), 204 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step P3 of 3: a lighter preview that is fast by construction.** Commits:
+  - `c280c017` docs: record P3 benchmark lock blocker
+  - `019f6564` docs: record partial P3 lane handoff
+  - `9ce5ef88` docs: record P3 preview budget and production miss
+  - `215d0228` preview: draw cached liquid points before full surface detail
+  - `01a298a9` preview: cap cached playback work with fixed artifacts
+  Diff: 10 files changed, 357 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The preview cache now serves a 48³, 8-bit density/temperature artifact, plus liquid and whitewater point artifacts capped at 20,000 points with radii. Playback passes the cached liquid points directly to the viewport, avoiding surface reconstruction during motion. Disk reload does not consult the full-volume store; bounds and density integral survive within the test's 1% quantization tolerance.
 
 Production Hot pour (256³ / 192³, 120 frames) on the AMD Radeon 8060S: cold preview 4.07 FPS, warm preview 4.32 FPS; cold load+draw 245.7 ms. Frame 60 tier-4 to full-detail took 375.1 s to fetch/rebuild and 61 ms to draw. The preview misses the 80 ms budget, and full-detail stop misses the one-second target. P2 acceptance remains unchecked. llvmpipe was queued behind a full suite and an earlier exclusive GPU benchmark; its P3 row remains unmeasured.
