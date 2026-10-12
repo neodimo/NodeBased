@@ -4,7 +4,7 @@
 
 ## Goal
 
-Determine whether **Wan-AI/Wan2.1-VACE-1.3B-diffusers**, through `diffusers.WanVACEPipeline`, improves the existing shot while fitting the RTX 3080 Ti and preserving repeatability. Use only this model/configuration. Deliver a go/no-go record even when memory, runtime or image quality fails. No automatic adoption follows a pass.
+Determine whether **Wan-AI/Wan2.1-VACE-1.3B-diffusers**, through `diffusers.WanVACEPipeline`, improves the existing shot while fitting the RTX 3080 Ti and preserving repeatability. Candidate checkpoint revision inspected in this sweep: `ec4d2cb062b548996b179d493fdd05340de702a1` (Hugging Face API, accessed 2026-10-12). Use this immutable revision unless a separately documented compatibility blocker requires a new proposal. Use only this model/configuration. Deliver a go/no-go record even when memory, runtime or image quality fails. No automatic adoption follows a pass.
 
 ## Inputs and setup — 15 minutes maximum
 
