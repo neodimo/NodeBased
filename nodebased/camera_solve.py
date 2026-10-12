@@ -1,7 +1,8 @@
 """Camera solve from the plate alone: the `solve_camera` op behind the CameraSolve3D node.
 
-A learned monocular SLAM (DPVO / DPV-SLAM, see providers/camera_solve_dpvo.py) returns one camera pose per
-frame and a sparse point cloud, up to scale and in its own frame. This module turns that into the document's
+A learned monocular SLAM (DPVO / DPV-SLAM, providers/camera_solve_dpvo.py, or MASt3R-SLAM,
+providers/camera_solve_mast3r.py, which also recovers the focal length) returns one camera pose per frame and a
+point cloud, up to scale and in its own frame. This module turns that into the document's
 own terms:
 
 * The solve is placed in the world by an anchor: the camera of the first solved frame (the node's anchor
@@ -34,6 +35,11 @@ import numpy as np
 
 from . import filmback, lensrefine, scene3d, track3d
 from .providers import camera_solve_dpvo as dpvo
+from .providers import camera_solve_mast3r as mast3r
+
+# The node's `provider` names one of these. DPV-SLAM is handed the focal length (the node's focal and vertical
+# aperture); MASt3R-SLAM recovers it, and the solved camera gets that focal (RECOVERS_FOCAL).
+SOLVERS = {dpvo.PROVIDER_NAME: dpvo, mast3r.PROVIDER_NAME: mast3r}
 
 KEY_DECIMALS = 3
 CAMERA_PARAMS = ("tx", "ty", "tz", "target_x", "target_y", "target_z", "roll")
@@ -389,24 +395,37 @@ def solve_camera_op(evaluator, dispatcher, cmd, store=None, solver=None, workdir
     if not source:
         raise ValueError("solve_camera: connect the plate to the CameraSolve3D image input")
     params = node["params"]
-    if params["provider"] != dpvo.PROVIDER_NAME:
-        raise ValueError(f"solve_camera: unknown camera solve provider {params['provider']!r}")
+    provider = SOLVERS.get(params["provider"])
+    if provider is None:
+        raise ValueError(f"solve_camera: unknown camera solve provider {params['provider']!r} "
+                         f"(one of {', '.join(sorted(SOLVERS))})")
     estimate_focal, distortion = lens_request(params)
+    if getattr(provider, "RECOVERS_FOCAL", False):
+        estimate_focal = False   # the solver recovers the focal length itself; the lens fit has no focal to add
     survey_data = parse_survey(params.get("survey", ""))
     plan = survey_plan(survey_data)
     time_range = document["time"]
     first, last = int(cmd.get("first", time_range["first"])), int(cmd.get("last", time_range["last"]))
-    if last - first + 1 < dpvo.MIN_FRAMES:
-        raise ValueError(f"solve_camera needs at least {dpvo.MIN_FRAMES} frames (got {last - first + 1})")
+    if last - first + 1 < provider.MIN_FRAMES:
+        raise ValueError(f"solve_camera needs at least {provider.MIN_FRAMES} frames (got {last - first + 1})")
     frames = _plate_frames(evaluator, document, source, first, last)
     height, width = frames[0].shape[:2]
-    intrinsics = dpvo.intrinsics_for(width, height, params["focal"], params["vaperture"])
-    run = solver or dpvo.run_solve
+    vaperture = float(params["vaperture"])
+    intrinsics = dpvo.intrinsics_for(width, height, params["focal"], vaperture)
+    run = solver or provider.run_solve
     with tempfile.TemporaryDirectory(prefix="camera-solve-", dir=workdir) as work:
         solved = run(frames, intrinsics, loop_closure=bool(params["loop_closure"]), seed=int(params["seed"]),
                      workdir=work)
     c2w, points, colors = solved["c2w"], solved["points"], solved["colors"]
     lens, lens_block, focal_px, radial = None, None, intrinsics[1], (0.0, 0.0)
+    if getattr(provider, "RECOVERS_FOCAL", False):
+        # The lens comes from the solve: the recovered focal in pixels, through the node's film back into mm.
+        # Rounded to the keys' 0.001 first, and the survey uses the rounded lens, so the camera is one lens.
+        focal, focal_source = round(float(solved["intrinsics"][1]) * vaperture / height, KEY_DECIMALS), "solved"
+        intrinsics = dpvo.intrinsics_for(width, height, focal, vaperture)
+        focal_px = intrinsics[1]
+    else:
+        focal, focal_source = float(params["focal"]), "node"
     if estimate_focal or distortion != "none":
         if not solved.get("tracks"):
             raise ValueError("solve_camera: the solver returned no tracked points to estimate the lens from")
@@ -445,8 +464,8 @@ def solve_camera_op(evaluator, dispatcher, cmd, store=None, solver=None, workdir
     camera_id = cmd.get("camera") or f"{key}_camera"
     cloud_id = f"{key}_points"
     keys = [keys_from_pose(pose) for pose in placed]
-    focal = round(filmback.focal_from_fov(fov_from_intrinsics(height, focal_px), float(params["vaperture"])), 4) \
-        if estimate_focal else float(params["focal"])
+    if estimate_focal:
+        focal = round(filmback.focal_from_fov(fov_from_intrinsics(height, focal_px), float(params["vaperture"])), 4)
     lens_params = {"lens_k1": round(radial[0], 6), "lens_k2": round(radial[1], 6)}
     commands = []
     if camera_id not in document["nodes"]:
@@ -474,20 +493,23 @@ def solve_camera_op(evaluator, dispatcher, cmd, store=None, solver=None, workdir
                          "params": {"splat_path": str(cloud_file)}})
     else:
         commands.append({"op": "set", "id": cloud_id, "param": "splat_path", "value": str(cloud_file)})
-    record = {"schema": 2, "provider": dpvo.PROVIDER_NAME, "version": dpvo.description()["version"],
+    record = {"schema": 2, "provider": provider.PROVIDER_NAME, "version": provider.description()["version"],
               "seed": int(params["seed"]), "loop_closure": bool(params["loop_closure"]), "scale": round(scale, 6),
               "scale_source": scale_source, "alignment": alignment, "frames": [first, last], "camera": camera_id,
               "intrinsics_px": [round(v, 4) for v in intrinsics],
               "camera_keys": [{k: round(v, KEY_DECIMALS) for k, v in row.items()} for row in keys]}
     if lens_block:
         record["lens"] = lens_block
+    if focal_source == "solved":   # a stage 7 DPVO record stays as it was
+        record.update(focal=focal, focal_source=focal_source)
     solve_id = store.put(json.dumps(record, sort_keys=True, indent=1).encode(), "camera_solve", {
         "producer": "CameraSolve3D", "version": record["version"], "inputs": [], "document": "", "frame_range": [first, last],
         "time": time.time()})
     commands.append({"op": "set", "id": key, "param": "solve", "value": solve_id})
     dispatcher.execute({"op": "batch", "commands": commands})
     info = dict(solved.get("info", {}))
-    return {"camera": camera_id, "points": cloud_id, "solve": solve_id, "scale": record["scale"],
+    return {"provider": provider.PROVIDER_NAME, "version": record["version"], "focal": focal,
+            "focal_source": focal_source, "camera": camera_id, "points": cloud_id, "solve": solve_id, "scale": record["scale"],
             "scale_source": scale_source, "alignment": alignment, "lens": lens_block, "frames": [first, last],
             "cloud_points": int(len(points)), "run": info}
 

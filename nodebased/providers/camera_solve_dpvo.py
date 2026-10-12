@@ -80,25 +80,23 @@ def intrinsics_for(width, height, focal_mm, vaperture_mm):
     return (f, f, width / 2.0, height / 2.0)
 
 
-def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progress=None, cancelled=None):
-    """Solve the camera of a plate; returns {"c2w": (N,4,4), "points": (M,3), "colors": (M,3) uint8, "tracks": dict, "info": dict}.
-
-    `frames` are N display-sRGB uint8 (H, W, 3) arrays, `intrinsics` is (fx, fy, cx, cy) in pixels. The poses
-    are camera-to-world in OpenCV axes (x right, y down, z forward), up to scale, one per frame in order.
-    `tracks` holds the solver's own measurements, for `nodebased.lensrefine`: `frame` (index into the poses),
-    `point` (index into the points), `xy` (pixel position on the plate, top-left origin, at the plate's size) and
-    `weight` (0 to 1). Each point has the position it was born at (weight 1) and one row per frame the network
-    followed it to.
-    """
-    if len(frames) < MIN_FRAMES:
-        raise ValueError(f"{PROVIDER_NAME} needs at least {MIN_FRAMES} frames (got {len(frames)})")
+def check_frames(name, frames, limits, min_frames):
+    """Refuse what a solver cannot take before any process starts; returns (height, width)."""
+    if len(frames) < min_frames:
+        raise ValueError(f"{name} needs at least {min_frames} frames (got {len(frames)})")
     shapes = {np.asarray(f).shape for f in frames}
     if len(shapes) != 1 or len(next(iter(shapes))) != 3 or next(iter(shapes))[2] != 3:
-        raise ValueError(f"{PROVIDER_NAME} needs same-size RGB frames")
-    limits = description()["limits"]
+        raise ValueError(f"{name} needs same-size RGB frames")
     height, width = next(iter(shapes))[:2]
     if width > limits["max_resolution"][0] or height > limits["max_resolution"][1] or len(frames) > limits["max_frames"]:
-        raise ValueError(f"{PROVIDER_NAME} limits are {limits['max_resolution']} and {limits['max_frames']} frames")
+        raise ValueError(f"{name} limits are {limits['max_resolution']} and {limits['max_frames']} frames")
+    return height, width
+
+
+def run_job(name, script, python, frames, job, workdir, progress=None, cancelled=None, env=None):
+    """The subprocess contract shared by the camera solvers: write the frames as .npy files and `job.json`, run
+    `python -I script run job.json` under the exclusive GPU lock, relay `progress i n` lines, and read
+    `result.npz` (every array) and `info.json` back. A failure raises with the process's last lines."""
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -106,16 +104,14 @@ def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progre
         path = workdir / f"frame_{index:05d}.npy"
         np.save(path, np.ascontiguousarray(frame, dtype=np.uint8))
         rows.append(str(path))
-    job = {"frames": rows, "intrinsics": [float(v) for v in intrinsics], "loop_closure": bool(loop_closure),
-           "seed": int(seed), "dpvo_dir": dpvo_dir(), "result": str(workdir / RESULT_FILE),
-           "info": str(workdir / INFO_FILE)}
+    job = {"frames": rows, **job, "result": str(workdir / RESULT_FILE), "info": str(workdir / INFO_FILE)}
     job_path = workdir / "job.json"
     job_path.write_text(json.dumps(job, indent=1), encoding="utf-8")
-    env = dict(os.environ, PYTHONUNBUFFERED="1", CUBLAS_WORKSPACE_CONFIG=":4096:8")
+    env = dict(os.environ, PYTHONUNBUFFERED="1", CUBLAS_WORKSPACE_CONFIG=":4096:8", **(env or {}))
     # No address-space cap: CUDA reserves terabytes of virtual address space (workers.py, local_gpu).
     from ..gpulock import gpu_job  # the solver side of this file runs in another interpreter, so import here
     with gpu_job(cancelled):
-        process = subprocess.Popen([provider_python(), "-I", str(Path(__file__).resolve()), "run", str(job_path)],
+        process = subprocess.Popen([python, "-I", str(Path(script).resolve()), "run", str(job_path)],
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
         tail = []
         try:
@@ -135,17 +131,35 @@ def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progre
                 process.kill()
                 process.wait()
         if code:
-            raise RuntimeError(f"{PROVIDER_NAME} solver process failed (exit {code}): " + " | ".join(tail[-8:])[-1200:])
+            raise RuntimeError(f"{name} solver process failed (exit {code}): " + " | ".join(tail[-8:])[-1200:])
     with np.load(job["result"]) as result:
-        solved = {"c2w": np.array(result["c2w"], np.float64), "points": np.array(result["points"], np.float64),
-                  "colors": np.array(result["colors"], np.uint8)}
-        if "track_frame" in result.files:   # where the network found each point on the other frames
-            solved["tracks"] = {"frame": np.array(result["track_frame"], np.int64), "point": np.array(result["track_point"], np.int64),
-                                "xy": np.array(result["track_xy"], np.float64), "weight": np.array(result["track_weight"], np.float64)}
+        solved = {key: np.array(result[key]) for key in result.files}
+    solved["c2w"] = solved["c2w"].astype(np.float64)
+    solved["points"] = solved["points"].astype(np.float64)
+    solved["colors"] = solved["colors"].astype(np.uint8)
+    if "track_frame" in solved:   # where the network found each point on the other frames
+        solved["tracks"] = {"frame": solved.pop("track_frame").astype(np.int64), "point": solved.pop("track_point").astype(np.int64),
+                            "xy": solved.pop("track_xy").astype(np.float64), "weight": solved.pop("track_weight").astype(np.float64)}
     solved["info"] = json.loads(Path(job["info"]).read_text(encoding="utf-8"))
     if os.environ.get(RUN_INFO_ENV):   # timings and peak VRAM for a caller that wants them (never in the artifact)
         Path(os.environ[RUN_INFO_ENV]).write_text(json.dumps(solved["info"], indent=1), encoding="utf-8")
     return solved
+
+
+def run_solve(frames, intrinsics, *, loop_closure=False, seed=0, workdir, progress=None, cancelled=None):
+    """Solve the camera of a plate; returns {"c2w": (N,4,4), "points": (M,3), "colors": (M,3) uint8, "tracks": dict, "info": dict}.
+
+    `frames` are N display-sRGB uint8 (H, W, 3) arrays, `intrinsics` is (fx, fy, cx, cy) in pixels. The poses
+    are camera-to-world in OpenCV axes (x right, y down, z forward), up to scale, one per frame in order.
+    `tracks` holds the solver's own measurements, for `nodebased.lensrefine`: `frame` (index into the poses),
+    `point` (index into the points), `xy` (pixel position on the plate, top-left origin, at the plate's size) and
+    `weight` (0 to 1). Each point has the position it was born at (weight 1) and one row per frame the network
+    followed it to.
+    """
+    check_frames(PROVIDER_NAME, frames, description()["limits"], MIN_FRAMES)
+    job = {"intrinsics": [float(v) for v in intrinsics], "loop_closure": bool(loop_closure), "seed": int(seed),
+           "dpvo_dir": dpvo_dir()}
+    return run_job(PROVIDER_NAME, __file__, provider_python(), frames, job, workdir, progress, cancelled)
 
 
 # ----------------------------------------------------------------------------- solver side

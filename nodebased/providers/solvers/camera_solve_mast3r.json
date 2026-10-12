@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "kind": "camera_solve",
+  "name": "camera_solve_mast3r",
+  "version": "1.0",
+  "locality": "local",
+  "local_gpu": true,
+  "accepts": {
+    "images": {"accepted": true, "role": "the plate as 8-bit display sRGB frames (the node's image input through the working-to-sRGB display transform), at least 8 frames; resized to 512 wide like upstream MASt3R-SLAM"},
+    "intrinsics": {"accepted": false, "role": "MASt3R-SLAM is uncalibrated: it tracks on MASt3R's per-pixel rays and returns the focal length it finds (the node's focal is not used; its vertical aperture turns the focal from pixels into millimetres)"},
+    "seed": {"accepted": true, "role": "torch, numpy and CUDA seed; the solver runs in one process (its back end inline), so the order of work is fixed"},
+    "loop_closure": {"accepted": true, "role": "the retrieval database that adds loop edges between keyframes, on (1) or off (0, only consecutive keyframes)"}
+  },
+  "limits": {"max_resolution": [1920, 1080], "max_frames": 2000, "min_frames": 8},
+  "returns": {"poses": "camera-to-world 4x4 per frame, OpenCV axes (x right, y down, z forward), up to scale; each frame is its keyframe's optimised pose times its pose relative to that keyframe when tracked",
+              "intrinsics": "fx, fy, cx, cy in plate pixels: the focal fitted to the keyframes' point maps (median over keyframes), square pixels, the principal point at the centre",
+              "points": "dense keyframe point maps, confident pixels on a 4-pixel grid, solve units, 8-bit colour, at most 60000",
+              "scale": "the solve is monocular: scale comes from the node's unit_scale or two surveyed points"},
+  "environment": {"interpreter_variable": "NODEBASED_MAST3R_PYTHON", "directory_variable": "NODEBASED_MAST3R_DIR",
+                  "gpu": "NVIDIA card through CUDA only (RTX 3080 Ti, 12 GB)",
+                  "setup": "projects/nb-providers/slam/setup_mast3r.sh",
+                  "models": ["naver MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth (2.75 GB)",
+                             "naver MASt3R retrieval trainingfree.pth (8 MB) and codebook.pkl (268 MB), loop closure only"]}
+}
