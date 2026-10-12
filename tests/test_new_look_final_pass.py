@@ -6,6 +6,7 @@ import unittest
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from nodebased.knobfit import WrappingRow
@@ -49,6 +50,10 @@ class LockPanelsTests(Base):
 
 
 
+def _one_line_need(row):
+    return row._needed(len(row.units))
+
+
 class OneLineKnobRowTests(Base):
     def open_cube(self):
         w = self.open_window((1920, 1080))
@@ -65,11 +70,20 @@ class OneLineKnobRowTests(Base):
         w = self.open_cube()
         rows = w.properties.findChildren(WrappingRow)
         colour = next(r for r in rows if any(u.objectName() == "red-field" for u in r.units))
+        xyz = [r for r in rows if len(r.units) == 3 and not any(u.objectName().endswith("-field") for u in r.units)]
+        # The default Properties width is 400 px whatever the platform's font; where the fields'
+        # own metrics need more than that (Windows), give the panel what the one line needs.
+        short = max(_one_line_need(r) - r.width() for r in [colour, *xyz]) + 8
+        if short > 0:
+            dock = w.properties_dock
+            w.resizeDocks([w.viewer_dock, dock], [w.viewer_dock.width() - short, dock.width() + short],
+                          Qt.Orientation.Horizontal)
+            for _ in range(5):
+                APP.processEvents()
         self.assertEqual(colour._columns, len(colour.units))
         for unit in colour.units[1:]:
             self.assertGreaterEqual(unit.width(),
                                     unit.fontMetrics().horizontalAdvance(unit.text()) + 6, unit.objectName())
-        xyz = [r for r in rows if len(r.units) == 3 and not any(u.objectName().endswith("-field") for u in r.units)]
         self.assertTrue(xyz)
         for row in xyz:
             self.assertEqual(row._columns, 3)

@@ -84,11 +84,12 @@ class ColumnTests(RailTestCase):
 
     def test_the_column_fits_when_the_text_is_wider(self):
         base = APP.styleSheet()
+        narrow = self.rail.width()   # the column's width at this platform's own font
         APP.setStyleSheet(base + "QWidget { font-size: 17px; }")
         try:
             self.settle(10)
             self.assert_column_fits()
-            self.assertGreater(self.rail.width(), 61)
+            self.assertGreater(self.rail.width(), narrow)
         finally:
             APP.setStyleSheet(base)
             self.settle(10)
