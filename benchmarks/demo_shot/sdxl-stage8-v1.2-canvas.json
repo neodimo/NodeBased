@@ -1,0 +1,292 @@
+{
+ "run": "stage 8, sdxl_controlnet 1.2, each frame from the warped guide canvas",
+ "date": "2026-10-11",
+ "determinism": {
+  "provider": "sdxl_controlnet",
+  "sampler_settings": {
+   "control_mode": "depth_normals",
+   "controlnet_conditioning_scale": 0.8,
+   "denoise_strength": 0.5,
+   "guidance": 5.0,
+   "steps": 30
+  },
+  "seed": 7,
+  "seed_honoured": true,
+  "version": "1.2"
+ },
+ "generated_sequence": "7f59a4604005f6e861bf3eba7f1c4649891f69bfc5cb79b846447a8bddea3d6d",
+ "verification_report": "ca01c65e18ff05d8dc2a923db4e2698447f4e96bf627afd6d3f31b8e05bd91f0",
+ "verdict": "FAIL",
+ "whole_run_seconds": 781.6,
+ "sdxl_run": {
+  "load_seconds": 5.23,
+  "generate_seconds": 584.15,
+  "peak_vram_allocated_mib": 7899,
+  "peak_vram_reserved_mib": 8346,
+  "cpu_offload": true,
+  "working_size": [
+   1024,
+   576
+  ],
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "torch": "2.14.1+cu126",
+  "diffusers": "0.41.0",
+  "frames": 24,
+  "denoise_strength": 0.5,
+  "filled_fraction_per_frame": [
+   0.0055,
+   0.0054,
+   0.0053,
+   0.0051,
+   0.0053,
+   0.0059,
+   0.0054,
+   0.0058,
+   0.0064,
+   0.0054,
+   0.0057,
+   0.0066,
+   0.0059,
+   0.005,
+   0.008,
+   0.0065,
+   0.0057,
+   0.0068,
+   0.0058,
+   0.0058,
+   0.0062,
+   0.0064,
+   0.0063
+  ]
+ },
+ "seconds_per_frame": 24.34,
+ "temporal": {
+  "unit": "8-bit display steps (mean absolute RGB difference per pixel)",
+  "mean": 2.644,
+  "p95": 7.6702,
+  "threshold_mean": 4.0,
+  "threshold_p95": 12.0,
+  "pass": true,
+  "pairs_measured": 23,
+  "compared_fraction": 0.9895,
+  "pairs": [
+   {
+    "frames": [
+     1,
+     2
+    ],
+    "pixels": 128344,
+    "mean": 5.1818,
+    "p95": 14.4005
+   },
+   {
+    "frames": [
+     2,
+     3
+    ],
+    "pixels": 128383,
+    "mean": 2.8339,
+    "p95": 7.6145
+   },
+   {
+    "frames": [
+     3,
+     4
+    ],
+    "pixels": 128281,
+    "mean": 2.591,
+    "p95": 6.8515
+   },
+   {
+    "frames": [
+     4,
+     5
+    ],
+    "pixels": 128362,
+    "mean": 2.5412,
+    "p95": 7.6546
+   },
+   {
+    "frames": [
+     5,
+     6
+    ],
+    "pixels": 128369,
+    "mean": 2.8479,
+    "p95": 8.0177
+   },
+   {
+    "frames": [
+     6,
+     7
+    ],
+    "pixels": 128234,
+    "mean": 2.1836,
+    "p95": 6.0187
+   },
+   {
+    "frames": [
+     7,
+     8
+    ],
+    "pixels": 128379,
+    "mean": 2.5998,
+    "p95": 7.6615
+   },
+   {
+    "frames": [
+     8,
+     9
+    ],
+    "pixels": 128262,
+    "mean": 2.615,
+    "p95": 7.1916
+   },
+   {
+    "frames": [
+     9,
+     10
+    ],
+    "pixels": 128267,
+    "mean": 2.5256,
+    "p95": 6.8308
+   },
+   {
+    "frames": [
+     10,
+     11
+    ],
+    "pixels": 128297,
+    "mean": 2.0194,
+    "p95": 5.5754
+   },
+   {
+    "frames": [
+     11,
+     12
+    ],
+    "pixels": 128250,
+    "mean": 2.4873,
+    "p95": 7.0991
+   },
+   {
+    "frames": [
+     12,
+     13
+    ],
+    "pixels": 128060,
+    "mean": 2.4662,
+    "p95": 7.6446
+   },
+   {
+    "frames": [
+     13,
+     14
+    ],
+    "pixels": 128264,
+    "mean": 2.6149,
+    "p95": 7.1192
+   },
+   {
+    "frames": [
+     14,
+     15
+    ],
+    "pixels": 128375,
+    "mean": 2.648,
+    "p95": 7.6323
+   },
+   {
+    "frames": [
+     15,
+     16
+    ],
+    "pixels": 127871,
+    "mean": 2.5139,
+    "p95": 6.9879
+   },
+   {
+    "frames": [
+     16,
+     17
+    ],
+    "pixels": 128018,
+    "mean": 2.3731,
+    "p95": 6.8273
+   },
+   {
+    "frames": [
+     17,
+     18
+    ],
+    "pixels": 128254,
+    "mean": 2.8381,
+    "p95": 7.607
+   },
+   {
+    "frames": [
+     18,
+     19
+    ],
+    "pixels": 128103,
+    "mean": 2.349,
+    "p95": 6.7701
+   },
+   {
+    "frames": [
+     19,
+     20
+    ],
+    "pixels": 128197,
+    "mean": 2.5306,
+    "p95": 8.0288
+   },
+   {
+    "frames": [
+     20,
+     21
+    ],
+    "pixels": 128351,
+    "mean": 2.3932,
+    "p95": 7.1596
+   },
+   {
+    "frames": [
+     21,
+     22
+    ],
+    "pixels": 128141,
+    "mean": 2.6953,
+    "p95": 7.6054
+   },
+   {
+    "frames": [
+     22,
+     23
+    ],
+    "pixels": 128149,
+    "mean": 2.2474,
+    "p95": 6.3944
+   },
+   {
+    "frames": [
+     23,
+     24
+    ],
+    "pixels": 128248,
+    "mean": 2.7121,
+    "p95": 8.3339
+   }
+  ]
+ },
+ "plate_render_temporal": {
+  "unit": "8-bit display steps (mean absolute RGB difference per pixel)",
+  "mean": 0.1884,
+  "p95": 0.2996,
+  "threshold_mean": 4.0,
+  "threshold_p95": 12.0,
+  "pass": true,
+  "pairs_measured": 23,
+  "compared_fraction": 0.9895
+ }
+}

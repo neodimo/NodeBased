@@ -345,6 +345,23 @@ Per-frame data: `benchmarks/demo_shot/`.
 | Run | Generation | Per frame | Peak VRAM (allocated / reserved) | Flicker mean / p95 | Temporal |
 |---|---|---|---|---|---|
 | Stage 3, `sdxl_controlnet` 1.0, per frame | 336.5 s | 14.0 s | 7,760 / 8,228 MiB | 15.4 / 48.3 steps | FAIL |
+| Stage 8, 1.1, from the previous generated picture | 583.0 s | 24.3 s | 7,899 / 8,346 MiB | 19.0 / 68.8 steps | FAIL |
+| Stage 8, 1.2, from the warped canvas | 584.2 s | 24.3 s | 7,899 / 8,346 MiB | 2.6 / 7.7 steps | PASS |
+
+**After.** Version 1.1 started each frame from the previous generated picture. Frames 2 and 3 agreed with frame 1
+(5 to 6 steps), then the model's contrast and texture gain compounded from pass to pass: by frame 6 the backdrop
+had broken into saturated streaks and by frame 24 the picture was noise, so the flicker went up to 19.0 and 68.8.
+Version 1.2 keeps a guide canvas that the image-to-image results never enter: frame 1's picture, warped into each
+frame, with the holes (about 0.6% of a frame) filled from that frame's own text-to-image picture. The flicker
+falls to mean 2.6 and 95th percentile 7.7 (every pair between 2.0 and 2.8 after the first, 5.2), under the
+threshold, and the verification report's temporal line reads PASS. The verdict stays FAIL on lighting and
+objects, as in stage 3: SDXL restyles the layout render. A frame now costs about 24 s against 14 s, because most
+frames run two passes (the text-to-image picture for the holes, then the image-to-image pass at strength 0.5, 15
+of the 30 steps); the peak card memory hardly moves (the two pipelines share their models). The whole hand run
+took 782 s. Stills, next to the stage 3 ones: `docs/images/demo_shot/sdxl_controlnet_reprojected_frame_0001.png`,
+`_0012.png`, `_0024.png`. Layout, lighting and the backdrop's stripes now hold through the shot; the picture
+softens towards frame 24 (the canvas is resampled once per frame) and the tall box picks up some ghosting at its
+edge. Frame 1 is the same picture as stage 3's, pixel for pixel.
 
 **Next: a local video model (assessment, nothing downloaded).** Checked in the brief's order, from each model's own
 documentation. CogVideoX-2B and 5B (with the community depth ControlNets or the CogVideoX-Fun control variants)
