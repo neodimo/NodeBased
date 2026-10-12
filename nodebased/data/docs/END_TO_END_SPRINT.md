@@ -488,13 +488,38 @@ is handed nothing. Frame rate after the warm-up (end to end in brackets); memory
 - **The lens comes back about 12 to 15% long.** 512 x 288 gives +13.9%. The per-frame fits range from 709 to
   825 px at 960, and the free-focal bundle adjustment is worse (502 px at 960, 988 at 1920), so it stays a
   diagnostic. That is the size of error stage 7 put into DPVO on purpose: handed a focal 12% and 15% long,
-  DPV-SLAM moves from 1.98 cm to 2.42 and 2.64 cm. The camera path survives it; whether the shot does is part 3.
+  DPV-SLAM moves from 1.98 cm to 2.42 and 2.64 cm. The camera path survives it; the shot below does not.
 - **The refinement is what makes the poses usable.** MASt3R-SLAM keeps one keyframe on this 1.5 m dolly, and its
   raw tracked poses are 14 cm off (19 cm at 512); the bundle adjustment (0.3 s, 15,000 matches, 0.41 px) brings
   them to 1.7 cm.
 - **Resolution does not help MASt3R-SLAM** (it always sees 512 x 288), and helps DPV-SLAM a lot: at 1920 it is
   three times as accurate as MASt3R-SLAM. MASt3R-SLAM runs at about 10 frames a second, a quarter of DPV-SLAM.
 - **Repeatable.** Two MASt3R-SLAM runs give the same poses and focal to the bit, so a re-solve keeps every id.
+
+**The shot with the solved camera** (`run_by_hand.py`, the committed 480 x 270 plate, `reproject`, seed 7, the
+first-frame anchor and the two survey points as in stage 7). The verifier's survey check reprojects the 44
+landmarks the plate shows (779 tracked observations) through the exported cameras; it passes when the RMS is
+within 0.5% of the plate height and the worst within 1.5% (1.35 px and 4.05 px here).
+
+| camera | focal length | survey RMS / worst | verdict |
+|---|---|---|---|
+| survey-point solve (stage 4a) | typed in, 22.54 mm | 0.33 / 1.56 px | **PASS** |
+| DPV-SLAM, handed the true focal | typed in, 22.54 mm | 2.96 / 16.9 px | FAIL (survey) |
+| DPV-SLAM, handed a focal 15% long | typed in, 25.92 mm | 25.1 / 58.1 px | FAIL (survey) |
+| MASt3R-SLAM, nothing typed in | recovered, 26.94 mm (+19.5%) | 32.7 / 62.4 px | FAIL (survey, objects) |
+
+The recovered lens is not good enough to drive the shot: on the 480 plate it comes back 19.5% long and the
+landmarks land 33 px off on average, worse than DPV-SLAM handed a lens 15% long. Two MASt3R-SLAM runs of the
+whole shot gave the same ids (scene_state `8b8d930efe794344b6530cef87042c69415ff6a045726c5b0b6d8ecc15116112`,
+report `a320949677b8227b5bc5b4ba3ca27cb0cdad25bb45ad9748d0ee7ce1727f9c95`), the first repeatable solved-camera
+shot. DPV-SLAM with the true lens also misses at this size: the 480 plate's survey scale is 9% off (stage 7), and
+the check is strict enough to see it. The shot graph is built for the 480 plate (its Merge fails on a 960 plate),
+so the 960 numbers above could not go through the shot.
+
+**Recommendation.** Keep DPV-SLAM as the camera solver and keep typing the lens in; use MASt3R-SLAM where its
+repeatability matters, or as a first guess of the lens to check by eye. A recovered lens needs a better fit than
+the point maps give before it can replace the typed one: a focal refined by a bundle adjustment over more
+keyframes (this dolly gives one), or the survey points themselves. The real test is still DiMo's filmed plate.
 
 **The stand-in for a filmed plate** (`examples/demo_shot/make_standin_plate.py`, 960 x 540): the demo plate
 rendered again through the "wide angle" Brown-Conrady preset (k1 -0.04, k2 0.004, about 10% at the corners) with a
