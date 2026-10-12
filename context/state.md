@@ -1,5 +1,39 @@
 ## 2026-10-11 — Lane 8 step S1 of 3: open/stroked Roto splines (DONE)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (7:17 AM on 2026-10-12 PDT)
+
+`main` moved `3edf3774` -> `7330eb39` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 127 tests in 350.109 s, OK. Full suite on
+the stacked tip `7330eb39` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1012-0156.log`, started 1:57 AM): **Ran 5238 tests in 18476.617 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Gonzo's end-to-end sprint, stage 8: temporal coherence, the generated shot stops flickering (flicker 15.4 to 2.6 display steps).** Commits:
+  - `62a28ebc` Stage 8 part 5: the demo shot through sdxl_controlnet 1.2 runs twice by hand and once by the agent to identical result ids; the agent script names the provider interpreter and the model cache from the real home (its window runs with a private settings home)
+  - `ca79b535` Sprint doc, stage 8 part 3: flicker before and after (15.4 / 48.3 to 2.6 / 7.7 display steps, PASS), card memory and per-frame time in the benchmark table, frames 1, 12 and 24 of the reprojected shot next to the stage 3 stills
+  - `58e4e5a4` sdxl_controlnet 1.2: guide each frame from a warped canvas (frame 1's picture, holes from each frame's own text-to-image picture) instead of the previous generated picture; chaining image-to-image results in 1.1 compounded the model's contrast and texture gain until the picture broke up
+  - `630cc560` Sprint doc, stage 8 part 3: the flicker baseline of the stage 3 result and the demo shot's SDXL benchmark table (stage 3 row; per-frame data under benchmarks/demo_shot)
+  - `31bf29fd` Sprint doc, stage 8 part 4: the local video model assessment (Wan2.1 VACE-1.3B next, Fun-Control as the fallback); written by the stage 8 worker, committed by Gonzo after its time ran out waiting on the GPU lock
+  - `3c80c4af` sdxl_controlnet 1.1: build the image-to-image pipeline with its constructor (from_pipe kept models on the card), agent demo takes --provider, docs describe the reprojection
+  - `6a3218e2` sdxl_controlnet 1.1: reprojection-guided generation (each frame image-to-image from the previous one warped by the exported motion, holes from its own text-to-image pass; denoise_strength pinned in the result identity)
+  - `0bd89bf8` verify: temporal flicker measure in the verification report (warp with exported motion, occlusion and ID mask)
+  Diff: 21 files changed, 1597 insertions(+), 59 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step P4 of 4: Hot pour preview at 12 frames per second, and a stop that settles within a second.** Commits:
+  - `db04a1fe` docs: record Lane 6 P4 cache blocker
+  Diff: 2 files changed, 14 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step S1 of 3: open and stroked splines in Roto, like Nuke's open Bezier with a stroke width.** Commits:
+  - `80285bbf` Roto: support open stroked splines
+  Diff: 13 files changed, 237 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Lane 8 added an optional per-shape `closed` flag (default true) and animatable `stroke_width` in pixels. Open splines rasterize with round caps/joins; feather extends from both sides and point offsets affect that feather. Width and the existing point/feather pixel values scale with proxy tiers. The viewer ends an open spline on Enter and closes it on first-point click; the list reports state and width. The validated `set_shapes` payload works with undo, save/load, and the agent-facing description.
 
 Evidence: focused Roto rendering/validation, proxy, undo/save, viewer, knowledge bundle, and parity-count checks passed on Linux offscreen. The pre-flag closed-shape raster is byte-identical when compared with the explicit closed form. Windows and real-display visual QA are unverified. No schema migration was needed.
