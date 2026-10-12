@@ -7458,6 +7458,7 @@ class Window(QMainWindow):
         self.keyed_frames = []
         self.playback_origin_frame = 0
         self.playback_origin_time = 0.0
+        self._stop_refine_pending = False
         self.playback_elapsed_frames = 0
         self.playback_dropped_frames = 0
         # Nuke-style playback fallback: count of primary (display) frames actually completed
@@ -8344,6 +8345,10 @@ class Window(QMainWindow):
         start = (not self.playing) if checked is None else bool(checked)
         if start == self.playing:
             return
+        fluid_project = any(node.get("type") == "FluidSurface3D"
+                            for node in self.dispatcher.document.get("nodes", {}).values())
+        stopping_proxy = not start and (self.proxy.currentData() != 1
+                                        or self.playback_auto_proxy_index is not None)
         self.playing = start
         if start:
             self.play_direction = -1 if direction < 0 else 1
@@ -8396,9 +8401,25 @@ class Window(QMainWindow):
             self.playback_timer.stop()
             self.preview_queue.cancel()
             if self.playback_auto_proxy_index is not None:
-                self.proxy.setCurrentIndex(self.playback_auto_proxy_index)
+                if fluid_project:
+                    self.proxy.blockSignals(True)
+                    self.proxy.setCurrentIndex(self.playback_auto_proxy_index)
+                    self.proxy.blockSignals(False)
+                else:
+                    self.proxy.setCurrentIndex(self.playback_auto_proxy_index)
                 self.playback_auto_proxy_index = None
             self.update_realtime_light()
+            if fluid_project:
+                if stopping_proxy:
+                    full_index = self.proxy.findData(1)
+                    if full_index >= 0 and self.proxy.currentIndex() != full_index:
+                        self.proxy.blockSignals(True)
+                        self.proxy.setCurrentIndex(full_index)
+                        self.proxy.blockSignals(False)
+                    self._stop_refine_pending = True
+                    self.request_preview(tier_override=2)
+                else:
+                    self.request_preview(tier_override=1)
 
     def playback_tick(self):
         """Follow the wall clock when rendering can keep up. When it can't, Nuke-style fallback:
@@ -12417,7 +12438,7 @@ class Window(QMainWindow):
         return TileRegion(x0, y0, x1 - x0, y1 - y0, full_x=bounds.x, full_y=bounds.y,
                           full_width=bounds.width, full_height=bounds.height)
 
-    def request_preview(self, *_, playhead_only=False):
+    def request_preview(self, *_, playhead_only=False, tier_override=None):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
@@ -12425,6 +12446,7 @@ class Window(QMainWindow):
         self.rendered_identity = self.render_identity()
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = snapshot["time"]["current"]
+        tier = self.proxy.currentData() if tier_override is None else int(tier_override)
         self.evaluator.preview_direction = -1 if self.playing and getattr(self, "play_direction", 1) < 0 else 1
         future = self.future_frames(frame) if self.playing else ()
         viewport = None
@@ -12444,7 +12466,6 @@ class Window(QMainWindow):
         if target and not current_extent.isEmpty():
             try:
                 if self.tile_executor.supports_tiled(snapshot, target):
-                    tier = self.proxy.currentData()
                     bounds = self.tile_executor.canvas_region(snapshot, target, frame=frame, tier=tier)
                     claimed = self.viewer.sceneRect()
                     same_canvas = (bounds.width * tier, bounds.height * tier) == \
@@ -12463,7 +12484,7 @@ class Window(QMainWindow):
             # runs to completion, but its result is discarded rather than stored.
             self.decode_pool.bump_epoch()
         self.preview_queue.replace(self.generation, frame, snapshot, future,
-                                   tier=self.proxy.currentData(), viewport=viewport,
+                                   tier=tier, viewport=viewport,
                                    playing=self.playing,
                                    cancel_active=cancel_active)
         # The decode-ahead pool only ever gets consulted by the tier != 1 Read path (tileexec.py's
@@ -12471,7 +12492,7 @@ class Window(QMainWindow):
         # never looks at it. Prefetching at tier 1 would just spend the decode pool's own worker
         # threads (and the GIL) decoding full frames nobody will ever read back -- measured as a
         # net loss for full-resolution playback (docs/BENCHMARKS-v0.17-playback.md).
-        if target and future and self.proxy.currentData() != 1:
+        if target and future and tier != 1:
             self.tile_executor.prefetch_reads(snapshot, target, future)
         self.timer.start(0 if self.playing else 35)
 
@@ -12865,6 +12886,10 @@ class Window(QMainWindow):
                 text.setTextWidth(520)   # a long, actionable message wraps instead of shrinking to a line
                 self.viewer.fit()
                 self.viewer.draw_format_overlay(None)
+        if self._stop_refine_pending and not self.playing and request.tier == 2:
+            self._stop_refine_pending = False
+            if fresh:
+                self.request_preview(tier_override=1)
         # Every completed render -- display or read-ahead -- may have added a display-cache entry,
         # which is exactly when the orange band grows. Refreshing here is what makes the strip
         # fill in live during playback instead of only after the next document edit.

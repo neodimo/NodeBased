@@ -1080,8 +1080,8 @@ def signed_distance(stream, positions, smoothing=0, resolution=1, radius=None):
     from .liquid_surface import level_set
     radius = stream.radius if not radius else float(radius)
     support = max(SUPPORT_SPACINGS * stream.spacing, 2.2 * radius)
-    res = max(1, int(resolution))
-    fine = tuple(n * res for n in stream.shape)
+    res = max(0.25, float(resolution))
+    fine = tuple(max(4, int(round(n * res))) for n in stream.shape)
     if stream.backend == "resident":
         from . import flip_gpu_levelset
         if flip_gpu_levelset.fits(fine):
@@ -1190,12 +1190,13 @@ def empty_instance():
                             ages=zero, lifetimes=zero, ids=e["id"])
 
 
-def surface_level_set(instance, params, temporal_instances=()):
+def surface_level_set(instance, params, temporal_instances=(), resolution_scale=1.0):
     """The filtered signed-distance grid and voxel size used by FluidSurface3D."""
     stream = getattr(instance, "stream", None)
     if not isinstance(stream, LiquidStream) or not len(instance):
         return None, None
-    resolution = min(4, max(1, int(params.get("surface_resolution", 1)) * int(params.get("detail_ratio", 1))))
+    resolution = min(4.0, max(0.25, int(params.get("surface_resolution", 1)) *
+                                int(params.get("detail_ratio", 1)) * float(resolution_scale)))
     phi, voxel = signed_distance(stream, instance.positions, 0, resolution,
                                  float(params["particle_radius"]))
     # Average signed distances on the common grid. Averaging fields (rather than vertices) also
@@ -1221,14 +1222,14 @@ def preserve_thin_sheet_gaps(phi, particle_spacing):
     return np.asarray(phi, np.float32) - np.float32(0.5 * particle_spacing)
 
 
-def surface_geometry(instance, params, temporal_instances=()):
+def surface_geometry(instance, params, temporal_instances=(), resolution_scale=1.0):
     """The Geometry (closed mesh, smooth outward normals) of a liquid's particles for FluidSurface3D."""
     from . import scene3d
     from .liquid_surface import marching_tetrahedra, taubin
     stream = getattr(instance, "stream", None)
     if not isinstance(stream, LiquidStream) or not len(instance):
         return scene3d.empty_geometry()
-    phi, voxel = surface_level_set(instance, params, temporal_instances)
+    phi, voxel = surface_level_set(instance, params, temporal_instances, resolution_scale)
     vertices, triangles, normals = marching_tetrahedra(phi, stream.origin, voxel)
     lo = np.asarray(stream.origin, np.float64)
     vertices = taubin(vertices, triangles, int(params["smoothing"]), lo, lo + np.array(phi.shape) * voxel)
@@ -1238,6 +1239,31 @@ def surface_geometry(instance, params, temporal_instances=()):
     velocities = point_velocities(vertices, instance.positions, instance.velocities, voxel) \
         if instance.velocities is not None else None
     return scene3d.Geometry(vertices, triangles, LIQUID_COLOR, normals=normals, velocities=velocities)
+
+
+def surface_cache_run(stream, params):
+    """Stable cache identity for a liquid surface mesh, independent of its display tier."""
+    from . import simcache
+    return simcache.run_key(stream.run, {"surface_mesh": params, "format": 1})
+
+
+def surface_to_state(geometry):
+    """Compact cache payload for the mesh built by `surface_geometry`."""
+    from .simcache import State
+    arrays = {"vertices": np.asarray(geometry.vertices, np.float32),
+              "triangles": np.asarray(geometry.triangles, np.int32)}
+    if geometry.normals is not None:
+        arrays["normals"] = np.asarray(geometry.normals, np.float32)
+    if geometry.velocities is not None:
+        arrays["velocities"] = np.asarray(geometry.velocities, np.float32)
+    return State(arrays, {"color": list(geometry.color)}, copy=False)
+
+
+def surface_from_state(state):
+    """Restore a cached closed mesh; node material knobs are applied by the evaluator afterward."""
+    from .scene3d import Geometry
+    return Geometry(state.arrays["vertices"], state.arrays["triangles"], tuple(state.meta["color"]),
+                    normals=state.arrays.get("normals"), velocities=state.arrays.get("velocities"))
 
 
 def foam_instance(instance, params):

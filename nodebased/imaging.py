@@ -569,6 +569,7 @@ class Evaluator:
         self._sim_preview_stores = {}
         self._sim_preview_ring = simcache.PreviewFrameRing(neighbor_frames=3)
         self.preview_direction = 1
+        self._sim_surface_store = None
         self._rigid_solvers = {}
         self._liquid_feedback_versions = {}
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
@@ -648,6 +649,19 @@ class Evaluator:
 
     def remember_sim_preview_state(self, run, frame, state):
         self._sim_preview_ring.put(run, int(frame), state)
+
+    def sim_surface_store(self):
+        """Separate bounded cache for extracted liquid meshes; it cannot evict simulation checkpoints."""
+        if self._sim_surface_store is None:
+            from . import simcache
+            template = self.sim_template
+            enabled = bool(template is not None and template.enabled and template.root is not None)
+            root = None if not enabled else template.root / "surface-mesh-v1"
+            disk_budget = 0 if template is None else min(template.disk_budget, 16 << 30)
+            self._sim_surface_store = simcache.SimCache(
+                root=root, memory_budget=256 << 20, disk_budget=disk_budget, enabled=enabled,
+                profile=None if template is None else template.profile)
+        return self._sim_surface_store
 
     def clear(self):
         """Drop retained results from memory.
@@ -1271,12 +1285,17 @@ class Evaluator:
                         if isinstance(stream, flip3d.LiquidStream) and tier > 1:
                             preview_run = flip3d.preview_cache_run(stream.run, tier)
                             state = self.sim_preview_state(preview_store, preview_run, frame, doc)
+                            display_tier = tier
+                            if state is None and tier < 4:
+                                fallback_run = flip3d.preview_cache_run(stream.run, 4)
+                                state = self.sim_preview_state(preview_store, fallback_run, frame, doc)
+                                if state is not None:
+                                    display_tier = 4
                             if state is None:
                                 state = particles.solve_frame(stream, frame, store, cancel)
                                 state = flip3d.preview_state(state, stream, tier)
                                 preview_store.put(preview_run, int(frame), state)
                                 self.remember_sim_preview_state(preview_run, frame, state)
-                            display_tier = tier
                         else:
                             state = particles.solve_frame(stream, frame, store, cancel)
                             display_tier = 1
@@ -1317,7 +1336,7 @@ class Evaluator:
                     incoming = values[node["inputs"]["particles"]]
                     if node["disabled"] or incoming is None:
                         value = scene3d.empty_geometry()
-                    elif tier > 1 and int(getattr(incoming, "proxy_tier", 1)) >= tier:
+                    elif tier >= 4 and int(getattr(incoming, "proxy_tier", 1)) >= tier:
                         # The cached playback artifact is already a bounded point cloud with
                         # radii. Keep it as particles in the display scene; surface extraction
                         # belongs to the stopped/full-detail request.
@@ -1335,8 +1354,19 @@ class Evaluator:
                                 state = flip3d.solve_frame(incoming.stream, sample_frame, self._sim_memory, cancel)
                                 sample = flip3d.instance_from_state(state, incoming.stream, sample_frame)
                                 temporal.append(flip3d.proxy_instance(sample, tier) if tier > 1 else sample)
-                        value = replace(flip3d.surface_geometry(incoming, params, temporal),
-                                        **scene3d.material_fields(params))
+                        if tier == 1 and isinstance(getattr(incoming, "stream", None), flip3d.LiquidStream):
+                            surface_store = self.sim_surface_store()
+                            surface_run = flip3d.surface_cache_run(incoming.stream, params)
+                            surface_state = surface_store.get(surface_run, int(frame))
+                            if surface_state is None:
+                                geometry = flip3d.surface_geometry(incoming, params, temporal)
+                                surface_store.put(surface_run, int(frame), flip3d.surface_to_state(geometry))
+                            else:
+                                geometry = flip3d.surface_from_state(surface_state)
+                        else:
+                            geometry = flip3d.surface_geometry(
+                                incoming, params, temporal, resolution_scale=0.5 if tier == 2 else 1.0)
+                        value = replace(geometry, **scene3d.material_fields(params))
                 elif kind == "FluidFoam3D":
                     incoming = values[node["inputs"]["particles"]]
                     value = flip3d.empty_instance() if node["disabled"] or incoming is None else \
@@ -1367,9 +1397,17 @@ class Evaluator:
                             preview_run = simcache.run_key(run, {"preview_particles": 2, "tier": int(tier),
                                                                   "point_budget": flip3d.PREVIEW_POINT_BUDGET})
                             solved = self.sim_preview_state(preview_store, preview_run, frame, doc)
+                            display_tier = int(tier)
+                            if solved is None and tier < 4:
+                                fallback_run = simcache.run_key(run, {"preview_particles": 2, "tier": 4,
+                                                                        "point_budget": flip3d.PREVIEW_POINT_BUDGET})
+                                solved = self.sim_preview_state(preview_store, fallback_run, frame, doc)
+                                if solved is not None:
+                                    display_tier = 4
                         else:
                             preview_run = None
                             solved = None
+                            display_tier = 1
                         if solved is None:
                             solved = simcache.solve_to_frame(store, run, int(frame), fluid.start_frame, 1,
                                                              int(params["seed"]), initial_whitewater,
@@ -1386,7 +1424,7 @@ class Evaluator:
                                     preview_store.put(preview_run, int(frame), preview_state)
                                     self.remember_sim_preview_state(preview_run, frame, preview_state)
                         value = replace(whitewater.instance_from_state(_whitewater_state(solved), incoming, frame),
-                                        proxy_tier=int(tier) if tier > 1 else 1)
+                                        proxy_tier=display_tier)
                 elif kind == "FluidCache3D":
                     incoming = values[node["inputs"]["volume"]]
                     if node["disabled"] or fluid is None:

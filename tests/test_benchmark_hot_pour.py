@@ -6,10 +6,13 @@ from types import SimpleNamespace
 import numpy as np
 
 from nodebased.simcache import SimCache, State
-from tools.benchmark_hot_pour import cache_report
+from tools.benchmark_hot_pour import cache_report, percentile
 
 
 class HotPourBenchmarkCacheReportTests(unittest.TestCase):
+    def test_nearest_rank_p95_is_reported_conservatively(self):
+        self.assertEqual(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.95), 10.0)
+
     def test_report_counts_packed_sparse_frames_and_dense_equivalent(self):
         with tempfile.TemporaryDirectory() as root:
             run = "d" * 64

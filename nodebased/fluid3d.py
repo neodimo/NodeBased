@@ -1516,12 +1516,25 @@ def _geo_track_cacheable(doc, source_key):
     return True
 
 
-def _geo_track_signature(evaluator, doc):
+def _geo_track_signature(evaluator, doc, source_key):
     """A frame-independent graph signature shared by playback snapshots of the same document."""
-    payload = dict(doc)
-    time_data = dict(payload.get("time", {}))
-    time_data.pop("current", None)
-    payload["time"] = time_data
+    nodes = doc.get("nodes", {})
+    todo, seen = [source_key], set()
+    while todo:
+        key = todo.pop()
+        if key in seen or key not in nodes:
+            continue
+        seen.add(key)
+        todo.extend(value for value in nodes[key].get("inputs", {}).values()
+                    if isinstance(value, str) and value in nodes)
+    time_data = doc.get("time", {})
+    payload = {
+        "nodes": {key: nodes[key] for key in sorted(seen)},
+        "time": {key: time_data[key] for key in ("first", "last", "fps") if key in time_data},
+        "curves": {key: value for key, value in doc.get("animation", {}).get("curves", {}).items()
+                   if key in seen},
+        "expressions": {key: value for key, value in doc.get("expressions", {}).items() if key in seen},
+    }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
     return hashlib.blake2b(encoded, digest_size=16).hexdigest()
 
@@ -1536,8 +1549,9 @@ def _geo_track(evaluator, doc, source_key, cancel, start, animated):
     first = int(time.get("first", start))
     last = min(int(time.get("last", first)), first + MAX_TRACK_FRAMES)
     cache_key = None
+    signature = None
     if _geo_track_cacheable(doc, source_key):
-        signature = _geo_track_signature(evaluator, doc)
+        signature = _geo_track_signature(evaluator, doc, source_key)
         cache_key = (signature, source_key, int(start), bool(animated), first, last)
         tracks = getattr(evaluator, "_fluid_geo_tracks", None)
         if tracks is None:
@@ -1953,6 +1967,8 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name="", ti
     if tier > 1:
         run = preview_run if tier == 4 else simcache.run_key(out_run, {"preview_volume": 1, "tier": tier})
         preview = preview_get(run, frame)
+        if preview is None and tier < 4:
+            preview = preview_get(preview_run, frame)
         if preview is not None:
             if preview.meta.get("preview_artifact"):
                 return _fixed_preview_volume_value(preview, stream, frame, name, preview_texture_key(frame))

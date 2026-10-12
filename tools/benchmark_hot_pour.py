@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import statistics
 import subprocess
@@ -266,6 +267,15 @@ def percentile_row(values):
             "max_s": round(values[-1], 3), "total_s": round(sum(values), 2)}
 
 
+def percentile(values, fraction):
+    """Nearest-rank percentile, conservative for small frame samples."""
+    ordered = sorted(float(value) for value in values)
+    if not ordered:
+        return None
+    index = max(0, min(len(ordered) - 1, math.ceil(float(fraction) * len(ordered)) - 1))
+    return ordered[index]
+
+
 def playback(args, document, evaluator, gpu):
     """Frames per second of the baked range played from the cache through the app's GPU viewport."""
     import numpy as np
@@ -312,7 +322,9 @@ def playback(args, document, evaluator, gpu):
         total = [a + b for a, b in times]
         results[label] = {"fps_median": round(1.0 / statistics.median(total), 2), "fps_mean": round(len(total) / sum(total), 2),
                           "fetch_ms_median": round(statistics.median(fetch) * 1000, 1),
-                          "draw_ms_median": round(statistics.median(draw) * 1000, 1)}
+                          "draw_ms_median": round(statistics.median(draw) * 1000, 1),
+                          "fetch_plus_draw_ms_median": round(statistics.median(total) * 1000, 1),
+                          "fetch_plus_draw_ms_p95": round(percentile(total, 0.95) * 1000, 1)}
     if frame_profile is not None:
         results["frame_profile"] = frame_profile
 
@@ -348,21 +360,39 @@ def playback(args, document, evaluator, gpu):
         results[label] = {"fps_median": round(1.0 / statistics.median(total), 2),
                           "fps_mean": round(len(total) / sum(total), 2),
                           "fetch_ms_median": round(statistics.median(fetch) * 1000, 1),
-                          "draw_ms_median": round(statistics.median(draw) * 1000, 1)}
+                          "draw_ms_median": round(statistics.median(draw) * 1000, 1),
+                          "fetch_plus_draw_ms_median": round(statistics.median(total) * 1000, 1),
+                          "fetch_plus_draw_ms_p95": round(percentile(total, 0.95) * 1000, 1)}
 
+    # Prime the preview ring from an artifact in the bake. Requesting a tier-1
+    # frame first can accidentally invoke the solver when the baked artifact is
+    # a tier-4 frame; that is not a playback measurement.
+    preview_eval.evaluate_raster(document, "scene", frame=1, tier=preview_tier, typed=True)
     preview_pass(f"whole scene preview 1/{preview_tier} cold")
     preview_pass(f"whole scene preview 1/{preview_tier} warm")
     stop_eval = fresh_preview_evaluator()
-    stop_frame = max(1, args.frames // 2)
-    stop_eval.evaluate_raster(document, "scene", frame=stop_frame, tier=preview_tier, typed=True)
-    start = time.perf_counter()
-    scene = stop_eval.evaluate_raster(document, "scene", frame=stop_frame, tier=1, typed=True)
-    fetched = time.perf_counter()
-    renderer.render(scene, camera, args.play_width, args.play_height, (0.02, 0.02, 0.025, 1.0), ambient=0.2)
-    done = time.perf_counter()
-    results["stop_to_full_detail"] = {"frame": stop_frame, "fetch_ms": round((fetched - start) * 1000, 1),
-                                      "draw_ms": round((done - fetched) * 1000, 1),
-                                      "total_ms": round((done - start) * 1000, 1)}
+    requested_stops = getattr(args, "stop_frames", (max(1, args.frames // 2),))
+    if isinstance(requested_stops, str):
+        requested_stops = tuple(int(value) for value in requested_stops.split(",") if value.strip())
+    stops = {}
+    for stop_frame in requested_stops:
+        stop_eval.evaluate_raster(document, "scene", frame=stop_frame, tier=preview_tier, typed=True)
+        tiers = {}
+        for stop_tier in (2, 1):
+            start = time.perf_counter()
+            scene = stop_eval.evaluate_raster(document, "scene", frame=stop_frame, tier=stop_tier, typed=True)
+            fetched = time.perf_counter()
+            renderer.render(scene, camera, args.play_width, args.play_height, (0.02, 0.02, 0.025, 1.0), ambient=0.2)
+            done = time.perf_counter()
+            tiers[f"tier_{stop_tier}"] = {"fetch_ms": round((fetched - start) * 1000, 1),
+                                           "draw_ms": round((done - fetched) * 1000, 1),
+                                           "total_ms": round((done - start) * 1000, 1)}
+        stops[str(stop_frame)] = tiers
+    results["stops_to_full_detail"] = stops
+    # Retain the P3 key for existing report readers, pointing at the representative frame 60 row.
+    representative = stops.get("60", next(iter(stops.values()), {}))
+    results["stop_to_full_detail"] = {"frame": 60 if "60" in stops else (next(iter(stops), None)),
+                                      **representative.get("tier_1", {})}
     return results
 
 
@@ -441,9 +471,16 @@ def main(argv=None):
                         help="record cached-frame file/read/decode/sparse rebuild/upload phases for one steam-only frame")
     parser.add_argument("--profile-only", action="store_true",
                         help="evaluate and draw only --profile-frame; for phase diagnosis, not an FPS result")
+    parser.add_argument("--stop-frames", default="1,60,120",
+                        help="comma-separated production frames for tier-4 -> half -> full stop timings")
+    parser.add_argument("--skip-stop", action="store_true",
+                        help="measure playback only when stop refinement cannot safely complete")
     args = parser.parse_args(argv)
     if args.profile_only and args.profile_frame is None:
         parser.error("--profile-only requires --profile-frame")
+    args.stop_frames = tuple(int(value) for value in args.stop_frames.split(",") if value.strip())
+    if (not args.skip_stop and not args.stop_frames) or any(frame < 1 or frame > args.frames for frame in args.stop_frames):
+        parser.error("--stop-frames must name one or more frames within the selected range")
     if args.profile_frame is not None and not 1 <= args.profile_frame <= args.frames:
         parser.error("--profile-frame must be within the selected frame range")
     workdir = Path(args.workdir or f"/tmp/hot-pour-{args.adapter}-{args.liquid_cells}-{args.smoke_cells}")

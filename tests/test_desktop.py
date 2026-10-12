@@ -1620,6 +1620,32 @@ class PlaybackProxyToggleTests(unittest.TestCase):
         w.toggle_playback(False)
         self.assertEqual(w.proxy.currentData(), 4)
 
+    def test_fluid_stop_requests_half_surface_then_full_detail(self):
+        w = self.window
+        w.dispatcher.document["nodes"]["fluid_surface_marker"] = {"type": "FluidSurface3D"}
+        quarter = w.proxy.findData(4)
+        w.proxy.setCurrentIndex(quarter)
+        try:
+            with unittest.mock.patch.object(w, "request_preview") as request_preview:
+                w.toggle_playback(True)
+                request_preview.reset_mock()
+                w.toggle_playback(False)
+                self.assertEqual([call.kwargs for call in request_preview.call_args_list],
+                                 [{"tier_override": 2}],
+                                 "a fluid stop must show the half-resolution surface first")
+                self.assertEqual(w.proxy.currentData(), 1)
+                self.assertTrue(w._stop_refine_pending)
+
+                current = w.dispatcher.document["time"]["current"]
+                request = FrameRequest(w.generation, current, False, {}, tier=2)
+                w.preview_ready((request, threading.Event()), None, None, "half surface ready")
+
+                self.assertEqual(request_preview.call_args.kwargs, {"tier_override": 1},
+                                 "the half-resolution stop result must enqueue full detail")
+                self.assertFalse(w._stop_refine_pending)
+        finally:
+            w.dispatcher.document["nodes"].pop("fluid_surface_marker", None)
+
 
 class DecodeAheadPlaybackTests(unittest.TestCase):
     """`Window.decode_pool` (decodepool.DecodeAheadPool): playback must warm it for the Read
