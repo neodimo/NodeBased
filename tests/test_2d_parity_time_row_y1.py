@@ -174,6 +174,11 @@ class TimeRowTests(unittest.TestCase):
             if widget.parentWidget() is not row or widget is w.frame_info:
                 continue
             checked += 1
+            if widget in row._optional and not widget.isVisible():
+                # The row hides its optional words, by design, when the platform's font makes
+                # everything too wide for the viewer; what is left must then fit.
+                self.assertLessEqual(row.row.minimumSize().width(), row.width(), widget.objectName())
+                continue
             self.assertTrue(widget.isVisible(), widget.objectName() or type(widget).__name__)
             self.assertTrue(bounds.contains(widget.geometry()), f"{widget.geometry()} outside {bounds}")
             self.assertGreaterEqual(widget.width(), widget.minimumSizeHint().width(),
