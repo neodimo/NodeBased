@@ -1,3 +1,10 @@
+## 2026-10-12 01:50 AM PDT — Lane 6 P4 of 4: hot-pour preview and stop (BLOCKED)
+
+- **What was done (evidence):** inspected the prescribed retained-cache location `scratch/nb-lanes/run/`; no production Hot pour cache is present. The P3 benchmark record states its 48,755,923,288-byte cache was removed after measurement. No source changes, profile run, tests, or performance measurements were made.
+- **Artifacts:** `scratch/nb-lanes/run/issue-6.md` was used as the local issue-edit staging file; the GitHub issue and lane board now record the blocker. Branch note in `TASKLOG.md` and `context/state.md` is committed; benchmark cache absent; no generated cache kept.
+- **State:** blocked before the brief's mandatory pre-change profile. P4 acceptance remains unchecked; Radeon and llvmpipe target results are unverified.
+- **Next owner + concrete artifact:** Needs Gonzo to regenerate production Hot pour cache under `scratch/nb-lanes/run/big-L6/`, then resume the profile in `docs/FLUIDS_SPIKE.md` before code changes.
+
 ## 2026-10-11 3:20 PM PDT — Lane 6 P3 of 3 (PARTIAL)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (1:46 AM on 2026-10-12 PDT)
