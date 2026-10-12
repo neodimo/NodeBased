@@ -62,6 +62,10 @@ Working images are 1024 × 576, delivered at 480 × 270. Temporal acceptance is 
 
 **Camera adherence and objects — camera rays or geometry-backed reprojection.** CameraCtrl encodes rays, MotionCtrl separates camera and object movement, and ReCamMaster conditions video on new camera trajectories [K,R]. GEN3C goes further: render a persistent 3D cache from the requested pose, then complete missing content [G]. Our exported intrinsics, metric geometry and motion remove much of their depth/pose-estimation uncertainty. Fun's small camera checkpoint is the practical learned-camera follow-up [F]. Cost: camera-coordinate conversion, relative-pose/scale normalization and non-rigid object motion still need validation; learned control is approximate, and GEN3C's measured memory is outside our budget. Preserve the verifier's **1 cm / 0.25° / 0.1°** position/rotation/FOV gates from the conditioning contract. Object tracking may also reject changed appearance or ambiguous edges; inspect those matches before attributing a failure to geometry. A camera-conditioned model must be measured from its generated pixels; copying input depth/IDs or declaring camera support cannot substitute for that evidence. Licence and stack changes remain those in the landscape.
 
+### 3. One worker-sized spike
+
+[**VACE depth + reference against stage 8**](../briefs/proposed/T1-vace-depth-reference.md) specifies one model, one fixed offload strategy, aspect-preserving depth/reference preparation, two fresh runs and a 90-minute hard stop. It compares against the exact benchmark, requires better flicker without sacrificing the requested edit or worsening verification, and falls back to the unchanged current provider. This brief is proposed, not authorized execution. In particular, VACE's edit mask and our reprojection-validity mask have different meanings; the experiment keeps them separate.
+
 ### Sources and dates
 
 All links checked **2026-10-12**. Read-only source inspection, not reproduced benchmarks. Search-engine failures were supplemented with the DonSeTch search wrapper and primary repository/model pages; this is a scoped sweep, not an exhaustive availability claim.
