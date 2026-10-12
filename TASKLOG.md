@@ -1,3 +1,10 @@
+## 2026-10-12 — Lane 8 S2 of 3: PlanarTracker (PARTIAL)
+
+- **What was done (evidence):** Added deterministic normalized-DLT homography fitting with fixed-seed RANSAC and synthetic tests for projective corner recovery, repeatability, and 25% outlier rejection.
+- **Artifacts:** `nodebased/planar.py` and `tests/test_planar_tracking.py` are committed in `1dcb65b`; test log is `scratch/nb-lanes/run/tests-L8.log`.
+- **State:** The fitting primitive passes its targeted tests. There is no PlanarTracker node or dense-flow feature matching integration yet; UI overlays, keyed corners, CornerPin export, Roto Planar follow, docs and full acceptance tests remain absent.
+- **Next owner + concrete artifact:** Needs Gonzo to resume S2 in `openclaw/nb-2d-parity-b`, implementing feature correspondence from the existing flow, node registration/analysis, UI/export/follow, and docs.
+
 ## 2026-10-12 8:20 AM PDT — Lane 6 P4 of 4: hot-pour preview and stop (PARTIAL)
 
 - **What was done:** Regenerated the 120-frame 256³ / 192³ Radeon production bake. A warmed frame-60 cProfile baseline took 397 ms, with fluid chain and geometry track work at the top. Implemented directional decoded-frame ring buffering, persistent volume texture updates, cached surface-mesh persistence and progressive tier-2 stop refinement. Production playback now measures 6.7 ms cold median / 7.8 ms p95 and 6.4 ms warm median / 8.3 ms p95 on Radeon; llvmpipe measures 23.0 / 31.3 ms cold and 22.1 / 29.6 ms warm. Targeted tests pass.

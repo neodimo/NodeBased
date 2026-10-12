@@ -1,3 +1,7 @@
+## 2026-10-12 — Lane 8 step S2 of 3: PlanarTracker (PARTIAL)
+
+A deterministic projective fitting primitive is committed as `1dcb65b`, with synthetic corner-recovery, deterministic-repeat, and 25%-outlier tests passing. This is a reusable algorithm slice only. PlanarTracker is not registered or connected to the existing dense flow; the viewer, animatable corners, CornerPin export, Roto follow, docs and acceptance coverage are still outstanding. Needs Gonzo: continue S2 in `openclaw/nb-2d-parity-b`; start with `nodebased/planar.py` and `tests/test_planar_tracking.py`. Windows and display QA remain unverified.
+
 ## 2026-10-12 8:20 AM PDT — Lane 6 P4 of 4: hot-pour preview and stop (PARTIAL)
 
 - **What was done:** Regenerated the 120-frame 256³ / 192³ Radeon production bake. A warmed frame-60 cProfile baseline took 397 ms, with fluid chain and geometry track work at the top. Implemented directional decoded-frame ring buffering, persistent volume texture updates, cached surface-mesh persistence and progressive tier-2 stop refinement. Production playback now measures 6.7 ms cold median / 7.8 ms p95 and 6.4 ms warm median / 8.3 ms p95 on Radeon; llvmpipe measures 23.0 / 31.3 ms cold and 22.1 / 29.6 ms warm. Targeted tests pass.
