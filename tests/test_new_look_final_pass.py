@@ -73,20 +73,23 @@ class OneLineKnobRowTests(Base):
         xyz = [r for r in rows if len(r.units) == 3 and not any(u.objectName().endswith("-field") for u in r.units)]
         # The default Properties width is 400 px whatever the platform's font; where the fields'
         # own metrics need more than that (Windows), give the panel what the one line needs.
-        short = max(_one_line_need(r) - r.width() for r in [colour, *xyz]) + 8
-        if short > 0:
-            dock = w.properties_dock
+        dock = w.properties_dock
+        for _ in range(8):
+            short = max(_one_line_need(r) - r.width() for r in [colour, *xyz]) + 8
+            if short <= 0:
+                break
             w.resizeDocks([w.viewer_dock, dock], [w.viewer_dock.width() - short, dock.width() + short],
                           Qt.Orientation.Horizontal)
             for _ in range(5):
                 APP.processEvents()
-        self.assertEqual(colour._columns, len(colour.units))
+        detail = [(r.width(), _one_line_need(r), r._columns) for r in [colour, *xyz]]
+        self.assertEqual(colour._columns, len(colour.units), detail)
         for unit in colour.units[1:]:
             self.assertGreaterEqual(unit.width(),
                                     unit.fontMetrics().horizontalAdvance(unit.text()) + 6, unit.objectName())
         self.assertTrue(xyz)
         for row in xyz:
-            self.assertEqual(row._columns, 3)
+            self.assertEqual(row._columns, 3, detail)
 
 
 if __name__ == "__main__":

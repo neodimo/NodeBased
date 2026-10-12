@@ -3,19 +3,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 
 from PySide6.QtCore import QCoreApplication, QSettings
 
 import nodebased
-from . import agentloop, issues, knowledge, settingshome
-
-settingshome.apply()
+from . import agentloop, issues, knowledge
 
 
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 DISK_OPS = frozenset({"save", "load", "render"})
+DISK_OPS_ENV = "NODEBASED_AGENT_DISK_OPS"
 # The window answers these only when the work is done (a 24-frame export at full size took over a
 # minute, the 30 s default dropped the connection while the window kept working), so they wait longer.
 LONG_TIMEOUT_MS = 60 * 60 * 1000
@@ -124,7 +124,11 @@ class MCPServer:
 
     @staticmethod
     def _disk_ops_allowed():
-        value = QSettings("NodeBased", "NodeBased").value("agent/allow_disk_ops", False)
+        # A headless session (mcpclient.HeadlessSession) says it here: Qt keeps settings in the
+        # registry on Windows, where its private HOME cannot hold the setting.
+        value = os.environ.get(DISK_OPS_ENV)
+        if value is None:
+            value = QSettings("NodeBased", "NodeBased").value("agent/allow_disk_ops", False)
         return value not in (False, "false", "0", 0)
 
     def _edit(self, arguments):
