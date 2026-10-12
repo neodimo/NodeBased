@@ -1,0 +1,262 @@
+{
+ "run": "stage 3 baseline, sdxl_controlnet 1.0, every frame text-to-image",
+ "date": "2026-10-11",
+ "determinism": {
+  "provider": "sdxl_controlnet",
+  "sampler_settings": {
+   "control_mode": "depth_normals",
+   "controlnet_conditioning_scale": 0.8,
+   "guidance": 5.0,
+   "steps": 30
+  },
+  "seed": 7,
+  "seed_honoured": true,
+  "version": "1.0"
+ },
+ "generated_sequence": "71b96ddebb1f3e13a2717e8c92227bc8ed8421061fa4bdabf40fd0a378d923d5",
+ "sdxl_run": {
+  "load_seconds": 5.02,
+  "generate_seconds": 336.51,
+  "peak_vram_allocated_mib": 7760,
+  "peak_vram_reserved_mib": 8228,
+  "cpu_offload": true,
+  "working_size": [
+   1024,
+   576
+  ],
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "torch": "2.14.1+cu126",
+  "diffusers": "0.41.0",
+  "frames": 24
+ },
+ "seconds_per_frame": 14.02,
+ "temporal": {
+  "unit": "8-bit display steps (mean absolute RGB difference per pixel)",
+  "mean": 15.427,
+  "p95": 48.2689,
+  "threshold_mean": 4.0,
+  "threshold_p95": 12.0,
+  "pass": false,
+  "pairs_measured": 23,
+  "compared_fraction": 0.9895,
+  "pairs": [
+   {
+    "frames": [
+     1,
+     2
+    ],
+    "pixels": 128344,
+    "mean": 20.3996,
+    "p95": 41.1759
+   },
+   {
+    "frames": [
+     2,
+     3
+    ],
+    "pixels": 128383,
+    "mean": 30.0269,
+    "p95": 70.9827
+   },
+   {
+    "frames": [
+     3,
+     4
+    ],
+    "pixels": 128281,
+    "mean": 22.7598,
+    "p95": 57.9344
+   },
+   {
+    "frames": [
+     4,
+     5
+    ],
+    "pixels": 128362,
+    "mean": 15.0576,
+    "p95": 34.1854
+   },
+   {
+    "frames": [
+     5,
+     6
+    ],
+    "pixels": 128369,
+    "mean": 32.3091,
+    "p95": 74.4167
+   },
+   {
+    "frames": [
+     6,
+     7
+    ],
+    "pixels": 128234,
+    "mean": 30.2651,
+    "p95": 73.9185
+   },
+   {
+    "frames": [
+     7,
+     8
+    ],
+    "pixels": 128379,
+    "mean": 10.2345,
+    "p95": 24.8969
+   },
+   {
+    "frames": [
+     8,
+     9
+    ],
+    "pixels": 128262,
+    "mean": 31.5342,
+    "p95": 75.4429
+   },
+   {
+    "frames": [
+     9,
+     10
+    ],
+    "pixels": 128267,
+    "mean": 19.3988,
+    "p95": 48.9393
+   },
+   {
+    "frames": [
+     10,
+     11
+    ],
+    "pixels": 128297,
+    "mean": 8.0035,
+    "p95": 23.1624
+   },
+   {
+    "frames": [
+     11,
+     12
+    ],
+    "pixels": 128250,
+    "mean": 13.6531,
+    "p95": 46.5873
+   },
+   {
+    "frames": [
+     12,
+     13
+    ],
+    "pixels": 128060,
+    "mean": 14.3268,
+    "p95": 47.1141
+   },
+   {
+    "frames": [
+     13,
+     14
+    ],
+    "pixels": 128264,
+    "mean": 13.1437,
+    "p95": 45.2668
+   },
+   {
+    "frames": [
+     14,
+     15
+    ],
+    "pixels": 128375,
+    "mean": 14.6338,
+    "p95": 40.5913
+   },
+   {
+    "frames": [
+     15,
+     16
+    ],
+    "pixels": 127871,
+    "mean": 9.1042,
+    "p95": 25.7937
+   },
+   {
+    "frames": [
+     16,
+     17
+    ],
+    "pixels": 128018,
+    "mean": 9.1523,
+    "p95": 29.1565
+   },
+   {
+    "frames": [
+     17,
+     18
+    ],
+    "pixels": 128254,
+    "mean": 13.0702,
+    "p95": 34.8017
+   },
+   {
+    "frames": [
+     18,
+     19
+    ],
+    "pixels": 128103,
+    "mean": 11.753,
+    "p95": 30.6241
+   },
+   {
+    "frames": [
+     19,
+     20
+    ],
+    "pixels": 128197,
+    "mean": 5.7848,
+    "p95": 17.4206
+   },
+   {
+    "frames": [
+     20,
+     21
+    ],
+    "pixels": 128351,
+    "mean": 4.8163,
+    "p95": 14.0391
+   },
+   {
+    "frames": [
+     21,
+     22
+    ],
+    "pixels": 128141,
+    "mean": 10.1131,
+    "p95": 25.1031
+   },
+   {
+    "frames": [
+     22,
+     23
+    ],
+    "pixels": 128149,
+    "mean": 7.6903,
+    "p95": 20.5522
+   },
+   {
+    "frames": [
+     23,
+     24
+    ],
+    "pixels": 128248,
+    "mean": 7.5202,
+    "p95": 20.2806
+   }
+  ]
+ },
+ "plate_render_temporal": {
+  "unit": "8-bit display steps (mean absolute RGB difference per pixel)",
+  "mean": 0.1884,
+  "p95": 0.2996,
+  "threshold_mean": 4.0,
+  "threshold_p95": 12.0,
+  "pass": true,
+  "pairs_measured": 23,
+  "compared_fraction": 0.9895
+ }
+}

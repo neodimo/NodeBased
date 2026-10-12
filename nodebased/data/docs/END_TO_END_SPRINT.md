@@ -333,6 +333,19 @@ display sRGB). All compared pixels of all pairs are pooled into one mean and one
 the report as `temporal` and in the text report as the "Temporal" line. Pass threshold: mean at most 4 and
 95th percentile at most 12 steps. Like the determinism line, it stays out of the score card's verdict.
 
+**Baseline.** The stage 3 result (`sdxl_controlnet` 1.0, every frame its own text-to-image pass, seed 7) measures
+mean 15.4 and 95th percentile 48.3 display steps over 23 frame pairs and 99% of the pixels: FAIL, about four
+times the threshold. The plate's own layout render, measured the same way, gives 0.19 and 0.30, so the warp and
+the masks add almost nothing of their own and the number is the model's flicker.
+
+**Benchmark: the demo shot through SDXL** (24 frames, 1024 by 576 working size, 30 steps, model CPU offload on,
+RTX 3080 Ti; whole run is the demo script from start to verdict, on a machine shared with other lanes' runs).
+Per-frame data: `benchmarks/demo_shot/`.
+
+| Run | Generation | Per frame | Peak VRAM (allocated / reserved) | Flicker mean / p95 | Temporal |
+|---|---|---|---|---|---|
+| Stage 3, `sdxl_controlnet` 1.0, per frame | 336.5 s | 14.0 s | 7,760 / 8,228 MiB | 15.4 / 48.3 steps | FAIL |
+
 **Next: a local video model (assessment, nothing downloaded).** Checked in the brief's order, from each model's own
 documentation. CogVideoX-2B and 5B (with the community depth ControlNets or the CogVideoX-Fun control variants)
 generate only at 720 by 480 and 8 frames a second, 49 frames; the 2B card says diffusers fp16 needs "from 4 GB"
