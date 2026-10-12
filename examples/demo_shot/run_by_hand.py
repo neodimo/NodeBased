@@ -8,11 +8,16 @@ needs a GPU, a model or a network; the provider is the local `reproject` stand-i
 runs the shot through the real model instead (NVIDIA card, see docs/GENERATIVE_CONDITIONING.md).
 
     python examples/demo_shot/run_by_hand.py [--plate DIR] [--out DIR] [--cache DIR] [--graph FILE] [--provider NAME]
-                                             [--solver survey|dpvo]
+                                             [--solver survey|dpvo|mast3r] [--focal-scale F] [--survey-check]
 
 `--solver dpvo` replaces the survey-point camera of the graph with a camera solved from the plate alone by the
 learned monocular SLAM (DPVO, NVIDIA card, see docs/END_TO_END_SPRINT.md stage 7): a CameraSolve3D node on the
 plate writes the Camera3D keys, with the first-frame camera as the anchor and two surveyed points for the scale.
+DPVO is handed the shot's focal length (times `--focal-scale`, to show what a wrong lens does). `--solver mast3r`
+uses MASt3R-SLAM (stage 9), which is handed no focal length: the solved camera gets the one it recovers.
+
+With a solved camera the verification also gets the survey check (`--survey-check` adds it to the survey-point
+run too): every landmark the plate shows, tracked on the plate, reprojected through the exported cameras.
 
 Run it twice and the ids and the output frames are identical.
 """
@@ -37,6 +42,7 @@ sys.path.insert(0, str(REPO))
 from nodebased.gpulock import gpu_job  # noqa: E402
 
 CPU_PROVIDERS = ("reproject", "null")
+SOLVERS = {"dpvo": ("camera_solve_dpvo", "DPVO"), "mast3r": ("camera_solve_mast3r", "MASt3R-SLAM")}
 
 
 class Agent:
@@ -89,21 +95,55 @@ def survey_pair(frames, size=shot.PLATE_SIZE):
     return {"distance": float(np.linalg.norm(world[best[0]] - world[best[1]])), "points": points}
 
 
-def solve_with_dpvo(agent, frames, log=print):
-    """Solve the graph's camera from the plate with the CameraSolve3D node; returns the op's reply."""
+def plate_size(plate):
+    import OpenImageIO as oiio
+    source = oiio.ImageInput.open(shot.plate_pattern(plate) % 1)
+    try:
+        return source.spec().width, source.spec().height
+    finally:
+        source.close()
+
+
+def survey_tracks(plate, frames):
+    """Every landmark the plate shows (its depth pass agrees with the landmark's depth) on each frame, at the
+    true camera's projection to a thousandth of a pixel: the 2D tracks a matchmover would have of the survey."""
+    import numpy as np
+    import make_standin_plate as standin
+    from nodebased.media import raster_layer_arrays, read_media_raster
+    width, height = plate_size(plate)
+    keys = {f: dict(shot.camera_at(f), roll=0.0) for f in range(1, frames + 1)}
+    world = np.array(shot.landmarks(), np.float64)
+    shown = {f: standin.visible(raster_layer_arrays(read_media_raster(shot.plate_pattern(plate) % f))["depth"][..., 0],
+                                standin.keyed_camera(keys[f]), world) for f in keys}
+    return standin.survey_tracks(keys, width, height, lens=False, shown=shown)
+
+
+def solve_from_plate(agent, frames, solver="dpvo", focal_scale=1.0, size=shot.PLATE_SIZE, log=print):
+    """Solve the graph's camera from the plate with the CameraSolve3D node; returns the op's reply. DPVO is handed
+    the shot's focal length (times `focal_scale`); MASt3R-SLAM is handed none."""
     start = shot.CAMERA_START
-    agent.call(op="create", id="solve", type="CameraSolve3D", name="Camera solve (DPVO)", params={
-        "seed": 0, "focal": shot.FOCAL, "anchor_tx": start["tx"], "anchor_ty": start["ty"], "anchor_tz": start["tz"],
-        "anchor_target_x": start["target_x"], "anchor_target_y": start["target_y"],
-        "anchor_target_z": start["target_z"]})
+    provider, label = SOLVERS[solver]
+    params = {"provider": provider, "seed": 0, "anchor_tx": start["tx"], "anchor_ty": start["ty"],
+              "anchor_tz": start["tz"], "anchor_target_x": start["target_x"], "anchor_target_y": start["target_y"],
+              "anchor_target_z": start["target_z"]}
+    if solver == "dpvo":
+        params["focal"] = shot.FOCAL * focal_scale
+    agent.call(op="create", id="solve", type="CameraSolve3D", name=f"Camera solve ({label})", params=params)
     agent.call(op="connect", id="solve", input="image", source="plate")
-    reply = agent.call(op="solve_camera", id="solve", camera="camera", first=1, last=frames, survey=survey_pair(frames))
-    log(f"camera solve: solve {reply['solve']}  scale {reply['scale']} ({reply['scale_source']})  "
-        f"{reply['cloud_points']} cloud points  run {json.dumps(reply['run'])}")
+    reply = agent.call(op="solve_camera", id="solve", camera="camera", first=1, last=frames,
+                       survey=survey_pair(frames, size))
+    log(f"camera solve: {reply['provider']} solve {reply['solve']}  focal {reply['focal']} mm ({reply['focal_source']})  "
+        f"scale {reply['scale']} ({reply['scale_source']})  {reply['cloud_points']} cloud points  run {json.dumps(reply['run'])}")
     return reply
 
 
-def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, log=print, provider=None, solver="survey"):
+def solve_with_dpvo(agent, frames, log=print):
+    """Stage 7's call, kept for callers: the DPVO solve with the shot's focal length."""
+    return solve_from_plate(agent, frames, "dpvo", log=log)
+
+
+def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, log=print, provider=None, solver="survey",
+        focal_scale=1.0, survey_check=None):
     document = json.loads(Path(graph).read_text())
     generate = document["nodes"]["generate"]["params"]
     provider = provider or generate["provider"]
@@ -112,16 +152,18 @@ def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, lo
     out.mkdir(parents=True, exist_ok=True)
     # A run that uses the card holds the GPU lock for its whole length; its providers see
     # NODEBASED_GPU_LOCK_HELD and do not wait for it again. The default reproject run never touches the card.
-    uses_gpu = solver == "dpvo" or provider not in CPU_PROVIDERS
+    uses_gpu = solver in SOLVERS or provider not in CPU_PROVIDERS
+    survey = survey_tracks(plate, last) if (solver != "survey" if survey_check is None else survey_check) else None
     with gpu_job(log=log) if uses_gpu else contextlib.nullcontext():
-        return _run(plate, out, cache, graph, document, generate, provider, last, log, solver)
+        return _run(plate, out, cache, graph, document, generate, provider, last, log, solver, focal_scale, survey)
 
 
-def _run(plate, out, cache, graph, document, generate, provider, last, log, solver):
+def _run(plate, out, cache, graph, document, generate, provider, last, log, solver, focal_scale=1.0, survey=None):
     agent = Agent(graph, cache)
     try:
         agent.call(op="set", id="plate", param="path", value=shot.plate_pattern(plate))
-        camera_solve = solve_with_dpvo(agent, last, log) if solver == "dpvo" else None
+        camera_solve = (solve_from_plate(agent, last, solver, focal_scale, plate_size(plate), log)
+                        if solver in SOLVERS else None)
         exported = agent.call(op="export_conditioning", id="export", first=1, last=last)
         log(f"export: scene_state {exported['scene_state']}  control_bundle {exported['control_bundle']}")
         # The Generate node's own controls drive the call, brief text included. `reproject` does not use a
@@ -132,8 +174,11 @@ def _run(plate, out, cache, graph, document, generate, provider, last, log, solv
         log(f"generate: generated_sequence {result['generated_sequence']}  seed {result['seed']}")
         log(f"  controls: {json.dumps(result['controls'])}  ignored in this call: {result['ignored']}")
         verified = agent.call(op="verify", scene_state=exported["scene_state"], bundle=exported["control_bundle"],
-                              generated_sequence=result["generated_sequence"])
+                              generated_sequence=result["generated_sequence"], **({"survey": survey} if survey else {}))
         log(f"verify: report {verified['report']}  verdict {verified['verdict']}")
+        if survey:
+            from nodebased.conditioning_verify import survey_line
+            log(f"  {survey_line(verified['survey'])}")
         # `generate` hands out the ConditionedRead node that reads its result, the same one a loop does
         agent.call(op="create", id="generated", **result["node"])
         agent.call(op="connect", id="grade", input="image", source="generated")
@@ -149,7 +194,11 @@ def _run(plate, out, cache, graph, document, generate, provider, last, log, solv
             "checks": {name: ("pass" if row.get("pass") else row.get("status", "FAIL"))
                        for name, row in verified["score_card"]["bindings"].items()},
             "determinism": verified.get("determinism"), "solver": solver,
-            "camera_solve": camera_solve and {k: camera_solve[k] for k in ("solve", "scale", "scale_source", "cloud_points", "run")},
+            "camera_solve": camera_solve and {k: camera_solve[k] for k in ("provider", "solve", "focal", "focal_source", "scale",
+                                                                           "scale_source", "cloud_points", "run")},
+            "survey": verified.get("survey") and {k: verified["survey"][k] for k in (
+                "points", "observations", "missing", "rms_pixels", "max_pixels", "threshold_rms_pixels",
+                "threshold_max_pixels", "pass") if k in verified["survey"]},
             "controls": result["controls"], "ignored": result["ignored"], "provenance_links": len(provenance["chain"]),
             "frames": last}
 
@@ -173,15 +222,20 @@ def main():
     parser.add_argument("--provider", default=None,
                         help="provider for the Generate step (default: the graph's own, reproject); "
                              "sdxl_controlnet runs the real model on the NVIDIA card")
-    parser.add_argument("--solver", choices=("survey", "dpvo"), default="survey",
+    parser.add_argument("--solver", choices=("survey", "dpvo", "mast3r"), default="survey",
                         help="where the graph's camera comes from: the committed survey-point solve (default) "
-                             "or a CameraSolve3D node run with DPVO on the NVIDIA card")
+                             "or a CameraSolve3D node run with DPVO or MASt3R-SLAM on the NVIDIA card")
+    parser.add_argument("--focal-scale", type=float, default=1.0,
+                        help="DPVO only: hand it the shot's focal length times this (a wrong lens on purpose)")
+    parser.add_argument("--survey-check", action=argparse.BooleanOptionalAction, default=None,
+                        help="verify the survey points' reprojection (default: on with a solved camera)")
     args = parser.parse_args()
     started = time.perf_counter()
     info_file = Path(args.cache).parent / "sdxl-run-info.json"
     os.environ["NODEBASED_SDXL_RUN_INFO"] = str(info_file)  # the SDXL provider writes its timings and peak VRAM here
     info_file.unlink(missing_ok=True)
-    summary = run(args.plate, args.out, args.cache, args.graph, provider=args.provider, solver=args.solver)
+    summary = run(args.plate, args.out, args.cache, args.graph, provider=args.provider, solver=args.solver,
+                  focal_scale=args.focal_scale, survey_check=args.survey_check)
     if info_file.exists():
         summary["model_run"] = json.loads(info_file.read_text())
     summary["output_pixel_digest"] = output_digest(args.out, summary["frames"])
