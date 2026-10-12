@@ -459,6 +459,51 @@ roughly twice that on the 3080 Ti, about 2 minutes for this 24-frame shot. Wan2.
 canny, pose and trajectory control, 81 frames at 16 fps, a 19 GB download) is the fallback if VACE's depth
 control proves too loose.
 
+## Stage 9: tracking with no lens given (10/12)
+
+**The solver.** `nodebased/providers/camera_solve_mast3r.py` (`camera_solve_mast3r` 1.0), the second choice on
+`CameraSolve3D` (`solver`: DPVO stays the default) behind the same GPU subprocess contract, in its own environment
+under `projects/nb-providers/slam/`. It is handed no focal length: the focal is fitted to the keyframes' point maps,
+the tracked poses are refined by a bundle adjustment of the tracker's own matches with that focal held, and the
+solved camera gets the recovered lens. MASt3R-SLAM works on a 512 x 288 copy of the plate whatever its size.
+
+**Measured** with `examples/demo_shot/benchmark_camera_solve.py`, the stage 7 alignment and the 24-frame demo
+plate (true focal 651.8 px at 960 x 540). DPV-SLAM runs with loop closure and is handed the true focal; MASt3R-SLAM
+is handed nothing. Frame rate after the warm-up (end to end in brackets); memory is the solver process's peak.
+
+| | DPV-SLAM | MASt3R-SLAM |
+|---|---|---|
+| 960 x 540: translation RMS / worst | 1.98 cm (1.35% of the path) / 4.97 cm | 1.69 cm (1.15%) / 3.05 cm |
+| 960 x 540: rotation mean / worst | 0.03 / 0.08 deg | 0.06 / 0.17 deg |
+| 960 x 540: focal length | handed 651.8 px | recovered 729.7 px (+12.0%) |
+| 960 x 540: frames per second | 46 (30) | 10.7 (8.1) |
+| 960 x 540: card memory | 0.79 GB | 3.2 GB |
+| 1920 x 1080: translation RMS / worst | 0.60 cm (0.41%) / 1.14 cm | 1.99 cm (1.35%) / 3.47 cm |
+| 1920 x 1080: rotation mean / worst | 0.04 / 0.07 deg | 0.07 / 0.18 deg |
+| 1920 x 1080: focal length | handed 1303.7 px | recovered 1497.7 px (+14.9%) |
+| 1920 x 1080: frames per second | 34 (20) | 9.4 (6.4) |
+| 1920 x 1080: card memory | 1.8 GB | 3.2 GB |
+| two runs | differ by up to 0.03% (960) and 0.11% (1920) of the camera's extent | bit-identical, focal included |
+
+- **The lens comes back about 12 to 15% long.** 512 x 288 gives +13.9%. The per-frame fits range from 709 to
+  825 px at 960, and the free-focal bundle adjustment is worse (502 px at 960, 988 at 1920), so it stays a
+  diagnostic. That is the size of error stage 7 put into DPVO on purpose: handed a focal 12% and 15% long,
+  DPV-SLAM moves from 1.98 cm to 2.42 and 2.64 cm. The camera path survives it; whether the shot does is part 3.
+- **The refinement is what makes the poses usable.** MASt3R-SLAM keeps one keyframe on this 1.5 m dolly, and its
+  raw tracked poses are 14 cm off (19 cm at 512); the bundle adjustment (0.3 s, 15,000 matches, 0.41 px) brings
+  them to 1.7 cm.
+- **Resolution does not help MASt3R-SLAM** (it always sees 512 x 288), and helps DPV-SLAM a lot: at 1920 it is
+  three times as accurate as MASt3R-SLAM. MASt3R-SLAM runs at about 10 frames a second, a quarter of DPV-SLAM.
+- **Repeatable.** Two MASt3R-SLAM runs give the same poses and focal to the bit, so a re-solve keeps every id.
+
+**The stand-in for a filmed plate** (`examples/demo_shot/make_standin_plate.py`, 960 x 540): the demo plate
+rendered again through the "wide angle" Brown-Conrady preset (k1 -0.04, k2 0.004, about 10% at the corners) with a
+slow handheld shake (about 1 cm, 0.4 deg of aim, 0.3 deg of roll). MASt3R-SLAM: 0.99 cm RMS /
+1.71 cm worst, 0.07 / 0.12 deg, focal 690.7 px (+6.0% against the lens's centre focal), 10.6 frames a second,
+bit-identical twice. DPV-SLAM handed the centre focal and no distortion: 2.16 cm / 5.35 cm, 0.06 / 0.13 deg.
+This lens does not hurt either solver here: MASt3R-SLAM does better than on the clean plate and DPV-SLAM 0.2 cm
+worse. A real lens with stronger distortion, rolling shutter and motion blur is still untested.
+
 ## Heavy runs and the integrator's suite (10/10)
 
 The full suite of the evening of 10/10 took 5 hours 5 minutes against a norm of 75 to 95 minutes, and its
