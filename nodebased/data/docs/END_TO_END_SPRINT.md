@@ -81,6 +81,13 @@ for one worker step (a few hours), reviewed and display-checked by Gonzo.
    with the exported depth and IDs), then reprojection-guided generation in the SDXL provider (each frame after
    the first made image-to-image from the warped frame before it, at a pinned strength that is part of the
    result's identity), with the measure before and after.
+9. **Tracking with no lens given.** Stage 7's solvers take the focal length they are handed. MASt3R-SLAM, which
+   needs no camera model, as a second live solver behind the same `CameraSolve3D` node and GPU subprocess
+   contract: per-frame poses, the recovered focal length and the point cloud. Measured next to DPV-SLAM on the
+   synthetic plate at 960 x 540 and 1920 x 1080 (pose error, focal length against the true one, frames per
+   second, card memory, repeatability); the demo shot driven by the solved camera with no focal length typed in,
+   checked by the survey points' reprojection error; and a stand-in for a filmed plate (the demo plate with lens
+   distortion and a handheld shake) solved the same way, until DiMo's footage replaces it.
 
 ## Order and cost
 
