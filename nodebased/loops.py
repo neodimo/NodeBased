@@ -290,7 +290,8 @@ def verify_task(options, input_ids, progress, cancelled):
         temporal=temporal_measure(frames,{frame:row["beauty"] for frame,row in observations.items()},references)
         report_path=root/"verification.json"
         report=verify_conditioning(scene_path,observations,report_path,
-            artifact_ids=[bundle_id,generated_id],artifact_store=store,determinism=determinism,temporal=temporal)
+            artifact_ids=[bundle_id,generated_id],artifact_store=store,determinism=determinism,temporal=temporal,
+            survey=options.get("survey"))
         if cancelled.is_set(): raise RuntimeError("cancelled")
         return {"artifact_id":report["artifact_id"]}
 

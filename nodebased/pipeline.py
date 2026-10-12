@@ -162,11 +162,17 @@ class Pipeline:
         generated = _artifact_id(cmd.get("generated_sequence"), "generated_sequence")
         options = {"scene_state_id": scene, "control_bundle_id": bundle,
                    "_artifact_root": str(self.store.root)}
+        survey = cmd.get("survey")
+        if survey is not None:
+            if not isinstance(survey, dict) or not isinstance(survey.get("points"), list):
+                raise ValueError("verify: survey must be {\"points\": [{\"name\", \"world\", \"track\"}, ...]}")
+            options["survey"] = survey
         result = verify_task(options, [generated], lambda *_: None, threading.Event())
         report = json.loads(self.store.get(result["artifact_id"]))
         card = report.get("score_card", report)
         return {"report": result["artifact_id"], "verdict": card.get("verdict"), "score_card": card,
-                "determinism": report.get("determinism")}
+                "determinism": report.get("determinism"),
+                **({"survey": report["survey"]} if "survey" in report else {})}
 
     # -- loops --------------------------------------------------------------------------------
     def loop(self, cmd):

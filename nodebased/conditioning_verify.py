@@ -30,6 +30,10 @@ class Tolerances:
     motion_p95_pixels: float = 3.0
     depth_rank_correlation: float = 0.8
     normals_mean_degrees: float = 10.0
+    # Survey points (stage 9): reprojection error of known world points against their 2D tracks on the plate,
+    # as a fraction of the plate's height so the bar does not change with the resolution.
+    survey_rms_fraction: float = 0.005
+    survey_max_fraction: float = 0.015
 
 
 def _rotation_error(a, b):
@@ -636,8 +640,60 @@ def _normals_measurement(observation, tolerances):
     return {"mean_error_degrees": mean, "pass": mean <= tolerances.normals_mean_degrees}
 
 
+def survey_reprojection(state, survey, tolerances=None):
+    """Reprojection error of surveyed points through the exported cameras.
+
+    `survey` is {"points": [{"name": str, "world": [x, y, z], "track": [{"frame": f, "x": px, "y": py}, ...]}]}:
+    world positions measured on set and the pixels where the plate shows them (a 2D track, image y down). Each
+    tracked position is compared with the point projected through the SceneState camera of that frame at the
+    export's resolution. Returns RMS and worst error in pixels, the pass thresholds (fractions of the height,
+    `Tolerances.survey_*`) and the per-point RMS. A point behind the camera or a frame outside the export
+    counts as a failed observation."""
+    tolerances = tolerances or Tolerances()
+    cameras = {int(row["frame"]): row for row in state["frames"]}
+    errors, per_point, missing = [], [], 0
+    height = None
+    for point in survey.get("points", ()):
+        world = np.asarray(point["world"], np.float64)[None]
+        point_errors = []
+        for row in point.get("track", ()):
+            frame = cameras.get(int(row["frame"]))
+            if frame is None or not isinstance(frame.get("camera"), scene3d.Camera):
+                missing += 1
+                continue
+            width, height = frame.get("resolution", (1920, 1080))
+            pixels, depth = scene3d.project(frame["camera"], width, height, world)
+            if not depth[0] > 0:
+                missing += 1
+                continue
+            point_errors.append(float(np.hypot(pixels[0, 0] - float(row["x"]), pixels[0, 1] - float(row["y"]))))
+        errors += point_errors
+        per_point.append({"name": point.get("name", ""), "observations": len(point_errors),
+                          "rms_pixels": float(np.sqrt(np.mean(np.square(point_errors)))) if point_errors else None})
+    if not errors or height is None:
+        return {"points": len(per_point), "observations": 0, "missing": missing, "rms_pixels": None,
+                "max_pixels": None, "pass": False, "reason": "no survey observation could be projected"}
+    rms, worst = float(np.sqrt(np.mean(np.square(errors)))), float(np.max(errors))
+    rms_limit, max_limit = tolerances.survey_rms_fraction * height, tolerances.survey_max_fraction * height
+    return {"points": len(per_point), "observations": len(errors), "missing": missing, "rms_pixels": rms,
+            "max_pixels": worst, "threshold_rms_pixels": rms_limit, "threshold_max_pixels": max_limit,
+            "height": int(height), "per_point": per_point,
+            "pass": bool(missing == 0 and rms <= rms_limit and worst <= max_limit)}
+
+
+def survey_line(survey):
+    """The report's one-line survey reprojection summary."""
+    if survey.get("rms_pixels") is None:
+        return f"Survey: unavailable ({survey.get('reason')}): FAIL"
+    missing = f", {survey['missing']} not projected" if survey["missing"] else ""
+    return (f"Survey: reprojection RMS {survey['rms_pixels']:.2f} px, worst {survey['max_pixels']:.2f} px over "
+            f"{survey['observations']} observations of {survey['points']} points{missing}; "
+            f"threshold RMS {survey['threshold_rms_pixels']:.2f} px, worst {survey['threshold_max_pixels']:.2f} px: "
+            f"{'PASS' if survey['pass'] else 'FAIL'}")
+
+
 def verify_conditioning(scene_state_path, observations, output_path, *, tolerances=None, artifact_ids=None,
-                       artifact_store=None, determinism=None, temporal=None):
+                       artifact_store=None, determinism=None, temporal=None, survey=None):
     """Write ``.json`` and ``.txt`` shot reports.
 
     `observations` is keyed by integer frame. A row contains `beauty` (HxWxRGBA float
@@ -651,7 +707,9 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
     left out of the verdict. `determinism` (provider, version, seed, sampler settings, whether the
     provider declared seed honoured) is copied into the report and never changes the verdict.
     `temporal` (the flicker measure of `nodebased.temporal.flicker`) is copied into the report with its own
-    pass threshold and, like determinism, stays out of the score card's verdict.
+    pass threshold and, like determinism, stays out of the score card's verdict. `survey` (surveyed world
+    points with their 2D tracks on the plate, see `survey_reprojection`) adds a "survey" check to the score
+    card: the reprojection error through the exported cameras, which does count in the verdict.
     """
     tolerances = tolerances or Tolerances()
     state = read_scene_state(scene_state_path)
@@ -822,6 +880,11 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
         score[category] = {"lock_state": locks[0] if len(locks) == 1 else locks,
                            "error": errors, "pass": None if unconditioned else passed,
                            **({"status": "not conditioned"} if unconditioned else {})}
+    if survey is not None:
+        report["survey"] = survey_reprojection(state, survey, tolerances)
+        score["survey"] = {"lock_state": "locked", "pass": report["survey"]["pass"],
+                           "error": [{"rms_pixels": report["survey"]["rms_pixels"],
+                                      "max_pixels": report["survey"]["max_pixels"]}]}
     applicable_scores = [item for item in score.values() if item["pass"] is not None]
     report["score_card"] = {"bindings": score,
                             "verdict": "PASS" if all(item["pass"] for item in applicable_scores) else "FAIL"}
@@ -876,6 +939,8 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
                      f"seed {'honoured' if d.get('seed_honoured') else 'not honoured'} by the provider")
     if "temporal" in report:
         lines.append(temporal_line(report["temporal"]))
+    if "survey" in report:
+        lines.append(survey_line(report["survey"]))
     path.with_suffix(".txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return report
 
