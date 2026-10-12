@@ -1,6 +1,5 @@
 """The GPU lock (nodebased/gpulock.py): a model run waits for whoever holds /tmp/nb-gpu.lock, and
 anyone who wants the lock afterwards waits for the run. Checked with a stub launcher and a private lock file."""
-import fcntl
 import os
 import stat
 import sys
@@ -12,6 +11,11 @@ from pathlib import Path
 from unittest import mock
 
 import numpy as np
+
+try:
+    import fcntl
+except ImportError:   # Windows: the lock is a Linux convention and the tests below skip there
+    fcntl = None
 
 from nodebased import gpulock
 from nodebased.providers import camera_solve_dpvo as dpvo

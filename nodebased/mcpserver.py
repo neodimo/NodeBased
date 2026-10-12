@@ -9,7 +9,9 @@ import sys
 from PySide6.QtCore import QCoreApplication, QSettings
 
 import nodebased
-from . import agentloop, issues, knowledge
+from . import agentloop, issues, knowledge, settingshome
+
+settingshome.apply()
 
 
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"

@@ -96,10 +96,12 @@ class HeadlessSession:
         self.home = tempfile.TemporaryDirectory(prefix="nodebased-agent-home-")
         settings = Path(self.home.name) / ".config" / "NodeBased"
         settings.mkdir(parents=True)
-        (settings / "NodeBased.conf").write_text(
-            f"[agent]\nallow_disk_ops={'true' if disk_ops else 'false'}\n", encoding="utf-8")
+        for name in ("NodeBased.conf", "NodeBased.ini"):   # Qt's ini suffix is .ini on Windows
+            (settings / name).write_text(
+                f"[agent]\nallow_disk_ops={'true' if disk_ops else 'false'}\n", encoding="utf-8")
         self.endpoint = "nodebased-headless-" + uuid.uuid4().hex
         self.env = {**os.environ, "HOME": self.home.name, "XDG_CONFIG_HOME": str(Path(self.home.name) / ".config"),
+                    "NODEBASED_SETTINGS_HOME": str(Path(self.home.name) / ".config"),
                     "NODEBASED_CACHE": str(self.cache), "QT_QPA_PLATFORM": "offscreen",
                     "PYTHONPATH": str(REPO) + os.pathsep + os.environ.get("PYTHONPATH", "")}
         self.window = subprocess.Popen([sys.executable, "-m", "nodebased", str(self.project),
