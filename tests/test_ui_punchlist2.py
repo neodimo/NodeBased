@@ -249,7 +249,7 @@ class AccentTests(unittest.TestCase):
     def test_no_source_file_hard_codes_the_old_accent(self):
         import pathlib
         for path in pathlib.Path(theme.__file__).parent.glob("*.py"):
-            text = path.read_text()
+            text = path.read_text(encoding="utf-8")   # Windows CI decoded the sources as cp1252 and failed on a byte
             if path.name == "theme.py":
                 continue
             self.assertNotIn("5ee0b5", text.lower(), path.name)
