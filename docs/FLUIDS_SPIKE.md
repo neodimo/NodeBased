@@ -1526,6 +1526,32 @@ P2 acceptance remains unchecked. **Needs Gonzo:** persist or otherwise make prod
 surface refinement bounded, then reduce the preview evaluation from 245.7 ms to under 80 ms and
 measure the same three rows on llvmpipe.
 
+### P4 baseline profile (2026-10-12)
+
+The P3 production bake was regenerated at 256³ liquid / 192³ steam, 120 frames, on the Radeon. It
+contains 48,755,923,288 bytes and is kept temporarily under `scratch/nb-lanes/run/L6-p4-cache`.
+Before any source changes, `cProfile` recorded a warmed tier-4 scene fetch for frame 60. The
+profiled evaluator call took 397 ms; the first call in a fresh process took 1.497 s because it also
+loaded Python modules. Top ten entries by cumulative time:
+
+| Calls | Cumulative | Entry |
+|---:|---:|---|
+| 725/1 | 397 ms | `imaging.Evaluator.evaluate_raster` |
+| 728/8 | 384 ms | `fluid3d.chain_for` |
+| 486/6 | 384 ms | `fluid3d._geo_track` |
+| 1,210 | 158 ms | `scene3d.geometry_from_node` |
+| 1,210 | 134 ms | `scene3d._geometry_from_node` |
+| 968 | 117 ms | `scene3d._cylinder` |
+| 5,093 | 47 ms | `json.dumps` |
+| 5,093 | 42 ms | `json.encoder.encode` |
+| 5,093 | 37 ms | `json.encoder.iterencode` |
+| 1,936 | 29 ms | `numpy.meshgrid` |
+
+This profile points to repeated fluid-chain / geometry-track digest work through the 120-frame
+document range; disk decoding and GPU upload are not the dominant entries. The 397 ms profile is
+above the 80 ms target. Cold/warm percentiles, stop timings, and any optimization result are still
+pending; P4 remains incomplete.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
