@@ -44,11 +44,13 @@ and `restore` copy a State in and out of a cache.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import time
+from collections import OrderedDict
 
 import numpy as np
-from collections import OrderedDict
 
 from .cancellation import Cancelled
 from . import simcache
@@ -1497,11 +1499,60 @@ def _resolver(kind, node, curves):
     return at
 
 
+def _geo_track_cacheable(doc, source_key):
+    """Only memoize tracks whose upstream graph is procedural and therefore document-stable."""
+    nodes = doc.get("nodes", {})
+    todo, seen = [source_key], set()
+    while todo:
+        key = todo.pop()
+        if key in seen or key not in nodes:
+            continue
+        seen.add(key)
+        node = nodes[key]
+        if str(node.get("type", "")).lower().startswith("read"):
+            return False
+        todo.extend(value for value in node.get("inputs", {}).values()
+                    if isinstance(value, str) and value in nodes)
+    return True
+
+
+def _geo_track_signature(evaluator, doc):
+    """A frame-independent graph signature shared by playback snapshots of the same document."""
+    payload = dict(doc)
+    time_data = dict(payload.get("time", {}))
+    time_data.pop("current", None)
+    payload["time"] = time_data
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+    return hashlib.blake2b(encoded, digest_size=16).hexdigest()
+
+
 def _geo_track(evaluator, doc, source_key, cancel, start, animated):
     """(GeometryTrack, digest) of the geometry wired into a fluid node. A static track is sampled once at
     `start` (like ParticleBounce3D); an animated one is sampled per frame and identified by the digests over the
     document's time range."""
     from .particles import collider_triangles
+
+    time = doc.get("time", {})
+    first = int(time.get("first", start))
+    last = min(int(time.get("last", first)), first + MAX_TRACK_FRAMES)
+    cache_key = None
+    if _geo_track_cacheable(doc, source_key):
+        signature = _geo_track_signature(evaluator, doc)
+        cache_key = (signature, source_key, int(start), bool(animated), first, last)
+        tracks = getattr(evaluator, "_fluid_geo_tracks", None)
+        if tracks is None:
+            tracks = evaluator._fluid_geo_tracks = OrderedDict()
+        cached = tracks.get(cache_key)
+        if cached is not None:
+            tracks.move_to_end(cache_key)
+            return cached
+
+    def remember(value):
+        if cache_key is not None:
+            tracks[cache_key] = value
+            while len(tracks) > 8:
+                tracks.popitem(last=False)
+        return value
 
     def provider(frame):
         geometry = evaluator.evaluate_raster(doc, source_key, cancel, frame=int(frame), typed=True)
@@ -1509,18 +1560,14 @@ def _geo_track(evaluator, doc, source_key, cancel, start, animated):
     if not animated:
         _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=start, typed=True, return_digest=True,
                                               digest_only=True)
-        return GeometryTrack(provider, False, start, digest), digest
-    import hashlib
-    time = doc.get("time", {})
-    first = int(time.get("first", start))
-    last = min(int(time.get("last", first)), first + MAX_TRACK_FRAMES)
+        return remember((GeometryTrack(provider, False, start, digest), digest))
     h = hashlib.sha256()
     for frame in range(first, last + 1):
         _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=frame, typed=True, return_digest=True,
                                               digest_only=True)
         h.update(str(digest).encode())
     digest = h.hexdigest()
-    return GeometryTrack(provider, True, start, digest), digest
+    return remember((GeometryTrack(provider, True, start, digest), digest))
 
 
 def chain_for(evaluator, doc, key, node, incoming, cancel=None):
