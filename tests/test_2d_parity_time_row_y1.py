@@ -57,7 +57,9 @@ class TimeRowTests(unittest.TestCase):
         w = self.open_window()
         order = [w.frame_current, w.play_button, w.frame_first_label,
                  w.frame_first, w.frame_last_label, w.frame_last, w.frame_fps, w.fps_presets]
-        edges = [self.left_edge(widget) for widget in order]
+        # An optional widget (the rate presets) may be hidden when the platform's font needs the
+        # room; a hidden widget has no place in the reading order.
+        edges = [self.left_edge(widget) for widget in order if widget.isVisible()]
         self.assertEqual(edges, sorted(edges), "the time row is out of reading order")
         self.assertEqual(len(set(edges)), len(edges))
         # The frame field carries no caption: the transport icons beside it already say it is the frame.
