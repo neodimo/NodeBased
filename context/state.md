@@ -1,5 +1,26 @@
 ## 2026-10-10 — Lane 4 step R3 of 3: shadow catcher floor (DONE)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (7:46 PM on 2026-10-11 PDT)
+
+`main` moved `5d0d31b0` -> `115b85f2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 109 tests in 571.940 s, OK. Full suite on
+the stacked tip `115b85f2` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1011-1456.log`, started 2:56 PM): **Ran 5181 tests in 15970.353 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step R7 of 3: Roto feather grows outward from the edge, point by point, like Nuke.** Commits:
+  - `ca64af04` test: pin roto feather quality and timing
+  - `97ec7764` roto: add per-point feather handles
+  - `4d8a3d93` roto: add migrated edge feather model
+  Diff: 12 files changed, 465 insertions(+), 56 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (2:26 PM on 2026-10-11 PDT)
 
 `main` moved `6b83f1fd` -> `9e2bfcbd` (lane commits cherry-picked onto main in lane order) and then to this
