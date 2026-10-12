@@ -10,16 +10,23 @@ keyframes' point maps. Same two halves and the same subprocess contract as DPVO 
 * The solver side (`python camera_solve_mast3r.py run JOB.json`): MASt3R-SLAM from `NODEBASED_MAST3R_DIR`, in
   one process (the upstream script runs its back end in a second process; inline it is repeatable), frames
   resized to 512 wide like upstream. Every frame is tracked against the latest keyframe; at the end each
-  frame's pose is its keyframe's optimised pose times the relative pose found when it was tracked.
+  frame's pose is its keyframe's optimised pose times its pose relative to that keyframe.
 
 The focal length: each keyframe's canonical point map gives, for every confident pixel, the ray x/z, y/z that
 pixel sees; the focal is the robust (Weiszfeld, L1) fit of `pixel - centre = f * ray` with the principal point
 at the image centre and square pixels, and the solve's focal is the median over keyframes, scaled back from
 the 512-wide frame to the plate.
+
+The poses: MASt3R-SLAM tracks a frame by aligning point maps (rays and distances), which leaves the camera off
+by several centimetres on the demo plate. With the focal above held, every tracked frame's pose is refined by a
+bundle adjustment on the reprojection of the tracker's own matches (`bundle_adjust`, numpy). Solving the focal
+in that bundle too (self-calibration) is recorded as a diagnostic only: on a short dolly it swings by tens of
+percent with whole-pixel match noise (the sprint doc, stage 9).
 """
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 import time
@@ -40,6 +47,8 @@ RECOVERS_FOCAL = True
 CONFIDENCE = 1.5           # MASt3R confidence (1 = none) a point must pass for the focal fit and the cloud
 CLOUD_STRIDE = 4           # one cloud point per 4 x 4 pixels of a keyframe
 MAX_CLOUD_POINTS = 60000
+MIN_REFINE_OBSERVATIONS = 200
+MATCH_STRIDE = 8           # the pose refinement uses each keyframe's matches on an 8-pixel grid
 
 
 def description():
@@ -111,16 +120,178 @@ def focal_from_pointmap(points, confidence, width, height, threshold=CONFIDENCE,
     return focal
 
 
-def run_solve(frames, intrinsics=None, *, loop_closure=False, seed=0, workdir, progress=None, cancelled=None):
+def _sim3(data):
+    """(translation, rotation matrix, scale) of lietorch Sim3 data [tx ty tz qx qy qz qw s]."""
+    t, (qx, qy, qz, qw), scale = np.asarray(data[:3], np.float64), (float(v) for v in data[3:7]), float(data[7])
+    rotation = np.array([[1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
+                         [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
+                         [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)]])
+    return t, rotation, scale
+
+
+def _rotation(rotvec):
+    """Rotation matrices (N, 3, 3) of rotation vectors (N, 3) (Rodrigues)."""
+    rotvec = np.asarray(rotvec, np.float64).reshape(-1, 3)
+    angle = np.linalg.norm(rotvec, axis=1)[:, None, None]
+    k = rotvec / np.maximum(angle[:, :, 0], 1e-12)
+    K = np.zeros((len(k), 3, 3))
+    K[:, 0, 1], K[:, 0, 2], K[:, 1, 0], K[:, 1, 2], K[:, 2, 0], K[:, 2, 1] = -k[:, 2], k[:, 1], k[:, 2], -k[:, 0], -k[:, 1], k[:, 0]
+    return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * K @ K
+
+
+def _project(segments, focal, width, height, log_rho, frame_params):
+    """Residuals (n, 2) of every match and, per row, its segment's point index and its frame number."""
+    centre = np.array([(width - 1) / 2.0, (height - 1) / 2.0])
+    out, points, frames, row_frame = [], [], 0, []
+    for seg, rho in zip(segments, log_rho):
+        rays = np.column_stack([(seg["pixels"] - centre) / focal, np.ones(len(rho))])
+        xyz = rays / np.exp(rho)[:, None]
+        for frame in seg["frames"]:
+            params = frame_params[frames]
+            R = frame["R"] @ _rotation(params[:3])[0]
+            moved = xyz[frame["index"]] @ R.T + frame["t"] + params[3:]
+            z = np.maximum(moved[:, 2:3], 1e-6)
+            out.append(focal * moved[:, :2] / z + centre - frame["observed"])
+            row_frame.append(np.full(len(frame["index"]), frames))
+            frames += 1
+    return np.concatenate(out), np.concatenate(row_frame)
+
+
+def bundle_adjust(segments, focal, width, height, free_focal=False, passes=2, outlier_pixels=3.0, iterations=40,
+                  huber=1.0):
+    """Bundle adjustment of the tracked frames on MASt3R's pixel matches, the focal held or (`free_focal`) solved.
+
+    Each segment is one keyframe with the frames tracked against it: `pixels` (P, 2) keyframe pixel positions,
+    `inv_depth` (P,) their inverse depths in the keyframe camera (from its point map), and `frames`, each with
+    `R`, `t` (keyframe camera to frame camera, X_f = R X_k + t, the solve's pose), `index` (M,) the keyframe
+    pixels it matched and `observed` (M, 2) where. Unknowns: every inverse depth, every frame's pose and, with
+    `free_focal`, the one focal length (square pixels, principal point at the centre, pixel centres at integers
+    like `focal_from_pointmap`). Levenberg-Marquardt on the reprojection error of every match (Huber, `huber` pixels), the
+    depths eliminated with the Schur complement, derivatives by finite differences (each frame touches only its
+    rows and each depth only its point's). Matches off by more than `outlier_pixels` after a pass are dropped for
+    the next. Each segment keeps its scale (mean log inverse depth; the translations follow). Numpy only.
+    Returns {"focal", "frames": [[(R, t), ...] per segment], "rms_pixels", "observations"}.
+    """
+    segments = [dict(seg, frames=[dict(f) for f in seg["frames"]]) for seg in segments]
+    n_frames = sum(len(seg["frames"]) for seg in segments)
+    log_rho = [np.log(np.asarray(seg["inv_depth"], np.float64)) for seg in segments]
+    gauge = [rho.mean() for rho in log_rho]
+    params = np.zeros((n_frames, 6))
+    log_f = math.log(focal)
+    offsets = np.cumsum([0] + [len(rho) for rho in log_rho])
+    n_points, n_cam = offsets[-1], 1 + 6 * n_frames
+
+    def point_rows():
+        return np.concatenate([offsets[s] + frame["index"] for s, seg in enumerate(segments) for frame in seg["frames"]])
+
+    def evaluate(log_f, log_rho, params):
+        r, frame_of_row = _project(segments, math.exp(log_f), width, height, log_rho, params)
+        return r, frame_of_row
+
+    def cost(r):
+        norm = np.linalg.norm(r, axis=1)
+        return float(np.where(norm <= huber, 0.5 * norm ** 2, huber * (norm - 0.5 * huber)).sum())
+
+    for _pass in range(passes):
+        if n_frames == 0 or sum(len(f["index"]) for seg in segments for f in seg["frames"]) < 8:
+            break
+        lam = 1e-3
+        r, frame_of_row = evaluate(log_f, log_rho, params)
+        current = cost(r)
+        pid = point_rows()
+        for _ in range(iterations):
+            eps = 1e-6
+            # Jacobian columns: focal (all rows), each frame's 6 (its rows), each depth (its rows)
+            jf = ((evaluate(log_f + eps, log_rho, params)[0] - r) / eps if free_focal else np.zeros_like(r))
+            jc = np.zeros((len(r), 6, 2))
+            for k in range(6):
+                bumped = params.copy()
+                bumped[:, k] += eps
+                jc[:, k] = (evaluate(log_f, log_rho, bumped)[0] - r) / eps
+            jp = (evaluate(log_f, [rho + eps for rho in log_rho], params)[0] - r) / eps     # (n, 2)
+            norm = np.linalg.norm(r, axis=1)
+            w = np.where(norm <= huber, 1.0, huber / np.maximum(norm, 1e-12))[:, None]       # IRLS weights
+            # camera block: index 0 = focal, 1 + 6 j .. = frame j
+            J = np.concatenate([jf[:, None, :], jc], axis=1)                              # (n, 7, 2)
+            Hcc = np.zeros((n_cam, n_cam))
+            gc = np.zeros(n_cam)
+            Hcp = np.zeros((n_cam, n_points))
+            Hpp = np.bincount(pid, (w * jp * jp).sum(1), n_points) + 1e-12
+            gp = np.bincount(pid, (w * jp * r).sum(1), n_points)
+            for j in range(n_frames):
+                rows = frame_of_row == j
+                cols = np.r_[0, 1 + 6 * j:7 + 6 * j]
+                Jj, wj, rj = J[rows], w[rows], r[rows]
+                Hcc[np.ix_(cols, cols)] += np.einsum("nac,nbc->ab", Jj * wj[:, None], Jj)
+                gc[cols] += np.einsum("nac,nc->a", Jj * wj[:, None], rj)
+                block = np.einsum("nac,nc->na", Jj * wj[:, None], jp[rows])                 # (n_j, 7)
+                for a, col in enumerate(cols):
+                    Hcp[col] += np.bincount(pid[rows], block[:, a], n_points)
+            improved = False
+            for _try in range(8):
+                damped_pp = Hpp * (1 + lam)
+                S = Hcc + lam * np.diag(np.diag(Hcc)) - (Hcp / damped_pp) @ Hcp.T
+                b = -gc + (Hcp / damped_pp) @ gp
+                try:
+                    dc = np.linalg.solve(S + 1e-9 * np.eye(n_cam), b)
+                except np.linalg.LinAlgError:
+                    lam *= 10
+                    continue
+                dp = (-gp - Hcp.T @ dc) / damped_pp
+                new_f = log_f + dc[0]
+                new_params = params + dc[1:].reshape(-1, 6)
+                new_rho = [rho + dp[offsets[s]:offsets[s + 1]] for s, rho in enumerate(log_rho)]
+                # hold each segment's scale: shift its log inverse depths back and scale its translations
+                start = 0
+                for s, seg in enumerate(segments):
+                    shift = new_rho[s].mean() - gauge[s]
+                    new_rho[s] = new_rho[s] - shift
+                    for k, frame in enumerate(seg["frames"]):
+                        t = (frame["t"] + new_params[start + k, 3:]) * math.exp(shift)
+                        new_params[start + k, 3:] = t - frame["t"]
+                    start += len(seg["frames"])
+                trial, _ = evaluate(new_f, new_rho, new_params)
+                if cost(trial) < current:
+                    log_f, log_rho, params, r, current = new_f, new_rho, new_params, trial, cost(trial)
+                    lam = max(lam / 3, 1e-7)
+                    improved = True
+                    break
+                lam *= 10
+            if not improved or np.abs(dc).max() < 1e-7:
+                break
+        # drop the matches that do not fit, then solve again from here
+        bad = np.linalg.norm(r, axis=1) > outlier_pixels
+        start = 0
+        for seg in segments:
+            for frame in seg["frames"]:
+                n = len(frame["index"])
+                keep = ~bad[start:start + n]
+                frame["index"], frame["observed"] = frame["index"][keep], frame["observed"][keep]
+                start += n
+    r, _ = evaluate(log_f, log_rho, params) if n_frames else (np.zeros((0, 2)), None)
+    poses, start = [], 0
+    for seg in segments:
+        poses.append([(frame["R"] @ _rotation(params[start + k, :3])[0], frame["t"] + params[start + k, 3:])
+                      for k, frame in enumerate(seg["frames"])])
+        start += len(seg["frames"])
+    norms = np.linalg.norm(r, axis=1)
+    return {"focal": math.exp(log_f) if free_focal else focal, "frames": poses, "observations": int(len(norms)),
+            "rms_pixels": float(np.sqrt(np.mean(norms ** 2))) if len(norms) else float("nan")}
+
+
+def run_solve(frames, intrinsics=None, *, loop_closure=False, seed=0, workdir, progress=None, cancelled=None,
+              config=None):
     """Solve the camera and the lens of a plate; returns {"c2w", "points", "colors", "intrinsics", "info"}.
 
     `frames` are N display-sRGB uint8 (H, W, 3) arrays. `intrinsics` is ignored (MASt3R-SLAM is uncalibrated);
     the returned `intrinsics` is (fx, fy, cx, cy) in plate pixels, the focal as recovered, the principal point
     at the plate's centre. `loop_closure` turns the retrieval database (loop edges between keyframes) on.
+    `config` overrides upstream's config/base.yaml ({"tracking": {"match_frac_thresh": 0.5}}; benchmarks only).
     """
     from . import camera_solve_dpvo as dpvo   # the solver side of this file runs in another interpreter
     height, width = dpvo.check_frames(PROVIDER_NAME, frames, description()["limits"], MIN_FRAMES)
-    job = {"loop_closure": bool(loop_closure), "seed": int(seed), "mast3r_dir": mast3r_dir()}
+    job = {"loop_closure": bool(loop_closure), "seed": int(seed), "mast3r_dir": mast3r_dir(), "config": config or {},
+           "debug": bool(os.environ.get("NODEBASED_MAST3R_DEBUG"))}
     solved = dpvo.run_job(PROVIDER_NAME, __file__, provider_python(), frames, job, workdir, progress, cancelled,
                           env={"TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1"})
     focal = float(solved["info"]["focal_px"])
@@ -165,17 +336,35 @@ def _solve(job):
     from mast3r_slam.config import config, load_config
     load_config("config/base.yaml")
     config["single_thread"], config["use_calib"] = True, False
+    for section, values in job.get("config", {}).items():
+        config[section].update(values)
     from mast3r_slam.frame import SharedKeyframes, create_frame
     from mast3r_slam.global_opt import FactorGraph
-    from mast3r_slam.lietorch_utils import as_SE3
     from mast3r_slam.mast3r_utils import load_mast3r, load_retriever, mast3r_inference_mono, resize_img
     from mast3r_slam.tracker import FrameTracker
 
+    import mast3r_slam.tracker as tracker_module
     device = "cuda:0"
     total = len(job["frames"])
     first = np.load(job["frames"][0])
     plate_h, plate_w = first.shape[:2]
     h, w = (int(v) for v in resize_img(first.astype(np.float32) / 255.0, INPUT_SIZE)["true_shape"][0])
+    grid = (np.arange(MATCH_STRIDE // 2, h, MATCH_STRIDE)[:, None] * w
+            + np.arange(MATCH_STRIDE // 2, w, MATCH_STRIDE)[None, :]).ravel()
+    grid_t = torch.from_numpy(grid).to(device)
+    captured = {}
+    upstream_match = tracker_module.mast3r_match_asymmetric
+
+    def capturing_match(model, frame_i, frame_j, idx_i2j_init=None):
+        """The tracker's matcher, also keeping where each keyframe grid pixel was found in the frame."""
+        out = upstream_match(model, frame_i, frame_j, idx_i2j_init=idx_i2j_init)
+        idx, valid, _Xii, _Cii, Qii, _Xji, _Cji, Qji = out
+        quality = torch.sqrt(Qii[idx[0]] * Qji).reshape(-1)       # as the tracker weighs a match
+        captured["match"] = (idx[0].reshape(-1)[grid_t].cpu().numpy(), valid[0].reshape(-1)[grid_t].cpu().numpy(),
+                             quality[grid_t].cpu().numpy())
+        return out
+    tracker_module.mast3r_match_asymmetric = capturing_match
+
     torch.cuda.reset_peak_memory_stats()
     started = time.perf_counter()
     model = load_mast3r(device=device)
@@ -196,14 +385,15 @@ def _solve(job):
             graph.add_factors(edges, [idx] * len(edges), config["local_opt"]["min_match_frac"])
         graph.solve_GN_rays()
 
-    anchors, times, lost, previous = [], [], 0, None   # anchors: (keyframe index, relative Sim3 data) per frame
+    identity = lietorch.Sim3.Identity(1, device=device).data.cpu().numpy().reshape(-1)
+    # anchors: per frame, (keyframe index, Sim3 data of the frame relative to it); matches: per tracked frame
+    anchors, matches, times, lost, previous, frame_focals = [], [], [], 0, None, []
     for t, path in enumerate(job["frames"]):
         rgb = np.load(path).astype(np.float32) / 255.0
         torch.cuda.synchronize()
         tick = time.perf_counter()
         pose = lietorch.Sim3.Identity(1, device=device) if previous is None else previous.T_WC
         frame = create_frame(t, rgb, pose, img_size=INPUT_SIZE, device=device)
-        identity = lietorch.Sim3.Identity(1, device=device).data.cpu()
         if previous is None:
             X, C = mast3r_inference_mono(model, frame)
             frame.update_pointmap(X, C)
@@ -212,38 +402,44 @@ def _solve(job):
             anchors.append((len(keyframes) - 1, identity))
         else:
             new_keyframe, _info, lost_track = tracker.track(frame)
+            k = len(keyframes) - 1
             if lost_track:
                 # Tracking failed against the last keyframe: hold the previous frame's pose (no relocalisation
                 # without the retrieval database), and say so in the run info.
                 lost += 1
                 anchors.append(anchors[-1])
                 frame.T_WC = previous.T_WC
-            elif new_keyframe:
-                keyframes.append(frame)
-                optimise(len(keyframes) - 1)
-                anchors.append((len(keyframes) - 1, identity))
             else:
-                k = len(keyframes) - 1
-                relative = lietorch.Sim3(keyframes.T_WC[k]).inv() * frame.T_WC
-                anchors.append((k, relative.data.cpu()))
+                relative = (lietorch.Sim3(keyframes.T_WC[k]).inv() * frame.T_WC).data.cpu().numpy().reshape(-1)
+                matches.append({"frame": t, "keyframe": k, "relative": relative, "match": captured["match"]})
+                if new_keyframe:
+                    keyframes.append(frame)
+                    optimise(len(keyframes) - 1)
+                    anchors.append((len(keyframes) - 1, identity))
+                else:
+                    anchors.append((k, relative))
         torch.cuda.synchronize()
         times.append(time.perf_counter() - tick)
+        if frame.X_canon is not None:
+            frame_focals.append(focal_from_pointmap(frame.X_canon.double().cpu().numpy(),
+                                                    frame.C.double().cpu().numpy().reshape(-1), w, h))
         previous = frame
         print(f"progress {t + 1} {total}", flush=True)
+    tracker_module.mast3r_match_asymmetric = upstream_match
 
     n_kf = len(keyframes)
-    c2w = np.tile(np.eye(4), (total, 1, 1))
-    for t, (k, relative) in enumerate(anchors):
-        pose = lietorch.Sim3(keyframes.T_WC[k]) * lietorch.Sim3(relative.to(device))
-        x, y, z, qx, qy, qz, qw = as_SE3(pose).data.numpy().reshape(-1)
-        qx, qy, qz, qw = (float(v) for v in (qx, qy, qz, qw))
-        c2w[t, :3, :3] = np.array([
-            [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
-            [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
-            [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)]])
-        c2w[t, :3, 3] = (x, y, z)
+    kf_sim3 = [keyframes.T_WC[k].cpu().numpy().reshape(-1).astype(np.float64) for k in range(n_kf)]
 
-    focals, points, colors = [], [], []
+    def c2w_of(k, rotation, centre):
+        """Camera-to-world of a frame whose pose in keyframe k's camera is (rotation, centre)."""
+        t_k, R_k, s_k = _sim3(kf_sim3[k])
+        pose = np.eye(4)
+        pose[:3, :3], pose[:3, 3] = R_k @ rotation, s_k * R_k @ centre + t_k
+        return pose
+
+    c2w_slam = np.stack([c2w_of(k, _sim3(rel)[1], _sim3(rel)[0]) for k, rel in anchors])
+
+    focals, points, colors, segments, segment_kf = [], [], [], [], []
     for k in range(n_kf):
         X = keyframes.X[k].double().cpu().numpy()
         C = (keyframes.C[k] / keyframes.N[k].clamp(min=1)).double().cpu().numpy().reshape(-1)
@@ -253,20 +449,63 @@ def _solve(job):
         keep = (C.reshape(h, w) > CONFIDENCE)[::CLOUD_STRIDE, ::CLOUD_STRIDE]
         points.append(world[::CLOUD_STRIDE, ::CLOUD_STRIDE][keep])
         colors.append(rgb[::CLOUD_STRIDE, ::CLOUD_STRIDE][keep])
+        # the keyframe's matches for the pose refinement: confident grid pixels in front of the camera
+        usable = (C[grid] > CONFIDENCE) & (X[grid, 2] > 1e-6)
+        position = np.full(len(grid), -1)
+        position[usable] = np.arange(usable.sum())
+        frames = []
+        for row in (m for m in matches if m["keyframe"] == k):
+            idx, valid, quality = row["match"]
+            ok = valid.reshape(-1).astype(bool) & (quality > config["tracking"]["Q_conf"]) & usable
+            if ok.sum() < 8:
+                continue
+            centre, rotation, _scale = _sim3(row["relative"])     # frame in keyframe coordinates
+            frames.append({"frame": row["frame"], "R": rotation.T, "t": -rotation.T @ centre, "index": position[ok],
+                           "observed": np.column_stack([idx[ok] % w, idx[ok] // w]).astype(np.float64)})
+        if frames:
+            segments.append({"pixels": np.column_stack([grid % w, grid // w])[usable].astype(np.float64),
+                             "inv_depth": 1.0 / X[grid, 2][usable], "frames": frames})
+            segment_kf.append(k)
     points, colors = np.concatenate(points), np.concatenate(colors)
     if len(points) > MAX_CLOUD_POINTS:
         step = int(np.ceil(len(points) / MAX_CLOUD_POINTS))
         points, colors = points[::step], colors[::step]
-    focal_work = float(np.nanmedian(focals))
+    focal_pointmap = float(np.nanmedian(focals))
     scale = max(plate_w, plate_h) / INPUT_SIZE
+
+    # The lens is the point maps' focal. With it held, every tracked frame's pose (and the keyframe depths) is
+    # refined on the reprojection of MASt3R's matches; the bundle with the focal free is kept as a diagnostic
+    # (on a short dolly it is far less certain than the point maps, see the sprint doc, stage 9).
+    if job.get("debug"):        # the refinement's input, for a benchmark that checks the matches against truth
+        import pickle
+        Path(job["result"]).with_name("segments.pkl").write_bytes(pickle.dumps(
+            {"segments": segments, "segment_keyframes": segment_kf,
+             "keyframe_frames": [int(keyframes.dataset_idx[k]) for k in range(n_kf)],
+             "focal_pointmap": focal_pointmap, "working_size": [w, h]}))
+    tick = time.perf_counter()
+    refined = bundle_adjust(segments, focal_pointmap, w, h) if segments else None
+    refine_s = time.perf_counter() - tick
+    free = bundle_adjust(segments, focal_pointmap, w, h, free_focal=True) if segments else None
+    c2w = c2w_slam.copy()
+    if refined is not None and refined["observations"] >= MIN_REFINE_OBSERVATIONS:
+        for seg, k, poses in zip(segments, segment_kf, refined["frames"]):
+            for frame, (R, t) in zip(seg["frames"], poses):
+                if anchors[frame["frame"]][0] == k:       # a frame that became a keyframe keeps the keyframe pose
+                    c2w[frame["frame"]] = c2w_of(k, R.T, -R.T @ t)
     warm = np.array(times[4:]) if total > 8 else np.array(times)
     info = {"frames": total, "keyframes": n_kf, "lost_frames": lost, "working_size": [w, h],
-            "focal_px": focal_work * scale, "focal_px_working": focal_work,
+            "focal_px": focal_pointmap * scale, "focal_px_working": focal_pointmap,
             "focal_px_per_keyframe": [f * scale for f in focals],
-            "fps_after_warmup": float(1 / warm.mean()), "fps_total": float(total / sum(times)), "load_s": load_s,
-            "peak_vram_mb": torch.cuda.max_memory_allocated() / 2 ** 20, "loop_closure": job["loop_closure"],
-            "seed": seed, "torch": torch.__version__, "gpu": torch.cuda.get_device_name(0)}
-    np.savez(job["result"], c2w=c2w, points=points, colors=np.clip(np.rint(colors), 0, 255).astype(np.uint8))
+            "focal_px_per_frame": [f * scale for f in frame_focals],
+            "focal_px_bundle_free": None if free is None else free["focal"] * scale,
+            "refine": None if refined is None else {"observations": refined["observations"],
+                                                    "rms_pixels_working": refined["rms_pixels"], "seconds": refine_s},
+            "fps_after_warmup": float(1 / warm.mean()), "fps_total": float(total / (sum(times) + refine_s)),
+            "load_s": load_s, "peak_vram_mb": torch.cuda.max_memory_allocated() / 2 ** 20,
+            "loop_closure": job["loop_closure"], "seed": seed, "torch": torch.__version__,
+            "gpu": torch.cuda.get_device_name(0)}
+    np.savez(job["result"], c2w=c2w, c2w_slam=c2w_slam, points=points,
+             colors=np.clip(np.rint(colors), 0, 255).astype(np.uint8))
     Path(job["info"]).write_text(json.dumps(info, indent=1), encoding="utf-8")
 
 

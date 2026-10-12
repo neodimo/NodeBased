@@ -160,6 +160,59 @@ class LensFitTests(unittest.TestCase):
         self.assertNotIn(mast3r.PROVIDER_NAME, {path.stem for path in PROVIDER_DIR.glob("*.json")})
 
 
+def dolly_segment(rng, focal=350.0, width=512, height=288, points=500, frames=16, pose_noise=0.0):
+    """A keyframe and the frames tracked against it on a short dolly with a slow pan, matches to a whole pixel
+    (as MASt3R gives them) with a tenth of them wrong. Returns (segment, true (R, t) per frame)."""
+    centre = np.array([(width - 1) / 2, (height - 1) / 2])
+    pixels = np.column_stack([rng.uniform(0, width, points), rng.uniform(0, height, points)])
+    depth = rng.uniform(3, 12, points)
+    world = np.column_stack([(pixels - centre) / focal * depth[:, None], depth])
+    rows, truth = [], []
+    for j in range(1, frames + 1):
+        a = j / frames
+        R = mast3r._rotation(np.array([[0.01 * np.sin(j), 0.06 * a, 0.004 * np.cos(j)]]))[0]
+        t = -R @ np.array([0.4 * a, 0.02 * np.sin(j), -1.4 * a])
+        seen = world @ R.T + t
+        observed = focal * seen[:, :2] / seen[:, 2:3] + centre
+        inside = np.flatnonzero((observed[:, 0] >= 0) & (observed[:, 0] < width) & (observed[:, 1] >= 0) & (observed[:, 1] < height))
+        observed = np.rint(observed[inside])
+        wrong = rng.random(len(inside)) < 0.1
+        observed[wrong] += rng.normal(0, 20, (wrong.sum(), 2))
+        R0 = R @ mast3r._rotation(rng.normal(0, pose_noise * 0.1, (1, 3)))[0]
+        rows.append({"frame": j, "R": R0, "t": t + rng.normal(0, pose_noise, 3), "index": inside, "observed": observed})
+        truth.append((R, t))
+    return {"pixels": pixels, "inv_depth": 1 / (depth * rng.uniform(0.95, 1.05, points)), "frames": rows}, truth
+
+
+class BundleAdjustTests(unittest.TestCase):
+    def test_free_focal_is_found_from_exact_geometry(self):
+        segment, _truth = dolly_segment(np.random.default_rng(0))
+        for start in (1.12, 0.9):
+            out = mast3r.bundle_adjust([segment], 350.0 * start, 512, 288, free_focal=True)
+            self.assertAlmostEqual(out["focal"] / 350.0, 1.0, places=2)
+            self.assertLess(out["rms_pixels"], 0.6)          # whole-pixel matches: about 0.4 px
+
+    def test_held_focal_stays_and_the_poses_come_back(self):
+        segment, truth = dolly_segment(np.random.default_rng(1), pose_noise=0.03)
+        before = np.mean([np.linalg.norm(f["t"] - t) for f, (_R, t) in zip(segment["frames"], truth)])
+        out = mast3r.bundle_adjust([segment], 350.0, 512, 288)
+        self.assertEqual(out["focal"], 350.0)
+        after = np.mean([np.linalg.norm(-R.T @ t - (-Rt.T @ tt)) for (R, t), (Rt, tt) in zip(out["frames"][0], truth)])
+        self.assertLess(after, before / 5)
+        self.assertEqual(len(out["frames"][0]), len(segment["frames"]))
+
+    def test_nothing_to_adjust(self):
+        out = mast3r.bundle_adjust([], 300.0, 512, 288)
+        self.assertEqual((out["focal"], out["frames"], out["observations"]), (300.0, [], 0))
+
+    def test_sim3_data_to_rotation(self):
+        half = np.radians(30) / 2          # 30 degrees about z, lietorch order [t, qx qy qz qw, s]
+        t, R, scale = mast3r._sim3([1, 2, 3, 0, 0, np.sin(half), np.cos(half), 2.0])
+        np.testing.assert_allclose(R, [[np.cos(2 * half), -np.sin(2 * half), 0], [np.sin(2 * half), np.cos(2 * half), 0], [0, 0, 1]], atol=1e-12)
+        self.assertEqual((list(t), scale), ([1, 2, 3], 2.0))
+        np.testing.assert_allclose(mast3r._rotation(np.array([[0, 0, 2 * half]]))[0], R, atol=1e-12)
+
+
 @unittest.skipIf(sys.platform == "win32", "the stub interpreter is a shell script")
 class SubprocessTests(unittest.TestCase):
     def setUp(self):
