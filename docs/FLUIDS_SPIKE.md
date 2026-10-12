@@ -1526,31 +1526,13 @@ P2 acceptance remains unchecked. **Needs Gonzo:** persist or otherwise make prod
 surface refinement bounded, then reduce the preview evaluation from 245.7 ms to under 80 ms and
 measure the same three rows on llvmpipe.
 
-### P4 baseline profile (2026-10-12)
+### P4: production preview ring and progressive stop (2026-10-12, partial)
 
-The P3 production bake was regenerated at 256³ liquid / 192³ steam, 120 frames, on the Radeon. It
-contains 48,755,923,288 bytes and is kept temporarily under `scratch/nb-lanes/run/L6-p4-cache`.
-Before any source changes, `cProfile` recorded a warmed tier-4 scene fetch for frame 60. The
-profiled evaluator call took 397 ms; the first call in a fresh process took 1.497 s because it also
-loaded Python modules. Top ten entries by cumulative time:
+Before source changes, the warmed frame-60 tier-4 profile took 397 ms. Its top cumulative entries were `Evaluator.evaluate_raster` (397 ms), `fluid3d.chain_for` (384 ms), `fluid3d._geo_track` (384 ms), `scene3d.geometry_from_node` (158 ms), `scene3d._geometry_from_node` (134 ms), `scene3d._cylinder` (117 ms), `json.dumps` (47 ms), JSON encoder `encode` (42 ms), JSON encoder `iterencode` (37 ms), and `numpy.meshgrid` (29 ms). The full 120-frame bake was regenerated at 256³ liquid / 192³ steam (48,755,923,288 bytes).
 
-| Calls | Cumulative | Entry |
-|---:|---:|---|
-| 725/1 | 397 ms | `imaging.Evaluator.evaluate_raster` |
-| 728/8 | 384 ms | `fluid3d.chain_for` |
-| 486/6 | 384 ms | `fluid3d._geo_track` |
-| 1,210 | 158 ms | `scene3d.geometry_from_node` |
-| 1,210 | 134 ms | `scene3d._geometry_from_node` |
-| 968 | 117 ms | `scene3d._cylinder` |
-| 5,093 | 47 ms | `json.dumps` |
-| 5,093 | 42 ms | `json.encoder.encode` |
-| 5,093 | 37 ms | `json.encoder.iterencode` |
-| 1,936 | 29 ms | `numpy.meshgrid` |
+The preview evaluator now keeps decoded frames in a directional in-memory ring and updates persistent volume textures in place. The Radeon 8060S production playback, 240 × 135, measured 120 frames: cold median 6.7 ms and p95 7.8 ms (149.49 median FPS); warm median 6.4 ms and p95 8.3 ms (155.33 median FPS). Both passes meet the 80 ms fetch-plus-draw target. llvmpipe measured cold median 23.0 ms / p95 31.3 ms and warm median 22.1 ms / p95 29.6 ms (120 frames each).
 
-This profile points to repeated fluid-chain / geometry-track digest work through the 120-frame
-document range; disk decoding and GPU upload are not the dominant entries. The 397 ms profile is
-above the 80 ms target. Cold/warm percentiles, stop timings, and any optimization result are still
-pending; P4 remains incomplete.
+Stopping remains unresolved. The first production frame-1 stop did not reach the half-resolution result within two minutes; it entered whitewater reconstruction from the simulation. The run was interrupted, so no full-detail stop timings exist for frames 1, 60 or 120, and the one-second stop target is unproven. Surface mesh persistence and half-resolution refinement are implemented and unit-tested, but the old-cache production path still needs a fix and measurement. The acceptance checklist remains unchecked. **Needs Gonzo:** make stopped preview reuse the baked production liquid and whitewater artifacts, then measure tier-2 arrival and full-detail completion at frames 1, 60 and 120.
 
 ## K2 rigid bodies — finish 1
 

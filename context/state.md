@@ -1,3 +1,11 @@
+## 2026-10-12 8:20 AM PDT — Lane 6 P4 of 4: hot-pour preview and stop (PARTIAL)
+
+- **What was done:** Regenerated the 120-frame 256³ / 192³ Radeon production bake. A warmed frame-60 cProfile baseline took 397 ms, with fluid chain and geometry track work at the top. Implemented directional decoded-frame ring buffering, persistent volume texture updates, cached surface-mesh persistence and progressive tier-2 stop refinement. Production playback now measures 6.7 ms cold median / 7.8 ms p95 and 6.4 ms warm median / 8.3 ms p95 on Radeon; llvmpipe measures 23.0 / 31.3 ms cold and 22.1 / 29.6 ms warm. Targeted tests pass.
+- **Artifacts:** source and tests committed in this worktree; profile/playback JSON and logs were temporary scratch under `scratch/nb-lanes/run/L6-p4-cache` (the 48.8 GB bake is removed before handoff); docs and bundled copy committed below. No public push.
+- **State:** PARTIAL. Radeon playback meets the 80 ms budget. A production frame-1 stop entered whitewater reconstruction and did not reach tier 2 within two minutes; interrupted. Full stop timings for frames 1, 60 and 120 are unverified, as is the one-second target.
+- **Next owner + concrete artifact:** Needs Gonzo: make the stopped preview reuse the production bake's liquid and whitewater artifacts, then run `tools/benchmark_hot_pour.py --reuse-cache --playback --stop-frames 1,60,120` against the production cache and document tier-2/full timings.
+- **Failure mode:** playback benchmark's fresh stop evaluator fell through to simulation reconstruction for whitewater; timing it as surface refinement would misattribute solver work.
+
 ## 2026-10-12 — Lane 3 T1 of 3: generative-video research radar (DONE)
 
 - **What was done — evidence:** read the stage 3/8 baseline and conditioning contract; searched the web and inspected primary model cards, repositories, licences and papers. Added a ranked, dated sweep covering the requested video families, small-card evidence, camera-control research and newer Wan/LTX/Hunyuan releases; separated published base-model numbers from unmeasured controlled workloads. Added mechanism comparisons, one bounded VACE brief and three non-scaling experiments. Four deliverable commits precede this final audit/handoff commit.
