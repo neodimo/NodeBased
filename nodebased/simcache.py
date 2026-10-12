@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -20,6 +21,9 @@ DEFAULT_MEMORY_BUDGET = 256 * MIB
 DEFAULT_DISK_BUDGET = 2048 * MIB
 PACKED_MAGIC = b"NBSIMC02"
 MAX_PACKED_HEADER = 8 * MIB
+PREVIEW_NEIGHBOR_FRAMES = 3
+PREVIEW_RING_FRAMES = PREVIEW_NEIGHBOR_FRAMES * 2 + 1
+_PREVIEW_PREFETCH = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim-preview-prefetch")
 
 
 def run_key(upstream_digest, params) -> str:
@@ -61,6 +65,113 @@ class State:
         if not isinstance(other, State) or self.meta != other.meta or self.arrays.keys() != other.arrays.keys():
             return False
         return all(np.array_equal(self.arrays[name], other.arrays[name]) for name in self.arrays)
+
+
+class PreviewFrameRing:
+    """Small per-run memory ring for decoded display frames, with asynchronous disk read-ahead."""
+
+    def __init__(self, neighbor_frames=3, max_runs=16):
+        self.neighbor_frames = max(1, int(neighbor_frames))
+        self.max_runs = max(1, int(max_runs))
+        self._frames = OrderedDict()
+        self._pending = {}
+        self._windows = {}
+        self._lock = threading.RLock()
+        self.disk_reads = 0
+        self.hits = 0
+        self.fallbacks = 0
+        self.prefetched = 0
+
+    def _run_frames(self, run):
+        frames = self._frames.get(run)
+        if frames is None:
+            frames = self._frames[run] = OrderedDict()
+        self._frames.move_to_end(run)
+        while len(self._frames) > self.max_runs:
+            old, _ = self._frames.popitem(last=False)
+            self._windows.pop(old, None)
+            for key, future in list(self._pending.items()):
+                if key[0] == old:
+                    future.cancel()
+                    self._pending.pop(key, None)
+        return frames
+
+    def _keep(self, run, frame, state):
+        if state is None:
+            return
+        with self._lock:
+            window = self._windows.get(run)
+            if window is not None and frame not in window:
+                return
+            frames = self._run_frames(run)
+            frames[int(frame)] = state
+            frames.move_to_end(int(frame))
+            while len(frames) > self.neighbor_frames * 2 + 1:
+                frames.popitem(last=False)
+
+    def put(self, run, frame, state):
+        self._keep(run, int(frame), state)
+
+    def get(self, run, frame, loader):
+        frame = int(frame)
+        key = (run, frame)
+        with self._lock:
+            frames = self._frames.get(run)
+            if frames is not None and frame in frames:
+                self.hits += 1
+                frames.move_to_end(frame)
+                self._frames.move_to_end(run)
+                return frames[frame]
+            future = self._pending.get(key)
+        if future is not None:
+            state = future.result()
+        else:
+            self.fallbacks += 1
+            self.disk_reads += 1
+            state = loader(frame)
+        self._keep(run, frame, state)
+        return state
+
+    def prefetch(self, run, current, direction, loader, first, last):
+        """Keep the last N and read ahead the next N frames along `direction` on a worker."""
+        current, first, last = int(current), int(first), int(last)
+        span = max(1, last - first + 1)
+        step = -1 if int(direction) < 0 else 1
+        history = [first + ((current - first - step * offset) % span)
+                   for offset in range(1, self.neighbor_frames + 1)]
+        ahead = [first + ((current - first + step * offset) % span)
+                 for offset in range(1, self.neighbor_frames + 1)]
+        keep = set(history + ahead + [current])
+        with self._lock:
+            self._run_frames(run)
+            self._windows[run] = keep
+            frames = self._frames[run]
+            for frame in list(frames):
+                if frame not in keep:
+                    frames.pop(frame, None)
+            for frame in history + ahead:
+                key = (run, frame)
+                if frame in frames or key in self._pending:
+                    continue
+                future = _PREVIEW_PREFETCH.submit(loader, frame)
+                self._pending[key] = future
+
+                def complete(done, key=key, run=run, frame=frame):
+                    try:
+                        state = done.result()
+                    except Exception:
+                        state = None
+                    self._keep(run, frame, state)
+                    with self._lock:
+                        self._pending.pop(key, None)
+                        if state is not None and frame in self._windows.get(run, set()):
+                            self.prefetched += 1
+
+                future.add_done_callback(complete)
+
+    def resident_frames(self, run):
+        with self._lock:
+            return tuple(self._frames.get(run, ()))
 
 
 class SimCache:

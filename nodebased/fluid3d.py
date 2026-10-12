@@ -1910,7 +1910,7 @@ def _fixed_preview_volume_state(volume):
                           "temperature_scale": 1.0 if temperature is None else tscale}, copy=False)
 
 
-def _fixed_preview_volume_value(state, stream, frame, name=""):
+def _fixed_preview_volume_value(state, stream, frame, name="", persistent_texture_key=None):
     from .scene3d import Volume
     density = state.arrays["density_u8"].astype(np.float32) * float(state.meta["density_scale"])
     factor = float(state.meta["cell_factor"])
@@ -1923,10 +1923,11 @@ def _fixed_preview_volume_value(state, stream, frame, name=""):
                                                + float(state.meta["temperature_min"]))
     return Volume(density, voxel_size=float(state.meta["voxel_size"]), origin=(0.0, 0.0, 0.0),
                   matrix=state.arrays["__matrix"], temperature=temperature, stream=stream, frame=int(frame),
-                  name=name, proxy_tier=4)
+                  name=name, proxy_tier=4, persistent_texture_key=persistent_texture_key)
 
 
-def cached_volume(stream, frame, store, cancel, precision, channels, name="", tier=1, preview_store=None):
+def cached_volume(stream, frame, store, cancel, precision, channels, name="", tier=1, preview_store=None,
+                  preview_ring=None, preview_range=None, preview_direction=1):
     """Read a served volume or its persistent, reduced-resolution display companion."""
     names = CHANNEL_SETS[channels]
     sparse = getattr(stream, "backend", None) == "resident_sparse"
@@ -1934,12 +1935,27 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name="", ti
     out_run = simcache.run_key(stream.run, {"out": [precision, channels] + (["sparse"] if sparse else [])})
     preview_run = simcache.run_key(out_run, {"preview_artifact": 1, "volume_edge": PREVIEW_VOLUME_EDGE})
     tier = int(tier)
+
+    def preview_get(run, at):
+        if preview_ring is None:
+            return preview_store.get(run, int(at))
+        first, last = preview_range or (int(at), int(at))
+        loader = lambda target: preview_store.get(run, int(target))
+        preview_ring.prefetch(run, int(at), preview_direction, loader, int(first), int(last))
+        return preview_ring.get(run, int(at), loader)
+
+    def preview_texture_key(at):
+        if preview_ring is None:
+            return None
+        slots = simcache.PREVIEW_RING_FRAMES
+        return ("preview-slot", out_run, int(at) % slots)
+
     if tier > 1:
         run = preview_run if tier == 4 else simcache.run_key(out_run, {"preview_volume": 1, "tier": tier})
-        preview = preview_store.get(run, int(frame))
+        preview = preview_get(run, frame)
         if preview is not None:
             if preview.meta.get("preview_artifact"):
-                return _fixed_preview_volume_value(preview, stream, frame, name)
+                return _fixed_preview_volume_value(preview, stream, frame, name, preview_texture_key(frame))
             return _cached_volume_value(preview, stream, frame, name, False, store)
     else:
         run = preview_run
@@ -1964,12 +1980,18 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name="", ti
     full = _cached_volume_value(got, stream, frame, name, sparse, store)
     if tier <= 1:
         if preview_store.get(preview_run, int(frame)) is None:
-            preview_store.put(preview_run, int(frame), _fixed_preview_volume_state(full))
+            preview = _fixed_preview_volume_state(full)
+            preview_store.put(preview_run, int(frame), preview)
+            if preview_ring is not None:
+                preview_ring.put(preview_run, int(frame), preview)
         return full
 
     # First access to an old cache lazily creates its proxy; subsequent scrubs fetch only the
     # reduced arrays. Baking at tier 1 pre-populates the default quarter-resolution companion.
     proxy = _fixed_preview_volume_state(full) if tier == 4 else _volume_preview_state(full, tier)
     preview_store.put(run, int(frame), proxy)
-    return (_fixed_preview_volume_value(proxy, stream, frame, name) if proxy.meta.get("preview_artifact")
+    if preview_ring is not None:
+        preview_ring.put(run, int(frame), proxy)
+    return (_fixed_preview_volume_value(proxy, stream, frame, name, preview_texture_key(frame))
+            if proxy.meta.get("preview_artifact")
             else _cached_volume_value(proxy, stream, frame, name, False, store))

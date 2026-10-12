@@ -12425,6 +12425,7 @@ class Window(QMainWindow):
         self.rendered_identity = self.render_identity()
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = snapshot["time"]["current"]
+        self.evaluator.preview_direction = -1 if self.playing and getattr(self, "play_direction", 1) < 0 else 1
         future = self.future_frames(frame) if self.playing else ()
         viewport = None
         # A first preview, or one whose source canvas just changed size, has no scene extent

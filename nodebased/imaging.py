@@ -567,6 +567,8 @@ class Evaluator:
         self._sim_memory = simcache.SimCache(enabled=False)
         self._sim_stores = {}
         self._sim_preview_stores = {}
+        self._sim_preview_ring = simcache.PreviewFrameRing(neighbor_frames=3)
+        self.preview_direction = 1
         self._rigid_solvers = {}
         self._liquid_feedback_versions = {}
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
@@ -634,6 +636,18 @@ class Evaluator:
                                       profile=None if self.sim_template is None else self.sim_template.profile)
             self._sim_preview_stores[key] = store
         return store
+
+    def sim_preview_state(self, store, run, frame, doc):
+        """Serve a decoded display artifact from the playback ring, reading the disk store only on a miss."""
+        frame = int(frame)
+        time_range = doc.get("time", {})
+        loader = lambda target: store.get(run, int(target))
+        self._sim_preview_ring.prefetch(run, frame, self.preview_direction, loader,
+                                        int(time_range.get("first", frame)), int(time_range.get("last", frame)))
+        return self._sim_preview_ring.get(run, frame, loader)
+
+    def remember_sim_preview_state(self, run, frame, state):
+        self._sim_preview_ring.put(run, int(frame), state)
 
     def clear(self):
         """Drop retained results from memory.
@@ -1256,11 +1270,12 @@ class Evaluator:
                         preview_store = self.sim_preview_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         if isinstance(stream, flip3d.LiquidStream) and tier > 1:
                             preview_run = flip3d.preview_cache_run(stream.run, tier)
-                            state = preview_store.get(preview_run, int(frame))
+                            state = self.sim_preview_state(preview_store, preview_run, frame, doc)
                             if state is None:
                                 state = particles.solve_frame(stream, frame, store, cancel)
                                 state = flip3d.preview_state(state, stream, tier)
                                 preview_store.put(preview_run, int(frame), state)
+                                self.remember_sim_preview_state(preview_run, frame, state)
                             display_tier = tier
                         else:
                             state = particles.solve_frame(stream, frame, store, cancel)
@@ -1268,7 +1283,9 @@ class Evaluator:
                             if isinstance(stream, flip3d.LiquidStream):
                                 preview_run = flip3d.preview_cache_run(stream.run, 4)
                                 if preview_store.get(preview_run, int(frame)) is None:
-                                    preview_store.put(preview_run, int(frame), flip3d.preview_state(state, stream, 4))
+                                    preview_state = flip3d.preview_state(state, stream, 4)
+                                    preview_store.put(preview_run, int(frame), preview_state)
+                                    self.remember_sim_preview_state(preview_run, frame, preview_state)
                         value = replace(particles.instance_from_state(state, stream, frame),
                                         proxy_tier=display_tier,
                                         matrix=incoming.matrix, render_as=incoming.render_as,
@@ -1349,7 +1366,7 @@ class Evaluator:
                         if tier > 1:
                             preview_run = simcache.run_key(run, {"preview_particles": 2, "tier": int(tier),
                                                                   "point_budget": flip3d.PREVIEW_POINT_BUDGET})
-                            solved = preview_store.get(preview_run, int(frame))
+                            solved = self.sim_preview_state(preview_store, preview_run, frame, doc)
                         else:
                             preview_run = None
                             solved = None
@@ -1360,11 +1377,14 @@ class Evaluator:
                             if tier > 1:
                                 solved = flip3d.preview_state(solved, fluid, tier)
                                 preview_store.put(preview_run, int(frame), solved)
+                                self.remember_sim_preview_state(preview_run, frame, solved)
                             else:
                                 preview_run = simcache.run_key(run, {"preview_particles": 2, "tier": 4,
                                                                       "point_budget": flip3d.PREVIEW_POINT_BUDGET})
                                 if preview_store.get(preview_run, int(frame)) is None:
-                                    preview_store.put(preview_run, int(frame), flip3d.preview_state(solved, fluid, 4))
+                                    preview_state = flip3d.preview_state(solved, fluid, 4)
+                                    preview_store.put(preview_run, int(frame), preview_state)
+                                    self.remember_sim_preview_state(preview_run, frame, preview_state)
                         value = replace(whitewater.instance_from_state(_whitewater_state(solved), incoming, frame),
                                         proxy_tier=int(tier) if tier > 1 else 1)
                 elif kind == "FluidCache3D":
@@ -1374,9 +1394,14 @@ class Evaluator:
                     else:
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         preview_store = self.sim_preview_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        preview_ring = self._sim_preview_ring
+                        time_range = doc.get("time", {})
                         value = fluid3d.cached_volume(fluid, frame, store, cancel, params["cache_precision"],
                                                       params["cache_channels"], node.get("name", ""), tier=tier,
-                                                      preview_store=preview_store)
+                                                      preview_store=preview_store, preview_ring=preview_ring,
+                                                      preview_range=(time_range.get("first", frame),
+                                                                     time_range.get("last", frame)),
+                                                      preview_direction=self.preview_direction)
                     link = scene3d.light_link_from_params(params)    # the smoke's light link rides this node
                     if not node["disabled"] and link != scene3d.LIGHT_LINK_ALL and isinstance(value, scene3d.Volume):
                         value = replace(value, light_link=link)

@@ -420,6 +420,7 @@ class Volume:
     name: str = ""                       # source solver name, retained by scene exports
     light_link: tuple = LIGHT_LINK_ALL   # which lights scatter in this smoke and which it shadows (`light_link_from_params`)
     proxy_tier: int = 1                  # pre-downsampled simulation tier; display-only
+    persistent_texture_key: object | None = None  # fixed-budget playback ring slot; the GPU updates its texture in place
 
     @classmethod
     def from_sparse(cls, grid, voxel_size=1.0, origin=(0.0, 0.0, 0.0), matrix=None, stream=None, frame=0, name=""):

@@ -660,6 +660,9 @@ _digests = weakref.WeakKeyDictionary()
 
 def _digest(volume, name='density'):
     """Content key of an array the shader reads; memoised on the (immutable) Volume object."""
+    persistent = getattr(volume, 'persistent_texture_key', None)
+    if persistent is not None:
+        return ('persistent', persistent, name)
     keys = _digests.setdefault(volume, {})
     key = keys.get(name)
     if key is None:
@@ -686,10 +689,25 @@ def _field(state, key, make, used):
     cache = state.setdefault('volume_textures', OrderedDict())
     used.add(key)
     entry = cache.get(key)
-    if entry is None:
+    persistent = len(key) > 1 and isinstance(key[1], tuple) and key[1][:1] == ('persistent',)
+    if entry is None or persistent:
         data, fmt = make()
         nz, ny, nx = data.shape[:3]
         channels = 1 if fmt == 'r32float' else 4
+        dimensions = (nx, ny, nz, fmt)
+        if entry is not None and persistent and entry[3] == dimensions:
+            profile = state.get('profile')
+            upload_started = time.perf_counter() if profile is not None else 0.0
+            device.queue.write_texture({'texture': entry[0]}, data,
+                                       {'bytes_per_row': nx * 4 * channels, 'rows_per_image': ny}, (nx, ny, nz))
+            if profile is not None:
+                profile['host_gpu_upload_s'] = profile.get('host_gpu_upload_s', 0.0) + time.perf_counter() - upload_started
+                profile['host_gpu_upload_bytes'] = profile.get('host_gpu_upload_bytes', 0) + data.nbytes
+            state['volume_texture_updates'] = state.get('volume_texture_updates', 0) + 1
+            cache.move_to_end(key)
+            return entry[1]
+        if entry is not None:
+            entry[0].destroy()
         gpu_texture = device.create_texture(
             size=(nx, ny, nz), dimension='3d', format=fmt,
             usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
@@ -700,7 +718,7 @@ def _field(state, key, make, used):
         if profile is not None:
             profile['host_gpu_upload_s'] = profile.get('host_gpu_upload_s', 0.0) + time.perf_counter() - upload_started
             profile['host_gpu_upload_bytes'] = profile.get('host_gpu_upload_bytes', 0) + data.nbytes
-        entry = cache[key] = (gpu_texture, gpu_texture.create_view(dimension='3d'), data.nbytes)
+        entry = cache[key] = (gpu_texture, gpu_texture.create_view(dimension='3d'), data.nbytes, dimensions)
         state['volume_uploads'] = upload_count(state) + 1
     cache.move_to_end(key)
     budget = VOLUME_MEMORY_BUDGETS[adapter_kind(state)]
