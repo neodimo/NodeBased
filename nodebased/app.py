@@ -246,7 +246,7 @@ PANEL_NODE_HELP = {
     "Dot": "Graph reroute and passthrough; pixel data stays unchanged.",
     "Switch": "Selects an input through which (0 or 1). It does not resample; pixel formats must match.",
     "ChannelShuffle": "Routes each output channel from A, B or a constant. A B channel requires a connected B input.",
-    "Roto": "Animatable bezier and polygon shapes produce a premultiplied matte. View this node to drag existing points. Drawing and point edits commit through one validated set_shapes command.",
+    "Roto": "Animatable closed shapes and open stroked splines produce a premultiplied matte. View this node to draw and edit points; payload changes use validated set_shapes.",
     "RotoPaint": "Drag in this node's viewer to add one undoable stroke. Connect input2 for reveal; clone samples the plate at the previous frame for DustBust.",
     "Tracker": "Pixel NCC tracking uses float scene-linear pixels. One validated set_tracks command commits after completion; failure or cancellation leaves the document unchanged.",
     "Viewer": "Shows the current view target. Its input follows the view target and appears as a faint tap, never a processing connection. Pixels pass through unchanged.",
@@ -2705,7 +2705,7 @@ class Viewer(PanZoomView):
         self.roto_drag = None
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.viewport().update()
-        prompt = "Roto: click points · Enter closes the shape · Esc cancels"
+        prompt = "Roto: click points · Enter ends open · click first point closes · Esc cancels"
         self.window.statusBar().showMessage(prompt)
         self.show_prompt(prompt)
         return True
@@ -2720,12 +2720,13 @@ class Viewer(PanZoomView):
         self.hide_prompt()
         self.viewport().update()
 
-    def finish_roto_draw(self):
+    def finish_roto_draw(self, closed=False):
         if not self.roto_drawing:
             return False
         context = self._roto_context()
-        if context is None or len(self.roto_draw_points) < shape_model.MINIMUM_SHAPE_POINTS:
-            self.window.statusBar().showMessage("Roto: at least 3 points are required", 4000)
+        minimum = shape_model.MINIMUM_SHAPE_POINTS if closed else 2
+        if context is None or len(self.roto_draw_points) < minimum:
+            self.window.statusBar().showMessage(f"Roto: at least {minimum} points are required", 4000)
             return False
         key, _, payload, _ = context
         frame = int(self.window.dispatcher.document["time"]["current"])
@@ -2742,7 +2743,8 @@ class Viewer(PanZoomView):
             index += 1
         shapes = copy.deepcopy(payload.get("shapes", []))
         shape = {"name": f"shape{index}", "mode": "union", "opacity": 1.0,
-                 "feather": 0.0, "feather_model": "edge", "points": points}
+                 "feather": 0.0, "feather_model": "edge", "closed": bool(closed),
+                 "stroke_width": 1.0, "points": points}
         shapes.append(shape)
         self.cancel_roto_edit()
         # Whole-payload replacement is the Dispatcher validation/undo boundary.  The local frame
@@ -3056,7 +3058,7 @@ class Viewer(PanZoomView):
                     if (len(self.roto_draw_points) >= shape_model.MINIMUM_SHAPE_POINTS and
                             math.hypot(scene_pos.x()-self.roto_draw_points[0]["scene"].x(),
                                        scene_pos.y()-self.roto_draw_points[0]["scene"].y()) < 12/max(abs(self.transform().m11()), .05)):
-                        self.finish_roto_draw()
+                        self.finish_roto_draw(closed=True)
                     else:
                         dx, dy = (end[0]-point[0], end[1]-point[1]) if distance > 3 else (0.0, 0.0)
                         self.roto_draw_points.append({"x": point[0], "y": point[1], "in_x": -dx, "in_y": -dy,
@@ -3351,10 +3353,11 @@ class Viewer(PanZoomView):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             for shape_index, shape in enumerate(resolved):
                 points = shape["points"]
-                if len(points) < 3:
+                closed = shape.get("closed", True)
+                if len(points) < (3 if closed else 2):
                     continue
                 path = QPainterPath(self._roto_scene_point(points[0], tier))
-                for index in range(len(points)):
+                for index in range(len(points) if closed else len(points) - 1):
                     start, end = points[index], points[(index + 1) % len(points)]
                     path.cubicTo(self._roto_scene_point({"x": start["x"] + start["out_x"],
                                                           "y": start["y"] + start["out_y"]}, tier),
@@ -3371,8 +3374,12 @@ class Viewer(PanZoomView):
                                   for value in point.values())
                 color = ("#9de7ff" if is_keyed else "#b08cff" if is_animated else
                          "#ff986f" if shape["mode"] == "subtract" else "#58d7ff")
-                pen = QPen(QColor(color), 2)
-                pen.setCosmetic(True)
+                pen = QPen(QColor(color), max(2.0, shape.get("stroke_width", 1.0) / tier) if not closed else 2)
+                if not closed:
+                    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                else:
+                    pen.setCosmetic(True)
                 painter.setPen(pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawPath(path)

@@ -36,6 +36,10 @@ def build_panel(window, key):
             lambda idx=index, field=label: row_edit(idx, "name", field.text()))
         label.setMinimumWidth(label.fontMetrics().horizontalAdvance(shape["name"]) + 10)
         row_layout.addWidget(label, 1)
+        width = shape_model.resolve_scalar(shape.get("stroke_width", 1.0), frame, "stroke_width")
+        state = f"{'Closed' if shape.get('closed', True) else 'Open'} · {width:g} px"
+        state_label = QLabel(state); state_label.setObjectName(f"roto-shape-row-state-{index}")
+        row_layout.addWidget(state_label)
         animated, keyed_here = key_state(shape)
         shape_curve = {"interpolation": "smooth",
                        "keys": [{"frame": frame}] if keyed_here else ([{"frame": -1}] if animated else [])}
@@ -205,14 +209,15 @@ def build_panel(window, key):
         layout.addWidget(follow_mode)
         for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
             cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
-        for field, label, lo, hi, step in (("feather", "Feather", -500, 500, 0.5),
+        for field, label, lo, hi, step in (("stroke_width", "Stroke width", 0, 4096, 0.5),
+                                          ("feather", "Feather", -500, 500, 0.5),
                                           ("opacity", "Opacity", 0, 1, 0.05)):
             spin = QDoubleSpinBox()
             spin.setObjectName("roto-shape-" + field)
             spin.setRange(lo, hi)
             spin.setSingleStep(step)
             spin.setValue(float(shape_model.resolve_scalar(
-                shape.get(field, 0 if field == "feather" else 1), frame, field)))
+                shape.get(field, 1 if field == "stroke_width" else 0 if field == "feather" else 1), frame, field)))
             spin.setKeyboardTracking(False)
             spin.editingFinished.connect(lambda f=field, w=spin: edit(f, float(w.value())))
             spin.setToolTip(f"Set the shape {label.lower()}")

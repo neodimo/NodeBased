@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, QRectF, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel, QDoubleSpinBox
 
 from nodebased.app import STYLE, Window
 from nodebased.core import empty_document, Dispatcher
@@ -73,6 +73,40 @@ class RotoOverlayTests(unittest.TestCase):
 
     def scene_pixel_tolerance(self):
         return 1.0 / max(abs(self.window.viewer.transform().m11()), 0.05) + 0.05
+
+    def test_enter_ends_an_open_spline(self):
+        viewer = self.window.viewer
+        self.assertTrue(viewer.begin_roto_draw("r"))
+        viewer.roto_draw_points = [
+            {"x": x, "y": y, "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0,
+             "scene": QPointF(x, y)}
+            for x, y in ((10.0, 10.0), (50.0, 20.0), (80.0, 70.0))]
+        viewer.setFocus()
+        QTest.keyClick(viewer, Qt.Key.Key_Return)
+        shape = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
+        self.assertFalse(shape["closed"])
+        self.assertEqual(shape["stroke_width"], 1.0)
+        self.assertEqual(len(viewer.roto_draw_points), 0)
+
+    def test_clicking_first_point_finishes_as_closed(self):
+        viewer = self.window.viewer
+        self.assertTrue(viewer.begin_roto_draw("r"))
+        viewer.roto_draw_points = [
+            {"x": x, "y": y, "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0,
+             "scene": QPointF(x, y)}
+            for x, y in ((10.0, 10.0), (50.0, 20.0), (80.0, 70.0))]
+        self.assertTrue(viewer.finish_roto_draw(closed=True))
+        self.assertTrue(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["closed"])
+
+    def test_shape_list_and_panel_show_open_state_and_stroke_width(self):
+        from nodebased.rotopanel import build_panel
+        shape = triangle(); shape.update(closed=False, stroke_width=7.0)
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": [shape]})
+        panel = build_panel(self.window, "r")
+        state = panel.findChild(QLabel, "roto-shape-row-state-0")
+        self.assertEqual(state.text(), "Open · 7 px")
+        width = panel.findChild(QDoubleSpinBox, "roto-shape-stroke_width")
+        self.assertEqual(width.value(), 7.0)
 
     def _open_edge_shape(self):
         shape = triangle(); shape.update(feather=6.0, feather_model="edge")

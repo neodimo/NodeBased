@@ -1,3 +1,11 @@
+## 2026-10-11 — Lane 8 step S1 of 3: open/stroked Roto splines (DONE)
+
+Lane 8 added an optional per-shape `closed` flag (default true) and animatable `stroke_width` in pixels. Open splines rasterize with round caps/joins; feather extends from both sides and point offsets affect that feather. Width and the existing point/feather pixel values scale with proxy tiers. The viewer ends an open spline on Enter and closes it on first-point click; the list reports state and width. The validated `set_shapes` payload works with undo, save/load, and the agent-facing description.
+
+Evidence: focused Roto rendering/validation, proxy, undo/save, viewer, knowledge bundle, and parity-count checks passed on Linux offscreen. The pre-flag closed-shape raster is byte-identical when compared with the explicit closed form. Windows and real-display visual QA are unverified. No schema migration was needed.
+
+Artifacts are in the Lane 8 worktree and are committed on its branch. Next owner: Gonzo integrates the branch and performs real-display QA.
+
 ## 2026-10-12 01:50 AM PDT — Lane 6 P4 of 4: hot-pour preview and stop (BLOCKED)
 
 - **What was done (evidence):** inspected the prescribed retained-cache location `scratch/nb-lanes/run/`; no production Hot pour cache is present. The P3 benchmark record states its 48,755,923,288-byte cache was removed after measurement. No source changes, profile run, tests, or performance measurements were made.

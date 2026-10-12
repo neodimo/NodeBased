@@ -175,6 +175,13 @@ while drawing begins. Nuke documents its Premultiply control with a default of `
 `rgb` and `rgba` multiply the corresponding input channels by shape coverage. `O` with a node selected wires the selection to `bg`. Documents
 saved before the slot existed gain it unwired on load and render the matte as before.
 
+Each shape has `closed` (default `true`) and animatable `stroke_width` (default 1 pixel).
+Closed shapes keep the historical fill and feather raster exactly. An open shape is a
+round-capped, round-joined stroke centred on its Bezier curve; its feather expands outward
+from both sides. Width and feather use image pixels and scale with proxy tiers. Enter ends
+an open spline; clicking its first point still closes it. Existing documents omit `closed`
+and therefore continue to load as closed shapes without a schema migration.
+
 With no `bg`, output remains a **matte artifact**: float32, scene-linear, premultiplied, with
 `rgb == a == coverage`. That is a premultiplied white matte, so it composites
 correctly through every existing kernel with no special case, and reads as a
@@ -399,7 +406,7 @@ first (see "Paint strokes" below).
   code path. Until then, keying a point means sending the whole shape list
   through `set_shapes`.
 * Tracking is supported by the analysis workflow above; planar tracking remains outside this node.
-* No open/stroked splines, no planar tracking, no ROI-limited or tiered execution —
+* No planar tracking, no ROI-limited or tiered execution —
   the evaluator still runs full frame; this pass only declares its rules.
 
 ## Transform viewer handle

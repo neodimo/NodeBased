@@ -33,8 +33,8 @@ MAX_SEGMENTS = 64
 SEGMENT_PIXELS = 3.0
 
 
-def flatten_points(points):
-    """Flatten a closed list of resolved bezier points to a polyline of (x, y) vertices.
+def flatten_points(points, closed=True):
+    """Flatten resolved Bezier points to a polyline of (x, y) vertices.
 
     Tangent handles are stored relative to their point (the Nuke/After Effects convention), so a
     span whose outgoing and incoming handles are both zero is a straight line and emits exactly one
@@ -43,7 +43,7 @@ def flatten_points(points):
     """
     count = len(points)
     vertices = []
-    for index in range(count):
+    for index in range(count if closed else count - 1):
         start = points[index]
         end = points[(index + 1) % count]
         x0, y0 = start["x"], start["y"]
@@ -62,6 +62,8 @@ def flatten_points(points):
             u = 1.0 - t
             vertices.append((u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
                              u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3))
+    if not closed and count:
+        vertices.append((points[-1]["x"], points[-1]["y"]))
     return np.asarray(vertices, dtype=np.float64)
 
 
@@ -124,6 +126,61 @@ def coverage(points, width, height):
             for index in np.nonzero(running[:-1] != 0)[0]:
                 _add_span(accumulator, crossings[index], crossings[index + 1])
     return (matte / SUBSAMPLES).astype(np.float32)
+
+
+def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear"):
+    """Rasterise an open cubic as round-capped, round-joined stroke coverage."""
+    h, w = int(height), int(width)
+    vertices = []
+    offsets = []
+    for index in range(len(points) - 1):
+        start, end = points[index], points[index + 1]
+        x0, y0 = start["x"], start["y"]
+        x1, y1 = x0 + start["out_x"], y0 + start["out_y"]
+        x2, y2 = end["x"] + end["in_x"], end["y"] + end["in_y"]
+        x3, y3 = end["x"], end["y"]
+        control = (math.hypot(x1-x0, y1-y0) + math.hypot(x2-x1, y2-y1) + math.hypot(x3-x2, y3-y2))
+        n = 1 if start["out_x"] == start["out_y"] == end["in_x"] == end["in_y"] == 0 else min(max(int(math.ceil(control / SEGMENT_PIXELS)), MIN_SEGMENTS), MAX_SEGMENTS)
+        a = np.asarray((start.get("feather_x", 0.0), start.get("feather_y", 0.0)), dtype=np.float64)
+        b = np.asarray((end.get("feather_x", 0.0), end.get("feather_y", 0.0)), dtype=np.float64)
+        for step in range(n):
+            t = step / n; u = 1.0 - t
+            vertices.append((u**3*x0+3*u*u*t*x1+3*u*t*t*x2+t**3*x3,
+                             u**3*y0+3*u*u*t*y1+3*u*t*t*y2+t**3*y3))
+            offsets.append(a*(1-t)+b*t)
+    vertices.append((points[-1]["x"], points[-1]["y"]))
+    offsets.append(np.asarray((points[-1].get("feather_x", 0.0), points[-1].get("feather_y", 0.0))))
+    vertices = np.asarray(vertices, dtype=np.float64)
+    if len(vertices) < 2:
+        return np.zeros((h, w), dtype=np.float32)
+    yy, xx = np.mgrid[0:h, 0:w]
+    px, py = xx.astype(np.float32) + .5, yy.astype(np.float32) + .5
+    best = np.full((h, w), np.inf, dtype=np.float32)
+    local_feather = np.zeros((h, w), dtype=np.float32)
+    for index, (p0, p1) in enumerate(zip(vertices[:-1], vertices[1:])):
+        vx, vy = p1 - p0
+        denom = vx*vx + vy*vy
+        if denom <= 1e-12:
+            continue
+        t = np.clip(((px-p0[0])*vx + (py-p0[1])*vy) / denom, 0.0, 1.0)
+        dist = np.hypot(px-(p0[0]+t*vx), py-(p0[1]+t*vy))
+        take = dist < best
+        normal = np.asarray((vy, -vx), dtype=np.float64) / math.sqrt(denom)
+        offset = np.abs((offsets[index][0] * (1-t) + offsets[index+1][0] * t) * normal[0] +
+                        (offsets[index][1] * (1-t) + offsets[index+1][1] * t) * normal[1])
+        np.copyto(best, dist, where=take)
+        np.copyto(local_feather, offset, where=take)
+    half = max(0.0, float(stroke_width)) * .5
+    extent = float(feather) + local_feather
+    alpha = np.where(extent >= 0,
+                     np.where(best <= half, 1.0,
+                              np.clip((half + extent + .5 - best) / np.maximum(extent, 1e-6), 0.0, 1.0)),
+                     np.clip(half + extent + .5 - best, 0.0, 1.0)).astype(np.float32)
+    if falloff == "smooth":
+        alpha = alpha*alpha*(3.0-2.0*alpha)
+    elif falloff == "gaussian":
+        alpha = np.exp(-4.0*np.square(1.0-alpha)).astype(np.float32)
+    return alpha.astype(np.float32)
 
 
 def feather(cover, radius):
@@ -243,7 +300,12 @@ def rasterise(shapes, width, height, invert=False):
             continue
         samples = shape.get("_motion_samples", ())
         falloff = shape.get("feather_falloff", "linear")
-        if shape.get("feather_model", "box") == "edge":
+        if not shape.get("closed", True):
+            layers = [shape["points"], *samples]
+            covers = [stroke_coverage(points, w, h, shape.get("stroke_width", 1.0), shape["feather"], falloff)
+                      for points in layers]
+            cover = sum(covers) / len(covers)
+        elif shape.get("feather_model", "box") == "edge":
             layers = [shape["points"], *samples]
             covers = [edge_feather(points, coverage(points, w, h), shape["feather"], falloff)
                       for points in layers]

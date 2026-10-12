@@ -52,7 +52,7 @@ Today's 2D node set is the 164 kinds above (the node catalogue's Image through O
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Roto | supported | `Roto` rasterises Bezier/B-spline shapes with an outward edge feather, per-point feather offsets and mode (`docs/ROTO_TRACKING.md`); pre-existing documents preserve the historical box-blur model until switched in the panel. Like Nuke's own Roto it is a shapes-only generator; the paint tools live on the `RotoPaint` node (row 7 below), which stores shapes and strokes in one ordered list. Built there: Brush (colour, opacity, hardness with a soft falloff, size, per-point pressure, spacing), Eraser, Clone (source offset and source frame, relative or absolute), Reveal (from input2), Blur, Sharpen, Smear, Dodge and Burn, each stroke with a frame lifetime (all frames, single frame, from/to range, from the current frame), a blend mode, a Tracker-follow option, and hide, reorder and delete in the Layers list. Not built: Nuke's per-stroke colour correction and its onion-skin. |
+| 1 | Roto | supported | `Roto` rasterises closed Bezier/B-spline shapes with outward edge feather and open round-capped, round-joined stroked splines with animatable width; both support per-point feather offsets (`docs/ROTO_TRACKING.md`). Existing documents default to closed shapes and preserve the historical box-blur model until switched in the panel. Like Nuke's own Roto it is a shapes-only generator; the paint tools live on the `RotoPaint` node (row 7 below), which stores shapes and strokes in one ordered list. Built there: Brush (colour, opacity, hardness with a soft falloff, size, per-point pressure, spacing), Eraser, Clone (source offset and source frame, relative or absolute), Reveal (from input2), Blur, Sharpen, Smear, Dodge and Burn, each stroke with a frame lifetime (all frames, single frame, from/to range, from the current frame), a blend mode, a Tracker-follow option, and hide, reorder and delete in the Layers list. Not built: Nuke's per-stroke colour correction and its onion-skin. |
 | 2 | Text | supported | `Text`, rendered through Qt's own text rasteriser offscreen (no new dependency); font availability is a machine property, not something NodeBased embeds or controls. |
 | 3 | Rectangle | supported | `Rectangle`, an area box with fractional softness, colour and an optional image input the box is composited over. |
 | 4 | Ramp | supported | `Ramp`, a linear gradient between two points and two colours, Nuke's own knob names. |
@@ -418,6 +418,8 @@ and D65/D60/DCI.
 **2026-10-11, step L1 of 3 (Rendering 13).** `Undistort` and `Redistort` apply a camera's Brown-Conrady lens (or a node preset) with overscan: undistorting a checker and redistorting it returns it within a pixel-filter tolerance away from the border, a known distortion of a render is undone against the undistorted render, and proxy tiers and the full-frame fallback agree. Tests: `tests/test_lens_l1.py`.
 
 ## Lane 8 step notes
+
+**2026-10-11, step S1 of 3 (open and stroked Roto splines).** Roto shapes now carry a backward-compatible `closed` flag and animatable `stroke_width`; open curves render as round-capped and round-joined strokes with outward feathering. Enter ends an open shape while clicking the first point still closes it. Existing payloads resolve as closed. Targeted raster, validation and proxy coverage is in `tests/test_roto.py`; display interaction remains an offscreen check.
 
 ### R7: edge feather model
 

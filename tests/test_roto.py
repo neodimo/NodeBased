@@ -51,6 +51,12 @@ class ShapeValidationTests(unittest.TestCase):
     def test_a_well_formed_shape_validates(self):
         shapes.validate_shape(square(0, 0, 10, 10), "s")
 
+    def test_open_shape_accepts_two_points_and_animatable_width(self):
+        line = square(0, 0, 10, 10)
+        line.update(closed=False, stroke_width=keyed(4.0, [(1, 4.0), (2, 8.0)]))
+        line["points"] = line["points"][:2]
+        shapes.validate_shape(line, "s")
+
     def test_fewer_than_three_points_is_rejected(self):
         bad = square(0, 0, 10, 10)
         bad["points"] = bad["points"][:2]
@@ -110,6 +116,52 @@ class ShapeTransformTests(unittest.TestCase):
         a = roto.rasterise(shapes.resolve_shapes({"shapes": [plain]}, 1), 40, 40)
         b = roto.rasterise(shapes.resolve_shapes({"shapes": [explicit]}, 1), 40, 40)
         self.assertEqual(a.tobytes(), b.tobytes())
+        explicit_closed = copy.deepcopy(plain); explicit_closed["closed"] = True
+        c = roto.rasterise(shapes.resolve_shapes({"shapes": [explicit_closed]}, 1), 40, 40)
+        self.assertEqual(a.tobytes(), c.tobytes())
+
+    def test_pre_flag_shape_resolves_as_closed(self):
+        old_shape = square(4, 5, 28, 31)
+        resolved = shapes.resolve_shapes({"shapes": [old_shape]}, 1)[0]
+        self.assertTrue(resolved["closed"])
+
+    def test_open_three_point_stroke_width_and_round_caps_at_proxy_tiers(self):
+        points = [{"x": x, "y": y, "in_x": 0.0, "in_y": 0.0,
+                   "out_x": 0.0, "out_y": 0.0}
+                  for x, y in zip((10.5, 30.5, 50.5), (20.5, 20.5, 30.5))]
+        shape = {"name": "wire", "mode": "union", "opacity": 1.0, "feather": 0.0,
+                 "closed": False, "stroke_width": 6.0, "points": points}
+        full = roto.rasterise(shapes.resolve_shapes({"shapes": [shape]}, 1), 64, 40)[..., 3]
+        self.assertEqual(float(full[20, 10]), 1.0)
+        self.assertEqual(float(full[30, 50]), 1.0)
+        self.assertEqual(float(full[16, 30]), 0.0)
+        self.assertEqual(float(full[10, 30]), 0.0)
+        for tier in (2, 4):
+            scaled = tiers.scale_node_data("Roto", {"shapes": [shape]}, tier)["shapes"][0]
+            image = roto.rasterise(shapes.resolve_shapes({"shapes": [scaled]}, 1), 64//tier, 40//tier)
+            self.assertGreater(float(image[20//tier, 30//tier, 3]), 0.85)
+
+    def test_stroke_feather_expands_outward_on_both_sides(self):
+        line = {"name": "wire", "mode": "union", "opacity": 1.0, "feather": 3.0,
+                "closed": False, "stroke_width": 4.0,
+                "points": [{"x": 5.5, "y": 16.5, "in_x": 0.0, "in_y": 0.0,
+                            "out_x": 0.0, "out_y": 0.0},
+                           {"x": 26.5, "y": 16.5, "in_x": 0.0, "in_y": 0.0,
+                            "out_x": 0.0, "out_y": 0.0}]}
+        alpha = roto.rasterise([line], 32, 32)[..., 3]
+        self.assertGreater(alpha[16, 15], 0.0)
+        self.assertGreater(alpha[16, 15], alpha[12, 15])
+        self.assertGreater(alpha[16, 15], alpha[20, 15])
+
+    def test_open_stroke_uses_per_point_feather_offsets(self):
+        line = {"name": "wire", "mode": "union", "opacity": 1.0, "feather": 0.0,
+                "closed": False, "stroke_width": 2.0,
+                "points": [{"x": 5.5, "y": 16.5, "in_x": 0.0, "in_y": 0.0,
+                            "out_x": 0.0, "out_y": 0.0, "feather_x": 0.0, "feather_y": 2.0},
+                           {"x": 26.5, "y": 16.5, "in_x": 0.0, "in_y": 0.0,
+                            "out_x": 0.0, "out_y": 0.0, "feather_x": 0.0, "feather_y": 2.0}]}
+        alpha = roto.rasterise([line], 32, 32)[..., 3]
+        self.assertGreater(alpha[14, 15], 0.0)
 
     def test_viewer_edit_inverse_round_trips_shape_and_full_tracker_transforms(self):
         shape = square(0, 0, 2, 2, track_link={"tracker_id": "t", "track_name": "a"},
@@ -325,17 +377,23 @@ class NodeDataSchemaTests(unittest.TestCase):
 
     def test_set_shapes_round_trips_through_the_dispatcher(self):
         d = Dispatcher(empty_document())
+        open_shape = {"name": "wire", "mode": "union", "opacity": 1.0, "feather": 0.0,
+                      "closed": False, "stroke_width": keyed(4.0, [(1, 4.0), (2, 8.0)]),
+                      "points": square(0, 0, 10, 10)["points"][:2]}
         d.execute({"op": "batch", "commands": [
             {"op": "create", "id": "r", "type": "Roto"},
-            {"op": "set_shapes", "id": "r", "shapes": [square(0, 0, 10, 10)]}]})
+            {"op": "set_shapes", "id": "r", "shapes": [open_shape]}]})
         self.assertEqual(len(d.document["node_data"]["r"]["shapes"]), 1)
+        self.assertFalse(d.document["node_data"]["r"]["shapes"][0]["closed"])
         validate(d.document)
         d.execute({"op": "undo"})
         self.assertNotIn("r", d.document["node_data"])
 
     def test_save_and_load_round_trip_every_shape_and_tracker_key(self):
         d = Dispatcher(empty_document())
-        shape = square(4, 5, 30, 35, opacity=keyed(0.5, [(1, 0.5), (24, 0.8)], "smooth"),
+        shape = square(4, 5, 30, 35, closed=False,
+                       stroke_width=keyed(4.0, [(1, 4.0), (24, 8.0)]),
+                       opacity=keyed(0.5, [(1, 0.5), (24, 0.8)], "smooth"),
                        feather=keyed(1.0, [(1, 1.0), (24, 3.0)]),
                        color=[keyed(1.0, [(1, 1.0), (24, 0.2)]), 0.25, 0.5, 1.0],
                        track_link={"tracker_id": "t", "track_name": "feature"})
@@ -381,6 +439,7 @@ class NodeDataSchemaTests(unittest.TestCase):
         described = Dispatcher(empty_document()).execute({"op": "describe"})
         self.assertEqual(described["node_data"]["payloads"]["Roto"], "shapes")
         self.assertIn("set_shapes", described["operations"])
+        self.assertIn("open shapes render as strokes", described["node_data"]["set_shapes"]["shapes"])
 
 
 class PayloadProxyScalingTests(unittest.TestCase):

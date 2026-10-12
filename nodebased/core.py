@@ -2902,7 +2902,7 @@ class Dispatcher:
                                   "point_fields": list(shapes.POINT_FIELDS),
                                   "set_warp_data": {"id": "SplineWarp or GridWarp node id", "data": "animated warp controls"},
                                   "set_shapes": {"id": "string (Roto node id)",
-                                                 "shapes": "[{name, mode, opacity, feather, points}]"},
+                                                 "shapes": "[{name, mode, opacity, feather, closed, stroke_width, points}] (closed defaults true; open shapes render as strokes)"},
                                   "set_paint_items": {"id": "string (RotoPaint node id)", "items": "ordered paint/shape layers"},
                                   "paint_tools": ["paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"],
                                   "paint_stroke": {"points": "[{x, y, pressure}]",

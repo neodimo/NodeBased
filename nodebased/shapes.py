@@ -41,6 +41,7 @@ SHAPE_LIMITS = {
     "out_x": (-65536.0, 65536.0), "out_y": (-65536.0, 65536.0),
     "feather_x": (-500.0, 500.0), "feather_y": (-500.0, 500.0),
     "opacity": (0.0, 1.0), "feather": (-500.0, 500.0), "enabled": (0.0, 1.0),
+    "stroke_width": (0.0, 4096.0),
     "error": (0.0, 1.0),
     "translate_x": (-65536.0, 65536.0), "translate_y": (-65536.0, 65536.0),
     "rotate": (-360000.0, 360000.0), "scale_x": (-1000.0, 1000.0),
@@ -60,7 +61,7 @@ NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks"
 # `tiers.PIXEL_UNIT_PARAMS`, or a shape keys a different part of the frame at tier 2.
 # See docs/EVALUATION_TIERS.md clause C3.
 PIXEL_UNIT_SCALARS = frozenset({"x", "y", "in_x", "in_y", "out_x", "out_y", "feather",
-                                "feather_x", "feather_y",
+                                "feather_x", "feather_y", "stroke_width",
                                 "translate_x", "translate_y", "center_x", "center_y"})
 
 
@@ -122,13 +123,16 @@ def resolve_scalar(value, frame, name=None):
 
 def validate_shape(shape, where):
     required = {"name", "mode", "opacity", "feather", "points"}
-    optional = {"visible", "locked", "invert", "feather_falloff", "feather_model", "color", "blend_mode", "motion_blur", "track_link", "transform", "track_follow"}
+    optional = {"visible", "locked", "invert", "feather_falloff", "feather_model", "color", "blend_mode", "motion_blur", "track_link", "transform", "track_follow", "closed", "stroke_width"}
     if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
         raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
     if not isinstance(shape["name"], str) or not 1 <= len(shape["name"]) <= 128:
         raise ValueError(f"{where}.name must contain 1-128 characters")
     if shape["mode"] not in SHAPE_MODES:
         raise ValueError(f"{where}.mode must be one of {list(SHAPE_MODES)}")
+    if "closed" in shape and type(shape["closed"]) is not bool:
+        raise ValueError(f"{where}.closed must be a boolean")
+    validate_scalar(shape.get("stroke_width", 1.0), "stroke_width", where)
     validate_scalar(shape["opacity"], "opacity", where)
     validate_scalar(shape["feather"], "feather", where)
     if shape.get("feather_model", "box") not in ("box", "edge"):
@@ -160,9 +164,9 @@ def validate_shape(shape, where):
         if not 0 <= base <= 1:
             raise ValueError(f"{where}.color[{channel}] must be between 0 and 1")
     points = shape["points"]
-    if not isinstance(points, list) or not MINIMUM_SHAPE_POINTS <= len(points) <= MAXIMUM_SHAPE_POINTS:
-        raise ValueError(f"{where}.points must hold between {MINIMUM_SHAPE_POINTS} and "
-                         f"{MAXIMUM_SHAPE_POINTS} points; open splines are not representable")
+    minimum = MINIMUM_SHAPE_POINTS if shape.get("closed", True) else 2
+    if not isinstance(points, list) or not minimum <= len(points) <= MAXIMUM_SHAPE_POINTS:
+        raise ValueError(f"{where}.points must hold between {minimum} and {MAXIMUM_SHAPE_POINTS} points")
     for index, point in enumerate(points):
         if (not isinstance(point, dict) or not set(POINT_FIELDS).issubset(point)
                 or set(point) - set(POINT_FIELDS) - set(FEATHER_POINT_FIELDS)):
@@ -383,6 +387,8 @@ def resolve_shapes(payload, frame):
             "mode": shape["mode"],
             "opacity": resolve_scalar(shape["opacity"], frame, "opacity"),
             "feather": resolve_scalar(shape["feather"], frame, "feather"),
+            "closed": shape.get("closed", True),
+            "stroke_width": resolve_scalar(shape.get("stroke_width", 1.0), frame, "stroke_width"),
             "feather_model": shape.get("feather_model", "box"),
             "points": resolved_points,
             "transform": {field: resolve_scalar(shape.get("transform", {}).get(field,
@@ -414,6 +420,7 @@ def apply_shape_transform(shape):
     c, s = math.cos(angle), math.sin(angle)
     if shape.get("feather_model") == "edge":
         shape["feather"] *= math.sqrt(abs(sx * sy))
+    shape["stroke_width"] *= math.sqrt(abs(sx * sy))
     def vector(x, y):
         x, y = x * sx, y * sy
         return c * x - s * y, s * x + c * y
