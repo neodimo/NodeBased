@@ -530,7 +530,7 @@ class RenderTests(unittest.TestCase):
 
     def test_pre_edge_documents_migrate_to_box_feather(self):
         doc = empty_document()
-        doc["version"] = SCHEMA_VERSION - 1
+        doc["version"] = 21   # the literal: feather_model is the v21 -> v22 step, whatever the current schema is
         doc["node_data"] = {"r": {"shapes": [square(8, 8, 24, 24, feather=3.0)]}}
         migrated = upgrade_document(doc)
         self.assertEqual(migrated["node_data"]["r"]["shapes"][0]["feather_model"], "box")
