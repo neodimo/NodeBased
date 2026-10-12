@@ -363,6 +363,17 @@ took 782 s. Stills, next to the stage 3 ones: `docs/images/demo_shot/sdxl_contro
 softens towards frame 24 (the canvas is resampled once per frame) and the tall box picks up some ghosting at its
 edge. Frame 1 is the same picture as stage 3's, pixel for pixel.
 
+**Determinism.** The shot ran twice by hand and once by the attached agent through the tools
+(`run_by_agent.py --provider sdxl_controlnet`), each with its own artifact store, so every run made all 24 frames
+anew: the same scene_state, control_bundle, generated_sequence
+(`7f59a4604005f6e861bf3eba7f1c4649891f69bfc5cb79b846447a8bddea3d6d`), verification report
+(`ca01c65e18ff05d8dc2a923db4e2698447f4e96bf627afd6d3f31b8e05bd91f0`) and output pixel digest all three times,
+about 780 s each. The agent's first try failed: its window runs with a private settings home, where the
+provider's default interpreter and the Hugging Face model cache are not found, so the agent script now names both
+from the real home before the session starts. The provider's real-model tests (the same manifest twice gives the
+same bytes; the image-to-image frame is pinned by seed and strength, and another strength leaves frame 1 alone)
+pass on the card with 1.2.
+
 **Next: a local video model (assessment, nothing downloaded).** Checked in the brief's order, from each model's own
 documentation. CogVideoX-2B and 5B (with the community depth ControlNets or the CogVideoX-Fun control variants)
 generate only at 720 by 480 and 8 frames a second, 49 frames; the 2B card says diffusers fp16 needs "from 4 GB"

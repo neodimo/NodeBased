@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -104,7 +105,19 @@ def main():
                         help="provider for the generate call (default: the graph's Generate node's, reproject)")
     args = parser.parse_args()
     started = time.perf_counter()
+    if args.provider == "sdxl_controlnet":
+        # The window runs with a private settings home, where the provider's default interpreter and the Hugging
+        # Face model cache (both under the home folder) do not exist: name them from the real home before the
+        # session starts. Environment only; the script still reaches the shot through the tools alone.
+        os.environ.setdefault("NODEBASED_SDXL_PYTHON",
+                              str(Path.home() / ".openclaw/workspace/projects/nb-providers/sdxl/.venv/bin/python"))
+        os.environ.setdefault("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
+        info_file = Path(args.cache).parent / "sdxl-run-info.json"
+        os.environ["NODEBASED_SDXL_RUN_INFO"] = str(info_file)  # the provider writes its timings and peak VRAM here
+        info_file.unlink(missing_ok=True)
     summary = run(args.plate, args.out, args.cache, args.graph, provider=args.provider)
+    if args.provider == "sdxl_controlnet" and info_file.exists():
+        summary["model_run"] = json.loads(info_file.read_text())
     summary["output_pixel_digest"] = output_digest(args.out, summary["frames"])
     summary["tool_sequence"] = [f"{name} x{summary['tool_sequence'].count(name)}"
                                 for name in dict.fromkeys(summary["tool_sequence"])]
