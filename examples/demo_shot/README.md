@@ -10,14 +10,18 @@ real model comes in stage 3 and only swaps the provider.
 
 | File | What it is |
 | --- | --- |
-| `make_plate.py` | Renders the 24-frame plate to EXR and checks it against `plate.sha256.json`; `--k1` renders the lens plate instead (hashes in `plate_k1.sha256.json`). |
+| `make_plate.py` | Renders the 24-frame plate to EXR and checks it against `plate.sha256.json`; `--k1` renders the lens plate instead (hashes in `plate_k1.sha256.json`); `--distorted` the plate of the lens round trip, 640 by 360 with k1 and k2 (hashes in `plate_distorted.sha256.json`). |
 | `solve_camera.py` | Tracks the plate, solves the camera from it, compares with the rendering camera, writes `solve.json` and `demo_shot.nbcomp`; `--solver dpvo --lens estimate` solves with DPV-SLAM and recovers the lens (below). |
 | `lens_benchmark.json` | The recorded focal length and k1 recovery runs (`solve_camera.py --solver dpvo --matrix`). |
 | `diagnose_verdict.py` | Measures the verifier on the shot: each check's worst value, its threshold, and the same measurement for the plate against its own SceneState. |
 | `demo_shot.nbcomp` | The shot graph. |
-| `run_by_hand.py` | Headless run through the `nodebased.agent` dispatcher; prints artifact ids and the verdict. |
+| `demo_shot_lens.nbcomp` | The shot graph of the distorted plate: plate, Undistort, the conditioning and the comp in the undistorted frame, Redistort, Write (below). |
+| `solve_lens.json` | The camera solve behind it: the lens the solve recovered against the truth, the survey and the overscan. |
+| `lens_check.py` | The lens round-trip error of a run, apart from the verifier's verdict. |
+| `capture_lens_view.py` | Renders the viewer's undistorted view with its overscan into `docs/images/demo_shot/`. |
+| `run_by_hand.py` | Headless run through the `nodebased.agent` dispatcher; prints artifact ids and the verdict. `--plate distorted` runs the lens shot. |
 | `run_by_agent.py` | The same shot through MCP tools only: a scripted agent on an offscreen window (stage 4b). |
-| `compare_runs.py` | Runs the hand run and the agent run with fresh stores and compares every id and the output pixels. |
+| `compare_runs.py` | Runs the hand run and the agent run with fresh stores and compares every id and the output pixels (`--plate distorted` for the lens shot). |
 | `run_by_claude.py` | One real Claude Code session on the brief over MCP (needs the `claude` CLI and a login; network). |
 | `BRIEF.md` | The one-sentence brief and the MCP tool sequence for the agent run (stage 4b). |
 | `shot.py` | Shared scene, camera move and graph builder. |
@@ -111,9 +115,56 @@ text anyway: one `generate` call does the shot, and the reply, the sequence's `g
 provenance row record `text` as ignored. The stand-in carries each frame's layout render into the next
 by its motion vectors; it does not paint a street.
 
+## The distorted plate shot (step L3)
+
+`python examples/demo_shot/run_by_hand.py --plate distorted` (and `run_by_agent.py`, `compare_runs.py` with the same
+flag) runs the shot of a filmed, distorted plate: **plate, Undistort (with overscan), the layout, the conditioning
+export and the generated picture in the undistorted frame, grade and merge, Redistort, Write**
+(`demo_shot_lens.nbcomp`). The plate is 640 by 360 with `k1` -0.03 and `k2` 0.004 (`make_plate.py --distorted`,
+hashes in `plate_distorted.sha256.json`; a plate in the cache that differs from them is rendered again). The solve
+node is `CameraSolve3D` with `Focal length is` = estimate, `Distortion` = k1 k2 and a survey of two picked points
+and their distance (`shot.pick_survey` picks them where the plate has texture on every frame). The overscan is the
+margin Undistort grows the frame by (24 by 20 pixels here, the frame a multiple of 16 each way, which is what a
+diffusion model wants), the export carries the lens of the overscan camera (the same physical lens on the larger
+film back) and the resolution of the overscan frame, so a provider works undistorted and `Redistort` puts the
+result back on the plate.
+
+The report keeps two things apart. The **verdict** is the model's: lighting and objects are checked against the exported
+SceneState, as in the plain shot. The **lens round trip** (`lens_check.py`, in the run's summary under
+`lens_round_trip`) is the pipeline's: `plate_identity` is the plate sent through Undistort and Redistort against the
+plate, and `result_vs_plate` is the written result against the plate; both are measured away from a 16 pixel edge
+band, as a mean and a 99th percentile of the absolute difference, against limits in `lens_check.LIMITS`. With the
+`reproject` stand-in both are judged. A real model restyles the picture, so for it only `plate_identity` is judged and
+`result_vs_plate` is printed for reading.
+
+Measured on this machine's CPU (24 frames, 640 by 360, no GPU used), the hand run takes **328 s** (the plain shot's
+155 s is at 480 by 270; the lens shot also renders the overscan frame and resamples twice): verdict **PASS**
+(lighting pass, objects pass, the rest not conditioned as in the plain shot), plate identity mean 0.0012 and p99 0.024,
+result against the plate mean 0.0022 and p99 0.036 (limits 0.003 / 0.06 and 0.01 / 0.12). The hand and the agent run
+give the same ids and the same output pixels (`compare_runs.py --plate distorted`, 667 s for both):
+
+| Artifact | Id |
+| --- | --- |
+| SceneState | `036e95618ba9a949859cea5f95cecfe83de82f03b36977d5f0aa8a63a3f18449` |
+| ControlBundle | `afd87a0e765f0d63780294d7a5f6c0546bde3a00464d7ded959c340fb5434666` |
+| Generated sequence | `4126456affb6425a4154d36b1d18c211f94493cd31817e72d00db2bfa24347d9` |
+| Verification report | `23e8a4bfdf87c72970fff1dab93c16bc7a24e50111f8b337010701dcb39cf396` |
+
+**Why 640 by 360.** The verifier's object check allows 2 pixels. The `reproject` stand-in carries each layout render
+along its motion vectors and its tracked error grows with the frame size: it passes at 640 and 704 wide and fails
+at 768, 832 and 896 (two objects drift 2.2 to 2.4 pixels on a few frames). The shot is therefore 640 wide.
+
+**The committed graph is not yet the DPV-SLAM solve.** `demo_shot_lens.nbcomp` holds the rendering camera and lens as
+the camera keys, and `solve_lens.json` says so (`recovered` is empty). The solve itself needs the whole graphics card:
+`python examples/demo_shot/solve_camera.py --solver dpvo --distorted` runs it, overwrites both files with the recovered
+focal length, `k1`, `k2` and the similarity errors, and `tests/test_lens_shot_l3.py` (`CardSolveTests`) checks it
+loosely when the card is free. Still to measure on the card: that solve (recovered focal length, `k1`, `k2` and the
+camera error against the truth), the hand run of the graph it writes, and `--provider sdxl_controlnet` on the
+distorted shot (the model's per-check verdict and its round-trip identity row).
+
 ## Running it
 
-    python examples/demo_shot/run_by_hand.py [--plate DIR] [--out DIR] [--cache DIR] [--solver survey|dpvo]
+    python examples/demo_shot/run_by_hand.py [--plate plain|distorted|DIR] [--out DIR] [--cache DIR] [--solver survey|dpvo]
 
 It starts `python -m nodebased.agent` on the graph and sends the same commands an attached agent sends
 (`export_conditioning`, `generate`, `verify`, `edit`-style creates, `render`, `artifacts`), then prints
