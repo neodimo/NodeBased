@@ -1,3 +1,11 @@
+## 2026-10-13 — Lane 6 P4 finish 2: production stop timing (DONE)
+
+- **What was done — evidence:** Regenerated the full 256³ liquid / 192³ steam, 120-frame Radeon cache (47,661,160,028 bytes) and measured tier-2 surface arrival and tier-1 full detail at frames 1, 60 and 120. Half-resolution totals were 11.5, 223.3 and 311.6 ms; full-detail totals were 225.9, 141.8 and 148.6 ms. The slowest half-resolution arrival is 688.4 ms under the one-second target. Existing P4 playback measurements also pass the 80 ms budget.
+- **Artifacts:** `benchmarks/hot_pour/radeon-stop-P4-2026-10-13.json` and synchronized `docs/FLUIDS_SPIKE.md` / `nodebased/data/docs/FLUIDS_SPIKE.md` are committed locally on the lane branch. Generated cache was removed after the JSON and documentation were recorded. `tests.test_knowledge` passed; log: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/tests-L6-p4-docs.log`. No public push.
+- **State:** DONE. All three production half-resolution results arrive under one second, and full detail was measured for each frame.
+- **Next owner + concrete artifact:** Gonzo/integrator reviews and merges this lane branch; use the benchmark JSON and P4 section of `docs/FLUIDS_SPIKE.md` as the evidence.
+- **Failure mode:** The previous stop run was queued while the shared GPU lock was held and produced no measurements. Waiting on the official lock allowed the production bake and stop benchmark to complete without interrupting the other card job.
+
 ## 2026-10-12 — Lane 6 P4 finish 1: reuse baked cache for whitewater stop (PARTIAL)
 
 - **What was done — evidence:** Fixed `FluidWhitewater3D` to fetch liquid frame data from its upstream `ParticleCache3D` budget store while retaining whitewater state in its own store. Added regression coverage and cache-audit classification for extracted liquid meshes. Targeted cache/benchmark tests passed (22 tests in the P4 focused set).
@@ -22,4 +30,3 @@
 - **What was done:** `main` `b1df7d9c` -> `9a7e099f` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `9a7e099f`: Ran 5312 tests in 19183.766 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
-

@@ -1,3 +1,7 @@
+## 2026-10-13 — Lane 6 P4 finish 2: production stop timing (DONE)
+
+Measured the regenerated 256³ / 192³ Radeon production cache at frames 1, 60 and 120. Tier-2 half-resolution surface totals were 11.5 / 223.3 / 311.6 ms; tier-1 full-detail totals were 225.9 / 141.8 / 148.6 ms. The one-second stop target passes at all three frames. P4's previously recorded production preview medians/p95s also meet the 80 ms (12 FPS) target. The exact stop measurements are in `benchmarks/hot_pour/radeon-stop-P4-2026-10-13.json`; the generated 47.66 GB cache was removed. `docs/FLUIDS_SPIKE.md` and its bundled copy record the results. Documentation knowledge check passes. Committed locally on the lane branch; not pushed.
+
 ## 2026-10-12 8:20 PM PDT — Lane 6 P4 finish 1 (PARTIAL)
 
 The whitewater stop now reads liquid frames from the upstream `ParticleCache3D` budget store; regression and benchmark-audit tests pass. The full-size Radeon cache was generated and audited, then its 46 GB simulation directory was moved to Trash. Production stop measurements at frames 1, 60 and 120 remain pending: the queued benchmark could not acquire `/tmp/nb-gpu.lock` while the integrator suite held it, and was stopped. The fix is committed locally in `6982cd8`, `11370fc`, and `db61281`; nothing was pushed. Next: Gonzo reruns the command in TASKLOG after the lock clears. Issue #6 and the lane board are updated; task remains blocked on measurement.

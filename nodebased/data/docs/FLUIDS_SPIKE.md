@@ -1516,23 +1516,25 @@ Production Hot pour, 256³ liquid / 192³ steam, 120 frames, tier 1/4 at 240 × 
 | AMD Radeon 8060S | 4.07 | 4.32 | 245.7 ms (234.1 fetch + 11.6 draw) | 375.1 s (frame 60) |
 | llvmpipe | not measured: queued behind the active shared GPU suite and earlier exclusive benchmark | — | — | — |
 
-The Radeon result proves the preview path is substantially lighter than P2's 0.49 FPS result,
-but misses the 80 ms load-plus-draw budget. Its full-detail stop also misses the one-second bar;
-fetching and rebuilding the liquid surface took 375.1 s, followed by a 61 ms draw. The cold/warm
-preview rows and stop measurement are in `benchmarks/hot_pour/radeon-preview-P3-2026-10-11.json`.
-The production bake cache (48,755,923,288 bytes) was generated under deliberate scratch and is
-removed after the adapter runs. Focused proxy, liquid-surface, and playback-control tests pass.
-P2 acceptance remains unchecked. **Needs Gonzo:** persist or otherwise make production liquid
-surface refinement bounded, then reduce the preview evaluation from 245.7 ms to under 80 ms and
-measure the same three rows on llvmpipe.
+This P3 row is the pre-ring baseline: it missed the 80 ms load-plus-draw budget and its full-detail
+stop took 375.1 s. P4's production ring and stop measurements below supersede those results for
+current Radeon acceptance. The baseline JSON remains `benchmarks/hot_pour/radeon-preview-P3-2026-10-11.json`.
 
-### P4: production preview ring and progressive stop (2026-10-12, partial)
+### P4: production preview ring and progressive stop (2026-10-13, complete)
 
 Before source changes, the warmed frame-60 tier-4 profile took 397 ms. Its top cumulative entries were `Evaluator.evaluate_raster` (397 ms), `fluid3d.chain_for` (384 ms), `fluid3d._geo_track` (384 ms), `scene3d.geometry_from_node` (158 ms), `scene3d._geometry_from_node` (134 ms), `scene3d._cylinder` (117 ms), `json.dumps` (47 ms), JSON encoder `encode` (42 ms), JSON encoder `iterencode` (37 ms), and `numpy.meshgrid` (29 ms). The full 120-frame bake was regenerated at 256³ liquid / 192³ steam (48,755,923,288 bytes).
 
-The preview evaluator now keeps decoded frames in a directional in-memory ring and updates persistent volume textures in place. The Radeon 8060S production playback, 240 × 135, measured 120 frames: cold median 6.7 ms and p95 7.8 ms (149.49 median FPS); warm median 6.4 ms and p95 8.3 ms (155.33 median FPS). Both passes meet the 80 ms fetch-plus-draw target. llvmpipe measured cold median 23.0 ms / p95 31.3 ms and warm median 22.1 ms / p95 29.6 ms (120 frames each).
+The preview evaluator keeps decoded frames in a directional in-memory ring and updates persistent volume textures in place. Radeon 8060S production playback at 240 × 135 over 120 frames measured 6.7 ms cold median / 7.8 ms p95 (149.49 median FPS) and 6.4 ms warm median / 8.3 ms p95 (155.33 median FPS). Both passes meet the 80 ms budget for 12 FPS. llvmpipe measured 23.0 ms cold median / 31.3 ms p95 and 22.1 ms warm median / 29.6 ms p95 over 120 frames.
 
-Stopping remains unresolved. The first production frame-1 stop did not reach the half-resolution result within two minutes; it entered whitewater reconstruction from the simulation. The run was interrupted, so no full-detail stop timings exist for frames 1, 60 or 120, and the one-second stop target is unproven. Surface mesh persistence and half-resolution refinement are implemented and unit-tested, but the old-cache production path still needs a fix and measurement. The acceptance checklist remains unchecked. **Needs Gonzo:** make stopped preview reuse the baked production liquid and whitewater artifacts, then measure tier-2 arrival and full-detail completion at frames 1, 60 and 120.
+On the regenerated 256³ liquid / 192³ steam, 120-frame production cache (47,661,160,028 bytes), the Radeon stop benchmark measured tier 2 (half-resolution surface) and tier 1 (full detail) at frames 1, 60 and 120. Times include evaluation and drawing:
+
+| Frame | Half-resolution surface | Full detail |
+| ---: | ---: | ---: |
+| 1 | 11.5 ms (6.9 fetch + 4.7 draw) | 225.9 ms (221.4 fetch + 4.5 draw) |
+| 60 | 223.3 ms (207.0 fetch + 16.3 draw) | 141.8 ms (82.8 fetch + 59.0 draw) |
+| 120 | 311.6 ms (291.5 fetch + 20.1 draw) | 148.6 ms (86.9 fetch + 61.7 draw) |
+
+The half-resolution surface arrives within one second at all three production frames (slowest: 311.6 ms at frame 120). Full detail follows in under 226 ms at all three. Together with the playback measurements above, both Radeon acceptance targets pass. The benchmark is `benchmarks/hot_pour/radeon-stop-P4-2026-10-13.json`; its 47.66 GB generated cache was removed after measurement.
 
 ## K2 rigid bodies — finish 1
 
