@@ -1,3 +1,7 @@
+## 2026-10-12 8:20 PM PDT — Lane 6 P4 finish 1 (PARTIAL)
+
+The whitewater stop now reads liquid frames from the upstream `ParticleCache3D` budget store; regression and benchmark-audit tests pass. The full-size Radeon cache was generated and audited, then its 46 GB simulation directory was moved to Trash. Production stop measurements at frames 1, 60 and 120 remain pending: the queued benchmark could not acquire `/tmp/nb-gpu.lock` while the integrator suite held it, and was stopped. The fix is committed locally in `6982cd8`, `11370fc`, and `db61281`; nothing was pushed. Next: Gonzo reruns the command in TASKLOG after the lock clears. Issue #6 and the lane board are updated; task remains blocked on measurement.
+
 ## 2026-10-13 — Lane 3 T3 of 3: compositing and simulation research (DONE)
 
 - **What was done:** Added the requested dated compositing/simulation section to `docs/RESEARCH_RADAR.md`: matting/keying, dense flow, inpainting, segmentation-assisted roto and GPU/learned simulation with sourced metrics, licences and explicit resource unknowns. Compared artist-facing techniques; proposed one bounded MEMFOF experiment and three alternative ideas. Added a one-page decision sheet ranking all three T1–T3 briefs and all nine outside-the-box tests. Evidence is source/document inspection; no claimed local model or runtime improvement.
