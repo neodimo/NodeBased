@@ -3166,5 +3166,4 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   shot end to end (`examples/demo_shot/demo_shot_lens.nbcomp`, `--plate distorted` on the hand run, the agent run and the
   comparison, which report matching ids), with the lens round-trip error reported apart from the verdict, and the viewer
   offers View undistorted / View plate for a graph with an Undistort node. Described in docs/END_TO_END_SPRINT.md, "Stage 7,
-  step L3". Left out: the DPV-SLAM solve of the distorted plate and the real model's run need the card; the committed graph
-  holds the rendering camera until `solve_camera.py --solver dpvo --distorted` is run. `gpu_job` takes a `timeout`.
+  step L3". Card run 10/13: the DPV-SLAM solve recovers the camera path (position 0.049 m RMS) but not the lens at 640 by 360 (focal length 10% off, `k1` 0.0012 against -0.03), so the shot with that camera fails the verdict on the stand-in and on `sdxl_controlnet`; it is kept as `demo_shot_lens_dpvo.nbcomp` and the committed graph keeps the rendering camera. Numbers in examples/demo_shot/README.md. `gpu_job` takes a `timeout`.
