@@ -13,8 +13,8 @@ Camera3D lens model, `nodebased/lensmodel.py`), at any size (`--size 960x540`, `
 `shot.OVERSCAN` times larger through the ideal camera and bent into the format, so the corners show the set.
 Beauty only: the data passes stay undistorted and are not written. Its hashes live in `plate_k1.sha256.json`.
 
-`--distorted` is the plate of the lens round trip (`demo_shot_lens.nbcomp`, run_by_hand.py --plate distorted): 960 by
-540, `shot.DISTORTED_K1` and a small `shot.DISTORTED_K2`. Its hashes live in `plate_distorted.sha256.json`.
+`--distorted` is the plate of the lens round trip (`demo_shot_lens.nbcomp`, run_by_hand.py --plate distorted): 768 by
+432, `shot.DISTORTED_K1` and a small `shot.DISTORTED_K2`. Its hashes live in `plate_distorted.sha256.json`.
 """
 from __future__ import annotations
 
