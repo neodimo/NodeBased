@@ -513,7 +513,7 @@
         "target_z": 0.0,
         "focal": 22.539097818315216,
         "haperture": 24.576,
-        "vaperture": 20.055111111111113,
+        "vaperture": 20.74666666666667,
         "near": 0.1,
         "far": 1000.0,
         "fstop": 0.0,
@@ -521,8 +521,8 @@
         "aperture_blades": 0,
         "blade_rotation": 0.0,
         "anamorphic_squeeze": 1.0,
-        "lens_k1": -0.034609053497942396,
-        "lens_k2": 0.005323495928993061,
+        "lens_k1": -0.03703703703703704,
+        "lens_k2": 0.006096631611034904,
         "lens_k3": 0.0,
         "lens_p1": 0.0,
         "lens_p2": 0.0,
@@ -556,7 +556,7 @@
         "solve": "",
         "solve_focal": "estimate",
         "solve_distortion": "k1 k2",
-        "survey": "{\"distances\": [{\"a\": \"Survey A\", \"b\": \"Survey B\", \"distance\": 10.077822185373186}], \"picks\": [{\"frame\": 1, \"name\": \"Survey A\", \"position\": null, \"x\": 163.0, \"y\": 255.0}, {\"frame\": 1, \"name\": \"Survey B\", \"position\": null, \"x\": 663.0, \"y\": 271.0}]}"
+        "survey": "{\"distances\": [{\"a\": \"Survey A\", \"b\": \"Survey B\", \"distance\": 10.077822185373186}], \"picks\": [{\"frame\": 1, \"name\": \"Survey A\", \"position\": null, \"x\": 136.0, \"y\": 212.0}, {\"frame\": 1, \"name\": \"Survey B\", \"position\": null, \"x\": 553.0, \"y\": 226.0}]}"
       },
       "inputs": {
         "image": "plate"
@@ -647,8 +647,8 @@
       "type": "Render3D",
       "name": "Render3D",
       "params": {
-        "width": 832,
-        "height": 464,
+        "width": 688,
+        "height": 400,
         "red": 0.0,
         "green": 0.0,
         "blue": 0.0,
@@ -747,8 +747,8 @@
       "params": {
         "reformat_type": "to_box",
         "format": "HD_1080",
-        "width": 768,
-        "height": 432,
+        "width": 640,
+        "height": 360,
         "pixel_aspect": 1.0,
         "scale": 1.0,
         "resize_type": "none",

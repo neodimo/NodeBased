@@ -3,8 +3,8 @@
  "status": "rendering camera stand-in; the DPV-SLAM solve needs the graphics card (python examples/demo_shot/solve_camera.py --solver dpvo --distorted) and rewrites this file and the graph",
  "plate": {
   "size": [
-   768,
-   432
+   640,
+   360
   ],
   "k1": -0.03,
   "k2": 0.004
@@ -18,22 +18,22 @@
    {
     "name": "Survey A",
     "frame": 1,
-    "x": 163.0,
-    "y": 255.0,
+    "x": 136.0,
+    "y": 212.0,
     "position": null
    },
    {
     "name": "Survey B",
     "frame": 1,
-    "x": 663.0,
-    "y": 271.0,
+    "x": 553.0,
+    "y": 226.0,
     "position": null
    }
   ],
   "distance": 10.0778
  },
  "overscan_margins": [
-  32,
-  16
+  24,
+  20
  ]
 }

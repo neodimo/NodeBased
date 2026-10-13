@@ -22,11 +22,11 @@ FOCAL = 22.539097818315216
 # plate's format with the Camera3D lens model, so the barrel-distorted corners show the set and not black.
 LENS_K1 = -0.03
 OVERSCAN = 1.35
-# The distorted plate of the lens round trip (demo_shot_lens.nbcomp): 768 wide (the verifier's 2 pixel object check holds there and
-# not at 960, see the README) through
+# The distorted plate of the lens round trip (demo_shot_lens.nbcomp): 640 wide (the verifier's 2 pixel object check holds there and at 704, and
+# not from 768 up, see the README) through
 # a barrel lens with a small second term. `--plate distorted` on the run scripts selects it.
 DISTORTED_K1, DISTORTED_K2 = -0.03, 0.004
-DISTORTED_SIZE = (768, 432)
+DISTORTED_SIZE = (640, 360)
 
 
 def camera_at(frame, move=FRAMES):

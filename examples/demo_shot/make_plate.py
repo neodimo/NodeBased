@@ -13,8 +13,8 @@ Camera3D lens model, `nodebased/lensmodel.py`), at any size (`--size 960x540`, `
 `shot.OVERSCAN` times larger through the ideal camera and bent into the format, so the corners show the set.
 Beauty only: the data passes stay undistorted and are not written. Its hashes live in `plate_k1.sha256.json`.
 
-`--distorted` is the plate of the lens round trip (`demo_shot_lens.nbcomp`, run_by_hand.py --plate distorted): 768 by
-432, `shot.DISTORTED_K1` and a small `shot.DISTORTED_K2`. Its hashes live in `plate_distorted.sha256.json`.
+`--distorted` is the plate of the lens round trip (`demo_shot_lens.nbcomp`, run_by_hand.py --plate distorted): 640 by
+360, `shot.DISTORTED_K1` and a small `shot.DISTORTED_K2`. Its hashes live in `plate_distorted.sha256.json`.
 """
 from __future__ import annotations
 
@@ -118,6 +118,22 @@ def check(hashes, expected):
     return [frame for frame, digest in hashes.items() if expected.get(str(frame)) != digest]
 
 
+def ensure_distorted_plate(folder):
+    """Make `folder` hold the committed distorted plate: frames that are missing or differ from the recorded hashes
+    (a plate an earlier size left in the cache) are rendered again."""
+    folder = Path(folder)
+    recorded = json.loads(DISTORTED_HASHES.read_text())
+    pattern = shot.plate_pattern(folder)
+    try:
+        current = {int(k): frame_digest(pattern % int(k)) for k in recorded["frames"]}
+    except Exception:
+        current = {}
+    if len(current) != len(recorded["frames"]) or check(current, recorded["frames"]):
+        render_plate(folder, tuple(recorded["size"]), len(recorded["frames"]), k1=recorded["k1"], k2=recorded["k2"])
+        print(f"rendered the distorted plate into {folder}")
+    return folder
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", help="folder for plate.%%04d.exr (default: the NodeBased cache, demo_shot/plate)")
@@ -127,7 +143,7 @@ def main():
     parser.add_argument("--k1", type=float, default=0.0, help="radial lens distortion of the lens plate (e.g. -0.03); 0 is the plain plate")
     parser.add_argument("--k2", type=float, default=0.0, help="second radial term of the lens plate")
     parser.add_argument("--distorted", action="store_true",
-                        help="the plate of the lens round trip: 960x540 with k1 and k2 of shot.DISTORTED_*; --out defaults to plate_distorted")
+                        help="the plate of the lens round trip: 640x360 with k1 and k2 of shot.DISTORTED_*; --out defaults to plate_distorted")
     args = parser.parse_args()
     if args.distorted:
         args.k1, args.k2, args.size = shot.DISTORTED_K1, shot.DISTORTED_K2, "x".join(map(str, shot.DISTORTED_SIZE))
