@@ -52,6 +52,16 @@ class GpuLockTests(unittest.TestCase):
         self.assertIsNotNone(suite, "the lock is free after the job")
         suite.close()
 
+    def test_job_gives_up_after_its_timeout_when_the_lock_is_held(self):
+        holder = try_lock(self.lock, fcntl.LOCK_SH)
+        self.addCleanup(holder.close)
+        started = time.monotonic()
+        with self.assertRaises(TimeoutError):
+            with gpulock.gpu_job(timeout=0.5):
+                self.fail("the lock was not free")
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertNotIn(gpulock.HELD_ENV, os.environ)
+
     def test_job_inside_a_job_does_not_wait_for_its_parent(self):
         with gpulock.gpu_job():
             with gpulock.gpu_job():

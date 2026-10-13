@@ -25,9 +25,9 @@ HELD_ENV = "NODEBASED_GPU_LOCK_HELD"
 
 
 @contextlib.contextmanager
-def gpu_job(cancelled=None, poll=0.25, log=None):
+def gpu_job(cancelled=None, poll=0.25, log=None, timeout=None):
     """Hold the exclusive GPU lock for the duration of the block. `cancelled` (a threading.Event)
-    ends the wait early with RuntimeError("Job cancelled")."""
+    ends the wait early with RuntimeError("Job cancelled"); `timeout` (seconds) ends it with TimeoutError."""
     if fcntl is None or os.environ.get(HELD_ENV):
         yield
         return
@@ -35,6 +35,7 @@ def gpu_job(cancelled=None, poll=0.25, log=None):
     handle = open(path, "a+")
     try:
         announced = False
+        deadline = None if timeout is None else time.monotonic() + timeout
         while True:
             try:
                 fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -42,6 +43,8 @@ def gpu_job(cancelled=None, poll=0.25, log=None):
             except BlockingIOError:
                 if cancelled is not None and cancelled.is_set():
                     raise RuntimeError("Job cancelled")
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise TimeoutError("the GPU lock is held by another job")
                 if log and not announced:
                     log("waiting for the GPU lock")
                     announced = True
