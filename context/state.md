@@ -1,3 +1,10 @@
+## 2026-10-12 — Lane 8 S2 finish 1: dense-flow planar analysis (PARTIAL)
+
+- **What was done (evidence):** Added a reference-to-current planar region tracker that follows a regular interior feature grid with the existing Lucas–Kanade `flow_pair`, refits a robust homography at each frame step, and returns tracked corners, error and inlier count. A synthetic 24-frame projective plate test stays within one pixel at the corners and repeats identically; RANSAC tests cover a quarter of correspondence outliers.
+- **Artifacts:** `nodebased/planar.py` and `tests/test_planar_tracking.py`, committed as `129c29d`; focused test log: `scratch/nb-lanes/run/tests-L8-planar.log`.
+- **State:** Fitter plus dense-flow sequence analysis are in. Real quarter-area image occlusion did not meet the one-pixel tolerance in a fixture, so that acceptance remains open. There is still no PlanarTracker node, Roto-region selection, keyed corner payload/UI, viewer quad/error overlay, CornerPin export, Planar Roto-follow, or docs/parity row.
+- **Next owner + concrete artifact:** Needs Gonzo to resume S2 in this worktree, starting from `nodebased/planar.py` and `tests/test_planar_tracking.py`, then wire node/panel/viewer paths and repeat the occlusion acceptance test.
+
 ## 2026-10-12 — Lane 8 step S2 of 3: PlanarTracker (PARTIAL)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 3 (Research, GPT-6 Astra), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (6:57 PM on 2026-10-12 PDT)
