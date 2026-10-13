@@ -1,5 +1,61 @@
 ## 2026-10-12 — Lane 8 step S2 of 3: PlanarTracker (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 3 (Research, GPT-6 Astra), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (6:57 PM on 2026-10-12 PDT)
+
+`main` moved `413023bf` -> `f4e96654` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 394 tests in 259.830 s, OK. Full suite on
+the stacked tip `f4e96654` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1012-1337.log`, started 1:37 PM): **Ran 5283 tests in 18885.651 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), the release fix: the checks on main pass again on Linux and Windows (playback proxy wait, Windows dock, rail and knob-row metrics, the GPU lock import, the agent session's settings, UTF-8 source scan).** Commits:
+  - `b49105c8` Accent source scan reads files as UTF-8 (Windows CI decoded them as cp1252 and failed on a byte)
+  - `096e2345` time row test: widgets hidden for room are left out of the reading-order check
+  - `eb620fa7` roto timing test: best of three, and a Windows-runner allowance (0.29 to 0.33 s measured there against the 0.25 s workstation figure)
+  - `3fa51187` headless agent session: the disk-ops setting travels by environment (Qt settings live in the registry on Windows); knob-row test widens the panel until the one-line need fits
+  - `46e46922` time row test: the optional words may be hidden when the platform's font needs the room, if what is left fits
+  - `7e83a710` CI: playback refinement wait follows the shared timeout; Windows: dock, rail and knob-row tests measure against the platform's metrics, gpulock test imports without fcntl, headless agent session gets private settings through NODEBASED_SETTINGS_HOME
+  Diff: 9 files changed, 59 insertions(+), 15 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 3 (Research, GPT-6 Astra), step T1 of 3: the research radar, generative video and temporal models for the shot pipeline.** Commits:
+  - `85ed4d13` docs: finalize dated research sweep and record lane three handoff
+  - `4c3c28c9` docs: propose lighting reprojection and material-space alternatives
+  - `123d2611` docs: propose a bounded repeatable VACE depth-reference experiment
+  - `8eebe870` docs: compare temporal lighting and camera mechanisms against stage eight
+  - `344f599b` docs: rank video-control models with sourced hardware and licence limits
+  Diff: 5 files changed, 265 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step L2 of 3: the camera solve recovers the lens, and survey points picked in the viewer fix the scale.** Commits:
+  - `1227c688` tests: pin the Roto feather-model migration test to schema 21; it derived the version from SCHEMA_VERSION - 1 and skipped the v21 step once the lens work moved the schema to 23
+  - `fcd77c8d` Bundled 3D_FOUNDATION.md matches the repository copy again (the schema 22 to 23 renumbering from the rebase reached only one of the two)
+  - `31fe0bd5` record_lens_benchmark.py writes the lens benchmark tables between markers of the demo README and the sprint notes
+  - `d7bbbf07` CameraSolve3D panel: the survey sentence shows once, the last solve's lens and scale under Solve result, the distance form in two rows
+  - `23078cf7` Docs for step L2: the lens and the survey (stage 7 notes, 3D foundation, demo shot README), catalog line, benchmark script keeps one GPU lock and the raw solves; measured numbers pending the GPU lock
+  - `1bf8ec52` Lens estimate reports median and inlier fraction before and after; DPVO tracks are in continuous pixel coordinates; triangulation errors name the survey
+  - `09bf5c64` Demo shot: a lens plate with k1 distortion (the Camera3D lens model, rendered with overscan), solve_camera.py --solver dpvo --lens estimate and --matrix for the focal and k1 benchmark, tests for the plumbing
+  - `f6abeb5c` CameraSolve3D estimates the lens and takes its scale from a Survey: focal and k1/k2 recovered by a bundle adjustment over the solver's own tracked points, survey picks followed through the plate and aligned by scale or similarity (schema 22)
+  Diff: 21 files changed, 2200 insertions(+), 72 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step P4 of 4: Hot pour preview at 12 frames per second, and a stop that settles within a second.** Commits:
+  - `3c46b0dd` docs: record Lane 6 P4 partial results
+  - `37769858` perf: refine stopped fluid previews progressively
+  - `31683152` perf: ring-buffer decoded fluid preview frames
+  - `d914619f` perf: reuse procedural fluid geometry tracks
+  - `2e036694` docs: profile hot pour preview fetch
+  Diff: 18 files changed, 714 insertions(+), 51 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step S2 of 3: planar tracking, a tracked plane that drives CornerPin and Roto.** Commits:
+  - `0e1463c5` docs: record partial Lane 8 planar tracker step
+  - `1dcb65bd` tracking: add deterministic robust homography fit
+  Diff: 4 files changed, 133 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 A deterministic projective fitting primitive is committed as `1dcb65b`, with synthetic corner-recovery, deterministic-repeat, and 25%-outlier tests passing. This is a reusable algorithm slice only. PlanarTracker is not registered or connected to the existing dense flow; the viewer, animatable corners, CornerPin export, Roto follow, docs and acceptance coverage are still outstanding. Needs Gonzo: continue S2 in `openclaw/nb-2d-parity-b`; start with `nodebased/planar.py` and `tests/test_planar_tracking.py`. Windows and display QA remain unverified.
 
 ## 2026-10-12 8:20 AM PDT — Lane 6 P4 of 4: hot-pour preview and stop (PARTIAL)
