@@ -10,10 +10,17 @@ NodeBased window on demo_shot.nbcomp with the agent bridge open and the MCP serv
 (nodebased.mcpclient), and every step below is a tool call over that server: no call into the
 document, the evaluator or the pipeline from this script.
 
-    python examples/demo_shot/run_by_agent.py [--plate DIR] [--out DIR] [--cache DIR] [--graph FILE] [--provider NAME]
+    python examples/demo_shot/run_by_agent.py [--plate plain|distorted|DIR] [--out DIR] [--cache DIR] [--graph FILE]
+                                              [--provider NAME]
 
 `--provider sdxl_controlnet` has the agent generate with the real model (NVIDIA card); the provider holds the
 GPU lock for the length of its job.
+
+`--plate distorted` is the same shot with the plate described as distorted ("the plate is distorted" is all the agent is
+told beyond the brief). The agent finds the lens in the graph (an Undistort node on the plate, a Redistort before the
+Write, a camera with a lens), looks at the undistorted plate with `view`, and brings the generated read in through the
+node that places the overscan picture in the plate's format, because the pictures the export makes are the undistorted,
+overscanned ones (docs/SHOT_WORKFLOW.md, "The distorted plate").
 
 Plan: knowledge shot_workflow, describe, inspect, edit (plate path), export_conditioning, generate,
 verify, edit (the generated read, its connection, the Write path), edit render per frame,
@@ -42,6 +49,25 @@ def find(document, kind):
     return [key for key, node in document["nodes"].items() if node["type"] == kind]
 
 
+def lens_steps(mcp, document, workflow, log):
+    """The extra steps of a distorted plate. Returns the node the generated read connects to."""
+    assert "Undistort" in workflow and "Redistort" in workflow, "shot_workflow topic does not describe the lens steps"
+    (undistort,), (redistort,) = find(document, "Undistort"), find(document, "Redistort")
+    nodes = document["nodes"]
+    assert nodes[undistort]["inputs"].get("camera") and nodes[redistort]["inputs"].get("camera"), "the lens nodes need the solved camera"
+    camera = nodes[nodes[undistort]["inputs"]["camera"]]["params"]
+    assert camera["lens_k1"] or camera["lens_k2"], "the graph's camera carries no lens"
+    # The export and the render use the overscan camera: same lens on a larger film back.
+    (export,) = find(document, "WriteGeo3D")
+    exported = nodes[nodes[export]["inputs"]["camera"]]["params"]
+    assert exported["vaperture"] > camera["vaperture"] and exported["lens_k1"], "the export camera is not the overscan camera"
+    # Look at the straightened plate: the data window beyond the format is the overscan.
+    mcp.call("view", id=undistort)
+    log(f"lens: k1 {camera['lens_k1']}, k2 {camera['lens_k2']}, focal {camera['focal']}; undistort {undistort}, redistort {redistort}")
+    (fit,) = find(document, "Reformat")
+    return fit
+
+
 def run(plate, out, cache, graph=HERE / "demo_shot.nbcomp", frames=None, brief=BRIEF, log=print, provider=None):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -54,6 +80,8 @@ def run(plate, out, cache, graph=HERE / "demo_shot.nbcomp", frames=None, brief=B
         (reader,), (export,), (generate,), (write,) = (find(document, kind) for kind in
                                                         ("Read", "WriteGeo3D", "Generate", "Write"))
         (grade,) = find(document, "Grade")
+        lens = shot.is_lens_graph(document)
+        into = lens_steps(mcp, document, workflow, log) if lens else grade
         settings = document["nodes"][generate]["params"]
         last = frames or document["time"]["last"]
         # 2. Bring in the plate.
@@ -75,7 +103,7 @@ def run(plate, out, cache, graph=HERE / "demo_shot.nbcomp", frames=None, brief=B
         # 7. Back into the comp: the generated read from the reply's node, graded, written.
         mcp.call("edit", commands=[
             {"op": "create", "id": "generated", **result["node"]},
-            {"op": "connect", "id": grade, "input": "image", "source": "generated"},
+            {"op": "connect", "id": into, "input": "image", "source": "generated"},
             {"op": "set", "id": write, "param": "path", "value": str(out / "shot.%04d.exr")}])
         for frame in range(1, last + 1):
             mcp.call("edit", commands=[{"op": "render", "id": write, "path": str(out / f"shot.{frame:04d}.exr"),
@@ -83,7 +111,7 @@ def run(plate, out, cache, graph=HERE / "demo_shot.nbcomp", frames=None, brief=B
         # 8. Prove where it came from.
         provenance = mcp.call("artifacts", action="provenance", id=result["generated_sequence"])
         sequence = [name for name, _ in mcp.log]
-    return {"scene_state": exported["scene_state"], "control_bundle": exported["control_bundle"],
+    summary = {"scene_state": exported["scene_state"], "control_bundle": exported["control_bundle"],
             "generated_sequence": result["generated_sequence"], "report": verified["report"],
             "verdict": verified["verdict"],
             "checks": {name: ("pass" if row.get("pass") else row.get("status", "FAIL"))
@@ -91,19 +119,27 @@ def run(plate, out, cache, graph=HERE / "demo_shot.nbcomp", frames=None, brief=B
             "determinism": verified.get("determinism"),
             "controls": result["controls"], "ignored": result["ignored"], "provenance_links": len(provenance["chain"]),
             "frames": last, "tool_sequence": sequence}
+    from run_by_hand import with_lens_round_trip
+    return with_lens_round_trip(summary, document, graph, plate, out, provider or settings["provider"])
 
 
 def main():
     from run_by_hand import output_digest
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--plate", default=str(shot.plate_dir()), help="folder holding plate.%%04d.exr")
-    parser.add_argument("--out", default=str(shot.default_cache() / "out-agent"), help="folder for shot.%%04d.exr")
-    parser.add_argument("--cache", default=str(shot.default_cache() / "store-agent"),
-                        help="artifact store root (NODEBASED_CACHE for the window)")
-    parser.add_argument("--graph", default=str(HERE / "demo_shot.nbcomp"))
+    parser.add_argument("--plate", default="plain",
+                        help="plain (default), distorted (the lens round trip), or a folder holding plate.%%04d.exr")
+    parser.add_argument("--out", help="folder for shot.%%04d.exr (default: out-agent, or out-agent-distorted)")
+    parser.add_argument("--cache", help="artifact store root (NODEBASED_CACHE for the window; default: store-agent, or store-agent-distorted)")
+    parser.add_argument("--graph", help="the shot graph (default: the one --plate selects)")
     parser.add_argument("--provider", default=None,
                         help="provider for the generate call (default: the graph's Generate node's, reproject)")
     args = parser.parse_args()
+    graph, plate, lens = shot.resolve_plate(args.plate)
+    suffix = "-distorted" if lens else ""
+    args.graph = args.graph or str(graph)
+    args.out = args.out or str(shot.default_cache() / f"out-agent{suffix}")
+    args.cache = args.cache or str(shot.default_cache() / f"store-agent{suffix}")
+    args.plate = str(plate)
     started = time.perf_counter()
     if args.provider == "sdxl_controlnet":
         # The window runs with a private settings home, where the provider's default interpreter and the Hugging
