@@ -1,9 +1,15 @@
 import unittest
+import tempfile
 from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 
 from nodebased import flip3d, scene3d
+from nodebased.core import Dispatcher
+from nodebased.imaging import Evaluator
+from nodebased.simcache import SimCache
+from tests.test_particles_nodes import make, wire
 
 
 class FluidSurfaceCacheTests(unittest.TestCase):
@@ -33,6 +39,37 @@ class FluidSurfaceCacheTests(unittest.TestCase):
         self.assertEqual(full.shape, (8, 8, 8))
         self.assertEqual(half.shape, (4, 4, 4))
         self.assertEqual(half_voxel, full_voxel * 2)
+
+    def test_whitewater_reuses_the_upstream_particle_cache_for_liquid_frames(self):
+        dispatcher = Dispatcher()
+        grid = {"division_size": 0.25, "bounds_min_x": -1.0, "bounds_min_y": 0.0,
+                "bounds_min_z": -1.0, "bounds_max_x": 1.0, "bounds_max_y": 2.0,
+                "bounds_max_z": 1.0, "max_size": 8, "substeps": 1}
+        source = {"fluid_type": "liquid", "src_center_y": 1.0, "src_radius": 0.45, "end_frame": 2}
+        make(dispatcher, src=("FluidSource3D", source), solver=("FluidLiquidSolver3D", grid),
+             cache=("ParticleCache3D", {"cache_memory_mb": 1024, "cache_disk_mb": 8192}),
+             white=("FluidWhitewater3D", {"cache_memory_mb": 256, "cache_disk_mb": 2048}))
+        wire(dispatcher, "solver", "fluid", "src")
+        wire(dispatcher, "cache", "particles", "solver")
+        wire(dispatcher, "white", "particles", "cache")
+
+        with tempfile.TemporaryDirectory() as root:
+            evaluator = Evaluator(sim=SimCache(root=root, memory_budget=64 << 20, disk_budget=2 << 30))
+            original = flip3d.solve_frame
+            used_stores = []
+
+            def record_store(stream, frame, cache, cancel=None):
+                used_stores.append(cache)
+                return original(stream, frame, cache, cancel)
+
+            with mock.patch.object(flip3d, "solve_frame", side_effect=record_store):
+                evaluator.evaluate_raster(dispatcher.document, "white", frame=2, typed=True)
+
+            self.assertTrue(used_stores)
+            upstream_store = evaluator._sim_stores[(1024, 8192)]
+            whitewater_store = evaluator._sim_stores[(256, 2048)]
+            self.assertTrue(all(cache is upstream_store for cache in used_stores))
+            self.assertIsNot(upstream_store, whitewater_store)
 
 
 if __name__ == "__main__":

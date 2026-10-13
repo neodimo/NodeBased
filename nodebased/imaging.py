@@ -1384,11 +1384,18 @@ class Evaluator:
                         run = simcache.run_key(fluid.run, {"kind": "FluidWhitewater3D", "params": params,
                                                            "format": 1})
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        liquid_store = store
+                        particles_node = nodes.get(node["inputs"].get("particles"))
+                        if particles_node is not None and particles_node.get("type") == "ParticleCache3D" \
+                                and not particles_node.get("disabled", False):
+                            cache_params = particles_node.get("params", {})
+                            liquid_store = self.sim_store(cache_params.get("cache_memory_mb", 256),
+                                                          cache_params.get("cache_disk_mb", 2048))
                         preview_store = self.sim_preview_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         def initial_whitewater(seed):
                             return _whitewater_cache_state(white_solver.initial_state(seed))
                         def whitewater_step(previous, solve_frame, substep, seed):
-                            liquid_state = flip3d.solve_frame(fluid, solve_frame, store, cancel)
+                            liquid_state = flip3d.solve_frame(fluid, solve_frame, liquid_store, cancel)
                             liquid_frame = flip3d.instance_from_state(liquid_state, fluid, solve_frame)
                             previous_state = _whitewater_state(previous)
                             result = white_solver.step(previous_state, liquid_frame, solve_frame, substep, seed)
