@@ -27,7 +27,7 @@ Persist a short worktree state note before any lock wait. Timing the replay is n
 
 ## One implementation and comparison — 45 minutes
 
-Make a small offline harness in deliberate lane scratch, leaving production behavior unchanged. Use the existing lens projection/refinement routines in `nodebased/lensrefine.py`, `nodebased/lensmodel.py` and the survey parsing/coordinates in `nodebased/track3d.py` as references. Do not reimplement a provider or rewrite bundle adjustment.
+Make a small offline harness in deliberate lane scratch, leaving production behavior unchanged. Use the existing lens projection/refinement routines in `nodebased/lensrefine.py`, `nodebased/lensmodel.py` the survey parsing/coordinates in `nodebased/camera_solve.py`, and projection conventions in `nodebased/track3d.py` as references. Do not reimplement a provider or rewrite bundle adjustment.
 
 Compare these three cases on exactly the same saved observations and masks:
 

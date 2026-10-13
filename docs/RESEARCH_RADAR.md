@@ -215,3 +215,8 @@ Primary tables/README/licences were read; results were not reproduced. Built-in 
 - **R20 — DroidCalib**, ICCV 2023: [paper, tables 1–2](https://openaccess.thecvf.com/content/ICCV2023/papers/Hagemann_Deep_Geometry-Aware_Camera_Self-Calibration_from_Video_ICCV_2023_paper.pdf), [repository, memory requirements and AGPL licence](https://github.com/boschresearch/DroidCalib).
 - **R21 — GeoCalib**, 2024-09: [paper, tables 1–3](https://arxiv.org/html/2409.06704), [repository and separate code/weight terms](https://github.com/cvg/GeoCalib).
 - **R22 — COLMAP**, living documentation, accessed 2026-10-12: [calibration FAQ](https://colmap.github.io/faq.html), [code/licence](https://github.com/colmap/colmap). The performance numbers are R20's reproducible comparison, not a new COLMAP benchmark.
+
+
+## Lane 3 step notes
+
+- **T2 of 3, 2026-10-12 — tracking and reconstruction:** completed the dated landscape, lens/dense-scene comparison, one proposed survey-constrained worker experiment, and three alternative mechanisms. Read “Tracking and reconstruction, swept 10/12” above and `briefs/proposed/T2-survey-constrained-lens.md`. Every candidate has benchmark, resource, intrinsic/dynamic and licence evidence or an explicit unknown. Stage-9 figures remain assignment-supplied until their raw artifacts are recovered; the existing L2 refinement is the baseline, not a new proposal. No weights, GPU runs, provider adoption or measured quality improvement. Bundled copy is byte-identical. Gonzo owns integration and any experiment assignment.
