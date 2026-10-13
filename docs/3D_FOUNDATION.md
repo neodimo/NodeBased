@@ -3162,3 +3162,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   --k1`). Schema bumped from 21 to 22 (three new `CameraSolve3D` knobs). Left out: tangential terms, `k3` and a
   shifted principal point are not estimated; the GPU solve itself is a recorded run (`solve_camera.py --solver dpvo
   --matrix`), not a suite test.
+- Step L3 of 3 (Rendering 13, lens and film-back), run without the graphics card: the distorted plate runs through the demo
+  shot end to end (`examples/demo_shot/demo_shot_lens.nbcomp`, `--plate distorted` on the hand run, the agent run and the
+  comparison, which report matching ids), with the lens round-trip error reported apart from the verdict, and the viewer
+  offers View undistorted / View plate for a graph with an Undistort node. Described in docs/END_TO_END_SPRINT.md, "Stage 7,
+  step L3". Left out: the DPV-SLAM solve of the distorted plate and the real model's run need the card; the committed graph
+  holds the rendering camera until `solve_camera.py --solver dpvo --distorted` is run. `gpu_job` takes a `timeout`.

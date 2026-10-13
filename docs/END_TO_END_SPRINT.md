@@ -389,6 +389,32 @@ typed focal length 1.2 times the truth) is queued behind it. The CPU tests prove
 with known truth: focal length within 1 percent at 1920 wide, k1 within 10 percent.
 <!-- lens-benchmark:end -->
 
+## Stage 7, step L3: the distorted plate, end to end (10/13)
+
+A filmed plate is distorted, so the shot's graph works in the undistorted frame and bends the result back:
+plate, `Undistort` with overscan, the solve, the layout and the conditioning export in the undistorted frame, comp,
+`Redistort`, `Write` (`examples/demo_shot/demo_shot_lens.nbcomp`). The export carries the lens of the overscan camera
+and the overscan resolution, so a provider works undistorted and the result lands back on the plate. The solve is a
+`CameraSolve3D` node with the focal length and `k1 k2` estimated and two surveyed points for the scale.
+
+- **Run it.** `run_by_hand.py --plate distorted`, `run_by_agent.py --plate distorted` (the attached agent adds the
+  lens steps of docs/SHOT_WORKFLOW.md to the one-sentence brief plus "the plate is distorted") and
+  `compare_runs.py --plate distorted`.
+- **The report.** The verdict is the model's checks; the lens round trip (plate through Undistort and Redistort against the
+  plate, and the written result against the plate, away from a 16 pixel edge band) is reported apart from it. With the
+  `reproject` stand-in both rows are judged; for a real model only the plate identity is, because it restyles the picture.
+- **Measured (CPU, 640 by 360, 24 frames).** Hand run 328 s, verdict PASS, plate identity mean 0.0012 / p99 0.024, result
+  against the plate mean 0.0022 / p99 0.036. Hand and agent give the same four artifact ids and output pixels (listed in
+  `examples/demo_shot/README.md`); `compare_runs.py --plate distorted` takes 667 s for both.
+- **Size.** The `reproject` stand-in passes the verifier's 2 pixel object check at 640 and 704 wide and fails at 768 and
+  up, so the distorted plate is 640 by 360.
+- **The viewer.** In the Composite workspace the strip offers "View undistorted" and "View plate" for a graph with an
+  Undistort node; the undistorted view shows the whole overscan frame with the plate's format outlined
+  (`docs/images/demo_shot/lens_view_undistorted.png`, made by `capture_lens_view.py`).
+- **Not yet measured (needs the card).** The DPV-SLAM solve of the distorted plate: the committed graph holds the rendering
+  camera and lens until `solve_camera.py --solver dpvo --distorted` replaces it, and the recovered focal length, `k1`, `k2`
+  and camera error are not recorded; the hand run of that graph; `--provider sdxl_controlnet` on the distorted shot.
+
 ## Stage 8: temporal coherence (10/11)
 
 **The measure.** `nodebased/temporal.py`, called by the verifier for every generated sequence. For each pair of
