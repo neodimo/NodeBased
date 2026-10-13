@@ -12764,6 +12764,8 @@ class Window(QMainWindow):
                                                             frame=request.frame, tier=request.tier)
                     frame = raster.pixels
                     data = raster.data
+                    shown = raster.display
+                    self.overscan_display = (shown.x, shown.y, shown.width, shown.height)
                     if raster.has_overscan:
                         render_region = TileRegion(data.x, data.y, data.width, data.height, full_x=data.x, full_y=data.y,
                                                    full_width=data.width, full_height=data.height)
@@ -12980,7 +12982,13 @@ class Window(QMainWindow):
             scene_rect = QRectF(0, 0, image.width(), image.height())
         self.viewer.set_image_rect(scene_rect)
         self.update_corner_readout(scene_rect, scale)
-        self.viewer.draw_format_overlay(scene_rect)
+        format_rect = scene_rect
+        shown = getattr(self, "overscan_display", None)
+        if (shown is not None and render_region is not None
+                and lensview.shows_overscan(self.dispatcher.document, self.dispatcher.document.get("view"))):
+            # An Undistort frame is shown whole, overscan included: the format guide stays on the display window inside it.
+            format_rect = QRectF(shown[0] * scale, shown[1] * scale, shown[2] * scale, shown[3] * scale)
+        self.viewer.draw_format_overlay(format_rect)
         if self.viewer._initial_fit_pending:
             self.viewer._fit_initial_image()
         elif previous.width() != scene_rect.width() or previous.height() != scene_rect.height():

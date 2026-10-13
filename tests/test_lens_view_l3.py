@@ -68,6 +68,8 @@ class ViewerToggleTests(unittest.TestCase):
             self.assertTrue(wait_until(lambda: window.viewer.sceneRect().width() > 192.0))
             self.assertTrue(wait_until(lambda: window.viewer.sceneRect().height() > 108.0))
             self.assertLess(window.viewer.sceneRect().x(), 0.0)
+            # the format guide stays on the plate's format inside the grown frame
+            self.assertEqual(window.viewer.format_rect.getRect(), (0.0, 0.0, 192.0, 108.0))
             strip.lens_button.click()
             self.assertEqual(window.dispatcher.document["view"], "plate")
             self.assertTrue(wait_until(lambda: window.viewer.sceneRect().size().toTuple() == (192.0, 108.0)))
