@@ -1,3 +1,11 @@
+## 2026-10-13 — Lane 8 S2 finish 1: PlanarTracker completed
+
+- **What was done (evidence):** Added the PlanarTracker image-tap node, four-corner Viewer picker, keyed corners and error-coloured quad, CornerPin export, and Roto Planar follow. The quarter-region occlusion fixture recovers a one-pixel translation within one pixel. Synthetic 24-frame homography tracking remains within one pixel and is deterministic; export motion keys and Roto homography-follow are asserted.
+- **Artifacts:** `nodebased/planar.py`, `nodebased/app.py`, `nodebased/shapes.py`, `tests/test_planar_tracking.py`, `docs/ROTO_TRACKING.md`, `docs/PARITY_2D.md` and byte-identical bundled copies; code commit `dd6dc8d`, docs commit `b2faa63` (committed on `openclaw/nb-2d-parity-b`, not pushed). Test logs: `scratch/nb-lanes/run/tests-L8-node-gate-rerun.log`, `tests-L8-planar-final.log`, `tests-L8-docs-final.log`, `tests-L8-labels.log`.
+- **State:** Step complete and targeted checks pass. Synchronous CPU analysis uses the full-frame evaluator; only four-click quadrilateral selection is supported. Real-display QA, Windows, CI and integration remain unverified.
+- **Next owner + concrete artifact:** Needs Gonzo/integrator to pick up branch `openclaw/nb-2d-parity-b` at `b2faa63`, run merge-candidate validation, and do real-display visual QA.
+- **Failure mode:** None carried forward; the prior quarter-area occlusion fixture now passes at the required tolerance.
+
 ## 2026-10-12 — Lane 3 T2 of 3: tracking and reconstruction research (DONE)
 
 - **What was done:** Added the dated tracking/reconstruction sweep to `docs/RESEARCH_RADAR.md`: standard-benchmark accuracy, speed, 12 GB feasibility, licences, intrinsic recovery and dynamic-scene limits; compared shared-lens and survey-constrained refinement with dense mesh/splat routes; wrote one bounded experiment and three outside-the-box ideas. Primary-source inspection includes 2026 VGGT-Ω, FlexSplat and VGGT-GS SLAM. Evidence is published literature and repository inspection; proposed improvements remain hypotheses.

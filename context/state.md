@@ -1,3 +1,13 @@
+## Lane 8 step S2 finish 1 complete — 2026-10-13
+
+PlanarTracker now registers as a 2D tracking analysis tap and passes its image through unchanged. Four clockwise Viewer clicks store four v8 scalar-envelope corner tracks; forward/backward Lucas–Kanade sampling and robust homography fitting write per-frame corner positions and fit error. The Viewer paints a quad with error colour, CornerPin export creates animated source/destination corners, and Roto Planar follow applies the reference-to-current homography.
+
+**Evidence.** `tests.test_planar_tracking` passes the known 24-frame homography within one pixel and deterministically, the one-pixel translation under a quarter-area image occlusion, keyed CornerPin motion export and Roto follow. Node gate (`tests.test_knobs`, `tests.test_tiers`, `tests.test_core`, `tests.test_desktop.FluidPropertiesPanelTests`, plus bypass/catalog/Roto modules), the knob label gate, docs-copy gate and parity-count gate pass. Docs row and `ROTO_TRACKING.md` section are byte-identical to their bundled copies.
+
+**Artifacts.** Code commit `dd6dc8d`; docs commit `b2faa63`; branch `openclaw/nb-2d-parity-b`, not pushed. Detailed test logs are in `scratch/nb-lanes/run/tests-L8-*.log`.
+
+**Limits and next owner.** Analysis currently runs synchronously on CPU through the full-frame evaluator; region selection supports a four-corner quad, not picking an existing curved Roto shape. Production plates, real-display QA, Windows, CI and integration were not checked. Needs Gonzo/integrator to validate the merge candidate and inspect the overlay on a real display.
+
 ## 2026-10-12 — Lane 3 T2 of 3: tracking and reconstruction research (DONE)
 
 - **What was done:** Added the dated tracking/reconstruction sweep to `docs/RESEARCH_RADAR.md`: standard-benchmark accuracy, speed, 12 GB feasibility, licences, intrinsic recovery and dynamic-scene limits; compared shared-lens and survey-constrained refinement with dense mesh/splat routes; wrote one bounded experiment and three outside-the-box ideas. Primary-source inspection includes 2026 VGGT-Ω, FlexSplat and VGGT-GS SLAM. Evidence is published literature and repository inspection; proposed improvements remain hypotheses.
