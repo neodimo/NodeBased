@@ -1,3 +1,7 @@
+# Lane 6 P4 finish 1 — stop-time cache reuse (active, 2026-10-12)
+
+The merged partial already meets the Radeon and llvmpipe preview budgets. Remaining scope: verify stop-time reuse of baked liquid and whitewater artifacts, then measure production tier-4 to tier-2 and tier-1 transitions at frames 1, 60 and 120. A clean current-code bake is at `scratch/nb-lanes/run/L6-p4-cache`; its cache audit and adapter stop runs are pending.
+
 # Lane 8 NL7 — motion — active (2026-10-09, 3:18 PM PDT)
 
 Shared animator, Reduce motion preference, family panel transition, eased Properties controls, graph node glides, and playback playhead are implemented. 76 targeted UI/motion tests and 7 documentation tests pass. Screenshot and completion notes are committed on this branch; integration and display QA remain with Gonzo.

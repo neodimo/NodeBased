@@ -31,6 +31,21 @@ class HotPourBenchmarkCacheReportTests(unittest.TestCase):
             self.assertEqual(report["steam_sparse_bytes"], packed.stat().st_size)
             self.assertEqual(report["steam_dense_equivalent_bytes"], 16 * 16 * 8 * 4 * 4)
 
+    def test_report_identifies_cached_liquid_surface_meshes(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = "s" * 64
+            cache = SimCache(Path(root) / "stores" / "256-2048")
+            cache.put(run, 60, State({
+                "vertices": np.zeros((3, 3), dtype=np.float32),
+                "triangles": np.array([[0, 1, 2]], dtype=np.int32),
+                "normals": np.ones((3, 3), dtype=np.float32),
+            }))
+
+            report = cache_report(root, SimpleNamespace())
+
+            self.assertEqual(report["runs"][run[:10]]["kind"], "liquid surface mesh")
+            self.assertEqual(report["runs"][run[:10]]["frames"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

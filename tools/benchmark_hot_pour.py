@@ -177,6 +177,8 @@ def cache_report(root, args):
             kind = "steam solver checkpoints"
         elif "position" in names and "radius" in names:
             kind = "whitewater"
+        elif {"vertices", "triangles"}.issubset(names):
+            kind = "liquid surface mesh"
         elif "position" in names:
             kind = "liquid particles"
         else:
