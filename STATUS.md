@@ -1,6 +1,6 @@
 # Lane 6 P4 finish 1 — stop-time cache reuse (active, 2026-10-12)
 
-The merged partial already meets the Radeon and llvmpipe preview budgets. Remaining scope: verify stop-time reuse of baked liquid and whitewater artifacts, then measure production tier-4 to tier-2 and tier-1 transitions at frames 1, 60 and 120. A clean current-code bake is at `scratch/nb-lanes/run/L6-p4-cache`; its cache audit and adapter stop runs are pending.
+The preview budgets pass. Root cause is fixed in `11370fc`: whitewater now loads liquid frames from the upstream ParticleCache3D store, avoiding eviction by its smaller store. Six focused P4 modules pass (22 tests). A clean current-code 120-frame bake is at `scratch/nb-lanes/run/L6-p4-cache`; its 49.32 GB cache contains 120 whitewater states and 119 surface meshes. The Radeon stop benchmark is queued behind the active full-suite GPU lock; stop results at frames 1, 60 and 120 remain pending.
 
 # Lane 8 NL7 — motion — active (2026-10-09, 3:18 PM PDT)
 
