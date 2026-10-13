@@ -15,6 +15,14 @@ lens_benchmark.json:
 
     python examples/demo_shot/solve_camera.py --solver dpvo --lens estimate --distortion k1 --width 960 --plate-k1 -0.03
     python examples/demo_shot/solve_camera.py --solver dpvo --matrix
+
+`--distorted` is the solve of the lens round trip: it renders the distorted plate (make_plate.py --distorted), solves it
+with the lens estimated (focal length, k1 and k2) and two survey picks for the scale, and writes `demo_shot_lens.nbcomp`
+(the shot graph with the solved camera, its overscan camera and the Undistort / Redistort round trip) and `solve_lens.json`
+(the recovered lens and the errors against the truth). The GPU, under the GPU lock. Later runs of the shot do not solve
+again: the camera that feeds the export is the one kept in the graph.
+
+    python examples/demo_shot/solve_camera.py --solver dpvo --distorted
 """
 from __future__ import annotations
 
@@ -253,11 +261,15 @@ def main():
     parser.add_argument("--width", type=int, default=960, help="dpvo: plate width (16:9)")
     parser.add_argument("--plate-k1", type=float, default=0.0, help="dpvo: render the lens plate with this radial distortion")
     parser.add_argument("--typed-focal-scale", type=float, default=1.2, help="dpvo: the typed focal length over the truth")
+    parser.add_argument("--distorted", action="store_true",
+                        help="dpvo: solve the distorted plate with the lens estimated and two survey picks; writes demo_shot_lens.nbcomp")
     parser.add_argument("--matrix", action="store_true", help="dpvo: every plate, width and setting; writes lens_benchmark.json")
     parser.add_argument("--cache", default=str(shot.default_cache()), help="dpvo: where plates and the artifact store go")
     parser.add_argument("--save-solves", help="dpvo: also keep each raw solver answer here as an .npz (to rerun the refinement offline)")
     parser.add_argument("--out", help="dpvo: write the result rows here (default with --matrix: lens_benchmark.json)")
     args = parser.parse_args()
+    if args.distorted:
+        return main_distorted(args)
     if args.solver == "dpvo":
         return main_dpvo(args)
     frames = read_plate(Path(args.plate) if args.plate else shot.plate_dir())
@@ -270,6 +282,80 @@ def main():
                                                       indent=1) + "\n")
     shot.save_graph(shot.HERE / "demo_shot.nbcomp", width, height, keys)
     print(json.dumps(summary))
+    return 0
+
+
+def solved_keys(document, camera_id, frames=shot.FRAMES):
+    """Per-frame Camera3D parameter values of a solved camera node (curves where it has them, the node's value otherwise)."""
+    node, curves = document["nodes"][camera_id], document["animation"]["curves"].get(camera_id, {})
+    out = {}
+    for frame in range(1, frames + 1):
+        row = {}
+        for name in ("tx", "ty", "tz", "target_x", "target_y", "target_z", "roll", "focal"):
+            curve = curves.get(name)
+            row[name] = float(np.interp(frame, [k["frame"] for k in curve["keys"]], [k["value"] for k in curve["keys"]])
+                              if curve else node["params"][name])
+        out[frame] = row
+    return out
+
+
+def solve_distorted(plate_folder, cache, log=print):
+    """Solve the distorted plate with the CameraSolve3D node: typed focal length 1.2 times the truth, `estimate` for
+    the focal length, k1 and k2, and a survey of two picks and their distance. Returns (document, reply, picks)."""
+    from nodebased import camera_solve as cs
+    from nodebased.artifacts import ArtifactStore
+    from nodebased.core import Dispatcher
+    from nodebased.gpulock import gpu_job
+    from nodebased.imaging import Evaluator
+    from nodebased.providers import camera_solve_dpvo as dpvo
+    reason = dpvo.available()
+    if reason:
+        raise SystemExit(f"cannot run the camera solve: {reason}")
+    size = shot.DISTORTED_SIZE
+    picks, distance = shot.pick_survey(size, shot.lens_of(shot.DISTORTED_K1, shot.DISTORTED_K2))
+    start = shot.CAMERA_START
+    dispatcher = Dispatcher()
+    dispatcher.execute({"op": "batch", "commands": [
+        {"op": "create", "id": "plate", "type": "Read", "params": {"path": shot.plate_pattern(plate_folder)}},
+        {"op": "create", "id": "solve", "type": "CameraSolve3D", "params": {
+            "seed": 0, "focal": shot.FOCAL * shot.SOLVE_TYPED_FOCAL_SCALE, "solve_focal": "estimate", "solve_distortion": "k1 k2",
+            "survey": shot.survey_json(picks, distance), "anchor_tx": start["tx"], "anchor_ty": start["ty"],
+            "anchor_tz": start["tz"], "anchor_target_x": start["target_x"], "anchor_target_y": start["target_y"],
+            "anchor_target_z": start["target_z"]}},
+        {"op": "connect", "id": "solve", "input": "image", "source": "plate"},
+        {"op": "time", "first": 1, "last": shot.FRAMES, "current": 1}]})
+    store = ArtifactStore(Path(cache) / "store-solve")
+    started = time.perf_counter()
+    with gpu_job(log=log):
+        reply = cs.solve_camera_op(Evaluator(), dispatcher, {"op": "solve_camera", "id": "solve", "camera": "camera"}, store=store)
+    log(f"solved in {time.perf_counter() - started:.1f} s")
+    return dispatcher.document, reply, (picks, distance)
+
+
+def main_distorted(args):
+    import make_plate
+    folder = Path(args.plate) if args.plate else shot.distorted_plate_dir()
+    if not (folder / (shot.plate_pattern(".").split("/")[-1] % shot.FRAMES)).exists():
+        make_plate.render_plate(folder, shot.DISTORTED_SIZE, shot.FRAMES, k1=shot.DISTORTED_K1, k2=shot.DISTORTED_K2)
+    document, reply, (picks, distance) = solve_distorted(folder, args.cache)
+    camera = document["nodes"]["camera"]["params"]
+    lens = shot.lens_of(camera["lens_k1"], camera["lens_k2"])
+    keys = solved_keys(document, "camera")
+    margins = shot.overscan_margins(lens, shot.DISTORTED_SIZE)
+    errors = similarity_errors(document, "camera", 1, shot.FRAMES)
+    record = {"schema": 1, "plate": {"size": list(shot.DISTORTED_SIZE), "k1": shot.DISTORTED_K1, "k2": shot.DISTORTED_K2},
+              "typed_focal_mm": round(shot.FOCAL * shot.SOLVE_TYPED_FOCAL_SCALE, 4), "true_focal_mm": round(shot.FOCAL, 4),
+              "recovered": {"focal_mm": round(camera["focal"], 4), "k1": round(lens["lens_k1"], 5), "k2": round(lens["lens_k2"], 5)},
+              "errors": {"focal_percent": round(100.0 * (camera["focal"] / shot.FOCAL - 1.0), 3),
+                         "k1": round(lens["lens_k1"] - shot.DISTORTED_K1, 5), "k2": round(lens["lens_k2"] - shot.DISTORTED_K2, 5),
+                         **{k: round(v, 5) for k, v in errors.items()}},
+              "survey": {"picks": picks, "distance": round(distance, 4), "scale": reply["scale"], "scale_source": reply["scale_source"]},
+              "overscan_margins": list(margins), "lens": reply["lens"], "run": reply["run"]}
+    shot.LENS_SOLVE.write_text(json.dumps(record, indent=1) + "\n")
+    shot.save_lens_graph(shot.LENS_GRAPH, shot.DISTORTED_SIZE, keys, lens, margins, shot.survey_json(picks, distance),
+                         plate_folder=shot.HERE / "plate_distorted")
+    print(json.dumps({k: record[k] for k in ("recovered", "errors", "overscan_margins")}, indent=1))
+    print(f"wrote {shot.LENS_GRAPH.name} and {shot.LENS_SOLVE.name}")
     return 0
 
 

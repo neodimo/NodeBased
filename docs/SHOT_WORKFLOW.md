@@ -109,6 +109,41 @@ write time), so they are compared by the SHA-256 of their pixels. Export from `r
 both give the same SceneState and ControlBundle. A different text, seed or provider gives a different
 generated-sequence id.
 
+## The distorted plate
+
+A filmed plate is distorted by its lens, and the pictures the export makes (depth, normals, motion, ids, the layout
+render) are those of an ideal camera. So a distorted plate is worked in the undistorted frame and bent back at the end:
+plate, `Undistort`, solve, the layout and the conditioning in the undistorted frame, comp, `Redistort`, `Write`. The brief
+for the agent is the same sentence plus "the plate is distorted". `examples/demo_shot/demo_shot_lens.nbcomp` is that shot
+(`run_by_hand.py --plate distorted`, `run_by_agent.py --plate distorted`, `compare_runs.py --plate distorted`).
+
+The lens steps, with the tool for each:
+
+1. **Find the lens.** `inspect`: an `Undistort` node on the plate and a `Redistort` before the `Write`, both wired to the
+   solved `Camera3D` (`camera`). Its `lens_k1`, `lens_k2` and `focal` are what the camera solve recovered
+   (`CameraSolve3D` with `solve_focal` `estimate`, `solve_distortion` `k1 k2` and a Survey of two picks and their distance for
+   the scale: the `solve` node of the graph, run once by `solve_camera.py --solver dpvo --distorted`, never at run time: a
+   re-solve changes the camera by a millimetre, so the camera that feeds the export is the one kept in the document).
+2. **Look at the straightened plate.** `view` the `Undistort` node. Its frame is larger than the format: the data window
+   beyond the format is the overscan, the part of the undistorted picture that a Redistort will bend back into the corners.
+   In the window, the viewer strip has "View undistorted" and "View plate" for a graph with an Undistort node.
+3. **Export in the undistorted frame.** The export node `export` and the `render` node use `camera_os`, the overscan camera:
+   the same pose and focal length on a film back taller by the overscan, so Render3D draws the whole undistorted frame at the
+   pixel size of the plate, and the same physical lens restated in that larger format's units (the model works in units of
+   half the format height: `k1` times the ratio squared, `k2` times its fourth power). `export_conditioning` therefore writes
+   a SceneState whose camera has `lens` `distorted: true` and a resolution larger than the plate. A provider conditions on
+   undistorted pictures; applying that lens to its result and cropping to the plate's format lands on the plate.
+4. **Generate and verify as before.** `generate` reads the undistorted plate (`generate`'s image input is the `Undistort`
+   node) and the export; the verifier measures the pictures against the export, all in the undistorted frame. The lens is not
+   part of its checks.
+5. **Bring it back.** The generated read goes into `fit`, a `Reformat` (to the plate's size, no resize, centred, keep the
+   bounding box) that puts the overscan picture in the plate's format with its overscan intact, then `grade`, then `merge` over
+   the undistorted plate, `Redistort`, `Write`. Connect `generated` to `fit`, not to `grade`: Merge needs matching formats.
+6. **Check the round trip.** The run reports a `lens_round_trip` block apart from the verdict (examples/demo_shot/lens_check.py):
+   the plate straightened and bent back against the plate (lens only, judged for every provider), and the written shot
+   against the distorted plate (judged for `reproject`, which copies the layout; reported and not judged for a model that
+   restyles the picture).
+
 ## Worked example: a smaller one, the smoke demo
 
 The same repeatable demo as "Artist workflow and repeatable local demo" in

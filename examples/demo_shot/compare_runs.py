@@ -1,6 +1,6 @@
 """Run the demo shot by hand and by the scripted agent, each with a fresh artifact store, and compare.
 
-    python examples/demo_shot/compare_runs.py [--plate DIR] [--work DIR] [--graph FILE] [--frames N]
+    python examples/demo_shot/compare_runs.py [--plate plain|distorted|DIR] [--work DIR] [--graph FILE] [--frames N]
 
 Both runs start from the same graph and plate. The hand run sends the dispatcher commands directly
 (`run_by_hand.py`); the agent run reaches the same result through MCP tools only (`run_by_agent.py`).
@@ -9,6 +9,9 @@ same bytes: the generated-sequence and verification ids must match exactly, and 
 written. The written output has no artifact id (frames go to a folder outside the store, and the EXR
 header holds a write time), so that row compares the SHA-256 of the pixels, and the row says so.
 Exit status 1 when any row differs.
+
+`--plate distorted` runs the lens round trip shot (`demo_shot_lens.nbcomp`) both ways: the ids must match as for the plain
+shot, and so must the lens round-trip error, which has its own row.
 """
 from __future__ import annotations
 
@@ -36,9 +39,13 @@ ROWS = (("SceneState", "scene_state", "artifact id"),
         ("Written output", "output_pixel_digest", "pixel digest (no artifact id: frames are written outside the store)"))
 
 
+LENS_ROW = ("Lens round trip", "lens_round_trip", "error of the redistorted result against the plate, apart from the verdict")
+
+
 def compare(hand, agent):
-    """One row per quantity: (label, kind, hand value, agent value, matches)."""
-    return [(label, kind, hand[key], agent[key], hand[key] == agent[key]) for label, key, kind in ROWS]
+    """One row per quantity: (label, kind, hand value, agent value, matches). A lens shot adds the round-trip row."""
+    rows = ROWS + ((LENS_ROW,) if "lens_round_trip" in hand or "lens_round_trip" in agent else ())
+    return [(label, kind, hand.get(key), agent.get(key), hand.get(key) == agent.get(key)) for label, key, kind in rows]
 
 
 def render(rows):
@@ -64,12 +71,15 @@ def run(plate, work, graph, frames=None, log=lambda *_: None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--plate", default=str(shot.plate_dir()), help="folder holding plate.%%04d.exr")
+    parser.add_argument("--plate", default="plain",
+                        help="plain (default), distorted (the lens round trip), or a folder holding plate.%%04d.exr")
     parser.add_argument("--work", help="folder for both runs' stores and outputs (default: under the demo cache)")
-    parser.add_argument("--graph", default=str(HERE / "demo_shot.nbcomp"))
+    parser.add_argument("--graph", help="the shot graph (default: the one --plate selects)")
     parser.add_argument("--frames", type=int, help="render only the first N frames")
     args = parser.parse_args()
-    work = args.work or str(shot.default_cache() / "compare")
+    graph, plate, lens = shot.resolve_plate(args.plate)
+    args.graph, args.plate = args.graph or str(graph), str(plate)
+    work = args.work or str(shot.default_cache() / ("compare-distorted" if lens else "compare"))
     Path(work).mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
     hand, agent, rows = run(args.plate, work, args.graph, args.frames, log=print)

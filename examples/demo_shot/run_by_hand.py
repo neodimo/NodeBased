@@ -7,8 +7,9 @@ and writes the EXR sequence. Prints the artifact ids and the verification verdic
 needs a GPU, a model or a network; the provider is the local `reproject` stand-in. `--provider sdxl_controlnet`
 runs the shot through the real model instead (NVIDIA card, see docs/GENERATIVE_CONDITIONING.md).
 
-    python examples/demo_shot/run_by_hand.py [--plate DIR] [--out DIR] [--cache DIR] [--graph FILE] [--provider NAME]
-                                             [--solver survey|dpvo|mast3r] [--focal-scale F] [--survey-check]
+    python examples/demo_shot/run_by_hand.py [--plate plain|distorted|DIR] [--out DIR] [--cache DIR] [--graph FILE]
+                                             [--provider NAME] [--solver survey|dpvo|mast3r] [--focal-scale F]
+                                             [--survey-check]
 
 `--solver dpvo` replaces the survey-point camera of the graph with a camera solved from the plate alone by the
 learned monocular SLAM (DPVO, NVIDIA card, see docs/END_TO_END_SPRINT.md stage 7): a CameraSolve3D node on the
@@ -18,6 +19,12 @@ uses MASt3R-SLAM (stage 9), which is handed no focal length: the solved camera g
 
 With a solved camera the verification also gets the survey check (`--survey-check` adds it to the survey-point
 run too): every landmark the plate shows, tracked on the plate, reprojected through the exported cameras.
+
+`--plate distorted` is the shot of the lens round trip (`demo_shot_lens.nbcomp`, the distorted plate of make_plate.py
+--distorted): plate -> Undistort (overscan) -> export, generate and verify in the undistorted frame -> comp -> Redistort ->
+write. The camera in that graph is the one solved from the plate with the lens estimated (solve_camera.py --distorted), so
+no solve runs here. The summary then has a `lens_round_trip` block, apart from the verdict: the plate straightened and bent
+back against the plate, and the written shot against the plate (examples/demo_shot/lens_check.py).
 
 Run it twice and the ids and the output frames are identical.
 """
@@ -145,6 +152,9 @@ def solve_with_dpvo(agent, frames, log=print):
 def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, log=print, provider=None, solver="survey",
         focal_scale=1.0, survey_check=None):
     document = json.loads(Path(graph).read_text())
+    if solver in SOLVERS and shot.is_lens_graph(document):
+        raise SystemExit(f"--solver {solver} does not apply to the distorted shot: its graph carries the solve "
+                         "(re-solve with solve_camera.py --solver dpvo --distorted)")
     generate = document["nodes"]["generate"]["params"]
     provider = provider or generate["provider"]
     last = frames or document["time"]["last"]
@@ -155,7 +165,16 @@ def run(plate, out, cache, graph=shot.HERE / "demo_shot.nbcomp", frames=None, lo
     uses_gpu = solver in SOLVERS or provider not in CPU_PROVIDERS
     survey = survey_tracks(plate, last) if (solver != "survey" if survey_check is None else survey_check) else None
     with gpu_job(log=log) if uses_gpu else contextlib.nullcontext():
-        return _run(plate, out, cache, graph, document, generate, provider, last, log, solver, focal_scale, survey)
+        summary = _run(plate, out, cache, graph, document, generate, provider, last, log, solver, focal_scale, survey)
+    return with_lens_round_trip(summary, document, graph, plate, out, provider)
+
+
+def with_lens_round_trip(summary, document, graph, plate, out, provider):
+    """The lens shot's round-trip error, set apart from the verdict (the model's checks). Shared with the agent run."""
+    if shot.is_lens_graph(document):
+        import lens_check
+        summary["lens_round_trip"] = lens_check.measure(graph, plate, out, summary["frames"], judged_result=provider == "reproject")
+    return summary
 
 
 def _run(plate, out, cache, graph, document, generate, provider, last, log, solver, focal_scale=1.0, survey=None):
@@ -181,7 +200,8 @@ def _run(plate, out, cache, graph, document, generate, provider, last, log, solv
             log(f"  {survey_line(verified['survey'])}")
         # `generate` hands out the ConditionedRead node that reads its result, the same one a loop does
         agent.call(op="create", id="generated", **result["node"])
-        agent.call(op="connect", id="grade", input="image", source="generated")
+        # the distorted shot places the overscan picture in the plate's format first (`fit`), the plain shot grades it directly
+        agent.call(op="connect", id="fit" if "fit" in document["nodes"] else "grade", input="image", source="generated")
         agent.call(op="set", id="write", param="path", value=str(out / "shot.%04d.exr"))
         for frame in range(1, last + 1):
             agent.call(op="render", id="write", path=str(out / f"shot.{frame:04d}.exr"), frame=frame, bits="half")
@@ -214,11 +234,11 @@ def output_digest(out, frames):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--plate", default=str(shot.plate_dir()), help="folder holding plate.%%04d.exr")
-    parser.add_argument("--out", default=str(shot.default_cache() / "out"), help="folder for shot.%%04d.exr")
-    parser.add_argument("--cache", default=str(shot.default_cache() / "store"),
-                        help="artifact store root (NODEBASED_CACHE for the agent process)")
-    parser.add_argument("--graph", default=str(shot.HERE / "demo_shot.nbcomp"))
+    parser.add_argument("--plate", default="plain",
+                        help="plain (default), distorted (the lens round trip), or a folder holding plate.%%04d.exr")
+    parser.add_argument("--out", help="folder for shot.%%04d.exr (default: out, or out-distorted)")
+    parser.add_argument("--cache", help="artifact store root (NODEBASED_CACHE for the agent process; default: store, or store-distorted)")
+    parser.add_argument("--graph", help="the shot graph (default: the one --plate selects)")
     parser.add_argument("--provider", default=None,
                         help="provider for the Generate step (default: the graph's own, reproject); "
                              "sdxl_controlnet runs the real model on the NVIDIA card")
@@ -230,6 +250,12 @@ def main():
     parser.add_argument("--survey-check", action=argparse.BooleanOptionalAction, default=None,
                         help="verify the survey points' reprojection (default: on with a solved camera)")
     args = parser.parse_args()
+    graph, plate, lens = shot.resolve_plate(args.plate)
+    suffix = "-distorted" if lens else ""
+    args.graph = args.graph or str(graph)
+    args.out = args.out or str(shot.default_cache() / f"out{suffix}")
+    args.cache = args.cache or str(shot.default_cache() / f"store{suffix}")
+    args.plate = str(plate)
     started = time.perf_counter()
     info_file = Path(args.cache).parent / "sdxl-run-info.json"
     os.environ["NODEBASED_SDXL_RUN_INFO"] = str(info_file)  # the SDXL provider writes its timings and peak VRAM here
