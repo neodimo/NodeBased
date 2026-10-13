@@ -1,5 +1,45 @@
 ## Lane 8 step S2 finish 1 complete — 2026-10-13
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 3 (Research, GPT-6 Astra), Lane 8 (2D parity B, GPT-6 Luna) (11:38 AM on 2026-10-13 PDT)
+
+`main` moved `b1df7d9c` -> `9a7e099f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 47 tests in 35.778 s, OK. Full suite on
+the stacked tip `9a7e099f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1013-0617.log`, started 6:17 AM): **Ran 5312 tests in 19183.766 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Gonzo's end-to-end sprint, stage 9: camera tracking with no lens given, a second live solver measured against the plate.** Commits:
+  - `988e674f` MASt3R-SLAM real-card test: the recovered focal within 15% at 512 x 288 (measured +13.9%; 5% was never met)
+  - `9fde8add` Sprint doc, stage 9 part 3: the demo shot with the MASt3R-SLAM camera fails the survey check (focal 19.5% long, 32.7 px RMS against a 1.35 px threshold), next to the survey solve and DPV-SLAM with the true and a 15% long lens; two runs give the same ids
+  - `c2b68dc2` Sprint doc, stage 9 parts 2 and 4: MASt3R-SLAM next to DPV-SLAM at 960 x 540 and 1920 x 1080 (pose error, recovered focal 12 to 15% long, 10 against 46 frames a second, 3.2 GB, bit-identical runs) and the stand-in filmed plate solved by both
+  - `a01550f0` camera_solve_mast3r: refine the tracked poses by a bundle adjustment of the tracker's own matches with the point-map focal held (numpy, Schur complement); the free-focal bundle kept as a diagnostic; benchmark reports the poses before refinement and takes config overrides
+  - `258027d3` Demo shot: --solver mast3r (no focal length handed in), --focal-scale for a wrong DPVO lens, the survey check in the verification; the stand-in filmed plate (wide-angle Brown-Conrady lens, handheld shake, survey tracks from the depth pass) and the camera solve benchmark
+  - `8b19b29c` verify: survey check, the reprojection error of surveyed world points through the exported cameras against their 2D tracks on the plate (RMS within 0.5% and worst within 1.5% of the plate height); scored in the verdict when the verify op is given a survey
+  - `c02085de` CameraSolve3D: MASt3R-SLAM as a second solver (camera_solve_mast3r 1.0): one-process driver, per-frame poses from the keyframes, the focal length fitted to the keyframes' point maps and keyed on the solved camera; the DPVO subprocess contract shared by both
+  - `68c6ff06` Sprint doc: stage 9, tracking with no lens given (MASt3R-SLAM next to DPV-SLAM, the solved camera driving the shot, a stand-in for a filmed plate)
+  Diff: 15 files changed, 1706 insertions(+), 64 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 3 (Research, GPT-6 Astra), step T2 of 3: the research radar, camera tracking and scene reconstruction from footage.** Commits:
+  - `b43aad0f` docs: finalize tracking radar and record research handoff
+  - `97ffc8ca` docs: outline verifier lens correction and confidence-aware scene proxies
+  - `36c4f53c` docs: propose bounded survey-constrained lens experiment
+  - `c5a20e42` docs: compare survey-constrained lens refinement and dense scene routes
+  - `3c870de8` docs: survey tracking reconstruction and calibration with dated evidence
+  Diff: 5 files changed, 331 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+- **Lane 8 (2D parity B, GPT-6 Luna), step S2 of 3: planar tracking, a tracked plane that drives CornerPin and Roto (finish 2).** Commits:
+  - `926ece75` docs: record Lane 8 PlanarTracker completion
+  - `b2faa63b` docs: record PlanarTracker parity and Roto workflow
+  - `dd6dc8d2` tracking: add planar region node and Roto follow
+  Diff: 19 files changed, 460 insertions(+), 55 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 PlanarTracker now registers as a 2D tracking analysis tap and passes its image through unchanged. Four clockwise Viewer clicks store four v8 scalar-envelope corner tracks; forward/backward Lucas–Kanade sampling and robust homography fitting write per-frame corner positions and fit error. The Viewer paints a quad with error colour, CornerPin export creates animated source/destination corners, and Roto Planar follow applies the reference-to-current homography.
 
 **Evidence.** `tests.test_planar_tracking` passes the known 24-frame homography within one pixel and deterministically, the one-pixel translation under a quarter-area image occlusion, keyed CornerPin motion export and Roto follow. Node gate (`tests.test_knobs`, `tests.test_tiers`, `tests.test_core`, `tests.test_desktop.FluidPropertiesPanelTests`, plus bypass/catalog/Roto modules), the knob label gate, docs-copy gate and parity-count gate pass. Docs row and `ROTO_TRACKING.md` section are byte-identical to their bundled copies.
