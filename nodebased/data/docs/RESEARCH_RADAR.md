@@ -301,6 +301,10 @@ There is no common benchmark in these inspected sources comparing interactive sm
 
 For genuinely **live re-simulation**, profile advection, particle transfers, pressure iterations, sparse occupancy and synchronization independently of rendering. Sparse tiles/multigrid/GPU residency are already built. NVIDIA Flow's block allocation and Warp's sparse kernels are useful design references [CS1,CS2]; a different pressure algorithm or SPH/LBM discretization is justified only if a measured solve bottleneck and matched physical-quality test support it. Learned surrogates require training and constrain the edit distribution [CS5,CS6]. None of those routes fixes the demonstrated old-cache stop by itself. Recover P4's raw record before calling its figures independently verified, and measure intermediate/full completion at the existing **frames 1, 60, 120** stop gate [P4, **2026-10-12**]. **Needs Gonzo:** route that existing finish work to the fluids owner; this research step starts no solver rewrite.
 
+### 3. One worker-sized spike
+
+[**MEMFOF against the current shared flow analysis**](../briefs/proposed/T3-memfof-shared-flow.md) is a proposed **90-minute** step with one pinned checkpoint, no production backend, matched full-HD inputs, existing analytic-motion gates, a large-motion quality test, an end-to-end two-direction speed target and bounded device memory. It explicitly accounts for MEMFOF's middle-frame flow origin: a triplet's two outputs do not equal the two directions of one adjacent pair. A failed speed/accuracy/resource gate produces an honest no-go record. This research run downloaded no weights and performed no card work; Gonzo owns any future assignment.
+
 ### Compositing and simulation sources and dates
 
 All living repositories, licences and model cards below **accessed 2026-10-13**; paper years/version URLs identify the published measurements. None reproduced here. Unknown fields are deliberately left unknown. For implementation, pin a commit/checkpoint plus licence text rather than relying on a moving branch.
