@@ -312,7 +312,7 @@ def solve_distorted(plate_folder, cache, log=print):
     if reason:
         raise SystemExit(f"cannot run the camera solve: {reason}")
     size = shot.DISTORTED_SIZE
-    picks, distance = shot.pick_survey(size, shot.lens_of(shot.DISTORTED_K1, shot.DISTORTED_K2))
+    picks, distance = shot.pick_survey(size, shot.lens_of(shot.DISTORTED_K1, shot.DISTORTED_K2), plate_folder=plate_folder)
     start = shot.CAMERA_START
     dispatcher = Dispatcher()
     dispatcher.execute({"op": "batch", "commands": [

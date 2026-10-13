@@ -246,9 +246,11 @@ def overscan_camera_params(lens, size, margins):
     return {"vaperture": filmback.DEFAULT_VAPERTURE * scale, **lens_for_format(lens, scale)}, scale
 
 
-def pick_survey(size, lens, frames=FRAMES):
+def pick_survey(size, lens, frames=FRAMES, plate_folder=None, radius=8, min_std=0.03):
     """Two picks far apart that stay in view on every frame, and the real distance between them: the survey the camera
-    solve is given. Each pick is the true projection through the lens, rounded to a whole pixel (a click), on frame 1."""
+    solve is given. Each pick is the true projection through the lens, rounded to a whole pixel (a click), on frame 1.
+    With `plate_folder`, only points whose window on the plate has texture on every frame checked are offered (a click
+    on a flat colour cannot be followed by the tracker)."""
     from dataclasses import replace
     import numpy as np
     from nodebased import scene3d
@@ -260,6 +262,18 @@ def pick_survey(size, lens, frames=FRAMES):
         pixels, depth = scene3d.project_lens(replace(solve_camera.truth_camera(frame), **lens), width, height, world)
         shown.append((depth > 0.5) & (pixels[:, 0] > 40) & (pixels[:, 1] > 40)
                      & (pixels[:, 0] < width - 40) & (pixels[:, 1] < height - 40))
+    if plate_folder is not None:
+        import lens_check
+        textured = []
+        for frame, pixels_shown in zip((1, (frames + 1) // 2, frames), shown):
+            gray = lens_check.read_display(Path(plate_folder) / (plate_pattern(".").split("/")[-1] % frame)).mean(axis=2)
+            pixels, _ = scene3d.project_lens(replace(solve_camera.truth_camera(frame), **lens), width, height, world)
+            ok = np.zeros(len(world), bool)
+            for n in np.flatnonzero(pixels_shown):
+                x, y = int(round(pixels[n, 0])), int(round(pixels[n, 1]))
+                ok[n] = float(gray[y - radius:y + radius + 1, x - radius:x + radius + 1].std()) > min_std
+            textured.append(ok)
+        shown = [a & b for a, b in zip(shown, textured)]
     visible = np.flatnonzero(np.logical_and.reduce(shown))
     best = max(((a, b) for a in visible for b in visible if a < b),
                key=lambda pair: np.linalg.norm(world[pair[0]] - world[pair[1]]))
