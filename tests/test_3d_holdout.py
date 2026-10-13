@@ -9,7 +9,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from nodebased import core, cryptomatte3d, gpu3d, gpuinstance, knobs, pathtrace as pt, scene3d as s
+from nodebased import core, cryptomatte3d, gpu3d, gpuinstance, gpupathtrace, knobs, pathtrace as pt, scene3d as s
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator
 from tests import gpu_precision
@@ -304,10 +304,12 @@ class GpuAgreesWithTheCpuTests(unittest.TestCase):
             for mode in ("raster", "raytrace"):
                 with self.subTest(case=label, mode=mode):
                     cpu, gpu = _cpu(mode)(case, "rgba"), _gpu(mode)(case, "rgba")
-                    wrong = (np.abs(gpu - cpu) > 5e-4).any(axis=-1)
+                    # an adapter without float32-blendable blends the picture in half float (x20, as the splat parity tests)
+                    gpu_precision.note(self.id())
+                    wrong = (np.abs(gpu - cpu) > gpu_precision.tolerance(5e-4)).any(axis=-1)
                     # a silhouette pixel on an exact triangle edge may fall either way on the two rasterizers
                     self.assertLessEqual(int(wrong.sum()), 1 + cpu.shape[0] * cpu.shape[1] // 2000, int(wrong.sum()))
-                    self.assertLess(float(np.abs(gpu - cpu).mean()), 2e-4)
+                    self.assertLess(float(np.abs(gpu - cpu).mean()), gpu_precision.tolerance(2e-4))
                     for output in ("depth", "position", "normals", "object_id", "uv"):
                         np.testing.assert_allclose(_gpu(mode)(case, output), _cpu(mode)(case, output), atol=1e-3, rtol=2e-3)
 
@@ -487,7 +489,8 @@ class BehindTests(unittest.TestCase):
         yield "cpu raster", s.render(scene_in, SMOKE_CAMERA, *SMALL, ambient=.1, mode="raster", output=output, volume=volume)
         yield "cpu ray traced", s.render(scene_in, SMOKE_CAMERA, *SMALL, ambient=.1, mode="raytrace", output=output, volume=volume)
         yield "cpu path tracer", pt.render(scene_in, SMOKE_CAMERA, *SMALL, BLACK, .1, output, SMALL_PATH, backend="cpu", volume=volume)
-        if gpu3d.available():
+        # splats and smoke are path traced on the GPU only where `soft_supported` allows (not on Microsoft's software driver)
+        if gpu3d.available() and gpupathtrace.soft_supported(gpu3d._state()):
             yield "gpu path tracer", pt.render(scene_in, SMOKE_CAMERA, *SMALL, BLACK, .1, output, SMALL_PATH, backend="gpu", volume=volume)
 
     def check(self, behind, in_front, outputs=("rgba", "depth", "object_id"), volume=None, tolerance=2e-3):
