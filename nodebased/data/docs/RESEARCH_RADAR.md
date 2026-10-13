@@ -177,6 +177,10 @@ These produce renderable structure, not guaranteed complete physical surfaces. N
 
 Existing splat relighting/shadow support does not turn baked RGB/SH into physical albedo. A reconstructed splat can be an occlusion proxy while still being a poor shadow receiver. Separate **visual colour**, **confidence-masked geometric depth**, and **material/normal estimates**; validate holdout boundaries and shadows against the original plate before using them to constrain generation. Capture quality and parallax set the ceiling; a plausible hallucinated surface must remain marked as inferred.
 
+### 3. One worker-sized spike
+
+[**Survey-constrained lens refinement against stage 9**](../briefs/proposed/T2-survey-constrained-lens.md) compares the saved provider solve, the already-merged L2 refinement, and one survey-in-the-fit variant. It has a **90-minute proposed budget**, fixed-input repeats, independent held-out survey points, explicit lens/position/speed/determinism gates and a known-lens fallback. The first gate is recovering the raw stage-9 artifacts; without them, a CPU synthetic replay is diagnostic only. This is a proposed experiment for Gonzo to assign, not executed research or permission to download models.
+
 ### Tracking sources and dates
 
 Primary tables/README/licences were read; results were not reproduced. Built-in search failed for some broad queries; DonSeTch's search found the 2026 papers with **partial engine coverage**. This is a scoped sweep, not an exhaustive list or a claim that October releases do not exist. Paper links without a version suffix are living pages: re-pin the revision before running an experiment.
