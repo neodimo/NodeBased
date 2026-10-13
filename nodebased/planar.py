@@ -85,3 +85,70 @@ def fit_homography_ransac(reference_points, current_points, threshold=2.0, max_t
     matrix = _fit(source[inliers], destination[inliers])
     errors = np.linalg.norm(project_points(matrix, source[inliers])-destination[inliers], axis=1)
     return matrix, inliers, float(np.sqrt(np.mean(errors*errors)))
+
+
+def track_region(frames, corners, reference_frame, *, samples_per_axis=8, vector_detail=4,
+                 smoothness=1.0, backend="auto", threshold=2.0):
+    """Track a quadrilateral through a frame mapping using Lucas-Kanade dense flow.
+
+    `frames` maps integer frame numbers to HxWxRGBA arrays. Dense adjacent-frame
+    flow follows each interior sample in both directions from the reference. A
+    robust homography fit rejects occluded or inconsistent samples before the
+    four region corners are projected. Returns ordered frame records containing
+    corners, matrix, RMS error and the accepted feature count.
+    """
+    from .opticalflow import _sample
+    from .opticalflow import flow_pair
+
+    numbers = sorted(int(frame) for frame in frames)
+    if not numbers or int(reference_frame) not in frames:
+        raise PlanarTrackingError("reference frame must be present in the frame mapping")
+    if numbers != list(range(numbers[0], numbers[-1] + 1)):
+        raise PlanarTrackingError("frame mapping must be a contiguous range")
+    quad = np.asarray(corners, dtype=np.float64)
+    if quad.shape != (4, 2) or not np.isfinite(quad).all():
+        raise PlanarTrackingError("region requires four finite corners")
+    if samples_per_axis < 2:
+        raise PlanarTrackingError("samples_per_axis must be at least two")
+    u = np.linspace(0.08, 0.92, int(samples_per_axis))
+    v = np.linspace(0.08, 0.92, int(samples_per_axis))
+    points = np.array([(1-a)*(1-b)*quad[0] + a*(1-b)*quad[1] + a*b*quad[2] + (1-a)*b*quad[3]
+                       for b in v for a in u], dtype=np.float64)
+    h, w = np.asarray(frames[numbers[0]]).shape[:2]
+    if any(np.asarray(frames[n]).shape[:2] != (h, w) for n in numbers):
+        raise PlanarTrackingError("all frames must have matching image dimensions")
+    ref = int(reference_frame)
+    positions = {ref: points.copy()}
+    for direction in (1, -1):
+        current = ref
+        while numbers[0] <= current + direction <= numbers[-1]:
+            nxt = current + direction
+            first, second = np.asarray(frames[current], np.float32), np.asarray(frames[nxt], np.float32)
+            fw, bw, occ = flow_pair(first, second, vector_detail=vector_detail,
+                                    smoothness=smoothness, flow_on="luminance", backend=backend)
+            # `flow_pair(first, second)` forward always maps first-frame points
+            # to second-frame points, including when this traversal runs backward in time.
+            # Its forward/backward mask removes samples hidden by an occlusion before RANSAC.
+            field = fw
+            xy = positions[current] - 0.5
+            sx, sy = xy[:, 0].astype(np.float32), xy[:, 1].astype(np.float32)
+            displacement = _sample(field, sx, sy)
+            visible = _sample(occ.astype(np.float32), sx, sy) < 0.5
+            if int(visible.sum()) < 4:
+                visible[:] = True
+            candidates = positions[current] + displacement
+            step_h, _, _ = fit_homography_ransac(positions[current][visible], candidates[visible], threshold=threshold)
+            # Reproject the full region grid through the robust per-step model. This prevents
+            # one occluded patch from poisoning every later frame in the traversal.
+            positions[nxt] = project_points(step_h, positions[current])
+            current = nxt
+    result = {}
+    for frame in numbers:
+        if frame == ref:
+            matrix = np.eye(3); inliers = np.ones(len(points), dtype=bool); rms = 0.0
+        else:
+            matrix, inliers, rms = fit_homography_ransac(points, positions[frame], threshold=threshold)
+        tracked = project_points(matrix, quad)
+        result[frame] = {"corners": tracked.tolist(), "matrix": matrix.tolist(),
+                         "error": rms, "features": int(inliers.sum())}
+    return result

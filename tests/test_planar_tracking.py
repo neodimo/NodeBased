@@ -33,3 +33,27 @@ class PlanarFitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PlanarSequenceTests(unittest.TestCase):
+    def test_lucas_kanade_region_tracks_24_homography_frames(self):
+        from nodebased.flow_nodes import warp_by_homography
+        from nodebased.planar import track_region
+        rng = np.random.default_rng(21)
+        plate = rng.random((96, 112, 4), dtype=np.float32)
+        plate[..., 3] = 1
+        quad = np.array([[20, 18], [88, 16], [90, 76], [18, 78]], dtype=float)
+        frames = {}
+        expected = {}
+        for frame in range(1, 25):
+            dx, dy = .35*(frame-12), .18*(frame-12)
+            matrix = np.array([[1, .001*(frame-12), dx], [-.001*(frame-12), 1, dy], [0, 0, 1]], dtype=float)
+            frames[frame] = warp_by_homography(plate, matrix)
+            expected[frame] = project_points(matrix, quad)
+        result = track_region(frames, quad, 12, samples_per_axis=12, vector_detail=3,
+                              backend="cpu", threshold=3.0)
+        repeated = track_region(frames, quad, 12, samples_per_axis=12, vector_detail=3,
+                                backend="cpu", threshold=3.0)
+        for frame in range(1, 25):
+            np.testing.assert_allclose(result[frame]["corners"], expected[frame], atol=1.0)
+            np.testing.assert_array_equal(result[frame]["corners"], repeated[frame]["corners"])
+
