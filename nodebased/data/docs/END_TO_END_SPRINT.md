@@ -411,9 +411,14 @@ and the overscan resolution, so a provider works undistorted and the result land
 - **The viewer.** In the Composite workspace the strip offers "View undistorted" and "View plate" for a graph with an
   Undistort node; the undistorted view shows the whole overscan frame with the plate's format outlined
   (`docs/images/demo_shot/lens_view_undistorted.png`, made by `capture_lens_view.py`).
-- **Not yet measured (needs the card).** The DPV-SLAM solve of the distorted plate: the committed graph holds the rendering
-  camera and lens until `solve_camera.py --solver dpvo --distorted` replaces it, and the recovered focal length, `k1`, `k2`
-  and camera error are not recorded; the hand run of that graph; `--provider sdxl_controlnet` on the distorted shot.
+- **Measured on the card (10/13).** The DPV-SLAM solve of the distorted plate recovered a focal length of 24.80 mm against the
+  true 22.54 mm (10.0% off), `k1` 0.0012 against -0.03 and `k2` 0.0001 against 0.004 (the lens is not found at 640 by 360),
+  with a good camera path (position 0.049 m RMS, rotation 0.09 degrees mean). The shot with that camera
+  (`demo_shot_lens_dpvo.nbcomp`, not the committed default) gives verdict FAIL on the stand-in (objects; 287 s) and on
+  `--provider sdxl_controlnet` (lighting and objects; 739 s, generation 441 s, peak 7.9 GiB of video memory). The model on
+  the rendering-camera graph also fails lighting and objects (910 s). The round-trip identity row passes in every run.
+  Table and detail: `examples/demo_shot/README.md`. Needs Gonzo: a lens estimate that recovers `k1`, then the solve written
+  into the default graph with a PASS stand-in verdict.
 
 ## Stage 8: temporal coherence (10/11)
 

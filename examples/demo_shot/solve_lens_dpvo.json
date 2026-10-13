@@ -1,0 +1,88 @@
+{
+ "schema": 1,
+ "plate": {
+  "size": [
+   640,
+   360
+  ],
+  "k1": -0.03,
+  "k2": 0.004
+ },
+ "typed_focal_mm": 27.0469,
+ "true_focal_mm": 22.5391,
+ "recovered": {
+  "focal_mm": 24.8034,
+  "k1": 0.00124,
+  "k2": 0.00013
+ },
+ "errors": {
+  "focal_percent": 10.046,
+  "k1": 0.03124,
+  "k2": -0.00387,
+  "fitted_scale": 0.99523,
+  "position_rms_m": 0.04873,
+  "rotation_mean_deg": 0.09174,
+  "rotation_max_deg": 0.17703
+ },
+ "survey": {
+  "picks": [
+   {
+    "name": "Survey A",
+    "frame": 1,
+    "x": 140.0,
+    "y": 240.0,
+    "position": null
+   },
+   {
+    "name": "Survey B",
+    "frame": 1,
+    "x": 509.0,
+    "y": 205.0,
+    "position": null
+   }
+  ],
+  "distance": 9.5197,
+  "scale": 4.642736,
+  "scale_source": "survey"
+ },
+ "overscan_margins": [
+  8,
+  4
+ ],
+ "lens": {
+  "focal_mode": "estimate",
+  "distortion": "k1 k2",
+  "focal_typed_mm": 27.0469,
+  "focal_mm": 24.8034,
+  "focal_px": 573.857,
+  "k1": 0.001242,
+  "k2": 0.000128,
+  "rms_px_before": 1.3635,
+  "rms_px_after": 1.1093,
+  "median_px_before": 1.0039,
+  "median_px_after": 0.7092,
+  "inliers_before": 0.9954,
+  "inliers_after": 0.9972,
+  "observations": 3252,
+  "points": 420,
+  "frames": 9,
+  "iterations": 120,
+  "focal_mm_sigma": 6.3619,
+  "k1_sigma": 0.010675,
+  "k2_sigma": 0.001575,
+  "warnings": [
+   "The focal length is poorly determined by this move (formal error above 5 percent)."
+  ]
+ },
+ "run": {
+  "frames": 24,
+  "fps_after_warmup": 60.140465652232926,
+  "fps_total": 33.6708786592502,
+  "terminate_s": 0.08661915798438713,
+  "peak_vram_mb": 414.0732421875,
+  "loop_closure": false,
+  "seed": 0,
+  "torch": "2.14.1+cu126",
+  "gpu": "NVIDIA GeForce RTX 3080 Ti"
+ }
+}

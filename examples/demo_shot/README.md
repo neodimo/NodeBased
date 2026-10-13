@@ -15,6 +15,7 @@ real model comes in stage 3 and only swaps the provider.
 | `lens_benchmark.json` | The recorded focal length and k1 recovery runs (`solve_camera.py --solver dpvo --matrix`). |
 | `diagnose_verdict.py` | Measures the verifier on the shot: each check's worst value, its threshold, and the same measurement for the plate against its own SceneState. |
 | `demo_shot.nbcomp` | The shot graph. |
+| `demo_shot_lens_dpvo.nbcomp`, `solve_lens_dpvo.json` | The same graph with the camera and lens of the DPV-SLAM solve on the card, and the recovered lens and errors (not the default; see the card measurements below). |
 | `demo_shot_lens.nbcomp` | The shot graph of the distorted plate: plate, Undistort, the conditioning and the comp in the undistorted frame, Redistort, Write (below). |
 | `solve_lens.json` | The camera solve behind it: the lens the solve recovered against the truth, the survey and the overscan. |
 | `lens_check.py` | The lens round-trip error of a run, apart from the verifier's verdict. |
@@ -154,13 +155,28 @@ give the same ids and the same output pixels (`compare_runs.py --plate distorted
 along its motion vectors and its tracked error grows with the frame size: it passes at 640 and 704 wide and fails
 at 768, 832 and 896 (two objects drift 2.2 to 2.4 pixels on a few frames). The shot is therefore 640 wide.
 
-**The committed graph is not yet the DPV-SLAM solve.** `demo_shot_lens.nbcomp` holds the rendering camera and lens as
-the camera keys, and `solve_lens.json` says so (`recovered` is empty). The solve itself needs the whole graphics card:
-`python examples/demo_shot/solve_camera.py --solver dpvo --distorted` runs it, overwrites both files with the recovered
-focal length, `k1`, `k2` and the similarity errors, and `tests/test_lens_shot_l3.py` (`CardSolveTests`) checks it
-loosely when the card is free. Still to measure on the card: that solve (recovered focal length, `k1`, `k2` and the
-camera error against the truth), the hand run of the graph it writes, and `--provider sdxl_controlnet` on the
-distorted shot (the model's per-check verdict and its round-trip identity row).
+**The DPV-SLAM solve on the card (10/13).** `python examples/demo_shot/solve_camera.py --solver dpvo --distorted` solved the
+distorted plate on the RTX 3080 Ti and wrote `demo_shot_lens_dpvo.nbcomp` and `solve_lens_dpvo.json`. The lens estimate does
+not hold at 640 by 360: the true focal length is 22.54 mm (typed 27.05 mm), the recovered one 24.80 mm (10.0% off); the
+recovered `k1` is 0.0012 against the true -0.03 and `k2` 0.0001 against 0.004, so the lens is not found. The camera path is
+good: fitted scale 0.995, position error 0.049 m RMS, rotation error 0.09 degrees mean and 0.18 maximum. A second solve in
+`CardSolveTests` stayed inside its loose bounds (focal within 15%, `k1` within 0.03); the `k1` error of the run above, 0.031,
+sits just outside, so the solver's result varies from run to run. The graph with that solve is not the committed default
+because the shot fails with it:
+
+| Run (640 by 360, 24 frames) | Camera in the graph | Verdict | Lens round trip | Time |
+| --- | --- | --- | --- | --- |
+| `reproject` stand-in, CPU | rendering camera (committed `demo_shot_lens.nbcomp`) | PASS | pass | 328 s |
+| `reproject` stand-in, CPU | DPV-SLAM solve (`demo_shot_lens_dpvo.nbcomp`) | FAIL (objects) | plate identity pass, result against plate fails (mean 0.077, p99 0.90) | 287 s |
+| `--provider sdxl_controlnet`, RTX 3080 Ti | DPV-SLAM solve | FAIL (lighting, objects) | plate identity pass (mean 0.0008, p99 0.014); result against plate printed, mean 0.27 | 739 s |
+| `--provider sdxl_controlnet`, RTX 3080 Ti | rendering camera | FAIL (lighting, objects) | plate identity pass; result against plate printed, mean 0.28 | 910 s |
+
+The model runs generate 24 frames at 1024 by 576 with CPU offload: 441 s (solved camera) and 579 s (rendering camera) for
+the generation, peak 7.9 GiB of video memory. The model's lighting and objects checks fail with the rendering camera as
+well, so the failure of the SDXL runs comes from the model's picture and not from the solve; the round-trip identity row
+passes in every run. To run a graph other than the default, `run_by_hand.py --plate distorted --graph FILE`.
+Still open (Needs Gonzo): a lens estimate that recovers `k1` on this plate, for example by solving a wider plate (960 wide, as in the `--plate-k1` command above) or fixing the lens to the plate's calibration, then the solve written into `demo_shot_lens.nbcomp` with
+a PASS stand-in verdict.
 
 ## Running it
 
