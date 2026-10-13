@@ -22,6 +22,10 @@ FOCAL = 22.539097818315216
 # plate's format with the Camera3D lens model, so the barrel-distorted corners show the set and not black.
 LENS_K1 = -0.03
 OVERSCAN = 1.35
+# The distorted plate of the lens round trip (demo_shot_lens.nbcomp): 960 wide, because the camera solve needs it, through
+# a barrel lens with a small second term. `--plate distorted` on the run scripts selects it.
+DISTORTED_K1, DISTORTED_K2 = -0.03, 0.004
+DISTORTED_SIZE = (960, 540)
 
 
 def camera_at(frame, move=FRAMES):
@@ -111,6 +115,10 @@ def plate_dir(base=None):
     return Path(base) / "plate" if base else default_cache() / "plate"
 
 
+def distorted_plate_dir(base=None):
+    return Path(base) / "plate_distorted" if base else default_cache() / "plate_distorted"
+
+
 def plate_pattern(folder):
     return str(Path(folder) / "plate.%04d.exr")
 
@@ -166,4 +174,177 @@ def save_graph(path, width, height, keys, frames=FRAMES, plate_folder=None):
     from nodebased.core import atomic_save
     document = build_graph(width, height, keys, frames)
     document["nodes"]["plate"]["params"]["path"] = plate_pattern(plate_folder or Path(path).resolve().parent / "plate")
+    atomic_save(path, document)
+
+
+# ----------------------------------------------------------------------------- the lens round trip (demo_shot_lens.nbcomp)
+
+LENS_GRAPH = HERE / "demo_shot_lens.nbcomp"
+LENS_SOLVE = HERE / "solve_lens.json"
+SOLVE_TYPED_FOCAL_SCALE = 1.2     # the artist types a focal length 20 percent off; the solve recovers it
+LENS_KEYS = ("lens_k1", "lens_k2", "lens_k3", "lens_p1", "lens_p2", "lens_cx", "lens_cy")
+
+
+def resolve_plate(choice):
+    """`--plate`: "plain" (the default) or "distorted" pick the shot (graph and plate folder); anything else is a plate
+    folder of the plain shot. Returns (graph file, plate folder, is the lens shot)."""
+    if choice in (None, "plain"):
+        return HERE / "demo_shot.nbcomp", plate_dir(), False
+    if choice == "distorted":
+        return LENS_GRAPH, distorted_plate_dir(), True
+    return HERE / "demo_shot.nbcomp", Path(choice), False
+
+
+def is_lens_graph(document):
+    """True for a shot graph with the lens round trip (an Undistort node)."""
+    return any(node["type"] == "Undistort" for node in document["nodes"].values())
+
+
+def lens_of(k1, k2):
+    return {"lens_k1": float(k1), "lens_k2": float(k2)}
+
+
+def lens_for_format(lens, scale):
+    """The same physical lens read on a format `scale` times as tall (the pixel size unchanged): the model's units are
+    half the format height, so a radial term of order n scales with scale**n, tangential terms with scale and the
+    principal point with 1/scale."""
+    out = dict(lens)
+    for name, power in (("lens_k1", 2), ("lens_k2", 4), ("lens_k3", 6), ("lens_p1", 1), ("lens_p2", 1)):
+        if name in out:
+            out[name] = float(out[name]) * scale ** power
+    for name in ("lens_cx", "lens_cy"):
+        if name in out:
+            out[name] = float(out[name]) / scale
+    return out
+
+
+def overscan_margins(lens, size, extra=2):
+    """Pixels to add on each side of the plate so that Undistort's grown frame fits: (mx, my), even, from the
+    window the node itself would make (nodebased.lensmodel.undistorted_window) plus `extra` pixels."""
+    from nodebased import lensmodel
+    from nodebased.raster import Region
+    width, height = size
+    box = Region(0, 0, width, height)
+    x, y, w, h = lensmodel.undistorted_window(lensmodel.from_params(lens), box, box)
+    grow = (max(-x, x + w - width), max(-y, y + h - height))
+    return tuple(int(-(-(g + extra) // 2) * 2) for g in grow)
+
+
+def overscan_camera_params(lens, size, margins):
+    """The Camera3D film back and lens of the overscan camera: the same focal length on a taller film back keeps
+    the pixel size, and the lens is the plate's, restated in the larger format's units."""
+    from nodebased import filmback
+    width, height = size
+    scale = (height + 2 * margins[1]) / height
+    return {"vaperture": filmback.DEFAULT_VAPERTURE * scale, **lens_for_format(lens, scale)}, scale
+
+
+def pick_survey(size, lens, frames=FRAMES):
+    """Two picks far apart that stay in view on every frame, and the real distance between them: the survey the camera
+    solve is given. Each pick is the true projection through the lens, rounded to a whole pixel (a click), on frame 1."""
+    from dataclasses import replace
+    import numpy as np
+    from nodebased import scene3d
+    import solve_camera
+    width, height = size
+    world = np.array(landmarks(), dtype=np.float64)
+    shown = []
+    for frame in (1, (frames + 1) // 2, frames):
+        pixels, depth = scene3d.project_lens(replace(solve_camera.truth_camera(frame), **lens), width, height, world)
+        shown.append((depth > 0.5) & (pixels[:, 0] > 40) & (pixels[:, 1] > 40)
+                     & (pixels[:, 0] < width - 40) & (pixels[:, 1] < height - 40))
+    visible = np.flatnonzero(np.logical_and.reduce(shown))
+    best = max(((a, b) for a in visible for b in visible if a < b),
+               key=lambda pair: np.linalg.norm(world[pair[0]] - world[pair[1]]))
+    first, _ = scene3d.project_lens(replace(solve_camera.truth_camera(1), **lens), width, height, world[list(best)])
+    picks = [{"name": name, "frame": 1, "x": float(np.rint(pixel[0])), "y": float(np.rint(pixel[1])), "position": None}
+             for name, pixel in zip(("Survey A", "Survey B"), first)]
+    return picks, float(np.linalg.norm(world[best[0]] - world[best[1]]))
+
+
+def survey_json(picks, distance):
+    import json
+    return json.dumps({"picks": picks, "distances": [{"a": picks[0]["name"], "b": picks[1]["name"],
+                                                       "distance": float(distance)}]}, sort_keys=True)
+
+
+def build_lens_graph_commands(size, keys, lens, margins, survey="", frames=FRAMES, solve_params=None):
+    """The shot graph of the distorted plate: plate -> Undistort (overscan) -> Generate, the conditioning and the comp in the
+    undistorted frame -> Redistort -> Write.
+
+    `keys` maps frame to the solved camera's parameter values (as `build_graph_commands`), `lens` is the solved lens
+    ({"lens_k1": .., "lens_k2": ..}, in units of half the plate's height). The export and the render use a second camera, the
+    same pose and focal length on a film back `margins` taller and wider (so Render3D draws the overscan the Undistort node
+    grows) with the same lens restated in that larger format's units; the SceneState therefore carries a lens a provider can
+    apply to its overscan pictures to land on the plate. The generated read is placed in the plate's format by a Reformat
+    that keeps its overscan, so Merge sees matching formats and the Redistort returns to the plate."""
+    width, height = size
+    big = (width + 2 * margins[0], height + 2 * margins[1])
+    c = []
+    _create(c, "plate", "Read", dict(path="plate_distorted/plate.%04d.exr"), name="Plate (distorted, rendered by NodeBased)")
+    for command in scene_commands(*big):
+        if command["id"] in ("camera", "scene", "render"):
+            continue
+        c.append(command)
+    _create(c, "camera", "Camera3D", dict(focal=FOCAL, **CAMERA_START, **lens), name="Solved camera (plate lens)")
+    for param in ("tx", "ty", "tz", "target_x", "target_y", "target_z", "roll", "focal"):
+        c.append({"op": "set_curve", "id": "camera", "param": param, "curve": {"interpolation": "linear",
+                  "keys": [{"frame": f, "value": float(keys[f][param])} for f in range(1, frames + 1)]}})
+    film, _scale = overscan_camera_params(lens, size, margins)
+    _create(c, "camera_os", "Camera3D", dict(focal=FOCAL, **CAMERA_START, **film),
+            name="Overscan camera (the plate lens on a larger film back)")
+    for param in ("tx", "ty", "tz", "target_x", "target_y", "target_z", "roll", "focal"):
+        c.append({"op": "set_curve", "id": "camera_os", "param": param, "curve": {"interpolation": "linear",
+                  "keys": [{"frame": f, "value": float(keys[f][param])} for f in range(1, frames + 1)]}})
+    _create(c, "solve", "CameraSolve3D", dict(
+        solve_focal="estimate", solve_distortion="k1 k2", survey=survey, focal=FOCAL * SOLVE_TYPED_FOCAL_SCALE,
+        anchor_tx=CAMERA_START["tx"], anchor_ty=CAMERA_START["ty"], anchor_tz=CAMERA_START["tz"],
+        anchor_target_x=CAMERA_START["target_x"], anchor_target_y=CAMERA_START["target_y"],
+        anchor_target_z=CAMERA_START["target_z"], **(solve_params or {})), name="Camera solve (lens estimated)")
+    c.append({"op": "connect", "id": "solve", "input": "image", "source": "plate"})
+    _create(c, "undistort", "Undistort", name="Undistort (overscan)")
+    c.append({"op": "connect", "id": "undistort", "input": "image", "source": "plate"})
+    c.append({"op": "connect", "id": "undistort", "input": "camera", "source": "camera"})
+    _create(c, "scene", "Scene3D", name="Layout")
+    for slot, key in enumerate(("ground", "pillar", "crate", "backdrop", "cube", "ball", "key", "sky")):
+        c.append({"op": "connect", "id": "scene", "input": f"object{slot}", "source": key})
+    _create(c, "export", "WriteGeo3D", name="SceneState and ControlBundle export (overscan)")
+    c.append({"op": "connect", "id": "export", "input": "scene", "source": "scene"})
+    c.append({"op": "connect", "id": "export", "input": "camera", "source": "camera_os"})
+    _create(c, "render", "Render3D", dict(width=big[0], height=big[1], ambient=0.25, samples=1,
+                                           render_output="multichannel", render_backend="cpu",
+                                           render_mode="raster", passes=PASSES))
+    c.append({"op": "connect", "id": "render", "input": "scene", "source": "export"})
+    c.append({"op": "connect", "id": "render", "input": "camera", "source": "camera_os"})
+    _create(c, "generate", "Generate", dict(provider="reproject", seed=SEED, text=BRIEF,
+                                             output_path="generated.%04d.exr"))
+    c.append({"op": "connect", "id": "generate", "input": "image", "source": "undistort"})
+    _create(c, "fit", "Reformat", dict(reformat_type="to_box", width=width, height=height, resize_type="none", center=1,
+                                       filter="nearest", preserve_bbox=1), name="Place the overscan in the plate format")
+    _create(c, "grade", "Grade", name="Grade the generated picture")
+    c.append({"op": "connect", "id": "grade", "input": "image", "source": "fit"})
+    _create(c, "merge", "Merge", name="Merge over the undistorted plate")
+    c.append({"op": "connect", "id": "merge", "input": "A", "source": "grade"})
+    c.append({"op": "connect", "id": "merge", "input": "B", "source": "undistort"})
+    _create(c, "redistort", "Redistort", name="Redistort (back onto the plate)")
+    c.append({"op": "connect", "id": "redistort", "input": "image", "source": "merge"})
+    c.append({"op": "connect", "id": "redistort", "input": "camera", "source": "camera"})
+    _create(c, "write", "Write", dict(path="shot.%04d.exr", file_type="exr", bit_depth="half"))
+    c.append({"op": "connect", "id": "write", "input": "image", "source": "redistort"})
+    c.append({"op": "time", "first": 1, "last": frames, "current": 1})
+    return c
+
+
+def build_lens_graph(size, keys, lens, margins, survey="", frames=FRAMES, solve_params=None):
+    from nodebased.core import Dispatcher
+    dispatcher = Dispatcher()
+    dispatcher.execute({"op": "batch", "commands": build_lens_graph_commands(size, keys, lens, margins, survey, frames, solve_params)})
+    return dispatcher.document
+
+
+def save_lens_graph(path, size, keys, lens, margins, survey="", frames=FRAMES, plate_folder=None, solve_params=None):
+    """Write the lens shot graph; its Read node points at `plate_folder` (stored relative to `path`)."""
+    from nodebased.core import atomic_save
+    document = build_lens_graph(size, keys, lens, margins, survey, frames, solve_params)
+    document["nodes"]["plate"]["params"]["path"] = plate_pattern(plate_folder or Path(path).resolve().parent / "plate_distorted")
     atomic_save(path, document)
