@@ -1,5 +1,25 @@
 ## 2026-10-12 — Lane 8 S2 finish 1: dense-flow planar analysis (PARTIAL)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (12:47 AM on 2026-10-13 PDT)
+
+`main` moved `ad710e0d` -> `c68e3bc1` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 19 tests in 37.945 s, OK. Full suite on
+the stacked tip `c68e3bc1` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1012-1907.log`, started 7:07 PM): **Ran 5284 tests in 18827.584 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step S2 of 3: planar tracking, a tracked plane that drives CornerPin and Roto (finish 1).** Commits:
+  - `ec8986a5` docs: record Lane 8 dense-flow tracking progress
+  - `129c29d3` tracking: follow planar regions with dense flow
+  Diff: 4 files changed, 105 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** Added a reference-to-current planar region tracker that follows a regular interior feature grid with the existing Lucas–Kanade `flow_pair`, refits a robust homography at each frame step, and returns tracked corners, error and inlier count. A synthetic 24-frame projective plate test stays within one pixel at the corners and repeats identically; RANSAC tests cover a quarter of correspondence outliers.
 - **Artifacts:** `nodebased/planar.py` and `tests/test_planar_tracking.py`, committed as `129c29d`; focused test log: `scratch/nb-lanes/run/tests-L8-planar.log`.
 - **State:** Fitter plus dense-flow sequence analysis are in. Real quarter-area image occlusion did not meet the one-pixel tolerance in a fixture, so that acceptance remains open. There is still no PlanarTracker node, Roto-region selection, keyed corner payload/UI, viewer quad/error overlay, CornerPin export, Planar Roto-follow, or docs/parity row.

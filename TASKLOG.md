@@ -1,13 +1,6 @@
-## 2026-10-12 — Lane 8 S2 finish 1: dense-flow planar analysis (PARTIAL)
+## 2026-10-13 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step S2 of 3: planar tracking, a tracked plane that drives CornerPin and Roto (finish 1) (integrator tick)
 
-- **What was done (evidence):** Added a reference-to-current planar region tracker that follows a regular interior feature grid with the existing Lucas–Kanade `flow_pair`, refits a robust homography at each frame step, and returns tracked corners, error and inlier count. A synthetic 24-frame projective plate test stays within one pixel at the corners and repeats identically; RANSAC tests cover a quarter of correspondence outliers.
-- **Artifacts:** `nodebased/planar.py` and `tests/test_planar_tracking.py`, committed as `129c29d`; focused test log: `scratch/nb-lanes/run/tests-L8-planar.log`.
-- **State:** Fitter plus dense-flow sequence analysis are in. Real quarter-area image occlusion did not meet the one-pixel tolerance in a fixture, so that acceptance remains open. There is still no PlanarTracker node, Roto-region selection, keyed corner payload/UI, viewer quad/error overlay, CornerPin export, Planar Roto-follow, or docs/parity row.
-- **Next owner + concrete artifact:** Needs Gonzo to resume S2 in this worktree, starting from `nodebased/planar.py` and `tests/test_planar_tracking.py`, then wire node/panel/viewer paths and repeat the occlusion acceptance test.
-
-## 2026-10-12 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) the release fix: the checks on main pass again on Linux and Windows (playback proxy wait, Windows dock, rail and knob-row metrics, the GPU lock import, the agent session's settings, UTF-8 source scan), Lane 3 (Research, GPT-6 Astra) step T1 of 3: the research radar, generative video and temporal models for the shot pipeline, Lane 4 (Rendering, Claude Sonnet 5.5) step L2 of 3: the camera solve recovers the lens, and survey points picked in the viewer fix the scale, Lane 6 (Fluids, GPT-6 Luna) step P4 of 4: Hot pour preview at 12 frames per second, and a stop that settles within a second, Lane 8 (2D parity B, GPT-6 Luna) step S2 of 3: planar tracking, a tracked plane that drives CornerPin and Roto (integrator tick)
-
-- **What was done:** `main` `413023bf` -> `f4e96654` plus this docs commit. Evidence and per-lane commit
-  list in the dated `context/state.md` section. Full suite at `f4e96654`: Ran 5283 tests in 18885.651 s, OK (skipped=1), exit 0.
+- **What was done:** `main` `ad710e0d` -> `c68e3bc1` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `c68e3bc1`: Ran 5284 tests in 18827.584 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
 
