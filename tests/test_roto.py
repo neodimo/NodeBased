@@ -474,6 +474,15 @@ class TilePathTests(unittest.TestCase):
 
 
 class RenderTests(unittest.TestCase):
+    def test_region_result_matches_full_render_and_skips_shapes_outside_its_bounds(self):
+        shapes_to_draw = [square(4, 4, 20, 20), square(36, 36, 55, 55),
+                          square(70, 70, 90, 90, feather=3.0)]
+        full = roto.rasterise(shapes_to_draw, 100, 100)
+        stats = {}
+        roi = roto.rasterise(shapes_to_draw, 100, 100, region=(0, 0, 28, 28), stats=stats)
+        self.assertEqual(roi.tobytes(), full[:28, :28].copy().tobytes())
+        self.assertEqual(stats, {"rasterised_shapes": 1, "skipped_shapes": 2})
+
     def test_edge_feather_keeps_interior_solid_and_ends_at_the_outline_distance(self):
         shape = square(10, 10, 30, 30, feather=10.0, feather_model="edge")
         alpha = roto.rasterise([shape], 50, 50)[15, :, 3]

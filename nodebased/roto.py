@@ -290,14 +290,50 @@ def edge_feather(points, cover, feather, falloff="linear"):
     return alpha.astype(np.float32)
 
 
-def rasterise(shapes, width, height, invert=False):
+def _shape_bounds(shape):
+    """Conservative pixel-space bounds, including Bezier control hull and edge expansion."""
+    points = [point for layer in [shape.get("points", []), *shape.get("_motion_samples", ())]
+              for point in layer]
+    if not points:
+        return (0.0, 0.0, 0.0, 0.0)
+    xs = [float(p["x"]) for p in points]
+    ys = [float(p["y"]) for p in points]
+    xs += [float(p["x"]) + float(p.get(k, 0.0)) for p in points for k in ("in_x", "out_x")]
+    ys += [float(p["y"]) + float(p.get(k, 0.0)) for p in points for k in ("in_y", "out_y")]
+    pad = abs(float(shape.get("feather", 0.0)))
+    pad += max((math.hypot(float(p.get("feather_x", 0.0)),
+                          float(p.get("feather_y", 0.0))) for p in points), default=0.0)
+    if not shape.get("closed", True):
+        pad += max(0.0, float(shape.get("stroke_width", 1.0))) * .5 + 1.0
+    else:
+        pad += 1.0
+    return min(xs)-pad, min(ys)-pad, max(xs)+pad, max(ys)+pad
+
+
+def rasterise(shapes, width, height, invert=False, *, region=None, stats=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
     h, w = int(height), int(width)
     matte = np.zeros((h, w), dtype=np.float32)
     rgb = np.zeros((h, w, 3), dtype=np.float32)
+    if region is None:
+        rx0, ry0, rx1, ry1 = 0.0, 0.0, float(w), float(h)
+        crop = (0, 0, w, h)
+    else:
+        rx, ry, rw, rh = map(int, region)
+        if rw < 0 or rh < 0 or rx < 0 or ry < 0 or rx + rw > w or ry + rh > h:
+            raise ValueError("Roto region must lie inside the image")
+        rx0, ry0, rx1, ry1 = rx, ry, rx + rw, ry + rh
+        crop = (rx, ry, rw, rh)
     for shape in shapes:
         if not shape.get("visible", True):
             continue
+        sx0, sy0, sx1, sy1 = _shape_bounds(shape)
+        if sx1 <= rx0 or sx0 >= rx1 or sy1 <= ry0 or sy0 >= ry1:
+            if stats is not None:
+                stats["skipped_shapes"] = stats.get("skipped_shapes", 0) + 1
+            continue
+        if stats is not None:
+            stats["rasterised_shapes"] = stats.get("rasterised_shapes", 0) + 1
         samples = shape.get("_motion_samples", ())
         falloff = shape.get("feather_falloff", "linear")
         if not shape.get("closed", True):
@@ -345,4 +381,6 @@ def rasterise(shapes, width, height, invert=False):
             matte = alpha + matte * (1.0 - alpha)
     if invert:
         matte = 1.0 - matte
-    return np.concatenate((rgb, matte[..., None]), axis=2).astype(np.float32)
+    pixels = np.concatenate((rgb, matte[..., None]), axis=2).astype(np.float32)
+    x, y, cw, ch = crop
+    return np.ascontiguousarray(pixels[y:y + ch, x:x + cw])

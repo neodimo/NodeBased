@@ -337,7 +337,7 @@ Required by `docs/EVALUATION_TIERS.md` clause C2. Declared in
 
 | Node | ROI rule | Meaning |
 | --- | --- | --- |
-| `Roto` | generator | Reads nothing. Produces exactly the requested region. |
+| `Roto` | generator | Reads nothing. The reference evaluator produces the full matte; `roto.rasterise(..., region=...)` returns an exact crop and skips shapes whose conservative bounds miss it. TileExecutor still resolves/slices the full matte. |
 | `Tracker` | solved inverse transform | Inverse-maps the requested rectangle's corners through the solved similarity, takes the bounding box, pads by the filter support. The `mask` slot takes the requested region. |
 | `ChannelShuffle` | identity | Both `A` and `B` are read at the requested region. |
 
@@ -370,19 +370,18 @@ stored payload, exactly as `docs/ANIMATION.md` specifies for parameters:
 
 ### Tiled execution
 
-Roto, Tracker and Stabilize are deliberately **absent** from `tiles.SUPPORTED_TILED_KINDS`,
-so a graph containing one reports `supports_tiled() == False` and falls back to
-the reference `Evaluator` through the existing explicit telemetry. Tracker's
-region is data-dependent, so the tile scheduler would have to solve before it
-could plan; roto's distance field currently evaluates the full outline.
+Roto is listed in `tiles.SUPPORTED_TILED_KINDS`, and its payload-aware digest is
+resolved before tile lookup. The tile executor nevertheless obtains the complete
+Roto raster and slices it for each requested tile; it does not yet rasterise a
+tile directly. The standalone region API can crop an exact result and skip
+shapes whose conservative bounds cannot touch the requested rectangle, but its
+shape kernels still allocate at image dimensions. Proxy tiers scale the shapes
+and dimensions before rasterising, so tier output is produced at tier resolution.
 
-The tile digest carries no `node_data` term. That is safe only while the two
-sets stay disjoint, so `tests/test_roto.py` asserts the disjointness directly —
-the day someone adds `Roto` to the tiled set, that test fails and forces the
-digest change first. The alternative, folding an always-`None` payload term into
-every tile digest now, would churn every existing tile cache key for no present
-benefit. `RotoPaint` is the one payload kind that tiles; it did the digest change
-first (see "Paint strokes" below).
+Tracker, Stabilize and PlanarTracker analyses still use the reference evaluator
+and full input images. `tiers.input_regions` declares solved-transform rules for
+Tracker and Stabilize, but TileExecutor does not yet schedule those analyses
+through that ROI path. Existing analysis cache digests are unchanged.
 
 ## What this pass deliberately does not do
 
@@ -413,9 +412,12 @@ first (see "Paint strokes" below).
   `nodebased.animation.merge_key` rather than growing a second key-insertion
   code path. Until then, keying a point means sending the whole shape list
   through `set_shapes`.
-* Tracking is supported by the analysis workflow above; planar tracking remains outside this node.
-* No planar tracking, no ROI-limited or tiered execution —
-  the evaluator still runs full frame; this pass only declares its rules.
+* Planar tracking is available through PlanarTracker and Roto's planar follow link. Picking a curved
+  Roto shape as the analysis region remains unsupported; the planar region is selected with four
+  Viewer clicks.
+* The Viewer still evaluates Roto mattes at full frame before displaying a tile, and Tracker,
+  Stabilize and PlanarTracker analysis still reads full-frame inputs. Direct tile rasterisation,
+  search/pattern-only analysis reads and measured 40-shape performance at 1920 x 1080 remain open.
 
 ## Transform viewer handle
 

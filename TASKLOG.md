@@ -30,3 +30,10 @@
 - **What was done:** `main` `b1df7d9c` -> `9a7e099f` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `9a7e099f`: Ran 5312 tests in 19183.766 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
+## 2026-10-13 — Lane 8 S3 of 3: Roto/tracker ROI and proxy execution (PARTIAL)
+
+- **What was done (evidence):** Added a region-aware Roto raster API that returns an exact crop and skips shapes whose conservative bounds cannot touch the requested region. Updated ROTO_TRACKING to distinguish that API from TileExecutor's existing full-matte slicing and to state the remaining full-frame tracker analysis accurately.
+- **Artifacts:** `nodebased/roto.py`, `tests/test_roto.py`, `docs/ROTO_TRACKING.md`, and its byte-identical bundled copy, committed locally as `8e65787` on `openclaw/nb-2d-parity-b`. Test logs: `scratch/nb-lanes/run/tests-L8-S3-roto.log` and `scratch/nb-lanes/run/tests-L8-S3-precommit.log`.
+- **State:** Partial. The focused Roto tests pass. TileExecutor still solves/slices the full Roto matte; Tracker, Stabilize and PlanarTracker analysis still uses full-frame inputs. Required measured before/after timings, tracker ROI equivalence and proxy-indicator verification remain undone.
+- **Next owner + concrete artifact:** Needs Gonzo to finish S3 on this branch, implement direct tiled Roto rasterization and ROI-fed analyses, benchmark the 40-shape case, and verify proxy indication. Start at `nodebased/tileexec.py` and `docs/ROTO_TRACKING.md`.
+
