@@ -40,6 +40,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
 from . import graphlook
+from . import lensview
 from .graphcorner import GraphCorner
 from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow, hide_spin_buttons,
                       with_hidden_buttons)
@@ -1519,8 +1520,19 @@ class Viewer(PanZoomView):
             return "A only"
         return state["compare"]
 
+    def toggle_lens_view(self):
+        """The strip's "View undistorted / View plate": show the Undistort node's grown frame, or the plate it reads."""
+        step = lensview.next_view(self.window.dispatcher.document)
+        if step is None:
+            return False
+        self.window.command({"op": "view", "id": step[1]})
+        return True
+
     def sync_inputs(self):
         document = self.window.dispatcher.document
+        strip = getattr(self.window, "viewer_strip", None)
+        if strip is not None:
+            strip.sync_lens_view(document)
         view = document.get("view")
         node = document.get("nodes", {}).get(view)
         is_empty_roto = bool(node and node.get("type") == "Roto"
@@ -12746,6 +12758,16 @@ class Window(QMainWindow):
                     frame = tile_result.pixels
                     tile_detail = (f"  ·  tiles {tile_result.tile_hits} hit/{tile_result.tile_misses} miss"
                                    if tile_result.tiled else "  ·  tile fallback")
+                elif request.display and lensview.shows_overscan(request.document, target):
+                    # An Undistort node's frame is grown past the format; show all of it, where the data window puts it.
+                    raster = self.evaluator.evaluate_raster(request.document, cancel=cancel,
+                                                            frame=request.frame, tier=request.tier)
+                    frame = raster.pixels
+                    data = raster.data
+                    if raster.has_overscan:
+                        render_region = TileRegion(data.x, data.y, data.width, data.height, full_x=data.x, full_y=data.y,
+                                                   full_width=data.width, full_height=data.height)
+                    tile_detail = "  ·  overscan shown"
                 else:
                     frame = self.evaluator.evaluate(request.document, cancel=cancel,
                                                     frame=request.frame, tier=request.tier)

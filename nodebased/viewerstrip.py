@@ -17,6 +17,7 @@ from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (QAbstractSpinBox, QButtonGroup, QFrame, QHBoxLayout, QLabel, QMenu, QSizePolicy,
                                QToolButton, QWidget)
 
+from . import lensview
 from .graphcorner import svg_icon
 from .theme import TOKENS
 from .timeline import UNIT_CONTROL, UNIT_GAP
@@ -236,6 +237,16 @@ class ViewerStrip(QFrame):
         self.fit_button = tool_button("Fit", "Fit the picture to the viewer", strip_icon(FIT_ICON))
         self.fit_button.clicked.connect(lambda: window.viewer.fit())
         self.row.addWidget(self.fit_button)
+        # A graph with an Undistort node gets a switch between the straightened frame (with its overscan) and the plate.
+        self.lens_separator = separator()
+        self.lens_button = tool_button(lensview.LABELS[lensview.UNDISTORTED], lensview.TIPS[lensview.UNDISTORTED])
+        self.lens_button.setObjectName("strip-lens")
+        self.lens_button.clicked.connect(lambda: window.viewer.toggle_lens_view())
+        self.row.addWidget(self.lens_separator)
+        self.row.addWidget(self.lens_button)
+        self.lens_present = False
+        self.lens_separator.hide()
+        self.lens_button.hide()
         self.more_button = tool_button("", "More viewer options: proxy, zebra, format mask, 1:1, resets, inputs",
                                        strip_icon(MORE_ICON, 16))
         self.more_button.setObjectName("strip-more")
@@ -249,6 +260,25 @@ class ViewerStrip(QFrame):
             control.setFixedHeight(UNIT_CONTROL)
         parent.installEventFilter(self)
         self.show()
+
+    def sync_lens_view(self, document):
+        """Show the lens switch only for a graph with an Undistort node, labelled with what a click does.
+
+        The strip button goes with the text labels when the viewer is too narrow (compact); the "more" menu always has it."""
+        step = lensview.next_view(document)
+        self.lens_present = step is not None
+        if step is not None:
+            self.lens_button.setText(lensview.LABELS[step[0]])
+            self.lens_button.setToolTip(lensview.TIPS[step[0]])
+        self._show_lens_button()
+        self.place()
+
+    def _show_lens_button(self):
+        visible = self.lens_present and not self.compact
+        if visible == self.lens_button.isHidden():
+            self.lens_button.setVisible(visible)
+            self.lens_separator.setVisible(visible)
+            self.layout().invalidate()
 
     # ---- the "more" menu: every control the old rows held that the strip itself leaves out ----
     def fill_more_menu(self):
@@ -275,6 +305,12 @@ class ViewerStrip(QFrame):
         menu.addAction("Reset gamma").triggered.connect(lambda: window.set_viewer_look(gamma=1.0))
         menu.addSeparator()
         self.fill_inputs_menu(menu.addMenu("Viewer inputs"))
+        step = lensview.next_view(window.dispatcher.document)
+        if step is not None:
+            menu.addSeparator()
+            action = menu.addAction(lensview.LABELS[step[0]])
+            action.setToolTip(lensview.TIPS[step[0]])
+            action.triggered.connect(lambda: window.viewer.toggle_lens_view())
 
     def fill_inputs_menu(self, menu):
         """Input A (1-9), buffer B and the compare mode: the nine-button strip on the viewer is
@@ -318,6 +354,7 @@ class ViewerStrip(QFrame):
         style = Qt.ToolButtonStyle.ToolButtonIconOnly if compact else Qt.ToolButtonStyle.ToolButtonTextBesideIcon
         for button in (self.roi_button, self.fit_button):
             button.setToolButtonStyle(style)
+        self._show_lens_button()
         self.layout().invalidate()
 
     def place(self):
