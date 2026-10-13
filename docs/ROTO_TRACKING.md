@@ -292,6 +292,14 @@ reference frame or the current frame leaves the solve at that frame instead of
 contributing a stale position. One usable track measures translation only; none
 resolves to identity rather than to an undefined region.
 
+## PlanarTracker
+
+`PlanarTracker` tracks a four-corner plane selected in the Viewer. Set its reference frame, connect an image, choose **Pick four region corners…**, then click the quadrilateral clockwise. **Track plane forward and backward** evaluates the connected image over the requested range, samples a feature grid, follows Lucas–Kanade flow in both directions and robustly fits a homography at each frame. The four corners are stored as v8 scalar x/y tracks, with per-frame fit error, so they remain editable and serializable like Tracker points.
+
+The Viewer draws the tracked quad and colours it by its fit error. **Export CornerPin** creates a CornerPin with keyed source and destination corners. In Roto's Track link menu, choose the PlanarTracker and set Follow to **Planar** to transform the shape by the reference-to-current homography. Region picking uses four clicks; drawing or selecting an existing curved Roto shape as the tracking region is not implemented. The analysis currently runs synchronously on CPU and uses the full-frame evaluator; PlanarTracker is an analysis tap whose image output passes through unchanged.
+
+Synthetic tests recover a known 24-frame projective move within one pixel, repeat the solve deterministically, retain a one-pixel translation under a quarter-region occlusion, assert the exported CornerPin corner keys, and verify Roto follows the plane homography. These tests do not establish performance or robustness on production plates.
+
 ## Stabilize
 
 `Stabilize` is a standalone image node with its own tracked-point payload and analysis controls. It uses the same similarity fit as Tracker and always applies the inverse motion; smoothing blends nearby track positions around the reference frame. It supports the optional mask + mix contract and shares the viewer point, box, path and export workflow.
