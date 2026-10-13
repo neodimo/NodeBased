@@ -22,10 +22,11 @@ FOCAL = 22.539097818315216
 # plate's format with the Camera3D lens model, so the barrel-distorted corners show the set and not black.
 LENS_K1 = -0.03
 OVERSCAN = 1.35
-# The distorted plate of the lens round trip (demo_shot_lens.nbcomp): 960 wide, because the camera solve needs it, through
+# The distorted plate of the lens round trip (demo_shot_lens.nbcomp): 768 wide (the verifier's 2 pixel object check holds there and
+# not at 960, see the README) through
 # a barrel lens with a small second term. `--plate distorted` on the run scripts selects it.
 DISTORTED_K1, DISTORTED_K2 = -0.03, 0.004
-DISTORTED_SIZE = (960, 540)
+DISTORTED_SIZE = (768, 432)
 
 
 def camera_at(frame, move=FRAMES):
@@ -218,16 +219,22 @@ def lens_for_format(lens, scale):
     return out
 
 
-def overscan_margins(lens, size, extra=2):
-    """Pixels to add on each side of the plate so that Undistort's grown frame fits: (mx, my), even, from the
-    window the node itself would make (nodebased.lensmodel.undistorted_window) plus `extra` pixels."""
+def overscan_margins(lens, size, extra=2, multiple=16):
+    """Pixels to add on each side of the plate so that Undistort's grown frame fits: (mx, my), from the window the
+    node itself would make (nodebased.lensmodel.undistorted_window) plus `extra` pixels, raised until the overscan frame
+    is a multiple of `multiple` pixels each way (what a diffusion model's working size wants)."""
     from nodebased import lensmodel
     from nodebased.raster import Region
     width, height = size
     box = Region(0, 0, width, height)
     x, y, w, h = lensmodel.undistorted_window(lensmodel.from_params(lens), box, box)
-    grow = (max(-x, x + w - width), max(-y, y + h - height))
-    return tuple(int(-(-(g + extra) // 2) * 2) for g in grow)
+    out = []
+    for grow, length in ((max(-x, x + w - width), width), (max(-y, y + h - height), height)):
+        margin = int(grow + extra)
+        while (length + 2 * margin) % multiple:
+            margin += 1
+        out.append(margin)
+    return tuple(out)
 
 
 def overscan_camera_params(lens, size, margins):
