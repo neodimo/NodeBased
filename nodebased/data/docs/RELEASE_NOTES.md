@@ -1,3 +1,126 @@
+# NodeBased 0.36.0 — the new look lands (node column, viewer strip, timeline, Properties, transport), Roto draws and feathers in the viewer, a lens on the camera that the solve can now recover, shadow catchers and holdouts, SDXL as the first real model provider with a generated shot that stops flickering, and a camera solved from the plate
+
+## What changed since 0.35.0
+
+- **The new look (stages three to five, and the punch lists from DiMo's reviews).**
+  - A left column of node families with SVG icons for the thirteen families and 146 common nodes, drawn in any
+    colour, and a floating node panel; the window's minimum width follows the top bar. A free node dragged onto a
+    wire is spliced in: the wire lights up under the card, the drop goes into the main input and the old
+    destination (mask kept), one undo.
+  - The viewer strip and corner readouts, a slim time row and timeline track, slim dock title bars, and a graph
+    "?" overlay in place of the cheat-line. Panels are locked by default so docked panels have no title bars
+    (Workspace → Lock panels brings them back). Simulate and Render have their own dock layouts, saved and
+    restored per tab; an output preview panel; the top bar search lists node types, menu commands and settings in
+    one list and Enter runs the first result. Views stay framed on resize until the artist zooms; the graph
+    frames its nodes above the corner's button row.
+  - Properties restyled: compact sections, colour wheels centred at neutral, number fields and sliders from the
+    theme, and knob rows sized by the number they show so a colour's four fields and an xyz row stay on one line.
+    The panel is empty with nothing selected.
+  - A status bar: cache, frame, when the project was last saved, version, and a state word at the left (Ready,
+    Rendering, Playing, Saving). The viewer no longer draws a dotted frame and size label around the canvas. The
+    family panel animates on a shared motion clock with a motion preference.
+  - The viewer surround is pure black in every theme, 2D and 3D. A full transport: start, previous key, step,
+    play backwards, stop, play, next key, end and a loop mode (once, loop, ping-pong), with Nuke's keys (J, K, L,
+    Alt+Left/Right); the strip and the timeline are one quiet playback unit with 28 px controls on an 8 px rhythm
+    and a thin ruler with key ticks and the cache line. The accent is an amber like Nuke's selection colour
+    (#e0a24a); the mint and the muted teal stay as named choices.
+  - Wiring feel: a dragged wire snaps to the nearest compatible socket within 40 screen pixels, or to the card
+    under the pointer, at every zoom; the socket and card light up and the status bar names the target. Pressing
+    beside a socket, on its label or on a card's bottom band starts a wire; sockets grow as the pointer nears.
+- **2D.**
+  - `Roto` draws and edits bezier curves in the viewer (drawing begins on press, tolerances scale with zoom), moves
+    several points at once, and has a transform box: move, scale and rotate the shape. Open splines can be
+    stroked instead of filled.
+  - Feather grows outward from the shape's edge, inward with a negative value, with a feather handle per point,
+    animated offsets, a reset for the selected points and an undo per gesture. Older projects keep their previous
+    feather rendering (schema 22) and the panel offers the model switch. A 1080p feather of 50 renders in
+    about 0.11 s.
+- **Rendering.**
+  - Per-object switches on every mesh node: Cast shadows, Receive shadows, Visible to camera, Holdout and Shadow
+    catcher, honoured by the CPU and GPU raster, ray-traced and path-traced modes (the instanced GPU tracer falls
+    back to the CPU). A holdout is cut out of the picture and the data passes. A shadow catcher renders black with
+    the shadows the scene's other objects throw on it as alpha; depth sees the floor, the object-id pass and
+    Cryptomatte do not. Docs sections on shadow catcher floors and putting CG onto a plate, and
+    `examples/shadow_catcher`. The viewport's shadow pass honours Cast shadows.
+  - A lens on the camera: Brown-Conrady distortion (radial, tangential, principal point, squeeze) on `Camera3D`
+    and imported cameras (schema 21; older files load with no lens). `Undistort` straightens a plate with overscan
+    so nothing is cut off and `Redistort` puts the lens back; `Project3D`, the tracker rays and the SceneState
+    export read the lens.
+  - The GPU path tracer does less work outside the card: scene buffers, accumulator, bind groups and readback
+    buffers are kept between frames, several passes go in one submission with one uniform write, volume grids are
+    packed with one copy, and the image is finished on the card for callers that skip the noise maps. The CPU path
+    tracer samples from the occlusion-scaled diffuse colour so it matches the GPU (one scene from 55 to 106 dB).
+    The full portable matrix is measured on the RTX 3080 Ti, the Radeon 8060S and the software renderer, and
+    `tools/profile_host_phases.py` measures the host side of a frame by phase.
+- **Camera tracking.** A `CameraSolve3D` node and `solve_camera` command: DPV-SLAM runs on the graphics card as a
+  subprocess provider, with anchor and scale controls, and writes a keyed `Camera3D` and a point cloud into the
+  document. On the demo plate at 960x540 it runs at 45 frames per second in half a gigabyte and lands within 2 cm
+  of the true camera; DROID-SLAM was measured as the reference.
+  - The solve recovers the lens and takes its scale from a survey. With no lens given, `CameraSolve3D` fits the
+    focal length and k1/k2 by a bundle adjustment over the solver's own tracked points, and reports the median
+    error and inlier fraction before and after. Survey points picked in the viewer are followed through the
+    plate and the solve is aligned to their measured distance by scale or similarity (schema 23). The panel shows
+    the last solve's lens and scale under Solve result. On synthetic tracks with known truth the focal length is
+    within 1 percent at 1920 wide and k1 within 10 percent; the demo shot gains a k1 lens plate for the benchmark.
+  - A deterministic robust homography fit and a dense-flow planar follow (`nodebased/planar.py`): a selected
+    quadrilateral is tracked with Lucas-Kanade flow and a projective fit with outlier rejection, recovering the
+    corners within a pixel over 24 synthetic frames. Library only in this release; the node and viewer picking
+    follow.
+- **Generative conditioning.** The first real model provider: SDXL ControlNet-Union, with control images from the
+  depth and normals passes, running in its own interpreter as a subprocess, one frame at a time with a fixed seed,
+  deterministic on the RTX 3080 Ti; model CPU offload by default so the pixels never depend on how much of the
+  card other programs hold. MCP tools (`export_conditioning`, `generate`, `verify`, `loop`, `artifacts`,
+  `workspace`) for an attached agent; `verify` scores the plate against its own SceneState; `Generate` carries the
+  seed and sampler settings in the artifact identity. The demo shot runs end to end: a rendered plate, a camera
+  solve from it, the shot graph, a headless hand run, a scripted agent run through MCP and a real Claude Code run,
+  all with the same verdict. A `ConditionedRead` of a generated sequence now reads the right frame (every frame
+  rendered as frame 1 before). The Agent panel and the Conditioning Queue wear the new look.
+  - The generated shot stops flickering. `verify` measures temporal flicker (each frame warped into the next
+    with the exported motion, occlusion and ID masked) and `sdxl_controlnet` 1.2 guides every frame from a
+    warped canvas of frame 1 with holes filled from the frame's own text-to-image pass. On the demo shot the
+    flicker drops from 15.4 to 2.6 display steps mean (48.3 to 7.7 at the 95th percentile), a PASS; the shot runs
+    twice by hand and once by the agent to identical result ids. Chaining image-to-image from the previous frame
+    (1.1) was tried first and compounded the model's contrast gain until the picture broke up.
+- **Fluids.** Cached fluid playback: frames are packed, shared legacy caches are kept, budgets are isolated per
+  simulation, full runs are retained (the Hot pour steam cache included) and eviction during a disk read is
+  tolerated. While scrubbing, the preview draws reduced detail (48³ 8-bit volumes, bounded liquid and whitewater
+  points, liquid points before the full surface) and reports a production miss; reduced frames persist. Decoded
+  preview frames sit in a ring buffer, procedural geometry tracks are reused, and a stopped preview refines
+  progressively. The production Hot pour preview at 240 x 135 plays at about 6.5 ms a frame on the Radeon
+  (23 ms on the software renderer), well inside the 12 frames per second target.
+- **Infrastructure.** GPU jobs (the SDXL and camera-solve launchers, the demo script) take an exclusive lock on the
+  shared GPU lock file, so a model run waits for a running suite and a suite waits for a run. Every window a test
+  opens is closed again.
+
+## Known limits
+
+- **Windows:** tested by the automated suite on the CI runner only. The GPU lock and the model providers (SDXL,
+  DPV-SLAM) have only been run on Linux.
+- **Lens:** CPU only; `Render3D` and the viewport still draw through the ideal camera. The camera solve is given
+  the lens or recovers it from its own tracks; the recovered lens inherits DPV-SLAM's millimetre of run-to-run
+  drift, so two solves give slightly different focal lengths and ids after the solve change. The lens benchmark
+  on the real DPVO solves (960 and 1920 wide, plain and k1 plates) is queued behind the GPU lock and not yet
+  recorded. Use plates 960 pixels wide or more. No filmed plate yet.
+- **Fluids:** the preview plays inside its budget, but stopping it enters whitewater reconstruction and does not
+  settle to half resolution within a second; the stop timings at frames 1, 60 and 120 are not recorded.
+- **Planar tracking:** library and tests only; no PlanarTracker node, region picking, CornerPin export or Roto
+  follow yet, and one-pixel recovery under quarter-area occlusion is unproven.
+- **New look:** starting a wire uses 20 px (40 would turn every press on a title into a wire); a body drop onto a
+  card with no free input is dropped; J while playing forwards stops and steps back.
+- **Roto:** the feather handles have no real-display visual review yet. **2D:** the Keylight row stays partial.
+  **Rigid bodies:** no fracture.
+
+## Moved to 0.37.0
+
+- The PlanarTracker node with viewer picking, a tracked plane that drives CornerPin and Roto, and the rest of
+  2D parity B.
+- Lens, part three: the lens in `Render3D` and the viewport, and the measured DPVO lens benchmark.
+- A fluid stop that reuses the baked liquid and whitewater artifacts and settles within a second.
+- Stage 9 of the end-to-end sprint: a second live camera solver measured against the plate, from the research
+  radar's tracking and reconstruction survey.
+- The last stages of the new look, and DiMo's filmed plate through the camera solve.
+- The 2D-to-3D pipe (ImageToSplat, ImageToMesh, WorldSculpt), on hold.
+
 # NodeBased 0.35.0 — the first of the new look, a Roto node that animates and follows trackers, a graph that behaves like Nuke's, volumes in the path tracer, adaptive sampling that pays off on the GPU, and liquids that stay on the card
 
 ## What changed since 0.34.0
