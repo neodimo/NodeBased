@@ -140,6 +140,9 @@ def main():
     args.out = args.out or str(shot.default_cache() / f"out-agent{suffix}")
     args.cache = args.cache or str(shot.default_cache() / f"store-agent{suffix}")
     args.plate = str(plate)
+    if lens:
+        import make_plate
+        make_plate.ensure_distorted_plate(plate)
     started = time.perf_counter()
     if args.provider == "sdxl_controlnet":
         # The window runs with a private settings home, where the provider's default interpreter and the Hugging

@@ -79,6 +79,9 @@ def main():
     args = parser.parse_args()
     graph, plate, lens = shot.resolve_plate(args.plate)
     args.graph, args.plate = args.graph or str(graph), str(plate)
+    if lens:
+        import make_plate
+        make_plate.ensure_distorted_plate(plate)
     work = args.work or str(shot.default_cache() / ("compare-distorted" if lens else "compare"))
     Path(work).mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()

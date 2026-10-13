@@ -256,6 +256,9 @@ def main():
     args.out = args.out or str(shot.default_cache() / f"out{suffix}")
     args.cache = args.cache or str(shot.default_cache() / f"store{suffix}")
     args.plate = str(plate)
+    if lens:
+        import make_plate
+        make_plate.ensure_distorted_plate(plate)
     started = time.perf_counter()
     info_file = Path(args.cache).parent / "sdxl-run-info.json"
     os.environ["NODEBASED_SDXL_RUN_INFO"] = str(info_file)  # the SDXL provider writes its timings and peak VRAM here
