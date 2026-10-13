@@ -96,6 +96,7 @@ from .groups import scope_document
 from . import shapes as shape_model
 from . import handles2d
 from . import tracker as tracker_model
+from . import planar as planar_model
 from .agentpanel import AgentPanel
 from .knobs import knob_layout
 from . import materialpreview
@@ -249,6 +250,7 @@ PANEL_NODE_HELP = {
     "Roto": "Animatable closed shapes and open stroked splines produce a premultiplied matte. View this node to draw and edit points; payload changes use validated set_shapes.",
     "RotoPaint": "Drag in this node's viewer to add one undoable stroke. Connect input2 for reveal; clone samples the plate at the previous frame for DustBust.",
     "Tracker": "Pixel NCC tracking uses float scene-linear pixels. One validated set_tracks command commits after completion; failure or cancellation leaves the document unchanged.",
+    "PlanarTracker": "Tracks a four-corner plane with bidirectional flow and robust homographies; corners export to CornerPin or drive Roto Planar follow.",
     "Viewer": "Shows the current view target. Its input follows the view target and appears as a faint tap, never a processing connection. Pixels pass through unchanged.",
     "WriteGeo3D": "OBJ exports world-space geometry, UVs and vertex normals; USD also exports colours. A .scene.json path exports versioned per-frame scene state and an adjacent NPZ. Connect a Camera3D to the optional camera input for that mode. The scene passes through unchanged, including when disabled.",
     "GenerateLUT": "Samples the upstream colour graph on an identity lattice and writes the selected 3D LUT size.",
@@ -1265,6 +1267,9 @@ class Viewer(PanZoomView):
         self.analysis_drag = None
         self.flare_drag = None
         self.tracker_picking = False
+        self.planar_picking = False
+        self.planar_pick_key = None
+        self.planar_pick_points = []
         self.track3d_picking = None
         self.tracker_drag = None
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
@@ -2302,6 +2307,37 @@ class Viewer(PanZoomView):
                 best, distance = {"kind": "point", "index": index}, d
         return best
 
+    def _draw_planar_overlay(self, painter):
+        context = self.window._planar_context()
+        if context is None or self.format_rect is None:
+            return
+        key, node, payload = context
+        tracks = payload.get("tracks", [])
+        if len(tracks) < 4:
+            points = self.planar_pick_points if self.planar_pick_key == key else []
+            if points:
+                painter.save(); painter.setPen(QPen(QColor("#f4ce63"), 2)); painter.setBrush(Qt.BrushStyle.NoBrush)
+                poly = QPolygonF([self._roto_scene_point({"x": x, "y": y}, 1) for x, y in points])
+                if len(points) > 1: painter.drawPolyline(poly)
+                for point in poly: painter.drawEllipse(point, 4, 4)
+                painter.restore()
+            return
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        try:
+            corners = planar_model.resolve_corners(payload, frame)
+        except ValueError:
+            return
+        scene = [self._roto_scene_point({"x": float(x), "y": float(y)}, 1) for x, y in corners]
+        scene.append(scene[0])
+        errors = [shape_model.resolve_scalar(track.get("error", 0.0), frame, "error") for track in tracks[:4]]
+        error = float(np.mean(errors))
+        color = QColor.fromRgbF(min(1.0, .2 + error), max(0.0, .9-error), .18)
+        painter.save(); painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(color, 2); pen.setCosmetic(True); painter.setPen(pen); painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPolyline(QPolygonF(scene))
+        for point in scene[:-1]: painter.drawEllipse(point, 4, 4)
+        painter.restore()
+
     def _draw_tracker_overlay(self, painter):
         self._draw_reconcile_overlay(painter)
         context = self.window._tracker_context()
@@ -2951,6 +2987,13 @@ class Viewer(PanZoomView):
             self.window.statusBar().showMessage(f"{what} picking finished")
             event.accept()
             return
+        if event.key() == Qt.Key.Key_Escape and self.planar_picking:
+            self.planar_picking = False
+            self.planar_pick_key = None
+            self.planar_pick_points = []
+            self.unsetCursor(); self.hide_prompt()
+            self.window.statusBar().showMessage("Planar region picking cancelled")
+            event.accept(); return
         if event.key() == Qt.Key.Key_Escape and self.tracker_picking:
             self.tracker_picking = False
             self.unsetCursor()
@@ -3493,6 +3536,7 @@ class Viewer(PanZoomView):
             painter.restore()
         self._draw_warp_overlay(painter)
         self._draw_tracker_overlay(painter)
+        self._draw_planar_overlay(painter)
         self._draw_survey_overlay(painter)
         transform_context = self._transform_context()
         if transform_context is not None:
@@ -3630,6 +3674,18 @@ class Viewer(PanZoomView):
             self.window.crypto_pick(self.crypto_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
             event.accept()
             return
+        if event.button() == Qt.MouseButton.LeftButton and self.planar_picking:
+            self.planar_pick_points.append(self._tracker_data_point(scene_pos))
+            if len(self.planar_pick_points) == 4:
+                key = self.planar_pick_key
+                points = copy.deepcopy(self.planar_pick_points)
+                self.planar_picking = False; self.planar_pick_key = None; self.planar_pick_points = []
+                self.unsetCursor(); self.hide_prompt()
+                self.window.set_planar_region(key, points)
+            else:
+                self.window.statusBar().showMessage(
+                    f"Planar region: corner {len(self.planar_pick_points)+1} of 4 · click clockwise · Esc cancels")
+            self.viewport().update(); event.accept(); return
         if event.button() == Qt.MouseButton.LeftButton and self.tracker_picking:
             context = self.window._tracker_context()
             if context is not None:
@@ -10826,6 +10882,24 @@ class Window(QMainWindow):
                 export_pin = QPushButton("Export CornerPin")
                 export_pin.clicked.connect(lambda checked=False, k=key: self.export_tracker_cornerpin(k))
                 form.addRow(export_pin)
+            if node["type"] == "PlanarTracker":
+                pick_region = QPushButton("Pick four region corners…")
+                pick_region.setObjectName("planar-pick-region")
+                pick_region.setToolTip("Click the plane corners clockwise in the viewer; Esc cancels")
+                pick_region.clicked.connect(lambda checked=False, k=key: self.begin_planar_pick(k))
+                form.addRow(pick_region)
+                timeline = self.dispatcher.document["time"]
+                first = QSpinBox(); first.setRange(timeline["first"], timeline["last"])
+                last = QSpinBox(); last.setRange(timeline["first"], timeline["last"])
+                first.setValue(timeline["first"]); last.setValue(timeline["last"])
+                analyse = QPushButton("Track plane forward and backward")
+                analyse.clicked.connect(lambda checked=False, k=key, a=first, b=last:
+                                        self.analyse_planar(k, a.value(), b.value()))
+                form.addRow(analyse)
+                form.addRow("From frame", first); form.addRow("Through frame", last)
+                export_pin = QPushButton("Export CornerPin")
+                export_pin.clicked.connect(lambda checked=False, k=key: self.export_tracker_cornerpin(k))
+                form.addRow(export_pin)
             if node["type"] == "ReadAlembic3D" and not node["disabled"]:
                 from . import alembicio
                 # Inspector hints must never prevent opening an invalid node's panel.
@@ -11225,6 +11299,78 @@ class Window(QMainWindow):
         if int(node["params"].get("reference_frame", frame)) != frame:
             self.command({"op": "set", "id": key, "param": "reference_frame", "value": frame})
         return self.viewer.begin_roto_draw(key)
+
+    def _planar_context(self, key=None):
+        selected = key or self.graph.selected_id()
+        node = self.dispatcher.document["nodes"].get(selected) if selected else None
+        if node is None or node["type"] != "PlanarTracker":
+            return None
+        return selected, node, self.dispatcher.document.get("node_data", {}).get(selected, {"tracks": []})
+
+    def begin_planar_pick(self, key):
+        context = self._planar_context(key)
+        if context is None or not context[1]["inputs"].get("image"):
+            self._show_command_error(ValueError("Connect an image to PlanarTracker before picking its region")); return False
+        if self.dispatcher.document.get("view") != key:
+            self.command({"op": "view", "id": key})
+        frame = int(context[1]["params"].get("reference_frame", 1))
+        if int(self.dispatcher.document["time"]["current"]) != frame:
+            self.set_time(current=frame)
+        self.viewer.planar_picking = True
+        self.viewer.planar_pick_key = key
+        self.viewer.planar_pick_points = []
+        self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+        self.viewer.show_prompt("PlanarTracker: click four corners clockwise · Esc cancels")
+        self.statusBar().showMessage("PlanarTracker: click four corners clockwise")
+        return True
+
+    def set_planar_region(self, key, points):
+        if len(points) != 4:
+            return False
+        tracks = [{"name": f"corner{i+1}", "enabled": 1, "x": float(point[0]),
+                   "y": float(point[1]), "error": 0.0} for i, point in enumerate(points)]
+        try:
+            self.command({"op": "set_tracks", "id": key, "tracks": tracks})
+        except ValueError as error:
+            self._show_command_error(error); return False
+        self.statusBar().showMessage("PlanarTracker region set; run Track plane to analyze it")
+        return True
+
+    def analyse_planar(self, key, first_frame=None, last_frame=None):
+        context = self._planar_context(key)
+        if context is None:
+            return False
+        _, node, payload = context
+        if len(payload.get("tracks", [])) != 4:
+            self._show_command_error(ValueError("Pick four region corners before tracking")); return False
+        source = node["inputs"].get("image")
+        if source is None:
+            self._show_command_error(ValueError("Connect an image before tracking the plane")); return False
+        doc = copy.deepcopy(self.dispatcher.document)
+        ref = int(node["params"].get("reference_frame", 1))
+        timeline = doc["time"]
+        lo = int(timeline["first"] if first_frame is None else first_frame)
+        hi = int(timeline["last"] if last_frame is None else last_frame)
+        lo, hi = min(lo, ref), max(hi, ref)
+        if hi-lo > 5000:
+            self._show_command_error(ValueError("Planar analysis is limited to 5,001 frames")); return False
+        from . import planar
+        try:
+            corners = planar.resolve_corners(payload, ref)
+            frames = {f: self.evaluator.evaluate_raster(doc, source, frame=f, tier=1).pixels
+                      for f in range(lo, hi+1)}
+            results = planar.track_region(frames, corners, ref,
+                samples_per_axis=int(node["params"].get("samples_per_axis", 8)),
+                vector_detail=int(node["params"].get("vector_detail", 4)),
+                smoothness=float(node["params"].get("smoothness", 1.0)), backend="cpu",
+                threshold=float(node["params"].get("ransac_threshold", 2.0)))
+            tracks = planar.tracks_from_results(results)
+            self.command({"op": "set_tracks", "id": key, "tracks": tracks})
+        except (ValueError, np.linalg.LinAlgError) as error:
+            self._show_command_error(error); return False
+        self.statusBar().showMessage(f"PlanarTracker: tracked {len(results)} frames")
+        self.viewer.viewport().update()
+        return True
 
     def _tracker_context(self, key=None):
         selected = key or self.graph.selected_id()
@@ -11675,7 +11821,7 @@ class Window(QMainWindow):
 
     def export_tracker_cornerpin(self, key):
         node = self.dispatcher.document["nodes"].get(key)
-        if node is None or node["type"] not in ("Tracker", "Stabilize"):
+        if node is None or node["type"] not in ("Tracker", "Stabilize", "PlanarTracker"):
             return False
         source = node["inputs"].get("image")
         tracks = copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(key, {}).get("tracks", []))

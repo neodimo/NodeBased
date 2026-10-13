@@ -506,6 +506,12 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("adaptive_update",)), KnobGroup("enum", ("tracking_channels",)),
         KnobGroup("enum", ("filter",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "PlanarTracker": _groups(
+        KnobGroup("int", ("reference_frame",), label="Reference frame"),
+        KnobGroup("int", ("samples_per_axis",), label="Feature grid"),
+        KnobGroup("int", ("vector_detail",), label="Flow detail"),
+        KnobGroup("float", ("smoothness",)), KnobGroup("float", ("ransac_threshold",), label="RANSAC threshold"),
+        KnobGroup("enum", ("filter",))),
     "Stabilize": _groups(
         KnobGroup("int", ("reference_frame",)), KnobGroup("bool", ("apply_translate",)),
         KnobGroup("bool", ("apply_rotate",)), KnobGroup("bool", ("apply_scale",)),

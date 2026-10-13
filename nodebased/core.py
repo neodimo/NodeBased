@@ -608,6 +608,10 @@ SPECS = {
                            "filter": "bilinear", "mix": 1.0}},
     # Stabilize uses the same tracked similarity fit as Tracker with the inverse transform fixed
     # on, and its own smoothing control in place of Tracker's mode switch.
+    # PlanarTracker is an analysis tap: Lucas–Kanade flow and robust fitting write four
+    # animatable corner tracks into node_data; the image itself passes through unchanged.
+    "PlanarTracker": {"inputs": ["image"], "params": {"reference_frame": 1, "samples_per_axis": 8,
+                    "vector_detail": 4, "smoothness": 1.0, "ransac_threshold": 2.0, "filter": "bilinear"}},
     "Stabilize": {"inputs": ["image"], "optional_inputs": ["mask"],
                   "params": {"reference_frame": 1, "apply_translate": 1, "apply_rotate": 1,
                              "apply_scale": 1, "smoothing": 0, "pattern_radius": 8,
@@ -1467,6 +1471,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "invert": (0, 1), "hide_input": (0, 1), "reference_frame": (-1000000, 1000000),
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
           "pattern_radius": (1, 128), "search_radius": (1, 256), "adaptive_update": (0, 1),
+          "samples_per_axis": (2, 24), "ransac_threshold": (0.01, 100.0),
           "frame_offset": (-1000000, 1000000),
           "minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0),
           "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1),
@@ -2925,7 +2930,7 @@ class Dispatcher:
                                                    "source_frame": "integer or relative",
                                                    "follow_track": "null or {node_id, track_index}",
                                                    "patch_blend": "0 (pure previous-frame clone) to 1 (pure same-frame patch fill)"},
-                                  "set_tracks": {"id": "string (Tracker node id)",
+                                  "set_tracks": {"id": "string (Tracker or PlanarTracker node id)",
                                                  "tracks": "[{name, enabled, x, y}]"}},
                     # Knob expressions (schema v9). A numeric parameter may carry a curve or an
                     # expression, never both; the document is rejected if it carries both.

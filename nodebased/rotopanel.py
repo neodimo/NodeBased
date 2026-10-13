@@ -189,6 +189,9 @@ def build_panel(window, key):
         follow.addItem("No Tracker link", None)
         trackers=window.dispatcher.document["nodes"]
         for tracker_id, tracker_node in trackers.items():
+            if tracker_node["type"] == "PlanarTracker":
+                follow.addItem(f"{tracker_node['name']} · plane", {"tracker_id": tracker_id, "track_name": "corner1"})
+                continue
             if tracker_node["type"] not in ("Tracker", "Stabilize"): continue
             for track in window.dispatcher.document.get("node_data", {}).get(tracker_id, {}).get("tracks", []):
                 follow.addItem(f"{tracker_node['name']} · {track['name']}",
@@ -204,6 +207,7 @@ def build_panel(window, key):
         follow.currentIndexChanged.connect(set_follow); layout.addWidget(QLabel("Transform follows")); layout.addWidget(follow)
         follow_mode=QComboBox(); follow_mode.setObjectName(f"roto-shape-track-follow-{i}")
         follow_mode.addItem("Translate only", "translate"); follow_mode.addItem("Full Tracker solve", "full")
+        follow_mode.addItem("Planar", "planar")
         follow_mode.setCurrentIndex(follow_mode.findData(shape.get("track_follow", "translate")))
         follow_mode.currentIndexChanged.connect(lambda index, idx=i, box=follow_mode: row_edit(idx, "track_follow", box.itemData(index)))
         layout.addWidget(follow_mode)

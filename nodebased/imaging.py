@@ -3228,7 +3228,7 @@ class Evaluator:
         source = inputs[0]
         if kind in ("MinColor", "Sampler", "CurveTool"):
             return source
-        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile"):
+        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile", "PlanarTracker"):
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
         if kind == "Shuffle" and p.get("layer"):
             layer = Evaluator._layer_of(kind, source, p["layer"])
@@ -4207,7 +4207,7 @@ class Evaluator:
             frame = np.ones((p["height"], p["width"], 4), np.float32)
             frame[..., :3] = (0.06 + pattern * 0.24)[..., None]
             return frame
-        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile"):
+        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile", "PlanarTracker"):
             # Write is a tap, not a transform: rendering it is an explicit action, and the pixels
             # continue downstream untouched so parking one mid-branch changes nothing.
             return inputs[0]

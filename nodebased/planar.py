@@ -135,7 +135,7 @@ def track_region(frames, corners, reference_frame, *, samples_per_axis=8, vector
             displacement = _sample(field, sx, sy)
             visible = _sample(occ.astype(np.float32), sx, sy) < 0.5
             if int(visible.sum()) < 4:
-                visible[:] = True
+                raise PlanarTrackingError("fewer than four visible planar features remain")
             candidates = positions[current] + displacement
             step_h, _, _ = fit_homography_ransac(positions[current][visible], candidates[visible], threshold=threshold)
             # Reproject the full region grid through the robust per-step model. This prevents
@@ -152,3 +152,60 @@ def track_region(frames, corners, reference_frame, *, samples_per_axis=8, vector
         result[frame] = {"corners": tracked.tolist(), "matrix": matrix.tolist(),
                          "error": rms, "features": int(inliers.sum())}
     return result
+
+
+def tracks_from_results(results):
+    """Encode tracked quad samples in the animatable scalar envelope used by Tracker."""
+    frames = sorted(int(frame) for frame in results)
+    if not frames:
+        raise PlanarTrackingError("no planar tracking samples were produced")
+    def envelope(values):
+        curve = {"interpolation": "linear", "keys": [
+            {"frame": frame, "value": float(value)} for frame, value in zip(frames, values)]}
+        return {"value": float(values[0]), "curve": curve}
+    tracks = []
+    for corner in range(4):
+        xs = [results[frame]["corners"][corner][0] for frame in frames]
+        ys = [results[frame]["corners"][corner][1] for frame in frames]
+        errors = [results[frame]["error"] for frame in frames]
+        tracks.append({"name": f"corner{corner+1}", "enabled": 1,
+                       "x": envelope(xs), "y": envelope(ys), "error": envelope(errors)})
+    return tracks
+
+
+def resolve_corners(payload, frame):
+    from .shapes import resolve_tracks
+    tracks = resolve_tracks(payload or {"tracks": []}, int(frame))
+    if len(tracks) < 4:
+        raise PlanarTrackingError("pick four planar region corners before using the track")
+    return np.asarray([[track["x"], track["y"]] for track in tracks[:4]], dtype=np.float64)
+
+
+def homography_from_quads(reference_corners, current_corners):
+    """Fit the plane mapping from its four reference/current corner pairs."""
+    matrix, inliers, _ = fit_homography_ransac(reference_corners, current_corners, threshold=1e-5)
+    if not inliers.all():
+        raise PlanarTrackingError("four planar corners do not define a consistent mapping")
+    return matrix
+
+
+def apply_homography_to_shape(shape, matrix, tier=1):
+    """Move resolved Roto anchors and their local handle vectors with the tracked plane."""
+    for point_set in [shape.get("points", []), *shape.get("_motion_samples", [])]:
+        for point in point_set:
+            anchor = np.array([[point["x"]*tier, point["y"]*tier]])
+            mapped_anchor = project_points(matrix, anchor)[0] / tier
+            for xf, yf in (("in_x", "in_y"), ("out_x", "out_y"), ("feather_x", "feather_y")):
+                vector = np.array([[point["x"]*tier + point.get(xf, 0.0)*tier,
+                                    point["y"]*tier + point.get(yf, 0.0)*tier]])
+                mapped_vector = project_points(matrix, vector)[0] / tier
+                point[xf], point[yf] = float(mapped_vector[0]-mapped_anchor[0]), float(mapped_vector[1]-mapped_anchor[1])
+            point["x"], point["y"] = map(float, mapped_anchor)
+
+
+def invert_homography(matrix):
+    """Return a stable inverse projective mapping."""
+    inverse = np.linalg.inv(np.asarray(matrix, dtype=np.float64))
+    if not np.isfinite(inverse).all():
+        raise PlanarTrackingError("homography has no finite inverse")
+    return inverse / inverse[2, 2]

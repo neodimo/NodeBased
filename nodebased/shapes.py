@@ -54,7 +54,7 @@ POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
 FEATHER_POINT_FIELDS = ("feather_x", "feather_y")
 
 # Payload shape per node type. A node type absent from this table may not appear in `node_data`.
-NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks", "RotoPaint": "items",
+NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks", "PlanarTracker": "tracks", "RotoPaint": "items",
                     "SplineWarp": "pairs", "GridWarp": "grid"}
 
 # Pixel-unit scalars inside a payload — these must be scaled by a proxy tier change alongside
@@ -148,7 +148,7 @@ def validate_shape(shape, where):
                              or not isinstance(link["tracker_id"], str) or not link["tracker_id"]
                              or not isinstance(link["track_name"], str) or not link["track_name"]):
         raise ValueError(f"{where}.track_link must identify a Tracker and track name")
-    if shape.get("track_follow", "translate") not in ("translate", "full"):
+    if shape.get("track_follow", "translate") not in ("translate", "full", "planar"):
         raise ValueError(f"{where}.track_follow must be translate or full")
     transform = shape.get("transform", {})
     if not isinstance(transform, dict) or set(transform) - set(TRANSFORM_DEFAULTS):
@@ -340,7 +340,7 @@ def validate_node_data(node_data, nodes):
                 link = shape.get("track_link")
                 if link is None: continue
                 tracker_id = link["tracker_id"]
-                if tracker_id not in nodes or nodes[tracker_id]["type"] not in ("Tracker", "Stabilize"):
+                if tracker_id not in nodes or nodes[tracker_id]["type"] not in ("Tracker", "Stabilize", "PlanarTracker"):
                     raise ValueError(f"node_data[{key!r}].shapes[{index}]: track_link must name a Tracker")
                 tracks = node_data.get(tracker_id, {}).get("tracks", [])
                 if not any(track["name"] == link["track_name"] for track in tracks):
@@ -484,7 +484,21 @@ def unresolve_roto_point(point, shape, document, frame, tier=1):
     if track_node is not None:
         data = document.get("node_data", {}).get(link["tracker_id"], {})
         reference = int(track_node["params"].get("reference_frame", 1))
-        if shape.get("track_follow", "translate") == "full":
+        if shape.get("track_follow", "translate") == "planar" and track_node["type"] == "PlanarTracker":
+            from . import planar as planar_model
+            ref_corners = planar_model.resolve_corners(data, reference)
+            current_corners = planar_model.resolve_corners(data, frame)
+            inverse = planar_model.invert_homography(
+                planar_model.homography_from_quads(ref_corners, current_corners))
+            anchor = [[result["x"]*tier, result["y"]*tier]]
+            mapped_anchor = planar_model.project_points(inverse, anchor)[0] / tier
+            for xf, yf in (("in_x", "in_y"), ("out_x", "out_y")):
+                endpoint = [[result["x"]*tier + result.get(xf, 0.0)*tier,
+                             result["y"]*tier + result.get(yf, 0.0)*tier]]
+                mapped_endpoint = planar_model.project_points(inverse, endpoint)[0] / tier
+                result[xf], result[yf] = float(mapped_endpoint[0]-mapped_anchor[0]), float(mapped_endpoint[1]-mapped_anchor[1])
+            result["x"], result["y"] = map(float, mapped_anchor)
+        elif shape.get("track_follow", "translate") == "full":
             from .tracker import solve
             solved = solve(data, frame, track_node["params"])
             angle = math.radians(solved["rotate"]); c, s = math.cos(angle), math.sin(angle)
@@ -525,7 +539,19 @@ def unresolve_feather_vector(vector, shape, document, frame):
     """Invert the shape and full-Tracker linear transforms for a feather handle vector."""
     x, y = map(float, vector)
     link = shape.get("track_link")
-    if link and shape.get("track_follow", "translate") == "full":
+    if link and shape.get("track_follow", "translate") == "planar":
+        tracker_node = document.get("nodes", {}).get(link["tracker_id"])
+        if tracker_node is not None and tracker_node["type"] == "PlanarTracker":
+            from . import planar as planar_model
+            data = document.get("node_data", {}).get(link["tracker_id"], {})
+            ref = int(tracker_node["params"].get("reference_frame", 1))
+            forward = planar_model.homography_from_quads(
+                planar_model.resolve_corners(data, ref), planar_model.resolve_corners(data, frame))
+            inverse = planar_model.invert_homography(forward)
+            cx, cy = shape["transform"].get("center_x", 0.0), shape["transform"].get("center_y", 0.0)
+            mapped = planar_model.project_points(inverse, [[cx, cy], [cx+x, cy+y]])
+            x, y = map(float, mapped[1]-mapped[0])
+    elif link and shape.get("track_follow", "translate") == "full":
         tracker_node = document.get("nodes", {}).get(link["tracker_id"])
         if tracker_node is not None:
             from .tracker import solve
@@ -557,7 +583,16 @@ def resolve_roto_shapes(payload, frame, document=None, tier=1):
             continue
         tracker_payload = document.get("node_data", {}).get(link["tracker_id"], {})
         reference = int(tracker_node["params"].get("reference_frame", 1))
-        if shape.get("track_follow", "translate") == "full":
+        if shape.get("track_follow", "translate") == "planar" and tracker_node["type"] == "PlanarTracker":
+            from . import planar as planar_model
+            try:
+                reference_corners = planar_model.resolve_corners(tracker_payload, reference)
+                current_corners = planar_model.resolve_corners(tracker_payload, frame)
+                matrix = planar_model.homography_from_quads(reference_corners, current_corners)
+                planar_model.apply_homography_to_shape(shape, matrix, tier=tier)
+            except ValueError:
+                continue
+        elif shape.get("track_follow", "translate") == "full":
             solved = tracker_model.solve(tracker_payload, frame, tracker_node["params"])
             # Solve maps the plate about its own centroid; transfer that similarity about the
             # Roto shape's centre, then apply the track translation.

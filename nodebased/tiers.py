@@ -561,6 +561,7 @@ REGION_RULES = {
     # region rule is Transform's rule applied to the solved values. Sharing the function rather
     # than copying it is the point: an error in the inverse map cannot drift between the two.
     "Tracker": _transform_rule,
+    "PlanarTracker": _identity,
     "Stabilize": _transform_rule,
     "Crop": _crop_rule,
     "CornerPin": _cornerpin_rule,

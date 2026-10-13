@@ -1096,7 +1096,7 @@ class TileExecutor:
             return imaging.Evaluator._apply_mask_mix(image, filtered, mask, params.get("mix", 1.0))
         if kind in ("Viewer", "Write"):
             return inputs[0].pixels.copy()
-        if kind in ("Dot", "NoOp", "PostageStamp", "Profile"):
+        if kind in ("Dot", "NoOp", "PostageStamp", "Profile", "PlanarTracker"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
                     "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",

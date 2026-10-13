@@ -3,7 +3,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "ConditionedRead": "#d9b87
           "Grade": "#83cbb7", "Vectorfield": "#80c8b0", "GenerateLUT": "#e06f6f", "ColorCorrect": "#6fc9b0", "Blur": "#79c7d9",
           "OCIOColorspace": "#80c8b0", "OCIODisplay": "#80c8b0", "OCIOFileTransform": "#80c8b0", "OCIOLookTransform": "#80c8b0", "OCIOLogConvert": "#80c8b0",
           "Transform": "#89aff0", "Crop": "#6f9be0", "Shuffle": "#a889d9",
-          "ChannelShuffle": "#9d80d4", "ShuffleCopy": "#a889d9", "Roto": "#e2937f", "RotoPaint": "#d87862", "Tracker": "#e0b06a", "Stabilize": "#e0b06a",
+          "ChannelShuffle": "#9d80d4", "ShuffleCopy": "#a889d9", "Roto": "#e2937f", "RotoPaint": "#d87862", "Tracker": "#e0b06a", "PlanarTracker": "#d2a65f", "Stabilize": "#e0b06a",
           "Merge": "#bd9ee3", "Dot": "#b8a6db", "Switch": "#c6a5db",
           # Premult/Unpremult are the other Merge-toolbar single-input nodes; not filed here was
           # a `theme.COLORS` gap that crashed `NodeItem` the moment either landed on the graph
