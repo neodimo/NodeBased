@@ -3359,6 +3359,20 @@ class Viewer(PanZoomView):
                 painter.drawRect(QRectF(rect.left() + bx0, rect.top() + by0, bx1 - bx0, by1 - by0))
         painter.restore()
 
+    def _draw_overscan_edge(self, painter):
+        """In an Undistort node's grown frame, outline the plate's format: what lies outside the line is overscan."""
+        rect, whole = self.format_rect, self.sceneRect()
+        document = self.window.dispatcher.document
+        if rect is None or rect == whole or not lensview.shows_overscan(document, document.get("view")):
+            return
+        painter.save()
+        pen = QPen(QColor("#f4c542"), 1, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(rect)
+        painter.restore()
+
     def _draw_roi_and_masks(self, painter):
         document = self.window.dispatcher.document
         masks = viewer_masks(document)
@@ -3654,6 +3668,7 @@ class Viewer(PanZoomView):
         # No dotted frame or size label around the canvas: the picture sits on the viewer's background
         # and the size is in the bottom-left corner readout.
         self._draw_roi_and_masks(painter)
+        self._draw_overscan_edge(painter)
 
     def mousePressEvent(self, event):
         if self.starts_pan(event):
