@@ -1,0 +1,1388 @@
+{
+  "version": 23,
+  "nodes": {
+    "glass_wall": {
+      "type": "Cylinder3D",
+      "name": "Cylinder3D",
+      "params": {
+        "cyl_radius": 0.12,
+        "cyl_height": 0.3,
+        "rows": 1,
+        "columns": 48,
+        "cyl_caps": "open",
+        "tx": 0.0,
+        "ty": 0.15,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.8,
+        "green": 0.8,
+        "blue": 0.8,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "off",
+        "shadow_catcher": "off",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "liquid",
+        "ior": 1.5,
+        "absorption_red": 0.98,
+        "absorption_green": 0.99,
+        "absorption_blue": 0.99,
+        "absorption_distance": 8.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "glass_base": {
+      "type": "Cylinder3D",
+      "name": "Cylinder3D",
+      "params": {
+        "cyl_radius": 0.12,
+        "cyl_height": 0.02,
+        "rows": 1,
+        "columns": 48,
+        "cyl_caps": "closed",
+        "tx": 0.0,
+        "ty": 0.01,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.8,
+        "green": 0.8,
+        "blue": 0.8,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "off",
+        "shadow_catcher": "off",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "liquid",
+        "ior": 1.5,
+        "absorption_red": 0.98,
+        "absorption_green": 0.99,
+        "absorption_blue": 0.99,
+        "absorption_distance": 8.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "glass": {
+      "type": "Scene3D",
+      "name": "Scene3D",
+      "params": {
+        "tx": 0.0,
+        "ty": 0.0,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0
+      },
+      "inputs": {
+        "object0": "glass_wall",
+        "object1": "glass_base",
+        "object2": null,
+        "object3": null,
+        "object4": null,
+        "object5": null,
+        "object6": null,
+        "object7": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "table_body": {
+      "type": "RigidBody3D",
+      "name": "RigidBody3D",
+      "params": {
+        "rigid_shape": "box",
+        "tx": 0.0,
+        "ty": -0.03,
+        "tz": 0.0,
+        "size_x": 0.6,
+        "size_y": 0.06,
+        "size_z": 0.6,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "velocity_x": 0.0,
+        "velocity_y": 0.0,
+        "velocity_z": 0.0,
+        "angular_velocity_x": 0.0,
+        "angular_velocity_y": 0.0,
+        "angular_velocity_z": 0.0,
+        "torque_x": 0.0,
+        "torque_y": 0.0,
+        "torque_z": 0.0,
+        "density": 1000.0,
+        "mass": 0.0,
+        "dynamic": 0,
+        "friction": 0.5,
+        "restitution": 0.0
+      },
+      "inputs": {
+        "geometry": null,
+        "part0": null,
+        "part1": null,
+        "part2": null,
+        "part3": null,
+        "part4": null,
+        "part5": null,
+        "part6": null,
+        "part7": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "table": {
+      "type": "RigidSolver3D",
+      "name": "RigidSolver3D",
+      "params": {
+        "gravity_x": 0.0,
+        "gravity_y": 0.0,
+        "gravity_z": 0.0,
+        "substeps": 4,
+        "iterations": 8,
+        "floor": "off",
+        "floor_y": 0.0,
+        "sleep_threshold": 0.025,
+        "sleep_time": 0.5,
+        "liquid_density": 1000.0
+      },
+      "inputs": {
+        "body0": "table_body",
+        "body1": null,
+        "body2": null,
+        "body3": null,
+        "body4": null,
+        "body5": null,
+        "body6": null,
+        "body7": null,
+        "liquid": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "table_top": {
+      "type": "Cube3D",
+      "name": "Cube3D",
+      "params": {
+        "cube_size": 1.0,
+        "tx": 0.0,
+        "ty": -0.03,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.7,
+        "sy": 0.06,
+        "sz": 2.2,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.28,
+        "green": 0.17,
+        "blue": 0.1,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "off",
+        "shadow_catcher": "on",
+        "spec_amount": 0.15,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "glass_view_wall": {
+      "type": "Cylinder3D",
+      "name": "Cylinder3D",
+      "params": {
+        "cyl_radius": 0.1215,
+        "cyl_height": 0.3,
+        "rows": 1,
+        "columns": 64,
+        "cyl_caps": "open",
+        "tx": 0.0,
+        "ty": 0.15,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.8,
+        "green": 0.9,
+        "blue": 0.95,
+        "alpha": 0.16,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "off",
+        "shadow_catcher": "off",
+        "spec_amount": 1.0,
+        "spec_shininess": 200.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "glass_view_base": {
+      "type": "Cylinder3D",
+      "name": "Cylinder3D",
+      "params": {
+        "cyl_radius": 0.1215,
+        "cyl_height": 0.02,
+        "rows": 1,
+        "columns": 64,
+        "cyl_caps": "closed",
+        "tx": 0.0,
+        "ty": 0.01,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.8,
+        "green": 0.9,
+        "blue": 0.95,
+        "alpha": 0.16,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "off",
+        "shadow_catcher": "off",
+        "spec_amount": 1.0,
+        "spec_shininess": 200.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "glass_view": {
+      "type": "Scene3D",
+      "name": "Scene3D",
+      "params": {
+        "tx": 0.0,
+        "ty": 0.0,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0
+      },
+      "inputs": {
+        "object0": "glass_view_wall",
+        "object1": "glass_view_base",
+        "object2": null,
+        "object3": null,
+        "object4": null,
+        "object5": null,
+        "object6": null,
+        "object7": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "spout": {
+      "type": "FluidSource3D",
+      "name": "FluidSource3D",
+      "params": {
+        "fluid_emit_from": "sphere",
+        "src_center_x": 0.0,
+        "src_center_y": 0.42,
+        "src_center_z": 0.0,
+        "src_radius": 0.03900000000000001,
+        "src_falloff": 0.5,
+        "src_density": 1.0,
+        "src_temperature": 1.0,
+        "src_fuel": 0.0,
+        "src_vel_x": 0.0,
+        "src_vel_y": -0.03333333333333333,
+        "src_vel_z": 0.0,
+        "src_inherit_velocity": 0.0,
+        "src_noise_amount": 0.0,
+        "src_noise_scale": 0.5,
+        "src_dilate": 0,
+        "animated": 0,
+        "start_frame": 1,
+        "end_frame": 1000000,
+        "fluid_type": "liquid",
+        "tx": 0.0,
+        "ty": 0.0,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0
+      },
+      "inputs": {
+        "geo": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "liquid_glass": {
+      "type": "FluidCollide3D",
+      "name": "FluidCollide3D",
+      "params": {
+        "animated": 0
+      },
+      "inputs": {
+        "fluid": "spout",
+        "geometry": "glass"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "liquid_table": {
+      "type": "FluidCollide3D",
+      "name": "FluidCollide3D",
+      "params": {
+        "animated": 0
+      },
+      "inputs": {
+        "fluid": "liquid_glass",
+        "geometry": "table"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "liquid": {
+      "type": "FluidLiquidSolver3D",
+      "name": "FluidLiquidSolver3D",
+      "params": {
+        "division_size": 0.024375,
+        "bounds_min_x": -0.18,
+        "bounds_min_y": -0.03,
+        "bounds_min_z": -0.18,
+        "bounds_max_x": 0.18,
+        "bounds_max_y": 0.45,
+        "bounds_max_z": 0.18,
+        "auto_resize": 1,
+        "padding": 8,
+        "max_size": 32,
+        "start_frame": 1,
+        "substeps": 2,
+        "seed": 0,
+        "flip_ratio": 0.95,
+        "particles_per_cell": 2,
+        "liquid_gravity": 9.8,
+        "viscosity": 0.0,
+        "surface_tension": 0.5,
+        "viscosity_by_attribute": "none",
+        "narrow_band": 0.0,
+        "tolerance": 0.001,
+        "max_iterations": 40,
+        "pressure": "resident",
+        "boundary_x_min": "closed",
+        "boundary_x_max": "closed",
+        "boundary_y_min": "closed",
+        "boundary_y_max": "open",
+        "boundary_z_min": "closed",
+        "boundary_z_max": "closed",
+        "liquid_sdf": 1
+      },
+      "inputs": {
+        "fluid": "liquid_table"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "liquid_cache": {
+      "type": "ParticleCache3D",
+      "name": "ParticleCache3D",
+      "params": {
+        "cache_memory_mb": 1024,
+        "cache_disk_mb": 8192
+      },
+      "inputs": {
+        "particles": "liquid"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "surface": {
+      "type": "FluidSurface3D",
+      "name": "FluidSurface3D",
+      "params": {
+        "particle_radius": 0.0,
+        "smoothing": 1,
+        "surface_resolution": 1,
+        "detail_ratio": 1,
+        "temporal_smoothing": 0,
+        "thin_sheet_preservation": 1,
+        "material": "liquid",
+        "ior": 1.333,
+        "absorption_red": 0.85,
+        "absorption_green": 0.5,
+        "absorption_blue": 0.15,
+        "absorption_distance": 0.08,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "particles": "liquid_cache"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "whitewater": {
+      "type": "FluidWhitewater3D",
+      "name": "FluidWhitewater3D",
+      "params": {
+        "whitewater_backend": "auto",
+        "foam_emission": 0.5,
+        "spray_emission": 0.5,
+        "bubbles_emission": 0.5,
+        "foam_threshold": 0.4,
+        "spray_threshold": 1.0,
+        "bubbles_threshold": 0.05,
+        "trapped_air_min": 0.1,
+        "trapped_air_max": 4.0,
+        "wave_crest_min": 0.01,
+        "wave_crest_max": 1.0,
+        "kinetic_energy_min": 0.0001,
+        "kinetic_energy_max": 0.003,
+        "kinetic_energy_per_mass": 1,
+        "foam_lifespan": 4.0,
+        "particle_lifespan": 2.0,
+        "max_particles": 60000,
+        "foam_size": 0.04,
+        "spray_size": 0.025,
+        "bubbles_size": 0.025,
+        "surface_band": 0.08,
+        "surface_offset": 0.02,
+        "spray_lift": 0.5,
+        "gravity": 9.8,
+        "spray_drag": 0.15,
+        "bubble_buoyancy": 1.5,
+        "bubble_drag": 2.0,
+        "seed": 0,
+        "cache_memory_mb": 256,
+        "cache_disk_mb": 2048
+      },
+      "inputs": {
+        "particles": "liquid_cache"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "foam": {
+      "type": "ParticleRender3D",
+      "name": "ParticleRender3D",
+      "params": {
+        "representation": "foam",
+        "size_scale": 0.7,
+        "foam_density": 1.0,
+        "spray_size": 1.0,
+        "particle_material": "standard",
+        "particle_metallic": 0.0,
+        "particle_pbr_roughness": 0.5,
+        "particle_pbr_specular": 0.5,
+        "particle_emission": 0.0,
+        "particle_cast_shadows": 1,
+        "particle_ramp_by": "off",
+        "particle_color_ramp": "",
+        "particle_opacity_ramp": "",
+        "particle_size_ramp": "",
+        "particle_emission_ramp": "",
+        "light_link": "all",
+        "light_link_list": ""
+      },
+      "inputs": {
+        "particles": "whitewater",
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "steam_source": {
+      "type": "FluidSource3D",
+      "name": "FluidSource3D",
+      "params": {
+        "fluid_emit_from": "surface",
+        "src_center_x": 0.0,
+        "src_center_y": 0.3,
+        "src_center_z": 0.0,
+        "src_radius": 0.25,
+        "src_falloff": 0.5,
+        "src_density": 0.3,
+        "src_temperature": 1.0,
+        "src_fuel": 0.0,
+        "src_vel_x": 0.0,
+        "src_vel_y": 0.1,
+        "src_vel_z": 0.0,
+        "src_inherit_velocity": 0.0,
+        "src_noise_amount": 0.0,
+        "src_noise_scale": 0.5,
+        "src_dilate": 1,
+        "animated": 1,
+        "start_frame": 1,
+        "end_frame": 1000000,
+        "fluid_type": "smoke",
+        "tx": 0.0,
+        "ty": 0.0,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0
+      },
+      "inputs": {
+        "geo": "surface"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "steam_lift": {
+      "type": "FluidForce3D",
+      "name": "FluidForce3D",
+      "params": {
+        "force_kind": "buoyancy",
+        "buoyancy_lift": 0.08,
+        "buoyancy_settle": 0.005,
+        "ambient_temperature": 0.0,
+        "force_dir_x": 0.0,
+        "force_dir_y": -1.0,
+        "force_dir_z": 0.0,
+        "strength": 0.015,
+        "turbulence_scale": 0.3,
+        "turbulence_speed": 0.1,
+        "drag": 0.1,
+        "from_frame": -1000000,
+        "to_frame": 1000000,
+        "seed": 0
+      },
+      "inputs": {
+        "fluid": "steam_source"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "steam_liquid": {
+      "type": "FluidCollide3D",
+      "name": "FluidCollide3D",
+      "params": {
+        "animated": 1
+      },
+      "inputs": {
+        "fluid": "steam_lift",
+        "geometry": "surface"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "steam_glass": {
+      "type": "FluidCollide3D",
+      "name": "FluidCollide3D",
+      "params": {
+        "animated": 0
+      },
+      "inputs": {
+        "fluid": "steam_liquid",
+        "geometry": "glass"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "steam_table": {
+      "type": "FluidCollide3D",
+      "name": "FluidCollide3D",
+      "params": {
+        "animated": 0
+      },
+      "inputs": {
+        "fluid": "steam_glass",
+        "geometry": "table"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "steam": {
+      "type": "FluidSolver3D",
+      "name": "FluidSolver3D",
+      "params": {
+        "division_size": 0.026875,
+        "bounds_min_x": -0.25,
+        "bounds_min_y": 0.0,
+        "bounds_min_z": -0.25,
+        "bounds_max_x": 0.25,
+        "bounds_max_y": 0.7,
+        "bounds_max_z": 0.25,
+        "auto_resize": 1,
+        "padding": 8,
+        "max_size": 32,
+        "start_frame": 1,
+        "substeps": 1,
+        "seed": 0,
+        "advection": "maccormack",
+        "vorticity": 0.4,
+        "dissipation": 0.1,
+        "cooling_rate": 0.12,
+        "boundary_x": "closed",
+        "boundary_y": "open",
+        "boundary_z": "closed",
+        "boundary_x_min": "closed",
+        "boundary_x_max": "closed",
+        "boundary_y_min": "open",
+        "boundary_y_max": "open",
+        "boundary_z_min": "closed",
+        "boundary_z_max": "closed",
+        "tolerance": 0.001,
+        "max_iterations": 60,
+        "pressure": "resident_sparse",
+        "fire": 0,
+        "ignition_temperature": 0.5,
+        "burn_rate": 0.6,
+        "burn_heat": 2.0,
+        "burn_smoke": 0.3,
+        "burn_expansion": 0.0,
+        "fuel_inefficiency": 0.0,
+        "temperature_output": 2.0,
+        "smoke_output": 0.3,
+        "gas_release": 0.0,
+        "flame_lifespan": 1.0,
+        "dissipation_field": "none",
+        "dissipation_range_lo": 0.0,
+        "dissipation_range_hi": 1.0,
+        "dissipation_ramp": 0.0,
+        "disturbance": 0.0,
+        "disturbance_size": 4.0,
+        "disturbance_field": "none",
+        "disturbance_range_lo": 0.0,
+        "disturbance_range_hi": 1.0,
+        "disturbance_ramp": 0.0,
+        "shredding": 0.0,
+        "turbulence": 0.0,
+        "swirl_size": 1.0,
+        "grain": 2,
+        "pulse_length": 30.0,
+        "turbulence_field": "none",
+        "turbulence_range_lo": 0.0,
+        "turbulence_range_hi": 1.0,
+        "turbulence_ramp": 0.0
+      },
+      "inputs": {
+        "fluid": "steam_table"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "steam_cache": {
+      "type": "FluidCache3D",
+      "name": "FluidCache3D",
+      "params": {
+        "cache_memory_mb": 1024,
+        "cache_disk_mb": 65536,
+        "cache_precision": "float32",
+        "cache_channels": "all",
+        "light_link": "all",
+        "light_link_list": ""
+      },
+      "inputs": {
+        "volume": "steam"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "camera": {
+      "type": "Camera3D",
+      "name": "Camera3D",
+      "params": {
+        "tx": 0.0,
+        "ty": 1.15,
+        "tz": 2.8,
+        "roll": 0.0,
+        "target_x": 0.0,
+        "target_y": 0.0,
+        "target_z": 0.0,
+        "focal": 45.0,
+        "haperture": 24.576,
+        "vaperture": 18.672,
+        "near": 0.1,
+        "far": 1000.0,
+        "fstop": 0.0,
+        "focus_distance": 5.0,
+        "aperture_blades": 0,
+        "blade_rotation": 0.0,
+        "anamorphic_squeeze": 1.0,
+        "lens_k1": 0.0,
+        "lens_k2": 0.0,
+        "lens_k3": 0.0,
+        "lens_p1": 0.0,
+        "lens_p2": 0.0,
+        "lens_cx": 0.0,
+        "lens_cy": 0.0
+      },
+      "inputs": {},
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "key_light": {
+      "type": "Light3D",
+      "name": "Light3D",
+      "params": {
+        "light_type": "Point",
+        "tx": 0.9,
+        "ty": 1.4,
+        "tz": 1.2,
+        "target_x": 0.0,
+        "target_y": 0.0,
+        "target_z": 0.0,
+        "red": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "intensity": 3.0,
+        "shadows": "on",
+        "cone_angle": 30.0,
+        "cone_penumbra_angle": 5.0,
+        "cone_falloff": 1.0,
+        "falloff_type": "No falloff",
+        "shadow_bias": 0.001,
+        "shadow_blur": 0.0,
+        "shadow_samples": 1,
+        "env_rotation": 0.0,
+        "env_blur": 0.0,
+        "area_width": 1.0,
+        "area_height": 1.0,
+        "area_radius": 0.5,
+        "area_normalize": "off",
+        "two_sided": "off",
+        "light_samples": 4,
+        "exposure": 0.0,
+        "light_color_mode": "RGB",
+        "kelvin": 6500.0,
+        "visible_to_camera": "on",
+        "light_group": ""
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "rim_light": {
+      "type": "Light3D",
+      "name": "Light3D",
+      "params": {
+        "light_type": "Point",
+        "tx": -1.0,
+        "ty": 0.9,
+        "tz": -0.8,
+        "target_x": 0.0,
+        "target_y": 0.0,
+        "target_z": 0.0,
+        "red": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "intensity": 1.6,
+        "shadows": "off",
+        "cone_angle": 30.0,
+        "cone_penumbra_angle": 5.0,
+        "cone_falloff": 1.0,
+        "falloff_type": "No falloff",
+        "shadow_bias": 0.001,
+        "shadow_blur": 0.0,
+        "shadow_samples": 1,
+        "env_rotation": 0.0,
+        "env_blur": 0.0,
+        "area_width": 1.0,
+        "area_height": 1.0,
+        "area_radius": 0.5,
+        "area_normalize": "off",
+        "two_sided": "off",
+        "light_samples": 4,
+        "exposure": 0.0,
+        "light_color_mode": "RGB",
+        "kelvin": 6500.0,
+        "visible_to_camera": "on",
+        "light_group": ""
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "scene": {
+      "type": "Scene3D",
+      "name": "Scene3D",
+      "params": {
+        "tx": 0.0,
+        "ty": 0.0,
+        "tz": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0
+      },
+      "inputs": {
+        "object0": "surface",
+        "object1": "foam",
+        "object2": "steam_cache",
+        "object3": "glass_view",
+        "object4": "table_top",
+        "object5": "key_light",
+        "object6": "front_cup",
+        "object7": "backdrop"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "render": {
+      "type": "Render3D",
+      "name": "Render3D",
+      "params": {
+        "width": 960,
+        "height": 540,
+        "red": 0.0,
+        "green": 0.0,
+        "blue": 0.0,
+        "alpha": 0.0,
+        "ambient": 0.35,
+        "samples": 2,
+        "render_output": "rgba",
+        "render_backend": "gpu",
+        "render_mode": "pathtrace",
+        "passes": "beauty,normals,depth",
+        "cryptomatte": 0,
+        "cryptomatte_levels": 6,
+        "volumes": "on",
+        "volume_step_size": 0.05,
+        "volume_density_scale": 1.0,
+        "volume_shadow_density": 1.0,
+        "volume_shadow_steps": 16,
+        "volume_scattering": 1.0,
+        "volume_absorption": 0.05,
+        "volume_red": 1.0,
+        "volume_green": 1.0,
+        "volume_blue": 1.0,
+        "volume_fps": 24.0,
+        "volume_depth_threshold": 0.1,
+        "volume_motion_blur": 0.0,
+        "volume_motion_samples": 8,
+        "volume_anisotropy": 0.0,
+        "volume_multi_scatter": 0.0,
+        "volume_multi_scatter_blur": 0.5,
+        "volume_fire_intensity": 0.0,
+        "volume_temperature_scale": 1500.0,
+        "volume_fire_threshold": 600.0,
+        "volume_fire_light": 1.0,
+        "volume_fire_ramp": "",
+        "volume_quality": "custom",
+        "pt_samples": 2,
+        "max_bounces": 2,
+        "diffuse_bounces": 1,
+        "specular_bounces": 1,
+        "transmission_bounces": 8,
+        "time_limit": 0.0,
+        "noise_threshold": 0.0,
+        "pt_seed": 1,
+        "sampling": "fixed",
+        "min_samples": 16,
+        "max_samples": 256,
+        "adaptive_pass_size": 8,
+        "motion_blur": 0,
+        "shutter": 0.5,
+        "shutter_offset": "centred",
+        "custom_offset": 0.0,
+        "motion_samples": 8,
+        "denoiser_strength": 1.0,
+        "denoise_color_sensitivity": 1.0,
+        "denoise_normal_sensitivity": 1.0,
+        "denoise_depth_sensitivity": 1.0,
+        "denoise_iterations": 4,
+        "denoise_temporal": 0,
+        "denoise": "off",
+        "beauty_raw": 0
+      },
+      "inputs": {
+        "scene": "scene",
+        "camera": "camera"
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "front_cup": {
+      "type": "Cylinder3D",
+      "name": "Cylinder3D",
+      "params": {
+        "cyl_radius": 0.105,
+        "cyl_height": 0.25,
+        "rows": 1,
+        "columns": 24,
+        "cyl_caps": "closed",
+        "tx": 0.18,
+        "ty": 0.14,
+        "tz": 0.2,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.8,
+        "green": 0.9,
+        "blue": 0.95,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "off",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "on",
+        "shadow_catcher": "off",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "backdrop": {
+      "type": "Card3D",
+      "name": "Card3D",
+      "params": {
+        "card_width": 4.0,
+        "card_height": 2.5,
+        "rows": 1,
+        "columns": 1,
+        "tx": 0.0,
+        "ty": 0.7,
+        "tz": -0.55,
+        "rx": 0.0,
+        "ry": 0.0,
+        "rz": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "sz": 1.0,
+        "uscale": 1.0,
+        "rot_order": "XYZ",
+        "pivot_x": 0.0,
+        "pivot_y": 0.0,
+        "pivot_z": 0.0,
+        "red": 0.16,
+        "green": 0.19,
+        "blue": 0.22,
+        "alpha": 1.0,
+        "light_link": "all",
+        "light_link_list": "",
+        "cast_shadows": "on",
+        "receive_shadows": "on",
+        "visible_to_camera": "on",
+        "holdout": "off",
+        "shadow_catcher": "off",
+        "spec_amount": 0.0,
+        "spec_shininess": 32.0,
+        "emission": 0.0,
+        "metallic": 0.0,
+        "pbr_roughness": 0.5,
+        "pbr_specular": 0.5,
+        "material": "standard",
+        "ior": 1.333,
+        "absorption_red": 0.55,
+        "absorption_green": 0.8,
+        "absorption_blue": 0.95,
+        "absorption_distance": 1.0,
+        "reflection": 1.0,
+        "roughness": 0.0
+      },
+      "inputs": {
+        "image": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "plate": {
+      "type": "Read",
+      "name": "Read",
+      "params": {
+        "path": "plate.png",
+        "colorspace": "Auto",
+        "alpha_mode": "Auto",
+        "layer": "",
+        "subimage": 0,
+        "frame_offset": 0,
+        "missing": "error"
+      },
+      "inputs": {},
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
+    "comp": {
+      "type": "Merge",
+      "name": "Merge",
+      "params": {
+        "operation": "over",
+        "mix": 1.0
+      },
+      "inputs": {
+        "A": "render",
+        "B": "plate",
+        "mask": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    }
+  },
+  "view": "comp",
+  "time": {
+    "first": 1,
+    "last": 120,
+    "current": 1,
+    "fps": 24.0
+  },
+  "animation": {
+    "curves": {
+      "spout": {
+        "tx": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": -0.035
+            },
+            {
+              "frame": 43,
+              "value": 0.03
+            },
+            {
+              "frame": 84,
+              "value": 0.035
+            },
+            {
+              "frame": 120,
+              "value": -0.02
+            }
+          ]
+        },
+        "tz": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": 0.0
+            },
+            {
+              "frame": 43,
+              "value": 0.025
+            },
+            {
+              "frame": 84,
+              "value": -0.025
+            },
+            {
+              "frame": 120,
+              "value": 0.0
+            }
+          ]
+        }
+      }
+    }
+  },
+  "settings": {
+    "color": {
+      "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
+      "working_space": "ACEScg",
+      "display": "sRGB - Display",
+      "view": "ACES 2.0"
+    },
+    "viewer": {
+      "background": "black"
+    },
+    "formats": {
+      "HD_1080": {
+        "width": 1920,
+        "height": 1080,
+        "pixel_aspect": 1.0
+      },
+      "HD_720": {
+        "width": 1280,
+        "height": 720,
+        "pixel_aspect": 1.0
+      },
+      "UHD_4K": {
+        "width": 3840,
+        "height": 2160,
+        "pixel_aspect": 1.0
+      },
+      "2K_DCP": {
+        "width": 2048,
+        "height": 1080,
+        "pixel_aspect": 1.0
+      },
+      "Square_1K": {
+        "width": 1024,
+        "height": 1024,
+        "pixel_aspect": 1.0
+      }
+    }
+  },
+  "node_data": {},
+  "expressions": {},
+  "references": []
+}
