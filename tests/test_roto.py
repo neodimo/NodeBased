@@ -17,6 +17,7 @@ import numpy as np
 
 from nodebased import roto, shapes, tiers, tiles, tracker
 from nodebased.tileexec import TileExecutor
+from nodebased.tiles import TileRegion
 from nodebased.core import (SCHEMA_VERSION, Dispatcher, atomic_save, empty_document,
                             load_document, upgrade_document, validate)
 from nodebased.imaging import Evaluator
@@ -223,6 +224,40 @@ class ShapeTransformTests(unittest.TestCase):
         expected_y = 1.0 - 1.5*(sine + cosine) + (3.0+3*sine/2)
         self.assertAlmostEqual(result["x"], expected_x, delta=1e-3)
         self.assertAlmostEqual(result["y"], expected_y, delta=1e-3)
+
+
+class RotoTileOverheadTests(unittest.TestCase):
+    def _document(self):
+        d = Dispatcher(empty_document())
+        d.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "r", "type": "Roto"},
+            *sets("r", width=64, height=64),
+            {"op": "set_shapes", "id": "r", "shapes": [square(4, 4, 60, 60)]}]})
+        return d.document
+
+    def test_whole_frame_uses_reference_path_without_tile_rasterization_at_each_tier(self):
+        from unittest.mock import patch
+        doc = self._document()
+        for tier in (1, 8):
+            executor = TileExecutor(tile_edge=16)
+            reference = Evaluator().evaluate(doc, "r", tier=tier)
+            with patch.object(executor, "_roto_tile", wraps=executor._roto_tile) as tiled_roto:
+                result = executor.compose(doc, "r", tier=tier)
+            self.assertFalse(result.tiled)
+            tiled_roto.assert_not_called()
+            self.assertEqual(result.pixels.tobytes(), reference.tobytes())
+
+    def test_shape_geometry_is_flattened_once_across_every_tile_it_touches(self):
+        from unittest.mock import patch
+        doc = self._document()
+        executor = TileExecutor(tile_edge=16)
+        request = TileRegion(16, 16, 32, 32, full_x=0, full_y=0, full_width=64, full_height=64)
+        original = roto.flatten_points
+        with patch.object(roto, "flatten_points", wraps=original) as flatten:
+            result = executor.compose_region(doc, "r", request)
+        self.assertTrue(result.tiled)
+        self.assertGreater(result.tile_misses, 1)
+        self.assertEqual(flatten.call_count, 1)
 
 
 class ScalarResolutionTests(unittest.TestCase):
@@ -486,9 +521,14 @@ class TilePathTests(unittest.TestCase):
             reference = Evaluator().evaluate_raster(dispatcher.document, "r", tier=tier).pixels
             # Keep tiles smaller than the lowest-tier image so every tier exercises pruning.
             executor = TileExecutor(tile_edge=4)
-            result = executor.compose(dispatcher.document, "r", tier=tier)
+            bounds = executor.canvas_region(dispatcher.document, "r", tier=tier)
+            half_width = bounds.width // 2
+            request = TileRegion(bounds.x, bounds.y, half_width, bounds.height,
+                                 full_x=bounds.x, full_y=bounds.y,
+                                 full_width=bounds.width, full_height=bounds.height)
+            result = executor.compose_region(dispatcher.document, "r", request, tier=tier)
             self.assertTrue(result.tiled)
-            self.assertEqual(result.pixels.tobytes(), reference.tobytes(), f"tier {tier}")
+            self.assertEqual(result.pixels.tobytes(), reference[:, :half_width].tobytes(), f"tier {tier}")
             self.assertGreater(executor.stats["skipped_shapes"], 0)
 
 
@@ -626,7 +666,7 @@ class RenderTests(unittest.TestCase):
         executor = TileExecutor(tile_edge=16)
         self.assertTrue(executor.supports_tiled(d.document, "r"))
         tiled = executor.compose(d.document, "r", frame=24)
-        self.assertTrue(tiled.tiled)
+        self.assertFalse(tiled.tiled)
         np.testing.assert_allclose(tiled.pixels, full, atol=1e-6)
 
     def test_full_follow_render_matches_the_shared_resolved_overlay_points(self):

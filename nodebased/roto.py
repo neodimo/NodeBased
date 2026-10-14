@@ -88,14 +88,25 @@ def _add_span(row, x0, x1):
         row[last] += x1 - last
 
 
-def coverage(points, width, height, origin=(0, 0)):
+def _flatten_cached(points, cache):
+    if cache is None:
+        return flatten_points(points)
+    key = id(points)
+    vertices = cache.get(key)
+    if vertices is None:
+        vertices = flatten_points(points)
+        cache[key] = vertices
+    return vertices
+
+
+def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
     """Scanline-fill one shape's resolved points into an HxW coverage array in [0, 1].
 
     Non-zero winding, so a self-intersecting shape fills the way every other package fills it and
     a hole is drawn by winding a sub-loop the other way.
     """
     matte = np.zeros((height, width), dtype=np.float64)
-    polyline = flatten_points(points)
+    polyline = _flatten_cached(points, flattened_cache)
     if polyline.shape[0] < 3:
         return matte.astype(np.float32)
     ax, ay = polyline[:, 0], polyline[:, 1]
@@ -195,7 +206,7 @@ def feather(cover, radius):
     return Evaluator._box_blur_axis(Evaluator._box_blur_axis(cover, radius, axis=1), radius, axis=0)
 
 
-def edge_feather(points, cover, feather, falloff="linear", origin=(0, 0)):
+def edge_feather(points, cover, feather, falloff="linear", origin=(0, 0), *, flattened_cache=None):
     """Rasterise a signed-distance feather with linearly interpolated vertex offsets.
 
     Work is restricted to each segment's feather-expanded bounds. This keeps the common small-shape
@@ -203,7 +214,7 @@ def edge_feather(points, cover, feather, falloff="linear", origin=(0, 0)):
     """
     height, width = cover.shape
     ox, oy = map(int, origin)
-    vertices = flatten_points(points)
+    vertices = _flatten_cached(points, flattened_cache)
     if len(vertices) < 3 or feather == 0 and not any(
             p.get("feather_x", 0) or p.get("feather_y", 0) for p in points):
         return cover
@@ -318,7 +329,7 @@ def _shape_bounds(shape):
     return shape["_raster_bounds"]
 
 
-def rasterise(shapes, width, height, invert=False, *, region=None, stats=None):
+def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, flattened_cache=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
     h, w = int(height), int(width)
     if region is None:
@@ -327,6 +338,8 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None):
         rx, ry, rw, rh = map(int, region)
         if rw < 0 or rh < 0 or rx < 0 or ry < 0 or rx + rw > w or ry + rh > h:
             raise ValueError("Roto region must lie inside the image")
+    if flattened_cache is None:
+        flattened_cache = {}
     # The legacy feather is a pair of separable box filters. Evaluate its complete support
     # around the request so cropped and full-frame pixels stay identical at tile edges.
     box_support = max((int(round(max(0.0, float(s.get("feather", 0.0)))))
@@ -366,14 +379,17 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None):
             cover = sum(covers) / len(covers)
         elif shape.get("feather_model", "box") == "edge":
             layers = [shape["points"], *samples]
-            covers = [edge_feather(points, coverage(points, tw, th, origin=(x0, y0)),
-                                   shape["feather"], falloff, origin=(x0, y0))
+            covers = [edge_feather(points, coverage(points, tw, th, origin=(x0, y0),
+                                   flattened_cache=flattened_cache), shape["feather"], falloff,
+                                   origin=(x0, y0), flattened_cache=flattened_cache)
                       for points in layers]
             cover = sum(covers) / len(covers)
         else:
-            cover = coverage(shape["points"], tw, th, origin=(x0, y0))
+            cover = coverage(shape["points"], tw, th, origin=(x0, y0),
+                             flattened_cache=flattened_cache)
             if samples:
-                cover = (cover + sum(coverage(points, tw, th, origin=(x0, y0))
+                cover = (cover + sum(coverage(points, tw, th, origin=(x0, y0),
+                                              flattened_cache=flattened_cache)
                                      for points in samples)) / (len(samples) + 1)
             cover = np.clip(feather(cover, shape["feather"]), 0.0, 1.0)
             if falloff == "smooth":

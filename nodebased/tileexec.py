@@ -573,21 +573,6 @@ class TileExecutor:
                               tile_hits=0, tile_misses=0, full_frame_fallbacks=1,
                               source_decodes=0, region=requested)
 
-        # Per-compose transient state.
-        self._source_cache.clear()
-        self._source_layer_cache.clear()
-        self._source_layer_presence_cache.clear()
-        self._roto_digests = {}
-        self._roto_shapes_cache = {}
-        self._paint_items_cache = {}
-        decodes_before = self.stats["source_decodes"]
-        paint_nodes = set(_all_ancestors(resolved, target))
-        node_digests = _compute_node_digests(
-            resolved, tier, frame,
-            solve=lambda key: (self._solve_paint(key, frame, tier)
-                               if resolved["nodes"][key]["type"] == "RotoPaint"
-                               else self._solve_roto(key, frame, tier)) if key in paint_nodes else None)
-
         target_bounds = self.canvas_region(resolved, target, frame, tier)
         width, height = target_bounds.width, target_bounds.height
         if region.full_width <= 0 or region.full_height <= 0:
@@ -600,6 +585,34 @@ class TileExecutor:
                 region.right > region.full_x + region.full_width or \
                 region.bottom > region.full_y + region.full_height:
             raise ValueError("Tile request must lie inside the target data window")
+        decodes_before = self.stats["source_decodes"]
+        contains_roto = (region.width * region.height) / max(1, width * height) >= 0.80 and any(
+            resolved["nodes"][key]["type"] == "Roto" for key in _all_ancestors(resolved, target))
+        if contains_roto:
+            self.stats["full_frame_fallbacks"] += 1
+            pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
+            x0, y0 = region.x - region.full_x, region.y - region.full_y
+            cropped = pixels[y0:y0 + region.height, x0:x0 + region.width]
+            return TileResult(pixels=cropped, canvas_width=region.width, canvas_height=region.height,
+                              tier=tier, tiled=False, tile_hits=0, tile_misses=0,
+                              full_frame_fallbacks=1,
+                              source_decodes=self.stats["source_decodes"] - decodes_before,
+                              region=region)
+
+        # Per-compose transient state.
+        self._source_cache.clear()
+        self._source_layer_cache.clear()
+        self._source_layer_presence_cache.clear()
+        self._roto_digests = {}
+        self._roto_shapes_cache = {}
+        self._roto_geometry_cache = {}
+        self._paint_items_cache = {}
+        paint_nodes = set(_all_ancestors(resolved, target))
+        node_digests = _compute_node_digests(
+            resolved, tier, frame,
+            solve=lambda key: (self._solve_paint(key, frame, tier)
+                               if resolved["nodes"][key]["type"] == "RotoPaint"
+                               else self._solve_roto(key, frame, tier)) if key in paint_nodes else None)
         nodes = resolved["nodes"]
         chain = list(_all_ancestors(resolved, target))
         _validate_merge_formats(resolved, chain, frame, tier)
@@ -940,15 +953,18 @@ class TileExecutor:
         return digest
 
     def _solve_roto(self, node_id, frame, tier):
-        """Get the evaluator's stable digest without rasterising the full matte."""
+        """Hash resolved geometry for tile identity without rendering a full matte."""
         cache_key = (node_id, int(frame), int(tier))
         digests = getattr(self, "_roto_digests", None)
         if digests is None:
             digests = self._roto_digests = {}
         if cache_key not in digests:
-            _, digests[cache_key] = self.evaluator.evaluate_raster(
-                self._unbaked_document, node_id, frame=frame, tier=tier,
-                typed=True, return_digest=True, digest_only=True)
+            payload = tiers.scale_node_data(
+                "Roto", self._unbaked_document.get("node_data", {}).get(node_id), tier)
+            resolved = shapes.resolve_roto_shapes(payload, frame, self._unbaked_document, tier)
+            encoded = json.dumps(resolved, sort_keys=True, allow_nan=False,
+                                 separators=(",", ":")).encode()
+            digests[cache_key] = hashlib.sha256(encoded).hexdigest()
         return digests[cache_key]
 
     def _roto_tile(self, document, node_id, node, params, frame, tier, region,
@@ -964,7 +980,8 @@ class TileExecutor:
         matte = roto.rasterise(resolved, params["width"], params["height"],
                                bool(params.get("invert", 0)),
                                region=(region.x, region.y, region.width, region.height),
-                               stats=self.stats)
+                               stats=self.stats,
+                               flattened_cache=self._roto_geometry_cache)
         source_id = node["inputs"].get("bg")
         if source_id is None:
             return matte
