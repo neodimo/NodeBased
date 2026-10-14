@@ -1,5 +1,27 @@
 ## 2026-10-14 — Lane 8 Q1 of 1: the tiled Roto path is faster than the full-frame one (DONE)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (2:47 PM on 2026-10-14 PDT)
+
+`main` moved `71d7b8f8` -> `fe6a82f3` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 89 tests in 29.409 s, OK. Full suite on
+the stacked tip `fe6a82f3` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1014-0917.log`, started 9:17 AM): **Ran 5339 tests in 19716.132 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step Q1 of 1: the tiled Roto path is faster than the full-frame one, measured where the artist works.** Commits:
+  - `8cc69051` notes: record Lane 8 Roto Q1 results
+  - `d584209d` docs: record Roto ROI measurements and fix
+  - `a73a3679` perf: bypass Roto tiling for broad requests
+  - `368d337c` docs: profile the tiled Roto baseline
+  Diff: 7 files changed, 194 insertions(+), 49 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done:** Profiled the prior tiled path at tiers 1 and 8 before changes. The tier-1 525 ms penalty came chiefly from 40 additional tile matte rasterizations; at tier 8 the extra 42 ms included digest-time full matte evaluation plus tile rendering. Broad Roto requests now use the reference path. Tile digests hash resolved shape data, and flattened shape geometry is reused across tiles. Quarter-frame and 512-pixel ROI timings are recorded in `docs/ROTO_TRACKING.md` and its bundled copy.
 - **Artifacts:** `docs/ROTO_TRACKING.md`, `nodebased/data/docs/ROTO_TRACKING.md`, `nodebased/roto.py`, `nodebased/tileexec.py`, `tests/test_roto.py`; commits `368d337`, `a73a367`, `d584209`, local branch only, not pushed. Profiles and five-run samples are in deliberate scratch at `scratch/nb-lanes/run/profile-L8-baseline.txt` and `scratch/nb-lanes/run/bench-L8-Q1.json`.
 - **State:** Done. Full-frame medians are within 1% of the evaluator at both tiers; tile/reference pixels match. 159 targeted tests passed. Windows and real-display review are unverified.
