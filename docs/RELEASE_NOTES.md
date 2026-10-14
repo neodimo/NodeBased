@@ -1,3 +1,59 @@
+# NodeBased 0.37.0 — a PlanarTracker node that drives CornerPin and Roto, MASt3R-SLAM as a second camera solver that needs no lens, a survey check on every exported camera, the distorted plate through the whole shot with View undistorted, and a fluid stop that settles within a second
+
+## What changed since 0.36.0
+
+- **2D.**
+  - A `PlanarTracker` node: pick a four-corner plane in the viewer, track it across the frames, see its keyed quad
+    and fit error, export the motion as an animated `CornerPin`, or make a `Roto` shape follow the plane. Tested on
+    synthetic projective motion, with recovery from a quarter-area occlusion and the same keys on every run.
+  - `Roto` can render an exact crop of its image: shapes whose bounds miss the requested region are skipped. The
+    first part of rendering only what the viewer asks for.
+- **Camera tracking.**
+  - MASt3R-SLAM as a second solver in `CameraSolve3D` (no focal length handed in): per-frame poses from its
+    keyframes, the focal length fitted to the keyframes' point maps, then the poses refined by a bundle adjustment
+    of its own matches. Measured next to DPV-SLAM at 960x540 and 1920x1080: it recovers the focal 12 to 15% long
+    and runs at 10 frames a second against DPV-SLAM's 46, in 3.2 GB, with bit-identical repeat runs. On the
+    demo shot its camera fails the new survey check, so DPV-SLAM stays the default.
+  - `verify` has a survey check: surveyed world points are projected through the exported cameras and compared
+    with their tracks on the plate (RMS within 0.5% and worst within 1.5% of the plate height), scored in the
+    verdict when a survey is given.
+  - The demo shot has a stand-in for a filmed plate (a wide-angle Brown-Conrady lens and handheld shake) and a
+    camera solve benchmark.
+- **Rendering and the viewer.**
+  - The distorted plate round trip: the demo shot runs with `--plate distorted` (plate, `Undistort`, conditioning
+    and comp, `Redistort`, Write) by hand and by an agent to identical ids and pixels, with the lens round-trip
+    error reported beside the verdict.
+  - The viewer offers View undistorted / View plate for a graph with an `Undistort` node, showing the whole
+    overscan frame with the plate's format outlined inside it.
+- **Fluids.** Stopping the Hot pour preview reuses the baked liquid and whitewater caches: the half-resolution
+  surface arrives in 12 to 312 ms and full detail within a quarter second at frames 1, 60 and 120 on both
+  Radeon targets, inside the one-second target.
+- **Research.** The research radar's last part: a sourced survey of compositing, keying, roto and simulation
+  beyond what NodeBased does, with ranked experiment proposals.
+
+## Known limits
+
+- **Windows:** tested by the automated suite on the CI runner only. The GPU lock and the model providers (SDXL,
+  DPV-SLAM, MASt3R-SLAM) have only been run on Linux.
+- **Lens:** CPU only; `Render3D` and the viewport still draw through the ideal camera. On the distorted plate
+  DPV-SLAM finds the camera path (5 cm) but not the lens (focal 10% off, k1 0.001 against -0.03), and the shot with
+  that solved camera fails its verdict, so the committed demo keeps the rendering camera. No filmed plate yet.
+- **Planar tracking:** picking is four corner clicks and the analysis runs on the CPU over full frames; no
+  real-display review yet.
+- **Roto and trackers:** only the Roto crop request honours the region; the tile executor still renders a full
+  Roto matte and tracker analyses read full frames.
+- **New look:** starting a wire uses 20 px; a body drop onto a card with no free input is dropped; J while playing
+  forwards stops and steps back.
+- **2D:** the Keylight row stays partial. **Rigid bodies:** no fracture.
+
+## Moved to 0.38.0
+
+- The rest of rendering only what the viewer asks for: tiles, trackers and proxy kernels, with timings.
+- A lens estimate that recovers k1 on the distorted plate, then the solved camera in the default demo graph; the
+  lens in `Render3D` and the viewport.
+- DiMo's filmed plate through the camera solve.
+- The 2D-to-3D pipe (ImageToSplat, ImageToMesh, WorldSculpt), on hold.
+
 # NodeBased 0.36.0 — the new look lands (node column, viewer strip, timeline, Properties, transport), Roto draws and feathers in the viewer, a lens on the camera that the solve can now recover, shadow catchers and holdouts, SDXL as the first real model provider with a generated shot that stops flickering, and a camera solved from the plate
 
 ## What changed since 0.35.0
