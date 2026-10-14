@@ -1,6 +1,6 @@
 {
- "schema": 1,
- "status": "rendering camera stand-in; the DPV-SLAM solve needs the graphics card (python examples/demo_shot/solve_camera.py --solver dpvo --distorted) and rewrites this file and the graph",
+ "schema": 2,
+ "solver": "landmarks",
  "plate": {
   "size": [
    640,
@@ -11,8 +11,25 @@
  },
  "typed_focal_mm": 27.0469,
  "true_focal_mm": 22.5391,
- "recovered": null,
- "errors": null,
+ "recovered": {
+  "focal_mm": 22.5578,
+  "k1": -0.03145,
+  "k2": 0.00423
+ },
+ "errors": {
+  "focal_percent": 0.083,
+  "k1": -0.00145,
+  "k2": 0.00023,
+  "position_max_m": 0.02152,
+  "rotation_max_deg": 0.18592
+ },
+ "fit": {
+  "landmarks": 50,
+  "observations": 842,
+  "of": 1200,
+  "rms_px": 0.706
+ },
+ "seconds": 7.6,
  "survey": {
   "picks": [
    {
@@ -30,10 +47,181 @@
     "position": null
    }
   ],
-  "distance": 10.0778
+  "distance": 10.0778,
+  "note": "the CameraSolve3D node of the graph (a plate with no survey)"
  },
  "overscan_margins": [
   24,
   20
+ ],
+ "frames": [
+  {
+   "frame": 1,
+   "rms_px": 0.4288,
+   "position_error_m": 0.00498,
+   "rotation_error_degrees": 0.02557,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 2,
+   "rms_px": 0.6347,
+   "position_error_m": 0.00596,
+   "rotation_error_degrees": 0.02771,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 3,
+   "rms_px": 0.6715,
+   "position_error_m": 0.01402,
+   "rotation_error_degrees": 0.09048,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 4,
+   "rms_px": 0.7827,
+   "position_error_m": 0.01477,
+   "rotation_error_degrees": 0.12579,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 5,
+   "rms_px": 0.8065,
+   "position_error_m": 0.01916,
+   "rotation_error_degrees": 0.13905,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 6,
+   "rms_px": 0.6947,
+   "position_error_m": 0.02122,
+   "rotation_error_degrees": 0.18592,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 7,
+   "rms_px": 0.7816,
+   "position_error_m": 0.01775,
+   "rotation_error_degrees": 0.1352,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 8,
+   "rms_px": 0.7382,
+   "position_error_m": 0.01983,
+   "rotation_error_degrees": 0.08109,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 9,
+   "rms_px": 0.7172,
+   "position_error_m": 0.02033,
+   "rotation_error_degrees": 0.14751,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 10,
+   "rms_px": 0.7728,
+   "position_error_m": 0.01081,
+   "rotation_error_degrees": 0.08842,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 11,
+   "rms_px": 0.7722,
+   "position_error_m": 0.02152,
+   "rotation_error_degrees": 0.15521,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 12,
+   "rms_px": 0.774,
+   "position_error_m": 0.01181,
+   "rotation_error_degrees": 0.10263,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 13,
+   "rms_px": 0.7167,
+   "position_error_m": 0.01227,
+   "rotation_error_degrees": 0.07286,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 14,
+   "rms_px": 0.582,
+   "position_error_m": 0.00487,
+   "rotation_error_degrees": 0.03917,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 15,
+   "rms_px": 0.604,
+   "position_error_m": 0.00565,
+   "rotation_error_degrees": 0.0,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 16,
+   "rms_px": 0.7013,
+   "position_error_m": 0.00468,
+   "rotation_error_degrees": 0.01536,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 17,
+   "rms_px": 0.7166,
+   "position_error_m": 0.00592,
+   "rotation_error_degrees": 0.03866,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 18,
+   "rms_px": 0.8034,
+   "position_error_m": 0.00454,
+   "rotation_error_degrees": 0.04178,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 19,
+   "rms_px": 0.7127,
+   "position_error_m": 0.00342,
+   "rotation_error_degrees": 0.03812,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 20,
+   "rms_px": 0.708,
+   "position_error_m": 0.01539,
+   "rotation_error_degrees": 0.09409,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 21,
+   "rms_px": 0.6893,
+   "position_error_m": 0.00503,
+   "rotation_error_degrees": 0.01691,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 22,
+   "rms_px": 0.7151,
+   "position_error_m": 0.00947,
+   "rotation_error_degrees": 0.04842,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 23,
+   "rms_px": 0.8076,
+   "position_error_m": 0.00591,
+   "rotation_error_degrees": 0.0,
+   "fov_error_degrees": 0.03363
+  },
+  {
+   "frame": 24,
+   "rms_px": 0.5415,
+   "position_error_m": 0.00903,
+   "rotation_error_degrees": 0.05,
+   "fov_error_degrees": 0.03363
+  }
  ]
 }

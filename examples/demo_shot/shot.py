@@ -182,6 +182,8 @@ def save_graph(path, width, height, keys, frames=FRAMES, plate_folder=None):
 
 LENS_GRAPH = HERE / "demo_shot_lens.nbcomp"
 LENS_SOLVE = HERE / "solve_lens.json"
+LENS_GRAPH_DPVO = HERE / "demo_shot_lens_dpvo.nbcomp"     # the same graph with the DPV-SLAM solve (not the default)
+LENS_SOLVE_DPVO = HERE / "solve_lens_dpvo.json"
 SOLVE_TYPED_FOCAL_SCALE = 1.2     # the artist types a focal length 20 percent off; the solve recovers it
 LENS_KEYS = ("lens_k1", "lens_k2", "lens_k3", "lens_p1", "lens_p2", "lens_cx", "lens_cy")
 

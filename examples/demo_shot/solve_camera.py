@@ -16,12 +16,17 @@ lens_benchmark.json:
     python examples/demo_shot/solve_camera.py --solver dpvo --lens estimate --distortion k1 --width 960 --plate-k1 -0.03
     python examples/demo_shot/solve_camera.py --solver dpvo --matrix
 
-`--distorted` is the solve of the lens round trip: it renders the distorted plate (make_plate.py --distorted), solves it
-with the lens estimated (focal length, k1 and k2) and two survey picks for the scale, and writes `demo_shot_lens.nbcomp`
-(the shot graph with the solved camera, its overscan camera and the Undistort / Redistort round trip) and `solve_lens.json`
-(the recovered lens and the errors against the truth). The GPU, under the GPU lock. Later runs of the shot do not solve
-again: the camera that feeds the export is the one kept in the graph.
+`--distorted` is the solve of the lens round trip: it renders the distorted plate (make_plate.py --distorted), solves
+the camera with the lens recovered (focal length, k1 and k2) and writes `demo_shot_lens.nbcomp` (the shot graph with the
+solved camera, its overscan camera and the Undistort / Redistort round trip) and `solve_lens.json` (the recovered lens and
+the errors against the truth). With the default `--solver survey` the camera comes from the set's surveyed landmarks
+(clicked on frame 1, tracked through the plate, one adjustment over every frame's pose and the one shared lens); it runs
+on the processor in seconds. With `--solver dpvo` the CameraSolve3D node solves the plate with no survey but two picks for
+the scale (the GPU, under the GPU lock) and the result goes to `demo_shot_lens_dpvo.nbcomp` and `solve_lens_dpvo.json`,
+which are not the shot's default (the lens does not come out of that solve, see the README). Later runs of the shot do
+not solve again: the camera that feeds the export is the one kept in the graph.
 
+    python examples/demo_shot/solve_camera.py --distorted
     python examples/demo_shot/solve_camera.py --solver dpvo --distorted
 """
 from __future__ import annotations
@@ -138,6 +143,101 @@ def read_plate(folder, frames=shot.FRAMES):
         raster = read_media_raster(shot.plate_pattern(folder) % frame)
         out[frame] = np.asarray(raster.to_display(), dtype=np.float32)
     return out
+
+
+
+# ----------------------------------------------------------------------------- the lens from surveyed points
+
+def solve_lens_landmarks(frames, width, height, plate_lens, typed_focal_mm, log=print):
+    """Solve the camera of a distorted plate from the surveyed landmarks, and recover the lens with it.
+
+    The landmarks are clicked on the first frame (the true projection through `plate_lens`, rounded to a whole pixel, the
+    precision of a click) and followed through the plate with the tracker. A first camera per frame comes from the plain
+    fit of `solve` (it takes the picture for an ideal one). Then one adjustment fits every frame's pose and the one
+    lens shared by all of them (focal length, k1, k2), starting from `typed_focal_mm` and no distortion: the landmarks'
+    world positions are known, so the lens is not entangled with the structure as in a solve with no survey (whose
+    reprojection cost is flat across k1 on this move, see the README). Returns (cameras, lens block, rows)."""
+    from nodebased import camera_solve as cs, filmback, lensrefine as lr
+    numbers = sorted(frames)
+    first, last = numbers[0], numbers[-1]
+    points = np.array(shot.landmarks(), dtype=np.float64)
+    reference = replace(truth_camera(first), **plate_lens)
+    clicks, depth = scene3d.project_lens(reference, width, height, points)
+    margin = 14 + SEARCH_RADIUS
+    keep = ((depth > 0.5) & (clicks[:, 0] > margin) & (clicks[:, 1] > margin)
+            & (clicks[:, 0] < width - margin) & (clicks[:, 1] < height - margin))
+    points, clicks = points[keep], np.round(clicks[keep])
+    tracks, used = [], []
+    for world, click in zip(points, clicks):
+        try:
+            tracks.append(tracker.analyse(frames, first, click, pattern_radius=PATTERN_RADIUS, search_radius=SEARCH_RADIUS,
+                                          first_frame=first, last_frame=last))
+            used.append(world)
+        except tracker.AnalysisError:
+            continue
+    world = np.array(used)
+    image = np.array([[track[f] for track in tracks] for f in numbers], dtype=np.float64)       # (frames, points, 2)
+    base, poses = generic_guess(), []
+    for index, frame in enumerate(numbers):
+        camera, _rms = _robust_fit(base, world, image[index], width, height)
+        base = camera
+        eye, target = camera.transform.position.array(), camera.target.array()
+        poses.append(cs.pose_from_keys(*map(float, eye), *map(float, target), float(camera.roll)))
+    rotation0, translation0 = lr.world_to_camera(np.array(poses))
+    count, frame_count = len(world), len(numbers)
+    start = np.array([math.log(typed_focal_mm * height / filmback.DEFAULT_VAPERTURE), 0.0, 0.0])
+    mask = np.ones((frame_count, count), bool)
+
+    def unpack(x):
+        rotation = lr._exp_rotation(x[3:].reshape(-1, 6)[:, :3]) @ rotation0
+        return rotation, x[3:].reshape(-1, 6)[:, 3:] + translation0, math.exp(x[0]), x[1], x[2]
+
+    def residual(x):
+        rotation, translation, focal, k1, k2 = unpack(x)
+        camera = np.einsum("fij,pj->fpi", rotation, world) + translation[:, None, :]
+        pixels = lr.camera_pixels(camera.reshape(-1, 3), focal, k1, k2, width, height).reshape(frame_count, count, 2)
+        out = (pixels - image)
+        out[camera[..., 2] <= 1e-6] = 1e3
+        return out
+
+    x = np.concatenate((start, np.zeros(frame_count * 6)))
+    damping = 1e-3
+    for stage in range(3):
+        current = residual(x)[mask].reshape(-1)
+        for _ in range(60):
+            jacobian = np.empty((len(current), len(x)))
+            for column in range(len(x)):
+                step = 1e-6 if column >= 3 else 1e-5
+                shifted = x.copy(); shifted[column] += step
+                jacobian[:, column] = (residual(shifted)[mask].reshape(-1) - current) / step
+            weights = np.repeat(np.minimum(1.0, 3.0 / np.maximum(np.linalg.norm(current.reshape(-1, 2), axis=1), 1e-12)), 2)
+            normal = (jacobian * weights[:, None]).T @ (jacobian * weights[:, None]) + damping * np.eye(len(x))
+            delta = np.linalg.solve(normal, -(jacobian * weights[:, None]).T @ (current * weights))
+            trial = residual(x + delta)[mask].reshape(-1)
+            if trial @ trial < current @ current:
+                x, current = x + delta, trial
+                damping = max(damping * 0.3, 1e-10)
+                if np.linalg.norm(delta) < 1e-9:
+                    break
+            else:
+                damping = min(damping * 10, 1e8)
+        error = np.linalg.norm(residual(x), axis=2)
+        mask = error < max(OUTLIER_PX, 3 * float(np.median(error[mask])))
+    rotation, translation, focal_px, k1, k2 = unpack(x)
+    error = np.linalg.norm(residual(x), axis=2)
+    rms = float(np.sqrt(np.mean(error[mask] ** 2)))
+    focal_mm = round(focal_px * filmback.DEFAULT_VAPERTURE / height, 4)
+    fov = cs.fov_from_intrinsics(height, focal_px)
+    placed = lr.camera_to_world(rotation, translation)
+    cameras = {frame: cs.solve_camera_object(placed[i], fov, (k1, k2)) for i, frame in enumerate(numbers)}
+    rows = [{"frame": frame, "rms_px": round(float(np.sqrt(np.mean(error[i][mask[i]] ** 2))), 4),
+             **{k: round(v, 5) for k, v in cv._camera_measurement(truth_camera(frame), cameras[frame]).items()}}
+            for i, frame in enumerate(numbers)]
+    block = {"landmarks": count, "observations": int(mask.sum()), "of": int(mask.size), "focal_mm": focal_mm,
+             "k1": round(float(k1), 5), "k2": round(float(k2), 5), "rms_px": round(rms, 4)}
+    log(f"  landmark solve: {count} landmarks, {int(mask.sum())} of {mask.size} tracked positions used, "
+        f"rms {rms:.3f} px, focal {focal_mm} mm, k1 {k1:.4f}, k2 {k2:.4f}")
+    return cameras, block, rows
 
 
 # ----------------------------------------------------------------------------- the DPVO lens benchmark
@@ -262,14 +362,14 @@ def main():
     parser.add_argument("--plate-k1", type=float, default=0.0, help="dpvo: render the lens plate with this radial distortion")
     parser.add_argument("--typed-focal-scale", type=float, default=1.2, help="dpvo: the typed focal length over the truth")
     parser.add_argument("--distorted", action="store_true",
-                        help="dpvo: solve the distorted plate with the lens estimated and two survey picks; writes demo_shot_lens.nbcomp")
+                        help="solve the distorted plate with the lens recovered; writes demo_shot_lens.nbcomp (--solver dpvo: demo_shot_lens_dpvo.nbcomp)")
     parser.add_argument("--matrix", action="store_true", help="dpvo: every plate, width and setting; writes lens_benchmark.json")
     parser.add_argument("--cache", default=str(shot.default_cache()), help="dpvo: where plates and the artifact store go")
     parser.add_argument("--save-solves", help="dpvo: also keep each raw solver answer here as an .npz (to rerun the refinement offline)")
     parser.add_argument("--out", help="dpvo: write the result rows here (default with --matrix: lens_benchmark.json)")
     args = parser.parse_args()
     if args.distorted:
-        return main_distorted(args)
+        return main_distorted(args) if args.solver == "dpvo" else main_distorted_landmarks(args)
     if args.solver == "dpvo":
         return main_dpvo(args)
     frames = read_plate(Path(args.plate) if args.plate else shot.plate_dir())
@@ -332,6 +432,40 @@ def solve_distorted(plate_folder, cache, log=print):
     return dispatcher.document, reply, (picks, distance)
 
 
+def main_distorted_landmarks(args):
+    """The default solve of the distorted plate: the surveyed landmarks and one lens shared by every frame."""
+    import make_plate
+    folder = Path(args.plate) if args.plate else shot.distorted_plate_dir()
+    if not (folder / (shot.plate_pattern(".").split("/")[-1] % shot.FRAMES)).exists():
+        make_plate.render_plate(folder, shot.DISTORTED_SIZE, shot.FRAMES, k1=shot.DISTORTED_K1, k2=shot.DISTORTED_K2)
+    width, height = shot.DISTORTED_SIZE
+    typed = shot.FOCAL * shot.SOLVE_TYPED_FOCAL_SCALE
+    started = time.perf_counter()
+    cameras, block, rows = solve_lens_landmarks(read_plate(folder), width, height,
+                                                shot.lens_of(shot.DISTORTED_K1, shot.DISTORTED_K2), typed)
+    seconds = time.perf_counter() - started
+    lens = shot.lens_of(block["k1"], block["k2"])
+    keys = camera_keys(cameras)
+    margins = shot.overscan_margins(lens, shot.DISTORTED_SIZE)
+    picks, distance = shot.pick_survey(shot.DISTORTED_SIZE, shot.lens_of(shot.DISTORTED_K1, shot.DISTORTED_K2), plate_folder=folder)
+    record = {"schema": 2, "solver": "landmarks", "plate": {"size": list(shot.DISTORTED_SIZE), "k1": shot.DISTORTED_K1, "k2": shot.DISTORTED_K2},
+              "typed_focal_mm": round(typed, 4), "true_focal_mm": round(shot.FOCAL, 4),
+              "recovered": {"focal_mm": block["focal_mm"], "k1": block["k1"], "k2": block["k2"]},
+              "errors": {"focal_percent": round(100.0 * (block["focal_mm"] / shot.FOCAL - 1.0), 3),
+                         "k1": round(block["k1"] - shot.DISTORTED_K1, 5), "k2": round(block["k2"] - shot.DISTORTED_K2, 5),
+                         "position_max_m": max(r["position_error_m"] for r in rows),
+                         "rotation_max_deg": max(r["rotation_error_degrees"] for r in rows)},
+              "fit": {k: block[k] for k in ("landmarks", "observations", "of", "rms_px")}, "seconds": round(seconds, 1),
+              "survey": {"picks": picks, "distance": round(distance, 4), "note": "the CameraSolve3D node of the graph (a plate with no survey)"},
+              "overscan_margins": list(margins), "frames": rows}
+    shot.LENS_SOLVE.write_text(json.dumps(record, indent=1) + "\n")
+    shot.save_lens_graph(shot.LENS_GRAPH, shot.DISTORTED_SIZE, keys, lens, margins, shot.survey_json(picks, distance),
+                         plate_folder=shot.HERE / "plate_distorted")
+    print(json.dumps({k: record[k] for k in ("recovered", "errors", "fit", "seconds", "overscan_margins")}, indent=1))
+    print(f"wrote {shot.LENS_GRAPH.name} and {shot.LENS_SOLVE.name}")
+    return 0
+
+
 def main_distorted(args):
     import make_plate
     folder = Path(args.plate) if args.plate else shot.distorted_plate_dir()
@@ -343,7 +477,7 @@ def main_distorted(args):
     keys = solved_keys(document, "camera")
     margins = shot.overscan_margins(lens, shot.DISTORTED_SIZE)
     errors = similarity_errors(document, "camera", 1, shot.FRAMES)
-    record = {"schema": 1, "plate": {"size": list(shot.DISTORTED_SIZE), "k1": shot.DISTORTED_K1, "k2": shot.DISTORTED_K2},
+    record = {"schema": 1, "solver": "dpvo", "plate": {"size": list(shot.DISTORTED_SIZE), "k1": shot.DISTORTED_K1, "k2": shot.DISTORTED_K2},
               "typed_focal_mm": round(shot.FOCAL * shot.SOLVE_TYPED_FOCAL_SCALE, 4), "true_focal_mm": round(shot.FOCAL, 4),
               "recovered": {"focal_mm": round(camera["focal"], 4), "k1": round(lens["lens_k1"], 5), "k2": round(lens["lens_k2"], 5)},
               "errors": {"focal_percent": round(100.0 * (camera["focal"] / shot.FOCAL - 1.0), 3),
@@ -351,11 +485,11 @@ def main_distorted(args):
                          **{k: round(v, 5) for k, v in errors.items()}},
               "survey": {"picks": picks, "distance": round(distance, 4), "scale": reply["scale"], "scale_source": reply["scale_source"]},
               "overscan_margins": list(margins), "lens": reply["lens"], "run": reply["run"]}
-    shot.LENS_SOLVE.write_text(json.dumps(record, indent=1) + "\n")
-    shot.save_lens_graph(shot.LENS_GRAPH, shot.DISTORTED_SIZE, keys, lens, margins, shot.survey_json(picks, distance),
+    shot.LENS_SOLVE_DPVO.write_text(json.dumps(record, indent=1) + "\n")
+    shot.save_lens_graph(shot.LENS_GRAPH_DPVO, shot.DISTORTED_SIZE, keys, lens, margins, shot.survey_json(picks, distance),
                          plate_folder=shot.HERE / "plate_distorted")
     print(json.dumps({k: record[k] for k in ("recovered", "errors", "overscan_margins")}, indent=1))
-    print(f"wrote {shot.LENS_GRAPH.name} and {shot.LENS_SOLVE.name}")
+    print(f"wrote {shot.LENS_GRAPH_DPVO.name} and {shot.LENS_SOLVE_DPVO.name}")
     return 0
 
 

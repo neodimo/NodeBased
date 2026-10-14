@@ -1,8 +1,8 @@
 """Rendering 13 step L3: the distorted plate through the demo shot, end to end (examples/demo_shot, `--plate distorted`).
 
 Everything runs on the CPU at 192 by 108 and four frames; the full-size numbers are in the example's README. The graph under
-test is built with the true camera and lens (the committed `demo_shot_lens.nbcomp` holds the one DPV-SLAM solved, which
-needs the card)."""
+test is built with the true camera and lens; the committed `demo_shot_lens.nbcomp` holds the camera the landmark solve
+recovered (LandmarkSolveTests), and the DPV-SLAM solve, which needs the card, is kept apart."""
 import contextlib
 import json
 import os
@@ -25,6 +25,7 @@ import lens_check  # noqa: E402
 import make_plate  # noqa: E402
 import run_by_hand  # noqa: E402
 import shot  # noqa: E402
+import solve_camera  # noqa: E402
 
 SIZE, FRAMES = (192, 108), 4
 LENS = shot.lens_of(shot.DISTORTED_K1, shot.DISTORTED_K2)
@@ -217,6 +218,55 @@ class GraphTests(LensShotBase):
         self.assertFalse(shot.is_lens_graph(json.loads((DEMO / "demo_shot.nbcomp").read_text())))
 
 
+class LandmarkSolveTests(unittest.TestCase):
+    """The camera of the distorted plate comes from the set's surveyed landmarks and one lens shared by every frame: the
+    reprojection of a solve with no survey is flat across k1 on this move (README), the landmarks' known positions are not."""
+    SIZE, FRAMES = (320, 180), 12
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        plate = Path(cls.folder.name) / "plate"
+        make_plate.render_plate(plate, cls.SIZE, cls.FRAMES, k1=shot.DISTORTED_K1, k2=shot.DISTORTED_K2)
+        cls.frames = solve_camera.read_plate(plate, cls.FRAMES)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def solve(self, typed_scale=shot.SOLVE_TYPED_FOCAL_SCALE):
+        return solve_camera.solve_lens_landmarks(self.frames, *self.SIZE, LENS, shot.FOCAL * typed_scale, log=lambda *_: None)
+
+    def test_the_lens_and_the_camera_come_out_of_a_typed_focal_length_that_is_20_percent_long(self):
+        cameras, block, rows = self.solve()
+        self.assertLess(abs(block["focal_mm"] / shot.FOCAL - 1.0), 0.03)
+        self.assertLess(abs(block["k1"] - shot.DISTORTED_K1), 0.005)
+        self.assertLess(abs(block["k2"] - shot.DISTORTED_K2), 0.003)
+        self.assertLess(block["rms_px"], 1.0)
+        self.assertEqual(sorted(cameras), list(range(1, self.FRAMES + 1)))
+        self.assertLess(max(r["position_error_m"] for r in rows), 0.06)
+        self.assertLess(max(r["rotation_error_degrees"] for r in rows), 0.5)
+        self.assertAlmostEqual(cameras[1].lens_k1, block["k1"], places=5)
+        self.assertAlmostEqual(cameras[1].lens_k2, block["k2"], places=5)
+
+    def test_a_short_typed_focal_length_converges_to_the_same_lens_and_a_rerun_gives_the_same_numbers(self):
+        _cameras, long_block, _rows = self.solve(1.2)
+        _cameras, short_block, _rows = self.solve(0.85)
+        self.assertLess(abs(short_block["focal_mm"] / long_block["focal_mm"] - 1.0), 0.01)
+        self.assertLess(abs(short_block["k1"] - long_block["k1"]), 0.003)
+        self.assertEqual(self.solve()[1], self.solve()[1])
+
+    def test_the_committed_graph_carries_the_solved_camera_and_lens_not_the_rendering_camera(self):
+        record = json.loads((DEMO / "solve_lens.json").read_text())
+        self.assertEqual(record["solver"], "landmarks")
+        self.assertLess(abs(record["errors"]["focal_percent"]), 3.0)
+        self.assertLess(abs(record["errors"]["k1"]), 0.005)
+        self.assertLess(record["errors"]["position_max_m"], 0.06)
+        camera = json.loads((DEMO / "demo_shot_lens.nbcomp").read_text())["nodes"]["camera"]["params"]
+        self.assertEqual((camera["lens_k1"], camera["lens_k2"]), (record["recovered"]["k1"], record["recovered"]["k2"]))
+        self.assertNotEqual(camera["lens_k1"], shot.DISTORTED_K1)           # recovered from the plate, not copied from the renderer
+
+
 class CardSolveTests(unittest.TestCase):
     """The DPV-SLAM solve of the full-size distorted plate needs the whole graphics card. It skips when the card or the
     solver is missing, or when another job (a suite run, a model) holds the machine's GPU lock for more than 10 seconds."""
@@ -249,15 +299,16 @@ class CardSolveTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.stack.close()
 
-    def test_the_solve_recovers_the_focal_length_and_the_lens_of_the_distorted_plate(self):
+    def test_the_solve_recovers_the_focal_length_and_the_camera_path_of_the_distorted_plate(self):
         import solve_camera
         plate = Path(self.folder.name) / "plate_distorted"
         make_plate.render_plate(plate, shot.DISTORTED_SIZE, shot.FRAMES, k1=shot.DISTORTED_K1, k2=shot.DISTORTED_K2)
         document, reply, _picks = solve_camera.solve_distorted(plate, Path(self.folder.name) / "cache", log=lambda *_: None)
         camera = document["nodes"]["camera"]["params"]
-        # loose bounds: the measured errors are in the example's README once a card run has recorded them
+        # the measured errors are in the example's README: a solve with no survey finds the camera path and the scale but not
+        # k1 (its reprojection is flat across k1 on this move), so only the focal length is held to a bound
         self.assertLess(abs(camera["focal"] / shot.FOCAL - 1.0), 0.15)
-        self.assertLess(abs(camera["lens_k1"] - shot.DISTORTED_K1), 0.03)
+        self.assertTrue(np.isfinite([camera["lens_k1"], camera["lens_k2"]]).all())
         self.assertEqual(reply["scale_source"], "survey")
 
 
