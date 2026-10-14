@@ -154,6 +154,8 @@ distorted`, 648 s for both):
 | Generated sequence | `c68d664ea28725ab69086c946eac4e67fba5207ca1e9c06c83b0a4bbeea9d96a` |
 | Verification report | `11be7d67a88603be6abc93412400a01f03eb705ca63586559e0a7ccc13a77578` |
 
+With `Undistort` and `Redistort` on the card (`lens_backend` auto, step G1) the same run takes 349 s against 362 s on the CPU backend, measured back to back: the two nodes are about 1% of the run either way (4.0 s on the CPU, 2.7 s on the card), the ids above are unchanged and the verdict is PASS, and the written frames differ from the CPU backend's by at most 0.001 (the EXR's half floats), so their pixel digest is not the same across backends.
+
 **Why 640 by 360.** The verifier's object check allows 2 pixels. The `reproject` stand-in carries each layout render
 along its motion vectors and its tracked error grows with the frame size: it passes at 640 and 704 wide and fails
 at 768, 832 and 896 (two objects drift 2.2 to 2.4 pixels on a few frames). The shot is therefore 640 wide.

@@ -2370,6 +2370,45 @@ Where the lens is used:
 The workflow is Nuke's: `Undistort` the plate (the data window grows so nothing is cropped), comp or generate on
 the undistorted image with the ideal camera, then `Redistort` back into the plate's format.
 
+**On the graphics card (step G1).** `Undistort` and `Redistort` have a `Backend` knob (`lens_backend`: `auto`, `cpu`,
+`gpu`, the choice `flow_backend` offers). `nodebased/gpulens.py` is a wgpu compute shader that does what
+`lensmodel.sample_coordinates` and `Evaluator._resample` do on the CPU: each output pixel maps its centre through the
+forward model (Undistort) or the 24 Newton steps and residual check of the inverse (Redistort), then reads the source
+with the node's `filter` (nearest, bilinear, Catmull-Rom cubic; black outside the source). The overscan window, the
+display window's offset, the principal point and the anamorphic squeeze are the CPU's. The source is a float texture and
+the output is written in bands of rows, so a 4K frame with its overscan fits an adapter whose buffers stop at 128 MiB.
+`auto` uses the card when there is one and the output has 65,536 pixels or more (below that the copies cost more than
+the warp); `cpu` never does; `gpu` reports why it could not (`GPU Undistort unavailable: ...`) instead of falling back.
+The CPU path stays the reference and the fallback when wgpu is missing, the frame is wider than the adapter's texture, or the
+card fails. The pixels of a run therefore depend on the adapter to within the tolerance below, and so does the written
+shot's pixel digest; the artifact ids of the demo shot do not.
+
+Agreement with the CPU, smooth content, all three filters, both directions, four lenses (radial, tangential,
+principal point, squeeze), 160 x 90 up to 3840 x 2160, with an overscan source and an offset display window, checked on
+the RTX 3080 Ti, the Radeon 8060S (`force-adapter.py integrated`) and llvmpipe (`force-adapter.py cpu`): inside the
+frame (every tap at least 4 pixels in from the source's edge) the largest difference is 3e-6 per channel against a limit of
+1e-4; within 4 pixels of the edge, where float32 and float64 can round a position to different sides of the black border,
+1.9e-5 against a stated 5e-4 (nearest: at most 0.1% of those pixels may differ at all; none did). Undistort then Redistort
+on the card returns a smooth plate to within 1e-3 away from the border. An adapter that lacks what the shader needs
+(storage buffers, a large enough texture) makes `tests/test_gpulens.py` skip that adapter's tests with the reason in
+the skip message.
+
+Timing, median of five, float RGBA, bilinear, the demo plate's lens (`tools/benchmark_lens_warp.py`; the GPU column is the
+node's whole cost, upload and read back included, measured on the RTX 3080 Ti with a test suite holding the lock and the
+card idle):
+
+| Size | Node | CPU (ms) | Card (ms) |
+|---|---|---|---|
+| 1920 x 1080 | Undistort | 283 | 37 |
+| 1920 x 1080 | Redistort | 1625 | 28 |
+| 3840 x 2160 | Undistort | 1155 | 466 |
+| 3840 x 2160 | Redistort | 7803 | 458 |
+
+A full hand run of the distorted demo shot (`run_by_hand.py --plate distorted`, 24 frames at 640 x 360) spends about
+4.0 s of its 362 s in the two nodes on the CPU (1.1%) and about 2.7 s of 349 s with `auto` (0.8%); the render, the
+export and the verifier take the rest, so the total moved by the run to run variation of this machine, not by the
+lens. The gain is in the viewer's "View undistorted" at plate size and in 2K and 4K shots.
+
 ## Motion blur
 
 Step R5's second half. `Render3D` blurs what moves across a shutter in the path tracer, the ray-traced mode and raster mode.
@@ -3167,3 +3206,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   comparison, which report matching ids), with the lens round-trip error reported apart from the verdict, and the viewer
   offers View undistorted / View plate for a graph with an Undistort node. Described in docs/END_TO_END_SPRINT.md, "Stage 7,
   step L3". Card run 10/13: the DPV-SLAM solve recovers the camera path (position 0.049 m RMS) but not the lens at 640 by 360 (focal length 10% off, `k1` 0.0012 against -0.03), so the shot with that camera fails the verdict on the stand-in and on `sdxl_controlnet`; it is kept as `demo_shot_lens_dpvo.nbcomp`. The default graph's camera and lens now come from the set's surveyed landmarks (`solve_camera.py --distorted`: focal length 0.08% off, `k1` -0.0314 against -0.03, position 2.2 cm worst), and the shot passes the verdict on the stand-in with it. Numbers in examples/demo_shot/README.md. `gpu_job` takes a `timeout`.
+- Step G1 of 2 (Rendering 13, lens on the graphics card): `Undistort` and `Redistort` run on the card
+  (`nodebased/gpulens.py`, the `lens_backend` knob, "Lens distortion" above); CPU reference and fallback unchanged.
+  Schema bumped from 23 to 24 (the knob). Agreement and timings measured on three adapters; tests in
+  `tests/test_gpulens.py`, timing in `tools/benchmark_lens_warp.py`. Left out: the live viewport still draws through
+  the ideal camera (step G2).
