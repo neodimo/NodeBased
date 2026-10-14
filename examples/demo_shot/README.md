@@ -11,13 +11,13 @@ real model comes in stage 3 and only swaps the provider.
 | File | What it is |
 | --- | --- |
 | `make_plate.py` | Renders the 24-frame plate to EXR and checks it against `plate.sha256.json`; `--k1` renders the lens plate instead (hashes in `plate_k1.sha256.json`); `--distorted` the plate of the lens round trip, 640 by 360 with k1 and k2 (hashes in `plate_distorted.sha256.json`). |
-| `solve_camera.py` | Tracks the plate, solves the camera from it, compares with the rendering camera, writes `solve.json` and `demo_shot.nbcomp`; `--solver dpvo --lens estimate` solves with DPV-SLAM and recovers the lens (below). |
+| `solve_camera.py` | Tracks the plate, solves the camera from it, compares with the rendering camera, writes `solve.json` and `demo_shot.nbcomp`; `--solver dpvo --lens estimate` solves with DPV-SLAM and recovers the lens (below); `--distorted` solves the distorted plate (the surveyed landmarks, or `--solver dpvo`). |
 | `lens_benchmark.json` | The recorded focal length and k1 recovery runs (`solve_camera.py --solver dpvo --matrix`). |
 | `diagnose_verdict.py` | Measures the verifier on the shot: each check's worst value, its threshold, and the same measurement for the plate against its own SceneState. |
 | `demo_shot.nbcomp` | The shot graph. |
-| `demo_shot_lens_dpvo.nbcomp`, `solve_lens_dpvo.json` | The same graph with the camera and lens of the DPV-SLAM solve on the card, and the recovered lens and errors (not the default; see the card measurements below). |
+| `demo_shot_lens_dpvo.nbcomp`, `solve_lens_dpvo.json` | The same graph with the camera and lens of the DPV-SLAM solve on the card (`solve_camera.py --solver dpvo --distorted`), and the recovered lens and errors (not the default; see below). |
 | `demo_shot_lens.nbcomp` | The shot graph of the distorted plate: plate, Undistort, the conditioning and the comp in the undistorted frame, Redistort, Write (below). |
-| `solve_lens.json` | The camera solve behind it: the lens the solve recovered against the truth, the survey and the overscan. |
+| `solve_lens.json` | The landmark solve behind it: the lens recovered against the truth, the fit, the per-frame errors and the overscan. |
 | `lens_check.py` | The lens round-trip error of a run, apart from the verifier's verdict. |
 | `capture_lens_view.py` | Renders the viewer's undistorted view with its overscan into `docs/images/demo_shot/`. |
 | `run_by_hand.py` | Headless run through the `nodebased.agent` dispatcher; prints artifact ids and the verdict. `--plate distorted` runs the lens shot. |
@@ -122,9 +122,11 @@ by its motion vectors; it does not paint a street.
 flag) runs the shot of a filmed, distorted plate: **plate, Undistort (with overscan), the layout, the conditioning
 export and the generated picture in the undistorted frame, grade and merge, Redistort, Write**
 (`demo_shot_lens.nbcomp`). The plate is 640 by 360 with `k1` -0.03 and `k2` 0.004 (`make_plate.py --distorted`,
-hashes in `plate_distorted.sha256.json`; a plate in the cache that differs from them is rendered again). The solve
-node is `CameraSolve3D` with `Focal length is` = estimate, `Distortion` = k1 k2 and a survey of two picked points
-and their distance (`shot.pick_survey` picks them where the plate has texture on every frame). The overscan is the
+hashes in `plate_distorted.sha256.json`; a plate in the cache that differs from them is rendered again). The camera and
+the lens in the graph come from the landmark solve below (`solve_camera.py --distorted`); the graph also keeps the
+`CameraSolve3D` node set up for a plate with no survey (`Focal length is` = estimate, `Distortion` = k1 k2 and a survey of
+two picked points and their distance, which `shot.pick_survey` picks where the plate has texture on every frame), whose
+result is the DPV-SLAM row of the table below. The overscan is the
 margin Undistort grows the frame by (24 by 20 pixels here, the frame a multiple of 16 each way, which is what a
 diffusion model wants), the export carries the lens of the overscan camera (the same physical lens on the larger
 film back) and the resolution of the overscan frame, so a provider works undistorted and `Redistort` puts the
@@ -138,22 +140,41 @@ band, as a mean and a 99th percentile of the absolute difference, against limits
 `reproject` stand-in both are judged. A real model restyles the picture, so for it only `plate_identity` is judged and
 `result_vs_plate` is printed for reading.
 
-Measured on this machine's CPU (24 frames, 640 by 360, no GPU used), the hand run takes **328 s** (the plain shot's
-155 s is at 480 by 270; the lens shot also renders the overscan frame and resamples twice): verdict **PASS**
-(lighting pass, objects pass, the rest not conditioned as in the plain shot), plate identity mean 0.0012 and p99 0.024,
-result against the plate mean 0.0022 and p99 0.036 (limits 0.003 / 0.06 and 0.01 / 0.12). The hand and the agent run
-give the same ids and the same output pixels (`compare_runs.py --plate distorted`, 667 s for both):
+Measured on this machine's CPU (24 frames, 640 by 360, no GPU used), with the camera and lens of the landmark solve the
+hand run takes **325 s** (the plain shot's 155 s is at 480 by 270; the lens shot also renders the overscan frame and
+resamples twice): verdict **PASS** (lighting pass, objects pass, the rest not conditioned as in the plain shot), plate
+identity mean 0.0012 and p99 0.024, result against the plate mean 0.0026 and p99 0.059 (limits 0.003 / 0.06 and
+0.01 / 0.12). The hand and the agent run give the same ids and the same output pixels (`compare_runs.py --plate
+distorted`, 648 s for both):
 
 | Artifact | Id |
 | --- | --- |
-| SceneState | `036e95618ba9a949859cea5f95cecfe83de82f03b36977d5f0aa8a63a3f18449` |
-| ControlBundle | `afd87a0e765f0d63780294d7a5f6c0546bde3a00464d7ded959c340fb5434666` |
-| Generated sequence | `4126456affb6425a4154d36b1d18c211f94493cd31817e72d00db2bfa24347d9` |
-| Verification report | `23e8a4bfdf87c72970fff1dab93c16bc7a24e50111f8b337010701dcb39cf396` |
+| SceneState | `14a7f274019d8a8f43406ccfc141b1df58096b8edaf435bfe3ab56038fddab3d` |
+| ControlBundle | `78a1f06a07031e526de0aba2a097d93d0a7fc371edea4cc80393e0a687313f72` |
+| Generated sequence | `c68d664ea28725ab69086c946eac4e67fba5207ca1e9c06c83b0a4bbeea9d96a` |
+| Verification report | `11be7d67a88603be6abc93412400a01f03eb705ca63586559e0a7ccc13a77578` |
 
 **Why 640 by 360.** The verifier's object check allows 2 pixels. The `reproject` stand-in carries each layout render
 along its motion vectors and its tracked error grows with the frame size: it passes at 640 and 704 wide and fails
 at 768, 832 and 896 (two objects drift 2.2 to 2.4 pixels on a few frames). The shot is therefore 640 wide.
+
+**The landmark solve (the default camera).** `python examples/demo_shot/solve_camera.py --distorted` (the processor, 8 s) clicks the
+set's 50 visible surveyed landmarks on frame 1 (the true projection rounded to a whole pixel), follows them through the
+distorted plate with the tracker and fits every frame's pose and one lens shared by all frames in a single adjustment
+(`solve_lens_landmarks`: Levenberg-Marquardt with a Huber weight, outlier tracks dropped twice), starting from a focal
+length typed 20 percent long and no distortion. Recovered against the truth: focal length 22.558 mm against 22.539
+(+0.08%), `k1` -0.0314 against -0.03, `k2` 0.0042 against 0.004; camera position 2.2 cm worst over the 24 frames, rotation
+0.19 degrees worst; 842 of 1200 tracked positions kept, 0.71 px RMS. The shot with that camera and lens gives the
+**PASS** above. Starting from a focal length 15% short gives the same lens to within 1% (`tests/test_lens_shot_l3.py`).
+
+**Why the solve with no survey cannot find `k1`.** The DPV-SLAM rows below come out with `k1` near 0 whatever the
+settings, and the cause is the data. On the saved DPV-SLAM answer for this plate (768 points, 6144 tracked positions), a
+bundle adjustment that holds the lens fixed gives the same reprojection error for a plate lens of zero, half the truth
+and the truth: RMS 1.022, 1.023 and 1.030 px. Poses and points absorb the distortion on a dolly with this little
+parallax. Letting only `k1 k2` move with the focal length known gives -0.008 and a formal error of 0.013, against the
+true -0.03; letting the focal length move too gives a focal length 18.6% short. A wider plate does not help: at 960 by 540
+the same estimate gives a focal length 34% long and `k1` -0.006. The surveyed landmarks break the tie, since their world
+positions are known, so the lens is no longer traded against the structure.
 
 **The DPV-SLAM solve on the card (10/13).** `python examples/demo_shot/solve_camera.py --solver dpvo --distorted` solved the
 distorted plate on the RTX 3080 Ti and wrote `demo_shot_lens_dpvo.nbcomp` and `solve_lens_dpvo.json`. The lens estimate does
@@ -166,7 +187,8 @@ because the shot fails with it:
 
 | Run (640 by 360, 24 frames) | Camera in the graph | Verdict | Lens round trip | Time |
 | --- | --- | --- | --- | --- |
-| `reproject` stand-in, CPU | rendering camera (committed `demo_shot_lens.nbcomp`) | PASS | pass | 328 s |
+| `reproject` stand-in, CPU | landmark solve (committed `demo_shot_lens.nbcomp`) | PASS | pass (result against plate mean 0.0026, p99 0.059) | 325 s |
+| `reproject` stand-in, CPU | rendering camera | PASS | pass (mean 0.0022, p99 0.036) | 328 s |
 | `reproject` stand-in, CPU | DPV-SLAM solve (`demo_shot_lens_dpvo.nbcomp`) | FAIL (objects) | plate identity pass, result against plate fails (mean 0.077, p99 0.90) | 287 s |
 | `--provider sdxl_controlnet`, RTX 3080 Ti | DPV-SLAM solve | FAIL (lighting, objects) | plate identity pass (mean 0.0008, p99 0.014); result against plate printed, mean 0.27 | 739 s |
 | `--provider sdxl_controlnet`, RTX 3080 Ti | rendering camera | FAIL (lighting, objects) | plate identity pass; result against plate printed, mean 0.28 | 910 s |
@@ -175,8 +197,7 @@ The model runs generate 24 frames at 1024 by 576 with CPU offload: 441 s (solved
 the generation, peak 7.9 GiB of video memory. The model's lighting and objects checks fail with the rendering camera as
 well, so the failure of the SDXL runs comes from the model's picture and not from the solve; the round-trip identity row
 passes in every run. To run a graph other than the default, `run_by_hand.py --plate distorted --graph FILE`.
-Still open (Needs Gonzo): a lens estimate that recovers `k1` on this plate, for example by solving a wider plate (960 wide, as in the `--plate-k1` command above) or fixing the lens to the plate's calibration, then the solve written into `demo_shot_lens.nbcomp` with
-a PASS stand-in verdict.
+The committed default graph carries the landmark solve instead, and its stand-in row reads PASS (325 s).
 
 ## Running it
 

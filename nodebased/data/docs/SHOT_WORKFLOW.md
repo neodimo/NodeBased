@@ -120,10 +120,12 @@ for the agent is the same sentence plus "the plate is distorted". `examples/demo
 The lens steps, with the tool for each:
 
 1. **Find the lens.** `inspect`: an `Undistort` node on the plate and a `Redistort` before the `Write`, both wired to the
-   solved `Camera3D` (`camera`). Its `lens_k1`, `lens_k2` and `focal` are what the camera solve recovered
-   (`CameraSolve3D` with `solve_focal` `estimate`, `solve_distortion` `k1 k2` and a Survey of two picks and their distance for
-   the scale: the `solve` node of the graph, run once by `solve_camera.py --solver dpvo --distorted`, never at run time: a
-   re-solve changes the camera by a millimetre, so the camera that feeds the export is the one kept in the document).
+   solved `Camera3D` (`camera`). Its `lens_k1`, `lens_k2` and `focal` come from the landmark solve of
+   `solve_camera.py --distorted`: the set's surveyed landmarks are clicked on the first frame, followed through the plate, and
+   one adjustment fits every frame's pose and the one lens they share (focal length, `k1`, `k2`), starting from a focal
+   length typed 20 percent long. Never at run time: the camera that feeds the export is the one kept in the document. A
+   solve with no survey (`CameraSolve3D`, the `solve` node of the graph, `solve_camera.py --solver dpvo --distorted`) finds
+   the path and the scale but not `k1` on this move, so it is not the shot's camera.
 2. **Look at the straightened plate.** `view` the `Undistort` node. Its frame is larger than the format: the data window
    beyond the format is the overscan, the part of the undistorted picture that a Redistort will bend back into the corners.
    In the window, the viewer strip has "View undistorted" and "View plate" for a graph with an Undistort node.

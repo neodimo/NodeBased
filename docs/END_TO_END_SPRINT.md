@@ -394,8 +394,9 @@ with known truth: focal length within 1 percent at 1920 wide, k1 within 10 perce
 A filmed plate is distorted, so the shot's graph works in the undistorted frame and bends the result back:
 plate, `Undistort` with overscan, the solve, the layout and the conditioning export in the undistorted frame, comp,
 `Redistort`, `Write` (`examples/demo_shot/demo_shot_lens.nbcomp`). The export carries the lens of the overscan camera
-and the overscan resolution, so a provider works undistorted and the result lands back on the plate. The solve is a
-`CameraSolve3D` node with the focal length and `k1 k2` estimated and two surveyed points for the scale.
+and the overscan resolution, so a provider works undistorted and the result lands back on the plate. The camera and the
+lens in the graph come from the set's surveyed landmarks (below); the graph also keeps the `CameraSolve3D` node with the
+focal length and `k1 k2` estimated and two surveyed points for the scale, the solve for a plate with no survey.
 
 - **Run it.** `run_by_hand.py --plate distorted`, `run_by_agent.py --plate distorted` (the attached agent adds the
   lens steps of docs/SHOT_WORKFLOW.md to the one-sentence brief plus "the plate is distorted") and
@@ -403,9 +404,16 @@ and the overscan resolution, so a provider works undistorted and the result land
 - **The report.** The verdict is the model's checks; the lens round trip (plate through Undistort and Redistort against the
   plate, and the written result against the plate, away from a 16 pixel edge band) is reported apart from it. With the
   `reproject` stand-in both rows are judged; for a real model only the plate identity is, because it restyles the picture.
-- **Measured (CPU, 640 by 360, 24 frames).** Hand run 328 s, verdict PASS, plate identity mean 0.0012 / p99 0.024, result
-  against the plate mean 0.0022 / p99 0.036. Hand and agent give the same four artifact ids and output pixels (listed in
-  `examples/demo_shot/README.md`); `compare_runs.py --plate distorted` takes 667 s for both.
+- **Measured (CPU, 640 by 360, 24 frames), with the landmark solve's camera.** Hand run 325 s, verdict PASS, plate identity
+  mean 0.0012 / p99 0.024, result against the plate mean 0.0026 / p99 0.059. Hand and agent give the same four artifact ids
+  and output pixels (listed in `examples/demo_shot/README.md`); `compare_runs.py --plate distorted` takes 648 s for both.
+- **The lens from surveyed landmarks (10/13).** `solve_camera.py --distorted` (8 s on the processor) clicks the 50 visible
+  surveyed landmarks on frame 1, tracks them through the distorted plate and fits every frame's pose and one shared lens in
+  one adjustment, from a focal length typed 20% long and no distortion. Recovered: focal length +0.08%, `k1` -0.0314 against
+  -0.03, `k2` 0.0042 against 0.004, camera position 2.2 cm worst, rotation 0.19 degrees worst. The stand-in verdict with it
+  is PASS. The solve with no survey cannot do this on this move: with the lens held fixed, the DPV-SLAM answer's
+  reprojection error is 1.022, 1.023 and 1.030 px for a lens of zero, half the truth and the truth, so `k1` is not
+  determined by those tracks (a wider plate, 960 by 540, gives a focal length 34% long and `k1` -0.006).
 - **Size.** The `reproject` stand-in passes the verifier's 2 pixel object check at 640 and 704 wide and fails at 768 and
   up, so the distorted plate is 640 by 360.
 - **The viewer.** In the Composite workspace the strip offers "View undistorted" and "View plate" for a graph with an
@@ -417,8 +425,7 @@ and the overscan resolution, so a provider works undistorted and the result land
   (`demo_shot_lens_dpvo.nbcomp`, not the committed default) gives verdict FAIL on the stand-in (objects; 287 s) and on
   `--provider sdxl_controlnet` (lighting and objects; 739 s, generation 441 s, peak 7.9 GiB of video memory). The model on
   the rendering-camera graph also fails lighting and objects (910 s). The round-trip identity row passes in every run.
-  Table and detail: `examples/demo_shot/README.md`. Needs Gonzo: a lens estimate that recovers `k1`, then the solve written
-  into the default graph with a PASS stand-in verdict.
+  Table and detail: `examples/demo_shot/README.md`. The default graph carries the landmark solve instead (above).
 
 ## Stage 8: temporal coherence (10/11)
 
