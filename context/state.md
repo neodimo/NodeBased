@@ -1,3 +1,11 @@
+## 2026-10-13 — 0.36.0 published (2:17 PM PDT)
+
+`v0.36.0` (annotated) at `ad19c6cb` is published: https://github.com/neodimo/NodeBased/releases/tag/v0.36.0 . The first tag (6:07 AM, on `b1df7d9c`) went red only on the Windows package job: `tests/test_3d_holdout` assumed an NVIDIA card (the runner's software D3D12 adapter blends in half float and refuses the GPU smoke/splat path tracer). The test fix `ad19c6cb` (half-float tolerance via `tests.gpu_precision`, path tracer gated by `gpupathtrace.soft_supported`) was fast-forwarded to main and the tag moved there at 9:50 AM. Tag workflows green on Linux and Windows; four assets (Linux AppImage, Windows portable ZIP, Windows setup exe, SHA256SUMS). The announcement was posted by hand at 3:55 PM as Discord message `1559699350580629505` (no automatic post was recorded); it is not yet pinned (pin needs a DiMo-started turn).
+
+## 2026-10-14 — 0.37.0 retagged for a Windows test (4:10 AM PDT)
+
+The first `v0.37.0` tag (on release commit `37e60325`) went red on Windows desktop conformance: `tests/test_lens_view_l3` expected the lens switch on the viewer strip, but the runner's small screen makes the strip compact and the switch moves into the "more" menu by design. Test fixed on `fix/lens-strip-windows-1014` (`45224e82`, on the release commit, because a merge round held main), tag moved there, and the branch merged into main at `e6a4a048` at 7:08 AM. Conformance on the new tag is green; the package workflow was still building at 7:48 AM.
+
 ## 2026-10-14 — Lane 8 S3 finish (DONE)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (7:07 AM on 2026-10-14 PDT)
