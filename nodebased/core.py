@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -2331,6 +2331,13 @@ def upgrade_document(document):
                 for name, value in (("solve_focal", "known"), ("solve_distortion", "none"), ("survey", "")):
                     params.setdefault(name, value)
         doc["version"] = 23
+    if isinstance(doc, dict) and doc.get("version") == 23:
+        # v23 -> v24 gives Undistort and Redistort a backend (Rendering 13 step G1). Automatic uses the card
+        # for big images; the CPU reference gives the same picture to within the GPU test's tolerance.
+        for node in doc.get("nodes", {}).values():
+            if isinstance(node, dict) and node.get("type") in ("Undistort", "Redistort"):
+                node.setdefault("params", {}).setdefault("lens_backend", "auto")
+        doc["version"] = 24
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

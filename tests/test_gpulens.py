@@ -20,7 +20,7 @@ import numpy as np
 
 import tests.isolation  # noqa: F401  (Qt settings of the test run stay out of the user's real ones)
 from nodebased import gpu3d, gpulens, lensmodel
-from nodebased.core import Dispatcher
+from nodebased.core import SCHEMA_VERSION, Dispatcher, SPECS, empty_document, upgrade_document, validate
 from nodebased.imaging import Evaluator, Region
 
 INTERIOR = 1e-4
@@ -166,6 +166,19 @@ class NodePathTests(unittest.TestCase):
         for kind in ("Undistort", "Redistort"):
             self.assertEqual(SPECS[kind]["params"]["lens_backend"], "auto")
         self.assertEqual(CHOICES["lens_backend"], ["auto", "cpu", "gpu"])
+
+    def test_a_v23_document_gains_the_backend_knob_on_upgrade(self):
+        """The schema step 23 to 24: lens nodes saved before the knob existed load with the automatic backend."""
+        old = {**empty_document(), "version": 23}
+        for kind in ("Undistort", "Redistort"):
+            params = {name: value for name, value in SPECS[kind]["params"].items() if name != "lens_backend"}
+            old["nodes"][kind.lower()] = {"type": kind, "name": kind, "pos": [0, 0], "disabled": False,
+                                          "inputs": {"image": None, "camera": None}, "params": params}
+        upgraded = upgrade_document(old)
+        validate(upgraded)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
+        for node in upgraded["nodes"].values():
+            self.assertEqual(node["params"]["lens_backend"], "auto")
 
     def test_gpu_round_trip_returns_the_plate(self):
         """Undistort then Redistort on the card returns a smooth plate to within 1e-3 away from the border."""
