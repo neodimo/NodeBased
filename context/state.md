@@ -1,3 +1,7 @@
+## 2026-10-14 — 0.37.0 published (8:38 AM PDT)
+
+`v0.37.0` (annotated) at `45224e82` is published: https://github.com/neodimo/NodeBased/releases/tag/v0.37.0 . Four assets (Linux AppImage, Windows portable ZIP, Windows setup exe, SHA256SUMS); tag workflows green on Linux and Windows after the 4:10 AM retag. The announcement went out through the lanes tick's delivery at 8:38 AM; its Discord message id was not recorded, so it is not pinned yet (nor is 0.36.0's, `1559699350580629505`; pinning needs a DiMo-started turn). Windows tag builds now take about 4 h 20 min; the tick's stale cutoff is 5.5 h.
+
 ## 2026-10-13 — 0.36.0 published (2:17 PM PDT)
 
 `v0.36.0` (annotated) at `ad19c6cb` is published: https://github.com/neodimo/NodeBased/releases/tag/v0.36.0 . The first tag (6:07 AM, on `b1df7d9c`) went red only on the Windows package job: `tests/test_3d_holdout` assumed an NVIDIA card (the runner's software D3D12 adapter blends in half float and refuses the GPU smoke/splat path tracer). The test fix `ad19c6cb` (half-float tolerance via `tests.gpu_precision`, path tracer gated by `gpupathtrace.soft_supported`) was fast-forwarded to main and the tag moved there at 9:50 AM. Tag workflows green on Linux and Windows; four assets (Linux AppImage, Windows portable ZIP, Windows setup exe, SHA256SUMS). The announcement was posted by hand at 3:55 PM as Discord message `1559699350580629505` (no automatic post was recorded); it is not yet pinned (pin needs a DiMo-started turn).
