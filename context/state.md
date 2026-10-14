@@ -1,3 +1,11 @@
+## 2026-10-14 — Lane 8 Q1 of 1: the tiled Roto path is faster than the full-frame one (DONE)
+
+- **What was done:** Profiled the prior tiled path at tiers 1 and 8 before changes. The tier-1 525 ms penalty came chiefly from 40 additional tile matte rasterizations; at tier 8 the extra 42 ms included digest-time full matte evaluation plus tile rendering. Broad Roto requests now use the reference path. Tile digests hash resolved shape data, and flattened shape geometry is reused across tiles. Quarter-frame and 512-pixel ROI timings are recorded in `docs/ROTO_TRACKING.md` and its bundled copy.
+- **Artifacts:** `docs/ROTO_TRACKING.md`, `nodebased/data/docs/ROTO_TRACKING.md`, `nodebased/roto.py`, `nodebased/tileexec.py`, `tests/test_roto.py`; commits `368d337`, `a73a367`, `d584209`, local branch only, not pushed. Profiles and five-run samples are in deliberate scratch at `scratch/nb-lanes/run/profile-L8-baseline.txt` and `scratch/nb-lanes/run/bench-L8-Q1.json`.
+- **State:** Done. Full-frame medians are within 1% of the evaluator at both tiers; tile/reference pixels match. 159 targeted tests passed. Windows and real-display review are unverified.
+- **Next owner + artifact:** Gonzo reviews and integrates `openclaw/nb-2d-parity-b` after lane checks; use the committed Roto tracking doc and test logs listed above.
+- **Failure mode:** The previous path rerasterized the matte once per tile and rendered it again to compute the tile digest; broad Roto requests paid both costs.
+
 ## 2026-10-14 — 0.37.0 published (8:38 AM PDT)
 
 `v0.37.0` (annotated) at `45224e82` is published: https://github.com/neodimo/NodeBased/releases/tag/v0.37.0 . Four assets (Linux AppImage, Windows portable ZIP, Windows setup exe, SHA256SUMS); tag workflows green on Linux and Windows after the 4:10 AM retag. The announcement went out through the lanes tick's delivery at 8:38 AM; its Discord message id was not recorded, so it is not pinned yet (nor is 0.36.0's, `1559699350580629505`; pinning needs a DiMo-started turn). Windows tag builds now take about 4 h 20 min; the tick's stale cutoff is 5.5 h.
