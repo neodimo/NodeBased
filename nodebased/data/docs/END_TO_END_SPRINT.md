@@ -567,6 +567,51 @@ bit-identical twice. DPV-SLAM handed the centre focal and no distortion: 2.16 cm
 This lens does not hurt either solver here: MASt3R-SLAM does better than on the clean plate and DPV-SLAM 0.2 cm
 worse. A real lens with stronger distortion, rolling shutter and motion blur is still untested.
 
+## Stage 6: the capture (10/14)
+
+A short recording of the two runs of the distorted-plate shot (0.37.0), made on a private virtual display and kept out of
+the repository. Gonzo reviews and appends it to the release; nothing was uploaded. Files: `scratch/nb-qa/1014-capture/`
+(`hand-run.mp4`, `agent-run.mp4`, `proof-frame.png`, `stills/`, `SHA256SUMS`, the recording tools in `tools/`).
+
+- **Display and recording.** `Xvfb :47 -screen 0 1920x1080x24` (stopped afterwards; the person's desktop is never touched),
+  the app on it through the xcb platform with a private settings home and artifact store, driven with `xdotool` (pointer,
+  keys, typed paths) and recorded with `ffmpeg -f x11grab -framerate 30 -video_size 1920x1080 -i :47 -c:v libx264
+  -preset ultrafast -crf 18`. The segments are cut and captioned with `make_video.py` (ffmpeg `trim`, `setpts`, `drawtext`,
+  `concat`; H.264, yuv420p, 30 fps, no audio, `-crf 20`). Long waits play faster under a visible "x16", "x12", "x6" or
+  "x4" caption with a running clock of real seconds.
+- **The graph.** `demo_shot_lens.nbcomp` with node positions added (the committed graph puts all 24 nodes at one point, so
+  the window shows one pile and no node can be clicked); nothing else differs. The plate is the cached distorted plate.
+- **Hand run, 114.7 s, 2.7 MB.** The window: open the shot, the distorted plate in the viewer, step frames, View undistorted
+  and View plate, the Generate node's panel (40 s). Then `run_by_hand.py --plate distorted` in a terminal (366.7 s, shown
+  at x12 in 32 s): export, generate, verify and the written frames. Then the finished project opened in the window, the
+  final comp in the viewer, View undistorted and View plate toggled once, back on the comp (43 s).
+- **Agent run, 82.3 s, 3.4 MB.** The window with the Agent panel open and its activity log filling, the scripted agent of
+  `run_by_agent.py` (unchanged, `--plate distorted` plan) driving the same shot through MCP from the one-sentence brief:
+  `agent_on_display.py` runs `run_by_agent.run` against a window on the private display, pausing 1.2 s after each tool call
+  so the log can be followed. 413.5 s in all (`export_conditioning` 203.5 s, `generate` 8.5 s, `verify` 54.1 s, 24 render
+  edits of 2.8 s each), shown at x16, x6 and x4 around the long calls. It ends on the final comp with the strip toggled once.
+- **The proof frame, `proof-frame.png` (1920 x 1080, 133 KB).** Frame 12 of each written sequence side by side, the four
+  artifact ids and the verdict of each run as text, and the pixel difference strip: all black, largest difference 0.
+  Hand and agent give the same SceneState `14a7f274...`, ControlBundle `78a1f06a...`, generated sequence `c68d664e...`,
+  report `11be7d67...`, verdict PASS and written-frame pixel digest `93724ace...` (the ids of `examples/demo_shot/README.md`).
+- **What the capture showed (for Gonzo; no app code changed in this step).**
+  1. The window has no controls for `export_conditioning` or `verify`, and the Generate panel's manifest and scene-state
+     fields need paths only an export makes. A person at the window cannot reach a verdict; the hand run's export, generate
+     and verify are the dispatcher's, run in a terminal.
+  2. Saving a project rewrites Read paths relative to the project folder using whatever spelling of the path it was given.
+     On this machine the home folder is reachable under two spellings (a link). A plate given through one spelling, saved
+     from a project folder under the other, reopened with a path one level short, and the viewer said "Missing frame 13" and
+     "Missing frame 21".
+  3. In the lens strip, View plate goes to the Plate node, not to the node that was viewed before View undistorted. After the
+     toggle the comp is back only by selecting the Write and pressing 1.
+  4. Agent > Show Agent panel and Window > AGENT left the panel unseen and the item unchecked on this display. The tests call
+     `show()` then `raise_()`; an offscreen probe with `show()` alone gives a blank right column with a PROPERTIES | AGENT tab
+     bar at its foot. The recording shows the panel through `show()` plus `raise_()` (`tools/x_window.py`).
+  5. `run_by_hand.py` and `run_by_agent.py` end with an OpenImageIO "pending error message ... Could not open file
+     ...plate.0001.exr" after the summary, although the file exists.
+  6. On a display with no window manager the window never had keyboard focus until `xdotool windowfocus` set it, and the Open
+     project dialog lost typed text until its name field was clicked. A capture trap, not an app fault.
+
 ## Heavy runs and the integrator's suite (10/10)
 
 The full suite of the evening of 10/10 took 5 hours 5 minutes against a norm of 75 to 95 minutes, and its
