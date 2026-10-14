@@ -1,5 +1,57 @@
 ## 2026-10-13 — Lane 6 P4 finish 2: production stop timing (DONE)
 
+## Continuous mode merge: Lane 3 (Research, GPT-6 Astra), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (7:17 PM on 2026-10-13 PDT)
+
+`main` moved `ae57c800` -> `1640de56` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 113 tests in 89.455 s, OK. Full suite on
+the stacked tip `1640de56` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1013-1349.log`, started 1:49 PM): **Ran 5331 tests in 19199.615 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 3 (Research, GPT-6 Astra), step T3 of 3: the research radar, compositing, keying, roto and simulation beyond what we do.** Commits:
+  - `5ec18042` docs: rank all research spikes and record compositing research handoff
+  - `26ed1c84` docs: outline corrective roto shared motion and residual simulation ideas
+  - `296a5d26` docs: propose bounded MEMFOF flow comparison with matched direction accounting
+  - `d6eaea6d` docs: compare artist-facing gains and isolate the fluids cache bottleneck
+  - `57109bed` docs: survey compositing and simulation research with dated evidence
+  Diff: 5 files changed, 348 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step L3 of 3: the distorted plate round trip (finish 2: the card measurements).** Commits:
+  - `c3310a64` demo shot: card measurements for the distorted plate (DPV-SLAM solve, hand run, SDXL runs), solved graph kept as demo_shot_lens_dpvo.nbcomp, docs and bundled copies updated
+  - `face9445` docs: the distorted plate shot in the demo README, the sprint notes and the 3D foundation step notes (bundled copies updated)
+  - `81c56651` tests: the distorted plate round trip, hand and agent ids, the export carrying the lens, the graph order; the card solve skips when the GPU lock is held for 10 seconds (gpu_job takes a timeout)
+  - `b34246b9` demo shot: the distorted plate at 640 by 360 (the stand-in passes the object check there, not from 768 up), and the run scripts re-render a cached plate that differs from the committed hashes
+  - `c971228d` docs: screenshot of the viewer's undistorted view with its overscan edge
+  - `e1724955` demo shot: the lens shot graph and its solve record (rendering-camera stand-in until the card solve is run)
+  - `72ac829d` demo shot: survey picks for the distorted plate are chosen where the plate has texture on every frame, so the tracker can follow them
+  - `7cd4a6c4` demo shot: the distorted plate at 768 by 432 (the verifier's object check holds there), overscan frame a multiple of 16
+  - `b07e28f3` demo shot: --plate distorted for the hand run, the agent run and the comparison, the lens round-trip check, the distorted solve, and the lens steps in SHOT_WORKFLOW
+  - `158cd012` viewer: outline the plate's format inside an undistorted frame; capture script for the lens view
+  - `42af271f` viewer: the format guide stays on the plate's format inside an undistorted frame's overscan
+  - `5e31c60d` viewer: View undistorted / View plate for a graph with an Undistort node, showing the whole overscan frame
+  - `f0b45360` demo shot: the distorted plate (k1 and k2) with committed hashes, and the lens shot graph builder
+  Diff: 28 files changed, 6545 insertions(+), 48 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step P4 of 4: Hot pour preview at 12 frames per second, and a stop that settles within a second (finish 1).** Commits:
+  - `b1ebdb02` docs: record Radeon production stop timings
+  - `4c82a31e` notes: record Lane 6 P4 finish progress
+  - `db61281b` notes: record Lane 6 stop-cache progress
+  - `11370fc5` perf: reuse baked liquid cache for whitewater
+  - `6982cd8a` bench: identify cached liquid surface meshes
+  Diff: 10 files changed, 2462 insertions(+), 28 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step S3 of 3: Roto, RotoPaint and the trackers render only what the viewer asks for.** Commits:
+  - `fda29972` docs: record lane 8 S3 partial handoff
+  - `109397fe` roto: add bounded region raster API
+  Diff: 6 files changed, 93 insertions(+), 34 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Measured the regenerated 256³ / 192³ Radeon production cache at frames 1, 60 and 120. Tier-2 half-resolution surface totals were 11.5 / 223.3 / 311.6 ms; tier-1 full-detail totals were 225.9 / 141.8 / 148.6 ms. The one-second stop target passes at all three frames. P4's previously recorded production preview medians/p95s also meet the 80 ms (12 FPS) target. The exact stop measurements are in `benchmarks/hot_pour/radeon-stop-P4-2026-10-13.json`; the generated 47.66 GB cache was removed. `docs/FLUIDS_SPIKE.md` and its bundled copy record the results. Documentation knowledge check passes. Committed locally on the lane branch; not pushed.
 
 ## 2026-10-12 8:20 PM PDT — Lane 6 P4 finish 1 (PARTIAL)
