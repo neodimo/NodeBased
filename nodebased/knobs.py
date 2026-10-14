@@ -396,11 +396,11 @@ KNOB_LAYOUT = {
     "Undistort": _groups(KnobGroup("enum", ("lens_preset",), label="Lens preset"),
                          KnobGroup("float", ("anamorphic_squeeze",), label="Anamorphic squeeze",
                                    section="Lens", help=LENS_HELP["anamorphic_squeeze"]),
-                         *_lens_knobs(), KnobGroup("enum", ("filter",))),
+                         *_lens_knobs(), KnobGroup("enum", ("filter",)), KnobGroup("enum", ("lens_backend",), label="Backend")),
     "Redistort": _groups(KnobGroup("enum", ("lens_preset",), label="Lens preset"),
                          KnobGroup("float", ("anamorphic_squeeze",), label="Anamorphic squeeze",
                                    section="Lens", help=LENS_HELP["anamorphic_squeeze"]),
-                         *_lens_knobs(), KnobGroup("enum", ("filter",))),
+                         *_lens_knobs(), KnobGroup("enum", ("filter",)), KnobGroup("enum", ("lens_backend",), label="Backend")),
     "STMap": _groups(
         KnobGroup("string", ("uv_layer",), label="UV layer"),
         KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),

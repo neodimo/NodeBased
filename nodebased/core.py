@@ -431,9 +431,11 @@ SPECS = {
     # supplies the lens; unwired, `lens_preset` picks a named lens ("custom" reads the node's own knobs).
     # Undistort grows the data window to hold the straightened plate; Redistort returns to the format.
     "Undistort": {"inputs": ["image"], "optional_inputs": ["camera"],
-                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "bilinear"}},
+                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "bilinear",
+                             "lens_backend": "auto"}},
     "Redistort": {"inputs": ["image"], "optional_inputs": ["camera"],
-                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "bilinear"}},
+                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "bilinear",
+                             "lens_backend": "auto"}},
     # STMap / IDistort / VectorBlur (step 5c): the 2D side of the control loop. Each takes the image,
     # an optional `uv` image (a map or a vector field) and an optional mask. `uv_layer` names a
     # layer of the `uv` input when it is wired, otherwise of the image input itself, so a
@@ -1860,7 +1862,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "premultiply_mode": ["none", "rgb", "rgba"],
            "output_alpha": ["preserve", "combined_weight", "hue_weight", "saturation_weight",
                             "brightness_weight", "hue", "saturation", "value"],
-           "flow_backend": ["auto", "cpu", "gpu"],
+           "flow_backend": ["auto", "cpu", "gpu"], "lens_backend": ["auto", "cpu", "gpu"],
            "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],

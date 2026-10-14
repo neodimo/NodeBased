@@ -3439,10 +3439,35 @@ class Evaluator:
             out = Region(x, y, w, h)
         else:
             out = display
-        sx, sy = lensmodel.sample_coordinates(lens, out, display, source.data,
-                                              "undistort" if kind == "Undistort" else "redistort")
-        pixels = Evaluator._resample(source.pixels, sx, sy, p["filter"]).astype(np.float32)
+        direction = "undistort" if kind == "Undistort" else "redistort"
+        pixels = Evaluator._lens_warp_gpu(kind, p, lens, source, out, display, direction)
+        if pixels is None:
+            sx, sy = lensmodel.sample_coordinates(lens, out, display, source.data, direction)
+            pixels = Evaluator._resample(source.pixels, sx, sy, p["filter"]).astype(np.float32)
         return Raster(pixels, out, display, source.layers, source.meta)
+
+    @staticmethod
+    def _lens_warp_gpu(kind, p, lens, source, out, display, direction):
+        """The wgpu twin of the lens warp (nodebased/gpulens.py), or None to run the CPU reference.
+
+        `lens_backend` auto uses the card when there is one and the output is big enough to repay the
+        copies; cpu never does; gpu reports what stopped it instead of falling back."""
+        backend = p.get("lens_backend", "auto")
+        if backend == "cpu":
+            return None
+        from . import gpulens
+        if backend == "auto" and out.width * out.height < gpulens.AUTO_MIN_PIXELS:
+            return None
+        try:
+            return gpulens.warp(lens, source.pixels, out, display, source.data, direction, p["filter"])
+        except gpulens.Unsupported as exc:
+            if backend == "gpu":
+                raise ValueError(f"GPU {kind} unavailable: {exc}") from exc
+        except Exception as exc:
+            # A card that said yes and then failed: auto falls back to the CPU reference, gpu reports it.
+            if backend == "gpu":
+                raise ValueError(f"GPU {kind} failed: {exc}") from exc
+        return None
 
     @staticmethod
     def _uv_node(kind, p, inputs):
