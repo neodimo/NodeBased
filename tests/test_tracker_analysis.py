@@ -54,6 +54,26 @@ class TrackerAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(result[3][0], 52.5, delta=0.51)
         self.assertAlmostEqual(result[3][1], 50.5, delta=0.51)
 
+    def test_region_reads_match_full_frame_tracker_analysis(self):
+        from nodebased.raster import Raster
+        from nodebased.tiers import Region
+        first = texture(128)
+        frames = {frame: moved(first, 2 * (frame - 1), frame - 1) for frame in range(1, 4)}
+
+        def roi_frame(frame, center, margin):
+            image = frames[frame]
+            x0 = max(0, int(np.floor(center[0] - margin - .5)))
+            y0 = max(0, int(np.floor(center[1] - margin - .5)))
+            x1 = min(image.shape[1], int(np.ceil(center[0] + margin + .5)) + 1)
+            y1 = min(image.shape[0], int(np.ceil(center[1] + margin + .5)) + 1)
+            return Raster(image[y0:y1, x0:x1], Region(x0, y0, x1-x0, y1-y0),
+                          Region(0, 0, image.shape[1], image.shape[0]))
+
+        full = analyse(frames, 1, (60.5, 60.5), 6, 12, last_frame=3)
+        region = analyse(frames, 1, (60.5, 60.5), 6, 12, last_frame=3,
+                         roi_frame=roi_frame)
+        self.assertEqual(region, full)
+
     def test_backward_analysis_tracks_from_reference_to_inclusive_start(self):
         first = texture()
         frames = {frame: moved(first, 3 * (frame - 1), -2 * (frame - 1))

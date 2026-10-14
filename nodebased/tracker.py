@@ -219,7 +219,7 @@ def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, s
 
 def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
             first_frame=None, last_frame=None, cancel=None, progress=None, direction="forward",
-            channels="luminance", adaptive_update=False):
+            channels="luminance", adaptive_update=False, roi_frame=None):
     """Track from the reference toward one timeline direction without mutating a document.
 
     Backward analysis uses ``first_frame`` as its inclusive endpoint; forward analysis uses
@@ -239,12 +239,14 @@ def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
     result = {reference_frame: (float(point[0]), float(point[1]))}
     previous = result[reference_frame]
     total = len(frame_numbers)
-    reference = get_frame(reference_frame)
+    reference = (roi_frame(reference_frame, point, pattern_radius + 2)
+                 if roi_frame is not None else get_frame(reference_frame))
     pattern_point = tuple(point)
     for offset, frame in enumerate(frame_numbers, start=1):
         if cancel is not None and cancel.is_set():
             raise CancelledError()
-        current_image = get_frame(frame)
+        current_image = (roi_frame(frame, previous, search_radius + pattern_radius + 2)
+                         if roi_frame is not None else get_frame(frame))
         match = match_pattern(reference, current_image, pattern_point, pattern_radius, search_radius,
                               search_point=previous, channels=channels)
         previous = match[:2]

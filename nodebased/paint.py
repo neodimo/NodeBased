@@ -18,13 +18,14 @@ def active(stroke, frame):
     return frame >= life["first"]
 
 
-def _distance_grid(width, height, points, size, spacing, hardness=1.0):
+def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0, 0)):
     """Stroke coverage in 0..1: the max over a chain of round dabs along the point path.
 
     A dab is solid out to `hardness` of its radius and falls off smoothly from there to the rim
     (hardness 1 is a hard edge with a one pixel antialiased rim, 0 a falloff across the whole
     radius), like Nuke's brush hardness. Pressure scales both the dab's radius and its strength.
     """
+    ox, oy = map(int, origin)
     yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
     hardness = min(1.0, max(0.0, float(hardness)))
     coverage = np.zeros((height, width), np.float32)
@@ -38,7 +39,7 @@ def _distance_grid(width, height, points, size, spacing, hardness=1.0):
             x, y = x0 + t*(x1-x0), y0 + t*(y1-y0)
             pressure = p0 + t*(p1-p0)
             radius = max(0.25, size * pressure * 0.5)
-            d = np.sqrt((xx + 0.5 - x)**2 + (yy + 0.5 - y)**2)
+            d = np.sqrt((xx + ox + 0.5 - x)**2 + (yy + oy + 0.5 - y)**2)
             ramp = np.clip((radius + 0.5 - d) / ((1.0 - hardness) * radius + 1.0), 0, 1)
             if hardness < 1.0:
                 ramp = ramp * ramp * (3.0 - 2.0 * ramp)
@@ -46,13 +47,15 @@ def _distance_grid(width, height, points, size, spacing, hardness=1.0):
     return coverage
 
 
-def apply_stroke(image, stroke, frame, source=None, reveal=None):
+def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
+                 source_origin=(0, 0), source_bounds=None):
     if not active(stroke, frame) or not stroke["visible"]:
         return image
     base = image.copy()
+    ox, oy = map(int, origin)
     brush = stroke["brush"]
     coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"],
-                              brush["size"], brush["spacing"], brush["hardness"])
+                              brush["size"], brush["spacing"], brush["hardness"], origin)
     alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
     tool = stroke["tool"]
     if tool == "paint":
@@ -65,8 +68,17 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None):
         dx, dy = stroke["source_offset"]
         h, w = base.shape[:2]
         sy, sx = np.mgrid[0:h, 0:w]
-        sx = np.clip((sx-dx).astype(int), 0, source.shape[1]-1)
-        sy = np.clip((sy-dy).astype(int), 0, source.shape[0]-1)
+        sx = np.rint(sx + ox - dx).astype(int)
+        sy = np.rint(sy + oy - dy).astype(int)
+        if source_bounds is None:
+            sx = np.clip(sx, 0, source.shape[1]-1)
+            sy = np.clip(sy, 0, source.shape[0]-1)
+        else:
+            bx, by, bw, bh = source_bounds
+            sx = np.clip(sx, bx, bx + bw - 1) - int(source_origin[0])
+            sy = np.clip(sy, by, by + bh - 1) - int(source_origin[1])
+            sx = np.clip(sx, 0, source.shape[1]-1)
+            sy = np.clip(sy, 0, source.shape[0]-1)
         target = source[sy, sx]
         patch_blend = float(stroke.get("patch_blend", 0.0))
         if patch_blend > 0:
@@ -126,7 +138,8 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None):
     return np.asarray(out, np.float32)
 
 
-def rasterise(image, items, frame, source=None, reveal=None):
+def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
+              canvas_size=None):
     out = image.copy()
     for item in items:
         delta = item.get("_track_delta", (0.0, 0.0))
@@ -141,11 +154,15 @@ def rasterise(image, items, frame, source=None, reveal=None):
             clone_source = source if clone_raster is None else clone_raster.fit(clone_raster.data)
             out = apply_stroke(out, item, frame,
                                source=clone_source[..., :4] if hasattr(clone_source, "shape") else source,
-                               reveal=reveal)
+                               reveal=reveal, origin=origin,
+                               source_origin=item.get("_clone_source_origins", {}).get(source_frame, origin),
+                               source_bounds=item.get("_clone_source_bounds", {}).get(source_frame))
         else:
             from . import roto
             shape = {k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
-            matte = roto.rasterise([shape], image.shape[1], image.shape[0])[..., 3:4]
+            full_w, full_h = canvas_size or (image.shape[1], image.shape[0])
+            matte = roto.rasterise([shape], full_w, full_h,
+                                   region=(origin[0], origin[1], image.shape[1], image.shape[0]))[..., 3:4]
             alpha = matte * np.float32(item["opacity"] if item["visible"] else 0.0)
             base = out.copy()
             if item["blend"] == "over":

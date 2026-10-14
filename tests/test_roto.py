@@ -472,6 +472,25 @@ class TilePathTests(unittest.TestCase):
     def test_roto_is_tile_sliced_with_payload_in_digest(self):
         self.assertIn("Roto", tiles.SUPPORTED_TILED_KINDS)
 
+    def test_region_tiles_match_full_renders_with_feather_and_open_stroke_at_each_tier(self):
+        doc = empty_document()
+        dispatcher = Dispatcher(doc)
+        dispatcher.execute({"op": "create", "id": "r", "type": "Roto"})
+        dispatcher.execute({"op": "batch", "commands": sets("r", width=128, height=96)})
+        closed = square(12, 14, 50, 52, feather=7.0)
+        open_shape = square(70, 20, 108, 68, closed=False, stroke_width=9.0,
+                            feather=2.0)
+        open_shape["points"] = open_shape["points"][:2]
+        dispatcher.execute({"op": "set_shapes", "id": "r", "shapes": [closed, open_shape]})
+        for tier in tiers.PROXY_TIERS:
+            reference = Evaluator().evaluate_raster(dispatcher.document, "r", tier=tier).pixels
+            # Keep tiles smaller than the lowest-tier image so every tier exercises pruning.
+            executor = TileExecutor(tile_edge=4)
+            result = executor.compose(dispatcher.document, "r", tier=tier)
+            self.assertTrue(result.tiled)
+            self.assertEqual(result.pixels.tobytes(), reference.tobytes(), f"tier {tier}")
+            self.assertGreater(executor.stats["skipped_shapes"], 0)
+
 
 class RenderTests(unittest.TestCase):
     def test_region_result_matches_full_render_and_skips_shapes_outside_its_bounds(self):

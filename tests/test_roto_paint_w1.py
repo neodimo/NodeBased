@@ -64,6 +64,13 @@ def tiled(d, tile_edge=None, frame=1):
     return executor.compose_region(document, "paint", region, frame=frame, tier=1).pixels
 
 
+def tiled_tier(d, tier, tile_edge=8):
+    executor = TileExecutor(evaluator=Evaluator(), tile_edge=tile_edge)
+    document = dict(d.document, view="paint")
+    region = executor.canvas_region(document, "paint", frame=1, tier=tier)
+    return executor.compose_region(document, "paint", region, frame=1, tier=tier).pixels
+
+
 class BrushProfileTests(unittest.TestCase):
     def row(self, **brush_kw):
         item = stroke(points=[{"x": 16.0, "y": 16.0, "pressure": 1.0}], brush=brush(**brush_kw))
@@ -186,6 +193,14 @@ class MaskAndTileTests(unittest.TestCase):
             for edge in (None, 5, 8, 11):
                 with self.subTest(mask=mask, edge=edge):
                     np.testing.assert_array_equal(tiled(d, edge), full)
+
+    def test_paint_tiles_are_byte_identical_to_full_frame_at_every_proxy_tier(self):
+        from nodebased.tiers import PROXY_TIERS
+        d = graph(self.ITEMS, mask=True, second=True)
+        for tier in PROXY_TIERS:
+            full = Evaluator().evaluate_raster(d.document, "paint", frame=1, tier=tier).pixels
+            with self.subTest(tier=tier):
+                self.assertEqual(tiled_tier(d, tier).tobytes(), full.tobytes())
 
     def test_editing_a_stroke_invalidates_the_tiles(self):
         d = graph(self.ITEMS)

@@ -38,6 +38,7 @@ import dataclasses
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import threading
 from pathlib import Path
 
@@ -46,6 +47,7 @@ import numpy as np
 from . import cachetier
 from . import groups
 from . import imaging
+from . import shapes
 from . import tiers
 from .animation import resolve_document
 from .core import DRAW_KINDS, SPECS, bypass_slot
@@ -409,6 +411,8 @@ class TileExecutor:
             "unsupported_kinds": 0,
             "supported_kinds": 0,
             "source_decodes": 0,
+            "rasterised_shapes": 0,
+            "skipped_shapes": 0,
         }
 
     # --- public API -------------------------------------------------------
@@ -457,6 +461,12 @@ class TileExecutor:
             if node["type"] not in SUPPORTED_TILED_KINDS:
                 return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
+                return False
+            if node["type"] == "RotoPaint" and any(
+                    float(item.get("patch_blend", 0.0)) > 0
+                    for item in document.get("node_data", {}).get(node_id, {}).get("items", [])
+                    if item.get("kind") == "stroke"):
+                # DustBust border diffusion reads across the full painted region.
                 return False
             if node.get("input_outputs"):
                 # Named output layers are carried only by the full-frame Raster representation.
@@ -567,6 +577,9 @@ class TileExecutor:
         self._source_cache.clear()
         self._source_layer_cache.clear()
         self._source_layer_presence_cache.clear()
+        self._roto_digests = {}
+        self._roto_shapes_cache = {}
+        self._paint_items_cache = {}
         decodes_before = self.stats["source_decodes"]
         paint_nodes = set(_all_ancestors(resolved, target))
         node_digests = _compute_node_digests(
@@ -664,6 +677,9 @@ class TileExecutor:
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
         halo = resolve_halo(kind, params)
+        if kind == "RotoPaint" and not node["disabled"]:
+            extra = self._rotopaint_halo(document, node_id, frame, tier)
+            halo = (max(halo[0], extra), max(halo[1], extra))
         cache_region = dataclasses.replace(region, halo_x=halo[0], halo_y=halo[1])
 
         content_digest = node_digests.get(node_id, "")
@@ -693,8 +709,9 @@ class TileExecutor:
         self.stats["supported_kinds"] += 1
         self.stats["tile_renders"] += 1
 
-        inputs = self._gather_inputs(document, node_id, node, params, frame, tier, buffered_region,
-                                     node_digests, cancel)
+        inputs = ([] if kind == "Roto" and not node["disabled"] else
+                  self._gather_inputs(document, node_id, node, params, frame, tier, buffered_region,
+                                      node_digests, cancel))
 
         if node["disabled"] and not tile_bypass_self_resolves(kind):
             # Bypassed: the gathered input IS the result. Running the kernel here is what made a
@@ -707,6 +724,12 @@ class TileExecutor:
             passed = inputs[0] if inputs else None
             raw = (np.zeros((buffered_region.height, buffered_region.width, 4), dtype=np.float32)
                    if passed is None else _align_artifact_to(passed, buffered_region))
+        elif kind == "Roto" and not node["disabled"]:
+            raw = self._roto_tile(document, node_id, node, params, frame, tier, buffered_region,
+                                  node_digests, cancel)
+        elif kind == "RotoPaint" and not node["disabled"]:
+            raw = self._rotopaint_tile(document, node_id, node, params, inputs, frame, tier,
+                                       buffered_region, node_digests, cancel)
         else:
             raw = self._evaluate_tile_kernel(kind, params, inputs, buffered_region, frame)
         bh, bw = buffered_region.height, buffered_region.width
@@ -748,7 +771,8 @@ class TileExecutor:
         if is_tile_source_kind(kind):
             return [self._generator_tile(document, node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
-        if kind in ("TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint", "Roto"):
+        if kind in ("TimeBlur", "TimeEcho", "Inpaint", "TVIScale") or \
+                (kind == "Roto" and node["disabled"]):
             return [self._temporal_tile(node_id, kind, node, params, frame, tier,
                                         buffered_region, node_digests)]
         # Disabled filter: passthrough to the first wired input (only). The legacy evaluator
@@ -910,27 +934,145 @@ class TileExecutor:
         for them. The pixels are kept for `_temporal_tile` to slice, and the Evaluator's cache
         makes the next compose of an unchanged node cheap.
         """
-        cache_key = (node_id, int(frame), int(tier))
-        solved = self._source_cache.get(cache_key)
-        if solved is None:
-            raster, digest = self.evaluator.evaluate_raster(
-                self._unbaked_document, node_id, frame=frame, tier=tier, return_digest=True)
-            solved = (raster.pixels, digest)
-            self._source_cache[cache_key] = solved
-        return solved[1]
+        _, digest = self.evaluator.evaluate_raster(
+            self._unbaked_document, node_id, frame=frame, tier=tier, typed=True,
+            return_digest=True, digest_only=True)
+        return digest
 
     def _solve_roto(self, node_id, frame, tier):
-        """Resolve one animated Roto generator once; its content digest includes linked tracks."""
+        """Get the evaluator's stable digest without rasterising the full matte."""
         cache_key = (node_id, int(frame), int(tier))
-        solved = self._source_cache.get(cache_key)
-        if solved is None:
-            raster, digest = self.evaluator.evaluate_raster(
-                self._unbaked_document, node_id, frame=frame, tier=tier, return_digest=True)
-            solved = raster.pixels
-            self._source_cache[cache_key] = solved
-            self._roto_digests = getattr(self, "_roto_digests", {})
-            self._roto_digests[cache_key] = digest
-        return getattr(self, "_roto_digests", {}).get(cache_key, "")
+        digests = getattr(self, "_roto_digests", None)
+        if digests is None:
+            digests = self._roto_digests = {}
+        if cache_key not in digests:
+            _, digests[cache_key] = self.evaluator.evaluate_raster(
+                self._unbaked_document, node_id, frame=frame, tier=tier,
+                typed=True, return_digest=True, digest_only=True)
+        return digests[cache_key]
+
+    def _roto_tile(self, document, node_id, node, params, frame, tier, region,
+                   node_digests, cancel):
+        """Rasterise only the requested Roto tile and preserve the optional plate behavior."""
+        from . import roto
+        shape_key = (node_id, int(frame), int(tier), node_digests.get(node_id, ""))
+        resolved = self._roto_shapes_cache.get(shape_key)
+        if resolved is None:
+            payload = tiers.scale_node_data("Roto", document.get("node_data", {}).get(node_id), tier)
+            resolved = shapes.resolve_roto_shapes(payload, frame, document, tier)
+            self._roto_shapes_cache[shape_key] = resolved
+        matte = roto.rasterise(resolved, params["width"], params["height"],
+                               bool(params.get("invert", 0)),
+                               region=(region.x, region.y, region.width, region.height),
+                               stats=self.stats)
+        source_id = node["inputs"].get("bg")
+        if source_id is None:
+            return matte
+        source = self._render_tile(document, source_id, frame, tier,
+                                   dataclasses.replace(region, halo_x=0, halo_y=0),
+                                   node_digests, cancel)
+        plate = _align_artifact_to(source, region)
+        if not resolved:
+            return plate
+        result = plate.copy()
+        coverage = matte[..., 3]
+        result[..., 3] = coverage
+        mode = params.get("premultiply_mode", "none")
+        if mode in ("rgb", "rgba"):
+            result[..., :3] *= coverage[..., None]
+        if mode == "rgba":
+            result[..., 3] *= coverage
+        return result
+
+    @staticmethod
+    def _rotopaint_halo(document, node_id, frame, tier):
+        payload = tiers.scale_node_data("RotoPaint", document.get("node_data", {}).get(node_id), tier)
+        items = shapes.resolve_paint_items(payload, frame)
+        reach = 0
+        for item in items:
+            if item.get("kind") != "stroke":
+                continue
+            brush = item["brush"]
+            if item["tool"] in ("blur", "sharpen"):
+                reach += int(round(max(1.0, float(brush["size"]) / 6.0)))
+            elif item["tool"] == "smear" and len(item["points"]) >= 2:
+                length = math.hypot(item["points"][-1]["x"] - item["points"][0]["x"],
+                                    item["points"][-1]["y"] - item["points"][0]["y"])
+                reach += int(math.ceil(min(length, float(brush["size"]) * .5)))
+        return reach
+
+    def _rotopaint_tile(self, document, node_id, node, params, inputs, frame, tier,
+                        region, node_digests, cancel):
+        from . import paint
+        from .raster import Raster
+        if not inputs or inputs[0] is None:
+            raise ValueError("RotoPaint: connect an image")
+        base = _align_artifact_to(inputs[0], region)
+        reveal = _align_artifact_to(inputs[1], region) if len(inputs) > 1 and inputs[1] else None
+        mask = _align_artifact_to(inputs[2], region) if len(inputs) > 2 and inputs[2] else None
+        item_key = (node_id, int(frame), int(tier), node_digests.get(node_id, ""))
+        items = self._paint_items_cache.get(item_key)
+        if items is None:
+            payload = tiers.scale_node_data("RotoPaint", document.get("node_data", {}).get(node_id), tier)
+            items = shapes.resolve_paint_items(payload, frame)
+            self._paint_items_cache[item_key] = items
+        payload = tiers.scale_node_data("RotoPaint", document.get("node_data", {}).get(node_id), tier)
+        stored = (payload or {}).get("items", [])
+        for item, original in zip(items, stored):
+            follow = original.get("follow_track") if original.get("kind") == "stroke" else None
+            if follow is None:
+                continue
+            linked = document.get("node_data", {}).get(follow["node_id"], {}).get("tracks", [])
+            track = linked[follow["track_index"]]
+            ref = int(original["lifetime"].get("first", document["time"]["first"]))
+            enabled = (shapes.resolve_scalar(track.get("enabled", 1), frame, "enabled") >= .5 and
+                       shapes.resolve_scalar(track.get("enabled", 1), ref, "enabled") >= .5)
+            current = (shapes.resolve_scalar(track["x"], frame, "x"),
+                       shapes.resolve_scalar(track["y"], frame, "y"))
+            reference = (shapes.resolve_scalar(track["x"], ref, "x"),
+                         shapes.resolve_scalar(track["y"], ref, "y"))
+            item["_track_delta"] = ([(current[0]-reference[0])/tier,
+                                     (current[1]-reference[1])/tier] if enabled else [0.0, 0.0])
+
+        image_id = node["inputs"].get("image")
+        for item in items:
+            if item.get("kind") != "stroke" or item.get("tool") != "clone":
+                continue
+            source_frame = (max(int(document["time"]["first"]), int(frame)-1)
+                            if item["source_frame"] == "relative" else int(item["source_frame"]))
+            dx, dy = item["source_offset"]
+            source_bounds = self.canvas_region(self._unbaked_document, image_id, source_frame, tier)
+            sx0 = max(source_bounds.x, int(math.floor(region.x-dx))-1)
+            sy0 = max(source_bounds.y, int(math.floor(region.y-dy))-1)
+            sx1 = min(source_bounds.right, int(math.ceil(region.right-dx))+1)
+            sy1 = min(source_bounds.bottom, int(math.ceil(region.bottom-dy))+1)
+            clone_region = TileRegion(sx0, sy0, max(0, sx1-sx0), max(0, sy1-sy0),
+                                      full_width=source_bounds.width, full_height=source_bounds.height,
+                                      full_x=source_bounds.x, full_y=source_bounds.y)
+            clone_doc = resolve_document(self._unbaked_document, source_frame)
+            clone_digests = _compute_node_digests(
+                clone_doc, tier, source_frame,
+                solve=lambda key: self.evaluator.evaluate_raster(
+                    clone_doc, key, frame=source_frame, tier=tier, typed=True,
+                    return_digest=True, digest_only=True)[1])
+            previous_doc = self._unbaked_document
+            self._unbaked_document = clone_doc
+            try:
+                clone_artifact = self._render_tile(clone_doc, image_id, source_frame, tier,
+                                                   clone_region, clone_digests, cancel)
+            finally:
+                self._unbaked_document = previous_doc
+            clone_bounds = tiers.Region(sx0, sy0, clone_region.width, clone_region.height)
+            item.setdefault("_clone_sources", {})[source_frame] = Raster(
+                clone_artifact.pixels, clone_bounds, source_bounds)
+            item.setdefault("_clone_source_origins", {})[source_frame] = (sx0, sy0)
+            item.setdefault("_clone_source_bounds", {})[source_frame] = (
+                source_bounds.x, source_bounds.y, source_bounds.width, source_bounds.height)
+
+        painted = paint.rasterise(base, items, frame, source=base, reveal=reveal,
+                                  origin=(region.x, region.y),
+                                  canvas_size=(region.full_width, region.full_height))
+        return Evaluator._apply_mask_mix(base, painted, mask=mask, mix=params.get("mix", 1.0))
 
     def _temporal_tile(self, node_id, kind, node, params, frame, tier, buffered_region,
                        node_digests) -> TileArtifact:

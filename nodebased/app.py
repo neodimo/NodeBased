@@ -83,6 +83,7 @@ from .decodepool import DecodeAheadPool
 from .tileexec import TileExecutor
 from .tiles import TileCache, TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
+from .raster import Raster
 from .artisttools import CacheInspectorPanel, SliceView
 from . import cachecontext
 from .timeline import (PLAY_ICON, STEP_BACK_ICON, STEP_FORWARD_ICON, STOP_ICON, TimelineBar, TimeRow, KEY_COLOR,
@@ -11384,13 +11385,29 @@ class Window(QMainWindow):
         from . import planar
         try:
             corners = planar.resolve_corners(payload, ref)
-            frames = {f: self.evaluator.evaluate_raster(doc, source, frame=f, tier=1).pixels
+            roi_executor = TileExecutor(tile_edge=self.tile_executor.tile_edge)
+            bounds = roi_executor.canvas_region(doc, source, ref, tier=1)
+            margin = max(32, int(math.ceil(max(np.ptp(corners[:, 0]),
+                                               np.ptp(corners[:, 1])) * .5)))
+            left = max(bounds.x, int(math.floor(float(corners[:, 0].min()) - margin)))
+            top = max(bounds.y, int(math.floor(float(corners[:, 1].min()) - margin)))
+            right = min(bounds.right, int(math.ceil(float(corners[:, 0].max()) + margin)))
+            bottom = min(bounds.bottom, int(math.ceil(float(corners[:, 1].max()) + margin)))
+            roi = TileRegion(left, top, right-left, bottom-top, full_width=bounds.width,
+                             full_height=bounds.height, full_x=bounds.x, full_y=bounds.y)
+            frames = {f: roi_executor.compose_region(doc, source, roi, frame=f, tier=1).pixels
                       for f in range(lo, hi+1)}
-            results = planar.track_region(frames, corners, ref,
+            local_corners = corners - np.asarray([left, top], dtype=np.float64)
+            results = planar.track_region(frames, local_corners, ref,
                 samples_per_axis=int(node["params"].get("samples_per_axis", 8)),
                 vector_detail=int(node["params"].get("vector_detail", 4)),
                 smoothness=float(node["params"].get("smoothness", 1.0)), backend="cpu",
                 threshold=float(node["params"].get("ransac_threshold", 2.0)))
+            to_global = np.array([[1.0, 0.0, left], [0.0, 1.0, top], [0.0, 0.0, 1.0]])
+            from_global = np.linalg.inv(to_global)
+            for result in results.values():
+                result["corners"] = (np.asarray(result["corners"]) + [left, top]).tolist()
+                result["matrix"] = (to_global @ np.asarray(result["matrix"]) @ from_global).tolist()
             tracks = planar.tracks_from_results(results)
             self.command({"op": "set_tracks", "id": key, "tracks": tracks})
         except (ValueError, np.linalg.LinAlgError) as error:
@@ -11921,18 +11938,37 @@ class Window(QMainWindow):
                "errors": {frame: 0.0}}
         self._tracker_job = job
         self._tracker_cancel = cancel
-        self._tracker_future = self.executor.submit(
-            lambda: tracker_model.analyse(
+        def analyze_roi():
+            pattern_radius = int(context[1]["params"].get("pattern_radius", 8))
+            search_radius = int(context[1]["params"].get("search_radius", 24))
+            roi_executor = TileExecutor(tile_edge=self.tile_executor.tile_edge)
+
+            def read_roi(at_frame, center, margin):
+                bounds = roi_executor.canvas_region(snapshot, source, at_frame, tier=1)
+                left = max(bounds.x, math.floor(center[0] - margin - .5))
+                top = max(bounds.y, math.floor(center[1] - margin - .5))
+                right = min(bounds.right, math.ceil(center[0] + margin + .5) + 1)
+                bottom = min(bounds.bottom, math.ceil(center[1] + margin + .5) + 1)
+                region = TileRegion(left, top, right-left, bottom-top,
+                                    full_width=bounds.width, full_height=bounds.height,
+                                    full_x=bounds.x, full_y=bounds.y)
+                result = roi_executor.compose_region(snapshot, source, region,
+                                                     frame=at_frame, tier=1, cancel=cancel)
+                from .tiers import Region
+                return Raster(result.pixels, Region(left, top, right-left, bottom-top), bounds)
+
+            return tracker_model.analyse(
                 lambda f: self.evaluator.evaluate_raster(snapshot, target=source, frame=f),
                 frame, point, first_frame=first, last_frame=last, cancel=cancel,
-                direction=direction,
-                pattern_radius=int(context[1]["params"].get("pattern_radius", 8)),
-                search_radius=int(context[1]["params"].get("search_radius", 24)),
+                direction=direction, pattern_radius=pattern_radius, search_radius=search_radius,
                 channels=context[1]["params"].get("tracking_channels", "luminance"),
                 adaptive_update=bool(context[1]["params"].get("adaptive_update", 0)),
+                roi_frame=read_roi,
                 progress=lambda f, n, total, score: (
                     job["progress"].update(frame=f, completed=n, total=total, score=score),
-                    job["errors"].update({f: max(0.0, min(1.0, 1.0-score))}))))
+                    job["errors"].update({f: max(0.0, min(1.0, 1.0-score))})))
+
+        self._tracker_future = self.executor.submit(analyze_roi)
         total = last - frame if direction == "forward" else frame - first
         self.statusBar().showMessage(f"Tracker {direction}: 0/{max(0, total)} frames")
         self.inspect(key)

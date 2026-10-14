@@ -88,7 +88,7 @@ def _add_span(row, x0, x1):
         row[last] += x1 - last
 
 
-def coverage(points, width, height):
+def coverage(points, width, height, origin=(0, 0)):
     """Scanline-fill one shape's resolved points into an HxW coverage array in [0, 1].
 
     Non-zero winding, so a self-intersecting shape fills the way every other package fills it and
@@ -109,12 +109,13 @@ def coverage(points, width, height):
     top, bottom = np.minimum(ay, by), np.maximum(ay, by)
     slope = (bx - ax) / (by - ay)
     # Only rows the shape actually touches are walked; an off-screen shape costs nothing.
-    first_row = max(0, int(math.floor(top.min())))
-    last_row = min(height, int(math.ceil(bottom.max())) + 1)
+    ox, oy = map(int, origin)
+    first_row = max(0, int(math.floor(top.min() - oy)))
+    last_row = min(height, int(math.ceil(bottom.max() - oy)) + 1)
     for row in range(first_row, last_row):
         accumulator = matte[row]
         for sub in range(SUBSAMPLES):
-            scanline = row + (sub + 0.5) / SUBSAMPLES
+            scanline = oy + row + (sub + 0.5) / SUBSAMPLES
             hit = (top <= scanline) & (scanline < bottom)
             if not hit.any():
                 continue
@@ -124,11 +125,11 @@ def coverage(points, width, height):
             crossings, winding = crossings[order], winding[order]
             running = np.cumsum(winding)
             for index in np.nonzero(running[:-1] != 0)[0]:
-                _add_span(accumulator, crossings[index], crossings[index + 1])
+                _add_span(accumulator, crossings[index] - ox, crossings[index + 1] - ox)
     return (matte / SUBSAMPLES).astype(np.float32)
 
 
-def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear"):
+def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear", origin=(0, 0)):
     """Rasterise an open cubic as round-capped, round-joined stroke coverage."""
     h, w = int(height), int(width)
     vertices = []
@@ -153,8 +154,9 @@ def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="l
     vertices = np.asarray(vertices, dtype=np.float64)
     if len(vertices) < 2:
         return np.zeros((h, w), dtype=np.float32)
+    ox, oy = map(int, origin)
     yy, xx = np.mgrid[0:h, 0:w]
-    px, py = xx.astype(np.float32) + .5, yy.astype(np.float32) + .5
+    px, py = xx.astype(np.float32) + ox + .5, yy.astype(np.float32) + oy + .5
     best = np.full((h, w), np.inf, dtype=np.float32)
     local_feather = np.zeros((h, w), dtype=np.float32)
     for index, (p0, p1) in enumerate(zip(vertices[:-1], vertices[1:])):
@@ -193,13 +195,14 @@ def feather(cover, radius):
     return Evaluator._box_blur_axis(Evaluator._box_blur_axis(cover, radius, axis=1), radius, axis=0)
 
 
-def edge_feather(points, cover, feather, falloff="linear"):
+def edge_feather(points, cover, feather, falloff="linear", origin=(0, 0)):
     """Rasterise a signed-distance feather with linearly interpolated vertex offsets.
 
     Work is restricted to each segment's feather-expanded bounds. This keeps the common small-shape
     case proportional to outline length rather than image area and requires only NumPy.
     """
     height, width = cover.shape
+    ox, oy = map(int, origin)
     vertices = flatten_points(points)
     if len(vertices) < 3 or feather == 0 and not any(
             p.get("feather_x", 0) or p.get("feather_y", 0) for p in points):
@@ -252,10 +255,10 @@ def edge_feather(points, cover, feather, falloff="linear"):
     best = np.full((height, width), np.inf, dtype=np.float32)
     local_radius = np.full((height, width), float(feather), dtype=np.float32)
     for p0, p1, delta0, delta1 in offsets:
-        left = max(0, int(math.floor(min(p0[0], p1[0])-radius-1)))
-        right = min(width, int(math.ceil(max(p0[0], p1[0])+radius+1)))
-        top = max(0, int(math.floor(min(p0[1], p1[1])-radius-1)))
-        bottom = min(height, int(math.ceil(max(p0[1], p1[1])+radius+1)))
+        left = max(ox, int(math.floor(min(p0[0], p1[0])-radius-1)))
+        right = min(ox+width, int(math.ceil(max(p0[0], p1[0])+radius+1)))
+        top = max(oy, int(math.floor(min(p0[1], p1[1])-radius-1)))
+        bottom = min(oy+height, int(math.ceil(max(p0[1], p1[1])+radius+1)))
         if left >= right or top >= bottom:
             continue
         yy, xx = np.mgrid[top:bottom, left:right]
@@ -264,10 +267,10 @@ def edge_feather(points, cover, feather, falloff="linear"):
         t = np.clip(((xx+.5-p0[0])*vx+(yy+.5-p0[1])*vy)/denom, 0.0, 1.0)
         dx = xx+.5-(p0[0]+t*vx); dy = yy+.5-(p0[1]+t*vy)
         dist2 = dx*dx+dy*dy
-        view = best[top:bottom,left:right]
+        view = best[top-oy:bottom-oy,left-ox:right-ox]
         take = dist2 < view
         np.copyto(view, dist2, where=take)
-        rv = local_radius[top:bottom,left:right]
+        rv = local_radius[top-oy:bottom-oy,left-ox:right-ox]
         np.copyto(rv, float(feather)+delta0+(delta1-delta0)*t, where=take)
     distance = np.sqrt(best, dtype=np.float32)
     signed = np.where(cover > 0.0, -distance, distance)
@@ -292,10 +295,14 @@ def edge_feather(points, cover, feather, falloff="linear"):
 
 def _shape_bounds(shape):
     """Conservative pixel-space bounds, including Bezier control hull and edge expansion."""
+    cached = shape.get("_raster_bounds")
+    if cached is not None:
+        return cached
     points = [point for layer in [shape.get("points", []), *shape.get("_motion_samples", ())]
               for point in layer]
     if not points:
-        return (0.0, 0.0, 0.0, 0.0)
+        shape["_raster_bounds"] = (0.0, 0.0, 0.0, 0.0)
+        return shape["_raster_bounds"]
     xs = [float(p["x"]) for p in points]
     ys = [float(p["y"]) for p in points]
     xs += [float(p["x"]) + float(p.get(k, 0.0)) for p in points for k in ("in_x", "out_x")]
@@ -307,49 +314,67 @@ def _shape_bounds(shape):
         pad += max(0.0, float(shape.get("stroke_width", 1.0))) * .5 + 1.0
     else:
         pad += 1.0
-    return min(xs)-pad, min(ys)-pad, max(xs)+pad, max(ys)+pad
+    shape["_raster_bounds"] = min(xs)-pad, min(ys)-pad, max(xs)+pad, max(ys)+pad
+    return shape["_raster_bounds"]
 
 
 def rasterise(shapes, width, height, invert=False, *, region=None, stats=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
     h, w = int(height), int(width)
-    matte = np.zeros((h, w), dtype=np.float32)
-    rgb = np.zeros((h, w, 3), dtype=np.float32)
     if region is None:
-        rx0, ry0, rx1, ry1 = 0.0, 0.0, float(w), float(h)
-        crop = (0, 0, w, h)
+        rx, ry, rw, rh = 0, 0, w, h
     else:
         rx, ry, rw, rh = map(int, region)
         if rw < 0 or rh < 0 or rx < 0 or ry < 0 or rx + rw > w or ry + rh > h:
             raise ValueError("Roto region must lie inside the image")
-        rx0, ry0, rx1, ry1 = rx, ry, rx + rw, ry + rh
-        crop = (rx, ry, rw, rh)
+    # The legacy feather is a pair of separable box filters. Evaluate its complete support
+    # around the request so cropped and full-frame pixels stay identical at tile edges.
+    box_support = max((int(round(max(0.0, float(s.get("feather", 0.0)))))
+                       for s in shapes if s.get("closed", True)
+                       and s.get("feather_model", "box") == "box"), default=0)
+    pad = box_support
+    x0, y0 = max(0, rx - pad), max(0, ry - pad)
+    x1, y1 = min(w, rx + rw + pad), min(h, ry + rh + pad)
+    tw, th = x1 - x0, y1 - y0
+    matte = np.zeros((th, tw), dtype=np.float32)
+    rgb = np.zeros((th, tw, 3), dtype=np.float32)
+    roi = (x0, y0, tw, th)
+    if region is None:
+        x0, y0, tw, th = 0, 0, w, h
+        roi = (x0, y0, tw, th)
+        matte = np.zeros((th, tw), dtype=np.float32)
+        rgb = np.zeros((th, tw, 3), dtype=np.float32)
+    rx0, ry0, rx1, ry1 = roi[0], roi[1], roi[0] + roi[2], roi[1] + roi[3]
     for shape in shapes:
         if not shape.get("visible", True):
             continue
-        sx0, sy0, sx1, sy1 = _shape_bounds(shape)
-        if sx1 <= rx0 or sx0 >= rx1 or sy1 <= ry0 or sy0 >= ry1:
-            if stats is not None:
-                stats["skipped_shapes"] = stats.get("skipped_shapes", 0) + 1
-            continue
+        if region is not None:
+            sx0, sy0, sx1, sy1 = _shape_bounds(shape)
+            if sx1 <= rx0 or sx0 >= rx1 or sy1 <= ry0 or sy0 >= ry1:
+                if stats is not None:
+                    stats["skipped_shapes"] = stats.get("skipped_shapes", 0) + 1
+                continue
         if stats is not None:
             stats["rasterised_shapes"] = stats.get("rasterised_shapes", 0) + 1
         samples = shape.get("_motion_samples", ())
         falloff = shape.get("feather_falloff", "linear")
         if not shape.get("closed", True):
             layers = [shape["points"], *samples]
-            covers = [stroke_coverage(points, w, h, shape.get("stroke_width", 1.0), shape["feather"], falloff)
+            covers = [stroke_coverage(points, tw, th, shape.get("stroke_width", 1.0),
+                                      shape["feather"], falloff, origin=(x0, y0))
                       for points in layers]
             cover = sum(covers) / len(covers)
         elif shape.get("feather_model", "box") == "edge":
             layers = [shape["points"], *samples]
-            covers = [edge_feather(points, coverage(points, w, h), shape["feather"], falloff)
+            covers = [edge_feather(points, coverage(points, tw, th, origin=(x0, y0)),
+                                   shape["feather"], falloff, origin=(x0, y0))
                       for points in layers]
             cover = sum(covers) / len(covers)
         else:
-            cover = coverage(shape["points"], w, h)
+            cover = coverage(shape["points"], tw, th, origin=(x0, y0))
             if samples:
-                cover = (cover + sum(coverage(points, w, h) for points in samples)) / (len(samples) + 1)
+                cover = (cover + sum(coverage(points, tw, th, origin=(x0, y0))
+                                     for points in samples)) / (len(samples) + 1)
             cover = np.clip(feather(cover, shape["feather"]), 0.0, 1.0)
             if falloff == "smooth":
                 cover = cover * cover * (3.0 - 2.0 * cover)
@@ -382,5 +407,4 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None):
     if invert:
         matte = 1.0 - matte
     pixels = np.concatenate((rgb, matte[..., None]), axis=2).astype(np.float32)
-    x, y, cw, ch = crop
-    return np.ascontiguousarray(pixels[y:y + ch, x:x + cw])
+    return np.ascontiguousarray(pixels[ry-y0:ry-y0+rh, rx-x0:rx-x0+rw])
