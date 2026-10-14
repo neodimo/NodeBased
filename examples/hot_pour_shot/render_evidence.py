@@ -80,7 +80,8 @@ def main():
         if not all(row["passed"] for row in comparisons.values()):
             raise SystemExit("CPU/GPU path-tracer comparison failed")
         return
-    doc["nodes"]["render"]["params"].update(render_backend="gpu", width=960, height=540)
+    doc["nodes"]["render"]["params"].update(render_backend="gpu", width=960, height=540, pt_samples=8,
+                                               max_bounces=4, diffuse_bounces=2, specular_bounces=2)
     doc["nodes"]["plate_fit"]["params"].update(width=960, height=540)
     output_dir = Path(__file__).resolve().parents[2] / "docs" / "images" / "hot_pour_shot"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -95,6 +96,8 @@ def main():
               "bake_seconds": round(bake_seconds, 2),
               "render_seconds": render_seconds, "comparison": comparisons}
     (RUN / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
+    benchmark = Path(__file__).resolve().parents[2] / "benchmarks" / "hot_pour" / "hot-pour-shot-2026-10-14.json"
+    benchmark.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2), flush=True)
     if bake_seconds >= 1200 or not all(row["passed"] for row in comparisons.values()):
         raise SystemExit("bake exceeded 20 minutes or a CPU/GPU comparison failed")
