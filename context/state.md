@@ -1,5 +1,30 @@
 ## 2026-10-14 — Lane 8 S3 finish (DONE)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (7:07 AM on 2026-10-14 PDT)
+
+`main` moved `37e60325` -> `0ecbfae1` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 129 tests in 104.325 s, OK. Full suite on
+the stacked tip `0ecbfae1` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1014-0137.log`, started 1:37 AM): **Ran 5337 tests in 19272.464 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step L3 of 3: the distorted plate round trip (finish 2: the card measurements) (finish 1).** Commits:
+  - `4262c524` docs: the distorted plate shot with the landmark solve (lens recovered, PASS verdict), why the solve with no survey cannot find k1; bundled copies updated
+  - `e6f634bb` demo shot: the distorted plate's camera and lens come from the surveyed landmarks (focal length 0.08% off, k1 within 0.002), the shot passes the stand-in verdict with it; the DPV-SLAM solve keeps its own files
+  Diff: 12 files changed, 866 insertions(+), 452 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step S3 of 3: Roto, RotoPaint and the trackers render only what the viewer asks for (finish 1).** Commits:
+  - `1bf928d3` docs: record Lane 8 S3 ROI completion and measurements
+  - `cd13e77b` roto: render viewer tiles and analysis regions directly
+  Diff: 12 files changed, 413 insertions(+), 113 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Roto and RotoPaint directly render requested tiles at proxy resolution, pruning Roto shapes by feather/stroke-expanded bounds. Tracker and Stabilize analysis read only their pattern/search regions through TileExecutor; PlanarTracker reads a padded rectangular ROI around the selected quad. Cache digests remain unchanged. Evidence: 135 targeted Roto, paint, tracking, planar, and viewer tests passed; the full-vs-tile 40-shape benchmark was byte-identical at tiers 1 and 8. Full-frame medians were 2,244 ms vs 2,769 ms (tier 1) and 44 ms vs 86 ms (tier 8), so interactive ROI timing is still unmeasured and whole-frame tile overhead is visible. Implementation commit `cd13e77`; details and local scratch benchmark pointer are in the top TASKLOG entry. Remaining non-S3 verification: display/GPU visual QA and Windows.
 
 ## 2026-10-13 — Lane 6 P4 finish 2: production stop timing (DONE)
