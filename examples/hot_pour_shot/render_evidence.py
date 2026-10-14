@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from nodebased import fluid3d, simcache
+from nodebased import fluid3d, gpu3d, gpupathtrace, simcache
 from nodebased.core import load_document
 from nodebased.imaging import Evaluator, write_png
 
@@ -22,12 +22,24 @@ FRAMES = (1, 60, 120)
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--small-width", type=int, default=96)
+    parser.add_argument("--adapter", choices=("default", "integrated", "cpu"), default="default")
+    parser.add_argument("--small-only", action="store_true", help="compare path tracers without writing 960 x 540 stills")
     args = parser.parse_args()
+    original_state = gpu3d._state
+    if args.adapter != "default":
+        gpu3d._state = lambda choice=None: original_state(args.adapter if (choice or "default") == "default" else choice)
+    if args.adapter == "cpu" and not gpupathtrace.soft_supported(gpu3d._state()):
+        print("SKIP: llvmpipe refuses path tracing this liquid/smoke scene (soft_supported=False)", flush=True)
+        return
+    state = gpu3d._state()
+    adapter_name = (getattr(state, "adapter", None) and state.adapter.info.get("device")) or gpu3d.describe()
+    print(json.dumps({"adapter": args.adapter, "device": str(adapter_name)}), flush=True)
     RUN.mkdir(parents=True, exist_ok=True)
     doc = load_document(ROOT / "hot_pour_shot.nbcomp")
     doc["nodes"]["render"]["params"].update(render_backend="gpu", render_mode="pathtrace", pt_samples=2,
                                                max_bounces=2, diffuse_bounces=1, specular_bounces=1)
     doc["nodes"]["render"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
+    doc["nodes"]["plate_fit"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
     fluid3d._SOLVERS.clear()
     evaluator = Evaluator(sim=simcache.SimCache(root=RUN, memory_budget=1 << 30, disk_budget=8 << 30))
     started = time.perf_counter()
@@ -39,9 +51,15 @@ def main():
     bake_seconds = time.perf_counter() - started
 
     gpu_small = {}
-    for frame in FRAMES:
-        gpu_small[frame] = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels.copy()
-        write_png(RUN / f"gpu-small-{frame:03d}.png", gpu_small[frame])
+    try:
+        for frame in FRAMES:
+            gpu_small[frame] = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels.copy()
+            write_png(RUN / f"gpu-small-{frame:03d}.png", gpu_small[frame])
+    except Exception as exc:
+        if args.adapter == "cpu":
+            print(f"SKIP: llvmpipe refused GPU path tracing the liquid/smoke scene: {type(exc).__name__}: {exc}", flush=True)
+            return
+        raise
     cpu_small = {}
     doc["nodes"]["render"]["params"]["render_backend"] = "cpu"
     for frame in FRAMES:
@@ -54,7 +72,16 @@ def main():
         reference = float(np.abs(want).mean())
         comparisons[str(frame)] = {"mean_absolute_error": mean_error, "limit": .02 * reference + .005,
                                    "passed": mean_error <= .02 * reference + .005}
+    if args.small_only:
+        result = {"adapter": args.adapter, "device": str(adapter_name), "bake_seconds": round(bake_seconds, 2),
+                  "comparison": comparisons}
+        (RUN / f"evidence-{args.adapter}.json").write_text(json.dumps(result, indent=2) + "\n")
+        print(json.dumps(result, indent=2), flush=True)
+        if not all(row["passed"] for row in comparisons.values()):
+            raise SystemExit("CPU/GPU path-tracer comparison failed")
+        return
     doc["nodes"]["render"]["params"].update(render_backend="gpu", width=960, height=540)
+    doc["nodes"]["plate_fit"]["params"].update(width=960, height=540)
     output_dir = Path(__file__).resolve().parents[2] / "docs" / "images" / "hot_pour_shot"
     output_dir.mkdir(parents=True, exist_ok=True)
     render_seconds = {}
@@ -64,7 +91,8 @@ def main():
         write_png(output_dir / f"hot-pour-{frame:03d}.png", shot)
         render_seconds[str(frame)] = round(time.perf_counter() - before, 2)
         print(json.dumps({"rendered": frame, "elapsed_seconds": render_seconds[str(frame)]}), flush=True)
-    result = {"cells": 32, "frames": 120, "bake_seconds": round(bake_seconds, 2),
+    result = {"adapter": args.adapter, "device": str(adapter_name), "cells": 32, "frames": 120,
+              "bake_seconds": round(bake_seconds, 2),
               "render_seconds": render_seconds, "comparison": comparisons}
     (RUN / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2), flush=True)

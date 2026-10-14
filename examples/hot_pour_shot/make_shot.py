@@ -50,9 +50,13 @@ def build_document(render_size=(960, 540), cells=32, render_backend="gpu"):
     # Merge overlays the transparent catcher/holdout/liquid render onto it.
     d.execute({"op": "create", "id": "plate", "type": "Read", "params": {
         "path": "plate.png", "colorspace": "Auto", "alpha_mode": "Auto", "missing": "error"}})
+    d.execute({"op": "create", "id": "plate_fit", "type": "Reformat", "params": {
+        "reformat_type": "to_box", "width": int(render_size[0]), "height": int(render_size[1]),
+        "resize_type": "fit", "filter": "bilinear"}})
+    d.execute({"op": "connect", "id": "plate_fit", "input": "image", "source": "plate"})
     d.execute({"op": "create", "id": "comp", "type": "Merge", "params": {"operation": "over"}})
     d.execute({"op": "connect", "id": "comp", "input": "A", "source": "render"})
-    d.execute({"op": "connect", "id": "comp", "input": "B", "source": "plate"})
+    d.execute({"op": "connect", "id": "comp", "input": "B", "source": "plate_fit"})
     d.document["view"] = "comp"
     # Dispatcher creation normalizes Read paths against the process cwd; keep this portable
     # example relative to its own folder instead.

@@ -1270,6 +1270,35 @@
       ],
       "disabled": false
     },
+    "plate_fit": {
+      "type": "Reformat",
+      "name": "Reformat",
+      "params": {
+        "reformat_type": "to_box",
+        "format": "HD_1080",
+        "width": 960,
+        "height": 540,
+        "pixel_aspect": 1.0,
+        "scale": 1.0,
+        "resize_type": "fit",
+        "center": 1,
+        "flip": 0,
+        "flop": 0,
+        "turn": 0,
+        "filter": "bilinear",
+        "preserve_bbox": 0,
+        "mix": 1.0
+      },
+      "inputs": {
+        "image": "plate",
+        "mask": null
+      },
+      "pos": [
+        0,
+        0
+      ],
+      "disabled": false
+    },
     "comp": {
       "type": "Merge",
       "name": "Merge",
@@ -1279,7 +1308,7 @@
       },
       "inputs": {
         "A": "render",
-        "B": "plate",
+        "B": "plate_fit",
         "mask": null
       },
       "pos": [
