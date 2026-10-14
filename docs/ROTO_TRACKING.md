@@ -337,7 +337,7 @@ Required by `docs/EVALUATION_TIERS.md` clause C2. Declared in
 
 | Node | ROI rule | Meaning |
 | --- | --- | --- |
-| `Roto` | generator | Reads nothing. The reference evaluator produces the full matte; `roto.rasterise(..., region=...)` returns an exact crop and skips shapes whose conservative bounds miss it. TileExecutor still resolves/slices the full matte. |
+| `Roto` | generator | Reads nothing. TileExecutor rasterises each requested tile at the selected tier; conservative shape bounds skip shapes that cannot touch that tile. |
 | `Tracker` | solved inverse transform | Inverse-maps the requested rectangle's corners through the solved similarity, takes the bounding box, pads by the filter support. The `mask` slot takes the requested region. |
 | `ChannelShuffle` | identity | Both `A` and `B` are read at the requested region. |
 
@@ -370,18 +370,25 @@ stored payload, exactly as `docs/ANIMATION.md` specifies for parameters:
 
 ### Tiled execution
 
-Roto is listed in `tiles.SUPPORTED_TILED_KINDS`, and its payload-aware digest is
-resolved before tile lookup. The tile executor nevertheless obtains the complete
-Roto raster and slices it for each requested tile; it does not yet rasterise a
-tile directly. The standalone region API can crop an exact result and skip
-shapes whose conservative bounds cannot touch the requested rectangle, but its
-shape kernels still allocate at image dimensions. Proxy tiers scale the shapes
-and dimensions before rasterising, so tier output is produced at tier resolution.
+Roto and RotoPaint render requested tiles at the selected proxy resolution.
+Roto's conservative shape bounds include feather and stroke expansion; shapes
+outside a tile are skipped before rasterisation. RotoPaint fetches the plate and
+clone source regions needed by the tile, including the neighborhood required by
+blur and smear strokes. Output is byte-identical to the full-frame reference at
+every tested proxy tier. Existing Roto and RotoPaint cache digests are preserved.
 
-Tracker, Stabilize and PlanarTracker analyses still use the reference evaluator
-and full input images. `tiers.input_regions` declares solved-transform rules for
-Tracker and Stabilize, but TileExecutor does not yet schedule those analyses
-through that ROI path. Existing analysis cache digests are unchanged.
+Tracker and Stabilize analysis requests only the reference pattern and each
+candidate search region through TileExecutor's ROI path. PlanarTracker requests
+the selected quadrilateral's bounding box plus a search margin. Tracker analysis
+cache digests are unchanged. PlanarTracker still uses a rectangular padded ROI;
+curved Roto masks are not an analysis-region option.
+
+On this machine, a synthetic 40-shape 1920 x 1080 Roto render measured 2,244 ms
+through the full-frame evaluator before the tile path and 2,769 ms through
+TileExecutor after it at tier 1. At tier 8 (240 x 135), the medians were 44 ms
+and 86 ms. The full-frame request includes tile scheduling and assembly overhead;
+these numbers do not measure the smaller regions requested during interactive
+viewing. The two paths produced byte-identical output at both tiers.
 
 ## What this pass deliberately does not do
 
@@ -415,9 +422,9 @@ through that ROI path. Existing analysis cache digests are unchanged.
 * Planar tracking is available through PlanarTracker and Roto's planar follow link. Picking a curved
   Roto shape as the analysis region remains unsupported; the planar region is selected with four
   Viewer clicks.
-* The Viewer still evaluates Roto mattes at full frame before displaying a tile, and Tracker,
-  Stabilize and PlanarTracker analysis still reads full-frame inputs. Direct tile rasterisation,
-  search/pattern-only analysis reads and measured 40-shape performance at 1920 x 1080 remain open.
+* Interactive ROI timing for dense Roto and RotoPaint scenes has not been benchmarked against a
+  representative artist session. Full-frame requests currently pay TileExecutor scheduling and
+  assembly overhead, as the 40-shape measurements above show.
 
 ## Transform viewer handle
 
@@ -439,7 +446,7 @@ polyline of `{x, y, pressure}` points, brush `size`, `hardness`, `opacity` and
 `smear`, `dodge` or `burn`), and a frame lifetime. Existing v12 documents
 upgrade without paint payload; Roto shape records and rendering remain unchanged.
 
-The deterministic CPU renderer uses the full-frame path. Paint is premultiplied
+The deterministic CPU renderer has both full-frame reference and direct tile paths. Paint is premultiplied
 colour, eraser attenuates the plate, clone samples the plate using its source
 offset and requested source frame, and reveal uses input2. The DustBust viewer
 preset records a single-frame clone dab from the previous frame. One viewer
@@ -478,8 +485,8 @@ Roto is. A stroke carries a tool and these per-stroke settings.
   the chosen size and the whole drag is one stroke and one undo step.
 - **Mask and mix**: the optional `mask` input limits where the paint layer shows
   and `mix` fades it; outside the mask the plate passes through.
-- **Tiles**: the stroke list is solved whole by the Evaluator and tiles are sliced from
-  the result (the same shape as Inpaint), so tiles equal the full frame at every seam.
+- **Tiles**: strokes render only the requested tile plus required blur/smear neighborhood,
+  and clone reads the matching source region. Tiled output equals the full frame at every seam.
   The tile digest folds in the Evaluator's digest, which carries the strokes and the
   plate at a clone's source frames.
 

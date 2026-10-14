@@ -1,3 +1,7 @@
+## 2026-10-14 — Lane 8 S3 finish (DONE)
+
+Roto and RotoPaint directly render requested tiles at proxy resolution, pruning Roto shapes by feather/stroke-expanded bounds. Tracker and Stabilize analysis read only their pattern/search regions through TileExecutor; PlanarTracker reads a padded rectangular ROI around the selected quad. Cache digests remain unchanged. Evidence: 135 targeted Roto, paint, tracking, planar, and viewer tests passed; the full-vs-tile 40-shape benchmark was byte-identical at tiers 1 and 8. Full-frame medians were 2,244 ms vs 2,769 ms (tier 1) and 44 ms vs 86 ms (tier 8), so interactive ROI timing is still unmeasured and whole-frame tile overhead is visible. Implementation commit `cd13e77`; details and local scratch benchmark pointer are in the top TASKLOG entry. Remaining non-S3 verification: display/GPU visual QA and Windows.
+
 ## 2026-10-13 — Lane 6 P4 finish 2: production stop timing (DONE)
 
 ## Continuous mode merge: Lane 3 (Research, GPT-6 Astra), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (7:17 PM on 2026-10-13 PDT)
