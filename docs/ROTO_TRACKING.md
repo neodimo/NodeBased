@@ -383,6 +383,26 @@ the selected quadrilateral's bounding box plus a search margin. Tracker analysis
 cache digests are unchanged. PlanarTracker still uses a rectangular padded ROI;
 curved Roto masks are not an analysis-region option.
 
+#### Lane 8 Q1 baseline profile (before optimization)
+
+`cProfile` on the synthetic 40-shape 1920 x 1080 Roto, `TileExecutor(tile_edge=256)`, one
+compose per tier. These are cumulative seconds under the profiler, so they identify where work
+goes rather than serving as the timing comparison below.
+
+Tier 1 top entries: `compose` 3.347; `compose_region` 3.347; `roto.rasterise` 41 calls / 3.328;
+`_compute_node_digests` 2.620; digest callback 2.619; `_solve_roto` 2.619;
+`Evaluator.evaluate_raster` 2.618; `_windowed_kernel` 2.610; Roto `_kernel` 2.610; `feather`
+131 calls / 1.308. The 41 raster calls show repeated per-tile shape rasterisation. The full matte
+kernel is also invoked while establishing the legacy-compatible Roto digest; the tile scheduler
+and assembly copies do not appear among the top ten.
+
+Tier 8 top entries: `compose` 0.125; `compose_region` 0.125; `roto.rasterise` 2 calls / 0.118;
+`coverage` 80 calls / 0.097; `_render_tile` 0.063; `_roto_tile` 0.063; `_compute_node_digests`
+0.062; digest callback 0.062; `_solve_roto` 0.062; `Evaluator.evaluate_raster` 0.062. At this
+small tier only one tile is needed, so the 42 ms gap in the earlier unprofiled comparison cannot
+be assigned to many-tile scheduling; most observed work is the full-frame digest raster plus
+tile rasterisation. The large-tier overhead is principally repeated shape rasterisation.
+
 On this machine, a synthetic 40-shape 1920 x 1080 Roto render measured 2,244 ms
 through the full-frame evaluator before the tile path and 2,769 ms through
 TileExecutor after it at tier 1. At tier 8 (240 x 135), the medians were 44 ms
