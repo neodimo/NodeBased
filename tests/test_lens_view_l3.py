@@ -58,10 +58,13 @@ class ViewerToggleTests(unittest.TestCase):
         try:
             self.assertTrue(wait_until(lambda: window.frame is not None and window.viewer.format_rect is not None))
             strip = window.viewer_strip
-            self.assertFalse(strip.lens_button.isHidden())
+            # On a small screen (the Windows CI runner's) the window cannot reach 1440 px, the strip goes compact
+            # and the button moves into the "more" menu; drive the same switch through the viewer then.
+            self.assertEqual(strip.lens_button.isHidden(), strip.compact)
             self.assertEqual(strip.lens_button.text(), lensview.LABELS[lensview.UNDISTORTED])
             self.assertEqual(window.viewer.sceneRect().size().toTuple(), (192.0, 108.0))
-            strip.lens_button.click()
+            toggle = window.viewer.toggle_lens_view if strip.compact else strip.lens_button.click
+            toggle()
             self.assertEqual(window.dispatcher.document["view"], "undistort")
             self.assertEqual(strip.lens_button.text(), lensview.LABELS[lensview.PLATE])
             # the whole grown frame is shown, the overscan beyond the 192 x 108 format
@@ -71,7 +74,7 @@ class ViewerToggleTests(unittest.TestCase):
             # the format guide stays on the plate's format inside the grown frame
             self.assertEqual(window.viewer.format_rect.getRect(), (0.0, 0.0, 192.0, 108.0))
             self.assertFalse(window.viewer.viewport().grab().isNull())          # the dashed format outline paints
-            strip.lens_button.click()
+            toggle()
             self.assertEqual(window.dispatcher.document["view"], "plate")
             self.assertTrue(wait_until(lambda: window.viewer.sceneRect().size().toTuple() == (192.0, 108.0)))
             # the "more" menu offers the same switch when the strip has no room for the button
