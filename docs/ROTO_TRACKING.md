@@ -403,12 +403,21 @@ small tier only one tile is needed, so the 42 ms gap in the earlier unprofiled c
 be assigned to many-tile scheduling; most observed work is the full-frame digest raster plus
 tile rasterisation. The large-tier overhead is principally repeated shape rasterisation.
 
-On this machine, a synthetic 40-shape 1920 x 1080 Roto render measured 2,244 ms
-through the full-frame evaluator before the tile path and 2,769 ms through
-TileExecutor after it at tier 1. At tier 8 (240 x 135), the medians were 44 ms
-and 86 ms. The full-frame request includes tile scheduling and assembly overhead;
-these numbers do not measure the smaller regions requested during interactive
-viewing. The two paths produced byte-identical output at both tiers.
+On this machine, the synthetic 40-shape 1920 x 1080 Roto now uses the reference evaluator
+for full-frame requests; the five-run medians were 2,299 ms at tier 1 and 44.0 ms at tier 8,
+within 5% of the earlier full-frame baseline (2,244 ms and 44 ms). The earlier tiled path took
+2,769 ms and 86 ms. The baseline profile above locates the 525 ms tier-1 penalty in 40
+additional per-tile matte rasterisations; at tier 8, the extra 42 ms came from a full matte
+render for digest calculation plus the actual tile render. Scheduling and assembly copies were
+outside the profiled top ten. Roto tile digests now hash resolved shape data without rendering.
+
+For interactive regions, each entry compares five-run median full-frame evaluator time with
+direct tiled-region time on that same synthetic scene. Tier 1 (1920 x 1080): a 960 x 540
+quarter-frame region took 2,301 ms before and 166 ms after; a 512 x 512 crop took 2,304 ms
+before and 76 ms after. Tier 8 (240 x 135): a 120 x 67 quarter-frame region took 44.0 ms
+before and 13.7 ms after; a 64 x 64 crop (the tier-8 equivalent of 512 x 512) took 43.9 ms
+before and 8.3 ms after. Full-frame and tile-reference pixels remain byte-identical at tiers 1
+and 8. These measurements cover Roto; dense RotoPaint interactive regions remain unmeasured.
 
 ## What this pass deliberately does not do
 
@@ -442,9 +451,8 @@ viewing. The two paths produced byte-identical output at both tiers.
 * Planar tracking is available through PlanarTracker and Roto's planar follow link. Picking a curved
   Roto shape as the analysis region remains unsupported; the planar region is selected with four
   Viewer clicks.
-* Interactive ROI timing for dense Roto and RotoPaint scenes has not been benchmarked against a
-  representative artist session. Full-frame requests currently pay TileExecutor scheduling and
-  assembly overhead, as the 40-shape measurements above show.
+* The 40-shape Roto profile and ROI timings above are synthetic measurements, not a recorded
+  artist session. Dense RotoPaint interactive-region timing remains unmeasured.
 
 ## Transform viewer handle
 
