@@ -1,3 +1,12 @@
+## 2026-10-15 — Lane 6 S2: Hot pour reads as a pour (PARTIAL)
+
+- **What was done (evidence):** The shot builder now uses a 64-cell liquid/steam grid and places its holdout cup on the liquid solver's pour axis. The source starts above the cup rim; every keyed horizontal source position stays within the cup radius. `tests.test_hot_pour_shot` passed on CPU in 3.656 seconds, and `tests.test_knowledge` passed (7 tests).
+- **Artifacts:** `examples/hot_pour_shot/make_shot.py`, regenerated `examples/hot_pour_shot/hot_pour_shot.nbcomp`, `tests/test_hot_pour_shot.py`, and synchronized `docs/FLUIDS_SPIKE.md` plus `nodebased/data/docs/FLUIDS_SPIKE.md`; local commits `2772e50`, `71691ea`, `b597df7`, not pushed. Test logs are in shared scratch `run/tests-L6-S2-part1.log` and `run/tests-L6-S2-knowledge.log`. No bake cache or image artifacts were generated.
+- **State:** Partial. CPU first-frame evaluation is verified. Visual stream/splash/fill, surface mesh appearance, all NVIDIA bake and path-tracer timing targets, progressive viewport timing, and Radeon preview FPS remain unverified. The exclusive GPU bake queued behind the integrator's active full-suite run; the lane's queued process was stopped without running.
+- **Next owner + concrete artifact:** Needs Gonzo: after the shared GPU lock is free, resume the remaining S2 brief using `examples/hot_pour_shot/render_evidence.py`, `docs/3D_FOUNDATION.md`'s R6 `progressiverender` path, and `benchmarks/hot_pour/`; replace the three stills only after a verified stream reaches the cup.
+
+## 2026-10-15 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step S1 of 1: the Hot pour in a rendered shot, with shadows and a holdout (finish 1) (integrator tick)
+
 ## 2026-10-15 — Lane 3 V1: interface at display rate (requested sweep 10/16)
 
 - **What was done:** Completed the five-part documentation brief in order. Evidence: inspected baseline source and the software-display QA artifact; sourced six-app architecture survey and Qt/Python/wgpu interop mechanisms; documented three options, effort estimates and presentation/first-look targets; linked the new section from the decision sheet. Recommended a staged hybrid render/present core, beginning with direct-surface and scheduling proofs. Existing preview worker and synchronous viewport readback are distinguished. Estimates and UX targets are not achieved performance or competitor benchmarks.

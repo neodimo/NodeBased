@@ -67,3 +67,9 @@ documentation and desktop checks passed. Animal/Windows remains untested; integr
 # Lane 6 H2 finish — branch handoff
 
 All requested code, measurements, and three-adapter targeted checks are committed on `openclaw/nb-fluids-spike`. `docs/FLUIDS_SPIKE.md` records the sparse/dense 256³ and 512³ comparisons and the 256³ path-traced plume before/after timing and 64-sample noise check. The retained tiles are compact; existing `Volume` consumers still expand them for rendering. Awaiting Gonzo's review, integration suite, and merge. No Windows or real-display run by this lane.
+
+# Lane 6 S2 — hot-pour picture quality (active, 2026-10-15)
+
+Starting on synchronized `openclaw/nb-fluids-spike`. The prior shot's 32-cell bake is quick, but the liquid still reads as a rounded mass, with no clear stream and noisy steam. S2 targets a visible pour, smooth cached-surface shading, progressive viewport first-look timing, and measured preview/render budgets on the 12 GB RTX 3080 Ti. Large generated data belongs in workspace scratch and must be removed before handoff. GPU work must use the shared lock.
+
+Current state: scene realigned to the pour axis at 64 cells; the CPU frame-1 test and documentation sync passed. GPU bake was queued behind an active integrator full-suite lock and stopped before starting. All timing and visual targets remain pending.
