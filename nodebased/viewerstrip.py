@@ -251,7 +251,7 @@ class ViewerStrip(QFrame):
         self.lens_button.hide()
         # Looking through a camera with a lens in the 3D viewport: draw the picture the way the lens bends it.
         self.lens3d_separator = separator()
-        self.lens3d_button = tool_button("Lens distortion", LENS_3D_TIP)
+        self.lens3d_button = tool_button("Lens", LENS_3D_TIP)
         self.lens3d_button.setObjectName("strip-lens3d")
         self.lens3d_button.setCheckable(True)
         self.lens3d_button.clicked.connect(lambda: window.viewport.toggle_lens_view())

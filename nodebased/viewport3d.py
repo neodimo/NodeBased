@@ -584,7 +584,8 @@ class Viewport3D(QWidget):
         """`scene3d.project`, or `project_lens` while the picture is drawn through the lens: the editor overlays
         land where the distorted picture shows the point."""
         if self._lens_drawn:
-            return scene3d.project_lens(camera, width, height, points)
+            with np.errstate(all="ignore"):     # a point behind the camera has no sensible distortion
+                return scene3d.project_lens(camera, width, height, points)
         return scene3d.project(camera, width, height, points)
 
     def _draw_world_line(self, painter, camera, start, end):

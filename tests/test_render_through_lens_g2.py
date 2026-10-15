@@ -94,6 +94,25 @@ class Knob(unittest.TestCase):
         del d.document["nodes"]["render"]["params"]["through_lens"]
         self.assertEqual(render(d).display, Region(0, 0, WIDTH, HEIGHT))
 
+    def test_a_saved_document_without_the_setting_loads_with_it_off(self):
+        """The additive upgrade: no schema bump, a Render3D saved before the setting gains it switched off."""
+        from nodebased.core import SCHEMA_VERSION, upgrade_document, validate
+        old = graph().document
+        del old["nodes"]["render"]["params"]["through_lens"]
+        upgraded = upgrade_document(old)
+        validate(upgraded)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
+        self.assertEqual(upgraded["nodes"]["render"]["params"]["through_lens"], 0)
+
+    def test_the_shipped_demo_shot_still_loads(self):
+        import json
+        from pathlib import Path
+        from nodebased.core import upgrade_document, validate
+        path = Path(__file__).resolve().parent.parent / "examples" / "demo_shot" / "demo_shot_lens.nbcomp"
+        document = upgrade_document(json.loads(path.read_text()))
+        validate(document)
+        self.assertEqual(document["nodes"]["render"]["params"]["through_lens"], 0)
+
     def test_it_is_laid_out_with_a_human_label(self):
         from nodebased.knobs import knob_layout
         labels = {group.label for group in knob_layout("Render3D") if "through_lens" in group.params}
@@ -134,7 +153,7 @@ class ThroughTheLens(unittest.TestCase):
         self.assertGreater(float(inside.mean()), 0.3, "the test picture has too little smooth interior to mean anything")
         self.assertLessEqual(float(difference[inside].max()), INTERIOR,
                              f"{self.backend}/{self.mode}: the interior differs from render + Redistort by more than {INTERIOR}")
-        self.assertLessEqual(float(difference.max()), EDGE_TOLERANCE * 20,
+        self.assertLessEqual(float(difference.max()), EDGE_TOLERANCE,
                              f"{self.backend}/{self.mode}: an edge differs from render + Redistort by more than the stated band")
 
     def test_the_stated_tolerance_is_tight_enough_to_fail(self):
@@ -160,6 +179,15 @@ class CpuRaster(ThroughTheLens):
 
 class GpuRaster(ThroughTheLens):
     backend, mode = "gpu", "raster"
+
+    def test_it_agrees_with_the_cpu_raster_render_and_redistort(self):
+        """The literal claim: the card's raster through the lens against the CPU's render, bent by the CPU kernel."""
+        bent = render(graph(through_lens=1, render_backend="gpu", render_mode="raster")).pixels
+        reference, ideal, frame = by_hand("cpu", "raster")
+        difference = np.abs(bent - reference).max(axis=2)
+        inside = smooth_mask(ideal, frame)
+        self.assertLessEqual(float(difference[inside].max()), INTERIOR)
+        self.assertLessEqual(float(difference.max()), EDGE_TOLERANCE)
 
 
 class GpuPathTracer(ThroughTheLens):

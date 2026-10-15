@@ -2456,6 +2456,8 @@ def upgrade_document(document):
                             params.setdefault(name, default)
                         for name, default in _MOTION_DEFAULTS.items():
                             params.setdefault(name, default)
+                        for name, default in _THROUGH_LENS_DEFAULTS.items():
+                            params.setdefault(name, default)
                 if isinstance(node, dict) and node.get("type") == "ReadSplat3D":
                     params = node.get("params")
                     if isinstance(params, dict):
