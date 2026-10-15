@@ -268,6 +268,7 @@ class TileResult:
     source_decodes: int
     region: TileRegion | None = None
     layers: dict | None = None
+    fallback_nodes: tuple[str, ...] = ()
 
     @property
     def shape(self) -> tuple:
@@ -451,15 +452,12 @@ class TileExecutor:
                           full_y=data.y, full_width=data.width, full_height=data.height)
 
     def supports_tiled(self, document, target):
-        """True iff every evaluated ancestor (including Switch selected branch, disabled bypass)
-        is in SUPPORTED_TILED_KINDS and the chain ends at a generator. Groups are expanded first."""
+        """True when a graph can be composed in tiles, evaluating unsupported nodes whole."""
         document, target = groups.flatten_groups(document, target)
         nodes = document["nodes"]
         kind_seen = False
         for node_id in _all_ancestors(document, target):
             node = nodes[node_id]
-            if node["type"] not in SUPPORTED_TILED_KINDS:
-                return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
             if node["type"] == "RotoPaint" and any(
@@ -556,6 +554,7 @@ class TileExecutor:
         # fallback below does: baking would freeze an animated upstream source at the outer
         # frame's value before the node's own per-age/per-subframe nested evaluation ever runs.
         self._unbaked_document = document
+        self._fallback_nodes = set()
         resolved = resolve_document(document, frame)
         if not self.supports_tiled(resolved, target):
             self.stats["full_frame_fallbacks"] += 1
@@ -581,10 +580,11 @@ class TileExecutor:
         expected_bounds = (target_bounds.x, target_bounds.y, width, height)
         if (region.full_x, region.full_y, region.full_width, region.full_height) != expected_bounds:
             raise ValueError("Tile request bounds must match target data-window extent")
-        if region.x < region.full_x or region.y < region.full_y or \
-                region.right > region.full_x + region.full_width or \
-                region.bottom > region.full_y + region.full_height:
-            raise ValueError("Tile request must lie inside the target data window")
+        x0, y0 = max(region.x, target_bounds.x), max(region.y, target_bounds.y)
+        x1, y1 = min(region.right, target_bounds.right), min(region.bottom, target_bounds.bottom)
+        region = dataclasses.replace(region, x=x0, y=y0, width=max(0, x1-x0), height=max(0, y1-y0))
+        if region.is_empty:
+            return TileResult(np.zeros((0, 0, 4), np.float32), 0, 0, tier, True, 0, 0, 0, 0, region)
         decodes_before = self.stats["source_decodes"]
         contains_roto = (region.width * region.height) / max(1, width * height) >= 0.80 and any(
             resolved["nodes"][key]["type"] == "Roto" for key in _all_ancestors(resolved, target))
@@ -636,16 +636,14 @@ class TileExecutor:
         output_layers = None
         tile_hits_before = self.cache.hits_exact + self.cache.hits_preview
         tile_misses_before = self.cache.misses
-        for tile_region in iter_tiles(region.width, region.height, self.tile_edge,
-                                      x=region.x, y=region.y):
-            # ``iter_tiles`` naturally treats the supplied rectangle as its canvas.  A demand
-            # request is only a *view onto* the node data window, though: Blur halos at an ROI
-            # edge must continue into valid neighbouring data, never clamp at the viewport edge.
-            tile_region = dataclasses.replace(tile_region,
-                                              full_width=region.full_width,
-                                              full_height=region.full_height,
-                                              full_x=region.full_x,
-                                              full_y=region.full_y)
+        # Keep the tile grid anchored to the data window. ROI requests then share exact tile keys
+        # with a later full-frame render, so disabling ROI reuses the already-rendered interior.
+        for tile_region in iter_tiles(width, height, self.tile_edge,
+                                      x=target_bounds.x, y=target_bounds.y):
+            ix0, iy0 = max(tile_region.x, region.x), max(tile_region.y, region.y)
+            ix1, iy1 = min(tile_region.right, region.right), min(tile_region.bottom, region.bottom)
+            if ix1 <= ix0 or iy1 <= iy0:
+                continue
             if cancel is not None and cancel.is_set():
                 raise CancelledTile()
             buffered = self._render_tile(resolved, target, frame, tier, tile_region,
@@ -658,26 +656,25 @@ class TileExecutor:
             # that aligns canvas coords to pixel coords.
             offset_y = tile_region.y - buffered.region.y
             offset_x = tile_region.x - buffered.region.x
-            ys_output = slice(tile_region.y - region.y, tile_region.bottom - region.y)
-            xs_output = slice(tile_region.x - region.x, tile_region.right - region.x)
-            output[ys_output, xs_output] = buffered.pixels[
-                offset_y:offset_y + tile_region.height,
-                offset_x:offset_x + tile_region.width]
+            ys_output = slice(iy0 - region.y, iy1 - region.y)
+            xs_output = slice(ix0 - region.x, ix1 - region.x)
+            ys_tile = slice(iy0 - buffered.region.y, iy1 - buffered.region.y)
+            xs_tile = slice(ix0 - buffered.region.x, ix1 - buffered.region.x)
+            output[ys_output, xs_output] = buffered.pixels[ys_tile, xs_tile]
             if buffered.layers:
                 if output_layers is None:
                     output_layers = {name: np.zeros((region.height, region.width, arr.shape[2]), np.float32)
                                      for name, arr in buffered.layers.items()}
                 for name, arr in buffered.layers.items():
-                    output_layers[name][ys_output, xs_output] = arr[
-                        offset_y:offset_y + tile_region.height,
-                        offset_x:offset_x + tile_region.width]
+                    output_layers[name][ys_output, xs_output] = arr[ys_tile, xs_tile]
         return TileResult(pixels=output, canvas_width=region.width, canvas_height=region.height, tier=tier,
                           tiled=True,
                           tile_hits=(self.cache.hits_exact + self.cache.hits_preview) - tile_hits_before,
                           tile_misses=self.cache.misses - tile_misses_before,
-                          full_frame_fallbacks=0,
+                          full_frame_fallbacks=len(self._fallback_nodes),
                           source_decodes=self.stats["source_decodes"] - decodes_before,
-                          region=region, layers=output_layers)
+                          region=region, layers=output_layers,
+                          fallback_nodes=tuple(sorted(self._fallback_nodes)))
 
     # --- internal ---------------------------------------------------------
     def _render_tile(self, document, node_id, frame, tier, region, node_digests, cancel):
@@ -685,7 +682,22 @@ class TileExecutor:
         node = document["nodes"][node_id]
         kind = node["type"]
         if kind not in SUPPORTED_TILED_KINDS:
-            raise UnsupportedTile(f"{kind} has no tile-native implementation")
+            self._fallback_nodes.add(kind)
+            raster = self.evaluator.evaluate_raster(document, node_id, frame=frame, tier=tier)
+            full, data = raster.pixels, raster.data
+            bx0, by0 = max(0, region.x-data.x), max(0, region.y-data.y)
+            bx1, by1 = min(full.shape[1], region.right-data.x), min(full.shape[0], region.bottom-data.y)
+            pixels = np.zeros((region.height, region.width, 4), np.float32)
+            if bx1 > bx0 and by1 > by0:
+                pixels[:by1-by0, :bx1-bx0] = full[by0:by1, bx0:bx1]
+            pixels.flags.writeable = False
+            key = TileKey(node_id=node_id, frame=int(frame), tier=int(tier), region_x=region.x,
+                          region_y=region.y, region_width=region.width, region_height=region.height,
+                          tile_edge=int(self.tile_edge), exact=True,
+                          content_digest=node_digests.get(node_id, ""))
+            artifact = TileArtifact(key=key, pixels=pixels, region=region)
+            self.cache.put(artifact)
+            return artifact
         params = dict(tiers.scale_params(kind, node["params"], tier))
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")

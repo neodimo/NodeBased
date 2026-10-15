@@ -535,3 +535,11 @@ only on release.
 Roto and tracker gestures have priority over this handle. In particular, a
 Transform handle never consumes a Roto point edit or tracker point-picking
 click.
+
+## Lane 8 step notes
+
+### Lane 8 T1: ROI correctness (partial)
+
+The tile executor now keeps ROI evaluation alive when a node lacks a tile-native kernel: it evaluates that node's full frame, crops to the requested region, and exposes the fallback node name in the viewer's ROI badge. Tracker and Stabilize still use this fallback; their region-native analysis/render paths remain open. Requests crossing a target data window are clipped to its edge. ROI handle presses are resolved before Roto drawing, so a selected Roto no longer turns a box-handle press into a new shape.
+
+Real-display measurements from the QA comp are from **tier 1 on llvmpipe**: ROI 960 × 540 rendered in 1.24–1.27 s (1.3–1.65 s to picture) versus 3.8–4.3 s full frame; ROI-off took 4.0–4.2 s and reused no region tiles. The QA was not run on the 12 GB RTX 3080 Ti, so that card's timings remain unmeasured. The new full-frame node fallback has no timing measurement yet. ROI-off region reuse and byte-for-byte QA-comp comparison remain open.
