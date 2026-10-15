@@ -459,6 +459,16 @@ This is the current **single decision table** for memory eligibility across the 
 
 **Decision:** start with an instrumented few-step adapter and preview channel, then evaluate NeuFlow v2. Adopt the common interaction contract first; select each backend by its measured ability to honor it. A meaningful intermediate image is a visual/structural gate, not merely a decoded tensor arriving quickly.
 
+### Ranking decision: speed before capacity before licence
+
+**Agree with the proposed A → B → material-once sequence as an experiment order**, with a qualification: it is a decision about reducing artist wait on the current generative-shot workflow, not a claim that A already has the lowest measured latency. A tests the largest current wait with an existing control stack and creates the preview channel; B has stronger published speed evidence but solves a different subproblem. Material-once should ultimately offer the strongest live response to camera/light edits, after its unmeasured material/de-lighting setup succeeds. None has demonstrated the first-look target here.
+
+- **A: [few-step SDXL plus displayed steps](../briefs/proposed/U1-few-step-sdxl-preview.md).** Fixed Lightning adapter, separately measured 12 GB offloaded / 48 GB resident variants, actual event-to-display gate. Recover stage-8 inputs; validate the distilled img2img schedule rather than assuming that truncating it preserves quality. Do not confuse step-count reduction with measured speedup.
+- **B: NeuFlow v2 before MEMFOF.** Published **15 ms at 1024 × 436 on RTX 2080 fp16** [CF5, paper v2, checked 10/13] is a stronger first-look hypothesis than MEMFOF's **472 ms full-HD RTX 3090** [CF1]; the image sizes and direction contracts differ, so no direct speed ratio is asserted. Require a same-card **1080p, both-directions** rerun against **1.34 s** historical Lucas–Kanade [PARITY_2D.md V1, 2026-09-27], with analytic **<0.1 px** accuracy, disocclusion/large-motion testing, preserved vector units and full transfer/evaluator costs. Proposed first-look gate **<1 s**, not a published result. MEMFOF remains a quality-led fallback if NeuFlow misses accuracy.
+- **C: T1-C material once, render every frame.** Amortizes generation and preserves scene camera/light geometry. First compare a supported object's de-lit material on known UVs; do not promise unseen texels or arbitrary scene reconstruction. Report material setup separately from per-frame render and invalidate progressive accumulation on edits.
+
+Candidate promotion order is **credible first useful look**, then **eligible card/residency**, then **usable licence**; unknown latency is a measurement priority, never a fabricated numeric rank. Within the fast but unproven controlled-video group, Causal Forcing++/Causal-rCM deserve inspection before ordinary clip diffusion, but missing depth/camera checkpoints and licence gaps prevent automatic replacement. The top decision sheet carries the complete reordered T1–T3 queue.
+
 ### Speed sources and dates
 
 All living pages accessed **2026-10-15**. Paper/version dates identify the evidence, not the age of a search-engine crawl.
