@@ -10,8 +10,9 @@ from nodebased.core import Dispatcher
 ROOT = Path(__file__).resolve().parent
 
 
-def build_document(render_size=(960, 540), cells=32, render_backend="gpu"):
-    # 32-cell liquid and steam domains keep this artist-facing shot practical to bake;
+def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
+    # 64-cell liquid and steam domains give the falling stream enough width to survive
+    # meshing while keeping this artist-facing shot practical to bake;
     # all 120 frames remain in the timeline so frames 1, 60 and 120 are representative.
     ops = hotpour.hot_pour_ops(cells, cells, 120, spout_height=0.42, particles_per_cell=2,
                                substeps=2, render_size=render_size)
@@ -35,7 +36,7 @@ def build_document(render_size=(960, 540), cells=32, render_backend="gpu"):
         commands.append(op)
     commands.extend((
         {"op": "create", "id": "front_cup", "type": "Cylinder3D", "params": {
-            "cyl_radius": 0.105, "cyl_height": 0.25, "cyl_caps": "closed", "tx": 0.18, "ty": 0.14,
+            "cyl_radius": 0.12, "cyl_height": 0.30, "cyl_caps": "closed", "tx": 0.0, "ty": 0.15,
             "tz": 0.20, "red": 0.8, "green": 0.9, "blue": 0.95, "alpha": 1.0, "holdout": "on",
             "cast_shadows": "off"}},
         {"op": "create", "id": "backdrop", "type": "Card3D", "params": {
