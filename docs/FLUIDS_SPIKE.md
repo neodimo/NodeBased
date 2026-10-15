@@ -1560,6 +1560,11 @@ On the regenerated 256³ liquid / 192³ steam, 120-frame production cache (47,66
 
 The half-resolution surface arrives within one second at all three production frames (slowest: 311.6 ms at frame 120). Full detail follows in under 226 ms at all three. Together with the playback measurements above, both Radeon acceptance targets pass. The benchmark is `benchmarks/hot_pour/radeon-stop-P4-2026-10-13.json`; its 47.66 GB generated cache was removed after measurement.
 
+
+### S2 of 2: the Hot pour reads as a pour (partial, 2026-10-15)
+
+The example now uses a 64-cell liquid/steam grid and centers the holdout cup on the solver's pour axis; the keyed source path stays inside the cup radius and begins above its rim. `tests.test_hot_pour_shot` passes its CPU frame-1 check, including the holdout, liquid material, steam, and sub-minute evaluation. The 12 GB RTX 3080 Ti measurements, replacement stills, viewport first-look result, and Radeon 12 FPS result remain pending. An integrator full-suite run currently owns the shared GPU lock, so this lane stopped its queued exclusive bake instead of contending for the card. No new bake or still render has been measured in S2; the prior S1 numbers do not establish these targets.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
