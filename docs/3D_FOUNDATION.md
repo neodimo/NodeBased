@@ -53,7 +53,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
 | `RigidBody3D` | rigidbody | A physical body descriptor with `rigid_shape` box, sphere, convex (convex hull of the connected mesh), or compound (convex hull per connected part); `density` derives mass from volume unless `mass` is set, with `friction`, `restitution`, initial linear/angular velocity and torque. |
 | `RigidSolver3D` | scene | Solves up to eight bodies with gravity, ground plane, contact friction/restitution, angular motion, torque and sleeping, returning their animated geometry. An optional FLIP liquid input supplies a waterline and gets a bounded equal-and-opposite velocity impulse in the returned scene; the upstream FLIP checkpoint remains unchanged. Its scene can connect to `FluidCollide3D.geometry` with `animated` on to stir smoke. |
-| `Render3D` | image | Renders `scene` through `camera` at its own width and height, in `raster`, `raytrace` or `pathtrace` mode (see "Path tracing"). |
+| `Render3D` | image | Renders `scene` through `camera` at its own width and height, in `raster`, `raytrace` or `pathtrace` mode (see "Path tracing"). `through_lens` renders the `rgba` picture through the camera's lens distortion (see "Lens distortion", step G2). |
 | `Relight` | image | A 2D node: recombines `Render3D`'s `relight` bundle with new light colour/intensity, in comp. |
 | `LightMixer` | image | A 2D node: rebalances a render's light groups with a gain and a colour each, live in the graph. Reads the `light.<group>` layers of `Render3D`'s `lights` pass or of an EXR. See "Light groups, light linking and the LightMixer". |
 
@@ -1139,7 +1139,8 @@ search. Settings → Viewer → "Switch the viewer to 3D when a 3D node is viewe
 VIEWPORT was its own dock load normally; the old dock is dropped and its view lives in the panel.
 
 - Orbit: left drag · Pan: middle drag · Dolly: wheel · **F** frames the scene · **C** looks
-  through the authored camera.
+  through the authored camera · **L** draws that view through the camera's lens when it has one ("Lens distortion",
+  step G2).
 - It shows what `Render3D` will see — the scene wired into the `Render3D` upstream of the viewed
   node, evaluated through the real graph, so textures, animation, expressions and disabled nodes
   all match. Before anything is wired it shows the loose geometry in the document.
@@ -2409,6 +2410,58 @@ A full hand run of the distorted demo shot (`run_by_hand.py --plate distorted`, 
 export and the verifier take the rest, so the total moved by the run to run variation of this machine, not by the
 lens. The gain is in the viewer's "View undistorted" at plate size and in 2K and 4K shots.
 
+**Looking through the lens in the 3D viewport and in renders (step G2).** Every renderer here draws the ideal pinhole
+picture. To show or render the picture the lens makes, the ideal picture is drawn a little larger and Redistort's own
+resample (`nodebased/viewportlens.py`, on the card through `gpulens.warp`, the CPU kernel as the fallback) brings it
+down into the format. The overscan is what the Undistort node would grow to, from the same `lensmodel.undistorted_window`;
+the camera that draws it has its field of view widened by the same ratio, so a pixel keeps its size and the centre stays
+put. The viewport caps the overscan at 75% of the format on each side (a lens that throws a corner further leaves that corner
+black rather than costing a frame several times the size); a render takes the Undistort node's cap of two formats.
+
+- **The viewport.** Looking through a camera whose lens bends something (`C`), the viewport draws through the lens by
+  default. The viewer strip has a **Lens** switch beside View undistorted / View plate (and the "more" menu a **Lens
+  distortion** check), and **L** flips it; both are only offered while the viewport looks through a camera with a lens,
+  and a camera without one draws exactly what it drew before. The grid is part of the picture and bends with it; the
+  editor overlays that sit over the picture (the selection box, markers, a fluid domain) are projected with
+  `scene3d.project_lens` and drawn as curves, so they land where the bent picture shows the point. The progressive
+  Render mode (`P`) draws through the lens too, on the converged overscan image. The GPU frame is read back as 8-bit and
+  bent as 8-bit (`gpulens.warp` takes a `uint8` picture as an `rgba8unorm` texture and returns packed bytes, a quarter of the
+  copies); the filter is bilinear and works on the display-encoded values, which is right for lining a plate up by eye and
+  not a colour-accurate resample (a render's is).
+- **Renders.** `Render3D`'s **Render through the lens** (`through_lens`, off by default; the setting is added to old
+  documents when they load, with no schema step) renders the raster, ray-traced and path-traced pictures of the
+  `rgba` output through the camera's lens, in the format's size. It draws with the node's own `render_backend` and
+  `render_mode` and bends with the same backend (`cpu` on the CPU, `gpu` on the card and an error when it cannot, `auto` on
+  the card when there is one). Depth, normals, ids, motion and Cryptomatte are refused with the reason, because a resample
+  would blur them.
+
+Agreement (`tests/test_render_through_lens_g2.py`, a 192 x 108 scene of two spheres and a light, a lens with every term):
+the setting against the same renderer's overscan picture bent by the Redistort node's CPU kernel (filter bilinear), on
+the RTX 3080 Ti, the Radeon 8060S (`force-adapter.py integrated`) and llvmpipe (`force-adapter.py cpu`). Where the picture
+is smooth (91% of the pixels), the largest difference is 2.4e-7 per channel against the step G1 limit of 1e-4; over the
+whole frame, hard edges included, 1.6e-5 against the stated 5e-4, for the CPU raster (identical), the GPU raster and
+the GPU path tracer on all three. The card's raster through the lens against the CPU raster plus Redistort: 7e-6 where smooth,
+5e-5 overall. The path tracer's own picture is not the CPU raster's, so it is measured against itself. The viewport's warp
+agrees with the CPU kernel to one 8-bit level and with the lens model's own mapping to two (`tests/test_viewport_lens_g2.py`);
+the centre of a small sphere lands within 1.5 pixels of `project_lens` on the GPU and the CPU renderer, and further than
+5 pixels from where the ideal camera puts it. An adapter that cannot run the warp skips its tests with the reason.
+
+Frame time, 1920 x 1080, the viewport looking through the barrel lens of the benchmark (k1 -0.06, k2 0.004; the overscan
+picture is 2474 x 1392), median of fifteen `grab()` calls, the whole paint (`tools/benchmark_viewport_lens.py`; the card
+run took the shared lock while an integrator suite ran on the CPU, with the card idle):
+
+| Adapter | No lens (ms) | Lens (ms) | Of which the warp (ms) | The CPU warp (ms) |
+|---|---|---|---|---|
+| RTX 3080 Ti (USB4 eGPU) | 5.2 | 30.9 | 18.6 | 1569 |
+| Radeon 8060S (integrated) | 2.0 | 10.9 | 1.8 | 1564 |
+| llvmpipe (software) | 9.7 | 30.3 | 13.6 | 1565 |
+
+The viewport stays interactive (32, 92 and 33 frames a second). The RTX 3080 Ti here sits behind a USB4 link, so its
+warp is the copies of the frame in and out (13.8 MB up, 8 MB down) and the integrated GPU, which shares memory with the
+CPU, does the same warp in a tenth of the time; a render target that stays on the card between the render and the warp
+would remove those copies and is not built. The reference (the CPU kernel) takes 1.6 s a frame at this size, which is
+why the viewport does not use it unless there is no adapter.
+
 ## Motion blur
 
 Step R5's second half. `Render3D` blurs what moves across a shutter in the path tracer, the ray-traced mode and raster mode.
@@ -3191,8 +3244,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   (`force-adapter.py integrated`) and llvmpipe (`force-adapter.py cpu`).
 - Step L1 of 3 (Rendering 13, lens and film-back): the lens model on `Camera3D` and the imported-camera readers,
   `Undistort` and `Redistort`, and `Project3D`, the tracker paths and the SceneState export reading the lens. See
-  "Lens distortion". Schema bumped from 20 to 21. Left out: the viewport and `Render3D` still draw through the
-  ideal camera; `conditioning_verify` still reprojects with the ideal projection.
+  "Lens distortion". Schema bumped from 20 to 21. Left out: the viewport and `Render3D` still drew through the
+  ideal camera (step G2 adds both); `conditioning_verify` still reprojects with the ideal projection.
 - Step L2 of 3 (Rendering 13, lens and film-back): `CameraSolve3D` recovers the focal length and the radial lens
   from the solver's own tracked points (`nodebased/lensrefine.py`, a numpy bundle adjustment; the DPVO provider now
   hands back its tracked positions) and takes its scale, or scale and placement, from a Survey of points picked in
@@ -3209,5 +3262,17 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 - Step G1 of 2 (Rendering 13, lens on the graphics card): `Undistort` and `Redistort` run on the card
   (`nodebased/gpulens.py`, the `lens_backend` knob, "Lens distortion" above); CPU reference and fallback unchanged.
   Schema bumped from 23 to 24 (the knob). Agreement and timings measured on three adapters; tests in
-  `tests/test_gpulens.py`, timing in `tools/benchmark_lens_warp.py`. Left out: the live viewport still draws through
-  the ideal camera (step G2).
+  `tests/test_gpulens.py`, timing in `tools/benchmark_lens_warp.py`. Left out: the live viewport still drew through
+  the ideal camera (step G2 below does it).
+- Step G2 of 2 (Rendering 13, the viewport and the renderers see through the lens): the live 3D viewport draws through
+  the camera's lens (overscan picture bent by Redistort's resample on the card, a **Lens** switch in the viewer strip and
+  its "more" menu, **L**), and `Render3D` has a `through_lens` setting for the raster, ray-traced and path-traced `rgba`
+  pictures. See "Lens distortion" above for the agreement on three adapters and the 1920 x 1080 frame times
+  (`nodebased/viewportlens.py`, `tools/benchmark_viewport_lens.py`, `examples/demo_shot/capture_viewport_lens.py`;
+  tests `tests/test_viewport_lens_g2.py` and `tests/test_render_through_lens_g2.py`). `docs/images/demo_shot/viewport_lens_on.png`
+  shows the viewport over the distorted plate with the lens off and on, `viewport_lens_strip.png` the strip. No schema
+  step: `through_lens` is filled in when an old document loads. `gpulens.warp` also takes 8-bit pictures now. Left out:
+  the warp copies the frame to the CPU and back (a render target that stays on the card would cut the RTX 3080 Ti's 18.6 ms
+  to the Radeon's 1.8 ms), the viewport's lens is an approximation for alignment (display-encoded bilinear), the
+  data outputs and Cryptomatte are refused with the lens, and `conditioning_verify` still reprojects with the ideal
+  projection.

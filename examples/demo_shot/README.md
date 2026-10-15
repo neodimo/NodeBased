@@ -20,6 +20,7 @@ real model comes in stage 3 and only swaps the provider.
 | `solve_lens.json` | The landmark solve behind it: the lens recovered against the truth, the fit, the per-frame errors and the overscan. |
 | `lens_check.py` | The lens round-trip error of a run, apart from the verifier's verdict. |
 | `capture_lens_view.py` | Renders the viewer's undistorted view with its overscan into `docs/images/demo_shot/`. |
+| `capture_viewport_lens.py` | Renders the 3D viewport looking through the shot's camera, lens off and on, over the distorted plate (`viewport_lens_on.png`), and the viewer strip with its Lens switch (`viewport_lens_strip.png`). |
 | `run_by_hand.py` | Headless run through the `nodebased.agent` dispatcher; prints artifact ids and the verdict. `--plate distorted` runs the lens shot. |
 | `run_by_agent.py` | The same shot through MCP tools only: a scripted agent on an offscreen window (stage 4b). |
 | `compare_runs.py` | Runs the hand run and the agent run with fresh stores and compares every id and the output pixels (`--plate distorted` for the lens shot). |
