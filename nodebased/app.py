@@ -1534,6 +1534,7 @@ class Viewer(PanZoomView):
         strip = getattr(self.window, "viewer_strip", None)
         if strip is not None:
             strip.sync_lens_view(document)
+            strip.sync_lens_3d()
         view = document.get("view")
         node = document.get("nodes", {}).get(view)
         is_empty_roto = bool(node and node.get("type") == "Roto"
@@ -7114,6 +7115,7 @@ class Window(QMainWindow):
         changed = self.view_stack.currentIndex() != index
         self.view_stack.setCurrentIndex(index)
         self.viewer_corners.set_active(mode == "2d")
+        self.viewer_strip.sync_lens_3d()
         # The stack raises the page it shows, which would cover the strip: put it back on top.
         self.viewer_strip.place()
         for name, button in self.viewer_mode_buttons.items():

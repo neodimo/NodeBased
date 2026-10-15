@@ -21,7 +21,7 @@ from PySide6.QtCore import Qt, QPointF, QTimer, QSettings
 from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget, QToolTip, QMenu, QLabel
 
-from . import handles3d, progressiverender, scene3d, viewportgpu, particleinspect
+from . import handles3d, progressiverender, scene3d, viewportgpu, viewportlens, particleinspect
 from .core import GEOMETRY_TYPES
 from .imaging import linear_to_srgb
 
@@ -90,6 +90,10 @@ class Viewport3D(QWidget):
         self.azimuth, self.elevation, self.distance = HOME
         self.center = np.zeros(3, np.float32)  # orbit pivot, world space
         self.look_through = False
+        # Looking through a camera with a lens: None draws the lens when the camera has one, True and False are the
+        # artist's choice from the viewer strip (or L). `_lens_drawn` is what the last paint did.
+        self.lens_view = None
+        self._lens_drawn = False
         self.status = ""
         self._drag = None
         self._press_pos = None
@@ -140,6 +144,7 @@ class Viewport3D(QWidget):
             self._gizmo_drag = None
         if self.isVisible():
             self.update()
+        self._sync_strip()
 
     # --- what to show ---------------------------------------------------------------------------
 
@@ -546,6 +551,52 @@ class Viewport3D(QWidget):
         return scene3d.Camera(scene3d.Transform3D(scene3d.Vec3(*position)), scene3d.Vec3(*self.center),
                               45.0, max(0.01, self.distance * 0.01), max(1000.0, self.distance * 100))
 
+    # --- the camera's lens -----------------------------------------------------------------------
+
+    def lens_available(self, authored=None):
+        """True when the viewport looks through a camera whose lens bends something."""
+        if authored is None:
+            authored = self._evaluated()[1]
+        return bool(self.look_through and viewportlens.active(authored))
+
+    def lens_view_on(self, authored=None):
+        """True when the picture is drawn through the lens: a camera with one, unless the artist switched it off."""
+        return self.lens_available(authored) and self.lens_view is not False
+
+    def set_lens_view(self, on):
+        self.lens_view = bool(on)
+        self._progressive_state = None
+        self.update()
+        self._sync_strip()
+
+    def toggle_lens_view(self):
+        if not self.lens_available():
+            return False
+        self.set_lens_view(not self.lens_view_on())
+        return True
+
+    def _sync_strip(self):
+        strip = getattr(self.window, "viewer_strip", None)
+        if strip is not None:
+            strip.sync_lens_3d()
+
+    def _project(self, camera, width, height, points):
+        """`scene3d.project`, or `project_lens` while the picture is drawn through the lens: the editor overlays
+        land where the distorted picture shows the point."""
+        if self._lens_drawn:
+            return scene3d.project_lens(camera, width, height, points)
+        return scene3d.project(camera, width, height, points)
+
+    def _draw_world_line(self, painter, camera, start, end):
+        """A world-space line over the picture: straight, or (through the lens) the curve the lens makes of it."""
+        samples = 32 if self._lens_drawn else 2
+        t = np.linspace(0.0, 1.0, samples, dtype=np.float64)[:, None]
+        points = np.asarray(start, np.float64) * (1 - t) + np.asarray(end, np.float64) * t
+        xy, z = self._project(camera, self.width(), self.height(), points)
+        for i in range(samples - 1):
+            if z[i] > camera.near and z[i + 1] > camera.near:
+                painter.drawLine(QPointF(*xy[i]), QPointF(*xy[i + 1]))
+
     # --- painting -------------------------------------------------------------------------------
 
     def paintEvent(self, event):
@@ -553,6 +604,7 @@ class Viewport3D(QWidget):
         scene, authored = self._evaluated()
         scene = self._dragged_scene(scene)
         camera = self._camera(authored)
+        self._lens_drawn = self.lens_view_on(authored)
         painter = QPainter(self)
         if self.render_mode and self._paint_progressive(painter, scene, camera, authored):
             backend = "Render (progressive)"
@@ -571,7 +623,9 @@ class Viewport3D(QWidget):
         self._draw_gizmo(painter, camera)
         top = self.top_inset
         painter.setPen(QColor("#d8d8df"))
-        mode = "through camera (C to leave)" if self.look_through and authored is not None else \
+        mode = ("through camera (C to leave)" + (" · lens on (L)" if self._lens_drawn else
+                                                 " · lens off (L)" if self.lens_available(authored) else ""))\
+            if self.look_through and authored is not None else \
             f"orbit LMB · pan MMB · dolly wheel · F frame · C camera · W/E/R gizmo [{self.gizmo_mode}] · " \
             "Q pivot mode · B background · P render"
         if self.pivot_mode and not self.look_through:
@@ -718,7 +772,7 @@ class Viewport3D(QWidget):
             color = SELECT_COLOR if selected else \
                 ((0.553, 0.722, 0.91, 1.0) if is_camera else (0.91, 0.851, 0.553, 1.0))
             pen_color = QColor(*(round(c * 255) for c in color[:3]))
-            xy, z = scene3d.project(camera, width, height, np.array((position, target)))
+            xy, z = self._project(camera, width, height, np.array((position, target)))
             if z[0] > camera.near and z[1] > camera.near:
                 painter.setPen(QPen(pen_color, 2 if selected else 1.5))
                 painter.drawLine(QPointF(*xy[0]), QPointF(*xy[1]))
@@ -747,7 +801,7 @@ class Viewport3D(QWidget):
             info = cached[1]
             if info is not None:
                 point, residuals, frames = info
-                xy, depth = scene3d.project(camera, width, height, point[None, :])
+                xy, depth = self._project(camera, width, height, point[None, :])
                 x, y = map(float, xy[0])
                 if float(depth[0]) > camera.near and 0 <= x < width and 0 <= y < height:
                     painter.setPen(QPen(QColor("#62e8b4"), 2))
@@ -767,9 +821,7 @@ class Viewport3D(QWidget):
             return
         painter.setPen(QPen(QColor(*(round(c * 255) for c in SELECT_COLOR[:3])), 2))
         for start, end in handles3d.bounds_edges(bounds):
-            xy, z = scene3d.project(camera, self.width(), self.height(), np.array((start, end)))
-            if z[0] > camera.near and z[1] > camera.near:
-                painter.drawLine(QPointF(*xy[0]), QPointF(*xy[1]))
+            self._draw_world_line(painter, camera, start, end)
 
     def _draw_fluid_domain_bounds(self, painter, scene, camera):
         if not scene.volumes:
@@ -777,9 +829,7 @@ class Viewport3D(QWidget):
         painter.setPen(QPen(QColor(75, 205, 220, 190), 1.25, Qt.PenStyle.DashLine))
         for volume in scene.volumes:
             for start, end in fluid_domain_edges(volume):
-                xy, depth = scene3d.project(camera, self.width(), self.height(), np.asarray((start, end)))
-                if depth[0] > camera.near and depth[1] > camera.near:
-                    painter.drawLine(QPointF(*xy[0]), QPointF(*xy[1]))
+                self._draw_world_line(painter, camera, start, end)
 
     _GIZMO_AXIS_COLORS = {"x": QColor(224, 90, 90), "y": QColor(120, 200, 110), "z": QColor(94, 150, 226)}
     _GIZMO_PLANE_COLORS = {"xy": QColor(94, 150, 226, 90), "yz": QColor(224, 90, 90, 90), "xz": QColor(120, 200, 110, 90)}
@@ -913,7 +963,7 @@ class Viewport3D(QWidget):
             segments.append((position, position + direction * 0.8, (0.91, 0.851, 0.553, 1.0)))
         return np.concatenate((_GRID, _line_vertices(segments))) if segments else _GRID
 
-    def _progressive_key(self, camera, render):
+    def _progressive_key(self, camera, render, lens=None):
         """Whatever should restart the progressive accumulation (`progressiverender.step`'s `key`):
         the document/frame/view identity, the camera's own numbers including its lens (orbiting never
         edits the document, so `_evaluated`'s cache key alone would miss it, and a depth-of-field or
@@ -928,17 +978,23 @@ class Viewport3D(QWidget):
                round(camera.blade_rotation, 3), round(camera.anamorphic_squeeze, 4))
         drag = (self._gizmo_drag["key"], self._gizmo_drag["current"]) if self._gizmo_drag is not None else None
         motion = tuple(sorted(render["params"].items())) if render is not None else None
-        return identity, pose, drag, motion
+        bend = None if lens is None else (lens.lens, lens.margin_x, lens.margin_y)
+        return identity, pose, drag, motion, bend
 
     def _paint_progressive(self, painter, scene, camera, authored):
         ratio = self.devicePixelRatioF()
         width, height = max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio))
         render = self._render_node()
-        key = self._progressive_key(camera, render)
+        lens = viewportlens.frame_for(camera, width, height) if self._lens_drawn else None
+        key = self._progressive_key(camera, render, lens)
         moments = self._motion_moments(render)
+        if lens is not None:     # trace the overscan picture; the lens bends the converged image below
+            moments = [(moment_scene, lens.camera(moment_camera)) for moment_scene, moment_camera in moments] if moments else moments
+            width, height = lens.render_width, lens.render_height
         try:
             self._progressive_state = progressiverender.step(
-                self._progressive_state, scene, camera, width, height, BACKGROUND, 0.15, key, moments=moments)
+                self._progressive_state, scene, lens.camera(camera) if lens else camera, width, height, BACKGROUND,
+                0.15, key, moments=moments)
         except Exception as error:  # a scene the path tracer refuses (e.g. particles slipped through)
             self.status = f"Render mode failed, using the interactive viewport: {error}"
             self.render_mode = False
@@ -951,6 +1007,8 @@ class Viewport3D(QWidget):
         rgb = np.clip(state.image[..., :3] / np.maximum(state.image[..., 3:4], 1e-6), 0, 1)
         rgba = np.concatenate((linear_to_srgb(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2)
         rgba = np.ascontiguousarray(rgba.astype(np.uint8))
+        if lens is not None:
+            rgba = viewportlens.redistort(lens, viewportlens.fit(lens, rgba))
         qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0],
                         QImage.Format.Format_RGBA8888).copy()
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -972,10 +1030,14 @@ class Viewport3D(QWidget):
     def _paint_gpu(self, painter, gpu, scene, camera, authored):
         ratio = self.devicePixelRatioF()
         width, height = max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio))
+        lens = viewportlens.frame_for(camera, width, height) if self._lens_drawn else None
         try:
-            frame = gpu.render(scene, camera, width, height, BACKGROUND,
+            frame = gpu.render(scene, lens.camera(camera) if lens else camera,
+                               lens.render_width if lens else width, lens.render_height if lens else height, BACKGROUND,
                                lines=self._editor_lines(scene, authored),
                                headlight=not scene.lights, ambient=0.15)
+            if frame is not None and lens is not None:
+                frame = viewportlens.redistort(lens, frame)    # the overscan picture, bent the way the lens bends it
         except Exception as error:  # a driver fault must not take the editor down
             self.status = f"GPU viewport failed, using the CPU renderer: {error}"
             self.backend = "cpu"
@@ -997,6 +1059,10 @@ class Viewport3D(QWidget):
     def _paint_cpu(self, painter, scene, camera, authored):
         scale = DRAG_SCALE if self._drag else 1.0
         width, height = max(1, int(self.width() * scale)), max(1, int(self.height() * scale))
+        lens = viewportlens.frame_for(camera, width, height) if self._lens_drawn else None
+        if lens is not None:      # draw the overscan picture through the ideal camera; the lens bends it afterwards
+            camera, format_size = lens.camera(camera), (width, height)
+            width, height = lens.render_width, lens.render_height
         # The reference splat rasterizer takes seconds to minutes per frame and refuses large
         # captures outright, so the fallback renders the meshes and marks splat centres instead.
         had_volumes = bool(scene.volumes)
@@ -1024,6 +1090,9 @@ class Viewport3D(QWidget):
         self.splat_note = self._splat_note(scene3d.Scene(splats=splats),
                                            self._mark_splats(splats, camera, rgb, depth), "points")
         rgba = np.concatenate((np.sqrt(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2).astype(np.uint8)
+        if lens is not None:
+            rgba = viewportlens.redistort(lens, rgba)
+            width, height = format_size
         qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0], QImage.Format.Format_RGBA8888).copy()
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.drawImage(self.rect(), qimage)
@@ -1034,17 +1103,17 @@ class Viewport3D(QWidget):
         for start, end, color in scene3d.grid_axes(width, height, scale=1.5):
             is_axis = color[:3] != (0.25, 0.25, 0.25)
             painter.setPen(QPen(QColor.fromRgbF(*color[:3], 1.0 if is_axis else 0.55), 2 if is_axis else 1))
-            for a, b in self._visible_segments(camera, depth, start, end):
+            for a, b in self._visible_segments(camera, depth, start, end, lens=lens):
                 painter.drawLine(a, b)
         if authored is not None and not self.look_through:
             painter.setPen(QPen(QColor("#8db8e8"), 1.5))
             for start, end in scene3d.frustum_lines(authored, 16 / 9):
-                for a, b in self._visible_segments(camera, depth, start, end, samples=24):
+                for a, b in self._visible_segments(camera, depth, start, end, samples=24, lens=lens):
                     painter.drawLine(a, b)
         painter.setPen(QPen(QColor("#e8d98d"), 1.5))
         for light in scene.lights:
             position, direction = light.world()
-            for a, b in self._visible_segments(camera, depth, position, position + direction * 0.8, samples=12):
+            for a, b in self._visible_segments(camera, depth, position, position + direction * 0.8, samples=12, lens=lens):
                 painter.drawLine(a, b)
 
     def _mark_splats(self, splats, camera, rgb, depth):
@@ -1096,9 +1165,10 @@ class Viewport3D(QWidget):
         return f"splats: {shown}{total:,} shown as {shape} (layout proxy, not the render)"
 
     @staticmethod
-    def _visible_segments(camera, depth, start, end, samples=96):
+    def _visible_segments(camera, depth, start, end, samples=96, lens=None):
         """Split a world-space line into screen segments that are in front of the near plane
-        and not occluded by the depth buffer."""
+        and not occluded by the depth buffer. Through a lens (`lens`, a `viewportlens.LensFrame`, with `camera` and
+        `depth` the overscan picture's) the segments are returned where the lens puts them on the plate."""
         t = np.linspace(0.0, 1.0, samples, dtype=np.float32)[:, None]
         points = np.asarray(start, np.float32) * (1 - t) + np.asarray(end, np.float32) * t
         height, width = depth.shape
@@ -1108,6 +1178,8 @@ class Viewport3D(QWidget):
         onscreen = (xy[:, 0] >= 0) & (xy[:, 0] < width) & (xy[:, 1] >= 0) & (xy[:, 1] < height)
         occluded = onscreen & (depth[iy, ix] < z * 0.999 - 1e-3)
         keep = (z > camera.near) & (z < camera.far) & ~occluded
+        if lens is not None:
+            xy = lens.to_plate(xy)
         return [(QPointF(*xy[i]), QPointF(*xy[i + 1])) for i in range(samples - 1)
                 if keep[i] and keep[i + 1]]
 
@@ -1266,5 +1338,8 @@ class Viewport3D(QWidget):
         elif event.key() == Qt.Key.Key_C:
             self.look_through = not self.look_through
             self.update()
+            self._sync_strip()
+        elif event.key() == Qt.Key.Key_L and not event.modifiers():
+            self.toggle_lens_view()
         else:
             super().keyPressEvent(event)

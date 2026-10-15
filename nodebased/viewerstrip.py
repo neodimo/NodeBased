@@ -28,6 +28,8 @@ STRIP_SIDE = 12       # smallest gap between the strip and the viewer's side edg
 CORNER_SIDE = 18      # corner readouts sit this far from the sides and ...
 CORNER_BOTTOM = 10    # ... this far from the bottom
 CHANNELS = ("RGB", "R", "G", "B", "A")
+LENS_3D_TIP = ("Draw the 3D viewport the way the camera's lens bends the picture, with the overscan the lens needs "
+               "(L). Off shows the ideal, undistorted picture.")
 
 SUN_ICON = ('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19'
             'M5 19l1.4-1.4M17.6 6.4 19 5"/>')
@@ -247,6 +249,17 @@ class ViewerStrip(QFrame):
         self.lens_present = False
         self.lens_separator.hide()
         self.lens_button.hide()
+        # Looking through a camera with a lens in the 3D viewport: draw the picture the way the lens bends it.
+        self.lens3d_separator = separator()
+        self.lens3d_button = tool_button("Lens distortion", LENS_3D_TIP)
+        self.lens3d_button.setObjectName("strip-lens3d")
+        self.lens3d_button.setCheckable(True)
+        self.lens3d_button.clicked.connect(lambda: window.viewport.toggle_lens_view())
+        self.row.addWidget(self.lens3d_separator)
+        self.row.addWidget(self.lens3d_button)
+        self.lens3d_present = False
+        self.lens3d_separator.hide()
+        self.lens3d_button.hide()
         self.more_button = tool_button("", "More viewer options: proxy, zebra, format mask, 1:1, resets, inputs",
                                        strip_icon(MORE_ICON, 16))
         self.more_button.setObjectName("strip-more")
@@ -273,7 +286,24 @@ class ViewerStrip(QFrame):
         self._show_lens_button()
         self.place()
 
+    def sync_lens_3d(self):
+        """Show the 3D viewport's lens switch while it looks through a camera with a lens, checked when the
+        picture is drawn through it. Like the Undistort switch it goes with the text labels when the strip is
+        compact; the "more" menu always has it."""
+        viewport = getattr(self.window, "viewport", None)
+        self.lens3d_present = bool(viewport is not None and self.window.viewer_mode() == "3d"
+                                   and viewport.lens_available())
+        if self.lens3d_present:
+            self.lens3d_button.setChecked(viewport.lens_view_on())
+        self._show_lens_button()
+        self.place()
+
     def _show_lens_button(self):
+        visible3d = self.lens3d_present and not self.compact
+        if visible3d == self.lens3d_button.isHidden():
+            self.lens3d_button.setVisible(visible3d)
+            self.lens3d_separator.setVisible(visible3d)
+            self.layout().invalidate()
         visible = self.lens_present and not self.compact
         if visible == self.lens_button.isHidden():
             self.lens_button.setVisible(visible)
@@ -311,6 +341,13 @@ class ViewerStrip(QFrame):
             action = menu.addAction(lensview.LABELS[step[0]])
             action.setToolTip(lensview.TIPS[step[0]])
             action.triggered.connect(lambda: window.viewer.toggle_lens_view())
+        if self.lens3d_present:
+            menu.addSeparator()
+            action = menu.addAction("Lens distortion")
+            action.setCheckable(True)
+            action.setChecked(window.viewport.lens_view_on())
+            action.setToolTip(LENS_3D_TIP)
+            action.toggled.connect(window.viewport.set_lens_view)
 
     def fill_inputs_menu(self, menu):
         """Input A (1-9), buffer B and the compare mode: the nine-button strip on the viewer is

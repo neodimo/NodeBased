@@ -39,8 +39,10 @@ struct Params {
     f: vec4<i32>,      // first output row of this band, rows in this band
 };
 @group(0) @binding(0) var src: texture_2d<f32>;
-@group(0) @binding(1) var<storage, read_write> dst: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read_write> dst: array<DST_T>;
 @group(0) @binding(2) var<uniform> p: Params;
+
+//STORE//
 
 fn radial_of(r2: f32) -> f32 {
     return 1.0 + r2 * (p.a.x + r2 * (p.a.y + r2 * p.a.z));
@@ -162,9 +164,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (sx > -1.0e5 && sy > -1.0e5 && sx < 1.0e5 && sy < 1.0e5) {
         colour = sample_src(sx + f32(p.e.z) - 0.5, sy + f32(p.e.w) - 0.5);
     }
-    dst[gid.y * ow + gid.x] = colour;
+    dst[gid.y * ow + gid.x] = store(colour);
 }
 """
+
+
+# The result of one pixel as the buffer holds it: four floats, or (the live viewport's 8-bit frames) four packed bytes.
+_STORE_F32 = ("DST_T", "vec4<f32>", "fn store(c: vec4<f32>) -> vec4<f32> { return c; }")
+_STORE_U8 = ("DST_T", "u32", "fn store(c: vec4<f32>) -> u32 { return pack4x8unorm(clamp(c, vec4<f32>(0.0), vec4<f32>(1.0))); }")
+
+
+def _source(packed):
+    marker, replacement, function = _STORE_U8 if packed else _STORE_F32
+    return _WGSL.replace("//STORE//", function).replace(marker, replacement)
 
 
 class Unsupported(Exception):
@@ -179,19 +191,23 @@ def available(choice=None):
         return False
 
 
-def _pipeline(state):
-    pipeline = state["pipelines"].get("lens_warp")
+def _pipeline(state, packed=False):
+    name = "lens_warp_u8" if packed else "lens_warp"
+    pipeline = state["pipelines"].get(name)
     if pipeline is None:
-        module = state["device"].create_shader_module(code=_WGSL)
+        module = state["device"].create_shader_module(code=_source(packed))
         pipeline = state["device"].create_compute_pipeline(
             layout="auto", compute={"module": module, "entry_point": "main"})
-        state["pipelines"]["lens_warp"] = pipeline
+        state["pipelines"][name] = pipeline
     return pipeline
 
 
 def warp(lens, pixels, out, display, source_data, direction, filter_name, choice=None):
     """The resampled `out` region (height x width x 4, float32) for an Undistort (`direction` "undistort")
     or Redistort ("redistort"): the GPU twin of `lensmodel.sample_coordinates` + `Evaluator._resample`.
+
+    An 8-bit source (the live viewport's frame) is read as a rgba8unorm texture and comes back as 8-bit
+    (uint8, four times less to copy each way); any other source is float32 and comes back float32.
 
     The source is a float texture (no 128 MiB binding limit, so a 4K frame with overscan fits); the output is
     written in bands of rows that each fit one buffer."""
@@ -201,31 +217,33 @@ def warp(lens, pixels, out, display, source_data, direction, filter_name, choice
         state = gpu3d._state(choice)
     except Exception as exc:
         raise Unsupported(str(exc)) from exc
-    pixels = np.ascontiguousarray(pixels, dtype=np.float32)
+    packed = getattr(pixels, "dtype", None) == np.uint8
+    pixels = np.ascontiguousarray(pixels, dtype=np.uint8 if packed else np.float32)
+    texel = 4 if packed else 16
     if pixels.ndim != 3 or pixels.shape[2] != 4:
         raise Unsupported("expects an HxWx4 image")
     sh, sw = pixels.shape[:2]
     if out.width * out.height == 0 or sw == 0 or sh == 0:
-        return np.zeros((max(out.height, 0), max(out.width, 0), 4), np.float32)
+        return np.zeros((max(out.height, 0), max(out.width, 0), 4), np.uint8 if packed else np.float32)
     wgpu, device = state["wgpu"], state["device"]
     texture_limit = device.limits.get("max-texture-dimension-2d", 8192)
     if max(sw, sh) > texture_limit:
         raise Unsupported(f"a {sw} x {sh} source exceeds this adapter's texture size {texture_limit}")
     buffer_limit = min(device.limits.get("max-storage-buffer-binding-size", 1 << 27),
                        device.limits.get("max-buffer-size", 1 << 28))
-    band = buffer_limit // (out.width * 16)
+    band = buffer_limit // (out.width * texel)
     if band < 1:
         raise Unsupported(f"a row of {out.width} pixels does not fit one buffer on this adapter")
     band = min(band, out.height, 8192)
-    result = np.zeros((out.height, out.width, 4), np.float32)
-    pipeline = _pipeline(state)
-    texture = device.create_texture(size=(sw, sh, 1), format="rgba32float", dimension="2d",
+    result = np.zeros((out.height, out.width, 4), np.uint8 if packed else np.float32)
+    pipeline = _pipeline(state, packed)
+    texture = device.create_texture(size=(sw, sh, 1), format="rgba8unorm" if packed else "rgba32float", dimension="2d",
                                     usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
-    dst_buf = device.create_buffer(size=out.width * band * 16, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
-    staging = device.create_buffer(size=out.width * band * 16, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ)
+    dst_buf = device.create_buffer(size=out.width * band * texel, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
+    staging = device.create_buffer(size=out.width * band * texel, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ)
     uniform_buf = device.create_buffer(size=UNIFORM_BYTES, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
     try:
-        device.queue.write_texture({"texture": texture}, pixels, {"bytes_per_row": sw * 16, "rows_per_image": sh}, (sw, sh, 1))
+        device.queue.write_texture({"texture": texture}, pixels, {"bytes_per_row": sw * texel, "rows_per_image": sh}, (sw, sh, 1))
         group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
             {"binding": 0, "resource": texture.create_view()},
             {"binding": 1, "resource": {"buffer": dst_buf, "offset": 0, "size": dst_buf.size}},
@@ -244,12 +262,12 @@ def warp(lens, pixels, out, display, source_data, direction, filter_name, choice
             compute.set_bind_group(0, group)
             compute.dispatch_workgroups(-(-out.width // 8), -(-rows // 8), 1)
             compute.end()
-            encoder.copy_buffer_to_buffer(dst_buf, 0, staging, 0, out.width * rows * 16)
+            encoder.copy_buffer_to_buffer(dst_buf, 0, staging, 0, out.width * rows * texel)
             device.queue.submit([encoder.finish()])
             staging.map_sync(wgpu.MapMode.READ)
             try:
-                result[row0:row0 + rows] = np.frombuffer(staging.read_mapped(0, out.width * rows * 16),
-                                                         np.float32).reshape(rows, out.width, 4)
+                result[row0:row0 + rows] = np.frombuffer(staging.read_mapped(0, out.width * rows * texel),
+                                                         result.dtype).reshape(rows, out.width, 4)
             finally:
                 staging.unmap()
     finally:
