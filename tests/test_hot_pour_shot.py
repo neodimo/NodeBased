@@ -14,6 +14,16 @@ class HotPourShotTests(unittest.TestCase):
     def test_small_shot_evaluates_with_catcher_and_holdout(self):
         started = time.perf_counter()
         doc = core.load_document(ROOT / "hot_pour_shot.nbcomp")
+        nodes = doc["nodes"]
+        cup = nodes["front_cup"]["params"]
+        source = nodes["spout"]["params"]
+        self.assertEqual(nodes["liquid"]["params"]["max_size"], 64)
+        self.assertEqual(cup["holdout"], "on")
+        self.assertAlmostEqual(cup["tx"], 0.0)
+        self.assertGreater(source["src_center_y"], cup["ty"] + cup["cyl_height"] / 2)
+        self.assertEqual(nodes["surface"]["params"]["material"], "liquid")
+        source_x = [point["value"] for point in doc["animation"]["curves"]["spout"]["tx"]["keys"]]
+        self.assertTrue(all(abs(x - cup["tx"]) < cup["cyl_radius"] for x in source_x))
         doc["nodes"]["render"]["params"].update(width=48, height=27, render_backend="cpu", pt_samples=2)
         doc["nodes"]["plate_fit"]["params"].update(width=48, height=27)
         # the example pins both solvers to the card ("resident"); this check runs where there is none (CI, 10/15 red)
