@@ -1291,6 +1291,7 @@ class Viewer(PanZoomView):
         # show it dimmed instead of going blank.
         self.roi_drag = None
         self.backdrop = None
+        self.roi_fallback_label = ""
         self.readout_buffer = ""
         self._initial_fit_pending = True
         self._image_rect = QRectF()
@@ -3394,7 +3395,8 @@ class Viewer(PanZoomView):
                     if (x, y) != (box.center().x(), box.center().y()):
                         painter.drawRect(QRectF(x - size, y - size, size * 2, size * 2))
             painter.restore()
-        labels = [text for text in (self.proxy_badge_text(), "ROI" if self._roi_active() else "") if text]
+        roi_label = (self.roi_fallback_label if self._roi_active() else "")
+        labels = [text for text in (self.proxy_badge_text(), roi_label or ("ROI" if self._roi_active() else "")) if text]
         if labels:
             painter.save()
             painter.resetTransform()
@@ -3736,6 +3738,16 @@ class Viewer(PanZoomView):
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 event.accept()
                 return
+        # ROI handles take priority over shape creation and point editing. Shift explicitly
+        # starts a fresh ROI; an ordinary press on a handle always resizes or moves it.
+        if event.button() == Qt.MouseButton.LeftButton and self._roi_active():
+            shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            kind = "new" if shift else self._roi_hit(scene_pos)
+            if kind is not None:
+                self.roi_drag = self._roi_start(kind, scene_pos)
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return
         context = self._roto_context()
         if event.button() == Qt.MouseButton.LeftButton and context is not None:
             if self.roto_drawing:
@@ -3933,14 +3945,6 @@ class Viewer(PanZoomView):
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     event.accept()
                     return
-        if event.button() == Qt.MouseButton.LeftButton and self._roi_active():
-            shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
-            kind = "new" if shift else self._roi_hit(scene_pos)
-            if kind is not None:
-                self.roi_drag = self._roi_start(kind, scene_pos)
-                self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                event.accept()
-                return
         # The wipe comes last on purpose: a roto point, a tracker pick or a Transform handle under
         # the pointer has already taken the click above, so the compare never steals one.
         if event.button() == Qt.MouseButton.LeftButton and self._wipe_active():
@@ -12811,6 +12815,8 @@ class Window(QMainWindow):
                     frame = tile_result.pixels
                     tile_detail = (f"  ·  tiles {tile_result.tile_hits} hit/{tile_result.tile_misses} miss"
                                    if tile_result.tiled else "  ·  tile fallback")
+                    if tile_result.fallback_nodes:
+                        tile_detail += "  ·  fallback: " + ", ".join(tile_result.fallback_nodes)
                 elif request.display and lensview.shows_overscan(request.document, target):
                     # An Undistort node's frame is grown past the format; show all of it, where the data window puts it.
                     raster = self.evaluator.evaluate_raster(request.document, cancel=cancel,
@@ -13050,6 +13056,9 @@ class Window(QMainWindow):
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload
+        fallback = re.search(r"fallback: ([^·]+)", status)
+        self.viewer.roi_fallback_label = ("ROI (" + ", ".join(
+            f"{name.strip()}: full frame" for name in fallback.group(1).split(",")) + ")") if fallback else ""
         extras = self.compare_results.pop((request.generation, request.frame), None)
         self.preview_queue.finish(cancel)
         self.busy = False

@@ -125,9 +125,8 @@ class SupportsTiledCoverageTests(unittest.TestCase):
         d.execute({"op": "create", "type": "Switch", "id": "s", "params": {"which": 0}})
         d.execute({"op": "connect", "id": "s", "input": "0", "source": "p"})
         d.execute({"op": "connect", "id": "s", "input": "1", "source": "q"})
-        self.assertFalse(TileExecutor().supports_tiled(d.document, "s"),
-                         "Switch is intentionally excluded from v0.9 tile execution; the executor "
-                         "must reject it via supports_tiled, not silently process it")
+        self.assertTrue(TileExecutor().supports_tiled(d.document, "s"),
+                        "unsupported nodes are composed through a full-frame node fallback")
 
     def test_unsupported_kind_in_merge_branch_disables_tiled(self):
         """Switch on Merge's B branch means the whole graph is not tile-native."""
@@ -142,8 +141,7 @@ class SupportsTiledCoverageTests(unittest.TestCase):
         d.execute({"op": "create", "type": "Merge", "id": "m"})
         d.execute({"op": "connect", "id": "m", "input": "A", "source": "p"})
         d.execute({"op": "connect", "id": "m", "input": "B", "source": "s"})
-        self.assertFalse(TileExecutor().supports_tiled(d.document, "m"),
-                         "Merge with a Switch on its B branch must NOT be claimed as tile-native")
+        self.assertTrue(TileExecutor().supports_tiled(d.document, "m"))
 
     def test_transform_in_chain_is_fallback_not_tiled(self):
         d = Dispatcher()
@@ -154,7 +152,7 @@ class SupportsTiledCoverageTests(unittest.TestCase):
                               "scale": 1.0, "center_x": 0.0, "center_y": 0.0,
                               "filter": "nearest"}})
         d.execute({"op": "connect", "id": "x", "input": "image", "source": "p"})
-        self.assertFalse(TileExecutor().supports_tiled(d.document, "x"))
+        self.assertTrue(TileExecutor().supports_tiled(d.document, "x"))
 
     def test_crop_in_chain_is_fallback_not_tiled(self):
         d = Dispatcher()
@@ -163,7 +161,29 @@ class SupportsTiledCoverageTests(unittest.TestCase):
         d.execute({"op": "create", "type": "Crop", "id": "c",
                    "params": {"x": 0, "y": 0, "width": 32, "height": 32}})
         d.execute({"op": "connect", "id": "c", "input": "image", "source": "p"})
-        self.assertFalse(TileExecutor().supports_tiled(d.document, "c"))
+        self.assertTrue(TileExecutor().supports_tiled(d.document, "c"))
+
+    def test_unsupported_node_uses_full_frame_fallback_then_crops(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Checker", "id": "p",
+                   "params": {"width": 64, "height": 64, "size": 16}})
+        d.execute({"op": "create", "type": "Tracker", "id": "t"})
+        d.execute({"op": "connect", "id": "t", "input": "image", "source": "p"})
+        full = Evaluator().evaluate(d.document, "t")
+        request = TileRegion(16, 8, 24, 20, full_width=64, full_height=64)
+        result = TileExecutor(tile_edge=32).compose_region(d.document, "t", request)
+        self.assertEqual(result.fallback_nodes, ("Tracker",))
+        np.testing.assert_array_equal(result.pixels, full[8:28, 16:40])
+
+    def test_region_request_crossing_target_window_is_clipped(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Checker", "id": "p",
+                   "params": {"width": 64, "height": 48, "size": 16}})
+        request = TileRegion(56, 40, 16, 16, full_width=64, full_height=48)
+        result = TileExecutor(tile_edge=32).compose_region(d.document, "p", request)
+        self.assertEqual((result.region.x, result.region.y, result.region.width, result.region.height),
+                         (56, 40, 8, 8))
+        self.assertEqual(result.pixels.shape, (8, 8, 4))
 
 
 class SourceRetentionTests(unittest.TestCase):
@@ -259,6 +279,17 @@ class HaloAndEdgeCorrectnessTests(unittest.TestCase):
         self.assertEqual(result.shape, (80, 96))
         self.assertEqual(result.region, request)
         np.testing.assert_allclose(result.pixels, full[80:160, 64:160], atol=1e-5)
+
+    def test_full_frame_reuses_roi_tiles_on_the_data_window_grid(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Checker", "id": "p",
+                   "params": {"width": 128, "height": 64, "size": 16}})
+        exe = TileExecutor(tile_edge=32)
+        roi = TileRegion(32, 0, 64, 64, full_width=128, full_height=64)
+        exe.compose_region(d.document, "p", roi)
+        full = exe.compose(d.document, "p")
+        self.assertGreaterEqual(full.tile_hits, 2)
+        np.testing.assert_array_equal(full.pixels, Evaluator().evaluate(d.document, "p"))
 
     def test_blur_through_merge_matches_full_frame(self):
         d = Dispatcher()

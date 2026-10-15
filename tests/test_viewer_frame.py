@@ -224,6 +224,23 @@ class ViewerFrameWindowTests(unittest.TestCase):
         self.assertTrue(abs(x - 359) <= slack and abs(y - 269) <= slack, (x, y, slack))
         self.assertTrue(abs(width - 512) <= slack and abs(height - 384) <= slack, (width, height, slack))
 
+    def test_roi_handle_press_precedes_selected_roto_draw(self):
+        viewer = self.window.viewer
+        self.window.command({"op": "create", "type": "Roto", "id": "roto"}, render=False)
+        self.window.command({"op": "connect", "id": "roto", "input": "bg", "source": "b"}, render=False)
+        self.window.command({"op": "view", "id": "roto"}, render=False)
+        self.window.graph.items_by_id["roto"].setSelected(True)
+        self.window.graph.primary_id = "roto"
+        self.window.set_viewer_roi(on=True, rect=[0.25, 0.25, 0.75, 0.75])
+        self.settle()
+        handle = viewer.mapFromScene(viewer.roi_scene_rect().topLeft())
+        QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton,
+                         Qt.KeyboardModifier.NoModifier, handle)
+        self.assertIsNotNone(viewer.roi_drag)
+        self.assertFalse(viewer.roto_drawing)
+        QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton,
+                           Qt.KeyboardModifier.NoModifier, handle)
+
     def test_proxy_half_halves_the_requested_tier_and_scales_the_blur(self):
         self.settle()
         self.composed.clear()
