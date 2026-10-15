@@ -1,5 +1,34 @@
 ## 2026-10-14 — Lane 8 Q1 of 1: the tiled Roto path is faster than the full-frame one (DONE)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (8:27 PM on 2026-10-14 PDT)
+
+`main` moved `46617c90` -> `e4daecc9` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 39 tests in 70.998 s, OK. Full suite on
+the stacked tip `e4daecc9` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1014-1457.log`, started 2:57 PM): **Ran 5362 tests in 19347.037 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step G1 of 2: the lens on the graphics card: Undistort and Redistort on the GPU.** Commits:
+  - `91421e2e` Docs for the lens on the graphics card: Backend knob, agreement limits on three adapters, timings at 1080p and 4K, the demo shot's hand run before and after
+  - `54fe1ab4` tools/benchmark_lens_warp.py: median-of-five timing of the lens warps on the CPU and the card
+  - `e0a3136b` Schema 24: Undistort and Redistort nodes saved before the backend knob load with the automatic backend
+  - `5d6d58af` Undistort and Redistort on the graphics card: a wgpu compute warp with a lens_backend knob (auto, cpu, gpu), checked against the CPU on three adapters
+  Diff: 11 files changed, 712 insertions(+), 11 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step S1 of 1: the Hot pour in a rendered shot, with shadows and a holdout.** Commits:
+  - `36734f7d` docs: record the Hot pour shot setup and pending visual proof
+  - `e30e4e54` tests: check Hot pour plate composite switches
+  - `d9ed1c6d` examples: resize the plate for the Hot pour comp
+  - `bda46358` examples: add a camera-matched Hot pour shot plate
+  Diff: 9 files changed, 1724 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (2:47 PM on 2026-10-14 PDT)
 
 `main` moved `71d7b8f8` -> `fe6a82f3` (lane commits cherry-picked onto main in lane order) and then to this
