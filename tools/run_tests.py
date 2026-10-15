@@ -7,7 +7,7 @@ modules peak around 1 GB), so the growth is accumulation across the single proce
 GPU adapters and caches that only the interpreter's exit returns. A fresh interpreter per batch
 releases all of it, and a runner that dies now loses one batch's output, not the whole log.
 
-Usage: python tools/run_tests.py [--batch N] [-v] [pattern]
+Usage: python tools/run_tests.py [--batch N] [-v] [pattern ...]
 Exit status is non-zero if any batch fails. Modules run in sorted order, like discover.
 """
 import argparse
@@ -20,15 +20,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def modules(pattern):
-    return sorted(f"tests.{p.stem}" for p in (ROOT / "tests").glob(pattern) if p.is_file())
+def modules(patterns):
+    """Sorted module names matching any of the glob patterns (a single string is one pattern)."""
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    found = {f"tests.{p.stem}" for pattern in patterns for p in (ROOT / "tests").glob(pattern) if p.is_file()}
+    return sorted(found)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch", type=int, default=12, help="test modules per interpreter")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("pattern", nargs="?", default="test*.py")
+    parser.add_argument("pattern", nargs="*", default=["test*.py"],
+                        help="one or more globs under tests/ (tools/field_report.py passes the GPU modules by name)")
     args = parser.parse_args()
     mods = modules(args.pattern)
     if not mods:
