@@ -1243,6 +1243,11 @@ _DENOISE_DEFAULTS = {"denoiser_strength": 1.0, "denoise_color_sensitivity": 1.0,
                      "denoise_depth_sensitivity": 1.0, "denoise_iterations": 4, "denoise_temporal": 0,
                      "denoise": "off", "beauty_raw": 0}
 SPECS["Render3D"]["params"].update(_DENOISE_DEFAULTS)
+# Rendering 13, step G2: `through_lens` 1 renders the picture the way the camera's lens bends it (the plate's space, in
+# the format's size), by drawing the ideal overscan picture with the chosen backend and mode and bending it with
+# Redistort's own resample (nodebased/viewportlens.py). Off draws the ideal picture, as every document did before.
+_THROUGH_LENS_DEFAULTS = {"through_lens": 0}
+SPECS["Render3D"]["params"].update(_THROUGH_LENS_DEFAULTS)
 
 
 def builtin_formats():
@@ -1776,7 +1781,7 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "denoise_normal_sensitivity": (0.0, 10.0), "denoise_depth_sensitivity": (0.0, 10.0),
                "denoise_iterations": (0, 16), "denoise_temporal": (0, 1),
                "min_samples": (1, 65536), "max_samples": (1, 65536), "adaptive_pass_size": (1, 1024),
-               "beauty_raw": (0, 1)})
+               "beauty_raw": (0, 1), "through_lens": (0, 1)})
 
 # `samples` is shared with Render3D's 1–4 supersampling control. Motion blur integrates temporal
 # and per-pixel trajectories, where Nuke permits a much wider count, so these nodes override the

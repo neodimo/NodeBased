@@ -1262,4 +1262,5 @@ KNOB_LAYOUT["Render3D"] += [
     KnobGroup("float", ("denoise_normal_sensitivity",), label="Denoise normal sensitivity"),
     KnobGroup("float", ("denoise_depth_sensitivity",), label="Denoise depth sensitivity"),
     KnobGroup("int", ("denoise_iterations",), label="Denoise iterations"),
-    KnobGroup("bool", ("denoise_temporal",), label="Denoise temporal")]
+    KnobGroup("bool", ("denoise_temporal",), label="Denoise temporal"),
+    KnobGroup("bool", ("through_lens",), label="Render through the lens")]

@@ -1682,6 +1682,24 @@ class Evaluator:
                         scene = scene3d.proxy_scene(scene, tier)
                     if getattr(scene, "volumes", ()) and params.get("volumes", "on") == "off":
                         scene = replace(scene, volumes=())   # the knob makes every backend ignore them
+                    lens_frame = None
+                    if params.get("through_lens", 0) and isinstance(camera, scene3d.Camera):
+                        # Through the lens (Rendering 13 step G2): draw the ideal overscan picture with this node's own
+                        # backend and mode, then bend it with Redistort's resample (nodebased/viewportlens.py).
+                        if params.get("render_output", "rgba") != "rgba":
+                            raise ValueError("Render through the lens needs the rgba output: the other outputs hold "
+                                             "data (depth, ids, vectors) that a resample would blur")
+                        if params.get("cryptomatte", 0):
+                            raise ValueError("Render through the lens cannot write Cryptomatte: a resample would blend the ids")
+                        from . import lensmodel, viewportlens
+                        lens_frame = viewportlens.frame_for(camera, params["width"], params["height"],
+                                                            limit=lensmodel.MAX_GROWTH)
+                    if lens_frame is not None:
+                        params = {**params, "width": lens_frame.render_width, "height": lens_frame.render_height}
+                        camera = lens_frame.camera(camera)
+                        if motion_moments:
+                            motion_moments = [(moment_scene, lens_frame.camera(moment_camera))
+                                              for moment_scene, moment_camera in motion_moments]
                     if params.get("render_output", "rgba") == "motion":
                         from . import motionblur
                         later_scene, later_camera = motion_later
@@ -1803,6 +1821,10 @@ class Evaluator:
                         rgba = motionblur.blend_bundle(drawn) if output == "relight" else motionblur.averaged(drawn)
                     else:
                         rgba = draw(scene, camera)
+                    if lens_frame is not None:
+                        rgba = self._bend_render(lens_frame, rgba, backend)
+                        if raw_beauty is not None:
+                            raw_beauty = self._bend_render(lens_frame, raw_beauty, backend)
                     if params.get("render_output", "rgba") == "relight":
                         rgba, layers = rgba
                         value = Raster(rgba, layers={name: Raster.of(arr) for name, arr in layers.items()})
@@ -3445,6 +3467,22 @@ class Evaluator:
             sx, sy = lensmodel.sample_coordinates(lens, out, display, source.data, direction)
             pixels = Evaluator._resample(source.pixels, sx, sy, p["filter"]).astype(np.float32)
         return Raster(pixels, out, display, source.layers, source.meta)
+
+    @staticmethod
+    def _bend_render(frame, rgba, backend):
+        """Render3D's `through_lens`: the overscan picture resampled into the format the way Redistort does.
+
+        `backend` is the node's own render_backend: cpu bends on the CPU, gpu on the card (and says why when it
+        cannot), auto on the card when there is one."""
+        from . import gpulens, viewportlens
+        try:
+            return viewportlens.redistort(frame, rgba, "bilinear", backend=backend if backend in ("cpu", "gpu") else "auto")
+        except gpulens.Unsupported as exc:
+            raise ValueError(f"GPU Render3D unsupported: the lens: {exc}") from exc
+        except Exception as exc:
+            if backend == "gpu":
+                raise ValueError(f"GPU Render3D failed in the lens: {exc}") from exc
+            raise
 
     @staticmethod
     def _lens_warp_gpu(kind, p, lens, source, out, display, direction):
