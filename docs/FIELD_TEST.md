@@ -22,21 +22,32 @@ for a couple of hours and run it while you do something else.
 ```sh
 cd projects/nodebased
 git fetch origin && git checkout field-kit-1015      # until the kit is merged to main
-python tools/make_field_bundle.py --out /run/media/omid/STICK/nb-bundle --weights
+python tools/make_field_bundle.py --everything --out /run/media/omid/STICK/nb-bundle
 ```
 
-That downloads the Windows wheels, copies the repository at HEAD as a zip and (with `--weights`) the three SDXL model snapshots
-from the Hugging Face cache (9.1 GB: the cache is where the provider reads them; `projects/nb-providers/sdxl` holds only the
-setup script and a Linux venv). It prints the bundle's size and every file's sha256 (also in `MANIFEST.txt`). Plan for about 12 GB
-with weights, 3 GB without. Use a Python that has pip. Add `--skip-provider` to leave out the torch and SDXL wheels
-(2.5 GB or more) if SDXL is not wanted. Put the Python 3.12 Windows installer on the stick too.
+`--everything` (implies `--weights`) is for a machine with no internet and no Python. It downloads the Windows wheels for the project
+(`.[gpu,usd]`, pip, setuptools, wheel) and for the SDXL provider (torch and torchvision CUDA 12.6, diffusers and the rest), copies the
+repository at HEAD as a zip, the three SDXL model snapshots from the Hugging Face cache (9.1 GB: the cache is where the provider
+reads them; `projects/nb-providers/sdxl` holds only the setup script and a Linux venv), the python.org Windows installer (the newest
+3.12 patch that ships one), the Microsoft Visual C++ redistributable, and the NodeBased Windows portable zip and setup exe from the
+GitHub release (needs `gh` logged in). The top of the bundle holds `BUNDLE-README.txt` (contents, install order, the NVIDIA driver
+minimum, the SLAM status) and `verify-bundle.ps1`. `manifest.json` and `MANIFEST.txt` list every file's size and sha256 plus the exact
+versions and URLs of the installers; a requirement with no Windows wheel is named there, never dropped silently. Plan for 12 to 15 GB.
+Without `--everything`: about 12 GB with `--weights`, 3 GB without. Use a Python that has pip. Add `--skip-provider` to leave out the
+torch and SDXL wheels (2.5 GB or more) if SDXL is not wanted.
 
-On the work machine, check the copy before using it (any Python 3.11+):
+## Verify the stick
+
+On the work machine, before anything else, in PowerShell (no Python needed yet):
 
 ```powershell
-# after unpacking the code (Path B, step 1):
-python C:\nb\nodebased\tools\make_field_bundle.py --verify E:\nb-bundle
+powershell -ExecutionPolicy Bypass -File E:\nb-bundle\verify-bundle.ps1
+# the same check as one line:
+$m = Get-Content -Raw E:\nb-bundle\manifest.json | ConvertFrom-Json; $m.files | ForEach-Object { if ((Get-FileHash -Algorithm SHA256 "E:\nb-bundle\$($_.path)").Hash.ToLower() -ne $_.sha256) { "BAD  $($_.path)" } }; "checked $($m.files.Count) files"
 ```
+
+It prints `all match the manifest` (the script) or the files that are missing or changed (the one-liner prints only `BAD` lines, then the count).
+With Python available (after step 2 below) `python tools\make_field_bundle.py --verify E:\nb-bundle` does the same.
 
 ## Path A: ONLINE (the work machine has internet)
 
@@ -68,30 +79,44 @@ hf download xinsir/controlnet-union-sdxl-1.0 --include "config_promax.json" "dif
 If the repository is private, run `gh auth login` first (GitHub CLI), or use the repository zip from the stick and skip step 1:
 `Expand-Archive E:\nb-bundle\nodebased-<hash>.zip C:\nb`.
 
-## Path B: OFFLINE (USB bundle, no internet on the work machine)
+## Path B: OFFLINE (USB bundle, no internet, no Python on the work machine)
 
-`E:\nb-bundle` is the stick. `README.txt` in it repeats these commands with the real file names.
+`E:\nb-bundle` is the stick. `BUNDLE-README.txt` in it repeats these commands with the real file names and states the NVIDIA driver minimum:
+the CUDA 12.6 torch wheels need driver 561.17 or newer on Windows (NVIDIA's CUDA 12.6 table; 560.76 for the GA release). Check with `nvidia-smi`.
 
 ```powershell
+# 0. install Python and the Visual C++ runtime from the stick (once; skip what is already there)
+E:\nb-bundle\installers\python-3.12.*-amd64.exe          # tick "Add python.exe to PATH" and the py launcher, Install Now
+E:\nb-bundle\installers\vc_redist.x64.exe                # PySide6, wgpu and torch need it on a bare machine
+# open a NEW PowerShell so PATH is current. To only run the app, unzip E:\nb-bundle\app\NodeBased-*-windows-x64-portable.zip
+# and start NodeBased.exe (or run the setup exe next to it); the tests and benchmarks below need steps 1 to 4.
+
 # 1. unpack the code
 Expand-Archive E:\nb-bundle\nodebased-<hash>.zip C:\nb          # makes C:\nb\nodebased
 cd C:\nb\nodebased
 
-# 2. environment and NodeBased with the extras, from the stick only
+# 2. a virtual environment, and NodeBased with the extras, from the stick only
 py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1                               # if PowerShell refuses: Set-ExecutionPolicy -Scope Process Bypass
+python -m pip install --no-index --find-links E:\nb-bundle\wheels --upgrade pip setuptools wheel
 pip install --no-index --find-links E:\nb-bundle\wheels ".[gpu,usd]"
 
-# 3. SDXL's packages (skip if the bundle was built with --skip-provider)
-pip install --no-index --find-links E:\nb-bundle\wheels-provider torch torchvision diffusers transformers accelerate safetensors huggingface_hub OpenEXR pillow
+# 3. SDXL's packages into the same environment (skip if the bundle was built with --skip-provider)
+pip install --no-index --find-links E:\nb-bundle\wheels-provider torch torchvision diffusers transformers accelerate safetensors huggingface_hub OpenEXR numpy pillow
 
-# 4. the weights (skip if there is no weights folder on the stick)
+# 4. the weights. The provider reads the Hugging Face cache (huggingface_hub's HF_HUB_CACHE, default
+#    %USERPROFILE%\.cache\huggingface\hub) and always runs offline, so either point at the stick:
+$env:HF_HUB_CACHE = "E:\nb-bundle\weights\hub"
+#    or copy once into the default cache (no variable needed afterwards; 9 GB):
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.cache\huggingface\hub" | Out-Null
 Copy-Item -Recurse -Force E:\nb-bundle\weights\hub\* "$env:USERPROFILE\.cache\huggingface\hub\"
+$env:HF_HUB_OFFLINE = "1"
 ```
 
 If step 2 says it cannot build `nodebased` offline, add `--no-build-isolation` after installing `setuptools wheel` from the same
-`--find-links` folder. The rest is the same as the online path.
+`--find-links` folder. The demo plates are generated by the report in about a minute (`examples/demo_shot/make_plate.py`), so they are not
+on the stick. The SLAM providers (DPVO, MASt3R) are Linux environments and are not in the bundle; the camera solve from survey points needs no
+SLAM. The rest is the same as the online path; the report commands are below.
 
 ## Run it
 

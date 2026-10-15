@@ -138,6 +138,76 @@ class FieldBundle(unittest.TestCase):
             self.assertEqual(make_field_bundle.verify(out), 1)
 
 
+class FieldBundleEverything(unittest.TestCase):
+    """--everything without a network: the downloads are replaced by fakes, the manifest and README are real."""
+
+    LISTING = '<a href="3.12.9/">3.12.9/</a> <a href="3.12.10/">3.12.10/</a> <a href="3.12.14/">3.12.14/</a> <a href="3.13.1/">3.13.1/</a>'
+
+    def test_python_installer_is_the_newest_patch_that_has_a_windows_installer(self):
+        have = {f"{make_field_bundle.PYTHON_FTP}3.12.10/python-3.12.10-amd64.exe", f"{make_field_bundle.PYTHON_FTP}3.12.9/python-3.12.9-amd64.exe"}
+        version, url = make_field_bundle.latest_python_installer("3.12", self.LISTING, lambda u: u in have)
+        self.assertEqual(version, "3.12.10")
+        self.assertTrue(url.endswith("/3.12.10/python-3.12.10-amd64.exe"))
+        with self.assertRaises(SystemExit):
+            make_field_bundle.latest_python_installer("3.12", self.LISTING, lambda u: False)
+
+    def test_installers_and_release_land_in_the_manifest_with_hashes(self):
+        with tempfile.TemporaryDirectory(prefix="field-bundle-test-") as tmp:
+            out = Path(tmp)
+            fetch = lambda url: ("bytes of " + url).encode()
+            parts = make_field_bundle.fetch_installers(out, "3.12", False, fetch=fetch, listing=self.LISTING, exists=lambda u: "3.12.10" in u)
+            self.assertEqual([p["name"] for p in parts], ["python", "vc_redist"])
+            self.assertEqual(parts[0]["version"], "3.12.10")
+            self.assertEqual(parts[0]["sha256"], make_field_bundle.sha256(out / "installers" / "python-3.12.10-amd64.exe"))
+            self.assertEqual(parts[1]["url"], make_field_bundle.VC_REDIST_URL)
+
+            def fake_gh(command):
+                self.assertEqual(command[:4], ["gh", "release", "download", "v0.37.0"])
+                self.assertIn("*windows*", command)
+                folder = Path(command[command.index("--dir") + 1])
+                folder.mkdir(parents=True)
+                (folder / "NodeBased-0.37.0-windows-x64-portable.zip").write_bytes(b"zip")
+                (folder / "NodeBased-0.37.0-windows-x64-setup.exe").write_bytes(b"exe")
+                good = make_field_bundle.hashlib.sha256(b"zip").hexdigest()
+                (folder / "SHA256SUMS").write_text(f"{good}  NodeBased-0.37.0-windows-x64-portable.zip\n{'0' * 64}  NodeBased-0.37.0-windows-x64-setup.exe\n")
+                return 0
+            app, problems = make_field_bundle.fetch_release(out, "0.37.0", False, gh=fake_gh)
+            self.assertEqual([a["matches_release_sums"] for a in app], [True, False])
+            self.assertEqual(len(problems), 1)
+            self.assertIn("setup.exe", problems[0])
+
+            missing = ["wheels/: examplepkg has no win_amd64 cp312 wheel (pip download failed)"]
+            make_field_bundle.write_readme(out, "0.37.0", "abc1234", "nodebased-abc1234.zip", "win_amd64", "3.12", parts + app, missing, [])
+            entries, total = make_field_bundle.build_manifest(out, parts + app, missing, problems)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["missing"], missing)
+            self.assertEqual({c["name"] for c in manifest["components"]}, {"python", "vc_redist", "app"})
+            listed = {e["path"] for e in entries}
+            self.assertTrue({"BUNDLE-README.txt", "verify-bundle.ps1", "installers/vc_redist.x64.exe"} <= listed)
+            readme = (out / "BUNDLE-README.txt").read_text(encoding="utf-8")
+            for needle in ("561.17", "560.76", "docs.nvidia.com", "vc_redist", "Add python.exe to PATH", "--no-index", "DPVO", "examplepkg",
+                           "HF_HUB_CACHE", "verify-bundle.ps1", "nodebased-abc1234.zip"):
+                self.assertIn(needle, readme)
+            self.assertIn("Get-FileHash", (out / "verify-bundle.ps1").read_text(encoding="utf-8"))
+            self.assertEqual(make_field_bundle.verify(out), 0)
+
+    def test_a_requirement_without_a_windows_wheel_is_named_not_dropped(self):
+        calls = []
+
+        def fake_pip(command, dry_run):
+            calls.append(command)
+            names = command[command.index("--only-binary=:all:") + 1:]
+            return 1 if "sourceonly" in names else 0
+        self.assertEqual(make_field_bundle.download_wheels(Path("w"), ["good", "sourceonly"], "win_amd64", "3.12", False, call=fake_pip), ["sourceonly"])
+        self.assertEqual(make_field_bundle.download_wheels(Path("w"), ["good"], "win_amd64", "3.12", False, call=fake_pip), [])
+
+    def test_everything_dry_run_lists_the_downloads_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory(prefix="field-bundle-test-") as tmp:
+            out = Path(tmp) / "bundle"
+            self.assertEqual(make_field_bundle.main(["--everything", "--out", str(out), "--dry-run"]), 0)
+            self.assertFalse(out.exists())
+
+
 class RunTestsAcceptsSeveralPatterns(unittest.TestCase):
     def test_modules_unions_the_patterns(self):
         sys.path.insert(0, str(ROOT / "tools"))
