@@ -161,35 +161,95 @@ class FieldBundleEverything(unittest.TestCase):
             self.assertEqual(parts[0]["sha256"], make_field_bundle.sha256(out / "installers" / "python-3.12.10-amd64.exe"))
             self.assertEqual(parts[1]["url"], make_field_bundle.VC_REDIST_URL)
 
+            seen = []
+
             def fake_gh(command):
+                seen.append(command)
                 self.assertEqual(command[:4], ["gh", "release", "download", "v0.37.0"])
-                self.assertIn("*windows*", command)
                 folder = Path(command[command.index("--dir") + 1])
-                folder.mkdir(parents=True)
+                folder.mkdir(parents=True, exist_ok=True)
                 (folder / "NodeBased-0.37.0-windows-x64-portable.zip").write_bytes(b"zip")
-                (folder / "NodeBased-0.37.0-windows-x64-setup.exe").write_bytes(b"exe")
                 good = make_field_bundle.hashlib.sha256(b"zip").hexdigest()
                 (folder / "SHA256SUMS").write_text(f"{good}  NodeBased-0.37.0-windows-x64-portable.zip\n{'0' * 64}  NodeBased-0.37.0-windows-x64-setup.exe\n")
                 return 0
+            stale = out / "app" / "NodeBased-0.37.0-windows-x64-setup.exe"
+            stale.parent.mkdir(); stale.write_bytes(b"left over from an earlier bundle")
             app, problems = make_field_bundle.fetch_release(out, "0.37.0", False, gh=fake_gh)
-            self.assertEqual([a["matches_release_sums"] for a in app], [True, False])
-            self.assertEqual(len(problems), 1)
-            self.assertIn("setup.exe", problems[0])
+            self.assertIn("*windows*portable*", seen[0])
+            self.assertEqual([a["path"] for a in app], ["app/NodeBased-0.37.0-windows-x64-portable.zip"])
+            self.assertEqual([a["matches_release_sums"] for a in app], [True])
+            self.assertEqual(problems, [])
+            self.assertFalse(stale.exists())
+            self.assertFalse(list((out / "app").glob("*setup*")))
+
+            names = ["cpython-3.12.14+20261013-x86_64-pc-windows-msvc-install_only.tar.gz", "cpython-3.12.15+20261013-x86_64-pc-windows-msvc-install_only.tar.gz",
+                     "cpython-3.12.15+20261013-x86_64-pc-windows-msvc-install_only_stripped.tar.gz", "cpython-3.12.15+20261013-aarch64-pc-windows-msvc-install_only.tar.gz",
+                     "cpython-3.13.16+20261013-x86_64-pc-windows-msvc-install_only.tar.gz"]
+            self.assertEqual(make_field_bundle.standalone_asset(names, "3.12"), (names[1], "3.12.15"))
+            with self.assertRaises(SystemExit):
+                make_field_bundle.standalone_asset(names[2:4], "3.12")
+            archive = b"tar bytes"
+            sums = f"{make_field_bundle.hashlib.sha256(archive).hexdigest()}  {names[1]}\n"
+            fetch_standalone = lambda url: sums.encode() if url.endswith("SHA256SUMS") else archive
+            release = lambda args: {"tagName": "20261013", "assets": [{"name": n} for n in names]}
+            standalone = make_field_bundle.fetch_standalone(out, "3.12", False, gh_json=release, fetch=fetch_standalone)
+            self.assertEqual(standalone[0]["path"], "python/" + names[1])
+            self.assertEqual((standalone[0]["name"], standalone[0]["version"], standalone[0]["release"]), ("python-standalone", "3.12.15", "20261013"))
+            self.assertIn("20261013/cpython-3.12.15%2B20261013-x86_64", standalone[0]["url"])
+            self.assertTrue(standalone[0]["matches_release_sums"])
+            with self.assertRaises(SystemExit):
+                make_field_bundle.fetch_standalone(out, "3.12", False, gh_json=release, fetch=lambda url: b"0" * 64 + b"  " + names[1].encode() if url.endswith("SHA256SUMS") else archive)
+            parts = parts + standalone
 
             missing = ["wheels/: examplepkg has no win_amd64 cp312 wheel (pip download failed)"]
             make_field_bundle.write_readme(out, "0.37.0", "abc1234", "nodebased-abc1234.zip", "win_amd64", "3.12", parts + app, missing, [])
             entries, total = make_field_bundle.build_manifest(out, parts + app, missing, problems)
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["missing"], missing)
-            self.assertEqual({c["name"] for c in manifest["components"]}, {"python", "vc_redist", "app"})
+            self.assertEqual({c["name"] for c in manifest["components"]}, {"python", "python-standalone", "vc_redist", "app"})
             listed = {e["path"] for e in entries}
-            self.assertTrue({"BUNDLE-README.txt", "verify-bundle.ps1", "installers/vc_redist.x64.exe"} <= listed)
+            self.assertTrue({"BUNDLE-README.txt", "verify-bundle.ps1", "installers/vc_redist.x64.exe", "python/" + names[1]} <= listed)
+            self.assertFalse([p for p in listed if "setup" in p])
             readme = (out / "BUNDLE-README.txt").read_text(encoding="utf-8")
-            for needle in ("561.17", "560.76", "docs.nvidia.com", "vc_redist", "Add python.exe to PATH", "--no-index", "DPVO", "examplepkg",
-                           "HF_HUB_CACHE", "verify-bundle.ps1", "nodebased-abc1234.zip"):
+            self.assertTrue(readme.startswith("No admin rights needed: everything installs under your user folder.\n"))
+            for needle in ("561.17", "560.76", "docs.nvidia.com", "vc_redist", "OPTIONAL", "nvidia-smi", "--no-index", "DPVO", "examplepkg",
+                           "HF_HUB_CACHE", "verify-bundle.ps1", "nodebased-abc1234.zip", "$env:USERPROFILE\\nb", "InstallAllUsers=0 PrependPath=1 Include_test=0",
+                           "tar -xzf", "skipped", "the app's packages carry their own runtime"):
                 self.assertIn(needle, readme)
+            self.assertNotIn("C:\\nb", readme)
+            self.assertNotIn("Add python.exe to PATH", readme)
+            self.assertNotIn("setup exe next to", readme)
             self.assertIn("Get-FileHash", (out / "verify-bundle.ps1").read_text(encoding="utf-8"))
             self.assertEqual(make_field_bundle.verify(out), 0)
+
+    def test_runtime_dll_report_reads_the_wheels(self):
+        with tempfile.TemporaryDirectory(prefix="field-bundle-test-") as tmp:
+            out = Path(tmp)
+            (out / "wheels").mkdir()
+            (out / "wheels-provider").mkdir()
+            for path, members in (("wheels/shiboken6-6.12.0-cp310-abi3-win_amd64.whl", ["shiboken6/msvcp140.dll", "shiboken6/vcruntime140_1.dll", "shiboken6/x.pyd"]),
+                                  ("wheels-provider/torch-2.14.1+cu126-cp312-cp312-win_amd64.whl", ["torch/lib/libiomp5md.dll"]),
+                                  ("wheels/numpy-2.5.4-cp312-cp312-win_amd64.whl", ["numpy/msvcp140.dll"])):
+                with make_field_bundle.zipfile.ZipFile(out / path, "w") as archive:
+                    for member in members:
+                        archive.writestr(member, b"x")
+            report = make_field_bundle.runtime_dll_report(out)
+            self.assertIn("carry their own runtime: yes (shiboken6); no (torch)", report)
+            self.assertIn("msvcp140.dll, vcruntime140_1.dll", report)
+            self.assertNotIn("numpy", report)
+
+    def test_reuse_keeps_only_folders_that_still_match_the_manifest(self):
+        with tempfile.TemporaryDirectory(prefix="field-bundle-test-") as tmp:
+            out = Path(tmp)
+            (out / "wheels").mkdir()
+            (out / "wheels" / "a.whl").write_bytes(b"wheel")
+            make_field_bundle.build_manifest(out)
+            manifest = make_field_bundle.previous_manifest(out)
+            self.assertTrue(make_field_bundle.folder_is_intact(out, manifest, "wheels"))
+            self.assertFalse(make_field_bundle.folder_is_intact(out, manifest, "weights"))
+            (out / "wheels" / "a.whl").write_bytes(b"other")
+            self.assertFalse(make_field_bundle.folder_is_intact(out, manifest, "wheels"))
+            self.assertEqual(make_field_bundle.previous_manifest(out / "nowhere"), {})
 
     def test_a_requirement_without_a_windows_wheel_is_named_not_dropped(self):
         calls = []
