@@ -1,0 +1,91 @@
+{
+  "adapter": "default",
+  "device": "NVIDIA GeForce RTX 3080 Ti / Vulkan (rgba32float)",
+  "cells": 32,
+  "frames": 120,
+  "bake_seconds": 26.17,
+  "render_seconds": {
+    "1": 98.32,
+    "60": 103.05,
+    "120": 103.56
+  },
+  "comparison": {
+    "1": {
+      "mean_absolute_error": 0.00016049793339334428,
+      "limit": 0.017159035205841066,
+      "passed": true
+    },
+    "60": {
+      "mean_absolute_error": 7.229293987620622e-05,
+      "limit": 0.016671472787857057,
+      "passed": true
+    },
+    "120": {
+      "mean_absolute_error": 7.592948531964794e-05,
+      "limit": 0.016625977754592895,
+      "passed": true
+    }
+  },
+  "cross_adapter_comparisons": {
+    "default": {
+      "device": "NVIDIA GeForce RTX 3080 Ti / Vulkan (rgba32float)",
+      "comparison": {
+        "1": {
+          "mean_absolute_error": 0.00016049793339334428,
+          "limit": 0.017159035205841066,
+          "passed": true
+        },
+        "60": {
+          "mean_absolute_error": 7.229293987620622e-05,
+          "limit": 0.016671472787857057,
+          "passed": true
+        },
+        "120": {
+          "mean_absolute_error": 7.592948531964794e-05,
+          "limit": 0.016625977754592895,
+          "passed": true
+        }
+      }
+    },
+    "integrated": {
+      "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO) / Vulkan (rgba32float)",
+      "comparison": {
+        "1": {
+          "mean_absolute_error": 0.00014303933130577207,
+          "limit": 0.017159035205841066,
+          "passed": true
+        },
+        "60": {
+          "mean_absolute_error": 5.0644994189497083e-05,
+          "limit": 0.016671472787857057,
+          "passed": true
+        },
+        "120": {
+          "mean_absolute_error": 7.592957990709692e-05,
+          "limit": 0.016625977754592895,
+          "passed": true
+        }
+      }
+    },
+    "cpu": {
+      "device": "llvmpipe (LLVM 22.1.8, 256 bits) / Vulkan (rgba32float)",
+      "comparison": {
+        "1": {
+          "mean_absolute_error": 0.0002070075715892017,
+          "limit": 0.017159035205841066,
+          "passed": true
+        },
+        "60": {
+          "mean_absolute_error": 9.866777691058815e-05,
+          "limit": 0.016671472787857057,
+          "passed": true
+        },
+        "120": {
+          "mean_absolute_error": 7.593022019136697e-05,
+          "limit": 0.016625977754592895,
+          "passed": true
+        }
+      }
+    }
+  }
+}

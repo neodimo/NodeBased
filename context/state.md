@@ -1,3 +1,9 @@
+## 2026-10-14 — Lane 6 S1 finish: the Hot pour in a rendered shot (DONE on lane branch)
+
+The pending visual proof is complete on `openclaw/nb-fluids-spike`. The 120-frame, 32-cell bake took 26.17 seconds on the RTX 3080 Ti. Full-size GPU path-traced renders at 960 × 540 took 98.32, 103.05 and 103.56 seconds for frames 1, 60 and 120. Small CPU/GPU comparisons passed on NVIDIA RTX 3080 Ti, AMD Radeon 8060S integrated graphics and llvmpipe; no adapter skip was needed. `tests.test_hot_pour_shot`, `tests.test_3d_holdout` and `tests.test_knowledge` passed. Synchronized docs, three stills and adapter measurements are in `docs/FLUIDS_SPIKE.md`, `nodebased/data/docs/FLUIDS_SPIKE.md`, `docs/images/hot_pour_shot/` and `benchmarks/hot_pour/hot-pour-shot-2026-10-14.json`.
+
+Rendered observations: the 8-sample stills are grainy; the liquid reads as a rounded mass rather than a stream entering the cup; the cup opening is indistinct; steam is faint and noisy; the tabletop shadow is hard-edged. Solver/lighting changes were outside this step. The result is committed on the lane branch and awaits Gonzo's integration review and the integrator's full suite. Windows and real-display review are unverified.
+
 ## 2026-10-14 — Lane 8 Q1 of 1: the tiled Roto path is faster than the full-frame one (DONE)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (8:27 PM on 2026-10-14 PDT)

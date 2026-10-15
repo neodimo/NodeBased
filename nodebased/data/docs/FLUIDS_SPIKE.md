@@ -1203,27 +1203,29 @@ change the simulation cache identity until their values are applied.
 
 ## The Hot pour in a shot
 
-`examples/hot_pour_shot/` connects `nodebased/hotpour.py`'s Hot pour graph to a camera-matched solid-set plate. The
-120-frame example uses 32-cell liquid and steam domains; its tabletop is a shadow catcher, a foreground cup is a holdout,
-and the key light casts shadows. The plate is a 68 KB render of the same set with the liquid and steam removed. A Reformat
-and Merge place the transparent render over that plate.
+`examples/hot_pour_shot/` connects `nodebased/hotpour.py`'s Hot pour graph to a camera-matched plate. The saved 32-cell liquid and steam graph spans 120 frames. A 68 KB still plate comes from the same camera and set with both simulations off; the tabletop is a shadow catcher, the foreground cup is a holdout, and the directional key casts the fluid shadow. The transparent render is fitted to the plate and merged over it.
 
-The frame-1 CPU test loads the saved graph, evaluates a 48 × 27 render and composite in under one minute, and confirms the
-liquid geometry, steam volume, holdout and catcher affect the output. **Bake and render measurements, the CPU/GPU path
-tracer comparisons, and the 960 × 540 stills are pending:** the integrator's full suite holds the exclusive GPU lock. The
-reproducible runner is `examples/hot_pour_shot/render_evidence.py`; it writes scratch frames and the benchmark record when
-the lock is available.
+On the RTX 3080 Ti, the 120-frame bake took 26.17 seconds, well under the 20-minute budget. The GPU path-tracer renders at 960 × 540 took 98.32 seconds (frame 1), 103.05 seconds (frame 60), and 103.56 seconds (frame 120). The stills are [frame 1](images/hot_pour_shot/hot-pour-001.png), [frame 60](images/hot_pour_shot/hot-pour-060.png), and [frame 120](images/hot_pour_shot/hot-pour-120.png). Measurements are in `benchmarks/hot_pour/hot-pour-shot-2026-10-14.json`; scratch frames and logs are under the lane run directory.
 
-**Visual issues to inspect after rendering:** steam readability against the blue backdrop, liquid silhouette at the coarse
-32-cell resolution, shadow softness and placement, and whether the holdout cup hides the intended amount of the stream.
+At small resolution, GPU-vs-CPU path tracing passed the holdout tolerance on all three frames on the NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated adapter, and llvmpipe (Vulkan software adapter). Maximum mean absolute error was 0.0002071 against per-frame limits from 0.016626 to 0.017160. The software adapter supported this scene, so no skip was needed.
+
+**What looks wrong in the rendered stills:**
+
+- The 8-sample full-size renders are visibly grainy, especially around steam and the liquid surface.
+- The liquid reads as a rounded mass behind the cup instead of a clear pouring stream entering the cup.
+- The cup reads as a plain white cylinder; its opening and material detail are hard to distinguish.
+- Steam is faint and noisy at frames 60 and 120, and appears as a pale column at frame 1.
+- The tabletop shadow is clearly present but very hard-edged.
+
+These are visual findings only; solver and lighting changes are outside this step. The reproducible runner is `examples/hot_pour_shot/render_evidence.py`.
 
 ## Lane 6 step notes
 
-### S1: the Hot pour in a rendered shot (partial)
+### S1: the Hot pour in a rendered shot (finish 1)
 
-Committed the camera-matched shot graph, a 68 KB solid-set plate and a focused frame-1 test. The CPU test confirms the
-composite, liquid and steam, plus pixel changes when the holdout and shadow-catcher switches are toggled. GPU bake timings,
-cross-adapter comparisons, full-size stills and final visual observations remain pending on the exclusive GPU lock.
+Completed the pending proof: the 120-frame 32-cell bake took 26.17 seconds on the RTX 3080 Ti; full-size path-traced stills
+were rendered at frames 1, 60 and 120; and small GPU/CPU comparisons passed on NVIDIA, AMD integrated and llvmpipe. The
+example and holdout tests passed. Measured timings, adapter errors, stills and visible issues are in the section above.
 
 ### M2: surface tension and whitewater life (partial)
 
