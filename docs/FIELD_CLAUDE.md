@@ -15,8 +15,11 @@ Your job is to measure and report. It is not to fix, tune or improve anything.
 
 - Do not push, commit, branch, tag or run any `git` command that writes (`git status`, `git log` and `git rev-parse` are fine).
 - Do not modify, add or delete any file under `tests\`, `nodebased\`, `tools\`, `examples\` or `docs\`. Write only under the report folders
-  (`C:\nb\field-*`) and the virtual environment.
+  (`%USERPROFILE%\nb\field-*`) and the virtual environment.
 - Do not upload, post, email or sync anything. The only artifact that leaves this machine is the report zip, and DiMo moves it.
+- This machine has no internet and you have no admin rights. Install nothing that needs elevation: no system PATH edits (use absolute paths
+  or the venv's `Activate.ps1`), no services, no registry, no `vc_redist.x64.exe`, no all-users installers. Everything goes under
+  `%USERPROFILE%\nb`. If `nvidia-smi` shows a driver older than 561.17, the SDXL step is recorded as skipped; that is a result, not a setup fault.
 - Do not change GPU drivers, power settings, Windows settings or other software, and do not close other people's programs.
 - Do not retry a failing step in a loop. A failed step is a result; report it. One retry is fine if the cause was clearly yours (wrong
   directory, environment not activated).
@@ -25,7 +28,7 @@ Your job is to measure and report. It is not to fix, tune or improve anything.
 
 ## Commands, in this order
 
-Work in `C:\nb\nodebased` (or wherever `tools\field_report.py` is) with the virtual environment active
+Work in `%USERPROFILE%\nb\nodebased` (or wherever `tools\field_report.py` is) with the virtual environment active
 (`.\.venv\Scripts\Activate.ps1`). `docs\FIELD_TEST.md` has the install steps if the environment is not there yet; follow its ONLINE or
 OFFLINE path, whichever the machine can do.
 
@@ -34,30 +37,30 @@ OFFLINE path, whichever the machine can do.
    nvidia-smi
    python -c "import wgpu, nodebased; print(nodebased.__version__, [a.info['device'] for a in wgpu.gpu.enumerate_adapters_sync()])"
    ```
-   The list must include the RTX A6000. If it does not, stop, run `python tools\field_report.py --quick --only machine --out C:\nb\field-machine`
+   The list must include the RTX A6000. If it does not, stop, run `python tools\field_report.py --quick --only machine --out "$env:USERPROFILE\nb\field-machine"`
    and give DiMo that report with the error text.
 2. Quick run, to catch setup problems in about a minute:
    ```powershell
-   python tools\field_report.py --quick --out C:\nb\field-quick --label "A6000 work machine (quick)"
+   python tools\field_report.py --quick --out "$env:USERPROFILE\nb\field-quick" --label "A6000 work machine (quick)"
    ```
-   Open `C:\nb\field-quick\field-report.md`. If any step failed for a setup reason (module not found, no adapter), fix the setup, not the repository, and
+   Open `%USERPROFILE%\nb\field-quick\field-report.md`. If any step failed for a setup reason (module not found, no adapter), fix the setup, not the repository, and
    re-run. If it failed for any other reason, carry on: that failure is a finding.
 3. The full run. It takes a long time; start it, and use the waiting time for step 4 only if the app can run alongside it without
    disturbing the timings, otherwise wait.
    ```powershell
-   python tools\field_report.py --out C:\nb\field-report --label "A6000 work machine"
+   python tools\field_report.py --out "$env:USERPROFILE\nb\field-report" --label "A6000 work machine"
    ```
    If the weights are absent the SDXL step says so; do not download them unless DiMo said to.
 4. The larger configurations that 48 GB allows (instances, Hot pour, SDXL without offload):
    ```powershell
-   python tools\field_report.py --big --only bench_instances,bench_hot_pour,sdxl --out C:\nb\field-big --label "A6000 work machine (big)"
+   python tools\field_report.py --big --only bench_instances,bench_hot_pour,sdxl --out "$env:USERPROFILE\nb\field-big" --label "A6000 work machine (big)"
    ```
 5. The five minutes in the app (next section), then fill in the observations.
 6. Rebuild the report with the observations in it:
    ```powershell
-   python tools\field_report.py --out C:\nb\field-report --rezip
+   python tools\field_report.py --out "$env:USERPROFILE\nb\field-report" --rezip
    ```
-   The zips are `C:\nb\field-report.zip` (and `field-quick.zip`, `field-big.zip`). Check each `.md` opens and its first section reads sensibly.
+   The zips are `%USERPROFILE%\nb\field-report.zip` (and `field-quick.zip`, `field-big.zip`). Check each `.md` opens and its first section reads sensibly.
 
 If a run hangs for more than 20 minutes with no new line in its `logs\` folder, stop it with Ctrl+C. The report keeps what finished.
 
@@ -80,7 +83,7 @@ nodebased examples\demo_shot\demo_shot.nbcomp           # or: python -m nodebase
    takes a long time; start one only if DiMo asked, and then note how long it took and the card memory (`nvidia-smi` in a second window).
 5. Anything else that looked wrong: a dialog, a crash, a warning on the console, a slow action.
 
-Write it into `C:\nb\field-report\observations.md` (the template is already there, one bullet per question). Plain sentences; "nothing wrong"
+Write it into `%USERPROFILE%\nb\field-report\observations.md` (the template is already there, one bullet per question). Plain sentences; "nothing wrong"
 where that is true. Include the exact text of any error. Copy the same file into `field-quick` and `field-big` only if you re-ran those
 after writing it; one set of observations is enough.
 
@@ -101,7 +104,7 @@ When the zips are rebuilt, send DiMo exactly this, with the brackets filled in (
 - [Anything skipped and why (weights absent, no CUDA).]
 
 **Files**
-- C:\nb\field-report.zip ([size] MB), C:\nb\field-big.zip ([size] MB), C:\nb\field-quick.zip ([size] MB). Not uploaded; DiMo moves them.
+- %USERPROFILE%\nb\field-report.zip ([size] MB), %USERPROFILE%\nb\field-big.zip ([size] MB), %USERPROFILE%\nb\field-quick.zip ([size] MB). Not uploaded; DiMo moves them.
 
 **Decision needed**
 - [One question, or "none".]

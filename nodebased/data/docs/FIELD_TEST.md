@@ -10,9 +10,14 @@ for a couple of hours and run it while you do something else.
 
 ## What you need on the work machine
 
-- Windows 10 or 11, 64-bit, the NVIDIA driver already installed (`nvidia-smi` works in PowerShell).
-- Python 3.12 (from python.org; tick "Add python.exe to PATH" and the `py` launcher). Python 3.11 works for NodeBased but the offline
-  bundle is built for 3.12.
+- Windows 10 or 11, 64-bit, the NVIDIA driver already installed (`nvidia-smi` works in PowerShell). **No admin rights are needed
+  anywhere**: everything installs under `%USERPROFILE%\nb`, with no system PATH edit, service or registry change. The driver cannot be
+  updated on that machine: run `nvidia-smi` first. The CUDA 12.6 torch wheels want 561.17 or newer (560.76 for the GA release); with an
+  older driver the SDXL step finds no CUDA device and the report records it as skipped (the provider runs on the NVIDIA card only, there
+  is no CPU path), and everything else still runs.
+- Python 3.12. The offline bundle carries a standalone CPython (python-build-standalone, unpacked into your profile, no installer). The
+  online path can use python.org's per-user installer: `python-3.12.10-amd64.exe /passive InstallAllUsers=0 PrependPath=1 Include_test=0`.
+  Python 3.11 works for NodeBased but the offline bundle is built for 3.12.
 - About 25 GB free disk for the full SDXL run (venv 7 GB with torch, weights 9 GB, caches), 5 GB without SDXL.
 - Git for the online path (or the repository zip from the stick).
 - Claude Code installed and logged in, if it drives the run.
@@ -28,9 +33,11 @@ python tools/make_field_bundle.py --everything --out /run/media/omid/STICK/nb-bu
 `--everything` (implies `--weights`) is for a machine with no internet and no Python. It downloads the Windows wheels for the project
 (`.[gpu,usd]`, pip, setuptools, wheel) and for the SDXL provider (torch and torchvision CUDA 12.6, diffusers and the rest), copies the
 repository at HEAD as a zip, the three SDXL model snapshots from the Hugging Face cache (9.1 GB: the cache is where the provider
-reads them; `projects/nb-providers/sdxl` holds only the setup script and a Linux venv), the python.org Windows installer (the newest
-3.12 patch that ships one), the Microsoft Visual C++ redistributable, and the NodeBased Windows portable zip and setup exe from the
-GitHub release (needs `gh` logged in). The top of the bundle holds `BUNDLE-README.txt` (contents, install order, the NVIDIA driver
+reads them; `projects/nb-providers/sdxl` holds only the setup script and a Linux venv), standalone CPython 3.12 for Windows (python-build-standalone,
+latest release, install_only tar.gz, sha256 checked against the release's SHA256SUMS), the python.org installer (the newest 3.12 patch
+that ships one; the per-user fallback only), the Microsoft Visual C++ redistributable (OPTIONAL: installing it needs admin), and the
+NodeBased Windows portable zip from the GitHub release (needs `gh` logged in; the setup exe is left out because it installs for all
+users). Re-running with `--reuse` keeps the wheels and weights that still match the folder's manifest and refreshes the rest. The top of the bundle holds `BUNDLE-README.txt` (contents, install order, the NVIDIA driver
 minimum, the SLAM status) and `verify-bundle.ps1`. `manifest.json` and `MANIFEST.txt` list every file's size and sha256 plus the exact
 versions and URLs of the installers; a requirement with no Windows wheel is named there, never dropped silently. Plan for 12 to 15 GB.
 Without `--everything`: about 12 GB with `--weights`, 3 GB without. Use a Python that has pip. Add `--skip-provider` to leave out the
@@ -53,8 +60,8 @@ With Python available (after step 2 below) `python tools\make_field_bundle.py --
 
 ```powershell
 # 1. get the code (the kit is on branch field-kit-1015 until it is merged to main)
-git clone --branch field-kit-1015 https://github.com/neodimo/NodeBased.git C:\nb\nodebased
-cd C:\nb\nodebased
+git clone --branch field-kit-1015 https://github.com/neodimo/NodeBased.git $env:USERPROFILE\nb\nodebased
+cd $env:USERPROFILE\nb\nodebased
 
 # 2. a virtual environment with NodeBased and the GPU and USD extras
 py -3.12 -m venv .venv
@@ -77,41 +84,57 @@ hf download xinsir/controlnet-union-sdxl-1.0 --include "config_promax.json" "dif
 ```
 
 If the repository is private, run `gh auth login` first (GitHub CLI), or use the repository zip from the stick and skip step 1:
-`Expand-Archive E:\nb-bundle\nodebased-<hash>.zip C:\nb`.
+`Expand-Archive E:\nb-bundle\nodebased-<hash>.zip $env:USERPROFILE\nb`.
 
-## Path B: OFFLINE (USB bundle, no internet, no Python on the work machine)
+## Path B: OFFLINE (USB bundle, no internet, no Python, no admin on the work machine)
 
-`E:\nb-bundle` is the stick. `BUNDLE-README.txt` in it repeats these commands with the real file names and states the NVIDIA driver minimum:
-the CUDA 12.6 torch wheels need driver 561.17 or newer on Windows (NVIDIA's CUDA 12.6 table; 560.76 for the GA release). Check with `nvidia-smi`.
+`E:\nb-bundle` is the stick. `BUNDLE-README.txt` in it repeats these commands with the real file names and states the NVIDIA driver minimum.
+Everything lands under `%USERPROFILE%\nb`: Python, the code, the virtual environment, the Hugging Face cache (if copied) and the reports.
 
 ```powershell
-# 0. install Python and the Visual C++ runtime from the stick (once; skip what is already there)
-E:\nb-bundle\installers\python-3.12.*-amd64.exe          # tick "Add python.exe to PATH" and the py launcher, Install Now
-E:\nb-bundle\installers\vc_redist.x64.exe                # PySide6, wgpu and torch need it on a bare machine
-# open a NEW PowerShell so PATH is current. To only run the app, unzip E:\nb-bundle\app\NodeBased-*-windows-x64-portable.zip
-# and start NodeBased.exe (or run the setup exe next to it); the tests and benchmarks below need steps 1 to 4.
+# 0. the driver, the first thing to look at (it cannot be updated there)
+nvidia-smi          # 561.17 or newer for the cu126 torch wheels (560.76 for GA); older: the SDXL step is recorded as skipped, the rest runs
 
-# 1. unpack the code
-Expand-Archive E:\nb-bundle\nodebased-<hash>.zip C:\nb          # makes C:\nb\nodebased
-cd C:\nb\nodebased
+# 1. Python from the stick, unpacked into your profile (no installer, no registry, no PATH edit)
+New-Item -ItemType Directory -Force "$env:USERPROFILE\nb" | Out-Null
+tar -xzf (Get-Item E:\nb-bundle\python\cpython-*.tar.gz).FullName -C "$env:USERPROFILE\nb"      # makes %USERPROFILE%\nb\python
+& "$env:USERPROFILE\nb\python\python.exe" --version
+# Fallback only, if that does not work: the python.org installer, per user:
+#   E:\nb-bundle\installers\python-3.12.10-amd64.exe /passive InstallAllUsers=0 PrependPath=1 Include_test=0
+# installers\vc_redist.x64.exe is OPTIONAL and needs admin: skip it (see "Visual C++ runtime" below).
+# To only run the app: unzip E:\nb-bundle\app\NodeBased-*-windows-x64-portable.zip into a folder you own and start NodeBased.exe.
 
-# 2. a virtual environment, and NodeBased with the extras, from the stick only
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1                               # if PowerShell refuses: Set-ExecutionPolicy -Scope Process Bypass
+# 2. unpack the code
+Expand-Archive E:\nb-bundle\nodebased-<hash>.zip "$env:USERPROFILE\nb"      # makes %USERPROFILE%\nb\nodebased
+cd "$env:USERPROFILE\nb\nodebased"
+
+# 3. a virtual environment, and NodeBased with the extras, from the stick only
+& "$env:USERPROFILE\nb\python\python.exe" -m venv .venv
+.\.venv\Scripts\Activate.ps1                               # if PowerShell refuses: Set-ExecutionPolicy -Scope Process Bypass (this window only)
 python -m pip install --no-index --find-links E:\nb-bundle\wheels --upgrade pip setuptools wheel
 pip install --no-index --find-links E:\nb-bundle\wheels ".[gpu,usd]"
 
-# 3. SDXL's packages into the same environment (skip if the bundle was built with --skip-provider)
+# 4. SDXL's packages into the same environment (skip if the bundle was built with --skip-provider)
 pip install --no-index --find-links E:\nb-bundle\wheels-provider torch torchvision diffusers transformers accelerate safetensors huggingface_hub OpenEXR numpy pillow
 
-# 4. the weights. The provider reads the Hugging Face cache (huggingface_hub's HF_HUB_CACHE, default
-#    %USERPROFILE%\.cache\huggingface\hub) and always runs offline, so either point at the stick:
+# 5. the weights. The provider reads the Hugging Face cache (HF_HUB_CACHE) and always runs offline. Either point at the stick:
 $env:HF_HUB_CACHE = "E:\nb-bundle\weights\hub"
-#    or copy once into the default cache (no variable needed afterwards; 9 GB):
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.cache\huggingface\hub" | Out-Null
-Copy-Item -Recurse -Force E:\nb-bundle\weights\hub\* "$env:USERPROFILE\.cache\huggingface\hub\"
+#    or copy once under your profile (9 GB), which keeps working when the stick is gone:
+$env:HF_HUB_CACHE = "$env:USERPROFILE\nb\hf\hub"
+New-Item -ItemType Directory -Force $env:HF_HUB_CACHE | Out-Null
+Copy-Item -Recurse -Force E:\nb-bundle\weights\hub\* $env:HF_HUB_CACHE
 $env:HF_HUB_OFFLINE = "1"
 ```
+
+### Visual C++ runtime (vc_redist.x64.exe is OPTIONAL)
+
+The redistributable installer needs admin, so it is on the stick only as a convenience. The app's packages carry their own runtime
+for the parts that need it most: PySide6 (Essentials) and shiboken6 ship `msvcp140.dll`, `vcruntime140.dll`, `vcruntime140_1.dll` and
+related files; torch and torchvision ship none (torch brings `libiomp5md.dll`, not the Microsoft runtime), and the standalone Python
+ships `vcruntime140.dll` and `vcruntime140_1.dll` but not `msvcp140.dll`. `BUNDLE-README.txt` lists the exact result read from the wheels in
+the bundle. If `python -c "import torch"` fails naming MSVCP140.dll, copy shiboken6's DLLs next to the standalone `python.exe` (no admin;
+not yet run on a machine without the redistributable):
+`Copy-Item "$env:USERPROFILE\nb\nodebased\.venv\Lib\site-packages\shiboken6\msvcp140*.dll" "$env:USERPROFILE\nb\python\"`.
 
 If step 2 says it cannot build `nodebased` offline, add `--no-build-isolation` after installing `setuptools wheel` from the same
 `--find-links` folder. The demo plates are generated by the report in about a minute (`examples/demo_shot/make_plate.py`), so they are not
@@ -120,13 +143,13 @@ SLAM. The rest is the same as the online path; the report commands are below.
 
 ## Run it
 
-Always from `C:\nb\nodebased` with the environment active. Do the quick run first: if it fails, nothing long will work.
+Always from `%USERPROFILE%\nb\nodebased` with the environment active. Do the quick run first: if it fails, nothing long will work.
 
 ```powershell
 python -c "import wgpu, nodebased; print(nodebased.__version__, [a.info['device'] for a in wgpu.gpu.enumerate_adapters_sync()])"
-python tools\field_report.py --quick --out C:\nb\field-quick --label "A6000 work machine (quick)"
-python tools\field_report.py --out C:\nb\field-report --label "A6000 work machine"
-python tools\field_report.py --big --only bench_instances,bench_hot_pour,sdxl --out C:\nb\field-big --label "A6000 work machine (big)"
+python tools\field_report.py --quick --out "$env:USERPROFILE\nb\field-quick" --label "A6000 work machine (quick)"
+python tools\field_report.py --out "$env:USERPROFILE\nb\field-report" --label "A6000 work machine"
+python tools\field_report.py --big --only bench_instances,bench_hot_pour,sdxl --out "$env:USERPROFILE\nb\field-big" --label "A6000 work machine (big)"
 ```
 
 - The first command must list the A6000 (backend Vulkan or D3D12). If it lists only a software adapter, stop: the driver is the problem.
@@ -143,12 +166,12 @@ The numbers do not show what looks wrong on that display. After the run, `docs/F
 app, play the demo shot, toggle **View undistorted**, open the Hot pour example, and fill in `observations.md` in the report folder:
 
 ```powershell
-python tools\field_report.py --out C:\nb\field-report --rezip      # puts observations.md into field-report.md and rebuilds the zip
+python tools\field_report.py --out "$env:USERPROFILE\nb\field-report" --rezip      # puts observations.md into field-report.md and rebuilds the zip
 ```
 
 ## What to bring back
 
-One file: `C:\nb\field-report.zip` (beside the report folder; for the other runs `field-quick.zip`, `field-big.zip`). It holds
+One file: `%USERPROFILE%\nb\field-report.zip` (beside the report folder; for the other runs `field-quick.zip`, `field-big.zip`). It holds
 `field-report.md` (read this first), `field-report.json` (everything, machine-readable), `observations.md` and `logs\` (the raw
 output of every step). It does not hold simulation caches, frames or weights. It names the machine, the user's home path in some
 log lines and the GPU, nothing else personal; open `field-report.md` before posting if that matters.
