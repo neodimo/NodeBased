@@ -1,5 +1,24 @@
 ## 2026-10-14 — Lane 6 S1 finish: the Hot pour in a rendered shot (DONE on lane branch)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (2:17 AM on 2026-10-15 PDT)
+
+`main` moved `a800afbc` -> `0617944c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 16 tests in 28.621 s, OK. Full suite on
+the stacked tip `0617944c` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1014-2047.log`, started 8:47 PM): **Ran 5362 tests in 19359.839 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step S1 of 1: the Hot pour in a rendered shot, with shadows and a holdout (finish 1).** Commits:
+  - `502ec91d` docs: finish Hot pour shot render evidence
+  Diff: 8 files changed, 139 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The pending visual proof is complete on `openclaw/nb-fluids-spike`. The 120-frame, 32-cell bake took 26.17 seconds on the RTX 3080 Ti. Full-size GPU path-traced renders at 960 × 540 took 98.32, 103.05 and 103.56 seconds for frames 1, 60 and 120. Small CPU/GPU comparisons passed on NVIDIA RTX 3080 Ti, AMD Radeon 8060S integrated graphics and llvmpipe; no adapter skip was needed. `tests.test_hot_pour_shot`, `tests.test_3d_holdout` and `tests.test_knowledge` passed. Synchronized docs, three stills and adapter measurements are in `docs/FLUIDS_SPIKE.md`, `nodebased/data/docs/FLUIDS_SPIKE.md`, `docs/images/hot_pour_shot/` and `benchmarks/hot_pour/hot-pour-shot-2026-10-14.json`.
 
 Rendered observations: the 8-sample stills are grainy; the liquid reads as a rounded mass rather than a stream entering the cup; the cup opening is indistinct; steam is faint and noisy; the tabletop shadow is hard-edged. Solver/lighting changes were outside this step. The result is committed on the lane branch and awaits Gonzo's integration review and the integrator's full suite. Windows and real-display review are unverified.
