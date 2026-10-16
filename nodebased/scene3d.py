@@ -3616,6 +3616,36 @@ def _render_mesh_layers(scene, camera, width, height, out, depth, rows=None, **k
     return layers
 
 
+def box_resolve(image, samples):
+    """Average each ``samples`` x ``samples`` block of a supersampled (H*s, W*s, C) image.
+
+    Adds the ``samples`` squared strided views and divides once, instead of
+    ``reshape(h, s, w, s, c).mean(axis=(1, 3))``: the multi-axis reduction walks the array in an
+    order that defeats NumPy's fast loops (about 8 times slower, and 148 ms of an empty 1080p
+    frame; the same finding as ``imaging._decimate``). The sum and the divisor are the same, so
+    results agree with the old call to float32 rounding.
+    """
+    s = int(samples)
+    if s <= 1:
+        return image
+    height, width = image.shape[0] // s, image.shape[1] // s
+    out = np.array(image[0:height * s:s, 0:width * s:s], dtype=np.float32)
+    for dy in range(s):
+        for dx in range(s):
+            if dy or dx:
+                out += image[dy:height * s:s, dx:width * s:s]
+    np.divide(out, np.float32(s * s), out=out)
+    return out
+
+
+def is_empty_scene(scene):
+    """True when nothing in ``scene`` can put a pixel on screen except the flat background, so
+    supersampling it would only average a constant."""
+    return not (scene.geometries or scene.splats or scene.particles or scene.volumes
+                or scene.environments or scene.instances
+                or any(light.visible_to_camera for light in scene.lights))
+
+
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
            shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None, volume=None, path=None, _lens=None, denoise=None, history_key=None):
     """Render a scene to premultiplied float32 RGBA using raster or raytrace visibility.
@@ -3760,12 +3790,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     elif shadow_active:
         # Estimate before framebuffer allocation; a running counter also bounds overdraw.
         _shadow_budget(_shadow_cost(width * height * samples ** 2 * shadow_count, triangle_count))
+    if samples > 1 and is_empty_scene(scene):
+        samples = 1
     if samples > 1:
         big = render(scene, camera, width * samples, height * samples, background, shade,
                      return_depth, ambient, 1, output, cancel, shadows=shadows, mode=mode,
                      progress=progress, volume=volume, _lens=_lens)
         image, depth = big if return_depth else (big, None)
-        image = image.reshape(height, samples, width, samples, 4).mean(axis=(1, 3)).astype(np.float32)
+        image = box_resolve(image, samples)
         image.flags.writeable = False
         if return_depth:
             depth = depth.reshape(height, samples, width, samples).min(axis=(1, 3))

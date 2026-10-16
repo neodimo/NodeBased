@@ -1251,6 +1251,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if samples > 1 and scene3d.is_empty_scene(scene):
+        samples = 1   # nothing to antialias: the frame is the flat background
     if scene3d.has_shadow_catchers(scene):
         # Shadow catcher (step R3): the picture with the catchers as holdouts, the shadow layer under it (nodebased/shadowcatch.py)
         from . import shadowcatch
@@ -1364,7 +1366,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 scene3d._visible_background(scene, iw, ih, result, depth, view_eye, view_matrix, focal,
                                             iw / ih, float(np.clip(background[3], 0, 1)))
                 if ss > 1:
-                    result = result.reshape(int(height), ss, int(width), ss, 4).mean(axis=(1, 3))
+                    result = scene3d.box_resolve(result, ss)
                 result.flags.writeable = False
                 return result
             if output == 'rgba':
@@ -1505,7 +1507,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                                         view_matrix, focal, (width*samples)/(height*samples),
                                         float(np.clip(background[3], 0, 1)))
     if samples > 1:
-        result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
+        result = scene3d.box_resolve(result, samples)
     result.flags.writeable = False
     return result
 
