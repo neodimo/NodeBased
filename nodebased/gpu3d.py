@@ -7,13 +7,17 @@ rounded area heuristic rather than hardware derivative-based LOD.
 """
 from __future__ import annotations
 
+import logging
 import math
+import os
 import threading
 from dataclasses import replace
 
 import numpy as np
 
 from . import scene3d, raytrace
+
+log = logging.getLogger(__name__)
 
 
 class Unsupported(Exception):
@@ -22,6 +26,7 @@ class Unsupported(Exception):
 
 _lock = threading.RLock()
 _states = {}
+_adapter_logged = []
 _errors = {}
 
 # Calibration (2026-09-19). The first budgets were derived from whole-render times, which include large
@@ -112,6 +117,102 @@ def _band_plan(state, work, path, height):
     return [(i * height // bands, (i + 1) * height // bands) for i in range(bands)]
 
 
+ADAPTER_ENV = 'NODEBASED_ADAPTER'
+ADAPTER_SETTING = 'interface/graphics_adapter'
+_KIND_RANK = {'discretegpu': 0, 'integratedgpu': 1, 'virtualgpu': 2, 'cpu': 3}
+_KIND_WORDS = {'discretegpu': 'discrete', 'integratedgpu': 'integrated', 'virtualgpu': 'virtual', 'cpu': 'software'}
+_adapter_cache = {}
+
+
+def _kind_of(info):
+    return str(info.get('adapter_type', '')).lower().replace('_', '').replace(' ', '')
+
+
+def _name_of(info):
+    return str(info.get('device') or info.get('description') or 'unnamed adapter')
+
+
+def _capacity(adapter):
+    limits = getattr(adapter, 'limits', None) or {}
+    return (limits.get('max-buffer-size', 0) or 0, limits.get('max-storage-buffer-binding-size', 0) or 0)
+
+
+def rank_adapters(adapters):
+    """Best first: discrete GPUs, then integrated, then virtual, then software; a tie goes to the adapter
+    with the larger buffer limits (a stand-in for memory, which wgpu does not report)."""
+    return sorted(adapters, key=lambda a: (_KIND_RANK.get(_kind_of(a.info), 4),
+                                           str(a.info.get('backend_type', '')).lower() == 'opengl',
+                                           tuple(-v for v in _capacity(a))))
+
+
+def adapter_preference():
+    """What the artist asked for: NODEBASED_ADAPTER (a part of an adapter's name), else the Graphics adapter
+    setting; '' means Automatic."""
+    value = os.environ.get(ADAPTER_ENV, '').strip()
+    if value:
+        return value
+    try:
+        from PySide6.QtCore import QSettings
+        stored = QSettings('NodeBased', 'NodeBased').value(ADAPTER_SETTING, '')
+        return str(stored or '').strip()
+    except Exception:
+        return ''
+
+
+def select_adapter(adapters, preference=''):
+    """The adapter the app runs on: the one the preference names (case-insensitive part of its name), else the
+    best ranked. None when there is nothing to choose from."""
+    ranked = rank_adapters(adapters)
+    wanted = (preference or '').strip().lower()
+    if wanted and wanted != 'automatic':
+        for adapter in ranked:
+            if wanted in _name_of(adapter.info).lower():
+                return adapter
+        log.warning('graphics adapter %r matches no adapter on this machine; choosing automatically', preference)
+    return ranked[0] if ranked else None
+
+
+def _summary(adapter):
+    info = adapter.info
+    return dict(name=_name_of(info), type=_KIND_WORDS.get(_kind_of(info), str(info.get('adapter_type', 'unknown'))),
+                backend=str(info.get('backend_type', 'unknown')), driver=str(info.get('description') or 'unknown'))
+
+
+def enumerate_adapters():
+    """Every adapter wgpu can see, best first, as plain dicts (name, type, backend, driver); cached. [] without wgpu."""
+    if 'list' not in _adapter_cache:
+        try:
+            import wgpu
+            _adapter_cache['list'] = [_summary(a) for a in rank_adapters(wgpu.gpu.enumerate_adapters_sync())]
+        except Exception:
+            _adapter_cache['list'] = []
+    return _adapter_cache['list']
+
+
+def adapter_warning(chosen_name, adapters=None):
+    """The top bar's warning when `chosen_name` is an integrated or software adapter while a discrete one exists,
+    else None."""
+    adapters = enumerate_adapters() if adapters is None else adapters
+    chosen = next((a for a in adapters if a['name'] == chosen_name), None)
+    if chosen is None or chosen['type'] not in ('integrated', 'software'):
+        return None
+    if not any(a['type'] == 'discrete' for a in adapters):
+        return None
+    return f"{chosen_name}: a faster adapter is available, Settings \u2192 Graphics adapter"
+
+
+ADAPTER_WARNING_HELP = ('A faster graphics card is installed but this application is not using it. Pick it in Settings '
+                        '\u2192 Graphics adapter (takes effect after a restart). If the card is not listed, Windows is hiding '
+                        'it from the application: open Settings \u2192 System \u2192 Display \u2192 Graphics, add NodeBased '
+                        'and set it to High performance.')
+
+
+def _log_adapters(adapters, chosen):
+    lines = [f"  {'*' if a['name'] == chosen else ' '} {a['name']} ({a['type']}, {a['backend']}, driver {a['driver']})"
+             for a in adapters]
+    log.info('graphics adapters, chosen marked:\n%s', '\n'.join(lines))
+
+
 def _state(choice=None):
     choice = choice or 'default'
     if choice not in ('default', 'discrete', 'integrated', 'cpu'):
@@ -124,7 +225,12 @@ def _state(choice=None):
         try:
             import wgpu
             if choice == 'default':
-                adapter = wgpu.gpu.request_adapter_sync(power_preference='high-performance')
+                adapter = select_adapter(wgpu.gpu.enumerate_adapters_sync(), adapter_preference())
+                if adapter is None:
+                    adapter = wgpu.gpu.request_adapter_sync(power_preference='high-performance')
+                if not _adapter_logged:
+                    _adapter_logged.append(True)
+                    _log_adapters(enumerate_adapters(), _name_of(adapter.info))
             else:
                 target = {'discrete': 'discretegpu', 'integrated': 'integratedgpu', 'cpu': 'cpu'}[choice]
                 adapter = next((a for a in wgpu.gpu.enumerate_adapters_sync()
@@ -164,6 +270,19 @@ def available():
         return True
     except Exception:
         return False
+
+
+def chosen_adapter_name():
+    """The adapter the app runs on ('' before the first device exists or when there is none)."""
+    state = _states.get('default')
+    if state:
+        return _name_of(state['info'])
+    adapters = enumerate_adapters()      # no device yet: name the adapter the first device will use
+    if not adapters:
+        return ''
+    wanted = adapter_preference().lower()
+    match = next((a for a in adapters if wanted and wanted != 'automatic' and wanted in a['name'].lower()), None)
+    return (match or adapters[0])['name']
 
 
 def describe():

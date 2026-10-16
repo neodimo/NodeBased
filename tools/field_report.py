@@ -190,6 +190,12 @@ try:
                                 "limits": limits})
 except Exception as exc:
     out["error"] = type(exc).__name__ + ": " + str(exc)
+try:
+    from nodebased import gpu3d
+    out["chosen"] = gpu3d.chosen_adapter_name()
+    out["warning"] = gpu3d.adapter_warning(out["chosen"])
+except Exception as exc:
+    out["chosen"] = None
 print("@@JSON@@" + json.dumps(out))
 """
 
@@ -660,7 +666,9 @@ def write_markdown(report, path, observations):
     steps = report["steps"]
     ok, bad, skipped = summarize(steps)
     m = report["machine"]
-    gpus = ", ".join(a["name"] or "?" for a in (m.get("wgpu") or {}).get("adapters", [])) or "none found"
+    chosen = (m.get("wgpu") or {}).get("chosen")
+    gpus = ", ".join((a["name"] or "?") + (" (chosen by the app)" if chosen and a["name"] == chosen else "")
+                     for a in (m.get("wgpu") or {}).get("adapters", [])) or "none found"
     lines = [f"# NodeBased field report: {report['label']}", "",
              f"{report['finished'] or report['started']} | NodeBased {m.get('nodebased_version')} ({(m.get('git') or {}).get('hash')}) | "
              f"{m.get('os')} | {'quick' if report['quick'] else 'full'}{', big' if report['big'] else ''} run, "
@@ -680,6 +688,8 @@ def write_markdown(report, path, observations):
         lines.append(f"GPU tests: {d['tests_run']} test cases in {d.get('batches')} batches"
                      + (f"; failing: {', '.join(d['failing_tests'][:12]) or 'see the log'}" if d.get("failed_batches") else "; none failed") + ".")
     lines.append(f"Adapters seen by wgpu: {gpus}.")
+    if (m.get("wgpu") or {}).get("warning"):
+        lines.append(f"**Slow adapter: {m['wgpu']['warning']}.**")
     torch = m.get("torch") or {}
     if torch.get("torch"):
         lines.append(f"torch {torch['torch']}, CUDA {torch.get('cuda')}: " + (", ".join(

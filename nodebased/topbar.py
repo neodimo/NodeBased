@@ -251,15 +251,20 @@ class GpuPill(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._compact = False
         self._tooltip = ""
+        self.warning = False
         self.set_state("", None, gpu=False)
 
-    def set_state(self, adapter, frame_ms, gpu=True):
+    def set_state(self, adapter, frame_ms, gpu=True, warning=None, help_text=""):
         """`adapter` is the display adapter name ('' when unknown), `frame_ms` the last frame's
-        time in milliseconds or None before the first frame."""
-        self._adapter = adapter or ("GPU" if gpu else "CPU")
+        time in milliseconds or None before the first frame. `warning` replaces the name with a
+        message (amber) when a faster adapter exists; `help_text` goes into the tooltip."""
+        self._adapter = warning or adapter or ("GPU" if gpu else "CPU")
         self._frame_ms = frame_ms
-        self.light.set_color(TOKENS["acc"] if gpu else TOKENS["tx2"])
-        self._tooltip = (f"{self._adapter}: display adapter and the last frame time" if gpu
+        self.warning = bool(warning)
+        self.light.set_color(TOKENS["warn"] if warning else TOKENS["acc"] if gpu else TOKENS["tx2"])
+        self.label.setStyleSheet(f"color: {TOKENS['warn']};" if warning else "")
+        self._tooltip = (f"{warning}\n{help_text}" if warning else
+                         f"{self._adapter}: display adapter and the last frame time" if gpu
                          else "No GPU display adapter in use; the CPU is drawing the viewer")
         self.setToolTip(self._tooltip)
         self._refresh()
@@ -354,8 +359,8 @@ class TopBar(QWidget):
         self.saved_dot.set_color(TOKENS["acc"] if saved else TOKENS["tx2"])
         self.saved_dot.setToolTip("Saved" if saved else "Unsaved changes")
 
-    def set_gpu(self, adapter, frame_ms, gpu=True):
-        self.gpu_pill.set_state(adapter, frame_ms, gpu)
+    def set_gpu(self, adapter, frame_ms, gpu=True, warning=None, help_text=""):
+        self.gpu_pill.set_state(adapter, frame_ms, gpu, warning, help_text)
         self._fit()      # a longer adapter name or time may no longer fit
         self._announce_floor()
 

@@ -40,6 +40,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
 from . import graphlook
+from . import gpu3d
 from . import lensview
 from .graphcorner import GraphCorner
 from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow, hide_spin_buttons,
@@ -538,6 +539,7 @@ class Preferences:
     VIEWER_AUTO_3D = "interface/viewer_auto_3d"
     WIRE_MODE = "interface/wire_mode"
     LOCK_PANELS = "interface/lock_panels"
+    GRAPHICS_ADAPTER = gpu3d.ADAPTER_SETTING
     WORKSPACE = "workspace"
 
     def __init__(self):
@@ -580,6 +582,17 @@ class Preferences:
 
     def set_thumbnails(self, enabled):
         self._store.setValue(self.THUMBNAILS, bool(enabled))
+        self._store.sync()
+
+    def graphics_adapter(self):
+        """The adapter name the artist picked in Settings; '' is Automatic."""
+        return str(self._store.value(self.GRAPHICS_ADAPTER, "") or "")
+
+    def set_graphics_adapter(self, name):
+        if name:
+            self._store.setValue(self.GRAPHICS_ADAPTER, str(name))
+        else:
+            self._store.remove(self.GRAPHICS_ADAPTER)
         self._store.sync()
 
     def display_cache_float32(self):
@@ -6931,7 +6944,8 @@ class ProjectSettingsDialog(QDialog):
     CUSTOM_ACCENT = "Custom…"
 
     def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
-                 max_panels=5, cache_float32=False, auto_3d=False):
+                 max_panels=5, cache_float32=False, auto_3d=False,
+                 adapters=(), graphics_adapter=""):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -6974,6 +6988,23 @@ class ProjectSettingsDialog(QDialog):
         self.auto_3d.setToolTip("The 2D and 3D views share one panel (Tab over it switches). Off: viewing "
                                 "a 3D node, or pressing 1 on it, leaves the panel on the view you chose.")
         interface.addRow("Viewer", self.auto_3d)
+        self.graphics_adapter = QComboBox()
+        self.graphics_adapter.setObjectName("graphics-adapter")
+        self.graphics_adapter.addItem("Automatic (fastest available)", "")
+        seen = set()
+        for entry in adapters:      # the same card can appear once per backend: list it once
+            if entry["name"] in seen:
+                continue
+            seen.add(entry["name"])
+            self.graphics_adapter.addItem(f"{entry['name']} ({entry['type']})", entry["name"])
+        index = self.graphics_adapter.findData(graphics_adapter)
+        self.graphics_adapter.setCurrentIndex(max(0, index))
+        self.graphics_adapter.setToolTip("Which graphics card renders the 3D views. Takes effect after you restart "
+                                         "NodeBased. The NODEBASED_ADAPTER environment variable (part of a name) overrides this.")
+        self.graphics_adapter_note = QLabel("Takes effect after restarting NodeBased")
+        self.graphics_adapter_note.setObjectName("graphics-adapter-note")
+        interface.addRow("Graphics adapter", self.graphics_adapter)
+        interface.addRow("", self.graphics_adapter_note)
         self.max_panels = QSpinBox()
         self.max_panels.setRange(1, 20)
         self.max_panels.setValue(int(max_panels))
@@ -9530,7 +9561,9 @@ class Window(QMainWindow):
                                        theme=self.theme_name, thumbnails=self.show_thumbnails,
                                        accent=self.accent_color, max_panels=self.panel_cap,
                                        cache_float32=self.preferences.display_cache_float32(),
-                                       auto_3d=self.preferences.viewer_auto_3d())
+                                       auto_3d=self.preferences.viewer_auto_3d(),
+                                       adapters=gpu3d.enumerate_adapters(),
+                                       graphics_adapter=self.preferences.graphics_adapter())
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -9544,6 +9577,10 @@ class Window(QMainWindow):
             self.set_show_thumbnails(dialog.thumbnails.isChecked())
             self.set_panel_cap(dialog.chosen_max_panels())
             self.preferences.set_viewer_auto_3d(dialog.auto_3d.isChecked())
+            chosen_adapter = dialog.graphics_adapter.currentData() or ""
+            if chosen_adapter != self.preferences.graphics_adapter():
+                self.preferences.set_graphics_adapter(chosen_adapter)
+                self.statusBar().showMessage("Graphics adapter changed: restart NodeBased to use it", 8000)
             new_cache_float32 = dialog.cache_float32.isChecked()
             if new_cache_float32 != self.preferences.display_cache_float32():
                 self.preferences.set_display_cache_float32(new_cache_float32)
@@ -13098,8 +13135,10 @@ class Window(QMainWindow):
             timing = re.search(r"(\d+) ms", status)
             if timing:
                 self.last_frame_ms = int(timing.group(1))
-                self.topbar.set_gpu(gpudisplay.adapter_name(), self.last_frame_ms,
-                                    gpu=gpudisplay.status() == "GPU")
+                name = gpu3d.chosen_adapter_name() or gpudisplay.adapter_name()
+                warning = gpu3d.adapter_warning(name)
+                self.topbar.set_gpu(name, self.last_frame_ms, gpu=gpudisplay.status() == "GPU",
+                                    warning=warning, help_text=gpu3d.ADAPTER_WARNING_HELP if warning else "")
             self.update_status_summary(request.frame)
         current = self.dispatcher.document["time"]["current"]
         # Outside playback the rule stays strict: a result is displayable only if it is still the
