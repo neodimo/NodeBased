@@ -123,6 +123,9 @@ class ViewerModeTests(unittest.TestCase):
         # 2D: zoom and pan, the ROI box and a compare mode.
         viewer.scale(2.0, 2.0)
         viewer.centerOn(300, 200)
+        # scale()/centerOn() bypass the input handlers; a real zoom or pan clears auto-fit.
+        # Otherwise a resize while switching pages legitimately fits the image again.
+        viewer.auto_fit = False
         w.roi_button.setChecked(True)
         w.command({"op": "viewer_input", "slot": 2, "id": "plate", "activate": False})
         w.command({"op": "viewer_compare", "b": 2, "mode": "wipe"})
@@ -137,6 +140,7 @@ class ViewerModeTests(unittest.TestCase):
         viewport.selected_key = "grade"
         camera = (viewport.azimuth, viewport.elevation, viewport.distance)
         w.set_viewer_mode("2d")
+        APP.processEvents()  # include the pending show/resize events from the page switch
         self.assertAlmostEqual(viewer.transform().m11(), zoom)
         now = viewer.mapToScene(viewer.viewport().rect().center())
         self.assertAlmostEqual(now.x(), center.x(), delta=1.0)

@@ -1,6 +1,35 @@
+## 2026-10-16 — 0.38.0 release suite red: viewer-state test repaired (Gonzo)
+
+- **What was done:** The full suite on release commit `ee93786c` finished with one failure in `test_each_view_keeps_its_state_over_a_2d_3d_2d_round_trip`; no tag was pushed. The test called `scale()` and `centerOn()` directly while leaving the viewer's auto-fit flag on. A later show/resize event could legitimately refit the image. Updated the test to mark its synthetic zoom/pan as manual and process queued page-switch events. The viewer-mode module passes (22 tests); the full release suite has not yet been rerun.
+- **Artifacts:** `tests/test_viewer_mode.py` (tracked test fix); `scratch/nb-lanes/run/release-v0.38.0-ee93786c.log` (deliberate local release log); `scratch/nb-lanes/auto/state.json` (local release gate). No 0.38.0 tag or release is published.
+- **State:** Partial. Focused module green; exact-HEAD full-suite and tag remain blocked until the release gate is restarted and green.
+- **Next owner + concrete artifact:** Gonzo: commit/push the test correction, restart the 0.38.0 release gate using `scratch/nb-lanes/auto/tick.py`, then inspect the new exact-HEAD suite log before tagging. Resume parked merges only after the tag.
+- **Failure mode:** A test that manipulates Qt's transform directly must also model the input handler's `auto_fit = False`; otherwise a queued resize makes its zoom assertion order-dependent.
+## 2026-10-16 — progressive rendering approved and queued (Gonzo)
+
+- **What was done:** DiMo approved Rendering 15 as the next rendering goal at 9:31 AM. Wrote two bounded briefs: H1 measures and builds a denoised 1080p first look targeting one second; H2 keeps the image refining and validates interaction, final-image agreement and adapter performance. This is an approved plan, not implementation evidence.
+- **Artifacts:** `scratch/nb-lanes/auto/briefs/L4-progress-a.md` and `L4-progress-b.md` (local automation briefs); `scratch/nb-lanes/auto/state.json` (local queued lane state); `status/nodebased.json` (workspace status board). No NodeBased code or benchmark result was produced.
+- **State:** Blocked on the 0.38.0 release tag and current merge round before H1 starts. The one-second target remains unverified. H2 is pending H1's integration.
+- **Next owner + concrete artifact:** Gonzo: after the tag and merge round, start H1 from `scratch/nb-lanes/auto/briefs/L4-progress-a.md`; record measured first-look latency before making a speed claim.
+
+## 2026-10-16 — Spike A integration prepared for field bundle v2 (Gonzo)
+
+- **What was done:** Merged `spike-a-fewstep-1015` into a disposable integration tree based on main `2bed9899`, resolving two overlaps with the field-bundle dry-run fix. The requested knowledge, step-preview and field-report tests passed: 28 tests. The merge commit is `1fd8ee9b`.
+- **Artifacts:** `scratch/nb-lanes/run/spike-a-integration-1016` (deliberate local scratch, unpushed); source branch `spike-a-fewstep-1015` at `d1117bb5`. The bundle output `scratch/field-bundle-1015` has not been rebuilt.
+- **State:** Partial. The 0.38.0 release suite is still running, so main is deliberately unchanged. Integration tests pass; tests on the eventual post-tag main and bundle verification are outstanding.
+- **Next owner + concrete artifact:** Gonzo: after the release tag, merge `spike-a-integration-1016` into main, rerun `python -m unittest tests.test_knowledge tests.test_steppreview tests.test_field_report`, push, then run `python tools/make_field_bundle.py --everything --reuse --out /var/home/omid/.openclaw/workspace/scratch/field-bundle-1015` and its `--verify` mode. An 8:39 AM automation reminder is armed in `scratch/nb-lanes/auto/state.json`.
+- **Failure mode:** The spike branch and main both edited the bundle weight path. The merge kept dry runs usable on CI without local weights and retained the Lightning-specific real-run guidance. Do not merge to main while the release suite's tag still depends on its unchanged main snapshot.
+
+## 2026-10-16 — stalled stacked suite, 2D region repair and release restart (Gonzo)
+
+- **What was done:** The 2D region branch changed `supports_tiled` to accept unsupported ancestors. Evidence: the stacked verbose probe logged 31 failures, predominantly assertions that whole-image nodes must take the full-frame fallback; it then spent over 90 minutes in the 8K memory gate at about 9.5 GB RSS with CPU busy. Captured the NumPy stack with gdb, stopped that probe, restored the unsupported-node full-frame contract on the 2D branch, and kept a named `fallback_nodes` result. Focused branch tests: 131 passed; repaired stacked tree: 266 passed. Main conformance on `2bed9899` succeeded on GitHub; resumed the integrator and started the 0.38.0 release suite from `ee93786c` at 4:10 AM.
+- **Artifacts:** 2D branch `openclaw/nb-2d-parity-b` commit `d2bc2b7b` (pushed as `origin/gonzo/roi-merge-repair-1016`; the same-named remote lane branch is stale and rejected a fast-forward push); probe tree `scratch/nb-lanes/run/hang-probe` at `0a2229e8` (deliberate local scratch); verbose log `scratch/nb-lanes/run/hang-probe-suite.log` (local scratch); release state `scratch/nb-lanes/auto/state.json` (local automation state). No project code has reached main yet.
+- **State:** Partial. Focused regressions pass; the full stacked suite and the 8K gate have not been rerun after repair. The 0.38.0 release suite is running on main, so the 2D branch merge waits for its tag.
+- **Next owner + concrete artifact:** Gonzo: check the release via `python3 scratch/nb-lanes/auto/tick.py tick`; after its tag, run the repaired stacked suite from `scratch/nb-lanes/run/hang-probe` with `tools/run_tests.py` and merge the validated lanes. Resolve any remaining failures by named test.
+- **Failure mode:** A changed `supports_tiled` contract made every graph appear tile-capable even when it contained unsupported whole-image nodes; focused new tests missed existing full-frame fallback expectations. The probe's 8K gate used enough CPU/memory to look silent; check process CPU/RSS and a stack before classifying a log stall as a deadlock.
+
 ## 2026-10-15 — continuous mode merge: Lane 3 (Research, GPT-6 Astra) step U1 of 1: the radar re-ranked for speed, on two cards: the 12 GB workstation and a 48 GB RTX A6000, Lane 4 (Rendering, Claude Sonnet 5.5) step G2 of 2: the live 3D viewport and the GPU renderers see through the camera's lens (integrator tick)
 
 - **What was done:** `main` `804a94f8` -> `81f42d77` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `81f42d77`: Ran 5415 tests in 20060.719 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
-

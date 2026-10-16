@@ -6188,3 +6188,15 @@ The RTX 3080 Ti eGPU still reports NVRM watchdog lock messages, so no NVIDIA res
 ## 2026-10-13 — Lane 8 S3: bounded Roto region API (PARTIAL)
 
 Commit `109397f` adds `roto.rasterise(..., region=..., stats=...)`, which returns a byte-identical crop and skips shapes outside a conservative bounds check. `tests.test_roto` passes (70 tests). ROTO_TRACKING docs and the bundled copy now describe actual behavior: TileExecutor still slices a full Roto matte; tracking analyses still use full-frame inputs. No benchmark, direct Roto tile kernel, tracker ROI test or proxy-indicator check is complete. Lane 8 S3 remains open; Needs Gonzo to continue from `nodebased/tileexec.py` and validate measured 40-shape timings.
+
+## 2026-10-16 4:10 AM — overnight merge gate
+2D region branch repaired at d2bc2b7b after the stacked suite exposed the unsupported-node full-frame contract regression. Focused repaired-stack tests passed (266). Full stacked validation remains open. Main conformance is green at 2bed9899; 0.38.0 release suite started at ee93786c. Performance branches and overnight lane merges remain pending until the tag. See TASKLOG.md for artifacts and failure mode.
+
+## 2026-10-16 7:40 AM — bundle v2 readiness
+Spike A integration is prepared at local scratch commit 1fd8ee9b; 28 requested tests pass. Release 0.38.0 still in suite, so main and the stick bundle are unchanged. After tag: merge, test, push, rebuild, verify. TASKLOG.md has paths and conflict resolution.
+## Rendering 15 queued — 2026-10-16
+
+DiMo approved the progressive-render direction at 9:31 AM: show a usable, denoised 1080p first look within one second, then refine continuously. H1 and H2 are specified in `scratch/nb-lanes/auto/briefs/L4-progress-a.md` and `L4-progress-b.md`. No implementation or one-second measurement exists yet. The lane is parked until the 0.38.0 tag and current merge round clear main; Gonzo owns its start and measured report.
+## 2026-10-16 — 0.38.0 release gate red, viewer test corrected
+
+The exact release commit `ee93786c` ran 5,430 tests and failed one viewer-mode zoom assertion. No tag was pushed. The test directly scaled and centered the view while leaving `auto_fit` true, so a later Qt page-switch resize could refit it; the isolated test passed. The test now sets `auto_fit = False` to model manual input and drains queued page-switch events before checking state. The 22-test viewer-mode module passes. Full-suite validation of a new release commit is outstanding. Main merges, field bundle v2 and progressive-render work remain parked behind the tag. See `TASKLOG.md` for the log path and handoff.
