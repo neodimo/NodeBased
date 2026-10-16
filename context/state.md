@@ -1,5 +1,36 @@
 ## 2026-10-15 — Lane 3 U1: speed-first research radar on both Ampere tiers
 
+## Continuous mode merge: Lane 3 (Research, GPT-6 Astra), Lane 4 (Rendering, Claude Sonnet 5.5) (5:57 PM on 2026-10-15 PDT)
+
+`main` moved `804a94f8` -> `81f42d77` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 64 tests in 38.825 s, OK. Full suite on
+the stacked tip `81f42d77` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1015-1217.log`, started 12:17 PM): **Ran 5415 tests in 20060.719 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 3 (Research, GPT-6 Astra), step U1 of 1: the radar re-ranked for speed, on two cards: the 12 GB workstation and a 48 GB RTX A6000.** Commits:
+  - `9ee59c7c` docs: record U1 evidence checks and worktree handoff
+  - `0e1a2efd` docs: replace research decision sheet with speed-first priorities
+  - `3e212eaf` docs: propose speed-gated SDXL preview spike for both cards
+  - `f69f206d` docs: define progressive first-look contract and recover P4 evidence
+  - `62cd7ea6` docs: compare both Ampere memory tiers with qualified residency gates
+  - `8640972b` docs: survey few-step images and streaming video latency
+  Diff: 5 files changed, 400 insertions(+), 38 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step G2 of 2: the live 3D viewport and the GPU renderers see through the camera's lens.** Commits:
+  - `46f2fae1` Viewport lens: frame-time benchmark on three adapters, docs and bundled copy, demo shot capture of the viewport over the distorted plate
+  - `ee369485` Render3D through_lens loads into old documents (additive upgrade), shorter Lens strip label, tighter whole-frame agreement and a literal GPU-raster against CPU-raster test
+  - `1bacec25` Render3D through_lens setting: the raster and path tracer backends render the camera's lens (overscan picture bent by Redistort's resample), checked against render + Redistort on three adapters
+  - `2e49c638` 3D viewport looks through the camera's lens: overscan picture bent by Redistort on the card, a strip switch and L key, overlays through the lens
+  Diff: 17 files changed, 1248 insertions(+), 52 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done:** Completed all five documentation parts in separate commits: real-time/few-step image and streaming-video survey; consolidated T1–T3 two-card eligibility table; progressive presentation contract; proposed dual-card SDXL preview spike; and replacement top decision sheet. Order is few-step SDXL with displayed steps, NeuFlow v2, then material-once rendering. Published latency, throughput, hardware and memory remain separate; no measured local gain is claimed. Final source audit identifies original CausVid timings as H100 at 640 × 352. Evidence: documentation tests pass before each docs commit and in the final check (7 tests); bundled radar bytes match; local link targets exist; all 50 speed-section external source links resolve. URL resolution proves reachability, not scientific reproducibility.
 - **Artifacts:** `docs/RESEARCH_RADAR.md`, byte-identical `nodebased/data/docs/RESEARCH_RADAR.md`, and `briefs/proposed/U1-few-step-sdxl-preview.md` are committed on `openclaw/nb-research`, not pushed. Five part commits: `8640972`, `62cd7ea`, `f69f206`, `3e212ea`, `0e1a2ef`; this final handoff also commits source-attribution refinement. Existing committed `benchmarks/hot_pour/radeon-stop-P4-2026-10-13.json` was read, not modified. Small test/link logs and `report-L3.md` are deliberate integrator scratch under the lane run directory; no weights, generated media or large cache was created.
 - **State:** DONE as research/documentation. No GPU execution, provider implementation, checkpoint adoption, runtime improvement or visual validation. First-look/peak/residency unknowns are explicit. Search provider failed, alternate search and primary fetches worked; this is a scoped sweep, not exhaustive coverage. Exact checkpoint/licence gaps remain listed. Both proposed hardware experiments are unexecuted.
