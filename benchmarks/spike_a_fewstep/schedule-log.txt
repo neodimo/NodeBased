@@ -1,0 +1,10 @@
+base scheduler: EulerDiscreteScheduler prediction_type epsilon timestep_spacing leading beta scaled_linear
+leading 30 [958.0, 925.0, 892.0, 859.0, 826.0, 793.0] sigmas [11.477, 9.544, 8.004, 6.768, 5.768, 4.951]
+leading 4 [751.0, 501.0, 251.0, 1.0] sigmas [4.117, 1.624, 0.698, 0.041, 0.0]
+trailing 30 [999.0, 966.0, 932.0, 899.0, 866.0, 832.0] sigmas [14.615, 12.018, 9.917, 8.303, 7.009, 5.935]
+trailing 4 [999.0, 749.0, 499.0, 249.0] sigmas [14.615, 4.082, 1.613, 0.693, 0.0]
+img2img strength 0.5 -> steps run 2 timesteps [499.0, 249.0] start sigma 1.613
+img2img strength 0.75 -> steps run 3 timesteps [749.0, 499.0, 249.0] start sigma 4.082
+img2img strength 0.25 -> steps run 1 timesteps [249.0] start sigma 0.693
+img2img strength 1.0 -> steps run 4 timesteps [999.0, 749.0, 499.0, 249.0] start sigma 14.615
+baseline 1.2 strength 0.5 -> steps 15 first timestep 499.0

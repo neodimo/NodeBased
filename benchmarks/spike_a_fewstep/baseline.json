@@ -1,0 +1,275 @@
+{
+ "label": "baseline",
+ "model_run": {
+  "load_seconds": 5.19,
+  "generate_seconds": 583.52,
+  "peak_vram_allocated_mib": 7899,
+  "peak_vram_reserved_mib": 8346,
+  "cpu_offload": true,
+  "working_size": [
+   1024,
+   576
+  ],
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "torch": "2.14.1+cu126",
+  "diffusers": "0.41.0",
+  "frames": 24,
+  "denoise_strength": 0.5,
+  "filled_fraction_per_frame": [
+   0.0055,
+   0.0054,
+   0.0053,
+   0.0051,
+   0.0053,
+   0.0059,
+   0.0054,
+   0.0058,
+   0.0064,
+   0.0054,
+   0.0057,
+   0.0066,
+   0.0059,
+   0.005,
+   0.008,
+   0.0065,
+   0.0057,
+   0.0068,
+   0.0058,
+   0.0058,
+   0.0062,
+   0.0064,
+   0.0063
+  ]
+ },
+ "temporal": {
+  "compared_fraction": 0.9895,
+  "mean": 2.644,
+  "p95": 7.6702,
+  "pairs": [
+   {
+    "frames": [
+     1,
+     2
+    ],
+    "mean": 5.1818,
+    "p95": 14.4005,
+    "pixels": 128344
+   },
+   {
+    "frames": [
+     2,
+     3
+    ],
+    "mean": 2.8339,
+    "p95": 7.6145,
+    "pixels": 128383
+   },
+   {
+    "frames": [
+     3,
+     4
+    ],
+    "mean": 2.591,
+    "p95": 6.8515,
+    "pixels": 128281
+   },
+   {
+    "frames": [
+     4,
+     5
+    ],
+    "mean": 2.5412,
+    "p95": 7.6546,
+    "pixels": 128362
+   },
+   {
+    "frames": [
+     5,
+     6
+    ],
+    "mean": 2.8479,
+    "p95": 8.0177,
+    "pixels": 128369
+   },
+   {
+    "frames": [
+     6,
+     7
+    ],
+    "mean": 2.1836,
+    "p95": 6.0187,
+    "pixels": 128234
+   },
+   {
+    "frames": [
+     7,
+     8
+    ],
+    "mean": 2.5998,
+    "p95": 7.6615,
+    "pixels": 128379
+   },
+   {
+    "frames": [
+     8,
+     9
+    ],
+    "mean": 2.615,
+    "p95": 7.1916,
+    "pixels": 128262
+   },
+   {
+    "frames": [
+     9,
+     10
+    ],
+    "mean": 2.5256,
+    "p95": 6.8308,
+    "pixels": 128267
+   },
+   {
+    "frames": [
+     10,
+     11
+    ],
+    "mean": 2.0194,
+    "p95": 5.5754,
+    "pixels": 128297
+   },
+   {
+    "frames": [
+     11,
+     12
+    ],
+    "mean": 2.4873,
+    "p95": 7.0991,
+    "pixels": 128250
+   },
+   {
+    "frames": [
+     12,
+     13
+    ],
+    "mean": 2.4662,
+    "p95": 7.6446,
+    "pixels": 128060
+   },
+   {
+    "frames": [
+     13,
+     14
+    ],
+    "mean": 2.6149,
+    "p95": 7.1192,
+    "pixels": 128264
+   },
+   {
+    "frames": [
+     14,
+     15
+    ],
+    "mean": 2.648,
+    "p95": 7.6323,
+    "pixels": 128375
+   },
+   {
+    "frames": [
+     15,
+     16
+    ],
+    "mean": 2.5139,
+    "p95": 6.9879,
+    "pixels": 127871
+   },
+   {
+    "frames": [
+     16,
+     17
+    ],
+    "mean": 2.3731,
+    "p95": 6.8273,
+    "pixels": 128018
+   },
+   {
+    "frames": [
+     17,
+     18
+    ],
+    "mean": 2.8381,
+    "p95": 7.607,
+    "pixels": 128254
+   },
+   {
+    "frames": [
+     18,
+     19
+    ],
+    "mean": 2.349,
+    "p95": 6.7701,
+    "pixels": 128103
+   },
+   {
+    "frames": [
+     19,
+     20
+    ],
+    "mean": 2.5306,
+    "p95": 8.0288,
+    "pixels": 128197
+   },
+   {
+    "frames": [
+     20,
+     21
+    ],
+    "mean": 2.3932,
+    "p95": 7.1596,
+    "pixels": 128351
+   },
+   {
+    "frames": [
+     21,
+     22
+    ],
+    "mean": 2.6953,
+    "p95": 7.6054,
+    "pixels": 128141
+   },
+   {
+    "frames": [
+     22,
+     23
+    ],
+    "mean": 2.2474,
+    "p95": 6.3944,
+    "pixels": 128149
+   },
+   {
+    "frames": [
+     23,
+     24
+    ],
+    "mean": 2.7121,
+    "p95": 8.3339,
+    "pixels": 128248
+   }
+  ],
+  "pairs_measured": 23,
+  "pass": true,
+  "threshold_mean": 4.0,
+  "threshold_p95": 12.0,
+  "unit": "8-bit display steps (mean absolute RGB difference per pixel)"
+ },
+ "checks": {
+  "camera": "not conditioned",
+  "depth": "not conditioned",
+  "lighting": "FAIL",
+  "motion": "not conditioned",
+  "normals": "not conditioned",
+  "objects": "FAIL"
+ },
+ "verdict": "FAIL",
+ "seconds_per_frame": 24.313,
+ "report": "ca01c65e18ff05d8dc2a923db4e2698447f4e96bf627afd6d3f31b8e05bd91f0",
+ "output_pixel_digest": "8ff9c4ec73e6b6f4d76b23ef2a9d59d7ce56c50bbe23f7e854c5ef3caad8ded5"
+}

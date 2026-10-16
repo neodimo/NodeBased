@@ -1,0 +1,273 @@
+{
+ "label": "base-i",
+ "settings": {
+  "denoise_strength": 1.0
+ },
+ "sampler_settings_recorded": {
+  "denoise_strength": 1.0
+ },
+ "generated_sequence": "dab45743624d5600bc5735d6399319890f76a5b9d8e5ddb36b509b692aaee2d5",
+ "report": "672b6d0bc81f5601085895b90e778e8fa53c53f13aed634c5bf5da1240132fae",
+ "verdict": "FAIL",
+ "checks": {
+  "camera": "not conditioned",
+  "depth": "not conditioned",
+  "lighting": "FAIL",
+  "motion": "not conditioned",
+  "normals": "not conditioned",
+  "objects": "FAIL"
+ },
+ "determinism": {
+  "provider": "sdxl_controlnet",
+  "sampler_settings": {
+   "control_mode": "depth_normals",
+   "controlnet_conditioning_scale": 0.8,
+   "denoise_strength": 1.0,
+   "guidance": 5.0,
+   "steps": 30
+  },
+  "seed": 7,
+  "seed_honoured": true,
+  "version": "1.2"
+ },
+ "temporal": {
+  "compared_fraction": 0.9895,
+  "mean": 15.427,
+  "p95": 48.2689,
+  "pairs": [
+   {
+    "frames": [
+     1,
+     2
+    ],
+    "mean": 20.3996,
+    "p95": 41.1759,
+    "pixels": 128344
+   },
+   {
+    "frames": [
+     2,
+     3
+    ],
+    "mean": 30.0269,
+    "p95": 70.9827,
+    "pixels": 128383
+   },
+   {
+    "frames": [
+     3,
+     4
+    ],
+    "mean": 22.7598,
+    "p95": 57.9344,
+    "pixels": 128281
+   },
+   {
+    "frames": [
+     4,
+     5
+    ],
+    "mean": 15.0576,
+    "p95": 34.1854,
+    "pixels": 128362
+   },
+   {
+    "frames": [
+     5,
+     6
+    ],
+    "mean": 32.3091,
+    "p95": 74.4167,
+    "pixels": 128369
+   },
+   {
+    "frames": [
+     6,
+     7
+    ],
+    "mean": 30.2651,
+    "p95": 73.9185,
+    "pixels": 128234
+   },
+   {
+    "frames": [
+     7,
+     8
+    ],
+    "mean": 10.2345,
+    "p95": 24.8969,
+    "pixels": 128379
+   },
+   {
+    "frames": [
+     8,
+     9
+    ],
+    "mean": 31.5342,
+    "p95": 75.4429,
+    "pixels": 128262
+   },
+   {
+    "frames": [
+     9,
+     10
+    ],
+    "mean": 19.3988,
+    "p95": 48.9393,
+    "pixels": 128267
+   },
+   {
+    "frames": [
+     10,
+     11
+    ],
+    "mean": 8.0035,
+    "p95": 23.1624,
+    "pixels": 128297
+   },
+   {
+    "frames": [
+     11,
+     12
+    ],
+    "mean": 13.6531,
+    "p95": 46.5873,
+    "pixels": 128250
+   },
+   {
+    "frames": [
+     12,
+     13
+    ],
+    "mean": 14.3268,
+    "p95": 47.1141,
+    "pixels": 128060
+   },
+   {
+    "frames": [
+     13,
+     14
+    ],
+    "mean": 13.1437,
+    "p95": 45.2668,
+    "pixels": 128264
+   },
+   {
+    "frames": [
+     14,
+     15
+    ],
+    "mean": 14.6338,
+    "p95": 40.5913,
+    "pixels": 128375
+   },
+   {
+    "frames": [
+     15,
+     16
+    ],
+    "mean": 9.1042,
+    "p95": 25.7937,
+    "pixels": 127871
+   },
+   {
+    "frames": [
+     16,
+     17
+    ],
+    "mean": 9.1523,
+    "p95": 29.1565,
+    "pixels": 128018
+   },
+   {
+    "frames": [
+     17,
+     18
+    ],
+    "mean": 13.0702,
+    "p95": 34.8017,
+    "pixels": 128254
+   },
+   {
+    "frames": [
+     18,
+     19
+    ],
+    "mean": 11.753,
+    "p95": 30.6241,
+    "pixels": 128103
+   },
+   {
+    "frames": [
+     19,
+     20
+    ],
+    "mean": 5.7848,
+    "p95": 17.4206,
+    "pixels": 128197
+   },
+   {
+    "frames": [
+     20,
+     21
+    ],
+    "mean": 4.8163,
+    "p95": 14.0391,
+    "pixels": 128351
+   },
+   {
+    "frames": [
+     21,
+     22
+    ],
+    "mean": 10.1131,
+    "p95": 25.1031,
+    "pixels": 128141
+   },
+   {
+    "frames": [
+     22,
+     23
+    ],
+    "mean": 7.6903,
+    "p95": 20.5522,
+    "pixels": 128149
+   },
+   {
+    "frames": [
+     23,
+     24
+    ],
+    "mean": 7.5202,
+    "p95": 20.2806,
+    "pixels": 128248
+   }
+  ],
+  "pairs_measured": 23,
+  "pass": false,
+  "threshold_mean": 4.0,
+  "threshold_p95": 12.0,
+  "unit": "8-bit display steps (mean absolute RGB difference per pixel)"
+ },
+ "generate_wall_seconds": 349.42,
+ "whole_seconds": 427.17,
+ "model_run": {
+  "load_seconds": 5.26,
+  "generate_seconds": 337.2,
+  "peak_vram_allocated_mib": 7760,
+  "peak_vram_reserved_mib": 8228,
+  "cpu_offload": true,
+  "working_size": [
+   1024,
+   576
+  ],
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "torch": "2.14.1+cu126",
+  "diffusers": "0.41.0",
+  "frames": 24,
+  "denoise_strength": 1.0,
+  "filled_fraction_per_frame": []
+ },
+ "seconds_per_frame": 14.05,
+ "output_pixel_digest": "565a3907901cc0ed8aa719622f47490bf6bc7cec3ac7c7bc9c47efb22ea769bc"
+}

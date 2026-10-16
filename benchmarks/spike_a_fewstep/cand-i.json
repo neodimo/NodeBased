@@ -1,0 +1,281 @@
+{
+ "label": "cand-i",
+ "settings": {
+  "fast_preview": true,
+  "denoise_strength": 1.0
+ },
+ "sampler_settings_recorded": {
+  "denoise_strength": 1.0,
+  "fast_preview": true
+ },
+ "generated_sequence": "7efa8583b04b810d5b3afdb1c06ecc8a2ac5a4a4a44459f5283cb0022a267af5",
+ "report": "0b26b5347b683e35788ecd67de330176be2657e465b02a5c083d18364b2865aa",
+ "verdict": "FAIL",
+ "checks": {
+  "camera": "not conditioned",
+  "depth": "not conditioned",
+  "lighting": "FAIL",
+  "motion": "not conditioned",
+  "normals": "not conditioned",
+  "objects": "not conditioned"
+ },
+ "determinism": {
+  "provider": "sdxl_controlnet",
+  "sampler_settings": {
+   "control_mode": "depth_normals",
+   "controlnet_conditioning_scale": 0.8,
+   "denoise_strength": 1.0,
+   "fast_preview": true,
+   "guidance": 0.0,
+   "steps": 4
+  },
+  "seed": 7,
+  "seed_honoured": true,
+  "version": "1.2"
+ },
+ "temporal": {
+  "compared_fraction": 0.9895,
+  "mean": 12.0097,
+  "p95": 28.2746,
+  "pairs": [
+   {
+    "frames": [
+     1,
+     2
+    ],
+    "mean": 9.8903,
+    "p95": 18.8506,
+    "pixels": 128344
+   },
+   {
+    "frames": [
+     2,
+     3
+    ],
+    "mean": 7.4438,
+    "p95": 18.057,
+    "pixels": 128383
+   },
+   {
+    "frames": [
+     3,
+     4
+    ],
+    "mean": 11.7584,
+    "p95": 19.5753,
+    "pixels": 128281
+   },
+   {
+    "frames": [
+     4,
+     5
+    ],
+    "mean": 10.2356,
+    "p95": 17.8726,
+    "pixels": 128362
+   },
+   {
+    "frames": [
+     5,
+     6
+    ],
+    "mean": 10.6727,
+    "p95": 16.8547,
+    "pixels": 128369
+   },
+   {
+    "frames": [
+     6,
+     7
+    ],
+    "mean": 19.6645,
+    "p95": 25.2038,
+    "pixels": 128234
+   },
+   {
+    "frames": [
+     7,
+     8
+    ],
+    "mean": 4.1407,
+    "p95": 9.6681,
+    "pixels": 128379
+   },
+   {
+    "frames": [
+     8,
+     9
+    ],
+    "mean": 8.1367,
+    "p95": 14.5326,
+    "pixels": 128262
+   },
+   {
+    "frames": [
+     9,
+     10
+    ],
+    "mean": 20.8178,
+    "p95": 30.6005,
+    "pixels": 128267
+   },
+   {
+    "frames": [
+     10,
+     11
+    ],
+    "mean": 5.8386,
+    "p95": 9.6319,
+    "pixels": 128297
+   },
+   {
+    "frames": [
+     11,
+     12
+    ],
+    "mean": 12.2115,
+    "p95": 20.3316,
+    "pixels": 128250
+   },
+   {
+    "frames": [
+     12,
+     13
+    ],
+    "mean": 17.7544,
+    "p95": 30.6948,
+    "pixels": 128060
+   },
+   {
+    "frames": [
+     13,
+     14
+    ],
+    "mean": 18.9816,
+    "p95": 28.9918,
+    "pixels": 128264
+   },
+   {
+    "frames": [
+     14,
+     15
+    ],
+    "mean": 10.0631,
+    "p95": 21.8432,
+    "pixels": 128375
+   },
+   {
+    "frames": [
+     15,
+     16
+    ],
+    "mean": 6.5877,
+    "p95": 11.7096,
+    "pixels": 127871
+   },
+   {
+    "frames": [
+     16,
+     17
+    ],
+    "mean": 10.4786,
+    "p95": 20.7455,
+    "pixels": 128018
+   },
+   {
+    "frames": [
+     17,
+     18
+    ],
+    "mean": 10.7214,
+    "p95": 20.2147,
+    "pixels": 128254
+   },
+   {
+    "frames": [
+     18,
+     19
+    ],
+    "mean": 14.0074,
+    "p95": 36.9666,
+    "pixels": 128103
+   },
+   {
+    "frames": [
+     19,
+     20
+    ],
+    "mean": 8.9544,
+    "p95": 29.3064,
+    "pixels": 128197
+   },
+   {
+    "frames": [
+     20,
+     21
+    ],
+    "mean": 7.5389,
+    "p95": 15.474,
+    "pixels": 128351
+   },
+   {
+    "frames": [
+     21,
+     22
+    ],
+    "mean": 25.6933,
+    "p95": 59.6992,
+    "pixels": 128141
+   },
+   {
+    "frames": [
+     22,
+     23
+    ],
+    "mean": 5.5212,
+    "p95": 17.5695,
+    "pixels": 128149
+   },
+   {
+    "frames": [
+     23,
+     24
+    ],
+    "mean": 19.1319,
+    "p95": 43.4954,
+    "pixels": 128248
+   }
+  ],
+  "pairs_measured": 23,
+  "pass": false,
+  "threshold_mean": 4.0,
+  "threshold_p95": 12.0,
+  "unit": "8-bit display steps (mean absolute RGB difference per pixel)"
+ },
+ "generate_wall_seconds": 194.0,
+ "whole_seconds": 271.5,
+ "model_run": {
+  "load_seconds": 10.26,
+  "generate_seconds": 176.62,
+  "peak_vram_allocated_mib": 7626,
+  "peak_vram_reserved_mib": 7948,
+  "host_rss_peak_mib": 14094,
+  "cpu_offload": true,
+  "working_size": [
+   1024,
+   576
+  ],
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "torch": "2.14.1+cu126",
+  "diffusers": "0.41.0",
+  "frames": 24,
+  "denoise_strength": 1.0,
+  "filled_fraction_per_frame": [],
+  "fast_preview": true,
+  "sampler": "EulerDiscrete trailing, guidance 0",
+  "lora": "ByteDance/SDXL-Lightning/sdxl_lightning_4step_lora.safetensors",
+  "lora_revision": "c9a24f48e1c025556787b0c58dd67a091ece2e44"
+ },
+ "seconds_per_frame": 7.359,
+ "output_pixel_digest": "b3cdcceff3248f8456df762140c54e66e1c9080afe9837434a73f8f946fae979"
+}
