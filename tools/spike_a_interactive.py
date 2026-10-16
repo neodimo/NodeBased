@@ -163,6 +163,12 @@ def main():
         app.processEvents()
         return until()
 
+    def pump_for(seconds):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            app.processEvents()
+            time.sleep(0.001)
+
     ready = session.start()
     cold = dict(ready)
     cold["window_shown_after_start"] = True
@@ -239,7 +245,7 @@ def main():
             "final_display_s": round(final.get("flushed", final["painted"]) - event_time, 4) if final else None,
             "exr_complete_s": round(exr_done[r] - event_time, 4) if r in exr_done else None,
             "paints": len(paints)})
-        time.sleep(0.2)
+        pump_for(0.2)
     stale_after_edits = session.log.stale + view.stale_dropped
     sequential_events = list(session.log.events)
 
@@ -258,9 +264,7 @@ def main():
             app.processEvents()
             time.sleep(0.001)
     wait_final(burst_revisions[-1])
-    pump(lambda: True)
-    time.sleep(1.0)
-    app.processEvents()
+    pump_for(1.0)
     last_revision = burst_revisions[-1]
     burst = {
         "edits": args.burst, "interval_s": args.burst_interval,
