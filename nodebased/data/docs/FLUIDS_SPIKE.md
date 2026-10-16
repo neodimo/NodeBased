@@ -1567,6 +1567,8 @@ The shot uses a 64-cell liquid/steam grid. The stream source is above the glass 
 
 **Measured on the 12 GB RTX 3080 Ti:** the 120-frame 64-cell bake took 34.94 seconds. The corrected 960 × 540 showcase frames use 32 path-tracing samples and took 201.06 seconds (frame 60), 201.88 seconds (frame 90) and 200.04 seconds (frame 120). The images are [frame 60](images/hot_pour_shot/hot-pour-060.png), [frame 90](images/hot_pour_shot/hot-pour-090.png) and [frame 120](images/hot_pour_shot/hot-pour-120.png). The corrected images show the stream entering the glass and a liquid pool at its base.
 
+For the holdout check, a 96 × 54 CPU frame-120 render compared the 32 center pixels inside the glass with the plate: render alpha was zero and the composited pixels matched the plate exactly.
+
 A separate 8/32/128-sample sweep was captured before correcting the offset second cup: at frames 60 and 90, 8 samples took 108.95 and 103.59 seconds; 32 took 191.16 and 190.40 seconds; 128 took 726.40 and 704.59 seconds. Those timings describe the earlier two-cup composition. Corrected 32-sample timings above are the measurements for the replacement stills. The full corrected 8/32/128 timing matrix is incomplete. Results are in `benchmarks/hot_pour/hot-pour-shot-2026-10-14.json`.
 
 **48 GB RTX A6000 estimate (unmeasured):** its four-times-larger memory may allow a 128-cell grid and 32-sample 960 × 540 stills to stay in memory. Scaling the measured 64-cell bake by the 8× voxel count suggests roughly 4 minutes 40 seconds for the same 120 frames, still under the 20-minute budget. This is a capacity and workload estimate; mesh cost and peak GPU memory have not been measured. The A6000 is the same Ampere generation, so this estimate assumes no faster solver steps.

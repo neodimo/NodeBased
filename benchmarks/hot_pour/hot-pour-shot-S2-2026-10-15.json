@@ -19,6 +19,14 @@
       "docs/images/hot_pour_shot/hot-pour-120.png"
     ]
   },
+  "frame_120_holdout_check": {
+    "adapter": "CPU",
+    "resolution": [96, 54],
+    "interior_pixels": 32,
+    "max_render_alpha": 0.0,
+    "max_composite_plate_delta": 0.0,
+    "passed": true
+  },
   "sample_sweep_before_plate_cleanup": {
     "composition": "two cups, one offset in the plate; timings are approximate for the final composition",
     "resolution": [960, 540],
