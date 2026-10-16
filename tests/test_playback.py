@@ -67,7 +67,13 @@ class PlaybackQueueTests(unittest.TestCase):
 
 class DisplayCacheTests(unittest.TestCase):
     def setUp(self):
-        self.document = demo_document()
+        # An animated knob upstream of the viewer, so every frame has a key of its own (a graph
+        # with no time-dependent input shares one key; see tests.test_perf_playback).
+        dispatcher = Dispatcher(demo_document())
+        for frame, value in ((1, 0.0), (24, 1.0)):
+            dispatcher.execute({"op": "set_key", "id": "grade", "param": "exposure",
+                                "frame": frame, "value": value})
+        self.document = dispatcher.document
 
     def _key(self, document=None, target="viewer", frame=1, tier=1):
         return DisplayCache.key(document or self.document, target, frame, tier)
