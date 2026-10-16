@@ -27,6 +27,7 @@ import numpy as np
 from nodebased.core import Dispatcher, demo_document
 from nodebased.decodepool import DecodeAheadPool
 from nodebased.imaging import Evaluator, write_png
+from nodebased.tiers import Region
 from nodebased.tileexec import (TileExecutor, _compute_node_digests, _align_artifact_to,
                                 _read_decode_key)
 from nodebased.tiles import TileArtifact, TileRegion, TileKey, DEFAULT_TILE_EDGE
@@ -163,17 +164,43 @@ class SupportsTiledCoverageTests(unittest.TestCase):
         d.execute({"op": "connect", "id": "c", "input": "image", "source": "p"})
         self.assertTrue(TileExecutor().supports_tiled(d.document, "c"))
 
-    def test_unsupported_node_uses_full_frame_fallback_then_crops(self):
+    def test_tracker_has_a_native_region_path(self):
         d = Dispatcher()
         d.execute({"op": "create", "type": "Checker", "id": "p",
                    "params": {"width": 64, "height": 64, "size": 16}})
         d.execute({"op": "create", "type": "Tracker", "id": "t"})
         d.execute({"op": "connect", "id": "t", "input": "image", "source": "p"})
-        full = Evaluator().evaluate(d.document, "t")
+        d.execute({"op": "set_tracks", "id": "t", "tracks": [{
+            "name": "anchor", "enabled": 1, "x": {"value": 32.5, "curve": {
+                "interpolation": "constant", "keys": [
+                    {"frame": 1, "value": 32.5}, {"frame": 2, "value": 35.5}]}}, "y": 32.5}]})
+        full = Evaluator().evaluate_raster(d.document, "t", frame=2)
         request = TileRegion(16, 8, 24, 20, full_width=64, full_height=64)
-        result = TileExecutor(tile_edge=32).compose_region(d.document, "t", request)
-        self.assertEqual(result.fallback_nodes, ("Tracker",))
-        np.testing.assert_array_equal(result.pixels, full[8:28, 16:40])
+        result = TileExecutor(tile_edge=32).compose_region(d.document, "t", request, frame=2)
+        self.assertTrue(result.tiled)
+        self.assertEqual(result.fallback_nodes, ())
+        np.testing.assert_array_equal(result.pixels,
+                                      full.fit(Region(request.x, request.y,
+                                                      request.width, request.height)))
+
+    def test_stabilize_has_a_native_region_path(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Checker", "id": "p",
+                   "params": {"width": 64, "height": 64, "size": 16}})
+        d.execute({"op": "create", "type": "Stabilize", "id": "s"})
+        d.execute({"op": "connect", "id": "s", "input": "image", "source": "p"})
+        d.execute({"op": "set_tracks", "id": "s", "tracks": [{
+            "name": "anchor", "enabled": 1, "x": {"value": 32.5, "curve": {
+                "interpolation": "constant", "keys": [
+                    {"frame": 1, "value": 32.5}, {"frame": 2, "value": 35.5}]}}, "y": 32.5}]})
+        full = Evaluator().evaluate_raster(d.document, "s", frame=2)
+        request = TileRegion(16, 8, 24, 20, full_width=64, full_height=64)
+        result = TileExecutor(tile_edge=32).compose_region(d.document, "s", request, frame=2)
+        self.assertTrue(result.tiled)
+        self.assertEqual(result.fallback_nodes, ())
+        np.testing.assert_array_equal(result.pixels,
+                                      full.fit(Region(request.x, request.y,
+                                                      request.width, request.height)))
 
     def test_region_request_crossing_target_window_is_clipped(self):
         d = Dispatcher()

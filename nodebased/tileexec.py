@@ -108,6 +108,15 @@ def _node_content_digest(node, params, input_hashes, frame, tier, fingerprint=No
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _tracked_transform_params(document, node_id, kind, params, frame, tier):
+    """Resolve the small, frame-dependent transform shared by Tracker and Stabilize."""
+    from . import tracker
+    payload = document.get("node_data", {}).get(node_id, {"tracks": []})
+    payload = tiers.scale_node_data(kind, payload, tier)
+    return {**params, **tracker.solve(payload, frame, params,
+                                      force_stabilise=(kind == "Stabilize"))}
+
+
 def _compute_node_digests(document, tier, frame, solve=None):
     """Walk the graph topologically and produce a per-node content digest.
 
@@ -144,6 +153,8 @@ def _compute_node_digests(document, tier, frame, solve=None):
         node = nodes[key]
         kind = node["type"]
         params = dict(tiers.scale_params(kind, node["params"], tier))
+        if kind in ("Tracker", "Stabilize") and not node["disabled"]:
+            params = _tracked_transform_params(document, key, kind, params, frame, tier)
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
         # ALL wired input slots, required and optional (mask included) — must mirror
@@ -185,6 +196,9 @@ def _compute_node_digests(document, tier, frame, solve=None):
                     fingerprint = (fingerprint or []) + [str(Path(source_path).expanduser().resolve()), stat.st_size, stat.st_mtime_ns]
                 except (OSError, KeyError):
                     fingerprint = (fingerprint or []) + [source_path, "missing"]
+        if kind in ("Tracker", "Stabilize"):
+            # Tracks are node_data rather than parameters; edits must invalidate solved tiles.
+            fingerprint = document.get("node_data", {}).get(key, {"tracks": []})
         if kind == "OCIOFileTransform" and params.get("path"):
             try:
                 stat = Path(params["path"]).expanduser().stat()
@@ -699,6 +713,8 @@ class TileExecutor:
             self.cache.put(artifact)
             return artifact
         params = dict(tiers.scale_params(kind, node["params"], tier))
+        if kind in ("Tracker", "Stabilize") and not node["disabled"]:
+            params = _tracked_transform_params(document, node_id, kind, params, frame, tier)
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
         halo = resolve_halo(kind, params)
@@ -812,7 +828,10 @@ class TileExecutor:
 
         slots = list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs", []))
         arity = len(slots)
-        rule = tiers.input_regions(kind, params, _to_tier_region(buffered_region), arity)
+        solved = ({name: params[name] for name in tiers.SOLVED_TRANSFORM_FIELDS}
+                  if kind in tiers.DATA_DEPENDENT_RULES else None)
+        rule = tiers.input_regions(kind, params, _to_tier_region(buffered_region), arity,
+                                   solved=solved)
         source_ids = [node["inputs"].get(s) for s in slots]
         full_w, full_h = buffered_region.full_width, buffered_region.full_height
         gathered = []
@@ -1269,6 +1288,19 @@ class TileExecutor:
             return inputs[0].pixels.copy()
         if kind in ("Dot", "NoOp", "PostageStamp", "Profile", "PlanarTracker"):
             return inputs[0].pixels.copy()
+        if kind in ("Tracker", "Stabilize"):
+            image_artifact = inputs[0]
+            source = _align_artifact_to(image_artifact, buffered_region)
+            filtered = imaging.Evaluator._transform(
+                image_artifact.pixels, params["translate_x"], params["translate_y"],
+                params["rotate"], params["scale"], params["center_x"], params["center_y"],
+                params["filter"], src_box=image_artifact.region, dst_box=buffered_region,
+                params=params)
+            mask_artifact = inputs[1] if len(inputs) > 1 and inputs[1] is not None else None
+            mask = (_align_artifact_to(mask_artifact, buffered_region)
+                    if mask_artifact is not None else None)
+            return imaging.Evaluator._apply_mask_mix(source, filtered, mask,
+                                                     params.get("mix", 1.0))
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
                     "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
                     "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",

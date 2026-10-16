@@ -373,6 +373,20 @@ def _transform_rule(params, region, arity):
     return [image] + [region] * (arity - 1)
 
 
+def _tracked_transform_rule(params, region, arity):
+    """Tracker/Stabilize use Transform's solved inverse map, with source pixels for mix."""
+    needed = _transform_rule(params, region, arity)[0]
+    # Their optional mask blends the filtered result against the untouched plate. Keep that
+    # output patch in the image request as well; Tracker's optional `track` input is typed data.
+    image = needed.union(region)
+    result = [image]
+    if arity > 1:
+        result.append(region)
+    if arity > 2:
+        result.append(None)
+    return result
+
+
 def _cornerpin_rule(params, region, arity):
     """Inverse-map the output rectangle's corners through the solved homography and take the
     bounding box -- the projective counterpart of `_transform_rule`, sharing its reasoning
@@ -560,9 +574,9 @@ REGION_RULES = {
     # A Tracker is a Transform whose transform is solved from tracks rather than typed in, so its
     # region rule is Transform's rule applied to the solved values. Sharing the function rather
     # than copying it is the point: an error in the inverse map cannot drift between the two.
-    "Tracker": _transform_rule,
+    "Tracker": _tracked_transform_rule,
     "PlanarTracker": _identity,
-    "Stabilize": _transform_rule,
+    "Stabilize": _tracked_transform_rule,
     "Crop": _crop_rule,
     "CornerPin": _cornerpin_rule,
     "STMap": _uv_lookup_rule,

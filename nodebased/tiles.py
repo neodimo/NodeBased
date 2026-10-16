@@ -296,6 +296,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Shuffle", "ShuffleCopy", "Remove", "ZMerge", "ZSlice", "ZDefocus",
     "Premult", "Unpremult",                # named-layer aware or pointwise, halo per tiers.py
     "Dot", "NoOp", "PostageStamp", "Profile", "PlanarTracker",  # passthrough, halo = (0, 0)
+    "Tracker", "Stabilize",              # solved transforms use the shared inverse-mapped region rule
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
     "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
     "Dither",                               # pointwise, halo = (0, 0); noise hashed from the absolute pixel position
@@ -378,6 +379,7 @@ DEFAULT_HALO_PER_KIND = {
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
+    "Tracker": (0, 0), "Stabilize": (0, 0),
     "TimeBlur": (0, 0), "TimeEcho": (0, 0),  # solved whole by `_temporal_tile`, sliced per tile
     "RotoPaint": (0, 0),                      # same: the stroke list is solved whole, sliced per tile
 }
