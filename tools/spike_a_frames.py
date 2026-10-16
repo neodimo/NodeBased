@@ -43,20 +43,32 @@ def main():
     scene = _unpack_artifact(store.get(args.scene_state), out / "bundle" / "scene")
     manifest = _unpack_artifact(store.get(args.bundle), out / "bundle" / "bundle")
     wanted = [int(x) for x in args.frames.split(",")]
-    controls = [c for c in read_control_bundle(manifest, scene) if c.frame in wanted]
-    settings = json.loads(args.settings)
+    controls = read_control_bundle(manifest, scene)   # all frames: the depth control images are normalised over the whole sequence
+    settings = provider.resolve_settings(json.loads(args.settings))
     report = {"settings": settings, "frames": wanted, "runs": {}}
+    import subprocess
+    rows, width, height = provider.write_control_files(controls, out / "controls")
+    rows = [row for row in rows if row["frame"] in wanted]
     for name, previews in (("previews_off", False), ("previews_on", True)):
         work = out / name
-        env = {provider.PREVIEW_DIR_ENV: str(work / "previews")} if previews else {}
-        os.environ.pop(provider.PREVIEW_DIR_ENV, None)
-        os.environ.update(env)
+        work.mkdir(parents=True, exist_ok=True)
+        results = []
+        for row in rows:
+            results.append(dict(row, result=str(work / f"frame_{row['frame']:04d}.result.npy")))
+        job = {"frames": results, "width": width, "height": height, "prompt": args.text, "seed": 7, "settings": settings,
+               "info": str(work / "info.json")}
+        if previews:
+            (work / "previews").mkdir(exist_ok=True)
+            job["preview_dir"] = str(work / "previews")
+        (work / "job.json").write_text(json.dumps(job))
+        env = dict(os.environ, CUBLAS_WORKSPACE_CONFIG=":4096:8", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
+                   PYTHONUNBUFFERED="1", TOKENIZERS_PARALLELISM="false")
         started = time.perf_counter()
-        _, info = provider.run_frames(controls, text=args.text, seed=7, sampler_settings=settings, workdir=work)
-        os.environ.pop(provider.PREVIEW_DIR_ENV, None)
-        report["runs"][name] = {"seconds": round(time.perf_counter() - started, 2), "model_run": info,
-                                "sha256": {str(c.frame): hashlib.sha256((work / f"frame_{c.frame:04d}.result.npy").read_bytes()).hexdigest()
-                                           for c in controls}}
+        subprocess.run([provider.provider_python(), "-I", provider.__file__, "run", str(work / "job.json")], check=True,
+                       env=env, stdout=subprocess.DEVNULL)
+        report["runs"][name] = {"seconds": round(time.perf_counter() - started, 2),
+                                "model_run": json.loads((work / "info.json").read_text()),
+                                "sha256": {str(r["frame"]): hashlib.sha256(Path(r["result"]).read_bytes()).hexdigest() for r in results}}
     off, on = report["runs"]["previews_off"]["sha256"], report["runs"]["previews_on"]["sha256"]
     report["identical"] = off == on
     (out / "frames.json").write_text(json.dumps(report, indent=1))
