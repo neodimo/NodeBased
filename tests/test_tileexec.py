@@ -126,8 +126,10 @@ class SupportsTiledCoverageTests(unittest.TestCase):
         d.execute({"op": "create", "type": "Switch", "id": "s", "params": {"which": 0}})
         d.execute({"op": "connect", "id": "s", "input": "0", "source": "p"})
         d.execute({"op": "connect", "id": "s", "input": "1", "source": "q"})
-        self.assertTrue(TileExecutor().supports_tiled(d.document, "s"),
-                        "unsupported nodes are composed through a full-frame node fallback")
+        self.assertFalse(TileExecutor().supports_tiled(d.document, "s"))
+        result = TileExecutor().compose(d.document, "s")
+        self.assertFalse(result.tiled)
+        self.assertIn("Switch", result.fallback_nodes)
 
     def test_unsupported_kind_in_merge_branch_disables_tiled(self):
         """Switch on Merge's B branch means the whole graph is not tile-native."""
@@ -142,7 +144,7 @@ class SupportsTiledCoverageTests(unittest.TestCase):
         d.execute({"op": "create", "type": "Merge", "id": "m"})
         d.execute({"op": "connect", "id": "m", "input": "A", "source": "p"})
         d.execute({"op": "connect", "id": "m", "input": "B", "source": "s"})
-        self.assertTrue(TileExecutor().supports_tiled(d.document, "m"))
+        self.assertFalse(TileExecutor().supports_tiled(d.document, "m"))
 
     def test_transform_in_chain_is_fallback_not_tiled(self):
         d = Dispatcher()
@@ -153,7 +155,7 @@ class SupportsTiledCoverageTests(unittest.TestCase):
                               "scale": 1.0, "center_x": 0.0, "center_y": 0.0,
                               "filter": "nearest"}})
         d.execute({"op": "connect", "id": "x", "input": "image", "source": "p"})
-        self.assertTrue(TileExecutor().supports_tiled(d.document, "x"))
+        self.assertFalse(TileExecutor().supports_tiled(d.document, "x"))
 
     def test_crop_in_chain_is_fallback_not_tiled(self):
         d = Dispatcher()
@@ -162,7 +164,7 @@ class SupportsTiledCoverageTests(unittest.TestCase):
         d.execute({"op": "create", "type": "Crop", "id": "c",
                    "params": {"x": 0, "y": 0, "width": 32, "height": 32}})
         d.execute({"op": "connect", "id": "c", "input": "image", "source": "p"})
-        self.assertTrue(TileExecutor().supports_tiled(d.document, "c"))
+        self.assertFalse(TileExecutor().supports_tiled(d.document, "c"))
 
     def test_tracker_has_a_native_region_path(self):
         d = Dispatcher()
