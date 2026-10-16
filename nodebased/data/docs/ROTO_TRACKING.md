@@ -538,8 +538,10 @@ click.
 
 ## Lane 8 step notes
 
-### Lane 8 T1: ROI correctness (partial)
+### Lane 8 T1: ROI correctness
 
-The tile executor now keeps ROI evaluation alive when a node lacks a tile-native kernel: it evaluates that node's full frame, crops to the requested region, and exposes the fallback node name in the viewer's ROI badge. Tracker and Stabilize still use this fallback; their region-native analysis/render paths remain open. Requests crossing a target data window are clipped to its edge. ROI handle presses are resolved before Roto drawing, so a selected Roto no longer turns a box-handle press into a new shape.
+The tile executor keeps the picture visible when a node lacks a tile-native kernel: it renders that node full-frame, crops to the requested region and names the fallback in the ROI badge. Tracker and Stabilize now use the solved Transform inverse map to request their input patch, while retaining the untouched output patch for mask/mix. Their badges disappear on that native path. Requests crossing the target data window clip to its edge. ROI handle presses are resolved before Roto drawing, so a selected Roto no longer turns a box-handle press into a new shape.
 
-Real-display measurements from the QA comp are from **tier 1 on llvmpipe**: ROI 960 × 540 rendered in 1.24–1.27 s (1.3–1.65 s to picture) versus 3.8–4.3 s full frame; ROI-off took 4.0–4.2 s and reused no region tiles. The QA was not run on the 12 GB RTX 3080 Ti, so that card's timings remain unmeasured. The new full-frame node fallback has no timing measurement yet. ROI-off region reuse and byte-for-byte QA-comp comparison remain open.
+The bundled `tests/fixtures/qa.nbcomp` is compared against the full evaluator inside a 960 × 540 box, both with its Tracker upstream and with the Roto background wired directly to RotoPaint; both comparisons are byte-identical. The test uses the QA plate sequence from `scratch/nb-qa/1015-roi` when available.
+
+At tier 1 on llvmpipe, the earlier ROI-off full-frame rerender took 4.0–4.2 s and reused no region tiles (the Tracker-free QA variant, since Tracker previously broke ROI). After this change, the original Tracker comp showed its first new frame in 124–138 ms across five runs; the first paint arrived in 8.8–9.7 ms. The 12 GB RTX 3080 Ti before/after timings are still being collected under the shared GPU lock.
