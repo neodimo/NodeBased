@@ -236,8 +236,16 @@ class GraphCorner:
                              if widget.isVisible() and widget is not self.minimap), default=0)
 
     def sync(self):
-        """Called whenever the graph repaints: the zoom label and the minimap follow the view."""
+        """Called whenever the graph repaints: the buttons and the zoom label follow the view.
+        The minimap is not repainted from here. It is a translucent child of the graph's viewport,
+        so repainting it repaints the viewport under it, which calls this again: a loop of about
+        700 paints a second at idle (profile 10/15). `refresh_minimap` is what the view's own
+        changes call instead."""
         self.toggle.sync()
         self.zoom.sync()
         self.reposition()
+
+    def refresh_minimap(self, *_):
+        """Repaint the minimap after the view or the nodes changed: scroll, zoom, resize, a
+        selection, a node moving, or the graph being rebuilt."""
         self.minimap.update()

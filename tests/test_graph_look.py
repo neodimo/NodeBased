@@ -2,6 +2,7 @@
 port directions and the minimap (Lane 2, NL2)."""
 import tests.isolation  # noqa: F401  (settings of the test run, not the developer's)
 
+import time
 import unittest
 
 from PySide6.QtCore import QPointF, Qt
@@ -374,6 +375,46 @@ class GraphLookTests(unittest.TestCase):
                 continue   # another node's rectangle or the view outline covers this point
             checked += 1
         self.assertGreaterEqual(checked, 3)
+
+    def _count_minimap_paints(self, action, wait_ms=60):
+        """MiniMap paint events while `action` runs and the loop settles."""
+        from PySide6.QtCore import QEvent, QObject
+        counter = {"n": 0}
+        mini = self.graph.corner.minimap
+
+        class Counter(QObject):
+            def eventFilter(self, obj, event):
+                if obj is mini and event.type() == QEvent.Type.Paint:
+                    counter["n"] += 1
+                return False
+        watcher = Counter()
+        APP.installEventFilter(watcher)
+        try:
+            self.settle()
+            counter["n"] = 0
+            action()
+            end = time.monotonic() + wait_ms / 1000
+            while time.monotonic() < end:
+                APP.processEvents()
+            return counter["n"]
+        finally:
+            APP.removeEventFilter(watcher)
+
+    def test_the_minimap_does_not_repaint_itself_when_nothing_changes(self):
+        # It used to repaint from the graph's paintEvent, which its own repaint triggered: about
+        # 700 paints a second at idle and a core of CPU.
+        self.assertLessEqual(self._count_minimap_paints(lambda: None, wait_ms=400), 2)
+
+    def test_the_minimap_follows_scroll_zoom_selection_and_moves(self):
+        graph = self.graph
+        self.assertGreaterEqual(self._count_minimap_paints(lambda: graph.zoom_to(0.5)), 1, "zoom")
+        self.assertGreaterEqual(self._count_minimap_paints(
+            lambda: graph.horizontalScrollBar().setValue(graph.horizontalScrollBar().value() + 40)), 1, "scroll")
+        item = graph.items_by_id["grade"]
+        self.assertGreaterEqual(self._count_minimap_paints(
+            lambda: item.setSelected(not item.isSelected())), 1, "selection")
+        self.assertGreaterEqual(self._count_minimap_paints(
+            lambda: item.setPos(item.pos() + QPointF(30, 20))), 1, "move")
 
     def test_the_zoom_control_reads_and_sets_the_graph_zoom(self):
         zoom = self.graph.corner.zoom
