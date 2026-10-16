@@ -151,13 +151,25 @@ stills, the candidate's canvas-guided final, the four denoising steps of an inde
 
 ## Real screen
 
-REALSCREEN_PLACEHOLDER
+**Not run.** A pass of the same bench on the workstation's real display (Xwayland, screen captures of the window during an edit) was queued behind the
+GPU lock and withdrawn when the lock stayed held by a 5-hour integration suite past the 30-minute bound (queued 10:10 PM, withdrawn 10:35 PM on
+2026-10-15). All display evidence here is offscreen widget grabs; no physical display or human reviewer was involved, so display acceptance is unverified.
+`tools/spike_a_interactive.py` runs on a real screen with `QT_QPA_PLATFORM=xcb DISPLAY=:0` (the window opens without taking focus).
 
 ## Limits and what was not done
 
 - **A6000 variant untested.** No substitution of any other card.
-- The 12 GB variant's first-look latency was not attributed call by call: the 3.7 s before step 1 and the 3 s after step 4 are inferred from the step
-  cadence and the weight sizes; PHASES_PLACEHOLDER
+- **Card parts left out because the GPU lock was held past the 30-minute bound** (other workers' suites from 9:00 PM on): the per-call phase probe
+  (`tools/spike_a_phases.py`, offloaded and a labelled resident diagnostic), the real-screen pass, a repeat of the live interaction run with clean lag
+  accounting, a comparison of the warm preview process's delivered frames against a cold batch process (`tools/spike_a_frames.py` with the whole-sequence
+  depth normalisation), and the CUDA unit test run (`RealModelTests`). The first-look latency is therefore **not attributed call by call**: the 3.7 s before
+  step 1 and the 3 s after step 4 are inferred from the 0.31 s step cadence, the batch per-frame times (two offloaded passes of about 6.5 s each per
+  guided frame) and the weight sizes (text encoders 1.7 GB, ControlNet 2.5 GB, UNet 5.1 GB copied per call). `tools/spike_a_phases.py` and the revised `tools/spike_a_frames.py` were written and
+  syntax-checked but **never executed**. A resident variant of the 12 GB card (UNet and
+  ControlNet kept on the card) was never measured and is the cheapest next test of that inference.
+- Previews on or off for the representative frames 1, 12 and 24 was checked with `spike_a_frames.py` as first written, which normalised the depth control
+  images over those three frames only: all three delivered pictures are byte-identical with previews on and off (`frames-previews-on-off.json`). The
+  full 24-frame canvas-guided runs with previews on and off are byte-identical as well (above).
 - **UI responsiveness** was measured by replaying a real run's pictures and timing through the real `PreviewSession` and `StepPreviewView` (max event-loop gap
   8 ms over 21,579 ticks, no gap over 100 ms, 2.6 to 3.1 ms per picture), because the card was held by other workers' suites when the live repeat was due.
   The first live interaction run's lag figure counted the bench's own blocking calls and is not used.

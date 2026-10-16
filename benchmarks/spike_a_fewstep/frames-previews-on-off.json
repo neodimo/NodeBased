@@ -1,0 +1,75 @@
+{
+ "settings": {
+  "fast_preview": true,
+  "denoise_strength": 1.0
+ },
+ "frames": [
+  1,
+  12,
+  24
+ ],
+ "runs": {
+  "previews_off": {
+   "seconds": 35.73,
+   "model_run": {
+    "load_seconds": 9.58,
+    "generate_seconds": 22.6,
+    "peak_vram_allocated_mib": 7626,
+    "peak_vram_reserved_mib": 7948,
+    "host_rss_peak_mib": 13981,
+    "cpu_offload": true,
+    "working_size": [
+     1024,
+     576
+    ],
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "torch": "2.14.1+cu126",
+    "diffusers": "0.41.0",
+    "frames": 3,
+    "denoise_strength": 1.0,
+    "filled_fraction_per_frame": [],
+    "fast_preview": true,
+    "sampler": "EulerDiscrete trailing, guidance 0",
+    "lora": "ByteDance/SDXL-Lightning/sdxl_lightning_4step_lora.safetensors",
+    "lora_revision": "c9a24f48e1c025556787b0c58dd67a091ece2e44"
+   },
+   "sha256": {
+    "1": "0df154a8cda8af535566f654c6bf7d19b258f358459c7fce365e8f288b957934",
+    "12": "56178343e776c7928a65286eba2cd41e50eccfcf5b706f9e490c91af61b5b63f",
+    "24": "ced37cd88d24d1754ca749188a5b0c099e103d2164ca3803ed1fab33fe02f4d1"
+   }
+  },
+  "previews_on": {
+   "seconds": 37.67,
+   "model_run": {
+    "load_seconds": 9.62,
+    "generate_seconds": 24.58,
+    "peak_vram_allocated_mib": 9050,
+    "peak_vram_reserved_mib": 10374,
+    "host_rss_peak_mib": 12273,
+    "cpu_offload": true,
+    "working_size": [
+     1024,
+     576
+    ],
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "torch": "2.14.1+cu126",
+    "diffusers": "0.41.0",
+    "frames": 3,
+    "denoise_strength": 1.0,
+    "filled_fraction_per_frame": [],
+    "fast_preview": true,
+    "sampler": "EulerDiscrete trailing, guidance 0",
+    "lora": "ByteDance/SDXL-Lightning/sdxl_lightning_4step_lora.safetensors",
+    "lora_revision": "c9a24f48e1c025556787b0c58dd67a091ece2e44",
+    "previews": true
+   },
+   "sha256": {
+    "1": "0df154a8cda8af535566f654c6bf7d19b258f358459c7fce365e8f288b957934",
+    "12": "56178343e776c7928a65286eba2cd41e50eccfcf5b706f9e490c91af61b5b63f",
+    "24": "ced37cd88d24d1754ca749188a5b0c099e103d2164ca3803ed1fab33fe02f4d1"
+   }
+  }
+ },
+ "identical": true
+}
