@@ -20,6 +20,9 @@ class HotPourShotTests(unittest.TestCase):
         self.assertEqual(nodes["liquid"]["params"]["max_size"], 64)
         self.assertEqual(cup["holdout"], "on")
         self.assertAlmostEqual(cup["tx"], 0.0)
+        self.assertAlmostEqual(cup["tz"], 0.0)
+        self.assertIsNone(nodes["scene"]["inputs"]["object3"],
+                          "the plate supplies the glass, so the transparent render must not draw a second one")
         self.assertGreater(source["src_center_y"], cup["ty"] + cup["cyl_height"] / 2)
         self.assertEqual(nodes["surface"]["params"]["material"], "liquid")
         source_x = [point["value"] for point in doc["animation"]["curves"]["spout"]["tx"]["keys"]]

@@ -19,6 +19,8 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
     commands = []
     for item in ops:
         op = dict(item)
+        if op.get("op") == "connect" and op.get("id") == "$new:scene" and op.get("input") == "object3":
+            continue  # the camera-matched plate supplies the glass; the live scene keeps only its holdout
         if op.get("op") == "create" and op.get("id") == "$new:table_top":
             op["params"].update(shadow_catcher="on", sx=1.7, sz=2.2, red=0.28, green=0.17, blue=0.10)
         if op.get("op") == "create" and op.get("id") == "$new:key_light":
@@ -37,7 +39,7 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
     commands.extend((
         {"op": "create", "id": "front_cup", "type": "Cylinder3D", "params": {
             "cyl_radius": 0.12, "cyl_height": 0.30, "cyl_caps": "closed", "tx": 0.0, "ty": 0.15,
-            "tz": 0.20, "red": 0.8, "green": 0.9, "blue": 0.95, "alpha": 1.0, "holdout": "on",
+            "tz": 0.0, "red": 0.8, "green": 0.9, "blue": 0.95, "alpha": 1.0, "holdout": "on",
             "cast_shadows": "off"}},
         {"op": "create", "id": "backdrop", "type": "Card3D", "params": {
             "card_width": 4.0, "card_height": 2.5, "ty": 0.7, "tz": -0.55,
