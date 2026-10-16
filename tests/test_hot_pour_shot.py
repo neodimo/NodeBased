@@ -35,7 +35,8 @@ class HotPourShotTests(unittest.TestCase):
         scene = Evaluator().evaluate_raster(doc, "scene", frame=1, typed=True)
         self.assertTrue(any(g.shadow_catcher for g in scene.geometries))
         self.assertTrue(any(g.holdout for g in scene.geometries))
-        self.assertTrue(any(g.material == "liquid" for g in scene.geometries))
+        self.assertTrue(any(g.material == "liquid" and len(g.vertices) > 0 for g in scene.geometries),
+                        "the shot renders the cached liquid surface mesh")
         self.assertTrue(scene.volumes, "the steam volume is connected into the shot")
         raw = Evaluator().evaluate_raster(doc, "render", frame=1).pixels
         self.assertEqual(raw.shape, (27, 48, 4))
