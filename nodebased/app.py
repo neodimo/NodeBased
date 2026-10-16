@@ -5946,6 +5946,13 @@ class Graph(PanZoomView):
         self._radial_node_type = None
         self.scene().selectionChanged.connect(self.selection_changed)
         self.corner = GraphCorner(self)
+        # The minimap shows the visible rectangle and every node. A scroll or a zoom moves the
+        # rectangle (a zoom changes the scroll ranges); selection, moves and rebuilds are
+        # reported where they happen.
+        for bar in (self.horizontalScrollBar(), self.verticalScrollBar()):
+            bar.valueChanged.connect(self.corner.minimap.update)
+            bar.rangeChanged.connect(self.corner.minimap.update)
+        self.scene().selectionChanged.connect(self.corner.minimap.update)
 
     def zoom_by(self, factor):
         """Zoom about the middle of the view (the corner buttons), within the same limits as the wheel."""
@@ -5971,6 +5978,7 @@ class Graph(PanZoomView):
             # nodes a speck in one corner).
             self.frame_nodes()
         self.corner.reposition()
+        self.corner.refresh_minimap()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -6398,6 +6406,10 @@ class Graph(PanZoomView):
         for edge, source, key, slot, out_name in self.edges:
             output, port = self.items_by_id[source].outputs[out_name], self.items_by_id[key].inputs[slot]
             edge.set_route(output.scenePos(), port.scenePos(), port.facing, output.facing)
+        # Called when a node moves and after a rebuild; the minimap draws a rectangle per node.
+        corner = getattr(self, "corner", None)
+        if corner is not None:
+            corner.refresh_minimap()
 
     def set_wire_mode(self, mode, save=True):
         """Switch every wire between curved and right angle; the choice is kept in the settings."""
