@@ -49,8 +49,16 @@
     "corrected_scene": "pending rerun on NVIDIA RTX 3080 Ti, Radeon 8060S and llvmpipe",
     "frame_comparisons": [1, 60, 120]
   },
-  "progressive_render_1920x1080": "pending shared GPU lock",
-  "radeon_preview_64_cell": "pending shared GPU lock",
+  "progressive_render_1920x1080": {
+    "status": "not measured",
+    "reason": "exclusive lock wait expired at 30 minutes while the integrator full-suite runner still held the shared lock",
+    "first_look_seconds": null,
+    "settle_seconds": null
+  },
+  "radeon_preview_64_cell": {
+    "status": "not measured",
+    "reason": "not started because the integrator full-suite runner still held the shared GPU lock"
+  },
   "a6000_48gb_estimate": {
     "measured": false,
     "estimated_grid_cells": 128,

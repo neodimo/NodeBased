@@ -1575,7 +1575,7 @@ A separate 8/32/128-sample sweep was captured before correcting the offset secon
 
 **What still looks wrong:** steam remains sparse and speckled rather than a soft column; the stream's top looks like a rounded blob; the liquid pool is hard to read through the pale glass; the tabletop shadow has a hard edge. These are visual observations from the three replacement stills.
 
-The 1920 × 1080 progressive Render first-look/settle timings and the 64-cell Radeon preview rate/stop time are still pending on the shared GPU lock. The step remains partial until the viewport first look is under one second and Radeon preview reaches 12 FPS with a stop under one second.
+The lane waited 30 minutes for the shared GPU lock; the integrator's full-suite runner still held it. No 1920 × 1080 progressive Render first-look/settle measurement or 64-cell Radeon preview rate/stop measurement was started. The step remains partial until the viewport first look is under one second and Radeon preview reaches 12 FPS with a stop under one second.
 
 ## K2 rigid bodies — finish 1
 
