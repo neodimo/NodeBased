@@ -372,6 +372,11 @@ class Liquid3D:
             changed = True
         if changed:
             self._systems.clear()
+            # The sparse transfer kernels own buffers sized to their original domain.
+            # auto_resize can grow and later shrink that domain between substeps; a
+            # cached transfer would then return a liquid mask with stale dimensions.
+            if self._flip_gpu is not None and self._flip_gpu.shape != self.shape:
+                self._flip_gpu = None
 
     def _fit_box(self, bounds, frame=None, include_sources=False):
         """The tile-aligned (start, stop, new_shape) cell box that fits the liquid, or None when the current box

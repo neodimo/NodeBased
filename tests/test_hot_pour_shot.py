@@ -2,6 +2,7 @@
 import unittest
 from pathlib import Path
 import time
+from unittest.mock import patch
 
 import numpy as np
 
@@ -11,6 +12,24 @@ ROOT = Path(__file__).resolve().parents[1] / "examples" / "hot_pour_shot"
 
 
 class HotPourShotTests(unittest.TestCase):
+    def test_frame_one_evaluates_with_each_pressure_selection(self):
+        from nodebased import fluid_gpu_solver
+
+        pressure_modes = ["auto", "cpu"]
+        if fluid_gpu_solver.available():
+            pressure_modes.append("resident")
+        for pressure in pressure_modes:
+            with self.subTest(pressure=pressure), patch.dict("os.environ", {"NODEBASED_SIM_CACHE": "0"}):
+                doc = core.load_document(ROOT / "hot_pour_shot.nbcomp")
+                for key in ("liquid", "steam"):
+                    doc["nodes"][key]["params"]["pressure"] = pressure
+                doc["nodes"]["render"]["params"].update(
+                    width=48, height=27, render_backend="cpu", pt_samples=2)
+                doc["nodes"]["plate_fit"]["params"].update(width=48, height=27)
+                scene = Evaluator().evaluate_raster(doc, "scene", frame=1, typed=True)
+                self.assertTrue(any(g.material == "liquid" and len(g.vertices) > 0
+                                    for g in scene.geometries))
+
     def test_small_shot_evaluates_with_catcher_and_holdout(self):
         started = time.perf_counter()
         doc = core.load_document(ROOT / "hot_pour_shot.nbcomp")
