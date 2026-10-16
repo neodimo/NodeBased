@@ -225,10 +225,14 @@ def _state(choice=None):
         try:
             import wgpu
             if choice == 'default':
-                adapter = select_adapter(wgpu.gpu.enumerate_adapters_sync(), adapter_preference())
+                try:
+                    adapter = select_adapter(list(wgpu.gpu.enumerate_adapters_sync()), adapter_preference())
+                except Exception as exc:       # an enumeration that fails is the same as one that finds nothing
+                    log.warning('could not enumerate graphics adapters (%s); asking for high performance', exc)
+                    adapter = None
                 if adapter is None:
                     adapter = wgpu.gpu.request_adapter_sync(power_preference='high-performance')
-                if not _adapter_logged:
+                if not _adapter_logged and enumerate_adapters():
                     _adapter_logged.append(True)
                     _log_adapters(enumerate_adapters(), _name_of(adapter.info))
             else:

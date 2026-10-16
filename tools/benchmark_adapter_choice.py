@@ -1,0 +1,122 @@
+"""Frame rate at 1920 x 1080 on each graphics adapter (docs/PERFORMANCE.md, "Adapter choice").
+
+    python tools/benchmark_adapter_choice.py [--adapters "RTX,Radeon,llvmpipe"] [--seconds 6] [--json out.json]
+    python tools/benchmark_adapter_choice.py --case empty3d|cards3d|checker --seconds 6      (one case, in-process)
+
+Each adapter and case is its own subprocess with NODEBASED_ADAPTER set to part of the adapter's name, under a turn of
+/tmp/nb-gpu.lock. Cases:
+
+* empty3d: an empty 3D scene rendered by the GPU renderer (what a 3D viewer pays before any geometry).
+* cards3d: 3000 lit cards rasterized at 4 samples: a scene where the card matters.
+* checker: a Checker -> Viewer graph at 1920 x 1080 played in the real window (drawn frames per second).
+"""
+import argparse
+import json
+import os
+import statistics
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+
+def case_empty3d(seconds):
+    from nodebased import gpu3d, scene3d
+    scene, camera = scene3d.Scene(()), scene3d.Camera()
+    gpu3d.render(scene, camera, 1920, 1080)
+    times = []
+    end = time.perf_counter() + seconds
+    while time.perf_counter() < end:
+        start = time.perf_counter()
+        gpu3d.render(scene, camera, 1920, 1080)
+        times.append(time.perf_counter() - start)
+    return dict(frames=len(times), fps=round(len(times) / sum(times), 2), median_ms=round(statistics.median(times) * 1000, 1))
+
+
+def case_cards3d(seconds):
+    """3000 lit cards at 4 samples: a scene where the card matters."""
+    from nodebased import gpu3d, scene3d
+    cards = tuple(scene3d._card(0.5, 0.5, (.2, .6, .9, 1), scene3d.Transform3D(scene3d.Vec3((i % 60) * .2 - 6, (i // 60) * .2 - 5, -(i % 7) * .3)))
+                  for i in range(3000))
+    scene, camera = scene3d.Scene(cards, (scene3d.Light(),)), scene3d.Camera()
+    kwargs = dict(ambient=.2, samples=4)
+    gpu3d.render(scene, camera, 1920, 1080, **kwargs)
+    times = []
+    end = time.perf_counter() + seconds
+    while time.perf_counter() < end:
+        start = time.perf_counter()
+        gpu3d.render(scene, camera, 1920, 1080, **kwargs)
+        times.append(time.perf_counter() - start)
+    return dict(frames=len(times), fps=round(len(times) / sum(times), 2), median_ms=round(statistics.median(times) * 1000, 1))
+
+
+def case_checker(seconds):
+    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtWidgets import QApplication
+    from nodebased.app import Window
+    app = QApplication.instance() or QApplication([])
+    window = Window()
+    window.resize(1600, 1000)
+    window.show()
+    window.agent_command({"op": "batch", "commands": [
+        {"op": "create", "type": "Checker", "id": "qa_checker", "params": {"width": 1920, "height": 1080}},
+        {"op": "view", "id": "qa_checker"}]})
+    window.set_time(first=1, last=100, current=1, fps=24.0)
+    drawn = []
+    window.signals.finished.connect(lambda payload, frame, image, status, region=None:
+                                    drawn.append(time.perf_counter()) if image is not None and frame is not None else None)
+    end = time.perf_counter() + 30
+    while not drawn and time.perf_counter() < end:
+        app.processEvents()
+        time.sleep(0.01)
+    drawn.clear()
+    start = time.perf_counter()
+    window.toggle_playback(True)
+    loop = QEventLoop()
+    QTimer.singleShot(int(seconds * 1000), loop.quit)
+    loop.exec()
+    window.toggle_playback(False)
+    elapsed = time.perf_counter() - start
+    window.confirm_discard = lambda *a, **k: True
+    window.close()
+    return dict(frames=len(drawn), fps=round(len(drawn) / elapsed, 2), median_ms=None)
+
+
+def run_case(case, adapter, seconds):
+    from nodebased import gpu3d
+    result = {"empty3d": case_empty3d, "cards3d": case_cards3d, "checker": case_checker}[case](seconds)
+    result.update(case=case, adapter=gpu3d.chosen_adapter_name(), requested=adapter)
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--adapters", default="RTX,Radeon,llvmpipe")
+    parser.add_argument("--seconds", type=float, default=6.0)
+    parser.add_argument("--case")
+    parser.add_argument("--json")
+    args = parser.parse_args()
+    if args.case:
+        print("@@JSON@@" + json.dumps(run_case(args.case, os.environ.get("NODEBASED_ADAPTER", ""), args.seconds)))
+        return
+    rows = []
+    for adapter in args.adapters.split(","):
+        for case in ("empty3d", "cards3d", "checker"):
+            env = {**os.environ, "NODEBASED_ADAPTER": adapter, "PYTHONPATH": str(ROOT)}
+            env.setdefault("QT_QPA_PLATFORM", "offscreen")
+            command = ["flock", "-w", "1800", "/tmp/nb-gpu.lock", sys.executable, __file__, "--case", case,
+                       "--seconds", str(args.seconds)]
+            done = subprocess.run(command, env=env, capture_output=True, text=True, timeout=900)
+            line = next((l for l in done.stdout.splitlines() if l.startswith("@@JSON@@")), None)
+            row = json.loads(line[8:]) if line else dict(case=case, requested=adapter, error=(done.stderr or done.stdout)[-300:])
+            print(json.dumps(row), flush=True)
+            rows.append(row)
+    if args.json:
+        Path(args.json).write_text(json.dumps(rows, indent=1))
+
+
+if __name__ == "__main__":
+    main()
