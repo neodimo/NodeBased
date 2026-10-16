@@ -9407,6 +9407,12 @@ class Window(QMainWindow):
         if all(current[name] == value for name, value in changes.items()):
             return
         self.command({"op": "viewer_roi", **changes})
+        if current["on"] and changes.get("on") is False:
+            # The latest ROI patch stays on top; reveal the last complete frame underneath it
+            # while the missing tiles render. The final preview replaces both when it lands.
+            backdrop_item = getattr(self.viewer, "backdrop_item", None)
+            if backdrop_item is not None:
+                backdrop_item.setOpacity(1.0)
 
     def toggle_viewer_roi(self, on):
         self.set_viewer_roi(on=on)
@@ -13006,6 +13012,7 @@ class Window(QMainWindow):
         if self.output_preview_dock.isVisible():
             self.refresh_output_preview()
         self.viewer.scene().clear()
+        self.viewer.backdrop_item = None
         if scale != 1:
             # Show the proxy at the comp's real size so framing, pans and zooms do not change
             # when an artist drops the tier. Fast transform on purpose: this is a display upscale
@@ -13028,6 +13035,7 @@ class Window(QMainWindow):
             backdrop.setPos(render_region.full_x * scale, render_region.full_y * scale)
             backdrop.setOpacity(0.35)
             backdrop.setZValue(-1)
+            self.viewer.backdrop_item = backdrop
         if render_region is not None:
             # Tile result coordinates are data-window coordinates. Keep the pixmap at that
             # location instead of rebasing the crop to (0,0), otherwise a pan would make the
