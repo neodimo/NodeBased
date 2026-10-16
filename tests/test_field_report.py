@@ -4,6 +4,8 @@ The end-to-end test runs the real command with --quick on this machine; on a mac
 failed, which still has to produce the report, so the assertions are about the report's shape and not about every step passing.
 """
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -275,6 +277,40 @@ class RunTestsAcceptsSeveralPatterns(unittest.TestCase):
         found = run_tests.modules(["test_gpulock.py", "test_gpumemory.py", "test_gpulock.py"])
         self.assertEqual(found, ["tests.test_gpulock", "tests.test_gpumemory"])
         self.assertEqual(run_tests.modules("test_gpulock.py"), ["tests.test_gpulock"])
+
+
+class LightningWeightsTests(unittest.TestCase):
+    """--everything puts the SDXL-Lightning 4-step LoRA (spike A) on the stick, with its licence."""
+
+    def make_cache(self, root):
+        for repo in (*make_field_bundle.SDXL_REPOS, make_field_bundle.LIGHTNING_REPO):
+            folder = root / ("models--" + repo.replace("/", "--"))
+            (folder / "refs").mkdir(parents=True)
+            (folder / "refs" / "main").write_text("abc123")
+            snapshot = folder / "snapshots" / "abc123"
+            snapshot.mkdir(parents=True)
+            names = make_field_bundle.LIGHTNING_FILES if repo == make_field_bundle.LIGHTNING_REPO else ("model.bin",)
+            for name in names:
+                (snapshot / name).write_bytes(b"x" * 10)
+        (root / "models--ByteDance--SDXL-Lightning" / "snapshots" / "abc123" / "sdxl_lightning_4step_unet.safetensors").write_bytes(b"big")
+
+    def test_lightning_snapshot_is_copied_with_its_three_files_only(self):
+        with tempfile.TemporaryDirectory() as temp, mock.patch.dict(os.environ, {"HF_HUB_CACHE": str(Path(temp) / "cache")}):
+            self.make_cache(Path(temp) / "cache")
+            plain, full = Path(temp) / "plain", Path(temp) / "full"
+            make_field_bundle.copy_weights(plain, False)
+            make_field_bundle.copy_weights(full, False, lightning=True)
+            self.assertFalse((plain / "hub" / "models--ByteDance--SDXL-Lightning").exists())
+            snapshot = full / "hub" / "models--ByteDance--SDXL-Lightning" / "snapshots" / "abc123"
+            self.assertEqual(sorted(p.name for p in snapshot.iterdir()), sorted(make_field_bundle.LIGHTNING_FILES))
+            self.assertEqual((full / "hub" / "models--ByteDance--SDXL-Lightning" / "refs" / "main").read_text(), "abc123")
+
+    def test_a_missing_lora_stops_the_build_with_the_command_to_fetch_it(self):
+        with tempfile.TemporaryDirectory() as temp, mock.patch.dict(os.environ, {"HF_HUB_CACHE": str(Path(temp) / "cache")}):
+            self.make_cache(Path(temp) / "cache")
+            shutil.rmtree(Path(temp) / "cache" / "models--ByteDance--SDXL-Lightning")
+            with self.assertRaisesRegex(SystemExit, "hf download ByteDance/SDXL-Lightning"):
+                make_field_bundle.copy_weights(Path(temp) / "out", False, lightning=True)
 
 
 if __name__ == "__main__":

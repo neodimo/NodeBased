@@ -1,6 +1,6 @@
 """Build the offline bundle for the field test (docs/FIELD_TEST.md, "Offline"): a folder to copy to a USB stick.
 
-    python tools/make_field_bundle.py --out DIR [--everything] [--weights] [--python-version 3.12] [--platform win_amd64]
+    python tools/make_field_bundle.py --out DIR [--everything] [--weights] [--lightning] [--python-version 3.12] [--platform win_amd64]
                                       [--skip-provider] [--dry-run] [--test-package NAME] [--reuse]
     python tools/make_field_bundle.py --verify DIR          (check a copied bundle against its manifest)
 
@@ -9,7 +9,8 @@ DIR gets:
   wheels/                pip download of the project's dependencies plus the gpu and usd extras, and the build tools
   wheels-provider/       torch and torchvision from the CUDA index, then diffusers, transformers, accelerate, safetensors,
                          huggingface_hub, OpenEXR, numpy and pillow: what projects/nb-providers/sdxl/setup.sh installs
-  weights/hub/           with --weights: the three SDXL model snapshots in the Hugging Face cache layout (about 9 GB)
+  weights/hub/           with --weights: the three SDXL model snapshots in the Hugging Face cache layout (about 9 GB);
+                         with --lightning (or --everything): also the SDXL-Lightning 4-step LoRA snapshot, spike A (394 MB, with its licence)
   BUNDLE-README.txt      what is inside, the install order, the driver minimum, the commands to run on the target machine
   verify-bundle.ps1      PowerShell check of every file against manifest.json (no Python needed)
   MANIFEST.txt, manifest.json   size and sha256 of every file, plus "components" (versions and URLs) and "missing" (see below)
@@ -44,13 +45,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TORCH_INDEX = "https://download.pytorch.org/whl/cu126"   # the index setup.sh uses; cu126 wheels carry their own CUDA runtime
 BUILD_TOOLS = ["setuptools>=68", "wheel", "pip"]          # `pip install .` builds the project; offline it needs these in find-links
-PROVIDER_PACKAGES = ["diffusers>=0.32", "transformers", "accelerate", "safetensors", "huggingface_hub", "OpenEXR", "numpy", "pillow"]
+PROVIDER_PACKAGES = ["diffusers>=0.32", "transformers", "accelerate", "safetensors", "huggingface_hub", "peft", "OpenEXR", "numpy", "pillow"]
 PYTHON_FTP = "https://www.python.org/ftp/python/"
 STANDALONE_REPO = "astral-sh/python-build-standalone"
 VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 RELEASE_REPO = "neodimo/NodeBased"
 DRIVER_SOURCE = "https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html (table 'Corresponding Driver Versions', CUDA 12.6 rows)"
 SDXL_REPOS = ("stabilityai/stable-diffusion-xl-base-1.0", "madebyollin/sdxl-vae-fp16-fix", "xinsir/controlnet-union-sdxl-1.0")
+# Spike A (docs/SPIKE_A_FEWSTEP.md): only these files of the repository are in the cache and on the stick.
+LIGHTNING_REPO = "ByteDance/SDXL-Lightning"
+LIGHTNING_FILES = ("sdxl_lightning_4step_lora.safetensors", "LICENSE.md", "README.md")
 
 
 def project_requirements():
@@ -95,24 +99,37 @@ def hf_cache():
     return Path.home() / ".cache" / "huggingface" / "hub"
 
 
-def copy_weights(destination, dry_run):
-    """The three snapshots the provider reads, files dereferenced (the cache holds symlinks to blobs), in cache layout."""
+def copy_weights(destination, dry_run, lightning=False, skip_present=False):
+    """The three snapshots the provider reads, files dereferenced (the cache holds symlinks to blobs), in cache layout.
+    With `lightning`, also the SDXL-Lightning 4-step LoRA snapshot (its three files only)."""
     cache = hf_cache()
     copied = 0
-    for repo in SDXL_REPOS:
+    for repo in SDXL_REPOS + ((LIGHTNING_REPO,) if lightning else ()):
         folder = cache / ("models--" + repo.replace("/", "--"))
         try:
             revision = (folder / "refs" / "main").read_text().strip()
         except OSError:
-            raise SystemExit(f"weights: {repo} is not in the Hugging Face cache at {cache}; run projects/nb-providers/sdxl/setup.sh first")
+            raise SystemExit(f"weights: {repo} is not in the Hugging Face cache at {cache}; run projects/nb-providers/sdxl/setup.sh first"
+                             + (" (the Lightning LoRA: hf download ByteDance/SDXL-Lightning sdxl_lightning_4step_lora.safetensors LICENSE.md README.md)"
+                                if repo == LIGHTNING_REPO else ""))
         source = folder / "snapshots" / revision
         target = destination / "hub" / folder.name
+        if skip_present and (target / "snapshots" / revision).is_dir():
+            continue
         print(f"weights: {repo} @ {revision[:8]} ({human(sum(p.stat().st_size for p in source.rglob('*') if p.is_file()))})", flush=True)
         if dry_run:
             continue
         (target / "refs").mkdir(parents=True, exist_ok=True)
         (target / "refs" / "main").write_text(revision)
-        shutil.copytree(source, target / "snapshots" / revision, symlinks=False, dirs_exist_ok=True)
+        if repo == LIGHTNING_REPO:
+            missing = [name for name in LIGHTNING_FILES if not (source / name).is_file()]
+            if missing:
+                raise SystemExit(f"weights: {repo} snapshot lacks {', '.join(missing)}")
+            for name in LIGHTNING_FILES:
+                (target / "snapshots" / revision).mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source / name, target / "snapshots" / revision / name)
+        else:
+            shutil.copytree(source, target / "snapshots" / revision, symlinks=False, dirs_exist_ok=True)
         copied += 1
     return copied
 
@@ -311,7 +328,7 @@ INSTALL ORDER (all per user, no elevation)
   .\\.venv\\Scripts\\Activate.ps1          # if PowerShell refuses: Set-ExecutionPolicy -Scope Process Bypass (this window only, no admin)
   python -m pip install --no-index --find-links E:\\nb-bundle\\wheels --upgrade pip setuptools wheel
   pip install --no-index --find-links E:\\nb-bundle\\wheels ".[gpu,usd]"
-  pip install --no-index --find-links E:\\nb-bundle\\wheels-provider torch torchvision diffusers transformers accelerate safetensors huggingface_hub OpenEXR numpy pillow
+  pip install --no-index --find-links E:\\nb-bundle\\wheels-provider torch torchvision diffusers transformers accelerate safetensors huggingface_hub peft OpenEXR numpy pillow
 
   4. The SDXL weights. Read them from the stick (nothing to copy) ...
   $env:HF_HUB_CACHE = "E:\\nb-bundle\\weights\\hub"; $env:HF_HUB_OFFLINE = "1"
@@ -440,7 +457,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", help="bundle folder (created)")
     parser.add_argument("--weights", action="store_true", help="also copy the SDXL model snapshots from the Hugging Face cache (about 9 GB)")
-    parser.add_argument("--everything", action="store_true", help="implies --weights; also standalone Python, the python.org installer, vc_redist and the release's Windows portable zip")
+    parser.add_argument("--lightning", action="store_true", help="implies --weights; also the SDXL-Lightning 4-step LoRA snapshot (spike A, 394 MB)")
+    parser.add_argument("--everything", action="store_true", help="implies --weights and --lightning; also standalone Python, the python.org installer, vc_redist and the release's Windows portable zip")
     parser.add_argument("--python-version", default="3.12")
     parser.add_argument("--platform", default="win_amd64")
     parser.add_argument("--skip-provider", action="store_true", help="leave out wheels-provider (torch is about 2.5 GB)")
@@ -455,6 +473,8 @@ def main(argv=None):
         parser.error("--out is required")
     out = Path(args.out).resolve()
     if args.everything:
+        args.weights = args.lightning = True
+    if args.lightning:
         args.weights = True
     started = time.monotonic()
     if not args.dry_run and subprocess.call([sys.executable, "-m", "pip", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
@@ -509,7 +529,9 @@ def main(argv=None):
 
     # 4. weights
     if args.weights and not kept("weights"):
-        copy_weights(out / "weights", args.dry_run)
+        copy_weights(out / "weights", args.dry_run, args.lightning)
+    elif args.weights and args.lightning:   # --reuse kept an older weights folder: add the LoRA snapshot to it
+        copy_weights(out / "weights", args.dry_run, True, skip_present=True)
 
     # 5. everything else a machine with no Python and no internet needs
     components, notes = [], []
