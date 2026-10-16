@@ -104,6 +104,10 @@ def copy_weights(destination, dry_run):
         try:
             revision = (folder / "refs" / "main").read_text().strip()
         except OSError:
+            if dry_run:
+                # a dry run must work on a machine without the weights (the CI runners have none)
+                print(f"weights: {repo}: not in the Hugging Face cache at {cache}; a real run copies it from there", flush=True)
+                continue
             raise SystemExit(f"weights: {repo} is not in the Hugging Face cache at {cache}; run projects/nb-providers/sdxl/setup.sh first")
         source = folder / "snapshots" / revision
         target = destination / "hub" / folder.name

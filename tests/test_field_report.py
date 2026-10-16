@@ -4,6 +4,7 @@ The end-to-end test runs the real command with --quick on this machine; on a mac
 failed, which still has to produce the report, so the assertions are about the report's shape and not about every step passing.
 """
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -264,7 +265,9 @@ class FieldBundleEverything(unittest.TestCase):
     def test_everything_dry_run_lists_the_downloads_and_writes_nothing(self):
         with tempfile.TemporaryDirectory(prefix="field-bundle-test-") as tmp:
             out = Path(tmp) / "bundle"
-            self.assertEqual(make_field_bundle.main(["--everything", "--out", str(out), "--dry-run"]), 0)
+            # an empty weights cache, as on the CI runners: the dry run lists the weights as absent and still succeeds
+            with mock.patch.dict(os.environ, {"HF_HUB_CACHE": str(Path(tmp) / "no-hub")}):
+                self.assertEqual(make_field_bundle.main(["--everything", "--out", str(out), "--dry-run"]), 0)
             self.assertFalse(out.exists())
 
 
