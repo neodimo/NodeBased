@@ -1,0 +1,53 @@
+{
+  "adapter": "NVIDIA GeForce RTX 3080 Ti / Vulkan",
+  "vram_gb": 12,
+  "grid_cells": 64,
+  "frames": 120,
+  "bake_seconds": 34.94,
+  "showcase": {
+    "resolution": [960, 540],
+    "stills_use_samples": 32,
+    "composition": "corrected single plate glass and aligned holdout",
+    "corrected_sample_32_seconds": {
+      "60": 201.06,
+      "90": 201.88,
+      "120": 200.04
+    },
+    "files": [
+      "docs/images/hot_pour_shot/hot-pour-060.png",
+      "docs/images/hot_pour_shot/hot-pour-090.png",
+      "docs/images/hot_pour_shot/hot-pour-120.png"
+    ]
+  },
+  "sample_sweep_before_plate_cleanup": {
+    "composition": "two cups, one offset in the plate; timings are approximate for the final composition",
+    "resolution": [960, 540],
+    "frames": {
+      "60": {
+        "8": 108.95,
+        "32": 191.16,
+        "128": 726.4
+      },
+      "90": {
+        "8": 103.59,
+        "32": 190.4,
+        "128": 704.59
+      }
+    },
+    "complete": false,
+    "missing": "corrected 8/32/128 measurements for every showcase frame"
+  },
+  "cpu_gpu_agreement": {
+    "corrected_scene": "pending rerun on NVIDIA RTX 3080 Ti, Radeon 8060S and llvmpipe",
+    "frame_comparisons": [1, 60, 120]
+  },
+  "progressive_render_1920x1080": "pending shared GPU lock",
+  "radeon_preview_64_cell": "pending shared GPU lock",
+  "a6000_48gb_estimate": {
+    "measured": false,
+    "estimated_grid_cells": 128,
+    "estimated_still_samples": 32,
+    "basis": "64-cell 120-frame bake measured at 34.94 seconds; cubic cell scaling estimates about 4 minutes 40 seconds for 128 cells. Same Ampere generation; no faster per-step rate assumed.",
+    "caveat": "GPU peak memory and higher-grid surface cost were not measured."
+  }
+}

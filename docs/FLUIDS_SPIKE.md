@@ -1561,9 +1561,19 @@ On the regenerated 256³ liquid / 192³ steam, 120-frame production cache (47,66
 The half-resolution surface arrives within one second at all three production frames (slowest: 311.6 ms at frame 120). Full detail follows in under 226 ms at all three. Together with the playback measurements above, both Radeon acceptance targets pass. The benchmark is `benchmarks/hot_pour/radeon-stop-P4-2026-10-13.json`; its 47.66 GB generated cache was removed after measurement.
 
 
-### S2 of 2: the Hot pour reads as a pour (partial, 2026-10-15)
+### S2 of 2: the Hot pour reads as a pour (in progress, 2026-10-15)
 
-The example now uses a 64-cell liquid/steam grid and centers the holdout cup on the solver's pour axis; the keyed source path stays inside the cup radius and begins above its rim. `tests.test_hot_pour_shot` passes its CPU frame-1 check, including the holdout, liquid material, steam, and sub-minute evaluation. The 12 GB RTX 3080 Ti measurements, replacement stills, viewport first-look result, and Radeon 12 FPS result remain pending. An integrator full-suite run currently owns the shared GPU lock, so this lane stopped its queued exclusive bake instead of contending for the card. No new bake or still render has been measured in S2; the prior S1 numbers do not establish these targets.
+The shot uses a 64-cell liquid/steam grid. The stream source is above the glass opening; the holdout and plate glass now share the solver's center axis. A plate-generation defect had left a second, offset glass in the plate, so the live render now carries only the holdout while the plate supplies the single glass. `tests.test_hot_pour_shot` verifies the 64-cell graph, aligned holdout, liquid-material surface mesh with vertices, steam and shadow catcher; its CPU frame-1 evaluation completes in under a minute.
+
+**Measured on the 12 GB RTX 3080 Ti:** the 120-frame 64-cell bake took 34.94 seconds. The corrected 960 × 540 showcase frames use 32 path-tracing samples and took 201.06 seconds (frame 60), 201.88 seconds (frame 90) and 200.04 seconds (frame 120). The images are [frame 60](images/hot_pour_shot/hot-pour-060.png), [frame 90](images/hot_pour_shot/hot-pour-090.png) and [frame 120](images/hot_pour_shot/hot-pour-120.png). The corrected images show the stream entering the glass and a liquid pool at its base.
+
+A separate 8/32/128-sample sweep was captured before correcting the offset second cup: at frames 60 and 90, 8 samples took 108.95 and 103.59 seconds; 32 took 191.16 and 190.40 seconds; 128 took 726.40 and 704.59 seconds. Those timings describe the earlier two-cup composition. Corrected 32-sample timings above are the measurements for the replacement stills. The full corrected 8/32/128 timing matrix is incomplete. Results are in `benchmarks/hot_pour/hot-pour-shot-2026-10-14.json`.
+
+**48 GB RTX A6000 estimate (unmeasured):** its four-times-larger memory may allow a 128-cell grid and 32-sample 960 × 540 stills to stay in memory. Scaling the measured 64-cell bake by the 8× voxel count suggests roughly 4 minutes 40 seconds for the same 120 frames, still under the 20-minute budget. This is a capacity and workload estimate; mesh cost and peak GPU memory have not been measured. The A6000 is the same Ampere generation, so this estimate assumes no faster solver steps.
+
+**What still looks wrong:** steam remains sparse and speckled rather than a soft column; the stream's top looks like a rounded blob; the liquid pool is hard to read through the pale glass; the tabletop shadow has a hard edge. These are visual observations from the three replacement stills.
+
+The 1920 × 1080 progressive Render first-look/settle timings and the 64-cell Radeon preview rate/stop time are still pending on the shared GPU lock. The step remains partial until the viewport first look is under one second and Radeon preview reaches 12 FPS with a stop under one second.
 
 ## K2 rigid bodies — finish 1
 
