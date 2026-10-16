@@ -453,7 +453,7 @@ def render(state, scene, camera, width, height, background, ambient, output='rgb
         for resource in reversed(resources):
             resource.destroy()
     if samples > 1:
-        result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
+        result = s.box_resolve(result, samples)
     if output == 'rgba':
         result = result + bg * (1 - result[..., 3:4])
     result = np.ascontiguousarray(result, 'f4')

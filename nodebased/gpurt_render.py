@@ -1263,7 +1263,7 @@ def render(state, scene, camera, width, height, background, ambient,
         result[..., :3] = rgb+(1-alpha[..., None])*result[..., :3]
         result[..., 3] = alpha+(1-alpha)*result[..., 3]
     if samples > 1:
-        result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
+        result = s.box_resolve(result, samples)
     if output == 'rgba':
         bg = np.asarray(background, 'f4').copy(); bg[3] = np.clip(bg[3], 0, 1); bg[:3] *= bg[3]
         result += bg*(1-result[..., 3:4])
