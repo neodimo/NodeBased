@@ -35,6 +35,12 @@ for row in job["frames"]:
     out[..., 0] = depth[..., 0]; out[..., 1] = normals[..., 1]; out[..., 2] = job["seed"] % 256
     np.save(row["result"], out)
     print("progress", row["frame"], len(job["frames"]), flush=True)
+if job.get("preview_dir"):
+    for row in job["frames"]:
+        for step in (1, 2):
+            path = job["preview_dir"] + "/f%04d_s%d.npy" % (row["frame"], step)
+            np.save(path, np.zeros((2, 2, 3), np.uint8))
+            print("preview " + json.dumps({"frame": row["frame"], "stage": "text2img", "step": step, "of": 2, "path": path}), flush=True)
 json.dump({"peak_vram_allocated_mib": 1, "seen_prompt": job["prompt"], "settings": job["settings"]}, open(job["info"], "w"))
 '''
 
@@ -77,6 +83,27 @@ class ConversionTests(unittest.TestCase):
                     {"denoise_strength": 1.5}):
             with self.assertRaises(ValueError, msg=str(bad)):
                 sdxl.resolve_settings(bad)
+
+
+class FastPreviewSettingsTests(unittest.TestCase):
+    """`fast_preview` (spike A): the SDXL-Lightning 4-step path is an opt-in setting; the default is untouched."""
+
+    def test_off_by_default_and_not_recorded_when_false(self):
+        self.assertEqual(sdxl.resolve_settings({"fast_preview": False}), sdxl.DEFAULT_SETTINGS)
+        self.assertNotIn("fast_preview", sdxl.resolve_settings(None))
+
+    def test_on_pins_four_steps_and_guidance_zero(self):
+        settings = sdxl.resolve_settings({"fast_preview": True})
+        self.assertEqual((settings["steps"], settings["guidance"], settings["fast_preview"]), (4, 0.0, True))
+        self.assertEqual(settings["denoise_strength"], 0.5)   # two of the four trained steps for a guided frame
+        self.assertEqual(sdxl.resolve_settings({"fast_preview": True, "steps": 4, "guidance": 0}), settings)
+
+    def test_on_refuses_another_schedule_and_a_strength_with_no_step(self):
+        for bad in ({"fast_preview": True, "steps": 8}, {"fast_preview": True, "guidance": 5.0},
+                    {"fast_preview": True, "denoise_strength": 0.1}, {"fast_preview": "yes"}):
+            with self.assertRaises(ValueError, msg=str(bad)):
+                sdxl.resolve_settings(bad)
+        self.assertEqual(sdxl.resolve_settings({"fast_preview": True, "denoise_strength": 1.0})["denoise_strength"], 1.0)
 
 
 @unittest.skipIf(sys.platform == "win32", "the stub interpreter is a shell script")
@@ -129,6 +156,20 @@ class ProviderPlumbingTests(unittest.TestCase):
         weaker = generate(self.bundle, self.state, self.root / "s" / "out.####.exr", "sdxl_controlnet", seed=3,
                           text="x", sampler_settings={"denoise_strength": 0.3})
         self.assertNotEqual(first["artifact_id"], weaker["artifact_id"])
+
+    def test_previews_reach_the_callback_and_never_change_the_frames(self):
+        events = []
+        controls = __import__("nodebased.generative", fromlist=["x"]).read_control_bundle(self.bundle, self.state)
+        plain, _ = sdxl.run_frames(controls, text="x", seed=2, sampler_settings=None, workdir=self.root / "w1")
+        shown, _ = sdxl.run_frames(controls, text="x", seed=2, sampler_settings=None, workdir=self.root / "w2",
+                                   preview=events.append)
+        self.assertEqual([(e["frame"], e["step"]) for e in events], [(1, 1), (1, 2), (2, 1), (2, 2)])
+        self.assertTrue(all("received" in e for e in events))
+        for a, b in zip(plain, shown):
+            np.testing.assert_array_equal(a, b)
+        with mock.patch.dict(os.environ, {sdxl.PREVIEW_DIR_ENV: str(self.root / "p")}):
+            sdxl.run_frames(controls, text="x", seed=2, sampler_settings=None, workdir=self.root / "w3")
+        self.assertEqual(len((self.root / "p" / "previews.jsonl").read_text().splitlines()), 4)
 
     def test_bad_settings_refuse_before_any_model_process_starts(self):
         with mock.patch.object(sdxl.subprocess, "Popen") as popen:
@@ -205,7 +246,38 @@ def cuda_unavailable():
     return sdxl.available()
 
 
+def lightning_missing():
+    try:
+        return "" if (sdxl._cached_snapshot(sdxl.LIGHTNING_REPO) / sdxl.LIGHTNING_LORA).exists() else "the Lightning LoRA is not cached"
+    except OSError:
+        return "the Lightning LoRA is not cached"
+
+
 class RealModelTests(unittest.TestCase):
+    def test_fast_preview_previews_on_or_off_give_byte_identical_frames(self):
+        """Spike A: the previews decode through their own VAE copy and draw no random numbers, so the frames match."""
+        reason = cuda_unavailable() or lightning_missing()
+        if reason:
+            self.skipTest(reason)
+        from nodebased.generative import read_control_bundle
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with mock.patch.dict(os.environ, {"NODEBASED_CACHE": str(root / "cache")}):
+                state, _, bundle, _ = make_shot(root, width=96, height=64, frames=(1, 2))
+                controls = read_control_bundle(bundle, state)
+                settings = {"fast_preview": True}
+                plain, info = sdxl.run_frames(controls, text="a stone wall", seed=3, sampler_settings=settings, workdir=root / "a")
+                events = []
+                shown, _ = sdxl.run_frames(controls, text="a stone wall", seed=3, sampler_settings=settings,
+                                           workdir=root / "b", preview=events.append)
+        self.assertTrue(info["fast_preview"])
+        for a, b in zip(plain, shown):
+            np.testing.assert_array_equal(a, b)
+        # frame 1: four text-to-image steps; frame 2: the fill pass (four) and the image-to-image tail (the last two)
+        self.assertEqual([(e["stage"], e["step"], e["of"]) for e in events if e["frame"] == 1], [("text2img", i, 4) for i in (1, 2, 3, 4)])
+        self.assertEqual([(e["stage"], e["step"], e["of"]) for e in events if e["frame"] == 2 and e["stage"] == "guided"],
+                         [("guided", 1, 2), ("guided", 2, 2)])
+
     def test_same_manifest_twice_gives_byte_identical_exr_frames(self):
         reason = cuda_unavailable()
         if reason:
