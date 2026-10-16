@@ -466,12 +466,14 @@ class TileExecutor:
                           full_y=data.y, full_width=data.width, full_height=data.height)
 
     def supports_tiled(self, document, target):
-        """True when a graph can be composed in tiles, evaluating unsupported nodes whole."""
+        """True only when every evaluated ancestor has a native tile implementation."""
         document, target = groups.flatten_groups(document, target)
         nodes = document["nodes"]
         kind_seen = False
         for node_id in _all_ancestors(document, target):
             node = nodes[node_id]
+            if node["type"] not in SUPPORTED_TILED_KINDS:
+                return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
             if node["type"] == "RotoPaint" and any(
@@ -572,6 +574,9 @@ class TileExecutor:
         resolved = resolve_document(document, frame)
         if not self.supports_tiled(resolved, target):
             self.stats["full_frame_fallbacks"] += 1
+            fallback_nodes = tuple(sorted({resolved["nodes"][key]["type"]
+                                           for key in _all_ancestors(resolved, target)
+                                           if resolved["nodes"][key]["type"] not in SUPPORTED_TILED_KINDS}))
             pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
             # A fallback cannot honour a partial request without evaluating the reference
             # full frame.  Crop only at this API boundary and report ``tiled=False`` so callers
@@ -584,7 +589,7 @@ class TileExecutor:
             return TileResult(pixels=cropped, canvas_width=int(requested.width),
                               canvas_height=int(requested.height), tier=tier, tiled=False,
                               tile_hits=0, tile_misses=0, full_frame_fallbacks=1,
-                              source_decodes=0, region=requested)
+                              source_decodes=0, region=requested, fallback_nodes=fallback_nodes)
 
         target_bounds = self.canvas_region(resolved, target, frame, tier)
         width, height = target_bounds.width, target_bounds.height
