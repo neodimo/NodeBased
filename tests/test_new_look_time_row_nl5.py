@@ -1,5 +1,6 @@
 """New look, step 5 (Lane 2), part 3: the slim time row and the timeline track (transport buttons, the
 frame field, the cached range in green, key diamonds, the playhead tab, the real-time light)."""
+import time
 import unittest
 
 from PySide6.QtWidgets import QApplication
@@ -43,6 +44,7 @@ class TimeRowTests(Base):
         self.assertEqual(w.realtime_label.text(), "real time")
         self.assertEqual(w.realtime_dot.color().name(), TOKENS["acc"])
         w.playing = True
+        w.playback_origin_time = time.monotonic()   # playback just started: no rate to judge yet
         w.playback_dropped_frames = 3
         w.update_realtime_light()
         self.assertEqual(w.realtime_label.text(), "dropping frames")
@@ -51,6 +53,38 @@ class TimeRowTests(Base):
         w.update_realtime_light()
         self.assertEqual(w.realtime_label.text(), "real time")
         self.assertEqual(w.realtime_dot.color().name(), TOKENS["acc"])
+
+    def test_the_light_shows_the_achieved_rate_and_turns_warm_below_the_comp_rate(self):
+        import time
+        w = self.open_window()
+        w.set_time(fps=24.0)
+        w.playing = True
+        w.playback_origin_time = time.monotonic() - 1.0
+        now = time.monotonic()
+        w.playback_shown_times.clear()
+        w.playback_shown_times.extend(now - 0.95 + i * 0.0865 for i in range(11))   # 11 fps
+        self.assertAlmostEqual(w.achieved_fps(), 11, delta=1.5)
+        w.update_realtime_light()
+        self.assertIn("of 24 fps", w.realtime_label.text())
+        self.assertTrue(w.realtime_label.text().startswith("11"))
+        self.assertEqual(w.realtime_dot.color().name(), TOKENS["warn"])
+        w.playback_shown_times.clear()
+        w.playback_shown_times.extend(now - 1.0 + i * (1.0 / 24) for i in range(1, 25))   # 24 fps
+        w.update_realtime_light()
+        self.assertEqual(w.realtime_label.text(), "real time · 24 fps")
+        self.assertEqual(w.realtime_dot.color().name(), TOKENS["acc"])
+        w.playing = False
+        w.update_realtime_light()
+        self.assertEqual(w.realtime_label.text(), "real time")
+
+    def test_no_rate_is_claimed_before_half_a_second_of_playback(self):
+        import time
+        w = self.open_window()
+        w.playing = True
+        w.playback_origin_time = time.monotonic() - 0.2
+        w.playback_shown_times.append(time.monotonic())
+        self.assertIsNone(w.achieved_fps())
+        w.playing = False
 
     def test_the_row_drops_status_text_before_it_clips_a_field(self):
         w = self.open_window((1280, 720), scale=1.25)

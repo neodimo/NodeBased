@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, CancelledError
+import collections
 import copy
 import json
 import math
@@ -7562,6 +7563,9 @@ class Window(QMainWindow):
         self._stop_refine_pending = False
         self.playback_elapsed_frames = 0
         self.playback_dropped_frames = 0
+        # Monotonic times of the frames shown during playback, newest last (achieved_fps).
+        self.playback_shown_times = deque(maxlen=240)
+        self._realtime_light_updated = 0.0
         # Nuke-style playback fallback: count of primary (display) frames actually completed
         # since playback started. playback_tick never lets the playhead advance more than one
         # frame past this, so a render pipeline that can't sustain real time degrades to slower,
@@ -8202,12 +8206,33 @@ class Window(QMainWindow):
         self.sync_timeline()
         return container
 
+    def achieved_fps(self):
+        """Frames per second actually put on screen over the last second of playback, or None
+        before there is half a second of playback to judge."""
+        if not self.playing:
+            return None
+        now = time.monotonic()
+        span = min(1.0, now - self.playback_origin_time)
+        if span < 0.5:
+            return None
+        return sum(1 for shown in self.playback_shown_times if shown >= now - span) / span
+
     def update_realtime_light(self):
-        """Green "real time" while playback keeps the clock; warm "dropping frames" once it has
-        dropped any since it started."""
-        behind = self.playing and self.playback_dropped_frames > 0
+        """The "real time" light follows the rate playback really achieves. Green while the
+        frames on screen keep up with the comp's rate, warm with the real figure ("11 of 24 fps")
+        once they fall below it. Before there is a measurement it falls back to the dropped-frame
+        count; stopped, it reads "real time"."""
+        achieved = self.achieved_fps()
+        rate = float(self.dispatcher.document["time"]["fps"])
+        if achieved is not None:
+            behind = achieved < rate * 0.95
+            shown = f"{achieved:.0f}" if achieved >= 10 else f"{achieved:.1f}"
+            text = f"{shown} of {rate:g} fps" if behind else f"real time · {rate:g} fps"
+        else:
+            behind = self.playing and self.playback_dropped_frames > 0
+            text = "dropping frames" if behind else "real time"
         self.realtime_dot.set_color(TOKENS["warn"] if behind else TOKENS["acc"])
-        self.realtime_label.setText("dropping frames" if behind else "real time")
+        self.realtime_label.setText(text)
         self.realtime_label.setProperty("behind", behind)
         self.realtime_label.style().unpolish(self.realtime_label)
         self.realtime_label.style().polish(self.realtime_label)
@@ -8475,6 +8500,7 @@ class Window(QMainWindow):
             self.playback_elapsed_frames = 0
             self.playback_dropped_frames = 0
             self.playback_frames_rendered = 0
+            self.playback_shown_times.clear()
             self.update_realtime_light()
             # Standard proxy-resolution playback: a source above HD makes the ACES 2.0 CPU
             # transform too slow for real-time (measured ~2.3s at 4K), so drop to the smallest
@@ -8539,6 +8565,9 @@ class Window(QMainWindow):
             self.playback_dropped_frames += advanced - 1
             self.update_realtime_light()
         self.playback_elapsed_frames = elapsed_frames
+        if time.monotonic() - self._realtime_light_updated > 0.25:
+            self._realtime_light_updated = time.monotonic()
+            self.update_realtime_light()
         bounded_frames = min(elapsed_frames, self.playback_frames_rendered)
         target, finished = playhead_at(time_range["first"], time_range["last"], self.playback_origin_frame,
                                        bounded_frames, self.play_direction, self.loop_mode)
@@ -13138,6 +13167,8 @@ class Window(QMainWindow):
             self.statusBar().showMessage(status)
             self.viewer_info.setText(status if frame is not None else "Evaluation error")
             if frame is not None:
+                if self.playing:
+                    self.playback_shown_times.append(time.monotonic())
                 self._show_image(image, request.tier, render_region,
                                  extras["image_b"] if extras is not None else None)
             else:
