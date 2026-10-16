@@ -6482,9 +6482,9 @@ class Graph(PanZoomView):
         return [item.key for item in items]
 
     def selection_changed(self):
-        self.window.inspect(self.selected_id())
-        # The keyed-frame band is scoped to the selection, so it has to follow it.
-        self.window.refresh_timeline_marks()
+        # The highlight paints as soon as the press returns; the Properties panel and the keyed-frame
+        # band (scoped to the selection) follow on the next event-loop turn.
+        self.window.schedule_inspect()
 
     def mousePressEvent(self, event):
         if self.radial_menu.is_open() and self.radial_menu.sustained:
@@ -7438,6 +7438,9 @@ class Window(QMainWindow):
 
     def __init__(self, document=None, agent_name=None):
         super().__init__()
+        self._inspect_pending = False
+        self._panel_cache = {}  # node key -> the wrapped Properties panel last built for it
+        self._panel_cache_stamp_seen = None
         self.dispatcher = Dispatcher(document or demo_document())
         self.saved_document = copy.deepcopy(self.dispatcher.document)
         self.preferences = Preferences()
@@ -9213,7 +9216,7 @@ class Window(QMainWindow):
                     self.request_preview()
             else:
                 self.after_command(render, sync_settings=cmd.get("op") in ("load", "undo", "redo"),
-                                   revision=before)
+                                   revision=before, moves=self._moves_only(cmd))
             return result
         except (ValueError, KeyError, TypeError, OSError) as error:
             self._show_command_error(error)
@@ -9471,7 +9474,26 @@ class Window(QMainWindow):
         look = viewer_look(document or self.dispatcher.document)
         return {"gamma": look["gamma"], "zebra": look["zebra"]}
 
-    def after_command(self, render=True, sync_settings=False, revision=None):
+    @staticmethod
+    def _moves_only(cmd):
+        """The `move` commands of a command that only changes node positions (no panel shows a
+        position), else None."""
+        subs = (cmd.get("commands") or []) if cmd.get("op") == "batch" else [cmd]
+        if subs and all(sub.get("op") == "move" and "path" not in sub for sub in subs):
+            return subs
+        return None
+
+    def _graph_shows(self, moves):
+        """True when every moved node's item already sits where the document now puts it (a drag
+        moved it), so the graph needs no rebuild."""
+        items = self.graph.items_by_id
+        for move in moves:
+            item = items.get(move["id"])
+            if item is None or abs(item.pos().x() - move["pos"][0]) > 0.01 or abs(item.pos().y() - move["pos"][1]) > 0.01:
+                return False
+        return len(items) == len(self.graph_nodes())
+
+    def after_command(self, render=True, sync_settings=False, revision=None, moves=None):
         key = self.graph.selected_id()
         # An edit that changed nothing must not rebuild the graph and the properties panel.
         # `editingFinished` fires on focus-out, so right-clicking a knob to open its context menu
@@ -9481,8 +9503,13 @@ class Window(QMainWindow):
         # such an edit as a no-op and leaves its revision alone, so that is the signal to trust.
         changed = revision is None or self.dispatcher.revision != revision
         if changed:
-            self.graph.rebuild()
-            self.inspect(key)
+            if moves is None or not self._graph_shows(moves):
+                self.graph.rebuild()
+            if moves is None:
+                self.inspect(key)
+            else:
+                # The panel on screen and the cached ones do not show positions, so they stay valid.
+                self._panel_cache_stamp_seen = self._panel_cache_stamp()
         # Undo, project load and agent "time" edits all land here, so the strip follows the
         # document rather than only the widget that happened to be dragged.
         self.sync_timeline()
@@ -9677,6 +9704,15 @@ class Window(QMainWindow):
             {"op": "thumbnail", "id": k, "value": value}))
         form.addRow(stamp)
         return page
+
+    def _fill_material_preview(self, label, params):
+        try:
+            preview = materialpreview.render(params)
+            image = QImage(preview.data, preview.shape[1], preview.shape[0],
+                           preview.strides[0], QImage.Format.Format_RGBA8888).copy()
+            label.setPixmap(QPixmap.fromImage(image))
+        except Exception:
+            pass  # a broken param must not take the properties panel down
 
     def build_node_panel(self, key):
         panel = QWidget()
@@ -11004,17 +11040,15 @@ class Window(QMainWindow):
                 # own colour/specular/PBR knobs, not the node's real shape (the look-dev convention).
                 # Built once with the rest of the panel; a slider drag does not refresh it until the
                 # panel rebuilds (reselecting the node, most simply).
-                try:
-                    preview = materialpreview.render(node["params"])
-                    preview_image = QImage(preview.data, preview.shape[1], preview.shape[0],
-                                           preview.strides[0], QImage.Format.Format_RGBA8888).copy()
-                    preview_label = QLabel()
-                    preview_label.setPixmap(QPixmap.fromImage(preview_image))
-                    preview_label.setToolTip("Material preview: a fixed sphere under one light and a "
-                                             "soft dome, not this node's own shape")
-                    form.addRow("Material", preview_label)
-                except Exception:
-                    pass  # a broken param must not take the properties panel down
+                preview_label = QLabel()
+                preview_label.setFixedSize(materialpreview.SIZE, materialpreview.SIZE)
+                preview_label.setToolTip("Material preview: a fixed sphere under one light and a "
+                                         "soft dome, not this node's own shape")
+                form.addRow("Material", preview_label)
+                # Rendered after the panel is on screen (the sphere costs 0.1 to 0.25 s); the label
+                # owns the timer, so a panel replaced first never runs it.
+                QTimer.singleShot(0, preview_label, lambda lbl=preview_label, p=dict(node["params"]):
+                                  self._fill_material_preview(lbl, p))
             if node["type"] in fluidknobpresets.FLUID_NODE_TYPES:
                 preset_row = QWidget()
                 preset_layout = QHBoxLayout(preset_row)
@@ -11067,11 +11101,27 @@ class Window(QMainWindow):
             panel_layout.addWidget(tabs, 1)
         return panel
 
-    def inspect(self, key):
+    def schedule_inspect(self):
+        """Follow the graph's selection on a zero-delay timer, so a press paints its highlight first."""
+        if not self._inspect_pending:
+            self._inspect_pending = True
+            QTimer.singleShot(0, self, self.flush_inspect)
+
+    def flush_inspect(self):
+        """Run a scheduled selection follow-up now (the timer, and anything that needs the panel current)."""
+        if self._inspect_pending:
+            self._inspect_pending = False
+            self.inspect(self.graph.selected_id(), reuse=True)
+            self.refresh_timeline_marks()
+
+    def inspect(self, key, reuse=False):
+        """Show the panel for `key`; a plain call builds it fresh, a selection change (`reuse`) may put back
+        the panel built for that node earlier if nothing has changed since."""
+        self._inspect_pending = False
         if hasattr(self, "viewport"):
             self.viewport.refresh_sim_stats()
         if not self.pinned_panels:
-            self.set_properties_widget(self.build_node_panel(key))
+            self._show_cached_panel(key, reuse)
             self._refresh_artist_tools(key)
             return
         if key is not None and key in self.pinned_panels:
@@ -11079,6 +11129,45 @@ class Window(QMainWindow):
             self.pinned_panels.insert(0, key)
         self.rebuild_properties_dock()
         self._refresh_artist_tools(key)
+
+    PANEL_CACHE_SIZE = 16
+
+    def _panel_cache_stamp(self):
+        document = self.dispatcher.document
+        return (self.dispatcher.revision, document["time"]["current"], self.theme_name)
+
+    def _show_cached_panel(self, key, reuse):
+        """Show the Properties panel for `key`, reusing the widgets built the last time this node was
+        selected when nothing in the document, the playhead or the theme has changed since."""
+        stamp = self._panel_cache_stamp()
+        if self._panel_cache_stamp_seen != stamp:
+            self._drop_panel_cache()
+            self._panel_cache_stamp_seen = stamp
+        root = self._panel_cache.pop(key, None) if key is not None else None
+        if root is not None and not reuse:
+            if root is not self.properties.widget():
+                root.deleteLater()
+            root = None
+        if root is not None:
+            self.set_properties_widget(root, reuse=True)
+        else:
+            self.set_properties_widget(self.build_node_panel(key))
+            root = self.properties.widget()
+        if key is not None and root is not None:
+            self._panel_cache[key] = root
+            while len(self._panel_cache) > self.PANEL_CACHE_SIZE:
+                oldest = next(iter(self._panel_cache))
+                if self._panel_cache[oldest] is not self.properties.widget():
+                    self._panel_cache.pop(oldest).deleteLater()
+                else:
+                    break
+
+    def _drop_panel_cache(self):
+        shown = self.properties.widget() if hasattr(self, "properties") else None
+        for root in self._panel_cache.values():
+            if root is not shown:
+                root.deleteLater()
+        self._panel_cache = {}
 
     def _artist_tools_evaluator(self):
         if getattr(self, "_artist_tools_eval", None) is None:
@@ -11209,8 +11298,9 @@ class Window(QMainWindow):
         layout.addStretch()
         self.set_properties_widget(container)
 
-    def set_properties_widget(self, panel):
-        """Swap the dock's contents, sized to the dock rather than to the panel's own wishes."""
+    def set_properties_widget(self, panel, reuse=False):
+        """Swap the dock's contents, sized to the dock rather than to the panel's own wishes.
+        `reuse` puts back a panel this method wrapped earlier and left alone since."""
         scroll_position = (self.properties.verticalScrollBar().value(),
                            self.properties.horizontalScrollBar().value())
         focused = self.focusWidget()
@@ -11220,9 +11310,10 @@ class Window(QMainWindow):
         if not focus_path and focused is not None and self.properties.isAncestorOf(focused):
             focus_path = getattr(self, "_properties_last_focus_path", [])
         old = self.properties.takeWidget()
-        if old:
+        if old and old is not panel and old not in self._panel_cache.values():
             old.deleteLater()
-        make_fluid(panel)
+        if not reuse:
+            make_fluid(panel)
         if not isinstance(panel, FluidRoot):
             root = FluidRoot()
             box = QVBoxLayout(root)
@@ -11230,8 +11321,11 @@ class Window(QMainWindow):
             box.addWidget(panel)
             panel = root
         self.properties.setWidget(panel)
-        for child in [panel, *panel.findChildren(QWidget)]:
-            child.installEventFilter(self)
+        if not reuse:
+            # Window.eventFilter only watches focus-in, which only a focusable widget receives.
+            for child in [panel, *panel.findChildren(QWidget)]:
+                if child.focusPolicy() != Qt.FocusPolicy.NoFocus:
+                    child.installEventFilter(self)
         scroll_area = self.properties
         restored = {"scroll": False, "focus": not focus_path}
         def restore_panel_state(attempts_left=40):
