@@ -110,7 +110,7 @@ def main():
     from nodebased.steppreview import PreviewSession
     from nodebased.steppreviewview import StepPreviewView
 
-    store = ArtifactStore(args.store)
+    store = ArtifactStore()
     stage = out / "bundle"
     (stage / "scene").mkdir(parents=True, exist_ok=True)
     (stage / "bundle").mkdir(parents=True, exist_ok=True)
@@ -162,6 +162,8 @@ def main():
     ready = session.start()
     cold = dict(ready)
     cold["window_shown_after_start"] = True
+    lag.update(max=0.0, n=0, over_100ms=0)   # the cold start blocks this thread on purpose and is reported apart
+    last[0] = time.monotonic()
 
     def edit(text, frame_number, seed=7):
         view.note_submitted(session.revision + 1)
@@ -277,7 +279,18 @@ def main():
     # --- representative frames: every stage saved
     evidence = out / "evidence"
     evidence.mkdir(exist_ok=True)
-    from PIL import Image
+    from PySide6.QtGui import QImage
+
+    class Image:   # the nodebased environment has no Pillow: PNGs through Qt
+        @staticmethod
+        def fromarray(array):
+            array = np.ascontiguousarray(array)
+            picture = QImage(array.data, array.shape[1], array.shape[0], array.shape[1] * 3, QImage.Format.Format_RGB888).copy()
+
+            class Saver:
+                def save(self, path):
+                    picture.save(str(path))
+            return Saver()
     rep = {}
     for number in [int(x) for x in args.frames.split(",")]:
         view.paints.clear()

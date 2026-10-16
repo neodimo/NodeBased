@@ -71,7 +71,7 @@ def main():
     finally:
         agent.close()
     from nodebased.artifacts import ArtifactStore
-    report = json.loads(ArtifactStore(args.store).get(verified["report"]))
+    report = json.loads(ArtifactStore().get(verified["report"]))
     summary = {"label": args.label, "settings": settings, "sampler_settings_recorded": result["sampler_settings"],
                "generated_sequence": result["generated_sequence"], "report": verified["report"],
                "verdict": verified["verdict"],
