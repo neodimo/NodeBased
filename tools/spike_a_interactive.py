@@ -95,6 +95,7 @@ def main():
     parser.add_argument("--frames", default="1,12,24")
     parser.add_argument("--grab", action="store_true", help="save a grab of the viewer at every paint of the first edit")
     parser.add_argument("--settings", default='{"fast_preview": true}')
+    parser.add_argument("--replay", metavar="RECORDED_RUN", help="no card: replay the pictures and timing of an earlier run of this bench (viewer-side responsiveness only)")
     args = parser.parse_args()
     os.environ["NODEBASED_CACHE"] = args.store
     out = Path(args.out)
@@ -118,7 +119,12 @@ def main():
     manifest = _unpack_artifact(store.get(args.bundle), stage / "bundle")
     controls = read_control_bundle(manifest, scene_path)
     app = QApplication.instance() or QApplication([])
-    session = PreviewSession(controls, json.loads(args.settings), out / "session")
+    command = None
+    if args.replay:
+        recorded = Path(args.replay)
+        command = [sys.executable, str(Path(__file__).with_name("spike_a_replay_server.py")),
+                   str(recorded / "session" / "previews"), str(recorded / "evidence")]
+    session = PreviewSession(controls, json.loads(args.settings), out / "session", command=command)
     view = StepPreviewView(session)
     from PySide6.QtCore import Qt
     view.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)   # a real screen: do not take the keyboard focus
@@ -128,7 +134,8 @@ def main():
     view.show()
     app.processEvents()
     memory = DeviceMemory(lambda: session.process.pid if session.process else 0)
-    memory.start()
+    if not args.replay:
+        memory.start()
     time.sleep(0.5)
     idle_before = memory.device_peak
 
@@ -189,13 +196,17 @@ def main():
     def wait_final(revision):
         pump(finished(revision))
         pump(lambda: any(p["revision"] == revision and p["kind"] == "final" for p in view.paints) or any(c["revision"] == revision for c in session.log.cancelled), 5)
-        # EXR completion: the delivered frame (plate size) converted and written, as the app's write step would
+        # EXR completion: the delivered frame (plate size) converted and written, as the app's write step would,
+        # on a worker thread so that the UI thread's responsiveness is the viewer's own
         result = session.workdir / f"r{revision:04d}_{session.log.submitted[revision]['frames'][0]:04d}.result.npy"
         if result.exists():
-            begun = time.monotonic()
-            rgba = provider.srgb_to_acescg(np.load(result))
-            _write_frame(out / "exr" / f"edit_{revision:04d}.exr", rgba, "ACEScg")
-            exr_done[revision] = time.monotonic()
+            def write(revision=revision, result=result):
+                rgba = provider.srgb_to_acescg(np.load(result))
+                _write_frame(out / "exr" / f"edit_{revision:04d}.exr", rgba, "ACEScg")
+                exr_done[revision] = time.monotonic()
+            worker = threading.Thread(target=write)
+            worker.start()
+            pump(lambda: not worker.is_alive(), 30)
 
     # warm-up: two edits, not scored (kernel and allocator warm-up on top of the cold load)
     for i in range(2):
@@ -284,6 +295,7 @@ def main():
             not (a["revision"] < b["revision"] and view.paints.index(a) > view.paints.index(b))
             for a in view.paints for b in view.paints)}
 
+    ticker.stop()   # what follows saves pictures on this thread; the lag figures end here
     # --- representative frames: every stage saved
     evidence = out / "evidence"
     evidence.mkdir(exist_ok=True)
