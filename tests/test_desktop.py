@@ -1194,6 +1194,9 @@ class SlowPlaybackTests(unittest.TestCase):
             {'op': 'set', 'id': 'plate', 'param': 'height', 'value': 64},
             {'op': 'set', 'id': 'wash', 'param': 'width', 'value': 64},
             {'op': 'set', 'id': 'wash', 'param': 'height', 'value': 64},
+            # Animated, so every frame is a new picture: a still comp is converted once.
+            {'op': 'set_key', 'id': 'plate', 'param': 'size', 'frame': 1, 'value': 8},
+            {'op': 'set_key', 'id': 'plate', 'param': 'size', 'frame': 200, 'value': 32},
         ]})
         self.displayed = []
         self.displayed_generations = []
@@ -1437,6 +1440,11 @@ class KeyframeUiTests(unittest.TestCase):
 
     def test_cached_frames_are_reported_on_the_timeline(self):
         w = self.window
+        # A still comp shares one cache entry across all frames; animate the plate so each frame
+        # is its own picture, which is what the strip reports frame by frame.
+        w.command({'op': 'batch', 'commands': [
+            {'op': 'set_key', 'id': 'plate', 'param': 'size', 'frame': 1, 'value': 32},
+            {'op': 'set_key', 'id': 'plate', 'param': 'size', 'frame': 20, 'value': 64}]})
         self.assertTrue(wait_until(lambda: w.frame_slider.cached_frames == {1}),
                         f'first cooked frame not reported as cached: {w.frame_slider.cached_frames}')
         w.set_time(current=2)

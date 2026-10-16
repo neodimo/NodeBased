@@ -53,7 +53,7 @@ from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
 from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
-from .playback import PlaybackQueue, DisplayCache
+from .playback import PlaybackQueue, DisplayCache, STATIC_FRAME
 from .queuepanel import QueuePanel, create_default_queue
 from . import pipeline
 from .motion import MotionAnimator
@@ -7489,6 +7489,9 @@ class Window(QMainWindow):
         self.node_errors = {}
         self.preview_queue = PlaybackQueue()
         self.display_cache = DisplayCache(force_float32=self.preferences.display_cache_float32())
+        # (key, picture) of the last display conversion; see render() in start_preview.
+        self._display_memo = None
+        self._compact_stop = threading.Event()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
         # QOffscreenSurface must be created on the GUI thread; the QOpenGLContext bound to
         # it is built lazily on nodebased-preview (the single worker thread above) on its
@@ -12654,6 +12657,7 @@ class Window(QMainWindow):
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
         self.generation += 1
+        self._compact_stop.set()
         self.rendered_identity = self.render_identity()
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = snapshot["time"]["current"]
@@ -12764,13 +12768,14 @@ class Window(QMainWindow):
                 # scene-linear frame, so a hit only needs the display-time conversion: checking it
                 # only after composing would still re-assemble every tile just to throw the result
                 # away.
-                cached = self.display_cache.get(display_key, region_key)
+                static = display_key[1] == STATIC_FRAME
+                cached = self.display_cache.get(display_key, region_key, copy=False)
                 crop = None
                 if cached is None and tiled and render_region != bounds:
                     # Read-ahead caches whole frames; a zoomed-in view asks for its visible crop.
                     # A whole frame contains every crop of itself, so serve the crop from it.
                     cached = self.display_cache.get(
-                        display_key, (bounds.x, bounds.y, bounds.width, bounds.height))
+                        display_key, (bounds.x, bounds.y, bounds.width, bounds.height), copy=False)
                     crop = QRect(render_region.x - bounds.x, render_region.y - bounds.y,
                                  render_region.width, render_region.height)
                 if cached is not None:
@@ -12783,8 +12788,17 @@ class Window(QMainWindow):
                     height, width = cached_or_cropped.shape[:2]
                     image = None
                     if request.display:
-                        image = to_qimage(cached_or_cropped, exposure, channel,
-                                          background=background, view=view, look=look)
+                        # The picture for this exact frame, region and display setup is kept from
+                        # the last conversion: a still comp shown again costs no conversion.
+                        memo_key = (display_key, region_key, exposure, channel, background, view,
+                                    look, None if crop is None else (crop.x(), crop.y()))
+                        memo = self._display_memo
+                        if memo is not None and memo[0] == memo_key:
+                            image = memo[1]
+                        else:
+                            image = to_qimage(cached_or_cropped, exposure, channel,
+                                              background=background, view=view, look=look)
+                            self._display_memo = (memo_key, image)
                     image, compare_note = self._compare_outputs(
                         request, cancel, cached_or_cropped, image, render_region,
                         exposure, channel, background, view, look)
@@ -12829,10 +12843,17 @@ class Window(QMainWindow):
                     tile_detail = "  ·  full-frame fallback"
                 if cancel.is_set():
                     raise Cancelled()
+                # A picture that is the same on every frame is kept at full precision, so showing
+                # it again hands out the stored array; any other frame is stored lazily, and
+                # rounded to half-float later by compact_display_cache.
                 self.display_cache.put(display_key, frame, region_key,
-                                       is_data=_is_data_target(request.document, target))
+                                       is_data=static or _is_data_target(request.document, target),
+                                       lazy=True)
                 image = (to_qimage(frame, exposure, channel, background=background, view=view, look=look)
                          if request.display else None)
+                if request.display:
+                    self._display_memo = ((display_key, region_key, exposure, channel, background,
+                                           view, look, None), image)
                 image, compare_note = self._compare_outputs(
                     request, cancel, frame, image, render_region, exposure, channel, background, view, look)
                 elapsed = (time.perf_counter() - start) * 1000
@@ -13125,8 +13146,21 @@ class Window(QMainWindow):
         self.refresh_timeline_marks()
         if len(self.preview_queue):
             self.start_preview()
-        elif not self.playing and self.show_thumbnails:
-            self.thumbnail_timer.start()
+        else:
+            if not self.playing and self.display_cache.has_pending:
+                self.compact_display_cache()
+            if not self.playing and self.show_thumbnails:
+                self.thumbnail_timer.start()
+
+    def compact_display_cache(self):
+        """Round the lazily stored frames to half-float on the worker while nothing else wants it.
+        One frame at a time, and a new preview request stops the run between frames."""
+        self._compact_stop.clear()
+        cache, stop = self.display_cache, self._compact_stop
+        def run():
+            while not stop.is_set() and cache.compact(limit=1):
+                pass
+        self.executor.submit(run)
 
     def schedule_thumbnails(self):
         """Render postage stamps for nodes whose upstream picture changed, when the viewer is idle."""

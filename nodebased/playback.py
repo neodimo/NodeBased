@@ -104,6 +104,53 @@ class PlaybackQueue:
 
 PRESENTATION_FIELDS = ("pos", "name", "label", "thumbnail")
 
+# Node kinds whose output is a pure function of their parameters and inputs: no file sequence, no
+# simulation, no per-frame state. This is an allow-list on purpose. A kind that is missing from it
+# is treated as time-dependent, which only costs speed; a kind wrongly listed here would freeze
+# playback on one picture. Add a kind only after reading that it never looks at the frame number.
+STATIC_KINDS = frozenset({
+    "Checker", "Constant", "Grid", "Ramp", "Rectangle", "Radial",
+    "Grade", "Add", "Multiply", "Gamma", "Exposure", "Invert", "Clamp", "ColorCorrect",
+    "Saturation", "Premult", "Unpremult", "Posterize", "Blur", "Sharpen", "Merge", "Blend",
+    "Transform", "Crop", "Reformat", "Mirror", "Dot", "NoOp", "Switch", "Viewer",
+    "Scene3D", "Camera3D", "Cube3D", "Sphere3D", "Cylinder3D", "Card3D", "Light3D", "Axis3D",
+    "TransformGeo3D", "MergeGeo3D", "Render3D",
+})
+
+# Stands in for the frame number in a display key whose content does not depend on the frame.
+STATIC_FRAME = "static"
+
+
+def is_time_dependent(document, target):
+    """True unless the picture at ``target`` is the same on every frame.
+
+    Walks ``target`` and everything wired into it. The picture can change with the frame when an
+    upstream knob carries an animation curve with more than one key, when any expression drives a
+    knob (an expression may read the frame), or when a node is not on the ``STATIC_KINDS`` list
+    (a Read of an image sequence, a simulation cache, a retime, a particle system and so on).
+    An unknown target or a missing node counts as time-dependent.
+    """
+    nodes = document.get("nodes", {})
+    if not target or target not in nodes:
+        return True
+    curves = (document.get("animation") or {}).get("curves") or {}
+    expressions = document.get("expressions") or {}
+    seen, pending = set(), [target]
+    while pending:
+        key = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        node = nodes.get(key)
+        if node is None or node.get("type") not in STATIC_KINDS:
+            return True
+        if any(len((curve or {}).get("keys", ())) > 1 for curve in (curves.get(key) or {}).values()):
+            return True
+        if expressions.get(key):
+            return True
+        pending.extend(source for source in (node.get("inputs") or {}).values() if source)
+    return False
+
 
 class DisplayCache:
     """A bounded cache of scene-linear, premultiplied frames.
@@ -136,6 +183,9 @@ class DisplayCache:
         # frame can legitimately hold a whole-frame read-ahead image and a zoomed-in crop at once.
         self._entries: OrderedDict[tuple, tuple[np.ndarray, bool]] = OrderedDict()
         self._residents: dict[tuple, int] = {}
+        # Entries stored as the producer's float32 array (see put(lazy=True)) that have not been
+        # rounded to half-float yet. Only the worker thread touches this.
+        self._pending: set[tuple] = set()
 
     @staticmethod
     def identity(document, target, tier):
@@ -167,6 +217,10 @@ class DisplayCache:
 
     @classmethod
     def key(cls, document, target, frame, tier):
+        """The cache key of one frame. A target that does not depend on time shares one key
+        (``STATIC_FRAME``) for every frame, so its picture is composed and converted once."""
+        if not is_time_dependent(document, target):
+            return (cls.identity(document, target, tier), STATIC_FRAME)
         return (cls.identity(document, target, tier), int(frame))
 
     def resident_frames(self, identity, frames):
@@ -176,10 +230,17 @@ class DisplayCache:
         being reported the moment it is gone, and a document edit changes the identity so the
         answer becomes "none" without any invalidation hook to keep in sync.
         """
+        if (identity, STATIC_FRAME) in self._residents:
+            return {int(f) for f in frames}
         return {int(f) for f in frames if (identity, int(f)) in self._residents}
 
-    def get(self, key, region=None):
+    def get(self, key, region=None, copy=True):
         """Return a copied float32 frame or None.
+
+        ``copy=False`` lets a caller that only reads the pixels (the display conversion, the
+        readout) take the stored array itself when it is already float32, saving a full-frame
+        copy. A half-float entry is converted either way. Never write into the result of a
+        ``copy=False`` read.
 
         `region` is the canvas rectangle the image covers. A full-resolution preview is only the
         visible crop, so an image cached for one pan/zoom is different pixels from the same frame
@@ -191,25 +252,43 @@ class DisplayCache:
             return None
         self._entries.move_to_end((key, region))
         stored, _is_data = entry
+        if not copy and stored.dtype == np.float32:
+            return stored
         return stored.astype(np.float32, copy=True)
 
-    def put(self, key, frame, region=None, is_data=False):
+    def put(self, key, frame, region=None, is_data=False, lazy=False):
+        """Store a frame. ``lazy=True`` keeps the producer's float32 array as it is, with no
+        rounding or copy on the calling (worker) thread, and leaves the half-float conversion to
+        ``compact()`` or to budget pressure. The caller must not write into ``frame`` afterwards."""
+        pending = False
         if is_data or self.force_float32:
             stored = np.ascontiguousarray(frame, dtype=np.float32)
+        elif lazy:
+            stored = np.ascontiguousarray(frame, dtype=np.float32)
+            pending = True
         else:
             stored = np.ascontiguousarray(half_safe(frame)).astype(np.float16)
         size = stored.nbytes
         if size > self.budget:
             return
-        existing = self._entries.pop((key, region), None)
+        slot = (key, region)
+        existing = self._entries.pop(slot, None)
         if existing is not None:
             self.bytes -= existing[0].nbytes
+            self._pending.discard(slot)
         else:
             self._residents[key] = self._residents.get(key, 0) + 1
-        self._entries[(key, region)] = (stored, bool(is_data))
+        self._entries[slot] = (stored, bool(is_data))
+        if pending:
+            self._pending.add(slot)
         self.bytes += size
+        while self.bytes > self.budget and self._pending:
+            # Rounding a waiting entry to half-float frees half its size, which is cheaper than
+            # losing a whole frame.
+            self._compact_one(next(iter(self._pending)))
         while self.bytes > self.budget:
-            (evicted_key, _), evicted = self._entries.popitem(last=False)
+            (evicted_key, evicted_region), evicted = self._entries.popitem(last=False)
+            self._pending.discard((evicted_key, evicted_region))
             self.bytes -= evicted[0].nbytes
             remaining = self._residents[evicted_key] - 1
             if remaining:
@@ -217,7 +296,32 @@ class DisplayCache:
             else:
                 del self._residents[evicted_key]
 
+    def _compact_one(self, slot):
+        entry = self._entries.get(slot)
+        self._pending.discard(slot)
+        if entry is None or entry[0].dtype != np.float32:
+            return
+        stored = np.ascontiguousarray(half_safe(entry[0])).astype(np.float16)
+        self.bytes -= entry[0].nbytes - stored.nbytes
+        self._entries[slot] = (stored, entry[1])
+
+    @property
+    def has_pending(self):
+        return bool(self._pending)
+
+    def compact(self, limit=None):
+        """Round entries stored by ``put(lazy=True)`` to half-float. Run it on the worker when
+        nothing else is waiting; ``limit`` caps how many entries one call converts."""
+        done = 0
+        for slot in list(self._pending):
+            if limit is not None and done >= limit:
+                break
+            self._compact_one(slot)
+            done += 1
+        return done
+
     def clear(self):
+        self._pending.clear()
         self._entries.clear()
         self._residents.clear()
         self.bytes = 0
