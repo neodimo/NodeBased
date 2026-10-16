@@ -16,6 +16,9 @@ class HotPourShotTests(unittest.TestCase):
         doc = core.load_document(ROOT / "hot_pour_shot.nbcomp")
         doc["nodes"]["render"]["params"].update(width=48, height=27, render_backend="cpu", pt_samples=2)
         doc["nodes"]["plate_fit"]["params"].update(width=48, height=27)
+        # the example pins both solvers to the card ("resident"); this check runs where there is none (CI, 10/15 red)
+        doc["nodes"]["liquid"]["params"]["pressure"] = "auto"
+        doc["nodes"]["steam"]["params"]["pressure"] = "auto"
         scene = Evaluator().evaluate_raster(doc, "scene", frame=1, typed=True)
         self.assertTrue(any(g.shadow_catcher for g in scene.geometries))
         self.assertTrue(any(g.holdout for g in scene.geometries))
