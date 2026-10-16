@@ -1,3 +1,55 @@
+# NodeBased 0.38.0 — the lens on the graphics card and in the 3D viewport and renderers, a camera and lens recovered from the surveyed plate, Roto rendering only the tiles the viewer asks for, and a field test kit for the A6000 work machine
+
+## What changed since 0.37.0
+
+- **Lens.**
+  - `Undistort` and `Redistort` run on the graphics card: a wgpu compute warp behind a `lens_backend` knob (auto, cpu, gpu),
+    checked against the CPU warp on three adapters, with `tools/benchmark_lens_warp.py` timing both at 1080p and 4K. Documents
+    saved before the knob load with the automatic backend (schema 24).
+  - The 3D viewport looks through the camera's lens: the overscan picture bent by Redistort on the card, a Lens switch on the
+    viewer strip and the L key, overlays drawn through the lens. Frame-time benchmark on three adapters.
+  - `Render3D` has a `through_lens` setting: the raster and path tracer backends render the camera's lens, matched against
+    render + Redistort on three adapters, including a literal GPU-raster against CPU-raster test. Old documents load with it off.
+- **Camera tracking.** The demo shot's distorted plate now gets its camera and lens from the surveyed landmarks (focal length 0.08%
+  off, k1 within 0.002), and the shot passes the stand-in verdict with that camera. The DPV-SLAM solve keeps its own files.
+- **Roto and the viewer.** `Roto` renders viewer tiles and analysis regions directly, and tiling is bypassed for broad requests. The
+  second part of rendering only what the viewer asks for.
+- **Fluids.** A camera-matched Hot pour shot plate in the examples, resized for the comp, with a test over the plate composite
+  switches and rendered stills at frames 60 and 120 in the docs.
+- **Field test kit.** `tools/field_report.py` records a machine, runs the GPU tests and benchmarks, and writes one report folder plus
+  a zip; `tools/make_field_bundle.py --everything` builds an offline stick (standalone Python, vc_redist, portable Windows app,
+  verify script) for a no-admin machine, with per-user paths and a runtime DLL report. `docs/FIELD_TEST.md` is the walkthrough and
+  `docs/FIELD_CLAUDE.md` the file to paste to Claude Code on the work machine. Nothing is uploaded by the kit. Tested end to end,
+  with an injected crash and a rezip.
+- **Research.** The radar re-ranked for speed on the 12 GB workstation and the 48 GB A6000: few-step SDXL previews, NeuFlow v2,
+  then materials generated once and rendered live, with a proposed SDXL experiment across both cards.
+- **Tests.** The host-phase profile tolerates a loaded box (medians per phase against the frame median); `run_tests.py` takes
+  several patterns.
+
+## Known limits
+
+- **Windows:** tested by the automated suite on the CI runner only. The field kit has been exercised on the Linux workstation; its
+  first run on the A6000 machine is still ahead.
+- **Lens:** the GPU warp and the lens in `Render3D` and the viewport agree with the CPU path within the documented limits on three
+  adapters; a filmed plate has not been through the solve yet. MASt3R-SLAM still recovers the focal long, so DPV-SLAM stays the
+  default solver.
+- **Roto and trackers:** `Tracker` and `Stabilize` ROI rendering and the ROI patch shown during refinement are in a merge candidate
+  that may land with this release or the next; full-frame refinement still takes about four seconds.
+- **Fluids:** the 64-cell Hot pour bake on the 3080 Ti is measured (35 s for 120 frames); the full sample timings, 1080p progressive
+  first look and Radeon preview/stop are not yet.
+- **Planar tracking:** four corner clicks, CPU analysis over full frames, no real-display review.
+- **New look:** starting a wire uses 20 px; a body drop onto a card with no free input is dropped; J while playing forwards stops and
+  steps back.
+- **2D:** the Keylight row stays partial. **Rigid bodies:** no fracture.
+
+## Moved to 0.39.0
+
+- The field report from the A6000 work machine, and whatever it turns up.
+- The rest of rendering only what the viewer asks for: tracker and proxy kernels with timings, and a faster full-frame refinement.
+- DiMo's filmed plate through the camera solve.
+- The few-step SDXL preview experiment from the radar.
+- The 2D-to-3D pipe (ImageToSplat, ImageToMesh, WorldSculpt), on hold.
+
 # NodeBased 0.37.0 — a PlanarTracker node that drives CornerPin and Roto, MASt3R-SLAM as a second camera solver that needs no lens, a survey check on every exported camera, the distorted plate through the whole shot with View undistorted, and a fluid stop that settles within a second
 
 ## What changed since 0.36.0
