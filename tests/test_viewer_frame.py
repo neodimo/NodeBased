@@ -201,6 +201,24 @@ class ViewerFrameWindowTests(unittest.TestCase):
         expected = 0.35 * inside.red() + 0.65 * background.red()
         self.assertAlmostEqual(outside.red(), expected, delta=2)
 
+    def test_roi_off_reveals_the_saved_frame_while_the_full_frame_is_pending(self):
+        self.settle()
+        viewer = self.window.viewer
+        self.window.set_viewer_roi(on=True, rect=[0.0, 0.0, 0.5, 0.5])
+        self.settle()
+        backdrop = viewer.backdrop_item
+        self.assertIsNotNone(backdrop)
+        self.assertAlmostEqual(backdrop.opacity(), 0.35)
+        previous_generation = self.window.frame_generation
+
+        self.window.set_viewer_roi(on=False)
+
+        self.assertEqual(backdrop.opacity(), 1.0)
+        self.assertEqual(self.window.frame_generation, previous_generation,
+                         "the saved full frame and current ROI patch appear before refinement")
+        self.assertNotEqual(self.window.frame_generation, self.window.generation)
+        self.settle()
+
     def test_roi_box_is_draggable_and_saved_on_release(self):
         viewer = self.window.viewer
         self.window.set_viewer_roi(on=True, rect=[0.25, 0.25, 0.75, 0.75])
