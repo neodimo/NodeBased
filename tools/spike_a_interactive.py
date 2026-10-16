@@ -120,6 +120,10 @@ def main():
     app = QApplication.instance() or QApplication([])
     session = PreviewSession(controls, json.loads(args.settings), out / "session")
     view = StepPreviewView(session)
+    from PySide6.QtCore import Qt
+    view.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)   # a real screen: do not take the keyboard focus
+    view.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus)
+    view.setWindowTitle("Spike A step preview")
     view.resize(1040, 640)
     view.show()
     app.processEvents()
