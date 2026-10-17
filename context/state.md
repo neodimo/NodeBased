@@ -1,5 +1,55 @@
 ## 2026-10-15 — Lane 6 S2 finish update: shape mismatch fixed, measurements partial
 
+## Continuous mode merge: Lane 3 (Research, GPT-6 Astra), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (11:38 PM on 2026-10-16 PDT)
+
+`main` moved `448327a4` -> `832c17b2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 73 tests in 55.363 s, OK. Full suite on
+the stacked tip `832c17b2` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1016-1759.log`, started 5:59 PM): **Ran 5438 tests in 20253.854 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 3 (Research, GPT-6 Astra), step V1 of 1: how the fastest apps keep their interface at display rate, and what our Python + Qt + wgpu setup can reach.** Commits:
+  - `637c6179` docs: link display-rate decision sheet and record V1 research handoff
+  - `e56a4d45` docs: define display cadence and input-to-visible latency acceptance targets
+  - `a3efdeec` docs: recommend staged native presentation core with two-week decision gates
+  - `6cfc54cb` docs: bound Python Qt wgpu latency and compare presentation remedies
+  - `e0133dbb` docs: survey display-rate architecture across six compositors and editors
+  Diff: 4 files changed, 306 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+- **Lane 6 (Fluids, GPT-6 Luna), step S2 of 2: the Hot pour reads as a pour (finish 2: the auto-solver crash, then the card numbers).** Commits:
+  - `5dfa09eb` notes: close Lane 6 S2 partial finish
+  - `bbf792f4` docs: record Lane 6 S2 GPU queue blocker
+  - `0a0418b5` docs: record Hot pour domain resize fix
+  - `7360b20b` fix: resize FLIP GPU transfers with liquid domain
+  - `87926b5f` docs: record partial Lane 6 S2 measurements
+  - `e73f3be8` notes: record Lane 6 S2 finish progress
+  - `afa4f524` docs: record frame-120 Hot pour holdout check
+  - `42377892` docs: record corrected Hot pour finish evidence
+  - `29a78b7e` tests: require the Hot pour surface mesh
+  - `a59e2693` examples: align Hot pour holdout with plate glass
+  - `223220ed` notes: hand off partial Hot pour S2
+  - `27e82400` docs: record partial Hot pour S2 result
+  - `ddf7cb7d` tests: guard Hot pour stream alignment
+  - `3156ece0` examples: align the Hot pour stream with the cup
+  Diff: 16 files changed, 204 insertions(+), 19 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step T1 of 2: the region of interest never breaks the picture (finish 1).** Commits:
+  - `d2bc2b7b` tiles: preserve full-frame fallback for unsupported nodes
+  - `fcf03778` docs: record RTX ROI visibility measurements
+  - `41948cea` docs: correct ROI timing evidence
+  - `051efd47` fix: reveal ROI backdrop during refinement
+  - `5245b5b0` docs: record ROI correctness and latency
+  - `8347e1f5` fix: render Tracker and Stabilize ROI tiles
+  - `9ae95119` fix: keep ROI visible with node fallbacks and reuse
+  Diff: 10 files changed, 3050 insertions(+), 45 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** Reproduced the `pressure="auto"` failure with grid masks sized 48 × 56 × 48 and 40 × 40 × 48. `Liquid3D` now invalidates its cached GPU transfer buffers when auto-resize changes the domain shape. Tiny frame-one tests pass with auto and CPU on the no-card shim and auto, CPU and resident on the RTX 3080 Ti. CPU solver, resize and documentation checks pass. Previously corrected measurements remain: the 64-cell bake took 34.94 seconds; corrected 32-sample 960 × 540 frames 60, 90 and 120 took 201.06, 201.88 and 200.04 seconds; a frame-120 crop matched the plate inside the cup.
 - **Artifacts:** `nodebased/flip3d.py`, `tests/test_hot_pour_shot.py`, synchronized `docs/FLUIDS_SPIKE.md` copies; commits `7360b20`, `0a0418b`, `bbf792f`, local to `openclaw/nb-fluids-spike`, not pushed. Logs and the unstarted sample sweep output are in `scratch/nb-lanes/run/tests-L6-S2-*.log` and `scratch/nb-lanes/run/measure-L6-S2-matrix.py`. No new cache or image data was generated in this follow-up.
 - **State:** Partial. The shape bug is verified fixed on CPU and card. The corrected 8/32/128 sweep timed out after its 30-minute exclusive-lock wait while the full suite held the shared GPU lock. Progressive first-look/settle and Radeon preview/stop remain unmeasured. No GPU lock was bypassed.
