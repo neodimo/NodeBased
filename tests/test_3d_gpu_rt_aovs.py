@@ -55,7 +55,7 @@ class HostTests(unittest.TestCase):
             with self.subTest(output=output), patch.object(gpu3d, '_state', return_value={}), \
                     patch.object(r, 'check_capability', return_value=None), \
                     patch.object(r, target, return_value='sentinel') as render:
-                self.assertEqual(gpu3d.render(s.Scene(), s.Camera(), 8, 8,
+                self.assertEqual(gpu3d.render(s.Scene((card(),)), s.Camera(), 8, 8,
                     output=output, samples=2, mode='raytrace'), 'sentinel')
                 render.assert_called_once()
                 if output != 'rgba':
