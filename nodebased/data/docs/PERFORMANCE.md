@@ -7,8 +7,9 @@ Frame-rate facts and the settings that decide them. Measure first; every brief c
 NodeBased renders its 3D views on one graphics adapter, chosen once at startup and fixed until the next start (the
 device state is global).
 
-**How it chooses.** The app lists every adapter wgpu can see and ranks them: discrete GPU first, then integrated, then
-software; a tie goes to the adapter with the larger buffer limits. The startup log prints the full list (name, type,
+**How it chooses.** The app lists every adapter wgpu can see and uses a startup heuristic: discrete GPU first, then
+integrated, then software; a tie goes to the adapter with the larger buffer limits. This is not a speed measurement:
+the fastest card depends on the workload and connection. The startup log prints the full list (name, type,
 backend, driver) with the choice marked. The old request for "high performance" is only the fallback when the list is
 empty. On a hybrid laptop (Intel Iris Xe plus an RTX 4070) that request came back with the Intel adapter, and the top
 bar read "Intel · 339 ms" a frame; ranking by type takes the RTX.
@@ -20,8 +21,8 @@ bar read "Intel · 339 ms" a frame; ranking by type takes the RTX.
   A name that matches nothing falls back to Automatic and logs a warning.
 - The top bar's adapter readout shows the adapter in use.
 
-**The slow-adapter warning.** When the app runs on an integrated or software adapter while a discrete one exists on the
-machine, the readout turns amber and reads "<adapter>: a faster adapter is available, Settings → Graphics adapter". Its
+**The adapter suggestion.** When the app runs on an integrated or software adapter while a discrete one exists on the
+machine, the readout turns amber and reads "<adapter>: a discrete adapter is available, Settings → Graphics adapter". Its
 tooltip adds the Windows route for drivers that hide the discrete card from applications: Settings → System → Display →
 Graphics, add NodeBased, set it to High performance.
 
@@ -36,15 +37,18 @@ platform).
 
 | Adapter | Type | Empty 3D scene | Checker to Viewer | 3000 lit cards, 4 samples |
 | --- | --- | ---: | ---: | ---: |
-| NVIDIA GeForce RTX 3080 Ti | discrete | 163 fps (6.0 ms) | 10.3 fps | not measured: the GPU lock stayed held by the test suite for 30 minutes |
-| AMD Radeon 8060S Graphics | integrated | 165 fps (6.0 ms) | 10.8 fps | not measured, same reason |
+| NVIDIA GeForce RTX 3080 Ti | discrete | 163 fps (6.0 ms) | 10.3 fps | 0.36 fps (2798 ms median) |
+| AMD Radeon 8060S Graphics | integrated | 165 fps (6.0 ms) | 10.8 fps | 0.65 fps (1543 ms median) |
 | llvmpipe | software | 162 fps (6.1 ms) | 10.4 fps | 0.47 fps (2118 ms) |
 
 Reading the numbers: the empty scene and the Checker playback land on the same figure on all three adapters. An empty
 frame costs a fixed 6 ms of setup and readback, and the Checker graph is evaluated on the processor and drawn by the
 window's own display context, which the "Graphics adapter" setting does not change. They show that the choice costs
-nothing where the card is idle. The gain from the right card appears with geometry: the 3000-card scene takes 2.1 s a
-frame on llvmpipe. Run the benchmark on the laptop to get the NVIDIA and Intel figures for that row.
+nothing where the card is idle. Differences appear with geometry: the 3000-card scene takes 2.1 s a
+frame on llvmpipe. In two runs of the heavy card scene, this workstation's Radeon was about 1.8× faster than its RTX
+3080 Ti eGPU. This is one workload, not a general card ranking; Automatic still prefers discrete GPUs, so an artist on
+this workstation can select Radeon in Settings for this scene. Run the benchmark on the laptop to get the NVIDIA and
+Intel figures for that machine before claiming a laptop gain.
 
 Laptop (DiMo, 10/15): Windows, 2880 x 1800 at 175 percent scaling, Intel Iris Xe plus RTX 4070 mobile.
 

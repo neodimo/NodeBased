@@ -6990,7 +6990,7 @@ class ProjectSettingsDialog(QDialog):
         interface.addRow("Viewer", self.auto_3d)
         self.graphics_adapter = QComboBox()
         self.graphics_adapter.setObjectName("graphics-adapter")
-        self.graphics_adapter.addItem("Automatic (fastest available)", "")
+        self.graphics_adapter.addItem("Automatic (discrete preferred)", "")
         seen = set()
         for entry in adapters:      # the same card can appear once per backend: list it once
             if entry["name"] in seen:

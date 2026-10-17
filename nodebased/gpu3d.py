@@ -138,8 +138,8 @@ def _capacity(adapter):
 
 
 def rank_adapters(adapters):
-    """Best first: discrete GPUs, then integrated, then virtual, then software; a tie goes to the adapter
-    with the larger buffer limits (a stand-in for memory, which wgpu does not report)."""
+    """Prefer discrete GPUs, then integrated, virtual and software adapters. This is a
+    startup heuristic, not a measured speed ranking; workloads and eGPU links can reverse it."""
     return sorted(adapters, key=lambda a: (_KIND_RANK.get(_kind_of(a.info), 4),
                                            str(a.info.get('backend_type', '')).lower() == 'opengl',
                                            tuple(-v for v in _capacity(a))))
@@ -190,18 +190,18 @@ def enumerate_adapters():
 
 
 def adapter_warning(chosen_name, adapters=None):
-    """The top bar's warning when `chosen_name` is an integrated or software adapter while a discrete one exists,
-    else None."""
+    """Suggest an available discrete adapter when the current one is integrated or software."""
     adapters = enumerate_adapters() if adapters is None else adapters
     chosen = next((a for a in adapters if a['name'] == chosen_name), None)
     if chosen is None or chosen['type'] not in ('integrated', 'software'):
         return None
     if not any(a['type'] == 'discrete' for a in adapters):
         return None
-    return f"{chosen_name}: a faster adapter is available, Settings \u2192 Graphics adapter"
+    return f"{chosen_name}: a discrete adapter is available, Settings \u2192 Graphics adapter"
 
 
-ADAPTER_WARNING_HELP = ('A faster graphics card is installed but this application is not using it. Pick it in Settings '
+ADAPTER_WARNING_HELP = ('A discrete graphics card is installed but this application is not using it. Its speed depends '
+                        'on the workload and connection. Pick it in Settings '
                         '\u2192 Graphics adapter (takes effect after a restart). If the card is not listed, Windows is hiding '
                         'it from the application: open Settings \u2192 System \u2192 Display \u2192 Graphics, add NodeBased '
                         'and set it to High performance.')

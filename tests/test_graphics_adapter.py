@@ -68,8 +68,8 @@ class AdapterWarning(unittest.TestCase):
     def test_warns_on_integrated_when_a_discrete_card_exists(self):
         adapters = summaries(LAPTOP)
         text = gpu3d.adapter_warning('Intel(R) Iris(R) Xe Graphics', adapters)
-        self.assertEqual(text, 'Intel(R) Iris(R) Xe Graphics: a faster adapter is available, Settings → Graphics adapter')
-        self.assertIn('llvmpipe: a faster adapter', gpu3d.adapter_warning('llvmpipe', adapters))
+        self.assertEqual(text, 'Intel(R) Iris(R) Xe Graphics: a discrete adapter is available, Settings → Graphics adapter')
+        self.assertIn('llvmpipe: a discrete adapter', gpu3d.adapter_warning('llvmpipe', adapters))
 
     def test_silent_on_the_discrete_card(self):
         self.assertIsNone(gpu3d.adapter_warning('NVIDIA GeForce RTX 4070 Laptop GPU', summaries(LAPTOP)))
@@ -98,7 +98,7 @@ class TopBarWarning(unittest.TestCase):
         text = gpu3d.adapter_warning('Iris', summaries([Fake('Iris', 'IntegratedGPU'), Fake('RTX', 'DiscreteGPU')]))
         pill.set_state('Iris', 339, warning=text, help_text=gpu3d.ADAPTER_WARNING_HELP)
         self.assertTrue(pill.warning)
-        self.assertIn('Iris: a faster adapter is available', pill.text())
+        self.assertIn('Iris: a discrete adapter is available', pill.text())
         self.assertIn('High performance', pill.toolTip())
         pill.set_state('RTX', 12)
         self.assertFalse(pill.warning)
