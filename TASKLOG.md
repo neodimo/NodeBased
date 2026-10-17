@@ -1,6 +1,13 @@
+## 2026-10-16 — adapter choice measured and prepared for integration (Gonzo)
+
+- **What was done:** Completed the partial adapter-choice branch's missing heavy-scene comparison after the 0.38.0 and stacked suites freed the GPU. The 3000-card, 1080p scene measured 0.36 FPS on the RTX 3080 Ti and 0.65 FPS on the Radeon 8060S in 20-second repeats; short initial runs agreed. Updated UI and documentation to present discrete-first as a preference, with a manual adapter choice and honest workload caveat. Merged current main into the branch. On that combined tree, 64 adapter/top-bar/field-report/docs checks passed; 63 GPU checks passed on each of RTX, Radeon and llvmpipe.
+- **Artifacts:** `docs/PERFORMANCE.md` and byte-identical `nodebased/data/docs/PERFORMANCE.md` contain the results; `nodebased/gpu3d.py`, `nodebased/app.py` and `tests/test_graphics_adapter.py` contain the corrected language. Raw local logs: `scratch/nb-lanes/run/adapter-{rtx,radeon}-repeat-1016.log`, `adapter-merged-targeted-1016.log` and `adapter-{rtx,radeon,llvmpipe}-gpu-tests-1016.log` (deliberate workspace scratch). Changes are committed on local `openclaw/nb-e2e`; main has not received them yet.
+- **State:** Partial pending the integrator's exact-HEAD full suite and merge. Automatic selection is a discrete-first heuristic; this workstation's integrated Radeon won the measured heavy scene. The laptop's Intel versus RTX 4070 speed and Windows behavior remain unverified, so no fastest-card claim is made.
+- **Next owner + concrete artifact:** Gonzo: run the full integration gate from `scratch/nb-lanes/auto/tick.py` for `openclaw/nb-e2e`; merge only on green, then update the project board. DiMo can use `tools/benchmark_adapter_choice.py` on the laptop for the Intel/RTX comparison and choose the faster card in Settings.
+- **Failure mode:** Adapter type alone does not rank speed across workloads or eGPU links. The original UI said a discrete card was “faster” without measuring it; the repeated local benchmark contradicted that wording.
+
 ## 2026-10-16 — continuous mode merge: Lane 3 (Research, GPT-6 Astra) step V1 of 1: how the fastest apps keep their interface at display rate, and what our Python + Qt + wgpu setup can reach, Lane 6 (Fluids, GPT-6 Luna) step S2 of 2: the Hot pour reads as a pour (finish 2: the auto-solver crash, then the card numbers), Lane 8 (2D parity B, GPT-6 Luna) step T1 of 2: the region of interest never breaks the picture (finish 1) (integrator tick)
 
 - **What was done:** `main` `448327a4` -> `832c17b2` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `832c17b2`: Ran 5438 tests in 20253.854 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
-

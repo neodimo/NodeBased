@@ -6274,3 +6274,7 @@ DiMo approved the progressive-render direction at 9:31 AM: show a usable, denois
 ## 2026-10-16 — 0.38.0 release gate red, viewer test corrected
 
 The exact release commit `ee93786c` ran 5,430 tests and failed one viewer-mode zoom assertion. No tag was pushed. The test directly scaled and centered the view while leaving `auto_fit` true, so a later Qt page-switch resize could refit it; the isolated test passed. The test now sets `auto_fit = False` to model manual input and drains queued page-switch events before checking state. The 22-test viewer-mode module passes. Full-suite validation of a new release commit is outstanding. Main merges, field bundle v2 and progressive-render work remain parked behind the tag. See `TASKLOG.md` for the log path and handoff.
+
+## 2026-10-16 — adapter choice branch prepared for full merge gate
+
+The adapter branch is merged with current main locally and passes its focused checks: 64 adapter/top-bar/field-report/docs tests, plus 63 GPU tests on each of RTX 3080 Ti, Radeon 8060S and llvmpipe. The missing 3000-card, 1080p comparison was repeated for 20 seconds per card: Radeon 0.65 FPS (1543 ms median), RTX 0.36 FPS (2798 ms median). Automatic selection remains a discrete-first heuristic, now labelled honestly; artist override and an available-discrete suggestion are built. The laptop's RTX 4070 gain remains unmeasured. The integrator's exact-HEAD full suite and main merge are outstanding. TASKLOG.md has artifact paths and failure mode.
