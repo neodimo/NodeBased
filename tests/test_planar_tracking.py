@@ -140,9 +140,13 @@ class PlanarNodeTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: window.properties.widget().findChild(
             QPushButton, "planar-pick-region") is not None, timeout=2))
         self.assertTrue(window.begin_planar_pick("plane"))
+        # A click lands on a whole pixel, so the picked corner is the scene point under that
+        # pixel; at any zoom other than 1 it is a fraction off the requested one.
+        picked = []
         for point in ((30, 30), (90, 30), (90, 80), (30, 80)):
-            QTest.mouseClick(window.viewer.viewport(), Qt.MouseButton.LeftButton,
-                             pos=window.viewer.mapFromScene(QPointF(*point)))
+            pixel = window.viewer.mapFromScene(QPointF(*point))
+            picked.append(window.viewer._tracker_data_point(window.viewer.mapToScene(pixel)))
+            QTest.mouseClick(window.viewer.viewport(), Qt.MouseButton.LeftButton, pos=pixel)
         corners = window.dispatcher.document["node_data"]["plane"]["tracks"]
         self.assertEqual(len(corners), 4)
         self.assertEqual(corners[0]["name"], "corner1")
@@ -163,9 +167,9 @@ class PlanarNodeTests(unittest.TestCase):
         self.assertEqual(len(pins), 1)
         pin_id, pin = pins[0]
         np.testing.assert_allclose([[pin["params"][f"to{i}_x"], pin["params"][f"to{i}_y"]]
-                                    for i in range(1, 5)], [[30,30],[90,30],[90,80],[30,80]])
-        for i, (x, y) in enumerate(((37,27),(97,27),(97,77),(37,77)), start=1):
+                                    for i in range(1, 5)], picked)
+        for i, (x, y) in enumerate(picked, start=1):
             curves = window.dispatcher.document["animation"]["curves"][pin_id]
             px = curves[f"to{i}_x"]["keys"]
             py = curves[f"to{i}_y"]["keys"]
-            self.assertEqual((px[1]["value"], py[1]["value"]), (x, y))
+            np.testing.assert_allclose((px[1]["value"], py[1]["value"]), (x + 7.0, y - 3.0))
