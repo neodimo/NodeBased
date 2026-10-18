@@ -4184,7 +4184,7 @@ class Port(QGraphicsEllipseItem):
                 # replaces *this* input only after a valid drop.  Keep the existing
                 # connection visible until then so a missed gesture cannot damage a comp.
                 graph.start_input_wire(self.node.key, self.slot)
-                graph.window.statusBar().showMessage("Input picked up: drag to an output · Esc or empty space keeps the original")
+                graph.window.statusBar().showMessage("Input picked up: drag to an output, or release on empty space to disconnect · Esc keeps it")
             else:
                 graph.start_input_wire(self.node.key, self.slot)
                 graph.window.statusBar().showMessage("Connect: drag to an output port · Esc cancels")
@@ -4205,7 +4205,7 @@ class Port(QGraphicsEllipseItem):
             if graph.wire_source:
                 graph.finish_wire_at(event.scenePos())
             elif graph.wire_input:
-                graph.finish_input_wire_at(event.scenePos())
+                graph.finish_input_wire_at(event.scenePos(), self._press_scene)
         self._press_scene = None
         self._dragging = False
         self._rewire_input = None
@@ -5884,6 +5884,7 @@ class SequenceBrowser(QDialog):
 
 
 # Wiring feel (new look). Every radius is in screen pixels, so wiring feels the same at 40 and 150 percent.
+DISCONNECT_DRAG = 6  # screen pixels a picked-up input wire must travel before an empty-space release disconnects it
 WIRE_REACH = 40      # a dragged wire snaps to the nearest compatible socket this close to the pointer
 GRAB_REACH = 20      # pressing this close to a socket (card edge, label, empty space) starts a wire
 GRAB_EDGE = 8        # a press deeper than this inside a card is a node drag, never a wire
@@ -6252,12 +6253,30 @@ class Graph(PanZoomView):
             if output != "rgba": command["output"] = output
             self.window.defer_command(command)
 
-    def finish_input_wire_at(self, scene_pos):
+    def finish_input_wire_at(self, scene_pos, dragged_from=None):
+        """End the input wire being dragged at `scene_pos`. Dropped on an output it reconnects there. Dropped
+        on empty canvas (clear of every socket and card) it disconnects the input it picked up, as in Nuke, when it was dragged (`dragged_from`
+        is where the press began) at least DISCONNECT_DRAG screen pixels; a click, or a second click ending
+        a click-click wire, changes nothing."""
         output = self.wire_target(scene_pos)
         if output:
             self.finish_input_wire(output.node.key, output.output_name)
+            return
+        picked = self.wire_input
+        dragged = (dragged_from is not None
+                   and QLineF(dragged_from, scene_pos).length() * self.view_scale() >= DISCONNECT_DRAG)
+        connected = bool(picked and self.window.graph_nodes().get(picked[0], {}).get("inputs", {}).get(picked[1]))
+        # Only empty canvas disconnects: a release on a socket or card that refused the wire (a cycle, a type
+        # mismatch) is a miss, and the original connection stays.
+        reach = WIRE_REACH / self.view_scale()
+        if self.card_at(scene_pos) is not None or any(
+                QLineF(port.scenePos(), scene_pos).length() <= reach for port in self.wire_ports(outputs=True)):
+            dragged = False
+        self.cancel_wire()
+        if dragged and connected:
+            self.window.defer_command({"op": "connect", "id": picked[0], "input": picked[1], "source": None})
+            self.window.statusBar().showMessage("Wire disconnected", 3000)
         else:
-            self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
 
     # ------------------------------------------------------------------------------------------
@@ -6630,7 +6649,10 @@ class Graph(PanZoomView):
             self.wire_grabbed = False
             if (event.position().toPoint() - self.wire_press).manhattanLength() > 4 and (self.wire_source or self.wire_input):
                 where = self.mapToScene(event.position().toPoint())
-                (self.finish_wire_at if self.wire_source else self.finish_input_wire_at)(where)
+                if self.wire_source:
+                    self.finish_wire_at(where)
+                else:
+                    self.finish_input_wire_at(where, self.mapToScene(self.wire_press))
             event.accept()
             return
         if self.inserting_edge is not None and event.button() == Qt.MouseButton.LeftButton:

@@ -304,16 +304,36 @@ class WireFeelTests(unittest.TestCase):
         self.release(self.at(self.input("mg", "B"), 0, -10))
         self.assertIsNone(self.source("mg", "B"))
 
-    def test_a_picked_up_input_dropped_on_empty_space_keeps_its_connection(self):
+    def test_a_picked_up_input_dragged_off_and_dropped_on_empty_space_disconnects(self):
+        """Nuke's gesture (10/18): drag the input end of a wire away and let go on empty canvas."""
         for zoom in ZOOMS:
             with self.subTest(zoom=zoom):
+                self.command({"op": "connect", "id": "gr", "input": "image", "source": "rd"})
                 self.show(zoom)
-                start = self.at(self.input("gr"))
-                far = self.at(P(1500, -150))   # clear of every socket and card at any zoom
-                self.drag(start, far)
-                self.assertEqual(self.source("gr", "image"), "rd")
+                self.drag(self.at(self.input("gr")), self.at(P(1500, -150)))
+                self.assertTrue(wait_until(lambda: self.source("gr", "image") is None))
                 self.assertIsNone(self.graph.pending_edge)
 
+    def test_a_click_or_tiny_drag_on_a_connected_input_changes_nothing(self):
+        for zoom in ZOOMS:
+            with self.subTest(zoom=zoom):
+                self.command({"op": "connect", "id": "gr", "input": "image", "source": "rd"})
+                self.show(zoom)
+                start = self.at(self.input("gr"))
+                self.drag(start, start + QPoint(2, 2))
+                self.settle(20)
+                self.assertEqual(self.source("gr", "image"), "rd")
+
+    def test_escape_while_dragging_a_picked_up_input_keeps_its_connection(self):
+        self.show(1.0)
+        start = self.at(self.input("gr"))
+        far = self.at(P(1500, -150))
+        self.press(start)
+        self.move(start, far)
+        QTest.keyClick(self.graph, Qt.Key.Key_Escape)
+        self.release(far)
+        self.settle(20)
+        self.assertEqual(self.source("gr", "image"), "rd")
 
 if __name__ == "__main__":
     unittest.main()
