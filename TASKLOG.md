@@ -1,3 +1,11 @@
+## 2026-10-18, 2:04 AM — 0.38.1 tagged: performance work and the Windows release repair on main (Gonzo)
+
+- **What was done:** The combined exact-HEAD gate on `1a8e646e` (performance branch, planar-pick test fix, Windows release repair, Properties panel cache fix) ran 5,489 tests in 20,678 s, OK. Main fast-forwarded from `e7edfc0a` through `1a8e646e`, the pending notes commit was rebased on top, and release commit `cdff2993` bumps the version to 0.38.1 with notes. 299 version- and docs-sensitive tests passed on the release commit. `v0.38.1` pushed; `v0.38.0` left untouched and unpublished.
+- **Artifacts:** `scratch/nb-lanes/run/combined-0381-1017-1a8e646e.log`, `scratch/nb-lanes/run/release-v0.38.1-focused.log`, notes `scratch/nb-lanes/auto/notes-0.38.1.md`. Tick release state set to the CI stage for 0.38.1.
+- **State:** Tagged; tag workflows (Desktop conformance, Build release packages) running. Not yet published.
+- **Next owner + concrete artifact:** The tick watches the tag workflows and posts the release announcement on publish; Gonzo fixes if a workflow is red. Research stays paused pending DiMo's GPT-lane priority.
+- **Failure mode:** The full suite ran on `1a8e646e`; the release commit changes only version strings and notes, covered by the focused run rather than a second six-hour suite.
+
 ## 2026-10-17, 5:53 AM — performance suite repair and release focused validation (partial)
 
 - **What was done:** The performance integration suite at exact HEAD `ebd3905c` completed 5,488 tests with 10 failures, all in one GPU AOV routing test. An empty-scene fast path reduced its mocked sample count; the test now uses actual geometry, passes focused validation, and is committed at `a3592ad1`. A full exact-HEAD suite is rerunning. Separately, the Windows-release repair passed 42 focused tests and is committed at `19b72666` in its isolated branch.
