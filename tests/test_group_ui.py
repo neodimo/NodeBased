@@ -137,6 +137,19 @@ class GroupUiTests(unittest.TestCase):
 
     # -- entering, editing, leaving -----------------------------------------------------------
 
+    def test_a_panel_built_at_root_for_a_grouped_node_is_not_reused_inside_the_group(self):
+        w = self.window
+        self.chain('g6', 3600)
+        self.select('g6a', 'g6b')
+        self.keys(Qt.Key.Key_G, CTRL)
+        group = self.group_of('g6a', 'g6b')
+        w.inspect('g6b', reuse=True)  # a selection follow-up that lands after the node left the root graph
+        self.double_click(group)
+        self.assertEqual(w.graph_path, [group])
+        self.select('g6b')
+        w.flush_inspect()
+        self.assertTrue(w.properties.findChildren(QLineEdit))
+
     def test_enter_a_group_edit_a_knob_inside_go_back_and_the_viewer_shows_it(self):
         w = self.window
         self.assertTrue(wait_until(lambda: w.frame is not None))

@@ -11225,7 +11225,8 @@ class Window(QMainWindow):
 
     def _panel_cache_stamp(self):
         document = self.dispatcher.document
-        return (self.dispatcher.revision, document["time"]["current"], self.theme_name)
+        return (self.dispatcher.revision, document["time"]["current"], self.theme_name,
+                tuple(getattr(self, "graph_path", ())))
 
     def _show_cached_panel(self, key, reuse):
         """Show the Properties panel for `key`, reusing the widgets built the last time this node was
