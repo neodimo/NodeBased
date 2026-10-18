@@ -1,0 +1,84 @@
+{
+  "bounds": "present return is a CPU timestamp when the application call returns; it is not screen response",
+  "platform": "xcb",
+  "qt": "6.11.2",
+  "frame": [
+    1920,
+    1080
+  ],
+  "direct": {
+    "path": "retained texture, QRenderWidget(present_method='screen')",
+    "adapter": {
+      "vendor": "llvmpipe",
+      "architecture": "",
+      "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+      "description": "Mesa 26.2.2 (LLVM 22.1.8)",
+      "stackgroup_min_size": "4",
+      "stackgroup_max_size": "128",
+      "vendor_id": "65541",
+      "device_id": "0",
+      "adapter_type": "CPU",
+      "backend_type": "Vulkan"
+    },
+    "device_epoch": 0,
+    "physical_size": [
+      1920,
+      1080
+    ],
+    "pixel_ratio": 1.0,
+    "new_frame": {
+      "submit_return_ms": {
+        "p50": 0.008360017091035843,
+        "p95": 0.012409989722073078,
+        "p99": 0.014399061910808086,
+        "max": 0.024529057554900646,
+        "mean": 0.008720249267450223
+      },
+      "present_return_ms": {
+        "p50": 0.022968975827097893,
+        "p95": 0.07185805588960648,
+        "p99": 3.1491839326918125,
+        "max": 3.209011978469789,
+        "mean": 0.17592661315575242
+      },
+      "interval_ms": {
+        "p50": 8.025245042517781,
+        "p95": 8.865040028467774,
+        "p99": 8.995515992864966,
+        "max": 9.180600056424737,
+        "mean": 7.947535175639185
+      },
+      "frames_per_second": 125.8239922268949,
+      "process_cpu_fraction": 8.479178090996937,
+      "counters": {
+        "conversions": 240,
+        "uploads": 240,
+        "draws": 240,
+        "draw_ms_total": 747.6450743852183
+      },
+      "to_qimage_runs_per_frame": 1,
+      "pixmap_builds_per_frame": 0
+    },
+    "pan_zoom": {
+      "handler_ms": {
+        "p50": 0.03455905243754387,
+        "p95": 0.058248057030141354,
+        "p99": 0.08318701293319464,
+        "max": 0.23625302128493786,
+        "mean": 0.037982730039705835
+      },
+      "event_to_present_return_ms": {
+        "p50": 7.607278064824641,
+        "p95": 8.676016004756093,
+        "p99": 8.750473032705486,
+        "max": 8.889688993804157,
+        "mean": 7.676489321359743
+      },
+      "process_cpu_ms_per_input": 66.63960837083334,
+      "counters": {
+        "draws": 240,
+        "draw_ms_total": 367.2598603880033
+      }
+    }
+  }
+}

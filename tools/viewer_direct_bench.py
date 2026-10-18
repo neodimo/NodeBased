@@ -109,9 +109,12 @@ def measure_default(imgs):
 def measure_direct(imgs):
     from nodebased import directviewer as dv
     widget = dv.make_widget()
-    dpr = widget.get_pixel_ratio()
-    widget.resize(round(W / dpr), round(H / dpr))
     widget.show()
+    for _ in range(30):
+        app.processEvents()
+        time.sleep(0.01)
+    dpr = widget.get_pixel_ratio()      # only meaningful once the window is mapped
+    widget.resize(round(W / dpr), round(H / dpr))
     for _ in range(30):
         app.processEvents()
         time.sleep(0.01)
@@ -180,7 +183,7 @@ def measure_direct(imgs):
     result = {
         "path": "retained texture, QRenderWidget(present_method='screen')",
         "adapter": {k: str(v) for k, v in info.items()},
-        "device_epoch": presenter.ledger.epoch,
+        "device_epoch": presenter.ledger.epoch, "selection_note": presenter.selection_note,
         "physical_size": list(widget.get_physical_size()), "pixel_ratio": dpr,
         "new_frame": {"submit_return_ms": dist(submit_ms), "present_return_ms": dist(frame_present),
                       "interval_ms": dist([(b - a) * 1000 for a, b in zip(frame_stamps, frame_stamps[1:])]),

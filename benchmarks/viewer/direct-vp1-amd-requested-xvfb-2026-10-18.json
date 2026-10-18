@@ -1,0 +1,85 @@
+{
+  "bounds": "present return is a CPU timestamp when the application call returns; it is not screen response",
+  "platform": "xcb",
+  "qt": "6.11.2",
+  "frame": [
+    1920,
+    1080
+  ],
+  "direct": {
+    "path": "retained texture, QRenderWidget(present_method='screen')",
+    "adapter": {
+      "vendor": "NVIDIA",
+      "architecture": "",
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "description": "615.71.09",
+      "stackgroup_min_size": "4",
+      "stackgroup_max_size": "128",
+      "vendor_id": "4318",
+      "device_id": "8712",
+      "adapter_type": "DiscreteGPU",
+      "backend_type": "Vulkan"
+    },
+    "device_epoch": 0,
+    "selection_note": "integrated was asked for but this window can only be presented to by NVIDIA GeForce RTX 3080 Ti",
+    "physical_size": [
+      1920,
+      1080
+    ],
+    "pixel_ratio": 1.0,
+    "new_frame": {
+      "submit_return_ms": {
+        "p50": 0.01137005165219307,
+        "p95": 0.018808990716934204,
+        "p99": 0.020798994228243828,
+        "max": 0.022288993932306767,
+        "mean": 0.012487016889887551
+      },
+      "present_return_ms": {
+        "p50": 51.81445996277034,
+        "p95": 53.52748709265143,
+        "p99": 54.33405202347785,
+        "max": 54.481946979649365,
+        "mean": 45.9132752973043
+      },
+      "interval_ms": {
+        "p50": 75.90186595916748,
+        "p95": 78.01079098135233,
+        "p99": 78.68918997701257,
+        "max": 79.11205699201673,
+        "mean": 64.7312659121442
+      },
+      "frames_per_second": 15.47253488031422,
+      "process_cpu_fraction": 1.0066916340910492,
+      "counters": {
+        "conversions": 240,
+        "uploads": 240,
+        "draws": 240,
+        "draw_ms_total": 74.17599577456713
+      },
+      "to_qimage_runs_per_frame": 1,
+      "pixmap_builds_per_frame": 0
+    },
+    "pan_zoom": {
+      "handler_ms": {
+        "p50": 0.029449001885950565,
+        "p95": 0.05037803202867508,
+        "p99": 0.07859792094677687,
+        "max": 0.2098740078508854,
+        "mean": 0.032762041761695095
+      },
+      "event_to_present_return_ms": {
+        "p50": 49.995896057225764,
+        "p95": 50.966025912202895,
+        "p99": 51.361943944357336,
+        "max": 51.9222270231694,
+        "mean": 50.12989657407161
+      },
+      "process_cpu_ms_per_input": 50.16200711250001,
+      "counters": {
+        "draws": 240,
+        "draw_ms_total": 32.32145216315985
+      }
+    }
+  }
+}
