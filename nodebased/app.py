@@ -103,7 +103,7 @@ from . import handles2d
 from . import tracker as tracker_model
 from . import planar as planar_model
 from .agentpanel import AgentPanel
-from .knobs import knob_layout
+from .knobs import knob_layout, slider_range
 from . import materialpreview
 from .curveeditor import CurveEditorDialog
 from .viewport3d import Viewport3D
@@ -271,36 +271,121 @@ PANEL_NODE_HELP = {
 
 
 class RulerSlider(QSlider):
-    """Integer-backed slider with a compact float ruler beneath its groove."""
+    """Integer-backed slider across a knob's soft range, drawn by the active style.
+
+    Pressing anywhere on the groove jumps the value there and keeps dragging from that point.
+    Ctrl drags at a tenth of the speed and Shift at ten times; the same modifiers scale the arrow
+    keys and the wheel. The soft range bounds the slider only: the value field beside it still
+    takes any number inside the knob's hard limits."""
+
+    STEPS = 10000
 
     def __init__(self, soft_min, soft_max, parent=None):
         super().__init__(Qt.Orientation.Horizontal, parent)
         self.soft_min = float(soft_min)
         self.soft_max = float(soft_max)
-        self.setRange(0, 1000)
+        self.setRange(0, self.STEPS)
+        self.setSingleStep(self.STEPS // 100)
+        self.setPageStep(self.STEPS // 10)
         self._visual_position = float(self.value())
+        self._drag = None             # (press x, value at press) while the artist drags
         self.motion = None
         self.setFixedHeight(24)
-        self.setToolTip(f"Soft range: {self.soft_min:g} to {self.soft_max:g}")
+        self.setMinimumWidth(48)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setToolTip(f"Soft range: {self.soft_min:g} to {self.soft_max:g} · "
+                        "Ctrl drag for fine steps, Shift drag for coarse steps")
 
     def float_value(self):
         if self.soft_max == self.soft_min:
             return self.soft_min
-        return self.soft_min + (self.value() / 1000.0) * (self.soft_max - self.soft_min)
+        return self.soft_min + (self.value() / self.STEPS) * (self.soft_max - self.soft_min)
 
     def set_float_value(self, value):
         if self.soft_max == self.soft_min:
             position = 0
         else:
             value = max(self.soft_min, min(self.soft_max, float(value)))
-            position = round((value - self.soft_min) / (self.soft_max - self.soft_min) * 1000)
+            position = round((value - self.soft_min) / (self.soft_max - self.soft_min) * self.STEPS)
         self.setValue(position)
         self._visual_position = float(position)
         self.update()
 
-    def paintEvent(self, event):
+    def _style_option(self):
         option = QStyleOptionSlider()
         self.initStyleOption(option)
+        # initStyleOption leaves subControls at SC_None, and a complex control drawn with no
+        # sub-controls paints nothing: from 10/9 to 10/18 every knob slider was an empty box.
+        option.subControls = QStyle.SubControl.SC_SliderGroove | QStyle.SubControl.SC_SliderHandle
+        return option
+
+    def _groove_span(self):
+        """(left x, usable width) of the groove the handle's centre travels along."""
+        option = self._style_option()
+        style = self.style()
+        groove = style.subControlRect(QStyle.ComplexControl.CC_Slider, option,
+                                      QStyle.SubControl.SC_SliderGroove, self)
+        handle = style.subControlRect(QStyle.ComplexControl.CC_Slider, option,
+                                      QStyle.SubControl.SC_SliderHandle, self)
+        width = max(1, groove.width() - handle.width())
+        return groove.x() + handle.width() / 2, width
+
+    def position_at(self, x):
+        left, width = self._groove_span()
+        return round(max(0.0, min(1.0, (x - left) / width)) * self.STEPS)
+
+    @staticmethod
+    def speed(modifiers):
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            return 0.1
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            return 10.0
+        return 1.0
+
+    def mousePressEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton or not self.isEnabled():
+            super().mousePressEvent(event)
+            return
+        x = event.position().x()
+        if event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
+            start = self.value()        # a modified drag scrubs from the current value
+        else:
+            start = self.position_at(x)  # a plain press jumps to the point under the cursor
+        self._drag = (x, start)
+        self.setSliderDown(True)
+        self.setValue(start)
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._drag is None:
+            super().mouseMoveEvent(event)
+            return
+        press_x, start = self._drag
+        _left, width = self._groove_span()
+        delta = (event.position().x() - press_x) / width * self.STEPS * self.speed(event.modifiers())
+        self.setValue(max(0, min(self.STEPS, round(start + delta))))
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if self._drag is None:
+            super().mouseReleaseEvent(event)
+            return
+        self._drag = None
+        self.setSliderDown(False)       # emits sliderReleased, which commits the knob
+        event.accept()
+
+    def keyPressEvent(self, event):
+        steps = {Qt.Key.Key_Left: -1, Qt.Key.Key_Down: -1, Qt.Key.Key_Right: 1, Qt.Key.Key_Up: 1}
+        if event.key() in steps:
+            delta = steps[event.key()] * self.singleStep() * self.speed(event.modifiers())
+            self.setValue(max(0, min(self.STEPS, round(self.value() + delta))))
+            self.sliderReleased.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def paintEvent(self, event):
+        option = self._style_option()
         option.sliderPosition = round(self._visual_position)
         option.sliderValue = self.value()
         painter = QStylePainter(self)
@@ -10637,17 +10722,18 @@ class Window(QMainWindow):
                     add_legacy_param(param, value, group.kind, label=group.label)
                 elif group.kind in ("string", "file_read", "file_write"):
                     add_legacy_param(param, value, group.kind, label=group.label)
-                elif group.kind == "float":
-                    control = numeric_field(param)
-                    form.addRow(group.label, self.animatable_row(
-                        key, param, control, expression=expressions.get(param)))
-                elif group.kind == "float_slider":
+                elif group.kind in ("float", "float_slider"):
+                    # Every single float knob is a slider with its value field beside it, as in the
+                    # approved design (DiMo 10/18); the layout's soft range or one derived from the schema.
                     curve = curves.get(param)
                     shown = resolved[param] if (curve or param in expressions) else value
-                    control = FloatSliderControl(parameter_limits(node["type"], param), group.soft_range, shown)
+                    control = FloatSliderControl(parameter_limits(node["type"], param),
+                                                 slider_range(node["type"], param, group.soft_range), shown)
                     control.motion = self.motion
                     control.slider.motion = self.motion
                     control.spin.setObjectName(f"{param}-field")
+                    control.spin.setProperty("nodebased_node_id", key)
+                    control.spin.setProperty("nodebased_param", param)
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")
@@ -11752,6 +11838,9 @@ class Window(QMainWindow):
             control.blockSignals(True)
             control.setValue(float(values[param]))
             control.blockSignals(False)
+            pair = control.parentWidget()
+            if isinstance(pair, FloatSliderControl):
+                pair.slider.set_float_value(float(values[param]))
 
     def attach_text_menu(self, editor, default=None, commit=None):
         """Give a text knob a context menu that outlives a panel rebuild.

@@ -105,8 +105,11 @@ class Knob3DWidgetTests(unittest.TestCase):
             fields = {f.objectName(): f for f in window.findChildren(QDoubleSpinBox) if f.objectName()}
             for name in ("tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz", "sphere_radius"):
                 self.assertIn(f"{name}-field", fields)
-            # Specular, plus the PBR material's Metallic/Roughness/Specular, are the sliders on the panel.
-            self.assertEqual(len([s for s in window.findChildren(QSlider) if s.isVisible()]), 4)
+            # Every single float knob is a slider beside its field since 10/18 (DiMo: sliders app-wide);
+            # the xyz rows stay typed fields.
+            from nodebased.knobs import knob_layout
+            floats = [g for g in knob_layout("Sphere3D") if g.kind in ("float", "float_slider")]
+            self.assertEqual(len([s for s in window.findChildren(QSlider) if s.isVisible()]), len(floats))
             fields["ty-field"].setValue(2.5)
             fields["ty-field"].editingFinished.emit()
             app.processEvents()
