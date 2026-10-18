@@ -1,0 +1,654 @@
+{
+  "baseline_commit": "dadbab0ef8eb496c7bcbc1b67163251a39fb08d2",
+  "date": "2026-10-18",
+  "probe_sha256": "0137c0253f812dc28be7abf1375393094123da80be8a4a562e041db56a679679",
+  "notes": [
+    "300 measured present returns per adapter, 1920x1080 retained texture; drawable 1920x1080 then 1600x900 at midpoint.",
+    "xcb/XWayland, Qt DPR forced to 1; desktop compositor output scaling is 1.75, so this is not native high-DPI qualification.",
+    "No actual scanout timing, GPU timestamps, or VRAM telemetry. Transfer counters cover exposed Python wgpu operations; driver/compositor copies are unobserved.",
+    "AMD compositor active-window screenshot after measurement shows checker 50/180 and overlay; screenshot 2800x1575 from 1600x900 window at desktop scale 1.75.",
+    "Original 10/15 play and micro harnesses copied to ignored scratch, worktree root corrected to current cwd; no application changes."
+  ],
+  "direct": {
+    "integrated": {
+      "versions": {
+        "PySide6": "6.11.2",
+        "Qt": "6.11.2",
+        "wgpu": "0.32.0",
+        "rendercanvas": "2.7.2"
+      },
+      "adapter": {
+        "vendor": "radv",
+        "architecture": "",
+        "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+        "description": "Mesa 26.2.2",
+        "stackgroup_min_size": 4,
+        "stackgroup_max_size": 128,
+        "vendor_id": 4098,
+        "device_id": 5510,
+        "adapter_type": "IntegratedGPU",
+        "backend_type": "Vulkan"
+      },
+      "all_adapters": [
+        {
+          "vendor": "radv",
+          "architecture": "",
+          "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+          "description": "Mesa 26.2.2",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4098,
+          "device_id": 5510,
+          "adapter_type": "IntegratedGPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "NVIDIA",
+          "architecture": "",
+          "device": "NVIDIA GeForce RTX 3080 Ti",
+          "description": "615.71.09",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4318,
+          "device_id": 8712,
+          "adapter_type": "DiscreteGPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "llvmpipe",
+          "architecture": "",
+          "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+          "description": "Mesa 26.2.2 (LLVM 22.1.8)",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 65541,
+          "device_id": 0,
+          "adapter_type": "CPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "",
+          "architecture": "",
+          "device": "NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2",
+          "description": "3.3.0 NVIDIA 615.71.09",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4318,
+          "device_id": 0,
+          "adapter_type": "Unknown",
+          "backend_type": "OpenGL"
+        }
+      ],
+      "platform": "xcb",
+      "dpr": 1.0,
+      "screen_refresh_hz": 119.91062562065541,
+      "context": "WgpuContextToScreen",
+      "format": "bgra8unorm-srgb",
+      "frames": 300,
+      "elapsed_s": 2.491480599041097,
+      "cpu_percent_one_core": 5.292394371874656,
+      "acquire_ms": {
+        "p50": 8.085223496891558,
+        "p95": 8.510948496405035,
+        "p99": 8.833006171043962,
+        "max": 19.5128460181877
+      },
+      "draw_submit_ms": {
+        "p50": 8.221213996876031,
+        "p95": 8.666407509008422,
+        "p99": 8.968061357736586,
+        "max": 19.676720956340432
+      },
+      "present_call_ms": {
+        "p50": 0.0119450269266963,
+        "p95": 0.023369980044662952,
+        "p99": 0.027830066392198205,
+        "max": 0.03328896127641201
+      },
+      "present_return_interval_ms": {
+        "p50": 8.325055940076709,
+        "p95": 8.75821195077151,
+        "p99": 9.166706828400493,
+        "max": 19.83343600295484
+      },
+      "sizes": [
+        [
+          1600,
+          900
+        ],
+        [
+          1920,
+          1080
+        ]
+      ],
+      "rss_mib": [
+        [
+          0,
+          237.9453125
+        ],
+        [
+          25,
+          237.9453125
+        ],
+        [
+          50,
+          237.9453125
+        ],
+        [
+          75,
+          237.9453125
+        ],
+        [
+          100,
+          237.94921875
+        ],
+        [
+          125,
+          237.953125
+        ],
+        [
+          150,
+          238.10546875
+        ],
+        [
+          175,
+          238.109375
+        ],
+        [
+          200,
+          238.109375
+        ],
+        [
+          225,
+          238.11328125
+        ],
+        [
+          250,
+          238.11328125
+        ],
+        [
+          275,
+          238.11328125
+        ]
+      ],
+      "transfer_calls_after_warmup": {},
+      "initial_upload_bytes": 8294400,
+      "bounds": "CPU timestamps around draw/submit and native present return; no scanout or photon timing; RSS is process resident memory, not VRAM"
+    },
+    "discrete": {
+      "versions": {
+        "PySide6": "6.11.2",
+        "Qt": "6.11.2",
+        "wgpu": "0.32.0",
+        "rendercanvas": "2.7.2"
+      },
+      "adapter": {
+        "vendor": "NVIDIA",
+        "architecture": "",
+        "device": "NVIDIA GeForce RTX 3080 Ti",
+        "description": "615.71.09",
+        "stackgroup_min_size": 4,
+        "stackgroup_max_size": 128,
+        "vendor_id": 4318,
+        "device_id": 8712,
+        "adapter_type": "DiscreteGPU",
+        "backend_type": "Vulkan"
+      },
+      "all_adapters": [
+        {
+          "vendor": "radv",
+          "architecture": "",
+          "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+          "description": "Mesa 26.2.2",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4098,
+          "device_id": 5510,
+          "adapter_type": "IntegratedGPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "NVIDIA",
+          "architecture": "",
+          "device": "NVIDIA GeForce RTX 3080 Ti",
+          "description": "615.71.09",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4318,
+          "device_id": 8712,
+          "adapter_type": "DiscreteGPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "llvmpipe",
+          "architecture": "",
+          "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+          "description": "Mesa 26.2.2 (LLVM 22.1.8)",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 65541,
+          "device_id": 0,
+          "adapter_type": "CPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "",
+          "architecture": "",
+          "device": "NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2",
+          "description": "3.3.0 NVIDIA 615.71.09",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4318,
+          "device_id": 0,
+          "adapter_type": "Unknown",
+          "backend_type": "OpenGL"
+        }
+      ],
+      "platform": "xcb",
+      "dpr": 1.0,
+      "screen_refresh_hz": 119.91062562065541,
+      "context": "WgpuContextToScreen",
+      "format": "bgra8unorm-srgb",
+      "frames": 300,
+      "elapsed_s": 2.4673344949260354,
+      "cpu_percent_one_core": 6.832619142101916,
+      "acquire_ms": {
+        "p50": 0.06963795749470592,
+        "p95": 0.13430440449155867,
+        "p99": 0.14965615933761,
+        "max": 8.09663301333785
+      },
+      "draw_submit_ms": {
+        "p50": 0.22210297174751759,
+        "p95": 0.43855439871549606,
+        "p99": 0.4921282292343675,
+        "max": 8.277648012153804
+      },
+      "present_call_ms": {
+        "p50": 7.94792256783694,
+        "p95": 8.349658391671255,
+        "p99": 9.301319365622474,
+        "max": 11.33643405046314
+      },
+      "present_return_interval_ms": {
+        "p50": 8.325797040015459,
+        "p95": 8.688513922970742,
+        "p99": 9.48703680885955,
+        "max": 11.469249962829053
+      },
+      "sizes": [
+        [
+          1600,
+          900
+        ],
+        [
+          1920,
+          1080
+        ]
+      ],
+      "rss_mib": [
+        [
+          0,
+          369.90625
+        ],
+        [
+          25,
+          369.92578125
+        ],
+        [
+          50,
+          369.94140625
+        ],
+        [
+          75,
+          369.5234375
+        ],
+        [
+          100,
+          369.55859375
+        ],
+        [
+          125,
+          369.58984375
+        ],
+        [
+          150,
+          382.9609375
+        ],
+        [
+          175,
+          367.171875
+        ],
+        [
+          200,
+          367.171875
+        ],
+        [
+          225,
+          367.171875
+        ],
+        [
+          250,
+          367.171875
+        ],
+        [
+          275,
+          367.171875
+        ]
+      ],
+      "transfer_calls_after_warmup": {},
+      "initial_upload_bytes": 8294400,
+      "bounds": "CPU timestamps around draw/submit and native present return; no scanout or photon timing; RSS is process resident memory, not VRAM"
+    },
+    "cpu": {
+      "versions": {
+        "PySide6": "6.11.2",
+        "Qt": "6.11.2",
+        "wgpu": "0.32.0",
+        "rendercanvas": "2.7.2"
+      },
+      "adapter": {
+        "vendor": "llvmpipe",
+        "architecture": "",
+        "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+        "description": "Mesa 26.2.2 (LLVM 22.1.8)",
+        "stackgroup_min_size": 4,
+        "stackgroup_max_size": 128,
+        "vendor_id": 65541,
+        "device_id": 0,
+        "adapter_type": "CPU",
+        "backend_type": "Vulkan"
+      },
+      "all_adapters": [
+        {
+          "vendor": "radv",
+          "architecture": "",
+          "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+          "description": "Mesa 26.2.2",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4098,
+          "device_id": 5510,
+          "adapter_type": "IntegratedGPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "NVIDIA",
+          "architecture": "",
+          "device": "NVIDIA GeForce RTX 3080 Ti",
+          "description": "615.71.09",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4318,
+          "device_id": 8712,
+          "adapter_type": "DiscreteGPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "llvmpipe",
+          "architecture": "",
+          "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+          "description": "Mesa 26.2.2 (LLVM 22.1.8)",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 65541,
+          "device_id": 0,
+          "adapter_type": "CPU",
+          "backend_type": "Vulkan"
+        },
+        {
+          "vendor": "",
+          "architecture": "",
+          "device": "NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2",
+          "description": "3.3.0 NVIDIA 615.71.09",
+          "stackgroup_min_size": 4,
+          "stackgroup_max_size": 128,
+          "vendor_id": 4318,
+          "device_id": 0,
+          "adapter_type": "Unknown",
+          "backend_type": "OpenGL"
+        }
+      ],
+      "platform": "xcb",
+      "dpr": 1.0,
+      "screen_refresh_hz": 119.91062562065541,
+      "context": "WgpuContextToScreen",
+      "format": "bgra8unorm-srgb",
+      "frames": 300,
+      "elapsed_s": 2.4754113090457395,
+      "cpu_percent_one_core": 369.1943079359639,
+      "acquire_ms": {
+        "p50": 6.666936504188925,
+        "p95": 7.219500525388867,
+        "p99": 7.497292386833578,
+        "max": 9.179849992506206
+      },
+      "draw_submit_ms": {
+        "p50": 7.176061510108411,
+        "p95": 8.588003407930955,
+        "p99": 9.156287553487344,
+        "max": 9.80378093663603
+      },
+      "present_call_ms": {
+        "p50": 1.1360955541022122,
+        "p95": 1.71412096824497,
+        "p99": 2.057097231736406,
+        "max": 2.8053439455106854
+      },
+      "present_return_interval_ms": {
+        "p50": 8.300847024656832,
+        "p95": 8.891056024003774,
+        "p99": 9.298614326398816,
+        "max": 12.06039299722761
+      },
+      "sizes": [
+        [
+          1600,
+          900
+        ],
+        [
+          1920,
+          1080
+        ]
+      ],
+      "rss_mib": [
+        [
+          0,
+          331.44921875
+        ],
+        [
+          25,
+          331.44921875
+        ],
+        [
+          50,
+          331.44921875
+        ],
+        [
+          75,
+          331.44921875
+        ],
+        [
+          100,
+          331.44921875
+        ],
+        [
+          125,
+          331.44921875
+        ],
+        [
+          150,
+          324.375
+        ],
+        [
+          175,
+          324.375
+        ],
+        [
+          200,
+          324.375
+        ],
+        [
+          225,
+          324.375
+        ],
+        [
+          250,
+          324.375
+        ],
+        [
+          275,
+          324.37890625
+        ]
+      ],
+      "transfer_calls_after_warmup": {},
+      "initial_upload_bytes": 8294400,
+      "bounds": "CPU timestamps around draw/submit and native present return; no scanout or photon timing; RSS is process resident memory, not VRAM"
+    }
+  },
+  "micro": {
+    "1080p": {
+      "compose_region Checker (cold, per frame)": 25.31,
+      "frame_float32_MB": 31.6,
+      "DisplayCache.put (half_safe + f16)": 14.58,
+      "  half_safe alone": 3.67,
+      "DisplayCache.get (f16->f32 copy)": 8.38,
+      "to_qimage: unpremult (clip+divide+zeros_like)": 13.81,
+      "to_qimage: display_rgb ACES 2.0 (Qt GL upload+shader+glReadPixels float)": 6.34,
+      "to_qimage: display_rgb sRGB (OCIO CPU, threaded)": 4.99,
+      "to_qimage: *weight, clip, *255, astype uint8": 9.68,
+      "to_qimage: QImage(...).copy()": 0.1,
+      "to_qimage TOTAL (as shipped)": 41.64,
+      "main: QPixmap.fromImage": 0.13,
+      "main: QImage.scaled x2 FastTransformation (proxy tier 2)": 0.95
+    },
+    "4K": {
+      "compose_region Checker (cold, per frame)": 91.28,
+      "frame_float32_MB": 126.6,
+      "DisplayCache.put (half_safe + f16)": 64.69,
+      "  half_safe alone": 19.23,
+      "DisplayCache.get (f16->f32 copy)": 36.51,
+      "to_qimage: unpremult (clip+divide+zeros_like)": 59.27,
+      "to_qimage: display_rgb ACES 2.0 (Qt GL upload+shader+glReadPixels float)": 50.0,
+      "to_qimage: display_rgb sRGB (OCIO CPU, threaded)": 22.32,
+      "to_qimage: *weight, clip, *255, astype uint8": 36.39,
+      "to_qimage: QImage(...).copy()": 1.01,
+      "to_qimage TOTAL (as shipped)": 176.74,
+      "main: QPixmap.fromImage": 1.14,
+      "main: QImage.scaled x2 FastTransformation (proxy tier 2)": 3.87
+    }
+  },
+  "playback": {
+    "harness_head": "dadbab0ef8eb496c7bcbc1b67163251a39fb08d2",
+    "case": "checker1080",
+    "seconds": 13.59,
+    "qt_platform": "xcb",
+    "frames_displayed": 326,
+    "fps_measured": 23.99,
+    "distinct_frames": 240,
+    "status_last": "1920 \u00d7 1080  \u00b7  0 ms  \u00b7  display cache hit  \u00b7  display GPU",
+    "status_render_ms_median": null,
+    "gap_ms_p50": 41.97,
+    "gap_ms_p95": 43.52,
+    "first_frame_s": 0.52,
+    "dropped": 0,
+    "tier_during_play": "1",
+    "mainthread_lag_ms_p50": 0.1,
+    "mainthread_lag_ms_p95": 2.6,
+    "mainthread_lag_ms_max": 7.9,
+    "stages": {
+      "Window._show_image (main)": {
+        "n": 326,
+        "ms_mean": 0.576,
+        "ms_p95": 0.667,
+        "total_s": 0.188,
+        "main_thread": true
+      },
+      "Window.playback_tick (main)": {
+        "n": 646,
+        "ms_mean": 0.565,
+        "ms_p95": 1.377,
+        "total_s": 0.365,
+        "main_thread": true
+      },
+      "Window.preview_ready (main, incl _show_image)": {
+        "n": 1304,
+        "ms_mean": 0.616,
+        "ms_p95": 2.182,
+        "total_s": 0.803,
+        "main_thread": true
+      },
+      "Window.request_preview (main)": {
+        "n": 326,
+        "ms_mean": 0.204,
+        "ms_p95": 0.308,
+        "total_s": 0.067,
+        "main_thread": true
+      },
+      "Window.start_preview (main)": {
+        "n": 1958,
+        "ms_mean": 0.02,
+        "ms_p95": 0.056,
+        "total_s": 0.039,
+        "main_thread": true
+      },
+      "copy.deepcopy(document) (main)": {
+        "n": 651,
+        "ms_mean": 0.095,
+        "ms_p95": 0.159,
+        "total_s": 0.062,
+        "main_thread": true
+      },
+      "refresh_timeline_marks (main)": {
+        "n": 1629,
+        "ms_mean": 0.176,
+        "ms_p95": 0.326,
+        "total_s": 0.287,
+        "main_thread": true
+      },
+      "update_status_summary (main)": {
+        "n": 326,
+        "ms_mean": 0.022,
+        "ms_p95": 0.029,
+        "total_s": 0.007,
+        "main_thread": true
+      },
+      "viewer.paintEvent (main)": {
+        "n": 353,
+        "ms_mean": 0.427,
+        "ms_p95": 0.551,
+        "total_s": 0.151,
+        "main_thread": true
+      }
+    },
+    "cpu_pct_by_thread": {
+      "python:1883866": 26.8,
+      "python:1884013": 1.5
+    },
+    "cpu_pct_total": 28.3,
+    "paint_events_per_s": {
+      "QLabel": 300.6,
+      "QToolButton": 241.5,
+      "QWidget": 233.1,
+      "Window": 149.8,
+      "QLineEdit": 144.0,
+      "ElidedLabel": 120.3,
+      "QDockWidget": 110.9,
+      "QPushButton": 96.3
+    },
+    "minimap_hidden": false,
+    "gpudisplay": "GPU",
+    "adapter": "AMD Radeon 8060S Graphics",
+    "wgpu_adapter": "NVIDIA GeForce RTX 3080 Ti",
+    "force_adapter": null,
+    "window_dpr": 1.0,
+    "viewport_dpr": 1.0,
+    "viewport_class": "QWidget",
+    "dpr": 1.0,
+    "dpi": 96.0,
+    "viewer_viewport_size": [
+      1107,
+      499
+    ]
+  }
+}

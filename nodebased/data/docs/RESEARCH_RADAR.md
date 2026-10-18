@@ -2,7 +2,7 @@
 
 ## Where to look next
 
-**Interface priority:** [V1 — Interface at display rate, swept 10/16](#interface-at-display-rate-swept-1016) compares three architecture options, recommends a staged hybrid core, and defines display/input gates; address this alongside the generation queue below.
+**Interface priority:** [V2 direct-presentation proof](#v2--direct-viewer-presentation-proof-2026-10-18) now recommends an opt-in retained-texture 2D viewer slice before any native-core rewrite. [V1 — Interface at display rate, swept 10/16](#interface-at-display-rate-swept-1016) compares three architecture options, recommends a staged hybrid core, and defines display/input gates; address this alongside the generation queue below.
 
 **Decision sheet · 2026-10-15 · U1 speed-first revision.** The objective is a useful first look **under one second**, with progressive refinement and no silent artist wait beyond **one minute** (U1 product brief, 2026-10-15). Experiment priority is credible first-look improvement for the current workflow, then memory tier, then licence; it is **not a measured latency leaderboard**. Unknown timings remain unknown. Existing prerequisites and control fidelity can move an apparently fast standalone demo down the queue. Gonzo owns assignment/integration; none of these proposed experiments ran in this research step.
 
@@ -640,6 +640,66 @@ For frame cadence, record the complete presentation-interval distribution, media
 
 - **V23:** Google/web.dev, [Measure performance with the RAIL model](https://web.dev/articles/rail), accessed **2026-10-15 PDT**. Explicit published guidance: **100 ms** visible response, **50 ms** event processing, **60 fps**, roughly **16 ms** per frame and **10 ms** application work. Rounded browser guidance is distinguished above from exact refresh arithmetic and NodeBased policy.
 
+## V2 — Direct viewer presentation proof, 2026-10-18
+
+**Decision: GO for an opt-in retained-texture 2D viewer slice in the existing Python/Qt application. NO-GO for replacing the default viewer or commissioning a native-core rewrite from this evidence alone.** This narrows V1's hybrid direction: Python can submit this simple direct surface at the monitor's cadence; first remove the recurring image conversion and prove lifecycle/interaction parity. The next research question is bounded newest-result scheduling under real changing-image load, after that slice exists. No application code or product performance changed in V2.
+
+### Observed stack and smallest supported path
+
+Measured on release baseline `dadbab0e`, Linux/KDE Wayland session with an **xcb/XWayland Qt window**, PySide6/Qt **6.11.2**, wgpu-py **0.32.0**, rendercanvas **2.7.2**. Installed `rendercanvas.qt.QRenderWidget._rc_get_present_info` defaults to **bitmap**, whose `WgpuContextToBitmap` downloads pixels. Explicit `present_method="screen"` yields **`WgpuContextToScreen`**, calling the native wgpu canvas context's `present()`. Installed Qt backend's Linux `_get_surface_ids` uses X11; its Wayland branch is disabled. Do not pass a native Wayland window handle to that X11 path.
+
+The successful probe embeds the presentation primitive in a Qt widget, chooses the **Radeon 8060S / Vulkan / Mesa 26.2.2**, configures `bgra8unorm-srgb` with opaque surface alpha, uploads one **1920 × 1080 RGBA8-sRGB texture (8,294,400 bytes)**, then samples that retained texture in a fullscreen triangle and adds a moving scissored red GPU overlay. The active DRM HDMI connector belongs to the AMD device (`1002:1586`), consistent with the selected display adapter. No Qt image widget, QImage construction or full-frame upload occurs in the measured loop. This is a presentation control, without NodeBased evaluation or its display transform.
+
+### Measurements and honest boundaries
+
+[Machine-readable record](../benchmarks/viewer/direct-presentation-V2-2026-10-18.json). Each adapter ran **300 measured native-present calls after 20 warm-up calls**, with a **1920 × 1080 retained image**, drawable **1920 × 1080 then 1600 × 900** at the midpoint. One exclusive GPU lock covered each run. Qt DPR was forced to **1**, monitor refresh reported **119.91 Hz**; KDE compositor output scale remained **1.75**. Timing boundaries are application submit/acquire/present-return, **not scanout, photons or confirmed displayed-frame counts**.
+
+| Adapter / Vulkan backend | Present-return interval median / p95 / p99 / max | Process CPU, one core = 100% | Sampled process RSS |
+| --- | --- | --- | --- |
+| Radeon 8060S, Mesa 26.2.2 | **8.33 / 8.76 / 9.17 / 19.83 ms** | **5.29%** | **237.95 → 238.11 MiB** |
+| RTX 3080 Ti, NVIDIA 615.71.09 | **8.33 / 8.69 / 9.49 / 11.47 ms** | **6.83%** | **369.91 → 367.17 MiB**, resize sample **382.96 MiB** |
+| llvmpipe, LLVM 22.1.8 / Mesa 26.2.2 | **8.30 / 8.89 / 9.30 / 12.06 ms** | **369.19%** | **331.45 → 324.38 MiB** |
+
+All three completed resize and issued the moving overlay; a **KDE compositor capture on AMD**, taken **after measurement**, visibly confirms checker plus overlay. Checker sample values are **50 and 180**, matching the encoded input. The capture is **2800 × 1575**, reflecting compositor scaling of the resized 1600 × 900 drawable. This verifies one simple RGB pattern, not OCIO/ACES, HDR or alpha correctness. Qt's `grabWindow` initially returned a black image for this direct surface; that capture was rejected as visual evidence and replaced with compositor capture.
+
+Instrumented exposed wgpu `read_texture`, `read_buffer`, `write_texture`, `write_buffer`, `copy_texture_to_buffer` and `copy_buffer_to_texture` calls are **zero during each measured steady-state loop**, after the one initial upload. Source inspection confirms direct presentation does not invoke the bitmap downloader. This establishes **no application CPU round trip in this probe**; it does not establish zero driver/compositor copies, particularly on the NVIDIA-to-AMD path. llvmpipe is a software reference, not a hardware acceleration result. RSS is process resident memory rather than VRAM; these roughly **2.5-second** samples show no sustained growth within this short run, and cannot establish long-term leak freedom.
+
+**Important scheduling cost:** AMD texture acquisition itself has **8.09 ms median / 8.51 ms p95**, while `present()` returns in microseconds; a tight forced draw loop hits surface backpressure. The combined draw/submit median is **8.22 ms**. Moving the copy off the CPU does not justify blocking the UI on repeated acquisition. Use paced callbacks and a bounded newest-ready-frame handoff; qualify input latency under load before assigning a dedicated render thread/native boundary.
+
+**Matched current baseline:** reran the existing 10/15 `play.py` and `micro.py` methods against this same HEAD, xcb/DPR 1, under the GPU lock, correcting their hard-coded historical checkout to the current worktree. The actual application checker runs at **23.99 fps at a 24 fps source timebase**, with **28.3% process CPU**, and makes **no `to_qimage` calls during the warm retained-image playback interval**. Its viewport is **1107 × 499** inside a 1600 × 1000 application window. Therefore it is not a like-for-like surface benchmark and there is **no claimed 5× product speedup**. This independently confirms the release's static-frame reuse; the prior 10/15 static-frame bottleneck is already fixed.
+
+The existing micro-harness still measures **41.64 ms median `to_qimage` at 1080p**, **176.74 ms at 4K**, for a changed full frame (nine warm repetitions). Its 1080p ACES GL upload/shader/float readback stage is **6.34 ms**; conversion includes substantial NumPy unpremultiply/quantize work. QImage copy alone is **0.10 ms**. Source remains `gpudisplay`'s `glReadPixels` followed by `imaging.to_qimage`. **Changed images and interactive view transforms are the opportunity**, not repeated conversion of the now-cached static checker. The probe does not execute an equivalent ACES transform, so subtracting these numbers would overstate any gain.
+
+### Proposed frame ownership and first production slice
+
+**Proposal, not implemented:** a presenter owns one compatible device, surface and retained image resources. A frame handle carries device epoch, graph/request revision, dimensions, format, colour/alpha interpretation and a strong reference to the texture. Renderer/presenter must share the **same wgpu device**; an arbitrary GPU texture from another adapter/device cannot be bound here. CPU-evaluated frames upload once per changed image. Keep the last valid retained image until a matching replacement is ready; hold in-flight resource references until the queue has consumed them, bound the ready queue, and reject stale revisions/old device epochs. Never retain a surface-acquired texture as the persistent frame across presents or resize. Surface textures are acquired per draw and released by presentation; resize reconfigures/acquires surface resources while leaving the independent image texture intact.
+
+**First production owner: Gonzo assigns L2 (Viewer ownership) an opt-in 2D retained-texture presenter.** Target `Viewer` / `_show_image` in `nodebased/app.py`, with a new isolated presentation module; keep the existing image path as a fallback. Begin with CPU-produced RGBA data uploaded once, GPU pan/zoom plus a single overlay, and explicit colour/alpha contracts. Preserve pixel sampling/export through a deliberate readback/CPU source path outside ordinary display. Gate with changed-checker/view-transform latency, A/B and ROI, Roto/Tracker hit ordering, non-unit DPR, resize/dock/reparent/close, stale-result rejection, colour/alpha reference pixels and selection under load. Do not port the whole graph or evaluator.
+
+**Second integration, only after that gate:** L4 can expose a same-device resident render texture, replacing its display-only readback; coordinate adapter selection through the existing graphics setting. A CPU-produced first slice still uploads changed images and cannot be called end-to-end zero-copy. The native core decision stays deferred unless profiling this slice shows persistent Python dispatch/GIL or device-thread ownership costs.
+
+### Remaining platform/lifecycle gates
+
+- **Windows remains untested.** The installed backend supplies an HWND, but this Linux Vulkan result proves neither Windows surface creation/D3D behavior nor packaging, compositing, docking or mixed-DPI parity. Run the same probe and application interaction gate on Windows before changing the default.
+- **Native Wayland remains unsupported by this tested Qt/rendercanvas path.** Keep explicit xcb for this experiment; independently choose/test a native Wayland-capable surface before claiming native Wayland support.
+- **Device loss is not proven controllable yet:** installed wgpu-native Python `GPUDevice._get_lost_async` raises `NotImplementedError`; native callback logs loss. Catch acquisition/submit failures, invalidate the epoch and recreate device/resources or fall back, but treat this as a proposed recovery strategy requiring fault injection. No device was reset during this study. Ordinary unconfigure/close completed; loss, in-flight close and reparent were not exercised.
+- **Overlay parity is open:** a scissored GPU overlay works; existing Qt/QGraphics overlay stacking, text, accessibility and hit routing are not proven on the native child surface. Do not assume Qt can paint over it.
+- **Colour/alpha and lifetime:** sRGB checker round-trip plus opaque alpha is the complete tested scope. ACES/OCIO, premultiplication, transparency, arbitrary LUTs, pixel picking and stale-frame lifetime need explicit reference tests. No external-memory bridge or texture import was attempted.
+
+### Reproduction and artifact status
+
+Small probe, existing-method baseline tool and numeric summary are committed; captures/raw traces remain deliberate ignored **research-worktree-relative `scratch/nb-perf/v2/`**, including `direct-{integrated,discrete,cpu}.json`, `direct-integrated.json.png`, `play-checker.json`, `micro.json` and corresponding logs. Initial failed-count/black-capture experiments were superseded; no generated footage or large cache was retained. From the reconciled worktree, using its project Python environment:
+
+```sh
+QT_QPA_PLATFORM=xcb QT_SCALE_FACTOR=1 PYTHONPATH=. flock -w 1800 /tmp/nb-gpu.lock python tools/research_direct_present.py --adapter integrated --out scratch/nb-perf/v2/direct-integrated.json
+# Repeat with --adapter discrete and --adapter cpu and distinct output paths.
+# --capture additionally uses KDE Spectacle's active-window capture after timing.
+QT_QPA_PLATFORM=xcb QT_SCALE_FACTOR=1 PYTHONPATH=. NB_BASELINE_OUT=scratch/nb-perf/v2/micro.json flock -w 1800 /tmp/nb-gpu.lock python tools/research_viewer_baseline.py
+QT_QPA_PLATFORM=offscreen PYTHONPATH=. python -m unittest tests.test_knowledge
+```
+
+The retained probe creates the output directory only if it already exists; make `scratch/nb-perf/v2/` first. It uses a Linux `/proc` RSS counter and is research instrumentation; adapt that counter before a Windows run. The source APIs cited above were inspected directly in the pinned installed packages; V1's V15/V16/V21 references supply architectural background, not additional runtime proof.
+
 ## Lane 3 step notes
 
 - **T2 of 3, 2026-10-12 — tracking and reconstruction:** completed the dated landscape, lens/dense-scene comparison, one proposed survey-constrained worker experiment, and three alternative mechanisms. Read “Tracking and reconstruction, swept 10/12” above and `briefs/proposed/T2-survey-constrained-lens.md`. Every candidate has benchmark, resource, intrinsic/dynamic and licence evidence or an explicit unknown. Stage-9 figures remain assignment-supplied until their raw artifacts are recovered; the existing L2 refinement is the baseline, not a new proposal. No weights, GPU runs, provider adoption or measured quality improvement. Bundled copy is byte-identical. Gonzo owns integration and any experiment assignment.
@@ -649,3 +709,5 @@ For frame cadence, record the complete presentation-interval distribution, media
 - **U1 of 1, 2026-10-15 — speed and two card tiers:** swept few-step SDXL and streaming-video successors; replaced the decision sheet with A (displayed few-step SDXL), B (NeuFlow v2), then material-once rendering; consolidated T1–T3 memory eligibility for both Ampere cards and documented the common progressive-viewer contract. Proposed `briefs/proposed/U1-few-step-sdxl-preview.md` includes separate offloaded/resident variants, actual display latency, final-byte/temporal/verifier gates and schedule compatibility checks. GEN3C full-offload memory and Wan2.2 offloaded minimum cannot justify blanket residency claims; MEMFOF already fit the smaller tier. P4 raw stop JSON is now committed and read; old-cache cases remain separately scoped. Documentation only, no weights/card execution, adoption or runtime gain. Gonzo owns integration and any spike assignment.
 
 - **V1 of 1, 2026-10-15 PDT (requested sweep 10/16) — interface at display rate:** all five documentation parts complete: six-tool architecture survey; source-grounded Qt/wgpu bounds and interop risks; three choices with first-two-week sketches; sourced/proposed interaction targets; decision-sheet pointer. Recommended direction is a hybrid render/present core, gated first by direct-screen and scheduling proofs in existing Qt. Existing preview threading is acknowledged; synchronous 3D readback in paint is source evidence. The software-display QA cannot establish empty-scene hardware FPS. Public competitor latencies remain unknown where unreported; all effort/rate projections are labelled estimates or targets. No performance execution or application changes. Gonzo owns integration and the profile-to-boundary decision above.
+
+- **V2 of 1, 2026-10-18 — direct presentation:** explicit Qt screen mode completed retained-texture, overlay and resize probes on Radeon, NVIDIA and llvmpipe, with no instrumented steady-state CPU round trip. Current static checker already reaches its 24 fps source rate; changed-image conversion remains costly. Go for the opt-in L2 viewer slice described above; Windows, device loss, full overlay/colour parity and actual scanout timing remain open. No application change or achieved product speedup.
