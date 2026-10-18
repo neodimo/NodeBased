@@ -240,6 +240,68 @@ class PropertiesIconButton(QToolButton):
         super().keyPressEvent(event)
 
 
+class PanelFamilyChip(QLabel):
+    """The node family's glyph (the left column's SVG set) on a chip in the family colour, drawn
+    from the vector file at paint time so it stays sharp at 175 percent."""
+
+    def __init__(self, family, color, parent=None):
+        super().__init__(parent)
+        self.family = family
+        self.color = QColor(color)
+        self.setObjectName("properties-family-badge")
+        self.setAccessibleName(f"{family} node family")
+        self.setToolTip(f"{family} node")
+        self.setFixedSize(26, 26)
+
+    def paintEvent(self, event):
+        from . import nodeicons
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        fill = QColor(self.color)
+        fill.setAlpha(46)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(fill)
+        painter.drawRoundedRect(QRectF(0, 0, self.width(), self.height()), 7, 7)
+        name = nodeicons.family_icon_name(self.family)
+        if self.family not in nodeicons.FAMILY_ICON_NAMES:
+            name = nodeicons.family_icon_name("Other")
+        nodeicons.paint(painter, name, self.color.name(), QRectF(4, 4, self.width() - 8, self.height() - 8))
+        painter.end()
+
+
+class PanelChevron(QToolButton):
+    """The header's own collapse arrow, drawn so it never falls back to a missing font glyph."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("panel-collapse-arrow")
+        self.setCheckable(True)
+        self.setChecked(True)               # checked = expanded
+        self.setFixedSize(20, 26)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Collapse or expand this node's properties")
+        self.setAccessibleName("Collapse properties")
+        self.setStyleSheet("QToolButton { border: 0; padding: 0; background: transparent; }")
+        self.toggled.connect(lambda _checked: self.update())
+
+    def text(self):
+        return "▾" if self.isChecked() else "▸"
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color = QColor("#e6e9ee" if self.underMouse() else "#8a93a0")
+        painter.setPen(QPen(color, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                            Qt.PenJoinStyle.RoundJoin))
+        c = QPointF(self.width() / 2, self.height() / 2)
+        if self.isChecked():
+            points = [QPointF(c.x() - 4, c.y() - 2), QPointF(c.x(), c.y() + 2), QPointF(c.x() + 4, c.y() - 2)]
+        else:
+            points = [QPointF(c.x() - 2, c.y() - 4), QPointF(c.x() + 2, c.y()), QPointF(c.x() - 2, c.y() + 4)]
+        painter.drawPolyline(points)
+        painter.end()
+
+
 PANEL_NODE_HELP = {
     "Merge": "A over B · scene-linear, premultiplied. Inputs must have matching dimensions. An optional mask gates the merge: where mask.a is 0, the result is B.",
     "Crop": "Masks to a rectangle in fixed image bounds; the canvas is not resized.",
@@ -7624,6 +7686,7 @@ class Window(QMainWindow):
         self.show_thumbnails = self.preferences.thumbnails()
         self.properties_tab = 0
         self.pinned_panels = []  # node keys, most-recent-first; independent of graph selection
+        self.collapsed_panels = set()  # node keys whose panel shows only its header row
         self.panel_cap = self.preferences.max_properties_panels()
         self.rendered_identity = None
         # node id -> (thumbnail_key, QImage). Lives on the window so a graph rebuild keeps them.
@@ -9948,42 +10011,45 @@ class Window(QMainWindow):
             top = QWidget()
             top.setObjectName("node-panel-header")
             top_layout = QHBoxLayout(top)
-            top_layout.setContentsMargins(8, 3, 8, 3)
-            top_layout.setSpacing(8)
+            top_layout.setContentsMargins(4, 4, 6, 4)
+            top_layout.setSpacing(6)
             family = node_family(node["type"])
-            badge = QLabel(family[:1].upper())
-            badge.setObjectName("properties-family-badge")
-            badge.setAccessibleName(f"{family} node family")
-            badge.setFixedSize(34, 34)
-            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            badge.setStyleSheet(f"color: {FAMILY_COLORS[family]}; background: {FAMILY_COLORS[family]}22; "
-                                "border-radius: 10px; font-weight: 700")
-            collapse = QToolButton()
-            collapse.setObjectName("panel-collapse-arrow")
-            collapse.setText("▾")
-            collapse.setToolTip("Collapse or expand this node's properties")
-            collapse.setAccessibleName("Collapse properties")
-            collapse.setVisible(False)
+            # One header row (DiMo 10/18): the header's own chevron, the family chip with the family
+            # glyph, the editable name, the node type in small text, view and menu. Collapsing hides
+            # everything under the row; the row itself, with the name and icon, always stays.
+            collapse = PanelChevron()
+            collapse.setChecked(key not in self.collapsed_panels)
+            badge = PanelFamilyChip(family, FAMILY_COLORS[family])
             title = QLineEdit(node["name"])
             title.setObjectName("node-name-header")
             title.setFrame(False)
-            title.setStyleSheet(f"color: {COLORS[node['type']]}; font-weight: 700; font-size: 15px")
+            title.setStyleSheet(f"QLineEdit {{ color: {COLORS[node['type']]}; font-weight: 700; font-size: 14px; "
+                                "background: transparent; border: 1px solid transparent; padding: 2px 4px; } "
+                                f"QLineEdit:hover {{ border-color: #2c333b; }} QLineEdit:focus {{ border-color: {TOKENS['acc']}; "
+                                "background: #0d0f12; }")
             title.editingFinished.connect(
                 lambda k=key, w=title: w.text() != self.graph_nodes()[k]["name"]
                 and self.defer_command({"op": "rename", "id": k, "name": w.text()}))
             title.installEventFilter(self)
             title.setToolTip("Node name · edit here; double-click to collapse or expand")
-            name_stack = QWidget()
-            name_layout = QVBoxLayout(name_stack)
-            name_layout.setContentsMargins(0, 0, 0, 0)
-            name_layout.setSpacing(0)
-            name_layout.addWidget(title)
-            node_type = QLabel(f"{node_family(node['type'])} · {node['type']}")
+
+            def fit_title(text, w=title):
+                bold = QFont(w.font()); bold.setBold(True); bold.setPixelSize(14)
+                need = QFontMetrics(bold).horizontalAdvance(text or " ") + 18
+                w.setMaximumWidth(need)
+                w.setMinimumWidth(min(need, 170))   # the name keeps its room; the type text gives way first
+            fit_title(title.text())
+            title.setCursorPosition(0)
+            title.textChanged.connect(fit_title)
+            node_type = ElidedLabel(f"{node_family(node['type'])} · {node['type']}")
             node_type.setObjectName("properties-node-type")
-            node_type.setStyleSheet("color: #7d8793; font-size: 11px")
-            name_layout.addWidget(node_type)
+            node_type.setStyleSheet("color: #7d8793; font-size: 11px; background: transparent")
+            node_type.setMinimumWidth(0)
+            node_type.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            top_layout.addWidget(collapse)
             top_layout.addWidget(badge)
-            top_layout.addWidget(name_stack, 1)
+            top_layout.addWidget(title)
+            top_layout.addWidget(node_type, 1)
             properties_menu = QMenu(top)
 
             def icon_button(name, tooltip, callback, *, in_menu=False):
@@ -10035,7 +10101,7 @@ class Window(QMainWindow):
                         lambda _=False, k=key: self.close_panel(k) if k in self.pinned_panels
                         else self.inspect(None), in_menu=True)
             properties_menu.addSeparator()
-            collapse_action = properties_menu.addAction("Collapse properties")
+            collapse_action = properties_menu.addAction("Collapse or expand properties")
             collapse_action.triggered.connect(collapse.click)
             menu_button = PropertiesIconButton("properties-menu")
             menu_button.setText("⋮")
@@ -10082,11 +10148,9 @@ class Window(QMainWindow):
             section_bar.setVisible(node["type"] not in ("Grade", "ColorCorrect"))
             section_toggle.toggled.connect(lambda shown, body=control_content, button=section_toggle:
                 (body.setVisible(shown), button.setText("▾  CONTROLS" if shown else "▸  CONTROLS")))
-            title._panel_content = content
             title._panel_collapse = collapse
+            name_edit = title       # `title` is reused as a plain string by some node kinds below
             panel_layout.addWidget(top)
-            collapse.clicked.connect(lambda: content.setVisible(not content.isVisible()))
-            collapse.clicked.connect(lambda: collapse.setText("▸" if content.isVisible() else "▾"))
             curves = (self.graph_document().get("animation") or {}).get("curves", {}).get(key, {})
             expressions = (self.graph_document().get("expressions") or {}).get(key, {})
             # Curves and expressions are resolved through the same document boundary used by the
@@ -11321,6 +11385,9 @@ class Window(QMainWindow):
             tabs.setCurrentIndex(min(self.properties_tab, tabs.count() - 1))
             tabs.currentChanged.connect(lambda index: setattr(self, "properties_tab", index))
             panel_layout.addWidget(tabs, 1)
+            name_edit._panel_content = tabs
+            tabs.setVisible(collapse.isChecked())
+            collapse.toggled.connect(lambda expanded, k=key, body=tabs: self.set_panel_collapsed(k, body, not expanded))
             fit_knob_widths(panel)
         return panel
 
@@ -11439,6 +11506,15 @@ class Window(QMainWindow):
             except Exception:
                 break
 
+    def set_panel_collapsed(self, key, body, collapsed):
+        """Collapse one node's panel to its header row. Kept per node, so a panel rebuilt after an
+        edit (or the same node opened again) comes back the way the artist left it."""
+        if collapsed:
+            self.collapsed_panels.add(key)
+        else:
+            self.collapsed_panels.discard(key)
+        body.setVisible(not collapsed)
+
     def pin_panel(self, key):
         if key is None or key not in self.graph_nodes():
             return
@@ -11503,21 +11579,11 @@ class Window(QMainWindow):
             section.setObjectName("stacked-panel-section")
             section_layout = QVBoxLayout(section)
             section_layout.setContentsMargins(0, 0, 0, 0)
-            section_header = QHBoxLayout()
-            node = self.graph_nodes()[panel_key]
-            collapse = QPushButton("▾")
-            collapse.setObjectName("panel-collapse")
-            collapse.setCheckable(True)
-            collapse.setChecked(True)
-            collapse.setToolTip("Collapse or expand this node's panel")
-            collapse.setFixedWidth(26)
-            collapse.setStyleSheet("padding: 0px")
-            section_header.addWidget(collapse, 1)
-            section_layout.addLayout(section_header)
-            body = self.build_node_panel(panel_key)
-            section_layout.addWidget(body)
-            collapse.toggled.connect(body.setVisible)
-            collapse.toggled.connect(lambda expanded, w=collapse: w.setText("▾" if expanded else "▸"))
+            section.setStyleSheet("QWidget#stacked-panel-section { border-top: 1px solid #232930; }")
+            section.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+            # Each stacked node is a collapsible section; its header row (name, icon, chevron) is the
+            # panel's own, so a collapsed section still says which node it is (DiMo 10/18).
+            section_layout.addWidget(self.build_node_panel(panel_key))
             layout.addWidget(section)
         layout.addStretch()
         self.set_properties_widget(container)
@@ -12670,13 +12736,9 @@ class Window(QMainWindow):
             return True
         if (watched.objectName() == "node-name-header"
                 and event.type() == QEvent.Type.MouseButtonDblClick):
-            content = getattr(watched, "_panel_content", None)
             collapse = getattr(watched, "_panel_collapse", None)
-            if content is not None:
-                expanded = not content.isVisible()
-                content.setVisible(expanded)
-                if collapse is not None:
-                    collapse.setText("▾" if expanded else "▸")
+            if collapse is not None:
+                collapse.click()
             return True
         if (event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_I
                 and not event.modifiers()):
