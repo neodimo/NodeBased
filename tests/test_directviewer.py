@@ -202,31 +202,54 @@ class RetainedPresenterTests(unittest.TestCase):
 
 
 class AdapterChoiceTests(unittest.TestCase):
-    def test_first_adapter_the_surface_accepts_wins(self):
+    """The display adapter comes from wgpu's own surface filter, never from get_preferred_format alone."""
+
+    class Adapter:
+        def __init__(self, name, kind):
+            self.info = {"device": name, "adapter_type": kind}
+
+    class Context:
+        def get_preferred_format(self, adapter):
+            return "bgra8unorm"
+
+    def request(self, answers):
+        calls = []
+
+        def fake(canvas=None, **kwargs):
+            calls.append(kwargs)
+            answer = answers.get(tuple(sorted(kwargs.items())), RuntimeError("not offered"))
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        return fake, calls
+
+    def test_request_is_filtered_by_the_surface_and_follows_the_wish(self):
         import wgpu
-        adapters = list(wgpu.gpu.enumerate_adapters_sync())
+        amd, nv = self.Adapter("amd", "IntegratedGPU"), self.Adapter("nv", "DiscreteGPU")
+        fake, calls = self.request({(("power_preference", "low-power"),): amd,
+                                    (("power_preference", "high-performance"),): nv})
+        with unittest.mock.patch.object(wgpu.gpu, "request_adapter_sync", fake):
+            adapter, fmt, note = dv.pick_display_adapter(self.Context(), preference="integrated")
+        self.assertIs(adapter, amd)
+        self.assertEqual((fmt, note), ("bgra8unorm", ""))
+        self.assertEqual(calls, [{"power_preference": "low-power"}])
 
-        class Picky:
-            def __init__(self, ok):
-                self.ok = ok
-
-            def get_preferred_format(self, adapter):
-                if dict(adapter.info) != dict(self.ok.info):
-                    raise RuntimeError("surface cannot present here")
-                return "bgra8unorm"
-
-        chosen = adapters[-1]
-        adapter, fmt = dv.pick_display_adapter(Picky(chosen), preference="")
-        self.assertEqual(dict(adapter.info), dict(chosen.info))
-        self.assertEqual(fmt, "bgra8unorm")
+    def test_wish_that_the_window_cannot_satisfy_says_so(self):
+        import wgpu
+        nv = self.Adapter("nv", "DiscreteGPU")
+        fake, _ = self.request({(("power_preference", "low-power"),): RuntimeError("no surface support"),
+                                (("power_preference", "high-performance"),): nv})
+        with unittest.mock.patch.object(wgpu.gpu, "request_adapter_sync", fake):
+            adapter, _, note = dv.pick_display_adapter(self.Context(), preference="integrated")
+        self.assertIs(adapter, nv)
+        self.assertIn("integrated was asked for", note)
 
     def test_no_presentable_adapter_is_an_error(self):
-        class Never:
-            def get_preferred_format(self, adapter):
-                raise RuntimeError("no")
-
-        with self.assertRaises(RuntimeError):
-            dv.pick_display_adapter(Never(), preference="")
+        import wgpu
+        fake, _ = self.request({})
+        with unittest.mock.patch.object(wgpu.gpu, "request_adapter_sync", lambda canvas=None, **k: (_ for _ in ()).throw(RuntimeError("no"))):
+            with self.assertRaises(RuntimeError):
+                dv.pick_display_adapter(self.Context(), preference="")
 
 
 class WindowSwitchTests(unittest.TestCase):
