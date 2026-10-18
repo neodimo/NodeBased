@@ -4856,6 +4856,18 @@ class Edge(QGraphicsPathItem):
         self.arrow = arrow
         self.arrowhead = QPolygonF()
         self.highlighted = False
+        self.hovered = False     # the pointer is on the wire
+        self.selected = False    # clicked: Delete or Backspace disconnects it
+        self.cutting = False     # the knife line currently crosses it
+
+    def set_wire_state(self, hovered=None, selected=None, cutting=None):
+        """Hover, selection and the knife's crossing each change how the wire is drawn."""
+        before = (self.hovered, self.selected, self.cutting)
+        self.hovered = self.hovered if hovered is None else hovered
+        self.selected = self.selected if selected is None else selected
+        self.cutting = self.cutting if cutting is None else cutting
+        if before != (self.hovered, self.selected, self.cutting):
+            self.update()
 
     def set_highlight(self, on):
         """Light the wire up while a free node hovers over it ready to be inserted."""
@@ -4887,9 +4899,16 @@ class Edge(QGraphicsPathItem):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         stroke = self.pen()
-        if self.highlighted:
-            bright = graphlook.mix(self.color, QColor("#ffffff"), 0.55)
-            stroke = QPen(bright, self.pen().widthF() + 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+        if self.cutting or self.selected or self.hovered or self.highlighted:
+            if self.cutting:
+                bright, extra = QColor(WIRE_CUT_COLOR), 1.5
+            elif self.selected:
+                bright, extra = QColor(WIRE_SELECTED_COLOR), 2.0
+            elif self.hovered:
+                bright, extra = graphlook.mix(self.color, QColor("#ffffff"), 0.7), 1.0
+            else:
+                bright, extra = graphlook.mix(self.color, QColor("#ffffff"), 0.55), 1.5
+            stroke = QPen(bright, self.pen().widthF() + extra, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
                           Qt.PenJoinStyle.RoundJoin)
             painter.setPen(QPen(graphlook.with_alpha(bright, 70), stroke.widthF() + 8, Qt.PenStyle.SolidLine,
                                 Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
@@ -5884,6 +5903,10 @@ class SequenceBrowser(QDialog):
 
 
 # Wiring feel (new look). Every radius is in screen pixels, so wiring feels the same at 40 and 150 percent.
+WIRE_SELECTED_COLOR = "#ffb454"   # a clicked wire: the warm accent no node family uses
+WIRE_CUT_COLOR = "#ff5d5d"        # a wire the knife line crosses
+CUT_HANDLE_RADIUS = 10  # screen pixels: the hovered wire's "x" handle at its midpoint
+WIRE_PICK = 6        # screen pixels either side of a wire's path that still count as pointing at it
 DISCONNECT_DRAG = 6  # screen pixels a picked-up input wire must travel before an empty-space release disconnects it
 WIRE_REACH = 40      # a dragged wire snaps to the nearest compatible socket this close to the pointer
 GRAB_REACH = 20      # pressing this close to a socket (card edge, label, empty space) starts a wire
@@ -5936,6 +5959,8 @@ class Graph(PanZoomView):
         self.inserting_edge = None
         self.dot_preview = None
         self.insert_target = None   # the wire a dragged free node would be inserted into (see wire_to_insert_into)
+        self.hover_wire = None       # (destination, slot) of the wire under the pointer
+        self.selected_wires = set()  # (destination, slot) of every clicked wire
         self.ctrl_handles_visible = False
         self.primary_id = None
         self.last_click_scene_pos = QPointF(0, 0)
@@ -6413,6 +6438,10 @@ class Graph(PanZoomView):
                     out_name = node.get("input_outputs", {}).get(slot, "out1" if doc["nodes"][source]["type"] == "ShuffleCopy" else "rgba")
                     self.edges.append((edge, source, key, slot, out_name))
         self.update_edges()
+        live = {self.wire_key(record) for record in self.edges}
+        self.selected_wires &= live
+        self.hover_wire = None
+        self.restyle_wires()
         self.scene().blockSignals(False)
         self.window.sync_breadcrumbs()
         if self.wire_source or self.wire_input:
@@ -6535,6 +6564,8 @@ class Graph(PanZoomView):
         # The highlight paints as soon as the press returns; the Properties panel and the keyed-frame
         # band (scoped to the selection) follow on the next event-loop turn.
         self.window.schedule_inspect()
+        if self.selected_wires and self.scene().selectedItems():
+            self.select_wires(())   # picking a node lets go of the wires
 
     def mousePressEvent(self, event):
         if self.radial_menu.is_open() and self.radial_menu.sustained:
@@ -6580,6 +6611,12 @@ class Graph(PanZoomView):
                 near.press(self.mapToScene(self.wire_press))
                 self.wire_grabbed = bool(self.wire_source or self.wire_input)
                 self.set_hot_port(None)
+                event.accept()
+                return
+        if (event.button() == Qt.MouseButton.LeftButton and self.inserting_edge is None
+                and event.modifiers() in (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.ShiftModifier)
+                and not (self.wire_source or self.wire_input)):
+            if self.press_on_wire(event):
                 event.accept()
                 return
         super().mousePressEvent(event)
@@ -6636,6 +6673,7 @@ class Graph(PanZoomView):
             self.update_pending_edge(self.mapToScene(event.position().toPoint()))
         elif not event.buttons():
             self.set_hot_port(self.grab_port_at(self.last_hover_scene_pos))
+            self.set_hover_wire(self.wire_under_pointer(event.position().toPoint()))
         elif event.buttons() & Qt.MouseButton.LeftButton and len(self.scene().selectedItems()) == 1:
             self.set_insert_target(self.wire_to_insert_into(self.drag_item()))
 
@@ -6880,6 +6918,8 @@ class Graph(PanZoomView):
             self.window.command({"op": "viewer_input", "slot": event.key() - Qt.Key.Key_0, "id": key})
         elif event.key() == Qt.Key.Key_D and not modifiers and key:
             self.window.command({"op": "disable", "id": key, "value": not self.window.graph_nodes()[key]["disabled"]})
+        elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not modifiers and self.selected_wires:
+            self.disconnect_wires(sorted(self.selected_wires))
         elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not modifiers:
             edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
             self.window.command({"op": "batch", "commands": edits})
@@ -6903,6 +6943,96 @@ class Graph(PanZoomView):
             self.finish_radial_gesture()
         super().keyReleaseEvent(event)
 
+    # ---- picking wires: hover, click to select, Delete to disconnect
+    @staticmethod
+    def wire_key(record):
+        return record[2], record[3]
+
+    def wire_under_pointer(self, viewport_pos):
+        """The wire record under a viewport point, or None. A card, socket or any other item above the wires
+        wins; backdrops sit below them and never block."""
+        for item in self.items(viewport_pos):
+            if isinstance(item, Edge):
+                continue
+            owner = item
+            while owner is not None and not isinstance(owner, NodeItem):
+                owner = owner.parentItem()
+            if owner is None or not owner.is_backdrop:
+                return None
+        return self.wire_at(self.mapToScene(viewport_pos))
+
+    def wire_at(self, scene_pos):
+        """The wire record whose path passes within WIRE_PICK screen pixels of `scene_pos` (at any zoom); the
+        closest of several."""
+        reach = WIRE_PICK / max(self.transform().m11(), 0.05)
+        best, best_distance = None, None
+        for record in self.edges:
+            path = record[0].path()
+            if path.isEmpty() or not path.controlPointRect().adjusted(-reach, -reach, reach, reach).contains(scene_pos):
+                continue
+            stroker = QPainterPathStroker()
+            stroker.setWidth(2 * reach)
+            if not stroker.createStroke(path).contains(scene_pos):
+                continue
+            distance = min(QLineF(path.pointAtPercent(i / 64), scene_pos).length() for i in range(65))
+            if best is None or distance < best_distance:
+                best, best_distance = record, distance
+        return best
+
+    def set_hover_wire(self, record):
+        key = None if record is None else self.wire_key(record)
+        if key != self.hover_wire:
+            self.hover_wire = key
+            self.restyle_wires()
+            self.viewport().update()
+
+    def select_wires(self, keys):
+        self.selected_wires = set(keys)
+        self.restyle_wires()
+
+    def restyle_wires(self):
+        for edge, _source, destination, slot, _out in self.edges:
+            key = (destination, slot)
+            edge.set_wire_state(hovered=key == self.hover_wire, selected=key in self.selected_wires)
+
+    def press_on_wire(self, event):
+        """A left press on a wire: the cut handle disconnects it, anywhere else on it selects it (Shift adds or
+        removes it from the selection). Returns whether the press was used."""
+        pos = event.position().toPoint()
+        scene_pos = self.mapToScene(pos)
+        if self.hover_wire is not None and self.cut_handle_hit(scene_pos):
+            self.disconnect_wires([self.hover_wire])
+            return True
+        record = self.wire_under_pointer(pos)
+        if record is None:
+            if self.selected_wires and not event.modifiers():
+                self.select_wires(())
+            return False
+        key = self.wire_key(record)
+        self.setFocus()
+        if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+            self.select_wires(self.selected_wires ^ {key})
+        else:
+            self.scene().clearSelection()
+            self.select_wires({key})
+        return True
+
+    def cut_handle_hit(self, scene_pos):
+        record = next((r for r in self.edges if self.wire_key(r) == self.hover_wire), None)
+        handle = getattr(record[0], "handle", None) if record else None
+        radius = CUT_HANDLE_RADIUS / max(self.transform().m11(), 0.05)
+        return bool(handle) and math.hypot(handle.x() - scene_pos.x(), handle.y() - scene_pos.y()) <= radius
+
+    def disconnect_wires(self, keys):
+        """Disconnect the wires `(destination, slot)` in one batch: one undo step brings them all back."""
+        commands = [{"op": "connect", "id": key, "input": slot, "source": None} for key, slot in keys]
+        self.hover_wire = None
+        self.selected_wires -= set(keys)
+        if commands:
+            self.window.command({"op": "batch", "commands": commands})
+            self.window.statusBar().showMessage(
+                "Wire disconnected" if len(commands) == 1 else f"{len(commands)} wires disconnected", 3000)
+
     def edge_handle_at(self, scene_pos):
         radius = 14 / max(self.transform().m11(), 0.05)
         for edge, source, key, slot, _out in self.edges:
@@ -6922,6 +7052,7 @@ class Graph(PanZoomView):
 
     def drawForeground(self, painter, rect):
         super().drawForeground(painter, rect)
+        self.draw_cut_handle(painter)
         if not self.ctrl_handles_visible:
             return
         scale = max(self.transform().m11(), 0.05)
@@ -6936,6 +7067,30 @@ class Graph(PanZoomView):
                 painter.drawEllipse(edge.handle, radius * 0.35, radius * 0.35)
                 painter.setPen(QPen(QColor("#f0c39d"), max(1.5 / scale, 0.75)))
                 painter.setBrush(QColor("#242428"))
+
+    def draw_cut_handle(self, painter):
+        """A small "x" at the middle of the hovered wire: clicking it disconnects the wire."""
+        if self.hover_wire is None or self.ctrl_handles_visible or self.wire_source or self.wire_input:
+            return
+        record = next((r for r in self.edges if self.wire_key(r) == self.hover_wire), None)
+        handle = getattr(record[0], "handle", None) if record else None
+        if handle is None:
+            return
+        scale = max(self.transform().m11(), 0.05)
+        radius, arm = CUT_HANDLE_RADIUS * 0.8 / scale, CUT_HANDLE_RADIUS * 0.32 / scale
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(QColor(WIRE_CUT_COLOR), 1.5 / scale))
+        painter.setBrush(QColor("#242428"))
+        painter.drawEllipse(handle, radius, radius)
+        painter.setPen(QPen(QColor(WIRE_CUT_COLOR), 1.8 / scale, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(handle + QPointF(-arm, -arm), handle + QPointF(arm, arm))
+        painter.drawLine(handle + QPointF(-arm, arm), handle + QPointF(arm, -arm))
+        painter.restore()
+
+    def leaveEvent(self, event):
+        self.set_hover_wire(None)
+        super().leaveEvent(event)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat(NODE_KIND_MIME_TYPE):
