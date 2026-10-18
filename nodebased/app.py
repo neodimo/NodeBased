@@ -993,6 +993,39 @@ class _FittedKnobRow(QWidget):
         return QSize(max(hint.width(), self._control.sizeHint().width() + spacing + 26), hint.height())
 
 
+def fit_knob_widths(panel):
+    """Size a Properties panel's controls to their content (DiMo 10/18: fields that ran to the right
+    edge of the dock). Labels and controls stay in two columns; only sliders and file paths widen
+    with the dock, everything else keeps the width its content asks for."""
+    for form in panel.findChildren(QFormLayout):
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+    for field in panel.findChildren(QAbstractSpinBox):
+        if isinstance(field, (FittedDoubleSpinBox, FittedSpinBox)) and not field.min_digits:
+            # Colour channels keep swatch plus four fields on one line; other numbers get eight digits.
+            field.min_digits = 4 if field.property("knob_channel") else 8
+            field.updateGeometry()
+    for combo in panel.findChildren(QComboBox):
+        combo.setProperty("fit_to_items", True)
+    for edit in panel.findChildren(QLineEdit):
+        if isinstance(edit.parentWidget(), (QAbstractSpinBox, QComboBox)) or edit.objectName() == "node-name-header":
+            continue
+        if edit.property("knob_path"):
+            continue                    # a file path keeps the room the dock gives it
+        metrics = edit.fontMetrics()
+        text = edit.text() or edit.placeholderText()
+        chars = max(14, min(36, len(text) + 2))
+        width = metrics.horizontalAdvance("0" * chars) + 20
+        edit.setMinimumWidth(min(width, 80))
+        edit.setMaximumWidth(width)
+    for pair in panel.findChildren(FloatSliderControl):
+        pair.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        pair.setMaximumWidth(pair.fontMetrics().horizontalAdvance("0") * 46)
+        row = pair.parentWidget()
+        if isinstance(row, _FittedKnobRow):
+            row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+
 class FpsSpinBox(FittedDoubleSpinBox):
     """The comp's frame rate. Shows only the digits it needs ("24 fps", "29.97 fps") and keeps three
     decimals for typing. "24.000 fps" in Windows' font made the field wider than the current-frame box
@@ -1141,7 +1174,9 @@ def make_fluid(root):
     """
     for form in root.findChildren(QFormLayout):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        # Only expanding fields (sliders, file paths) take the dock's spare width; numbers, choices
+        # and switches keep the width their content asks for (DiMo 10/18).
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
     for field in root.findChildren(QAbstractSpinBox):
         field.setMinimumWidth(FLUID_FIELD_MIN_WIDTH)
         field.setSizePolicy(QSizePolicy.Policy.Preferred, field.sizePolicy().verticalPolicy())
@@ -1149,8 +1184,14 @@ def make_fluid(root):
         # (Window.eventFilter blocks the wheel from reaching an unfocused knob at all).
         field.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     for combo in root.findChildren(QComboBox):
-        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        combo.setMinimumContentsLength(6)
+        if combo.property("fit_to_items"):
+            # As wide as its longest choice, and still able to shrink (with an ellipsis) in a narrow dock.
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+            combo.setSizePolicy(QSizePolicy.Policy.Preferred, combo.sizePolicy().verticalPolicy())
+            combo.setMinimumWidth(min(combo.sizeHint().width(), combo.fontMetrics().horizontalAdvance("0") * 6 + 40))
+        else:
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(6)
         combo.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     for button in root.findChildren(QPushButton):
         if button.minimumWidth() == 0 and button.maximumWidth() > 1000:
@@ -10195,6 +10236,8 @@ class Window(QMainWindow):
                                  "velocity_grid": "Velocity grid"}[param], control)
                 elif isinstance(value, str):
                     control = QLineEdit(value)
+                    if kind in ("file_read", "file_write") or param.endswith("path"):
+                        control.setProperty("knob_path", True)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control:
                         w.text() != self.graph_nodes()[k]["params"][p]
@@ -10383,6 +10426,7 @@ class Window(QMainWindow):
                 if group.kind == "color":
                     color_fields = [numeric_field(param) for param in group.params]
                     for field in color_fields:
+                        field.setProperty("knob_channel", True)
                         # Four stepper columns cost the digits their room in a narrow dock, and
                         # a colour is typed, scrubbed or picked from the swatch, never stepped.
                         hide_spin_buttons(field)
@@ -10473,7 +10517,8 @@ class Window(QMainWindow):
                         card = QFrame()
                         card.setObjectName("properties-mix-card")
                         card.setStyleSheet("QFrame#properties-mix-card { margin-top: 10px; padding: 8px; "
-                                           "border-radius: 12px; background: #161a1f; border: 1px solid #232930; }")
+                                           "border-radius: 12px; background: #161a1f; border: 1px solid #232930; } "
+                                           "QFrame#properties-mix-card QLabel { background: transparent; }")
                         card_layout = QFormLayout(card)
                         card_layout.setContentsMargins(8, 6, 8, 6)
                         card_layout.addRow(group.label, animated)
@@ -11276,6 +11321,7 @@ class Window(QMainWindow):
             tabs.setCurrentIndex(min(self.properties_tab, tabs.count() - 1))
             tabs.currentChanged.connect(lambda index: setattr(self, "properties_tab", index))
             panel_layout.addWidget(tabs, 1)
+            fit_knob_widths(panel)
         return panel
 
     def schedule_inspect(self):
@@ -12342,7 +12388,8 @@ class Window(QMainWindow):
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-        layout.addWidget(control, 1)
+        # A slider row widens with the dock; a plain number keeps its own width (DiMo 10/18).
+        layout.addWidget(control, 1 if isinstance(control, FloatSliderControl) else 0)
         layout.addWidget(self.make_key_button(key, param, control, expression))
         return row
 

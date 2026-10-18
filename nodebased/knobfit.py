@@ -153,9 +153,26 @@ class FittedSpinMixin:
         glyph = self._glyph_width() or (22 if self.property("keyedHere") else 0)
         return base - reserved + metrics.horizontalAdvance(self._full_text()) + glyph + 2
 
+    # A Properties field asks for at least this many digits (DiMo 10/18: about eight digits plus the
+    # spinner), so a column of fields lines up and a field does not jump wider as its value grows.
+    # 0 keeps the old behaviour: the width of the value shown.
+    min_digits = 0
+
+    def stable_width(self):
+        if not self.min_digits:
+            return 0
+        decimals = self.decimals() if isinstance(self, QDoubleSpinBox) else 0
+        digits = "0" * max(1, self.min_digits - decimals) + ("." + "0" * decimals if decimals else "")
+        metrics = self.fontMetrics()
+        base = super().sizeHint().width()
+        reserved = max(metrics.horizontalAdvance(self.prefix() + self.textFromValue(self.minimum()) + self.suffix()),
+                       metrics.horizontalAdvance(self.prefix() + self.textFromValue(self.maximum()) + self.suffix()))
+        glyph = self._glyph_width() or (22 if self.property("keyedHere") else 0)
+        return base - reserved + metrics.horizontalAdvance(self.prefix() + "-" + digits + self.suffix()) + glyph + 2
+
     def sizeHint(self):
         hint = super().sizeHint()
-        return QSize(self.fitted_width(), hint.height())
+        return QSize(max(self.fitted_width(), self.stable_width()), hint.height())
 
     def minimumSizeHint(self):
         return QSize(min(self.fitted_width(), 64), super().minimumSizeHint().height())
