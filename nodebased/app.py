@@ -71,6 +71,7 @@ from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, 
                     valid_accent, TOKENS, FAMILY_COLORS, TYPE, theme_colors, VIEWER_SURROUND)
 from .color import VIEWS
 from . import gpudisplay
+from . import directviewer
 from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE, VIEWER_INPUT_COUNT,
                    VIEWER_MASK_MODES, VIEWER_MASKS, VIEWER_PROXY_TIERS, VIEWER_ROI_DEFAULT,
                    viewer_look, viewer_masks, viewer_proxy, viewer_roi, viewer_state)
@@ -8667,6 +8668,16 @@ class Window(QMainWindow):
             action.toggled.connect(dock.setVisible)
             dock.visibilityChanged.connect(action.setChecked)
             window_menu.addAction(action)
+        self.direct_dock = None
+        self.direct_widget = None
+        self.direct_action = QAction("Direct picture (experimental GPU)", self, checkable=True)
+        self.direct_action.setObjectName("direct-picture")
+        self.direct_action.setToolTip("A floating picture with GPU pan and zoom. Experimental: no Roto, "
+                                      "Tracker, A/B or region overlays; the Viewer stays the default.")
+        self.direct_action.toggled.connect(self.set_direct_viewer)
+        window_menu.addAction(self.direct_action)
+        if directviewer.enabled():
+            QTimer.singleShot(0, lambda: self.direct_action.setChecked(True))
         window_menu.addSeparator()
         workspaces_menu = window_menu.addMenu("Workspaces")
         workspaces_menu.addAction("Save as…", self.save_workspace_as)
@@ -13196,8 +13207,9 @@ class Window(QMainWindow):
         self.viewer_corners.set_image(round(scene_rect.width()), round(scene_rect.height()),
                                       f"{space} · float RGBA", proxy)
 
-    def _show_image(self, image, scale, render_region, image_b=None):
+    def _show_image(self, image, scale, render_region, image_b=None, generation=None):
         previous = self.viewer.sceneRect().size()
+        shown_image = image   # the proxy-sized picture, before the display upscale below
         self.viewer.set_compare_image(image_b, scale, render_region)
         # The pixmap is displayed in full-resolution scene coordinates, but the live frame stays
         # proxy-sized. Keep both coordinate systems beside the picture for cheap mouse lookups.
@@ -13255,6 +13267,65 @@ class Window(QMainWindow):
         elif previous.width() != scene_rect.width() or previous.height() != scene_rect.height():
             self.viewer.fit()
         self.viewer._place_pixel_readout()
+        self._offer_direct(shown_image, scale, render_region, scene_rect, generation)
+
+    # The opt-in retained-texture picture (nodebased/directviewer.py). The default Viewer above keeps
+    # painting and stays the fallback, export source and pixel-sampling source; this dock only shows the
+    # same picture with GPU pan and zoom, and has none of the Viewer's overlays.
+    DIRECT_TITLE = "DIRECT PICTURE (experimental GPU, no overlays)"
+
+    def set_direct_viewer(self, on):
+        dock = getattr(self, "direct_dock", None)
+        if not on:
+            if dock is not None:
+                dock.hide()
+            return
+        if dock is None:
+            dock = QDockWidget(self.DIRECT_TITLE, self)
+            dock.setObjectName("direct-viewer-dock")
+            try:
+                widget = directviewer.make_widget()
+            except Exception as exc:   # no rendercanvas / no screen surface: the default viewer carries on
+                self._direct_failed(f"Direct picture is unavailable: {exc}")
+                return
+            widget.failed.connect(self._direct_failed)
+            dock.visibilityChanged.connect(lambda visible: self.direct_action.setChecked(visible))
+            widget.setMinimumSize(160, 90)
+            dock.setWidget(widget)
+            dock.setFloating(True)
+            dock.resize(960, 540)
+            self.direct_dock = dock
+            self.direct_widget = widget
+        dock.show()
+        image = getattr(self.viewer, "last_display_image", None)
+        if image is not None:
+            self._offer_direct(image, self.viewer.last_scale, self.viewer.last_render_region,
+                               self.viewer.sceneRect(), None)
+
+    def _direct_failed(self, message):
+        self.statusBar().showMessage(message, 8000)
+        action = getattr(self, "direct_action", None)
+        if action is not None and action.isChecked():
+            action.blockSignals(True)
+            action.setChecked(False)
+            action.blockSignals(False)
+        dock = getattr(self, "direct_dock", None)
+        if dock is not None:
+            dock.hide()
+            dock.deleteLater()
+            self.direct_dock = None
+            self.direct_widget = None
+
+    def _offer_direct(self, image, scale, render_region, scene_rect, generation):
+        dock = getattr(self, "direct_dock", None)
+        if dock is None or not dock.isVisible():
+            return
+        if render_region is not None:
+            rect = (render_region.x * scale, render_region.y * scale, image.width() * scale, image.height() * scale)
+        else:
+            rect = (0.0, 0.0, image.width() * scale, image.height() * scale)
+        format_rect = (scene_rect.x(), scene_rect.y(), scene_rect.width(), scene_rect.height())
+        self.direct_widget.submit(image, rect, format_rect, generation)
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload
@@ -13321,7 +13392,8 @@ class Window(QMainWindow):
                 if self.playing:
                     self.playback_shown_times.append(time.monotonic())
                 self._show_image(image, request.tier, render_region,
-                                 extras["image_b"] if extras is not None else None)
+                                 extras["image_b"] if extras is not None else None,
+                                 generation=request.generation)
             else:
                 self.viewer.scene().clear()
                 self.viewer._hide_pixel_readout()
@@ -13792,6 +13864,8 @@ class Window(QMainWindow):
             self._tracker_cancel.set()
         self.timer.stop()
         self.playback_timer.stop()
+        if getattr(self, 'direct_widget', None) is not None:
+            self.direct_widget.close()
         self.thumbnails_closed = True
         self.thumbnail_timer.stop()
         self.thumbnail_cancel.set()
