@@ -1,5 +1,27 @@
 ## 2026-10-18 — Lane 2 VP1: opt-in retained-texture 2D viewer slice (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (4:37 PM on 2026-10-18 PDT)
+
+`main` moved `93a137ea` -> `07713917` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 37 tests in 32.353 s, OK. Full suite on
+the stacked tip `07713917` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1018-1037.log`, started 10:37 AM): **Ran 5510 tests in 21092.830 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), VP1 of 2: opt-in retained-texture 2D viewer vertical slice.** Commits:
+  - `34206646` notes: Lane 2 VP1 completion in TASKLOG and state
+  - `51f47bca` viewer: direct picture docs, functional and bench results for VP1
+  - `72a64ae1` viewer: pick the display adapter through wgpu's surface filter, add the VP1 bench tool
+  - `c22cff7e` viewer: opt-in retained-texture picture presenter with GPU pan/zoom, ledger rules and focused tests
+  Diff: 18 files changed, 1921 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 See the matching TASKLOG.md entry for the evidence and its limits. Code: `nodebased/directviewer.py`, Window menu "Direct picture (experimental GPU)" and `Window._offer_direct` in `app.py`; docs `docs/DIRECT_VIEWER.md`. Contracts: newest-only pending picture, one conversion and one texture write per drawn picture, no work on pan/zoom, generation + device-epoch rejection, retired textures held 3 presents, surface texture never kept past one draw, adapter chosen through wgpu's surface filter. Default Viewer path untouched; switch off by default.
 
 Gate for Gonzo (VP2): real-display cadence/latency A/B, AMD on a real X display, docking and non-unit scale on the live display, Windows, Wayland, device loss, overlay and hit-order parity, colour/alpha.
