@@ -1,3 +1,32 @@
+# NodeBased 0.38.1 — faster playback and graph clicks, a graphics adapter choice, and the Windows package repaired
+
+## What changed since 0.38.0
+
+0.38.0 was tagged but never published: its Windows package failed two tests. 0.38.1 carries everything listed under 0.38.0
+below, plus:
+
+- **Playback.** Static frames convert once and reach the display without a half-float round trip; Render3D skips
+  supersampling an empty scene. At 1080p and 24 fps a constant Checker now plays at the full 24 fps (was 9.8), an empty 3D scene
+  with an animated camera on the GPU at 11.9 fps (was 3.5), and one Render3D frame of an empty scene takes 8 ms (was about 190).
+  The time row shows the frame rate playback really achieves, in the warm colour when it falls behind.
+- **Graph input.** A click paints its selection highlight before the Properties panel is built, and letting go of a dragged node
+  no longer rebuilds the panel or the graph. On the 18-node demo, press to highlight went from 130 ms to 12 ms and a drag release
+  from 154 ms to 3 ms. Panels are reused on re-selection, the material preview renders after the panel shows, and the minimap
+  repaints only when something changed.
+- **Graphics adapter.** NodeBased ranks discrete over integrated over software cards when it picks an adapter, with a choice in
+  Settings, a `NODEBASED_ADAPTER` override, a warning in the top bar when it runs on a slow adapter, and the chosen adapter in the
+  field report. `tools/benchmark_adapter_choice.py` times each card. On this workstation the integrated Radeon beat the RTX
+  3080 Ti eGPU on a heavy scene, so the app prefers a discrete card without promising it is the fastest.
+- **Fixes.** The Properties panel cache is scoped to the graph level, so entering a group shows the right panel. The field-report
+  smoke test no longer runs the hardware benchmarks, and the GPU-against-CPU lens test uses the cross-renderer tolerance; these were
+  the two Windows failures.
+
+## Known limits
+
+- **Laptop:** the Intel Iris Xe against RTX 4070 comparison is not measured yet; the adapter choice there is untested on the real
+  machine. Windows is tested by the automated suite on the CI runner only.
+- **Playback:** the display conversion still costs about 41 ms a frame at 1080p, so animated content stays under real time.
+
 # NodeBased 0.38.0 — the lens on the graphics card and in the 3D viewport and renderers, a camera and lens recovered from the surveyed plate, Roto rendering only the tiles the viewer asks for, and a field test kit for the A6000 work machine
 
 ## What changed since 0.37.0
