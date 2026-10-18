@@ -64,8 +64,8 @@ Targets:
 - A comp whose picture does not change (an empty 3D scene, a constant Checker, a Read of one still)
   plays at the comp's rate: the cost per tick is a paint of about 1 ms.
 - Animated content at 1080p spends under 16 ms per frame on the display path, excluding the render
-  itself. Not met yet: the display conversion (`to_qimage`) is still about 41 ms per frame (see
-  "Still slow").
+  itself. Met in the opt-in Direct picture (about 2.7 ms, see "Direct viewer display transform"); not
+  met yet in the default Viewer, where `to_qimage` is still about 41 ms per frame (see "Still slow").
 - The time row shows the frames per second playback achieves, and turns warm below the comp's rate.
 
 What changed, with the measurement from before and after:
@@ -125,11 +125,55 @@ The real time light measures the frames put on screen over the last second (`Win
 It reads "real time · 24 fps" while the rate holds and "11 of 24 fps" in the warm colour once the
 rate falls below 95 percent of the comp's. It makes no claim in the first half second of playback.
 
+### Direct viewer display transform
+
+With the Direct picture dock up (Window menu, or `NODEBASED_DIRECT_VIEWER=1`), a playback frame no
+longer goes through `to_qimage`. The worker hands the window the scene-linear float frame and its
+display settings (`carddisplay.LazyPicture`); the dock uploads it once into a float texture and its
+fragment shader does gain, channel select, unpremultiply, gamma, OCIO's own view-transform shader,
+the checker, the clipping warning and the 8-bit quantise. The card agrees with `to_qimage` within
+1/255 on every channel (tests/test_carddisplay.py) on the RTX 3080 Ti, the Radeon 8060S and
+llvmpipe. The Viewer holds its last picture while the dock plays and repaints when playback stops;
+the 8-bit picture is built only when something asks for it. Details in docs/DIRECT_VIEWER.md.
+
+Measured 2026-10-18 on a private Xvfb display (xcb, no DRI3), 24 fps comps at 1080p unless the row
+says 4K, 10 s of the app's own playback, NVIDIA RTX 3080 Ti presenting, with the full test suite running beside it (so
+the absolute rates are lower than the table above). Summary in
+`benchmarks/viewer/direct-display-transform-xvfb-2026-10-18.json`:
+
+| Case | Before (Viewer) | After (Direct picture) |
+|---|---:|---:|
+| Display path per frame on the UI thread, animated checker | 45.2 ms (`to_qimage`) | 2.7 ms (hand-over 0.2, upload 1.9, draw 0.6) |
+| Animated checker | 11.6 fps | 19.0 fps |
+| Animated empty 3D scene (GPU) | 8.3 fps | 15.6 fps |
+| 4K animated checker, proxy 1/2 while playing | 10.3 fps (`to_qimage` 47.6 ms) | 19.3 fps (display path 2.8 ms) |
+| 4K animated checker, full resolution | 2.9 fps (`to_qimage` 190 ms) | 3.7 fps (bound by the 128 MB float upload) |
+
+On the card, the display shader costs 0.4 ms per 960 x 540 draw on the RTX 3080 Ti, 0.3 ms on the
+Radeon 8060S and 2.4 ms on llvmpipe. OCIO's lookup tables sit in a storage buffer: inlined as
+constant arrays they made the ACES 2.0 draw 17 ms, because naga copies a constant array into
+function memory for every dynamic index. The float frame's copy to the card is asynchronous but
+not free: 12 ms at 1080p and 48 ms at 4K on the RTX 3080 Ti (about 2.7 GB/s over PCIe with the suite
+on the card; a persistent mapped staging ring measured the same), 1.9 ms on the Radeon's shared
+memory.
+
+What still holds the animated checker below 24 fps:
+
+- Presenting to Xvfb costs about 21 ms per frame on the UI thread, with vsync on or off (VP1 saw
+  44 to 52 ms at full size): with no DRI3 the swapchain image is copied out by the processor. That
+  is a property of this display server; presentation on a real screen is not measured yet.
+- On the worker, `DisplayCache.put` compacts the oldest waiting frame to half-float under budget
+  pressure on every put (37 percent of worker samples), on top of the 21 ms compose. That is profile
+  item 2, untouched here.
+- At 4K full resolution the frame is 128 MB of float32 per upload; keeping the render on the card
+  (the later L4 step: same device as Render3D) removes it.
+
 ### Still slow
 
-- `to_qimage` is about 41 ms per 1080p frame and 170 ms at 4K (ten full-frame float32 temporaries
-  and a float readback from the integrated GPU). Moving the exposure, unpremultiply, view
-  transform and 8-bit quantise into the shader of a GL viewer is the next step (profile item 1).
+- In the default Viewer, `to_qimage` is about 41 ms per 1080p frame and 170 ms at 4K (ten
+  full-frame float32 temporaries and a float readback from the integrated GPU). The Direct picture
+  does it on the card during playback (above); the Viewer itself, stills and compare pictures
+  still pay it.
 - Each displayed frame is still two worker jobs with a signal to the UI thread between them.
 - The CPU rasteriser takes 620 ms for a cube; the GPU path waits on the card.
 
