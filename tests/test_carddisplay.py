@@ -130,5 +130,92 @@ class ShaderSourceTests(unittest.TestCase):
             carddisplay._inline_tables("", Desc())
 
 
+def fake_widget_class():
+    from PySide6.QtCore import Signal
+    from PySide6.QtWidgets import QWidget
+
+    class FakeDirectWidget(QWidget):
+        """The direct picture without a screen surface: records what the window hands it."""
+        failed = Signal(str)
+        accept_linear = True
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.error = None
+            self.linear, self.images = [], []
+
+        def submit(self, image, rect, format_rect=None, generation=None):
+            self.images.append(image)
+            return True
+
+        def submit_linear(self, frame, settings, rect, format_rect=None, generation=None):
+            if not self.accept_linear:
+                return False
+            self.linear.append((frame, settings, tuple(rect)))
+            return True
+
+    return FakeDirectWidget
+
+
+class PlaybackRoutingTests(unittest.TestCase):
+    """With the direct picture up, playback frames go to the card as floats and skip `to_qimage`."""
+
+    def setUp(self):
+        import uuid
+        import unittest.mock
+        from nodebased.app import Window
+        from tests.waiting import wait_until
+        QApplication.instance() or QApplication([])
+        self.window = Window(agent_name="nodebased-test-" + uuid.uuid4().hex)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        with unittest.mock.patch.object(dv, "make_widget", fake_widget_class()):
+            self.window.direct_action.setChecked(True)
+        self.widget = self.window.direct_widget
+        self.assertIsNotNone(self.widget)
+
+    def tearDown(self):
+        from tests.test_desktop import release_window
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        QApplication.instance().processEvents()
+
+    def request(self, playing=True):
+        import copy
+        import types
+        return types.SimpleNamespace(playing=playing, document=copy.deepcopy(self.window.dispatcher.document))
+
+    def test_worker_routes_only_playback_without_a_b_buffer(self):
+        w = self.window
+        self.assertTrue(w._direct_linear_for(self.request(), "ACES 2.0"))
+        self.assertFalse(w._direct_linear_for(self.request(playing=False), "ACES 2.0"))
+        self.assertFalse(w._direct_linear_for(self.request(), "No such view"))
+        w.direct_action.setChecked(False)
+        self.assertFalse(w._direct_linear_for(self.request(), "ACES 2.0"))
+
+    def test_lazy_picture_goes_to_the_card_and_is_never_converted(self):
+        w = self.window
+        before = w.viewer.last_display_image
+        frame = test_frames()["ramps"]
+        picture = carddisplay.LazyPicture(frame, 0.0, "RGB", "black", "ACES 2.0", None)
+        w._show_image(picture, 1, None, generation=99)
+        self.assertEqual(len(self.widget.linear), 1)
+        self.assertIs(self.widget.linear[0][0], frame)
+        self.assertEqual(self.widget.linear[0][2], (0.0, 0.0, 96.0, 64.0))
+        self.assertFalse(picture.built())
+        self.assertIs(w.viewer.last_display_image, before)     # the Viewer keeps its last picture
+        self.assertIs(w.direct_lazy, picture)
+
+    def test_a_view_the_card_refuses_is_built_on_the_processor(self):
+        w = self.window
+        self.widget.accept_linear = False
+        picture = carddisplay.LazyPicture(test_frames()["ramps"], 0.0, "RGB", "black", "ACES 2.0", None)
+        w._show_image(picture, 1, None, generation=99)
+        self.assertTrue(picture.built())
+        self.assertIs(w.viewer.last_display_image, picture.image())
+        self.assertIs(self.widget.images[-1], picture.image())   # and the dock gets the 8-bit picture
+
+
 if __name__ == "__main__":
     unittest.main()

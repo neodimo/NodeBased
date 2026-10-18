@@ -187,3 +187,43 @@ def uniform_values(settings):
     levels = checker_levels(view) if checker else (0.0, 0.0)
     return [float(np.float32(2.0) ** np.float32(exposure)), float(CHANNELS.index(channel)), gamma,
             1.0 if zebra and channel != "A" else 0.0, 1.0 if checker else 0.0, levels[0], levels[1], 0.0]
+
+
+@lru_cache(maxsize=16)
+def supported(view):
+    """True when `view` builds as a card shader (the GPU itself may still refuse; the presenter says so)."""
+    try:
+        view_source(view)
+    except Unsupported:
+        return False
+    return True
+
+
+class LazyPicture:
+    """A frame the direct viewer shows on the card; the 8-bit QImage is built only if something asks.
+
+    Playback with the direct viewer on hands one of these to the window instead of `to_qimage`'s
+    result. `image()` runs `to_qimage` once, on first request (sampling, export, a fallback when the
+    card refuses the view), and keeps the result."""
+
+    def __init__(self, frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None):
+        self.frame = frame
+        self.args = (exposure, channel, background, view, look)
+        self.settings = settings_from(exposure, channel, background, view, look)
+        self._image = None
+
+    def width(self):
+        return int(self.frame.shape[1])
+
+    def height(self):
+        return int(self.frame.shape[0])
+
+    def built(self):
+        return self._image is not None
+
+    def image(self):
+        if self._image is None:
+            from .imaging import to_qimage
+            exposure, channel, background, view, look = self.args
+            self._image = to_qimage(self.frame, exposure, channel, background=background, view=view, look=look)
+        return self._image

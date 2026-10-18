@@ -381,13 +381,17 @@ class RetainedPresenter:
     def _upload_linear(self, frame):
         """Write the float frame into the retained rgba32float texture (one copy, no conversion)."""
         wgpu = self.wgpu
-        frame = np.ascontiguousarray(frame, np.float32)
+        # The display cache keeps settled frames as float16: those go up as half floats, as they are.
+        half = frame.dtype == np.float16
+        frame = np.ascontiguousarray(frame, np.float16 if half else np.float32)
         height, width = frame.shape[:2]
-        if self.linear_texture is None or self.linear_size != (width, height):
+        texel = 8 if half else 16
+        fmt = "rgba16float" if half else "rgba32float"
+        if self.linear_texture is None or self.linear_size != (width, height) or self.linear_texture.format != fmt:
             if self.linear_texture is not None:
                 self.ledger.retire(self.linear_texture)
             self.linear_texture = self.device.create_texture(
-                size=(width, height, 1), format="rgba32float",
+                size=(width, height, 1), format=fmt,
                 usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
             self.linear_size = (width, height)
             self.linear_bind_group = self.device.create_bind_group(layout=self.linear_layout, entries=[
@@ -400,7 +404,7 @@ class RetainedPresenter:
                     entries=[{"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
             self.counters["texture_creates"] += 1
         self.device.queue.write_texture({"texture": self.linear_texture}, frame,
-                                        {"bytes_per_row": width * 16, "rows_per_image": height}, (width, height, 1))
+                                        {"bytes_per_row": width * texel, "rows_per_image": height}, (width, height, 1))
         self.counters["linear_uploads"] += 1
 
     def _upload(self, qimage):
@@ -549,6 +553,25 @@ def make_widget(parent=None):
             if self.presenter is None and not self._start():
                 return False
             fresh = self.presenter.offer(qimage, self.rect, self.format_rect, generation)
+            if fresh:
+                self._request()
+            return fresh
+
+        def submit_linear(self, frame, settings, rect, format_rect=None, generation=None):
+            """Hand over a scene-linear float frame; the card runs the display transform.
+            False when the direct viewer is down or the card cannot build this view's shader."""
+            from . import carddisplay
+            if self.error is not None:
+                return False
+            if self.presenter is None and not self._start():
+                return False
+            try:
+                self.presenter.linear_pipeline(settings[3])
+            except carddisplay.Unsupported:
+                return False
+            self.rect = tuple(rect)
+            self.format_rect = tuple(format_rect or rect)
+            fresh = self.presenter.offer_linear(frame, settings, self.rect, self.format_rect, generation)
             if fresh:
                 self._request()
             return fresh
