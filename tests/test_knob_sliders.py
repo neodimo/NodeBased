@@ -139,5 +139,64 @@ class SliderInputTests(unittest.TestCase):
         self.assertGreaterEqual(len(drawn_colors(pair.slider)), 3)
 
 
+class KnobSizingTests(unittest.TestCase):
+    """Fields take the width their content needs; only sliders and file paths use the dock's spare
+    width (DiMo 10/18: every field ran to the right edge of the panel)."""
+
+    def setUp(self):
+        self.window = Window()
+        self.window.resize(1800, 900)
+        self.window.show()
+        APP.processEvents()
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def panel_for(self, node_type, width=700):
+        w = self.window
+        w.resizeDocks([w.properties_dock], [width], Qt.Orientation.Horizontal)
+        key = f"size_{node_type.lower()}_{width}"
+        if key not in w.dispatcher.document["nodes"]:
+            w.dispatcher.execute({"op": "create", "id": key, "type": node_type, "pos": [0, 0]})
+        panel = w.build_node_panel(key)
+        w.set_properties_widget(panel)
+        for _ in range(3):
+            APP.processEvents()
+        return panel
+
+    def test_numbers_and_choices_keep_their_content_width_in_a_wide_dock(self):
+        from PySide6.QtWidgets import QComboBox, QSpinBox
+        panel = self.panel_for("Constant")
+        self.assertGreater(panel.width(), 500)
+        width_field = panel.findChild(QSpinBox, "width-field") or next(
+            f for f in panel.findChildren(QSpinBox) if f.value() == 960)
+        digits = width_field.fontMetrics().horizontalAdvance("-00000000")
+        self.assertLess(width_field.width(), digits + 80)
+        self.assertGreaterEqual(width_field.width(), digits)
+        panel = self.panel_for("Merge")
+        combo = next(c for c in panel.findChildren(QComboBox) if c.currentText() == "over")
+        longest = max(combo.fontMetrics().horizontalAdvance(combo.itemText(i)) for i in range(combo.count()))
+        self.assertGreaterEqual(combo.width(), longest)
+        self.assertLess(combo.width(), longest + 90)
+
+    def test_colour_row_keeps_swatch_and_four_fields_on_one_line(self):
+        from PySide6.QtWidgets import QDoubleSpinBox, QFrame
+        for width in (700, 380):
+            panel = self.panel_for("Constant", width)
+            fields = [panel.findChild(QDoubleSpinBox, f"{c}-field") for c in ("red", "green", "blue", "alpha")]
+            swatch = panel.findChild(QFrame, "color-swatch")
+            tops = {field.mapTo(panel, QPoint(0, 0)).y() for field in fields}
+            self.assertEqual(len(tops), 1, width)
+            self.assertLess(abs(swatch.mapTo(panel, QPoint(0, 0)).y() - min(tops)), swatch.height(), width)
+
+    def test_slider_rows_use_the_spare_width(self):
+        panel = self.panel_for("Grade")
+        pair = next(p for p in panel.findChildren(FloatSliderControl) if p.spin.objectName() == "exposure-field")
+        self.assertGreater(pair.slider.width(), 150)
+
+
 if __name__ == "__main__":
     unittest.main()
