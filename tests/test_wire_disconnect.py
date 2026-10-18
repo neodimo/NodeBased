@@ -132,6 +132,61 @@ class WireDisconnectTests(wire_feel.WireFeelTests):
                 self.undo()
                 self.assertEqual(self.source("gr", "image"), "rd")
 
+    # ---- the knife: Ctrl+Alt and drag
+    def knife(self, start, end, release=True):
+        view = self.graph.viewport()
+        QTest.mousePress(view, LEFT, CTRL_ALT, start)
+        self.move(start, end)
+        if release:
+            QTest.mouseRelease(view, LEFT, CTRL_ALT, end)
+            self.settle(20)
+
+    def test_a_knife_line_cuts_every_wire_it_crosses_in_one_undo_step(self):
+        for zoom in ZOOMS:
+            with self.subTest(zoom=zoom):
+                self.command({"op": "connect", "id": "gr", "input": "image", "source": "rd"},
+                             {"op": "connect", "id": "bl", "input": "image", "source": "gr"},
+                             {"op": "connect", "id": "mg", "input": "A", "source": "cn"})
+                self.show(zoom)
+                # Read->Grade and Constant->Merge both run straight down; Grade->Blur sits lower, clear of the line.
+                self.knife(self.at(P(1150, -120)), self.at(P(1950, -120)))
+                self.assertIsNone(self.source("gr", "image"))
+                self.assertIsNone(self.source("mg", "A"))
+                self.assertEqual(self.source("bl", "image"), "gr")   # not crossed
+                self.undo()
+                self.assertEqual((self.source("gr", "image"), self.source("mg", "A")), ("rd", "cn"))
+
+    def test_the_knife_line_is_visible_and_marks_the_wires_it_would_cut(self):
+        self.show(1.0)
+        self.graph.centerOn(P(1295, -100))
+        self.settle()
+        start, end = self.at(P(1200, -120)), self.at(P(1400, -120))
+        self.knife(start, end, release=False)
+        self.assertIsNotNone(self.graph.knife)
+        self.assertTrue(self.record("gr")[0].cutting)
+        self.assertFalse(self.record("bl")[0].cutting)
+        before = self.graph.viewport().grab().toImage()
+        self.graph.knife = None
+        self.assertNotEqual(before, self.graph.viewport().grab().toImage())   # the line draws
+        QTest.mouseRelease(self.graph.viewport(), LEFT, CTRL_ALT, end)
+
+    def test_a_knife_that_crosses_nothing_changes_nothing(self):
+        self.show(1.0)
+        self.knife(self.at(P(1500, -200)), self.at(P(1700, -100)))
+        self.assertEqual((self.source("gr", "image"), self.source("bl", "image")), ("rd", "gr"))
+        self.assertIsNone(self.graph.knife)
+
+    def test_alt_drag_still_pans_and_ctrl_drag_does_not_cut(self):
+        self.show(1.0)
+        before = self.graph.horizontalScrollBar().value()
+        start = self.at(P(1500, -200))
+        view = self.graph.viewport()
+        QTest.mousePress(view, LEFT, Qt.KeyboardModifier.AltModifier, start)
+        self.move(start, start + QPoint(60, 0))
+        QTest.mouseRelease(view, LEFT, Qt.KeyboardModifier.AltModifier, start + QPoint(60, 0))
+        self.assertNotEqual(self.graph.horizontalScrollBar().value(), before)
+        self.assertEqual(self.source("gr", "image"), "rd")
+
 
 for _name in dir(wire_feel.WireFeelTests):   # the scene and helpers are inherited; its own tests run in their module
     if _name.startswith("test_"):

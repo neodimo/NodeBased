@@ -5903,6 +5903,10 @@ class SequenceBrowser(QDialog):
 
 # Wiring feel (new look). Every radius is in screen pixels, so wiring feels the same at 40 and 150 percent.
 WIRE_SELECTED_COLOR = "#ffb454"   # a clicked wire: the warm accent no node family uses
+# Ctrl+Alt+drag cuts every wire the line crosses. Held modifiers ride on each mouse event, so nothing can
+# stick when the window loses focus, and Alt alone (pan) stays free; a plain letter key such as Y would
+# need press/release bookkeeping and would clash with typing into a focused field.
+KNIFE_MODIFIERS = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
 WIRE_CUT_COLOR = "#ff5d5d"        # a wire the knife line crosses
 CUT_HANDLE_RADIUS = 10  # screen pixels: the hovered wire's "x" handle at its midpoint
 WIRE_PICK = 6        # screen pixels either side of a wire's path that still count as pointing at it
@@ -5959,6 +5963,7 @@ class Graph(PanZoomView):
         self.dot_preview = None
         self.insert_target = None   # the wire a dragged free node would be inserted into (see wire_to_insert_into)
         self.hover_wire = None       # (destination, slot) of the wire under the pointer
+        self.knife = None            # [start, end] scene points of the cut line being dragged
         self.selected_wires = set()  # (destination, slot) of every clicked wire
         self.ctrl_handles_visible = False
         self.primary_id = None
@@ -6582,6 +6587,11 @@ class Graph(PanZoomView):
             # Panning leaves wires, the selection and the last click position alone.
             PanZoomView.mousePressEvent(self, event)
             return
+        if (event.button() == Qt.MouseButton.LeftButton and event.modifiers() == KNIFE_MODIFIERS
+                and not (self.wire_source or self.wire_input) and self.inserting_edge is None):
+            self.start_knife(self.mapToScene(event.position().toPoint()))
+            event.accept()
+            return
         self.ctrl_handles_visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         self.primary_id = None   # only a backdrop press (NodeItem.mousePressEvent) sets it again
         self.viewport().update()
@@ -6658,6 +6668,10 @@ class Graph(PanZoomView):
                                             self.window.preferences.radial_dead_zone())
             event.accept()
             return
+        if self.knife is not None:
+            self.move_knife(self.last_hover_scene_pos)
+            event.accept()
+            return
         visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         if visible != self.ctrl_handles_visible:
             self.ctrl_handles_visible = visible
@@ -6679,6 +6693,11 @@ class Graph(PanZoomView):
     def mouseReleaseEvent(self, event):
         if self.pan is not None:
             PanZoomView.mouseReleaseEvent(self, event)
+            return
+        if self.knife is not None and event.button() == Qt.MouseButton.LeftButton:
+            self.move_knife(self.mapToScene(event.position().toPoint()))
+            self.finish_knife()
+            event.accept()
             return
         if self.wire_grabbed and event.button() == Qt.MouseButton.LeftButton:
             # A wire the graph started from a near miss ends like one a socket started: a drag drops it
@@ -6905,6 +6924,7 @@ class Graph(PanZoomView):
         elif event.key() == Qt.Key.Key_Home and not modifiers:
             self.frame_nodes()
         elif event.key() == Qt.Key.Key_Escape and not modifiers:
+            self.cancel_knife()
             self.cancel_wire()
             self.cancel_dot_insert()
             if self.radial_menu.is_open():
@@ -7016,6 +7036,56 @@ class Graph(PanZoomView):
             self.select_wires({key})
         return True
 
+    def start_knife(self, scene_pos):
+        self.knife = [scene_pos, scene_pos]
+        self.hover_wire = None
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.viewport().update()
+
+    def move_knife(self, scene_pos):
+        self.knife[1] = scene_pos
+        crossed = {self.wire_key(record) for record in self.wires_crossed(*self.knife)}
+        for edge, _source, destination, slot, _out in self.edges:
+            edge.set_wire_state(hovered=False, cutting=(destination, slot) in crossed)
+        self.viewport().update()
+
+    def wires_crossed(self, start, end):
+        """Every wire record whose path the segment `start`-`end` crosses."""
+        line = QLineF(start, end)
+        if line.length() == 0:
+            return []
+        crossed = []
+        for record in self.edges:
+            for polygon in record[0].path().toSubpathPolygons():
+                points = list(polygon)
+                if any(line.intersects(QLineF(a, b))[0] == QLineF.IntersectionType.BoundedIntersection
+                       for a, b in zip(points, points[1:])):
+                    crossed.append(record)
+                    break
+        return crossed
+
+    def finish_knife(self):
+        """Let go: every wire under the line is disconnected in one batch (one undo step)."""
+        start, end = self.knife
+        crossed = [self.wire_key(record) for record in self.wires_crossed(start, end)]
+        self.knife = None
+        self.unsetCursor()
+        for edge, *_ in self.edges:
+            edge.set_wire_state(cutting=False)
+        self.viewport().update()
+        if crossed:
+            self.disconnect_wires(crossed)
+        else:
+            self.window.statusBar().showMessage("The knife crossed no wires", 3000)
+
+    def cancel_knife(self):
+        if self.knife is not None:
+            self.knife = None
+            self.unsetCursor()
+            for edge, *_ in self.edges:
+                edge.set_wire_state(cutting=False)
+            self.viewport().update()
+
     def cut_handle_hit(self, scene_pos):
         record = next((r for r in self.edges if self.wire_key(r) == self.hover_wire), None)
         handle = getattr(record[0], "handle", None) if record else None
@@ -7052,6 +7122,7 @@ class Graph(PanZoomView):
     def drawForeground(self, painter, rect):
         super().drawForeground(painter, rect)
         self.draw_cut_handle(painter)
+        self.draw_knife(painter)
         if not self.ctrl_handles_visible:
             return
         scale = max(self.transform().m11(), 0.05)
@@ -7085,6 +7156,19 @@ class Graph(PanZoomView):
         painter.setPen(QPen(QColor(WIRE_CUT_COLOR), 1.8 / scale, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         painter.drawLine(handle + QPointF(-arm, -arm), handle + QPointF(arm, arm))
         painter.drawLine(handle + QPointF(-arm, arm), handle + QPointF(arm, -arm))
+        painter.restore()
+
+    def draw_knife(self, painter):
+        if self.knife is None:
+            return
+        scale = max(self.transform().m11(), 0.05)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(QColor(WIRE_CUT_COLOR), 2.0 / scale, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(QLineF(*self.knife))
+        painter.setBrush(QColor(WIRE_CUT_COLOR))
+        painter.drawEllipse(self.knife[0], 3 / scale, 3 / scale)
         painter.restore()
 
     def leaveEvent(self, event):
