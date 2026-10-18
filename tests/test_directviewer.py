@@ -317,6 +317,101 @@ class WidgetDeviceLossTests(unittest.TestCase):
         self.assertIsNone(widget.presenter)
 
 
+class PlatformGuardTests(unittest.TestCase):
+    def test_native_wayland_is_refused_before_any_surface_is_made(self):
+        self.assertIn("QT_QPA_PLATFORM=xcb", dv.unsupported_platform("wayland"))
+        self.assertIn("QT_QPA_PLATFORM=xcb", dv.unsupported_platform("wayland-egl"))
+        for name in ("xcb", "offscreen", "windows", "cocoa"):
+            self.assertEqual(dv.unsupported_platform(name), "")
+
+    def test_make_widget_raises_on_wayland_and_the_window_switch_falls_back(self):
+        with unittest.mock.patch.object(dv, "unsupported_platform", return_value="native Wayland is not supported"):
+            with self.assertRaises(RuntimeError):
+                dv.make_widget()
+
+
+class StubPresenter:
+    """Takes pictures and draws nothing: these tests are about which surface gets which input."""
+
+    def __init__(self, context, adapter=None, preference=None):
+        self.offers = []
+        self.ledger = dv.FrameLedger()
+        self.counters = {}
+
+    def offer(self, qimage, rect, format_rect, generation=None):
+        self.offers.append(generation)
+        return True
+
+    def draw(self, view, size):
+        pass
+
+    def lose_device(self):
+        pass
+
+
+class HitOrderTests(unittest.TestCase):
+    """While the direct dock is open the Viewer keeps every overlay and every hit; the direct surface only navigates."""
+
+    def setUp(self):
+        from tests.test_roto_ui import roto_document
+        from nodebased.app import Window
+        from PySide6.QtCore import QSettings
+        QSettings("NodeBased", "NodeBased").clear()
+        self.window = Window(roto_document(), agent_name="nodebased-test-" + uuid.uuid4().hex)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True)
+        APP.processEvents()
+        patcher = unittest.mock.patch.object(dv, "RetainedPresenter", StubPresenter)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.window.direct_action.setChecked(True)
+        APP.processEvents()
+        self.assertIsNotNone(self.window.direct_widget)
+
+    def tearDown(self):
+        from tests.test_desktop import release_window
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def test_roto_click_order_is_unchanged_and_the_direct_surface_never_takes_a_roto_click(self):
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtTest import QTest
+        viewer, widget = self.window.viewer, self.window.direct_widget
+        self.assertTrue(viewer.begin_roto_draw("r"))
+        transform = viewer.transform()
+        QTest.mouseClick(viewer.viewport(), Qt.MouseButton.LeftButton, pos=viewer.mapFromScene(QPointF(30, 30)))
+        self.assertEqual(len(viewer.roto_draw_points), 1)
+        # A plain click on the direct surface is swallowed there: no Roto point, no pan, no view change.
+        view = widget.view
+        QTest.mouseClick(widget, Qt.MouseButton.LeftButton, pos=QPoint(widget.width() // 2, widget.height() // 2))
+        self.assertEqual(len(viewer.roto_draw_points), 1)
+        self.assertEqual(widget.view, view)
+        self.assertTrue(widget.auto_fit)
+        # Wheel and Alt-drag on the direct surface move only the direct surface.
+        widget.rect = (0, 0, 100, 100)
+        QTest.mousePress(widget, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.AltModifier, QPoint(10, 10))
+        QTest.mouseMove(widget, QPoint(30, 25))
+        QTest.mouseRelease(widget, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.AltModifier, QPoint(30, 25))
+        self.assertFalse(widget.auto_fit)
+        self.assertEqual(viewer.transform(), transform)
+        self.assertEqual(len(viewer.roto_draw_points), 1)
+        # The Viewer still takes the next Roto point, in the same place in the order.
+        QTest.mouseClick(viewer.viewport(), Qt.MouseButton.LeftButton, pos=viewer.mapFromScene(QPointF(70, 30)))
+        self.assertEqual(len(viewer.roto_draw_points), 2)
+
+    def test_viewer_wipe_and_roi_state_are_not_read_or_changed_by_the_direct_surface(self):
+        viewer, widget = self.window.viewer, self.window.direct_widget
+        wipe, mode = dict(self.window.viewer.wipe), viewer.compare_mode()
+        widget.fit()
+        APP.processEvents()
+        self.assertEqual(viewer.wipe, wipe)
+        self.assertEqual(viewer.compare_mode(), mode)
+        self.assertIn("no overlays", self.window.direct_dock.windowTitle())
+
+
 @needs_wgpu
 class SrgbSurfaceTests(unittest.TestCase):
     def test_srgb_surface_shows_the_same_bytes_the_cpu_image_holds(self):
@@ -406,6 +501,14 @@ class WindowSwitchTests(unittest.TestCase):
         self.assertIsNone(w.direct_dock)
         self.assertIsNotNone(w.viewer.last_display_image)
         self.assertEqual(w.viewer_mode(), "2d")
+
+    def test_wayland_refusal_leaves_the_default_viewer_in_charge(self):
+        w = self.window
+        with unittest.mock.patch.object(dv, "unsupported_platform", return_value="native Wayland is not supported"):
+            w.direct_action.setChecked(True)
+        self.assertFalse(w.direct_action.isChecked())
+        self.assertIsNone(w.direct_dock)
+        self.assertIn("Wayland", w.statusBar().currentMessage())
 
     def test_switch_failure_leaves_the_default_viewer_in_charge(self):
         w = self.window

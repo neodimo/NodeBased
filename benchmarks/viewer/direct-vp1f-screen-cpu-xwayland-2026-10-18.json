@@ -1,0 +1,203 @@
+{
+  "platform": "xcb",
+  "checks": {
+    "picture_is_visible_on_screen": true,
+    "new_pictures_reach_the_screen": true,
+    "aspect_16_9_kept": true,
+    "cell_size_matches_the_view": true,
+    "zoom_scaled_the_picture_on_screen": true,
+    "pan_moved_the_view": true,
+    "pan_shifted_the_grid_by_the_drag": true,
+    "resize_shrank_the_picture_on_screen": true,
+    "resize_back_restored_it": true,
+    "no_error": true,
+    "reopened_widget_shows_the_picture": true
+  },
+  "captures": [
+    {
+      "name": "fit-frame0",
+      "bbox": [
+        107,
+        156,
+        1676,
+        941
+      ],
+      "cell_px": 84.0,
+      "top_left_colour": "blue",
+      "coverage": 0.9538239419294459,
+      "edges": 19,
+      "top_left_rgb": [
+        20,
+        60,
+        180
+      ],
+      "first_edge_x": 82
+    },
+    {
+      "name": "fit-frame1",
+      "bbox": [
+        107,
+        156,
+        1676,
+        941
+      ],
+      "cell_px": 84.0,
+      "top_left_colour": "orange",
+      "coverage": 0.953845500267577,
+      "edges": 19,
+      "top_left_rgb": [
+        200,
+        120,
+        40
+      ],
+      "first_edge_x": 80
+    },
+    {
+      "name": "fit-frame2",
+      "bbox": [
+        107,
+        156,
+        1676,
+        941
+      ],
+      "cell_px": 84.0,
+      "top_left_colour": "blue",
+      "coverage": 0.9538239419294459,
+      "edges": 19,
+      "top_left_rgb": [
+        20,
+        60,
+        180
+      ],
+      "first_edge_x": 82
+    },
+    {
+      "name": "zoomed",
+      "bbox": [
+        105,
+        154,
+        1680,
+        945
+      ],
+      "cell_px": 169.0,
+      "top_left_colour": "blue",
+      "coverage": 0.9869583018392543,
+      "edges": 9,
+      "top_left_rgb": [
+        20,
+        60,
+        180
+      ],
+      "first_edge_x": 163,
+      "view_zoom": 3.0170357812499984
+    },
+    {
+      "name": "panned",
+      "bbox": [
+        105,
+        154,
+        1680,
+        945
+      ],
+      "cell_px": 169.0,
+      "top_left_colour": "blue",
+      "coverage": 0.9842365835222978,
+      "edges": 10,
+      "top_left_rgb": [
+        20,
+        60,
+        180
+      ],
+      "first_edge_x": 99
+    },
+    {
+      "name": "resized-half",
+      "bbox": [
+        107,
+        156,
+        836,
+        469
+      ],
+      "cell_px": 42.0,
+      "top_left_colour": "other",
+      "coverage": 0.9194101264014855,
+      "edges": 19,
+      "top_left_rgb": [
+        255,
+        140,
+        26
+      ],
+      "first_edge_x": 40,
+      "widget_physical": [
+        480,
+        270
+      ]
+    },
+    {
+      "name": "resized-back",
+      "bbox": [
+        107,
+        156,
+        1676,
+        941
+      ],
+      "cell_px": 84.0,
+      "top_left_colour": "blue",
+      "coverage": 0.9538239419294459,
+      "edges": 19,
+      "top_left_rgb": [
+        20,
+        60,
+        180
+      ],
+      "first_edge_x": 82,
+      "widget_physical": [
+        960,
+        540
+      ]
+    },
+    {
+      "name": "reopened",
+      "bbox": [
+        107,
+        156,
+        1676,
+        941
+      ],
+      "cell_px": 84.0,
+      "top_left_colour": "orange",
+      "coverage": 0.953845500267577,
+      "edges": 19,
+      "top_left_rgb": [
+        200,
+        120,
+        40
+      ],
+      "first_edge_x": 80
+    }
+  ],
+  "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+  "selection_note": "",
+  "pixel_ratio": 1.0,
+  "widget_physical_size": [
+    960,
+    540
+  ],
+  "format": "bgra8unorm-srgb",
+  "capture_px_per_physical_px": 1.7458333333333333,
+  "pan_view_delta_scene_px": [
+    -19.88706941193186,
+    -9.94353470596593
+  ],
+  "pan_on_screen_px": {
+    "expected_mod_one_cell": 104.75,
+    "measured_mod_one_cell": 105.0
+  },
+  "presenter_counters": {
+    "conversions": 3,
+    "texture_creates": 1,
+    "uploads": 3,
+    "draws": 23,
+    "draw_ms_total": 81.60378865431994
+  }
+}

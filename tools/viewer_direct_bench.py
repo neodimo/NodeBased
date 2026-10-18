@@ -24,13 +24,15 @@ p.add_argument("--out", required=True)
 p.add_argument("--frames", type=int, default=240)
 p.add_argument("--inputs", type=int, default=240)
 p.add_argument("--only", choices=["default", "direct", "both"], default="both")
+p.add_argument("--size", default="1920x1080", help="WxH of the picture; the direct widget and the Viewer's viewport are made this size")
 args = p.parse_args()
 
+import tests.isolation  # noqa: F401  (Qt settings stay out of the real user file)
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import QPointF, Qt
 
 app = QtWidgets.QApplication([])
-W, H = 1920, 1080
+W, H = (int(v) for v in args.size.lower().split("x"))
 
 
 def images(count=8):
@@ -67,6 +69,19 @@ def measure_default(imgs):
         app.processEvents()
         time.sleep(0.01)
     view = window.viewer
+    # Same output dimensions as the direct widget: the Viewer (still fed by Window._show_image) becomes a
+    # top-level window whose viewport is exactly W x H physical pixels.
+    view.setParent(None)
+    view.show()
+    for _ in range(6):
+        for _ in range(30):
+            app.processEvents()
+            time.sleep(0.01)
+        dw = view.viewport().width() - round(W / view.devicePixelRatioF())
+        dh = view.viewport().height() - round(H / view.devicePixelRatioF())
+        if dw == 0 and dh == 0:
+            break
+        view.resize(view.width() - dw, view.height() - dh)
     cpu0, t0 = time.process_time(), time.perf_counter()
     show_ms, paint_ms, stamps = [], [], []
     for i in range(args.frames):
@@ -99,9 +114,10 @@ def measure_default(imgs):
                       "to_qimage_runs_per_frame": 1, "pixmap_builds_per_frame": 1, "gpu_uploads_per_frame": 0},
         "pan_zoom": {"handler_ms": dist(handler_ms), "handler_plus_repaint_ms": dist(response_ms),
                      "process_cpu_ms_per_input": input_cpu / args.inputs * 1000},
-        "viewport_physical": [view.viewport().width(), view.viewport().height()],
+        "viewport_physical": [round(view.viewport().width() * view.devicePixelRatioF()), round(view.viewport().height() * view.devicePixelRatioF())],
     }
     window.saved_document = window.dispatcher.document
+    view.close()
     window.close()
     return result
 

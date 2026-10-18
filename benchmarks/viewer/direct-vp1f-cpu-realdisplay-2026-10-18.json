@@ -1,0 +1,137 @@
+{
+  "bounds": "present return is a CPU timestamp when the application call returns; it is not screen response",
+  "platform": "xcb",
+  "qt": "6.11.2",
+  "frame": [
+    1920,
+    1080
+  ],
+  "default": {
+    "path": "default Viewer (QGraphicsView + QPixmap.fromImage), Window._show_image",
+    "new_frame": {
+      "show_image_ms": {
+        "p50": 0.5415640771389008,
+        "p95": 0.7669369224458933,
+        "p99": 1.2423519510775805,
+        "max": 2.6260990416631103,
+        "mean": 0.5820661657101786
+      },
+      "viewport_repaint_return_ms": {
+        "p50": 1.0418780148029327,
+        "p95": 1.6087099211290479,
+        "p99": 1.9267209572717547,
+        "max": 2.1040559513494372,
+        "mean": 1.0942550870822743
+      },
+      "interval_ms": {
+        "p50": 6.394634954631329,
+        "p95": 7.273657945916057,
+        "p99": 7.792482036165893,
+        "max": 9.595977026037872,
+        "mean": 6.499820062988068
+      },
+      "frames_per_second": 153.58650758254237,
+      "process_cpu_fraction": 0.7074130442482736,
+      "to_qimage_runs_per_frame": 1,
+      "pixmap_builds_per_frame": 1,
+      "gpu_uploads_per_frame": 0
+    },
+    "pan_zoom": {
+      "handler_ms": {
+        "p50": 0.13143604155629873,
+        "p95": 0.22197305224835873,
+        "p99": 0.3859689459204674,
+        "max": 0.6319510284811258,
+        "mean": 0.14399863333286098
+      },
+      "handler_plus_repaint_ms": {
+        "p50": 1.2542509939521551,
+        "p95": 1.738016027957201,
+        "p99": 2.189963008277118,
+        "max": 2.6884080143645406,
+        "mean": 1.3124925671339345
+      },
+      "process_cpu_ms_per_input": 3.636065974999999
+    },
+    "viewport_physical": [
+      1920,
+      1080
+    ]
+  },
+  "direct": {
+    "path": "retained texture, QRenderWidget(present_method='screen')",
+    "adapter": {
+      "vendor": "llvmpipe",
+      "architecture": "",
+      "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+      "description": "Mesa 26.2.2 (LLVM 22.1.8)",
+      "stackgroup_min_size": "4",
+      "stackgroup_max_size": "128",
+      "vendor_id": "65541",
+      "device_id": "0",
+      "adapter_type": "CPU",
+      "backend_type": "Vulkan"
+    },
+    "device_epoch": 0,
+    "selection_note": "",
+    "physical_size": [
+      1920,
+      1080
+    ],
+    "pixel_ratio": 1.0,
+    "new_frame": {
+      "submit_return_ms": {
+        "p50": 0.008889008313417435,
+        "p95": 0.011919066309928894,
+        "p99": 0.014138990081846714,
+        "max": 0.015820027329027653,
+        "mean": 0.008869567924800018
+      },
+      "present_return_ms": {
+        "p50": 0.021069077774882317,
+        "p95": 3.002917976118624,
+        "p99": 3.3671270357444882,
+        "max": 3.460724023170769,
+        "mean": 0.48122779650536057
+      },
+      "interval_ms": {
+        "p50": 8.247717982158065,
+        "p95": 8.852919097989798,
+        "p99": 9.097682079300284,
+        "max": 9.636815986596048,
+        "mean": 8.243926945454188
+      },
+      "frames_per_second": 121.32600337863889,
+      "process_cpu_fraction": 7.386840393263205,
+      "counters": {
+        "conversions": 240,
+        "uploads": 240,
+        "draws": 240,
+        "draw_ms_total": 1182.062173844315
+      },
+      "to_qimage_runs_per_frame": 1,
+      "pixmap_builds_per_frame": 0
+    },
+    "pan_zoom": {
+      "handler_ms": {
+        "p50": 0.03676803316920996,
+        "p95": 0.0585080124437809,
+        "p99": 0.11267606168985367,
+        "max": 0.15919504221528769,
+        "mean": 0.039342144737020135
+      },
+      "event_to_present_return_ms": {
+        "p50": 8.269367972388864,
+        "p95": 8.652415941469371,
+        "p99": 8.741433033719659,
+        "max": 8.846019976772368,
+        "mean": 8.307144691449745
+      },
+      "process_cpu_ms_per_input": 56.42721518750002,
+      "counters": {
+        "draws": 240,
+        "draw_ms_total": 1551.0866573313251
+      }
+    }
+  }
+}

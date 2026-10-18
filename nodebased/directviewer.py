@@ -408,8 +408,26 @@ class RetainedPresenter:
                 "load_op": "clear", "store_op": "store"}
 
 
+def unsupported_platform(name=None):
+    """Why this Qt platform cannot show the direct picture, or "" when it can.
+
+    The installed rendercanvas hands wgpu an X11 surface (its Wayland branch is switched off), so under Qt's
+    native Wayland platform the window id is not an X window and the process dies with an X error. Run the
+    application with QT_QPA_PLATFORM=xcb (Xwayland) for the direct picture."""
+    if name is None:
+        from PySide6.QtGui import QGuiApplication
+        name = QGuiApplication.platformName()
+    if str(name).lower().startswith("wayland"):
+        return ("native Wayland is not supported by the screen surface (rendercanvas offers only X11 window ids); "
+                "start NodeBased with QT_QPA_PLATFORM=xcb")
+    return ""
+
+
 def make_widget(parent=None):
     """The Qt surface. Imported lazily so the module (and its tests of the pure rules) load without rendercanvas."""
+    reason = unsupported_platform()
+    if reason:
+        raise RuntimeError(reason)
     from PySide6.QtCore import Qt, Signal
     from rendercanvas.qt import QRenderWidget
 
