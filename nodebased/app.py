@@ -72,6 +72,7 @@ from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, 
 from .color import VIEWS
 from . import gpudisplay
 from . import directviewer
+from . import carddisplay
 from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE, VIEWER_INPUT_COUNT,
                    VIEWER_MASK_MODES, VIEWER_MASKS, VIEWER_PROXY_TIERS, VIEWER_ROI_DEFAULT,
                    viewer_look, viewer_masks, viewer_proxy, viewer_roi, viewer_state)
@@ -12981,7 +12982,9 @@ class Window(QMainWindow):
                                                    crop.left():crop.left() + crop.width()]
                     height, width = cached_or_cropped.shape[:2]
                     image = None
-                    if request.display:
+                    if request.display and self._direct_linear_for(request, view):
+                        image = carddisplay.LazyPicture(cached_or_cropped, exposure, channel, background, view, look)
+                    elif request.display:
                         # The picture for this exact frame, region and display setup is kept from
                         # the last conversion: a still comp shown again costs no conversion.
                         memo_key = (display_key, region_key, exposure, channel, background, view,
@@ -13045,9 +13048,11 @@ class Window(QMainWindow):
                 self.display_cache.put(display_key, frame, region_key,
                                        is_data=static or _is_data_target(request.document, target),
                                        lazy=True)
-                image = (to_qimage(frame, exposure, channel, background=background, view=view, look=look)
+                direct = request.display and self._direct_linear_for(request, view)
+                image = (carddisplay.LazyPicture(frame, exposure, channel, background, view, look) if direct
+                         else to_qimage(frame, exposure, channel, background=background, view=view, look=look)
                          if request.display else None)
-                if request.display:
+                if request.display and not direct:
                     self._display_memo = ((display_key, region_key, exposure, channel, background,
                                            view, look, None), image)
                 image, compare_note = self._compare_outputs(
@@ -13068,6 +13073,16 @@ class Window(QMainWindow):
                     f"Internal error while evaluating ({type(error).__name__}: {error}). "
                     "This is a NodeBased bug, not a problem with the graph.", None)
         self.executor.submit(work)
+
+    def _direct_linear_for(self, request, view):
+        """Runs on the worker. True when this playback frame goes to the direct viewer as floats and
+        skips `to_qimage`: the direct picture is up, the card can run `view`, and no B buffer is in play
+        (compare pictures are still built on the processor)."""
+        if not (getattr(self, "_direct_linear_on", False) and request.playing):
+            return False
+        if compare_model.active_b(request.document)[1] is not None:
+            return False
+        return carddisplay.supported(view)
 
     def _render_b(self, request, cancel, b_target, a_frame, a_region):
         """Evaluate the B buffer at the request's own frame and tier, lined up pixel for pixel with
@@ -13208,6 +13223,10 @@ class Window(QMainWindow):
                                       f"{space} · float RGBA", proxy)
 
     def _show_image(self, image, scale, render_region, image_b=None, generation=None):
+        if isinstance(image, carddisplay.LazyPicture):
+            if self._show_direct_linear(image, scale, render_region, generation):
+                return
+            image = image.image()   # the card refused it: build the picture on the processor after all
         previous = self.viewer.sceneRect().size()
         shown_image = image   # the proxy-sized picture, before the display upscale below
         self.viewer.set_compare_image(image_b, scale, render_region)
@@ -13277,6 +13296,7 @@ class Window(QMainWindow):
     def set_direct_viewer(self, on):
         dock = getattr(self, "direct_dock", None)
         if not on:
+            self._direct_linear_on = False
             if dock is not None:
                 dock.hide()
             return
@@ -13297,12 +13317,14 @@ class Window(QMainWindow):
             self.direct_dock = dock
             self.direct_widget = widget
         dock.show()
+        self._direct_linear_on = True
         image = getattr(self.viewer, "last_display_image", None)
         if image is not None:
             self._offer_direct(image, self.viewer.last_scale, self.viewer.last_render_region,
                                self.viewer.sceneRect(), None)
 
     def _direct_failed(self, message):
+        self._direct_linear_on = False
         self.statusBar().showMessage(message, 8000)
         action = getattr(self, "direct_action", None)
         if action is not None and action.isChecked():
@@ -13315,6 +13337,32 @@ class Window(QMainWindow):
             dock.deleteLater()
             self.direct_dock = None
             self.direct_widget = None
+
+    def _show_direct_linear(self, picture, scale, render_region, generation):
+        """Playback with the direct picture up: the float frame goes straight to the card and the
+        Viewer keeps its last picture until playback stops (the stop's refresh repaints it). The
+        8-bit picture is built only if something asks for it (`self.direct_lazy.image()`)."""
+        dock = getattr(self, "direct_dock", None)
+        if dock is None or not dock.isVisible() or self.direct_widget is None:
+            self._direct_linear_on = False
+            return False
+        width, height = picture.width(), picture.height()
+        if render_region is not None:
+            rect = (render_region.x * scale, render_region.y * scale, width * scale, height * scale)
+            format_rect = (render_region.full_x * scale, render_region.full_y * scale,
+                           render_region.full_width * scale, render_region.full_height * scale)
+        else:
+            rect = format_rect = (0.0, 0.0, width * scale, height * scale)
+        if not self.direct_widget.submit_linear(picture.frame, picture.settings, rect, format_rect, generation):
+            if self.direct_widget is not None and self.direct_widget.error is None:
+                return False   # this view only: the next frame tries again, and falls back again
+            self._direct_linear_on = False
+            return False
+        self.direct_lazy = picture
+        self.direct_linear_shown = getattr(self, "direct_linear_shown", 0) + 1
+        if self.output_preview_dock.isVisible():
+            self.output_preview.set_image(picture.image())
+        return True
 
     def _offer_direct(self, image, scale, render_region, scene_rect, generation):
         dock = getattr(self, "direct_dock", None)
