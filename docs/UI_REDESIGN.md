@@ -282,7 +282,8 @@ Every radius is in screen pixels, converted through the view transform, so wirin
   first free input that accepts the wire (a mask input only when nothing else is free); dragging an input onto a
   card takes the card's output. A card with no free input takes nothing. Compatible means the right direction,
   another node, a socket type that accepts the wire and no cycle. With nothing compatible in range the wire is
-  dropped ("Wire dropped") and every existing connection stays.
+  dropped ("Wire dropped"); a dragged-off input that lands on empty canvas disconnects instead (see
+  Disconnecting a wire below), and every other existing connection stays.
 - **The snap.** As soon as a target is in range the pending wire's end glides onto the socket (80 ms), the wire,
   the socket (drawn larger, brighter) and the card light up in the same tone as the insert hint, and the status
   bar says "to Merge1.B". Leaving the range lets the wire follow the pointer again. Esc cancels and clears it.
@@ -290,8 +291,20 @@ Every radius is in screen pixels, converted through the view transform, so wirin
   label, on the card edge beside it, or on empty space. Pressing in the bottom 10 px band of a card
   (`OUTPUT_BAND`) starts an output wire. Pressing deeper than 8 px inside a card is a node drag, as ever
   (`GRAB_EDGE`). The socket a press would grab draws a little larger as the pointer nears it. Dragging from a
-  connected input still picks it up and keeps the old connection until a valid drop. A click-click wire ends at
+  connected input picks it up and keeps the old connection until a valid drop or a disconnect. A click-click wire ends at
   the second click with the same reach.
+- **Disconnecting a wire** (10/18, DiMo: "i don't even know how to do it"). Every one of these is one undo step:
+  - Drag a wire's input end (the arrowhead) away and let go on empty canvas, as in Nuke
+    (`DISCONNECT_DRAG` = 6 px: a click or a smaller wiggle changes nothing; a release on a socket or card that
+    refused the wire, or Esc, keeps the connection).
+  - Hover a wire (it brightens, within `WIRE_PICK` = 6 px of its path at any zoom) and click the small red "x"
+    at its midpoint.
+  - Click a wire to select it (warm orange; Shift-click adds more), then Delete or Backspace.
+  - Hold Ctrl+Alt and drag a line across wires: a dashed red knife line draws, the wires it crosses turn red,
+    and releasing cuts them all; Esc cancels. Ctrl+Alt rides on the mouse event, so nothing sticks when the
+    window loses focus, and Alt alone still pans.
+  - Right-click an input socket ("Disconnect").
+  The graph's "?" overlay and the input socket's tooltip list the same gestures.
 - Start reach is 20 px and not 40 px: with 40 px every press on a card title would start a wire instead of
   moving the node.
 
