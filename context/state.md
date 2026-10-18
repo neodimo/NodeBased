@@ -1,3 +1,9 @@
+## 2026-10-18 — Lane 2 VP1: opt-in retained-texture 2D viewer slice (PARTIAL)
+
+See the matching TASKLOG.md entry for the evidence and its limits. Code: `nodebased/directviewer.py`, Window menu "Direct picture (experimental GPU)" and `Window._offer_direct` in `app.py`; docs `docs/DIRECT_VIEWER.md`. Contracts: newest-only pending picture, one conversion and one texture write per drawn picture, no work on pan/zoom, generation + device-epoch rejection, retired textures held 3 presents, surface texture never kept past one draw, adapter chosen through wgpu's surface filter. Default Viewer path untouched; switch off by default.
+
+Gate for Gonzo (VP2): real-display cadence/latency A/B, AMD on a real X display, docking and non-unit scale on the live display, Windows, Wayland, device loss, overlay and hit-order parity, colour/alpha.
+
 ## 2026-10-18 — Lane 3 V2: direct viewer presentation proof
 
 ## Continuous mode merge: Lane 3 (Research, GPT-6 Astra) (8:37 AM on 2026-10-18 PDT)
