@@ -184,6 +184,7 @@ def measure_direct(imgs):
         "path": "retained texture, QRenderWidget(present_method='screen')",
         "adapter": {k: str(v) for k, v in info.items()},
         "device_epoch": presenter.ledger.epoch, "selection_note": presenter.selection_note,
+        "selection": getattr(presenter, "selection", {}),
         "physical_size": list(widget.get_physical_size()), "pixel_ratio": dpr,
         "new_frame": {"submit_return_ms": dist(submit_ms), "present_return_ms": dist(frame_present),
                       "interval_ms": dist([(b - a) * 1000 for a, b in zip(frame_stamps, frame_stamps[1:])]),

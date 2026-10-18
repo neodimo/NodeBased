@@ -52,11 +52,9 @@ class FrameLedgerTests(unittest.TestCase):
         self.assertTrue(ledger.offer("frame 1", 3, 0))
         self.assertTrue(ledger.offer("frame 2", 3, 0))
 
-    def test_retired_resources_wait_for_enough_presents(self):
+    def test_retired_resources_are_released_after_the_next_submit(self):
         ledger = dv.FrameLedger()
         ledger.retire("texture")
-        for _ in range(dv.RETIRE_PRESENTS - 1):
-            self.assertEqual(ledger.note_present(), [])
         self.assertEqual(ledger.note_present(), ["texture"])
         self.assertEqual(ledger.note_present(), [])
 
@@ -170,15 +168,30 @@ class RetainedPresenterTests(unittest.TestCase):
         self.assertEqual(self.presenter.counters["uploads"], 2)
         self.assertEqual(tuple(pixels[13, 21, :3]), (200, 120, 40))   # parity flipped
 
-    def test_size_change_retires_the_old_texture_until_presents_pass(self):
+    def test_size_change_destroys_the_old_texture_after_the_replacing_submit(self):
         self.draw((32.0, 24.0, 2.0), checker_image())
         old = self.presenter.texture
+        destroyed = []
+        original = self.presenter._destroy
+        self.presenter._destroy = lambda resource: (destroyed.append(resource), original(resource))
         self.draw((32.0, 24.0, 2.0), checker_image(width=32, height=24), rect=(0, 0, 32, 24), generation=2)
         self.assertIsNot(self.presenter.texture, old)
-        self.assertEqual(len(self.presenter.ledger._retired), 1)
-        for _ in range(dv.RETIRE_PRESENTS):
-            self.draw((16.0, 12.0, 2.0))
+        self.assertEqual(destroyed, [old])
         self.assertEqual(self.presenter.ledger._retired, [])
+
+    def test_resize_and_close_while_work_is_queued(self):
+        # Many submits in flight, then a size change mid-stream: the picture after it is right
+        # (no use of the destroyed texture), and closing waits for the queue rather than racing it.
+        for shift in range(12):
+            self.presenter.offer(checker_image(shift=shift), (0, 0, 64, 48), (0, 0, 64, 48), 1)
+            self.presenter.draw((32.0, 24.0, 2.0), self.context.size)
+        pixels = self.draw((16.0, 12.0, 4.0), checker_image(width=32, height=24, shift=0), rect=(0, 0, 32, 24))
+        self.assertEqual(tuple(pixels[13, 21, :3]), (20, 60, 180))
+        for _ in range(12):
+            self.presenter.draw((16.0, 12.0, 4.0), self.context.size)
+        self.presenter.lose_device()
+        self.assertEqual(self.presenter.counters["idle_waits"], 1)
+        self.assertIsNone(self.presenter.device)
 
     def test_dropped_pending_pictures_are_never_converted(self):
         for shift in range(5):
@@ -262,6 +275,36 @@ class AdapterChoiceTests(unittest.TestCase):
             adapter, _, note = dv.pick_display_adapter(self.Context(), preference="integrated")
         self.assertIs(adapter, nv)
         self.assertIn("integrated was asked for", note)
+        self.assertNotIn("only", note)    # what was selected, never a claim about adapters not asked for
+
+    def test_windows_asks_d3d12_first_and_vulkan_is_the_switch(self):
+        self.assertEqual(dv.backend_order("", platform="win32"), ["D3D12", None])
+        self.assertEqual(dv.backend_order("vulkan", platform="win32"), ["Vulkan", None])
+        self.assertEqual(dv.backend_order("", platform="linux"), [None])
+        self.assertEqual(dv.backend_order("auto", platform="win32"), [None])
+
+    def test_selection_records_the_backend_asked_for_and_what_failed(self):
+        import wgpu
+        nv = self.Adapter("nv", "DiscreteGPU")
+        nv.info["backend_type"] = "Vulkan"
+        seen = []
+
+        def fake(canvas=None, **kwargs):
+            backend = os.environ.get("WGPU_BACKEND_TYPE")
+            seen.append(backend)
+            if backend == "D3D12":
+                raise RuntimeError("no D3D12 here")
+            return nv
+        with unittest.mock.patch.object(wgpu.gpu, "request_adapter_sync", fake):
+            adapter, selection = dv.choose_display_adapter(self.Context(), preference="", backend="d3d12")
+        self.assertIs(adapter, nv)
+        self.assertEqual(seen[:4], ["D3D12"] * 4)
+        self.assertIsNone(seen[4])
+        self.assertNotIn("WGPU_BACKEND_TYPE", os.environ)
+        self.assertEqual(selection["requested_backends"], ["D3D12", "auto"])
+        self.assertEqual((selection["selected_device"], selection["selected_backend"]), ("nv", "Vulkan"))
+        self.assertIn("D3D12 was asked for; selected Vulkan", selection["note"])
+        self.assertEqual(sum("error" in a for a in selection["attempts"]), 4)
 
     def test_no_presentable_adapter_is_an_error(self):
         import wgpu
