@@ -1264,3 +1264,28 @@ KNOB_LAYOUT["Render3D"] += [
     KnobGroup("int", ("denoise_iterations",), label="Denoise iterations"),
     KnobGroup("bool", ("denoise_temporal",), label="Denoise temporal"),
     KnobGroup("bool", ("through_lens",), label="Render through the lens")]
+
+
+def slider_range(node_type, param, soft_range=None):
+    """The range a knob's slider spans: the layout's soft range, else one derived from the schema.
+
+    A hard range that is already a working range (a span of 1000 or less, such as 0 to 1 or
+    -180 to 180) is the slider's range. Wider hard ranges (many knobs allow -1e6 to 1e6 only to
+    reject nonsense) get a working range around the default, so a slider move is a useful step:
+    ten either side of zero, or four times the default's size, cut to the hard limits."""
+    from .core import parameter_limits
+    lo, hi = (float(v) for v in parameter_limits(node_type, param))
+    if soft_range is not None:
+        # A layout's soft range never reaches past the knob's hard limits (Clamp's minimum is 0..1
+        # though its layout says -1..1); a range that collapses falls back to the hard one.
+        soft_lo, soft_hi = max(lo, float(soft_range[0])), min(hi, float(soft_range[1]))
+        if soft_lo < soft_hi:
+            return soft_lo, soft_hi
+    if hi - lo <= 1000:
+        return lo, hi
+    default = SPECS[node_type]["params"].get(param, 0.0)
+    default = float(default) if isinstance(default, (int, float)) else 0.0
+    span = max(10.0, abs(default) * 4)
+    soft_lo = lo if lo >= 0 else max(lo, -span)
+    soft_hi = min(hi, (lo if lo > 0 else 0.0) + span)
+    return soft_lo, soft_hi

@@ -246,6 +246,7 @@ QSpinBox, QDoubleSpinBox {{ font-family: {t['mono']}; font-size: {t['value']}px;
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border: 1px solid {c['accent']}; }}
 QPushButton {{ background: {c['button']}; border: 1px solid {c['button_border']}; border-radius: {r['control']}px; padding: 6px {sp['lg']}px; }}
 QDoubleSpinBox#knob-value {{ background: {c['field']}; border-radius: {r['field']}px; padding: 3px 6px; }}
+QSlider#knob-slider {{ background: transparent; }}
 QSlider#knob-slider::groove:horizontal {{ height: 6px; background: {c['border']}; border-radius: 3px; }}
 QSlider#knob-slider::sub-page:horizontal {{ background: {c['accent']}; border-radius: 3px; }}
 QSlider#knob-slider::handle:horizontal {{ width: 14px; margin: -4px 0; border-radius: 7px; background: {c['text']}; }}
