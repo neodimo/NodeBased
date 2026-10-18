@@ -312,7 +312,7 @@ PANEL_NODE_HELP = {
     "Merge": "A over B · scene-linear, premultiplied. Inputs must have matching dimensions. An optional mask gates the merge: where mask.a is 0, the result is B.",
     "Crop": "Masks to a rectangle in fixed image bounds; the canvas is not resized.",
     "Blur": "Separable box blur with radius measured in pixels.",
-    "ColorCorrect": "Lift, gamma, gain and saturation operate on unpremultiplied colour.",
+    "ColorCorrect": "As in Nuke: master, shadows, midtones and highlights, each with saturation, contrast, gamma, gain and offset, on unpremultiplied colour. The Ranges curves set what counts as shadow and highlight by luminance; midtones are the rest.",
     "Shuffle": "Remaps output channels from any input channel or the constants 0 and 1.",
     "Premult": "Multiplies RGB by alpha to premultiply a straight-alpha input.",
     "Unpremult": "Divides RGB by alpha. At alpha 0, RGB remains untouched without NaN or infinity.",
@@ -1058,7 +1058,14 @@ class _FittedKnobRow(QWidget):
     def minimumSizeHint(self):
         hint = super().minimumSizeHint()
         spacing = self.layout().spacing() if self.layout() is not None else 4
-        return QSize(max(hint.width(), self._control.sizeHint().width() + spacing + 26), hint.height())
+        control = self._control
+        if isinstance(control, FloatSliderControl):
+            # The slider gives way before the number: a short slider still beside its label beats the
+            # whole row wrapping under the label (10/18).
+            need = control.spin.sizeHint().width() + control.layout().spacing() + max(control.slider.minimumWidth(), 48)
+        else:
+            need = control.sizeHint().width()
+        return QSize(max(hint.width(), need + spacing + 26), hint.height())
 
 
 def fit_knob_widths(panel):
@@ -1071,7 +1078,7 @@ def fit_knob_widths(panel):
     for field in panel.findChildren(QAbstractSpinBox):
         if isinstance(field, (FittedDoubleSpinBox, FittedSpinBox)) and not field.min_digits:
             # Colour channels keep swatch plus four fields on one line; other numbers get eight digits.
-            field.min_digits = 4 if field.property("knob_channel") else 8
+            field.min_digits = 4 if field.property("knob_channel") else 7
             field.updateGeometry()
     for combo in panel.findChildren(QComboBox):
         combo.setProperty("fit_to_items", True)
@@ -10423,7 +10430,7 @@ class Window(QMainWindow):
             content_layout.addWidget(control_content)
             # Grade and ColorCorrect open with their own BALANCE section (heading and Reset), so an outer
             # CONTROLS heading above it read as an empty section (10/9 sprint, compared with the mockup).
-            section_bar.setVisible(node["type"] not in ("Grade", "ColorCorrect"))
+            section_bar.setVisible(node["type"] != "Grade")
             section_toggle.toggled.connect(lambda shown, body=control_content, button=section_toggle:
                 (body.setVisible(shown), button.setText("▾  CONTROLS" if shown else "▸  CONTROLS")))
             title._panel_collapse = collapse
@@ -10438,7 +10445,9 @@ class Window(QMainWindow):
             resolved_document = resolve_document(self.graph_document(),
                                                  self.dispatcher.document["time"]["current"])
             resolved = resolved_document["nodes"][key]["params"]
-            if node["type"] in ("Grade", "ColorCorrect"):
+            # Grade keeps its balance wheels; ColorCorrect is laid out like Nuke's, a section of sliders per
+            # range (DiMo 10/18: "nothing like Nuke's").
+            if node["type"] == "Grade":
                 balance = QWidget()
                 balance.setObjectName("properties-balance-section")
                 balance.setMinimumHeight(142)

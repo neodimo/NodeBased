@@ -68,7 +68,7 @@ class SchemaV4UpgradeTests(unittest.TestCase):
                                                         "blue": 0.5, "alpha": 1.0}}}
         filter_specs = {
             "Grade": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0},
-            "ColorCorrect": {"lift": 0.0, "gamma": 1.0, "gain": 1.0, "saturation": 1.0},
+            "ColorCorrect": {"lift": 0.0, "gamma": 1.0, "gain": 1.0, "saturation": 1.0},  # the v3 params
             "Blur": {"radius": 0.0},
             "Transform": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                           "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest"},
@@ -236,7 +236,7 @@ class MaskMixSemanticsTests(unittest.TestCase):
         if kind == "Grade":
             return {"exposure": self.EXPOSURE, "multiply": 1.0, "offset": 0.0}
         if kind == "ColorCorrect":
-            return {"lift": 0.0, "gamma": 1.0, "gain": 1.5, "saturation": 1.0}
+            return {"gamma": 1.0, "gain": 1.5, "saturation": 1.0}
         if kind == "Blur":
             return {"radius": 0.0}  # radius 0 → identity, simplifies comparisons
         if kind == "Transform":

@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -174,7 +174,15 @@ SPECS = {
     "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0}},
     "Checker": {"inputs": [], "params": {"width": 960, "height": 540, "size": 64}},
     "Grade": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0}},
-    "ColorCorrect": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"lift": 0.0, "gamma": 1.0, "gain": 1.0, "saturation": 1.0, "mix": 1.0}},
+    # ColorCorrect as in Nuke (properties overhaul, 10/18): master, shadows, midtones and highlights, each with
+    # saturation, contrast, gamma, gain and offset; the Ranges tab's shadow and highlight lookup curves pick
+    # how much of each pixel (by its luminance) is shadow or highlight, midtones are the rest.
+    "ColorCorrect": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {
+        **{f"{prefix}{name}": value for prefix in ("", "shadows_", "midtones_", "highlights_")
+           for name, value in (("saturation", 1.0), ("contrast", 1.0), ("gamma", 1.0), ("gain", 1.0), ("offset", 0.0))},
+        "shadows_curve": '{"interpolation":"smooth","points":[[0,1],[0.09,0]]}',
+        "highlights_curve": '{"interpolation":"smooth","points":[[0.5,0],[1,1]]}',
+        "mix": 1.0}},
     "Blur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"radius": 8.0, "mix": 1.0}},
     # Invert/Clamp/Multiply/Add/Gamma/Saturation are Nuke's Color-toolbar nodes that split a
     # single knob each out of Grade/ColorCorrect into its own scrub-friendly node. Multiply, Add
@@ -1616,6 +1624,10 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
 # One key per line from here on: several lanes add limits at once and a shared line conflicts on every merge.
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
+LIMITS.update({"contrast": (0.0, 100.0),
+               **{f"{zone}_{name}": LIMITS[name] if name != "contrast" else (0.0, 100.0)
+                  for zone in ("shadows", "midtones", "highlights")
+                  for name in ("saturation", "contrast", "gamma", "gain", "offset")}})
 LIMITS.update({"skew_x": (-10.0, 10.0), "skew_y": (-10.0, 10.0),
                "scale_x": (0.001, 1000.0), "scale_y": (0.001, 1000.0),
                "clamp": (0, 1), "black_outside": (0, 1), "motionblur": (0, 1)})
@@ -2343,6 +2355,29 @@ def upgrade_document(document):
             if isinstance(node, dict) and node.get("type") in ("Undistort", "Redistort"):
                 node.setdefault("params", {}).setdefault("lens_backend", "auto")
         doc["version"] = 24
+    if isinstance(doc, dict) and doc.get("version") == 24:
+        # v24 -> v25 gives ColorCorrect Nuke's knobs (properties overhaul, 10/18). The old node was
+        # gamma(gain * x + lift * (1 - x)) followed by saturation; the new master runs saturation,
+        # contrast, gamma, gain, offset. Exact when gamma is 1 (gain - lift as gain, lift as offset;
+        # saturation commutes with an equal scale and shift of all three channels) or when lift is 0
+        # and saturation is 1 (gain ** (1 / gamma) as gain). Otherwise the same mapping, close to the
+        # old look but not identical.
+        for node in doc.get("nodes", {}).values():
+            if not (isinstance(node, dict) and node.get("type") == "ColorCorrect"):
+                continue
+            params = node.setdefault("params", {})
+            lift = float(params.pop("lift", 0.0))
+            gain = float(params.get("gain", 1.0))
+            gamma = float(params.get("gamma", 1.0))
+            saturation = float(params.get("saturation", 1.0))
+            if lift == 0.0 and saturation == 1.0 and gamma != 1.0 and gain >= 0.0:
+                params["gain"] = gain ** (1.0 / gamma)
+            else:
+                params["gain"] = max(0.0, gain - lift)
+                params["offset"] = lift
+            for name, value in SPECS["ColorCorrect"]["params"].items():
+                params.setdefault(name, value)
+        doc["version"] = 25
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
