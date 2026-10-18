@@ -1,5 +1,24 @@
 ## 2026-10-18 — Lane 3 V2: direct viewer presentation proof
 
+## Continuous mode merge: Lane 3 (Research, GPT-6 Astra) (8:37 AM on 2026-10-18 PDT)
+
+`main` moved `dadbab0e` -> `2e64b221` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 16 tests in 28.866 s, OK. Full suite on
+the stacked tip `2e64b221` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1018-0244.log`, started 2:44 AM): **Ran 5489 tests in 20643.253 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 3 (Research, GPT-6 Astra), step V2 of 1: prove a direct presentation path for the viewer.** Commits:
+  - `c95c73be` research: prove retained direct viewer presentation and bound adoption gates
+  Diff: 7 files changed, 937 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done — evidence:** Reconciled the research branch to release main `dadbab0e`. The installed Qt/wgpu/rendercanvas screen path completed 300 retained-1080p-texture present calls with resize and a moving GPU overlay on Radeon 8060S, RTX 3080 Ti and llvmpipe. Instrumented steady-state transfer calls were zero. AMD compositor capture confirms the checker/overlay. Re-ran the existing baseline methods on the same HEAD: static checker 23.99 fps at a 24 fps source rate; changed-frame conversion median 41.64 ms at 1080p. Documentation checks: seven pass. No application code changed.
 - **Inference/decision:** Go for an opt-in retained-texture 2D Viewer slice in existing Qt/Python; defer native-core rewrite. Application present-return cadence is not scanout latency or a product speedup. The short RSS sample is not a long-term leak/VRAM test.
 - **Artifacts:** Committed in this lane change, not pushed: both byte-identical `RESEARCH_RADAR.md` copies; `tools/research_direct_present.py`; `tools/research_viewer_baseline.py`; `benchmarks/viewer/direct-presentation-V2-2026-10-18.json`; these handoff notes. Deliberate ignored worktree scratch: `scratch/nb-perf/v2/` contains raw per-adapter JSON/logs, `direct-integrated.json.png` compositor capture, baseline traces, and `test-knowledge.log`. No large caches or generated footage.
