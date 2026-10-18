@@ -132,11 +132,13 @@ class RotoArtistPanelTests(unittest.TestCase):
                          ["Visible", "Lock", "Invert"])
 
     def test_colour_swatch_tracks_the_shape_colour_after_a_change(self):
-        from unittest.mock import patch
+        # The linear float picker (10/18): set the floats and press OK.
         chooser = self.panel().findChild(QPushButton, "roto-shape-color")
-        with patch("nodebased.rotopanel.QColorDialog.getColor", return_value=QColor(32, 96, 160, 255)):
-            chooser.click()
-        expected = [32 / 255, 96 / 255, 160 / 255, 1.0]
+        chooser.click()
+        expected = [0.125, 0.75, 0.333333, 1.0]     # floats, not 8-bit steps (a shape colour stays 0-1)
+        picker = self.window.color_picker
+        picker.set_color(expected)
+        picker.accept()
         self.assertTrue(wait_until(lambda: np.allclose(
             self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["color"], expected)))
         swatch = self.panel().findChild(QLabel, "roto-shape-color-swatch")

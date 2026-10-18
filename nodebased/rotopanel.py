@@ -301,8 +301,9 @@ def build_panel(window, key):
             swatch.setProperty("rgba", rgba)
         paint_swatch(shape.get("color", [1, 1, 1, 1]))
         def choose():
-            rgba=resolved_color(shape.get("color",[1,1,1,1])); picked=QColorDialog.getColor(QColor.fromRgbF(*rgba),window,"Roto colour",QColorDialog.ColorDialogOption.ShowAlphaChannel)
-            if picked.isValid(): edit("color",[picked.redF(),picked.greenF(),picked.blueF(),picked.alphaF()])
+            # The linear float picker (DiMo 10/18): the shape's floats go in and come back unclamped.
+            rgba=resolved_color(shape.get("color",[1,1,1,1]))
+            window.open_color_picker([float(v) for v in rgba], "Roto colour", lambda picked: edit("color", [min(max(float(v), 0.0), 1.0) for v in picked]))   # a shape colour is 0-1
         color.clicked.connect(choose); color_row.addWidget(color); color_row.addWidget(swatch)
         color_curve = shape.get("color", [])
         animated_color, keyed_color = key_state(color_curve)
