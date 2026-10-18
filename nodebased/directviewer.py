@@ -29,7 +29,9 @@ Known gaps are listed in docs/DIRECT_VIEWER.md and shown in the dock's title.
 from __future__ import annotations
 
 import collections
+import logging
 import os
+import threading
 import time
 
 import numpy as np
@@ -39,6 +41,22 @@ ADAPTER_ENV = "NODEBASED_DIRECT_ADAPTER"
 RETIRE_PRESENTS = 3
 ZOOM_RANGE = (0.05, 20.0)     # logical zoom, the same bounds PanZoomView.wheelEvent applies
 SURROUND = (0.0, 0.0, 0.0)    # VIEWER_SURROUND is pure black in every theme
+RECOVERY_LIMIT = (3, 30.0)    # at most this many device recoveries in this many seconds, then the dock gives up
+
+
+class LossWatch(logging.Handler):
+    """Notices wgpu's own "device lost" report (it only logs it; the promise API is not implemented here)."""
+
+    def __init__(self):
+        super().__init__(level=logging.ERROR)
+        self.lost = threading.Event()
+        self.message = ""
+
+    def emit(self, record):
+        text = record.getMessage()
+        if "device was lost" in text.lower() or "device lost" in text.lower():
+            self.message = text.splitlines()[0] if text else "device lost"
+            self.lost.set()
 
 
 def enabled():
@@ -222,6 +240,11 @@ class RetainedPresenter:
         self.bind_group = None
         self.picture = None          # the scene geometry of the retained picture
         self.uploaded_sequence = 0
+        self.last_frame = None       # (qimage, rect, format_rect): the CPU picture the texture was made from
+        self.recoveries = []         # perf_counter stamps of device recoveries
+        self.recovery_reason = ""
+        self.loss_watch = LossWatch()
+        logging.getLogger("wgpu").addHandler(self.loss_watch)
         self._start_device()
 
     # -- device ---------------------------------------------------------------------------------
@@ -250,7 +273,46 @@ class RetainedPresenter:
         for resource in (self.texture, self.uniform):
             self._destroy(resource)
         self.texture = self.bind_group = self.overlay_bind_group = None
+        self.texture_size = None
         self.device = None
+        logging.getLogger("wgpu").removeHandler(self.loss_watch)
+
+    def device_lost(self):
+        """True once wgpu has reported the device lost (checked at the top of every draw)."""
+        return self.loss_watch.lost.is_set()
+
+    def recover(self, reason=""):
+        """Replace a lost or failing device: new epoch, every old resource released, a new device from the
+        same adapter, the surface configured again, and the retained CPU picture queued for upload.
+
+        Raises RuntimeError when recoveries come too fast (the dock then falls back to the Viewer)."""
+        now = time.perf_counter()
+        limit, window = RECOVERY_LIMIT
+        self.recoveries = [t for t in self.recoveries if now - t < window]
+        if len(self.recoveries) >= limit:
+            raise RuntimeError(f"the device was lost {limit} times in {window:.0f} s ({reason})")
+        self.recoveries.append(now)
+        pending = self.ledger.pending            # newer than anything uploaded; survives the new epoch
+        old_device = self.device
+        for resource in self.ledger.new_epoch():
+            self._destroy(resource)
+        for resource in (self.texture, self.uniform):
+            self._destroy(resource)
+        self.texture = self.bind_group = self.overlay_bind_group = None
+        self.texture_size = None
+        self.picture = None
+        try:
+            if old_device is not None:
+                old_device.destroy()
+        except Exception:
+            pass
+        self.loss_watch.lost.clear()
+        self._start_device()
+        frame = pending[1] if pending is not None else self.last_frame
+        if frame is not None:
+            self.ledger.offer(frame, None, self.ledger.epoch)
+        self.counters["recoveries"] += 1
+        self.recovery_reason = reason
 
     @staticmethod
     def _destroy(resource):
@@ -303,9 +365,12 @@ class RetainedPresenter:
 
         `view` is (centre_x, centre_y, zoom) in scene units and physical px per scene px. The surface
         texture and its view are locals here and are gone when this returns."""
+        if self.device_lost():
+            self.recover(self.loss_watch.message)
         taken = self.ledger.take()
         if taken is not None:
             qimage, rect, format_rect = taken[1]
+            self.last_frame = taken[1]
             self._upload(qimage)
             self.picture = (rect, format_rect)
             self.uploaded_sequence = taken[0]
@@ -361,6 +426,7 @@ def make_widget(parent=None):
             self.format_rect = None
             self._pan = None
             self.draw_requests = 0
+            self.recoveries = 0
             self.request_draw(self._draw)
 
         # -- feeding ----------------------------------------------------------------------------
@@ -408,7 +474,13 @@ def make_widget(parent=None):
             if self.auto_fit and self.rect is not None:
                 self.view = fit_view(size, self.rect)
             try:
-                self.presenter.draw(self.view, size)
+                try:
+                    self.presenter.draw(self.view, size)
+                except Exception as exc:
+                    # A lost or failing device is replaced once; the same draw is then repeated on the new one.
+                    self.presenter.recover(str(exc).splitlines()[0] if str(exc) else type(exc).__name__)
+                    self.recoveries += 1
+                    self.presenter.draw(self.view, size)
             except Exception as exc:
                 self._fail(f"direct viewer draw failed: {exc}")
 

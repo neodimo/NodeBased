@@ -213,6 +213,111 @@ class RetainedPresenterTests(unittest.TestCase):
 
 
 @needs_wgpu
+class DeviceLossTests(unittest.TestCase):
+    """A real loss: the device is destroyed under the presenter (wgpu reports 'Parent device is lost')."""
+
+    def setUp(self):
+        self.presenter, self.context = make_presenter()
+        self.addCleanup(self.presenter.lose_device)
+
+    def draw(self, view=(32.0, 24.0, 2.0), image=None, generation=1):
+        if image is not None:
+            self.assertTrue(self.presenter.offer(image, (0, 0, 64, 48), (0, 0, 64, 48), generation))
+        self.presenter.draw(view, self.context.size)
+        return self.context.read()
+
+    def test_destroyed_device_makes_the_next_draw_raise(self):
+        self.draw(image=checker_image())
+        self.presenter.device.destroy()
+        with self.assertRaises(Exception) as caught:
+            self.draw()
+        self.assertIn("lost", str(caught.exception).lower())
+
+    def test_recover_rebuilds_the_picture_from_the_retained_cpu_image(self):
+        before = self.draw(image=checker_image()).copy()
+        old_device, old_texture = self.presenter.device, self.presenter.texture
+        epoch = self.presenter.ledger.epoch
+        old_device.destroy()
+        self.presenter.recover("test loss")
+        self.assertIsNot(self.presenter.device, old_device)
+        self.assertEqual(self.presenter.ledger.epoch, epoch + 1)
+        self.assertIsNone(self.presenter.texture)
+        self.assertEqual(self.presenter.counters["recoveries"], 1)
+        after = self.draw()                                   # no new offer: the retained picture comes back
+        self.assertTrue((before == after).all())
+        self.assertEqual(self.presenter.counters["uploads"], 2)
+        self.assertEqual(self.presenter.counters["conversions"], 2)
+        self.assertIsNot(self.presenter.texture, old_texture)
+
+    def test_offer_from_the_lost_epoch_is_refused_and_a_newer_pending_picture_survives(self):
+        self.draw(image=checker_image(shift=0))
+        epoch = self.presenter.ledger.epoch
+        self.presenter.offer(checker_image(shift=1), (0, 0, 64, 48), (0, 0, 64, 48), 2)   # waiting for the next draw
+        self.presenter.device.destroy()
+        self.presenter.recover("test loss")
+        self.assertFalse(self.presenter.ledger.offer("from the lost device", 9, epoch))
+        pixels = self.draw()
+        self.assertEqual(tuple(pixels[13, 21, :3]), (200, 120, 40))   # shift 1, not the older shift 0 picture
+
+    def test_a_logged_device_loss_is_noticed_at_the_top_of_the_next_draw(self):
+        import logging
+        self.draw(image=checker_image())
+        old_device = self.presenter.device
+        logging.getLogger("wgpu").error("The WGPU device was lost (Unknown):\nsimulated by the test")
+        self.assertTrue(self.presenter.device_lost())
+        self.draw()
+        self.assertIsNot(self.presenter.device, old_device)
+        self.assertFalse(self.presenter.device_lost())
+        self.assertEqual(self.presenter.counters["recoveries"], 1)
+
+    def test_recoveries_that_come_too_fast_give_up(self):
+        self.draw(image=checker_image())
+        limit = dv.RECOVERY_LIMIT[0]
+        for _ in range(limit):
+            self.presenter.recover("again")
+        with self.assertRaises(RuntimeError):
+            self.presenter.recover("once too often")
+
+
+@needs_wgpu
+class WidgetDeviceLossTests(unittest.TestCase):
+    """The Qt surface repeats a draw once on a replaced device and gives up (dock hides) when that fails too."""
+
+    def test_widget_recovers_once_from_a_destroyed_device(self):
+        widget = dv.make_widget()
+        self.addCleanup(widget.close)
+        presenter, context = make_presenter(size=(64, 48))
+        self.addCleanup(presenter.lose_device)
+        widget.presenter = presenter
+        widget.rect = widget.format_rect = (0, 0, 64, 48)
+        widget._physical = lambda: (64, 48)
+        self.assertTrue(presenter.offer(checker_image(), widget.rect, widget.rect, 1))
+        widget._draw()
+        presenter.device.destroy()
+        widget._draw()
+        self.assertIsNone(widget.error)
+        self.assertEqual(widget.recoveries, 1)
+        self.assertEqual(presenter.counters["recoveries"], 1)
+
+    def test_widget_fails_over_when_recovery_cannot_help(self):
+        widget = dv.make_widget()
+        self.addCleanup(widget.close)
+        presenter, context = make_presenter(size=(64, 48))
+        widget.presenter = presenter
+        widget.rect = widget.format_rect = (0, 0, 64, 48)
+        widget._physical = lambda: (64, 48)
+        failures = []
+        widget.failed.connect(failures.append)
+        presenter.offer(checker_image(), widget.rect, widget.rect, 1)
+        with unittest.mock.patch.object(presenter, "recover", side_effect=RuntimeError("gone for good")), \
+                unittest.mock.patch.object(presenter, "draw", side_effect=RuntimeError("Parent device is lost")):
+            widget._draw()
+        self.assertIsNotNone(widget.error)
+        self.assertTrue(failures and "draw failed" in failures[0])
+        self.assertIsNone(widget.presenter)
+
+
+@needs_wgpu
 class SrgbSurfaceTests(unittest.TestCase):
     def test_srgb_surface_shows_the_same_bytes_the_cpu_image_holds(self):
         import wgpu
