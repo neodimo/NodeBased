@@ -1,0 +1,44 @@
+{
+  "platform": "xcb",
+  "checks": {
+    "default_viewer_has_picture": true,
+    "opened": true,
+    "changing_checker_uploads": {
+      "uploads": 20,
+      "conversions": 20
+    },
+    "wheel_changed_view_without_upload": true,
+    "pan_moved_view": true,
+    "resize_no_error": true,
+    "docked_no_error": true,
+    "refloated_no_error": true,
+    "reopen_same_widget_still_draws": true,
+    "reopen_receives_new_picture": true,
+    "fresh_widget_after_close": true,
+    "default_viewer_still_has_picture": true
+  },
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "selection_note": "",
+  "pixel_ratio": 1.0,
+  "resize_physical_sizes": [
+    [
+      798,
+      425
+    ],
+    [
+      498,
+      275
+    ],
+    [
+      998,
+      575
+    ]
+  ],
+  "docked_state": {
+    "error": null,
+    "visible": true,
+    "floating": false,
+    "action": true,
+    "presenter": true
+  }
+}

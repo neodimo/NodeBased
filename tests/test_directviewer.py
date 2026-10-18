@@ -117,6 +117,9 @@ def make_presenter(size=(160, 120), adapter=None):
     import wgpu
     from nodebased import gpu3d
     adapters = gpu3d.rank_adapters(list(wgpu.gpu.enumerate_adapters_sync()))
+    kind = {"discrete": "discretegpu", "integrated": "integratedgpu", "cpu": "cpu"}.get(os.environ.get("NB_TEST_ADAPTER", ""))
+    if kind:   # run the pixel tests on one named adapter: NB_TEST_ADAPTER=integrated|cpu|discrete
+        adapters = [a for a in adapters if gpu3d._kind_of(a.info) == kind] or adapters
     context = FakeContext(size)
     presenter = dv.RetainedPresenter(context, adapter=adapter or adapters[0])
     return presenter, context
@@ -199,6 +202,22 @@ class RetainedPresenterTests(unittest.TestCase):
         self.assertIsNone(self.presenter.ledger.pending)
         self.assertEqual(self.presenter.ledger.epoch, epoch + 1)
         self.assertFalse(self.presenter.ledger.offer("late", 9, epoch))
+
+
+class SrgbSurfaceTests(unittest.TestCase):
+    def test_srgb_surface_shows_the_same_bytes_the_cpu_image_holds(self):
+        import wgpu
+        from nodebased import gpu3d
+        adapter = gpu3d.rank_adapters(list(wgpu.gpu.enumerate_adapters_sync()))[0]
+        context = FakeContext((160, 120), fmt="rgba8unorm-srgb")
+        presenter = dv.RetainedPresenter(context, adapter=adapter)
+        self.addCleanup(presenter.lose_device)
+        presenter.offer(checker_image(), (0, 0, 64, 48), (0, 0, 64, 48), 1)
+        presenter.draw((32.0, 24.0, 2.0), (160, 120))
+        # The surface re-encodes on write, so the stored bytes equal the display bytes the CPU image holds.
+        got = context.read()[13, 21, :3].astype(int)
+        for have, want in zip(got, (20, 60, 180)):
+            self.assertLessEqual(abs(int(have) - want), 1)
 
 
 class AdapterChoiceTests(unittest.TestCase):
