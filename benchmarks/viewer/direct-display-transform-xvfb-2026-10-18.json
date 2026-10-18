@@ -1,0 +1,142 @@
+{
+ "date": "2026-10-18",
+ "display": "private Xvfb, xcb, no DRI3, 1920x1080 screen",
+ "presenting_adapter": "NVIDIA GeForce RTX 3080 Ti (Vulkan)",
+ "note": "10 s of Window.toggle_playback per run, graph minimap hidden, full test suite running beside it on a shared GPU lock",
+ "harness": "scratch/nb-perf/1015/scripts/play.py with a Direct picture switch",
+ "cases": {
+  "animated checker 1080p": {
+   "viewer": {
+    "fps": 11.62,
+    "frames_shown": 114,
+    "tier": "1",
+    "stage_ms_mean": {
+     "Window._show_image": 0.612,
+     "Window.preview_ready": 1.583,
+     "color.display_rgb": 14.221,
+     "tile_executor.compose_region": 22.203,
+     "to_qimage": 45.158
+    }
+   },
+   "direct": {
+    "fps": 19.01,
+    "frames_shown": 184,
+    "tier": "1",
+    "stage_ms_mean": {
+     "Window._show_direct_linear": 0.206,
+     "Window._show_image": 0.21,
+     "Window.preview_ready": 0.914,
+     "presenter._upload_linear": 1.858,
+     "presenter.draw": 2.453,
+     "tile_executor.compose_region": 22.732,
+     "wgpu present": 20.547
+    }
+   }
+  },
+  "animated empty 3D scene 1080p (GPU render)": {
+   "viewer": {
+    "fps": 8.31,
+    "frames_shown": 86,
+    "tier": "1",
+    "stage_ms_mean": {
+     "Window._show_image": 0.644,
+     "Window.preview_ready": 1.469,
+     "color.display_rgb": 12.831,
+     "evaluator.evaluate_raster": 40.49,
+     "tile_executor.compose_region": 50.516,
+     "to_qimage": 40.981
+    }
+   },
+   "direct": {
+    "fps": 15.58,
+    "frames_shown": 162,
+    "tier": "1",
+    "stage_ms_mean": {
+     "Window._show_direct_linear": 0.245,
+     "Window._show_image": 0.248,
+     "Window.preview_ready": 0.904,
+     "evaluator.evaluate_raster": 21.195,
+     "presenter._upload_linear": 1.704,
+     "presenter.draw": 2.269,
+     "tile_executor.compose_region": 31.86,
+     "wgpu present": 21.887
+    }
+   }
+  },
+  "animated checker 4K, proxy 1/2 while playing": {
+   "viewer": {
+    "fps": 10.32,
+    "frames_shown": 102,
+    "tier": "2",
+    "stage_ms_mean": {
+     "Window._show_image": 7.914,
+     "Window.preview_ready": 5.278,
+     "color.display_rgb": 15.094,
+     "tile_executor.compose_region": 22.676,
+     "to_qimage": 47.587
+    }
+   },
+   "direct": {
+    "fps": 19.29,
+    "frames_shown": 184,
+    "tier": "2",
+    "stage_ms_mean": {
+     "Window._show_direct_linear": 0.43,
+     "Window._show_image": 0.434,
+     "Window.preview_ready": 0.978,
+     "presenter._upload_linear": 1.783,
+     "presenter.draw": 2.383,
+     "tile_executor.compose_region": 22.217,
+     "wgpu present": 20.919
+    }
+   }
+  },
+  "animated checker 4K, full resolution": {
+   "viewer": {
+    "fps": 2.89,
+    "frames_shown": 30,
+    "tier": "1",
+    "stage_ms_mean": {
+     "Window._show_image": 2.004,
+     "Window.preview_ready": 2.301,
+     "color.display_rgb": 62.163,
+     "tile_executor.compose_region": 85.884,
+     "to_qimage": 190.032
+    }
+   },
+   "direct": {
+    "fps": 3.67,
+    "frames_shown": 36,
+    "tier": "1",
+    "stage_ms_mean": {
+     "Window._show_direct_linear": 1.118,
+     "Window._show_image": 1.122,
+     "Window.preview_ready": 1.228,
+     "presenter._upload_linear": 20.096,
+     "presenter.draw": 118.626,
+     "tile_executor.compose_region": 92.74,
+     "wgpu present": 36.621
+    }
+   }
+  }
+ },
+ "card_microbench_960x540_draw_ms": {
+  "RTX 3080 Ti": {
+   "ACES 2.0 tables inlined": 17.0,
+   "ACES 2.0 tables in storage buffer": 0.4,
+   "Linear": 0.4
+  },
+  "Radeon 8060S": {
+   "ACES 2.0": 0.3
+  },
+  "llvmpipe": {
+   "ACES 2.0": 2.4
+  }
+ },
+ "card_float_upload_ms_with_completion": {
+  "RTX 3080 Ti 1080p": 12.4,
+  "RTX 3080 Ti 4K": 47.6,
+  "Radeon 8060S 1080p": 1.9,
+  "llvmpipe 1080p": 7.0
+ }
+}
