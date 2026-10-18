@@ -53,6 +53,7 @@ if widget is None:
 pr = widget.presenter
 log["adapter"] = pr.adapter_info.get("device") if pr else None
 log["selection_note"] = getattr(pr, "selection_note", "")
+log["selection"] = getattr(pr, "selection", {})
 log["pixel_ratio"] = widget.get_pixel_ratio()
 before = dict(pr.counters)
 for k in range(20):

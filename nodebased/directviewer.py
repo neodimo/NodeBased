@@ -11,8 +11,9 @@ Contracts (the tests in tests/test_directviewer.py pin each one):
   resources and is the only code that creates or destroys them. A picture is uploaded once, inside
   the draw callback, and only the newest ready picture is ever uploaded (an older pending picture is
   dropped, never converted). A same-size picture is written into the existing texture (queue writes
-  are ordered before later submits); a different size makes a new texture and the old one is held
-  for `RETIRE_PRESENTS` presents before `destroy()`.
+  are ordered before later submits); a different size makes a new texture and the old one is
+  destroyed after the draw that replaced it is submitted (WebGPU frees it once the queue has finished
+  the submissions that used it); closing waits for the queue to go idle.
 * Revision and epoch. Every offer carries the source generation and the epoch it was made in. An
   offer from an older epoch (a device that has since been replaced) or an older generation is
   rejected; submission order inside a generation is last-writer-wins.
@@ -35,6 +36,7 @@ from __future__ import annotations
 import collections
 import logging
 import os
+import sys
 import threading
 import time
 
@@ -42,7 +44,7 @@ import numpy as np
 
 ENV = "NODEBASED_DIRECT_VIEWER"
 ADAPTER_ENV = "NODEBASED_DIRECT_ADAPTER"
-RETIRE_PRESENTS = 3
+BACKEND_ENV = "NODEBASED_DIRECT_BACKEND"
 UNIFORM_BYTES = 112           # the 80-byte view block, then carddisplay's two display vec4s
 ZOOM_RANGE = (0.05, 20.0)     # logical zoom, the same bounds PanZoomView.wheelEvent applies
 SURROUND = (0.0, 0.0, 0.0)    # VIEWER_SURROUND is pure black in every theme
@@ -106,10 +108,15 @@ class FrameLedger:
         self._retired.append((self.presents, resource))
 
     def note_present(self):
-        """Called once per completed draw; returns the retired resources that are now safe to destroy."""
+        """Called once per draw, after its submit; returns every resource retired before that submit.
+
+        A replaced texture is referenced only by command buffers already submitted, so it may be
+        destroyed now: WebGPU's `destroy()` contract (implemented by wgpu-core's lifetime tracker)
+        frees the memory only once the queue has completed every submission that used it. This
+        replaces VP1's "hold for three presents" heuristic, which counted draws, not GPU completion."""
         self.presents += 1
-        ready = [r for at, r in self._retired if self.presents - at >= RETIRE_PRESENTS]
-        self._retired = [(at, r) for at, r in self._retired if self.presents - at < RETIRE_PRESENTS]
+        ready = [r for _, r in self._retired]
+        self._retired = []
         return ready
 
     def new_epoch(self):
@@ -187,39 +194,90 @@ fn scene_at(frag: vec2f) -> vec2f { return v.centre + (frag - v.viewport * 0.5) 
 """
 
 
-def pick_display_adapter(context, preference=None):
-    """(adapter, format, note): an adapter wgpu reports as able to present to this window's surface.
+def backend_order(choice=None, platform=None):
+    """The wgpu backends the display request tries, in order; None means "let wgpu choose".
+
+    `choice` (or NODEBASED_DIRECT_BACKEND): d3d12, vulkan or auto. On Windows the default is D3D12
+    first (W1, docs/WINDOWS_HYBRID_PRESENTATION.md: one presentation API with DXGI's documented
+    hybrid flip path), with Vulkan the measured alternative; wgpu's own default there is Vulkan.
+    Elsewhere the default is auto. A named backend that offers nothing falls back to auto."""
+    choice = (choice if choice is not None else os.environ.get(BACKEND_ENV, "")).strip().lower()
+    if not choice:
+        choice = "d3d12" if (platform or sys.platform) == "win32" else "auto"
+    named = {"d3d12": "D3D12", "dx12": "D3D12", "vulkan": "Vulkan"}.get(choice)
+    return [named, None] if named else [None]
+
+
+def _request(context, backend, kwargs):
+    """One surface-filtered request, with wgpu-py's WGPU_BACKEND_TYPE set for the call only."""
+    import wgpu
+    saved = os.environ.get("WGPU_BACKEND_TYPE")
+    try:
+        if backend is not None:
+            os.environ["WGPU_BACKEND_TYPE"] = backend
+        return wgpu.gpu.request_adapter_sync(canvas=context, **kwargs)
+    finally:
+        if backend is not None:
+            if saved is None:
+                os.environ.pop("WGPU_BACKEND_TYPE", None)
+            else:
+                os.environ["WGPU_BACKEND_TYPE"] = saved
+
+
+def choose_display_adapter(context, preference=None, backend=None):
+    """(adapter, selection): an adapter wgpu reports as able to present to this window's surface.
 
     `get_preferred_format` alone proves nothing: on a display server without DRI3 it answers for an
     adapter whose `configure` then aborts the process in native code. The only safe test is to let wgpu
     filter by the surface (`request_adapter_sync(canvas=context)`, which passes `compatibleSurface`).
     The wish (`preference` or NODEBASED_DIRECT_ADAPTER: discrete, integrated, cpu) picks the power
-    preference of the request; when the surface-compatible adapter is a different kind, the note says so."""
-    import wgpu
+    preference of the request; `backend_order` picks the backends. `selection` records what was
+    requested, what was selected and every request that failed, with no claim about adapters that
+    were never asked for (a handful of preference requests does not prove the others incompatible)."""
     from . import gpu3d
     wanted = (preference if preference is not None else os.environ.get(ADAPTER_ENV, "")).strip().lower()
     wanted_kind = {"discrete": "discretegpu", "integrated": "integratedgpu", "cpu": "cpu", "software": "cpu"}.get(wanted, "")
     requests = {"integrated": [dict(power_preference="low-power")], "cpu": [dict(force_fallback_adapter=True)]}.get(
         wanted, [dict(power_preference="high-performance")])
     requests += [dict(power_preference="high-performance"), dict(power_preference="low-power"), dict(force_fallback_adapter=True)]
-    errors, found = [], None
-    for kwargs in requests:
-        try:
-            adapter = wgpu.gpu.request_adapter_sync(canvas=context, **kwargs)
-        except Exception as exc:
-            errors.append(f"{kwargs}: {exc}")
-            continue
-        if found is None:
-            found = adapter
-        if not wanted_kind or gpu3d._kind_of(adapter.info) == wanted_kind:
-            found = adapter
+    order = backend_order(backend)
+    attempts, found = [], None
+    for wanted_backend in order:
+        for kwargs in requests:
+            label = ", ".join(f"{k}={v}" for k, v in kwargs.items()) + f", backend={wanted_backend or 'auto'}"
+            try:
+                adapter = _request(context, wanted_backend, kwargs)
+            except Exception as exc:
+                attempts.append({"request": label, "error": str(exc)})
+                continue
+            attempts.append({"request": label, "device": gpu3d._name_of(adapter.info),
+                             "backend": adapter.info.get("backend_type", "")})
+            if found is None:
+                found = adapter
+            if not wanted_kind or gpu3d._kind_of(adapter.info) == wanted_kind:
+                found = adapter
+                break
+        if found is not None:
             break
     if found is None:
-        raise RuntimeError("no adapter can present to this window: " + "; ".join(errors))
-    name = gpu3d._name_of(found.info)
-    note = "" if not wanted_kind or gpu3d._kind_of(found.info) == wanted_kind else (
-        f"{wanted} was asked for but this window can only be presented to by {name}")
-    return found, context.get_preferred_format(found), note
+        raise RuntimeError("no adapter can present to this window: " + "; ".join(
+            f"{a['request']}: {a['error']}" for a in attempts))
+    name, got_backend = gpu3d._name_of(found.info), found.info.get("backend_type", "")
+    notes = []
+    if wanted_kind and gpu3d._kind_of(found.info) != wanted_kind:
+        notes.append(f"{wanted} was asked for; the surface-filtered requests selected {name}")
+    if order[0] is not None and got_backend != order[0]:
+        notes.append(f"{order[0]} was asked for; selected {got_backend or 'an unnamed backend'}")
+    selection = {"requested_kind": wanted or "auto", "requested_backends": [b or "auto" for b in order],
+                 "selected_device": name, "selected_backend": got_backend,
+                 "attempts": attempts, "note": "; ".join(notes)}
+    return found, selection
+
+
+def pick_display_adapter(context, preference=None, backend=None):
+    """(adapter, format, note): `choose_display_adapter` for callers that want only the note."""
+    adapter, selection = choose_display_adapter(context, preference, backend)
+    return adapter, context.get_preferred_format(adapter), selection["note"]
 
 
 class RetainedPresenter:
@@ -231,10 +289,11 @@ class RetainedPresenter:
         self.wgpu = wgpu
         self.context = context
         self.selection_note = ""
+        self.selection = {}
         if adapter is None:
-            adapter, fmt, self.selection_note = pick_display_adapter(context, preference)
-        else:
-            fmt = context.get_preferred_format(adapter)
+            adapter, self.selection = choose_display_adapter(context, preference)
+            self.selection_note = self.selection["note"]
+        fmt = context.get_preferred_format(adapter)
         self.adapter = adapter
         self.adapter_info = dict(adapter.info)
         self.format = fmt
@@ -307,8 +366,19 @@ class RetainedPresenter:
             raise carddisplay.Unsupported(f"the card could not build the {view} shader")
         return self.linear_pipelines[view]
 
-    def lose_device(self):
-        """Drop every resource and bump the epoch; the caller makes a new presenter or reports failure."""
+    def lose_device(self, wait=True):
+        """Drop every resource and bump the epoch; the caller makes a new presenter or reports failure.
+
+        Closing while work is queued waits for the queue to finish first, so the device and the
+        surface go away with nothing in flight. A device wgpu reported lost, or one after a failed draw
+        (that caller passes wait=False), is not waited on.
+        caller passes wait=False."""
+        if self.device is not None and wait and not self.device_lost():
+            try:
+                self.wait_idle()
+                self.counters["idle_waits"] += 1
+            except Exception:
+                self.counters["idle_wait_failures"] += 1
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
         for resource in (self.texture, self.linear_texture, self.uniform):
@@ -359,6 +429,19 @@ class RetainedPresenter:
             self.ledger.offer(frame, None, self.ledger.epoch)
         self.counters["recoveries"] += 1
         self.recovery_reason = reason
+
+    def wait_idle(self):
+        """Block until the queue has completed every submission so far.
+
+        wgpu-py 0.32's `on_submitted_work_done` cannot be called against wgpu-native 29 (its callback
+        type no longer matches), so this maps a 4-byte copy instead: queue order means the map cannot
+        complete before every earlier submission has."""
+        wgpu = self.wgpu
+        probe = self.device.create_buffer(size=4, usage=wgpu.BufferUsage.COPY_SRC)
+        try:
+            self.device.queue.read_buffer(probe)
+        finally:
+            probe.destroy()
 
     @staticmethod
     def _destroy(resource):
@@ -591,7 +674,7 @@ def make_widget(parent=None):
         def _fail(self, message):
             self.error = message
             if self.presenter is not None:
-                self.presenter.lose_device()
+                self.presenter.lose_device(wait=False)
             self.presenter = None
             self.failed.emit(message)
 
