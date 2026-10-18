@@ -8,7 +8,8 @@ import unittest
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtTest import QTest
 
-from nodebased.app import CUT_HANDLE_RADIUS, WIRE_PICK
+from nodebased.app import CUT_HANDLE_RADIUS, SHORTCUT_SECTIONS, WIRE_PICK
+from nodebased.shortcuthelp import graph_shortcut_text
 from tests import test_wire_feel as wire_feel
 from tests.test_wire_feel import LEFT, NOTHING, ZOOMS, P
 from tests.test_desktop import wait_until
@@ -186,6 +187,25 @@ class WireDisconnectTests(wire_feel.WireFeelTests):
         QTest.mouseRelease(view, LEFT, Qt.KeyboardModifier.AltModifier, start + QPoint(60, 0))
         self.assertNotEqual(self.graph.horizontalScrollBar().value(), before)
         self.assertEqual(self.source("gr", "image"), "rd")
+
+    # ---- discoverable
+    def test_the_input_socket_tooltip_and_the_help_overlay_list_every_way_to_disconnect(self):
+        tip = self.graph.items_by_id["gr"].inputs["image"].toolTip()
+        for phrase in ("Disconnect", "drag this end off", "right-click", "x", "Ctrl+Alt"):
+            self.assertIn(phrase, tip)
+        overlay = graph_shortcut_text()
+        for phrase in ("arrowhead off", "click a wire, Delete", "hover a wire, click x", "Ctrl+Alt+drag",
+                       "right-click an input"):
+            self.assertIn(phrase, overlay)
+        rows = " ".join(f"{keys} {what}" for keys, what in dict(SHORTCUT_SECTIONS)["Node graph"])
+        for phrase in ("arrowhead onto empty canvas", "Click a wire", "Delete or Backspace", "its x",
+                       "Ctrl+Alt+drag", "Right-click an input socket"):
+            self.assertIn(phrase, rows)
+
+    def test_right_click_on_a_connected_input_still_disconnects_in_one_step(self):
+        self.show(1.0)
+        QTest.mouseClick(self.graph.viewport(), Qt.MouseButton.RightButton, pos=self.at(self.input("gr")))
+        self.assertTrue(wait_until(lambda: self.source("gr", "image") is None))
 
 
 for _name in dir(wire_feel.WireFeelTests):   # the scene and helpers are inherited; its own tests run in their module

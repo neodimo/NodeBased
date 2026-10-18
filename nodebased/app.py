@@ -139,7 +139,12 @@ SHORTCUT_SECTIONS = (
                     ("Period", "create Dot"), ("1", "view selected node (viewer input 1)"),
                     ("2-9", "connect selected node to viewer input 2-9 and show it"), ("D", "toggle bypass"),
                     ("F", "frame the selected nodes (all when none is selected)"), ("Home", "frame every node"),
-                    ("Delete/Backspace", "delete selected"),
+                    ("Delete/Backspace", "delete selected nodes, or disconnect the selected wires"),
+                    ("Drag a wire's arrowhead onto empty canvas", "disconnect it (Nuke's gesture)"),
+                    ("Click a wire · Shift-click", "select it · add more wires; then Delete or Backspace disconnects"),
+                    ("Hover a wire, click its x", "disconnect that wire"),
+                    ("Ctrl+Alt+drag across wires", "knife: cut every wire the line crosses (Esc cancels)"),
+                    ("Right-click an input socket", "disconnect it"),
                     ("Ctrl+A", "select all"), ("Ctrl+C/Ctrl+X/Ctrl+V", "copy/cut/paste"),
                     ("Alt+C", "duplicate"), ("Ctrl+G", "group the selected nodes"),
                     ("Ctrl+Shift+G", "ungroup the selected group"),
@@ -4115,7 +4120,8 @@ class Port(QGraphicsEllipseItem):
         self._dragging = False
         self._rewire_input = None
         self.setToolTip("Output: drag to an input, or click then click an input" if slot is None else
-                         f"Input {slot}: drag to an output; drag an output here; click to pick up and rewire; right-click disconnects")
+                         f"Input {slot}: drag to an output; drag an output here; click to pick up and rewire. Disconnect: drag this end off onto "
+                         f"empty canvas, right-click it, or click the wire's x. Ctrl+Alt-drag cuts every wire it crosses")
         self.label = None
         if (slot or label_text) and not node.is_dot:
             label = self.label = QGraphicsSimpleTextItem(label_text or slot, node)

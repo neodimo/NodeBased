@@ -28,13 +28,15 @@ class GraphShortcutOverlayTests(Base):
             self.assertNotIn("Tab search/add", label.text())
 
     def test_the_overlay_lists_every_shortcut_the_line_had(self):
-        self.assertEqual(graph_shortcut_text(), OLD_HINT_LINE)
+        # The old line first, word for word; the disconnect gestures (10/18) follow it.
+        self.assertTrue(graph_shortcut_text().startswith(OLD_HINT_LINE))
         self.assertEqual(len(graph_shortcut_items()), len(GRAPH_SHORTCUTS))
         w = self.open_window()
         w.toggle_graph_shortcuts()
         overlay = w.shortcut_overlay
         self.assertTrue(overlay.isVisible())
-        self.assertEqual(overlay.text(), OLD_HINT_LINE)
+        self.assertTrue(overlay.text().startswith(OLD_HINT_LINE))
+        self.assertEqual(overlay.text(), graph_shortcut_text())
         for item in OLD_HINT_LINE.split("  ·  "):
             self.assertIn(item, overlay.text())
         overlay.close()

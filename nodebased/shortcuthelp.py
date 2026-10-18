@@ -4,7 +4,7 @@ The graph used to carry its shortcuts as one long line of text above it. The moc
 line; the same text now opens from the "?" button in the graph's corner and from the ? key, as a
 small frosted panel over the graph. It closes with Escape, with ? again, or with a click outside.
 
-`GRAPH_SHORTCUTS` is the old line, item by item: each pair is (keys, what they do), and
+`GRAPH_SHORTCUTS` starts with the old line, item by item (the disconnect gestures follow it): each pair is (keys, what they do), and
 `keys + " " + what` is the text the line showed. `graph_shortcut_text()` joins them the way the
 line did, so a test can hold the overlay to every shortcut the line listed.
 """
@@ -27,12 +27,18 @@ GRAPH_SHORTCUTS = (
     ("drag output ↔ input", "to wire"),
     ("Ctrl-drag noodle midpoint", "inserts Dot"),
     ("click a wired input", "to rewire"),
+    # Disconnecting (10/18): every way, one gesture each.
+    ("drag an arrowhead off", "to empty canvas disconnects"),
+    ("click a wire, Delete", "disconnects it"),
+    ("hover a wire, click x", "disconnects it"),
+    ("Ctrl+Alt+drag across wires", "cuts every wire it crosses"),
+    ("right-click an input", "disconnects it"),
 )
 COLUMNS = 2
 
 
 def graph_shortcut_items():
-    """Every shortcut of the old line, as the line wrote it."""
+    """Every shortcut, the old line's first, as the line wrote it."""
     return [f"{keys} {what}" for keys, what in GRAPH_SHORTCUTS]
 
 
