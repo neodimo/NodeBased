@@ -170,9 +170,8 @@ SHORTCUT_SECTIONS = (
 
 
 def _choose_paint_color(viewer):
-    chosen = QColorDialog.getColor(QColor.fromRgbF(*viewer.paint_color), viewer, "RotoPaint colour")
-    if chosen.isValid():
-        viewer.paint_color = [chosen.redF(), chosen.greenF(), chosen.blueF(), chosen.alphaF()]
+    viewer.window.open_color_picker(list(viewer.paint_color), "RotoPaint colour",
+                                    lambda rgba: setattr(viewer, "paint_color", list(rgba)))
 
 
 def _lifetime_for_mode(mode, current, frame):
@@ -1486,6 +1485,7 @@ class Viewer(PanZoomView):
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
         self.survey_picking = None   # the CameraSolve3D node whose Survey a click adds a pick to
         self.zdefocus_picking = None
+        self.color_sampling = None     # a colour picker's eyedropper: called with the linear pixel clicked
         self.focus_picking = None   # the Camera3D node whose focus distance a click sets
         # A/B compare. The wipe geometry is display state only (not in the document): the split
         # is a fraction of the format rectangle plus an angle, see compare.py. `wipe_pixmap` is
@@ -1656,6 +1656,22 @@ class Viewer(PanZoomView):
             return
         self.fit()
         self._initial_fit_pending = False
+
+    def linear_pixel_at(self, scene_pos):
+        """The shown frame's linear float RGBA under a scene point, or None off the image. This is the
+        pixel the readout reports, before any display transform: what a colour picker samples."""
+        frame = self.window.frame
+        if frame is None or self.last_frame_size is None or not hasattr(frame, "shape"):
+            return None
+        scale = max(float(self.last_scale), 1.0)
+        region = self.last_render_region
+        origin_x, origin_y = (0.0, 0.0) if region is None else (region.x * scale, region.y * scale)
+        array_x = math.floor((scene_pos.x() - origin_x) / scale)
+        array_y = math.floor((scene_pos.y() - origin_y) / scale)
+        if not (0 <= array_y < frame.shape[0] and 0 <= array_x < frame.shape[1]):
+            return None
+        values = [float(v) for v in frame[array_y, array_x]]
+        return (values + [1.0] * 4)[:4]
 
     def _hide_pixel_readout(self):
         self._pixel_readout_active = False
@@ -3889,6 +3905,12 @@ class Viewer(PanZoomView):
             PanZoomView.mousePressEvent(self, event)
             return
         scene_pos = self._event_scene_pos(event)
+        if event.button() == Qt.MouseButton.LeftButton and self.color_sampling is not None:
+            callback, self.color_sampling = self.color_sampling, None
+            self.unsetCursor()
+            callback(self.linear_pixel_at(scene_pos))
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self.zdefocus_picking:
             self.window.zdefocus_pick(self.zdefocus_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
             event.accept()
@@ -10508,23 +10530,26 @@ class Window(QMainWindow):
                     swatch.setFixedSize(24, 24)
 
                     def set_swatch():
-                        rgb = [max(0.0, min(1.0, field.value())) for field in color_fields[:3]]
-                        swatch.setStyleSheet("background-color: rgb(%d, %d, %d); border: 1px solid #777;" %
-                                             tuple(int(value * 255) for value in rgb))
+                        # The swatch shows the colour as the viewer would (its display transform), so an
+                        # HDR or scene-linear value no longer reads as a clipped 8-bit square.
+                        from .colorpicker import display_color
+                        shown = display_color([field.value() for field in color_fields[:3]], self.effective_view())
+                        swatch.setStyleSheet(f"background-color: {shown.name()}; border: 1px solid #777;")
 
-                    def pick_color():
-                        current = [max(0.0, min(1.0, field.value())) for field in color_fields[:3]]
-                        color = QColorDialog.getColor(
-                            QColor(*(int(value * 255) for value in current)), self, "Choose color")
-                        if color.isValid():
-                            for param, value in zip(group.params[:3],
-                                                    (color.redF(), color.greenF(), color.blueF())):
-                                self.defer_command({"op": "set", "id": key, "param": param,
-                                                    "value": value})
-                            for field, value in zip(color_fields[:3],
-                                                    (color.redF(), color.greenF(), color.blueF())):
-                                field.setValue(value)
-                            set_swatch()
+                    def pick_color(k=key, params=group.params, fields=color_fields, label_text=group.label):
+                        # The knob's own floats, unclamped: the picker works in linear float (DiMo 10/18).
+                        knob = self.graph_nodes()[k]["params"]
+                        current = [float(knob[param]) for param in params]
+
+                        def accept(rgba):
+                            commands = [{"op": "set", "id": k, "param": param, "value": float(value)}
+                                        for param, value in zip(params, rgba)
+                                        if float(value) != float(self.graph_nodes()[k]["params"][param])]
+                            for field, value in zip(fields, rgba):
+                                field.setValue(float(value))
+                            if commands:
+                                self.command({"op": "batch", "commands": commands})
+                        self.open_color_picker(current, f"{self.graph_nodes()[k]['name']} · {label_text}", accept)
 
                     swatch.clicked.connect(pick_color)
                     set_swatch()
@@ -11115,12 +11140,12 @@ class Window(QMainWindow):
                             def choose_layer_color(k=key, idx=selected):
                                 entries = current_layer_items(k)
                                 if idx >= len(entries): return
-                                chosen = QColorDialog.getColor(QColor.fromRgbF(*entries[idx]["color"]),
-                                                               self, "RotoPaint colour")
-                                if chosen.isValid():
-                                    entries[idx]["color"] = [chosen.redF(), chosen.greenF(),
-                                                             chosen.blueF(), chosen.alphaF()]
-                                    self.command({"op": "set_paint_items", "id": k, "items": entries})
+                                def accept(rgba, k=k, idx=idx):
+                                    items = current_layer_items(k)
+                                    if idx < len(items):
+                                        items[idx]["color"] = [float(v) for v in rgba]
+                                        self.command({"op": "set_paint_items", "id": k, "items": items})
+                                self.open_color_picker(list(entries[idx]["color"]), "RotoPaint colour", accept)
                             color_button = QPushButton("Choose colour…")
                             color_button.setObjectName("rotopaint-layer-color")
                             color_button.clicked.connect(lambda: choose_layer_color())
@@ -11514,6 +11539,28 @@ class Window(QMainWindow):
                 evaluator.evaluate_raster(document, key, frame=frame, typed=True)
             except Exception:
                 break
+
+    def open_color_picker(self, rgba, title, on_accept):
+        """Open the linear float colour picker for a colour knob (never QColorDialog's 8-bit one).
+        Non-modal, so its eyedropper can click the viewer; `on_accept` gets the floats on OK."""
+        from .colorpicker import LinearColorPicker
+        previous = getattr(self, "color_picker", None)
+        if previous is not None:
+            previous.close()
+        picker = LinearColorPicker(rgba, self, title, view=self.effective_view(),
+                                   sampler=self.begin_color_sample)
+        picker.colorAccepted.connect(on_accept)
+        picker.finished.connect(lambda _result: setattr(self.viewer, "color_sampling", None))
+        picker.setModal(False)
+        self.color_picker = picker
+        picker.show()
+        return picker
+
+    def begin_color_sample(self, callback):
+        """The next left click in the viewer reports its linear pixel to `callback`."""
+        self.viewer.color_sampling = callback
+        self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+        self.statusBar().showMessage("Click a pixel in the viewer to sample its linear colour", 4000)
 
     def set_panel_collapsed(self, key, body, collapsed):
         """Collapse one node's panel to its header row. Kept per node, so a panel rebuilt after an
