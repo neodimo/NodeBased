@@ -165,27 +165,38 @@ fn scene_at(frag: vec2f) -> vec2f { return v.centre + (frag - v.viewport * 0.5) 
 
 
 def pick_display_adapter(context, preference=None):
-    """(adapter, format): the first adapter, in preference order, that the surface can present to.
+    """(adapter, format, note): an adapter wgpu reports as able to present to this window's surface.
 
-    Order: `preference` / NODEBASED_DIRECT_ADAPTER (an adapter type or part of its name), then the
-    application's own ranking (`gpu3d.rank_adapters`: discrete, integrated, software). Only an adapter
-    for which `context.get_preferred_format` succeeds qualifies, because a device from an adapter that
-    cannot present to the window cannot be configured on its surface."""
+    `get_preferred_format` alone proves nothing: on a display server without DRI3 it answers for an
+    adapter whose `configure` then aborts the process in native code. The only safe test is to let wgpu
+    filter by the surface (`request_adapter_sync(canvas=context)`, which passes `compatibleSurface`).
+    The wish (`preference` or NODEBASED_DIRECT_ADAPTER: discrete, integrated, cpu) picks the power
+    preference of the request; when the surface-compatible adapter is a different kind, the note says so."""
     import wgpu
     from . import gpu3d
-    adapters = gpu3d.rank_adapters(list(wgpu.gpu.enumerate_adapters_sync()))
     wanted = (preference if preference is not None else os.environ.get(ADAPTER_ENV, "")).strip().lower()
-    if wanted:
-        wanted_kind = {"discrete": "discretegpu", "integrated": "integratedgpu", "cpu": "cpu", "software": "cpu"}.get(wanted, wanted)
-        first = [a for a in adapters if gpu3d._kind_of(a.info) == wanted_kind or wanted in gpu3d._name_of(a.info).lower()]
-        adapters = first + [a for a in adapters if a not in first]
-    errors = []
-    for adapter in adapters:
+    wanted_kind = {"discrete": "discretegpu", "integrated": "integratedgpu", "cpu": "cpu", "software": "cpu"}.get(wanted, "")
+    requests = {"integrated": [dict(power_preference="low-power")], "cpu": [dict(force_fallback_adapter=True)]}.get(
+        wanted, [dict(power_preference="high-performance")])
+    requests += [dict(power_preference="high-performance"), dict(power_preference="low-power"), dict(force_fallback_adapter=True)]
+    errors, found = [], None
+    for kwargs in requests:
         try:
-            return adapter, context.get_preferred_format(adapter)
-        except Exception as exc:    # the surface does not support this adapter
-            errors.append(f"{gpu3d._name_of(adapter.info)}: {exc}")
-    raise RuntimeError("no adapter can present to this window: " + "; ".join(errors))
+            adapter = wgpu.gpu.request_adapter_sync(canvas=context, **kwargs)
+        except Exception as exc:
+            errors.append(f"{kwargs}: {exc}")
+            continue
+        if found is None:
+            found = adapter
+        if not wanted_kind or gpu3d._kind_of(adapter.info) == wanted_kind:
+            found = adapter
+            break
+    if found is None:
+        raise RuntimeError("no adapter can present to this window: " + "; ".join(errors))
+    name = gpu3d._name_of(found.info)
+    note = "" if not wanted_kind or gpu3d._kind_of(found.info) == wanted_kind else (
+        f"{wanted} was asked for but this window can only be presented to by {name}")
+    return found, context.get_preferred_format(found), note
 
 
 class RetainedPresenter:
@@ -195,8 +206,9 @@ class RetainedPresenter:
         import wgpu
         self.wgpu = wgpu
         self.context = context
+        self.selection_note = ""
         if adapter is None:
-            adapter, fmt = pick_display_adapter(context, preference)
+            adapter, fmt, self.selection_note = pick_display_adapter(context, preference)
         else:
             fmt = context.get_preferred_format(adapter)
         self.adapter = adapter
