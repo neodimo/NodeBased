@@ -9,9 +9,9 @@ of those steps on the card.
 
 The view transform is OCIO's own GPU shader for the view (`GpuShaderDesc`, the text gpudisplay
 already hands to OpenGL), so the card runs the processor the CPU path runs, not an approximation of
-it. OCIO's small 1D lookup tables (ACES 2.0 ships two: the reach and the gamut-cusp tables, both
-nearest-sampled at texel centres) are inlined as constant arrays, which keeps the bind group fixed
-for every view. A view that needs a 2D or 3D lookup texture, or a filtered 1D one, raises
+it. OCIO's small lookup tables (ACES 2.0 ships two 1D textures, the reach and gamut-cusp tables,
+nearest-sampled at texel centres, and one constant hue array) go into one read-only storage buffer
+per view, bound as group 1. A view that needs a 2D or 3D lookup texture, or a filtered 1D one, raises
 `Unsupported` and the direct viewer falls back to uploading `to_qimage`'s bytes.
 
 `settings_from` reads the same arguments `to_qimage` takes; `uniform_values` packs them for the
@@ -52,40 +52,51 @@ def _gpu_processor(view):
     return color.config().getProcessor(transform).getDefaultGPUProcessor()
 
 
-def _number(value):
-    text = repr(float(np.float32(value)))
-    return text if "e" in text or "." in text or "n" in text else text + ".0"
+def _move_tables(text, desc):
+    """Move OCIO's lookup data out of the shader text into one storage buffer of vec4 rows.
 
-
-def _inline_tables(text, desc):
-    """Replace each nearest-sampled 1D OCIO texture with a constant array and an index fetch."""
+    Each nearest-sampled 1D texture becomes `NAME_fetch(u)` and each `const float NAME[N]` array an
+    indexed read of `ocio_tables`. Constant arrays inlined in the shader were 40 times slower: naga
+    copies a constant array into function memory for every dynamic index, and ACES 2.0's cusp lookup
+    indexes its 363 hues in a loop (17 ms against 0.4 ms per 960 x 540 draw on the RTX 3080 Ti).
+    Returns (glsl, rows) where rows is an (N, 4) float32 array, at least one row long."""
     if list(desc.get3DTextures()):
         raise Unsupported("view needs a 3D lookup table")
-    tables = []
+    rows, helpers = [], []
     for texture in desc.getTextures():
         if texture.height != 1 or "NEAREST" not in str(texture.interpolation):
             raise Unsupported(f"view needs a {texture.width}x{texture.height} {texture.interpolation} lookup")
         width = int(texture.width)
         values = np.asarray(texture.getValues(), np.float32)
-        rgb = "RGB" in str(texture.channel)
-        values = values.reshape(width, 3) if rgb else values.reshape(width, 1)
+        values = values.reshape(width, 3 if "RGB" in str(texture.channel) else 1)
+        offset = len(rows)
+        rows.extend(np.pad(values, ((0, 0), (0, 4 - values.shape[1]))))
         sampler = texture.samplerName
         name = re.sub(r"\W", "_", sampler)
-        items = ", ".join("vec4(" + ", ".join(_number(c) for c in row) + (", 0.0" * (4 - len(row))) + ")" for row in values)
-        tables.append(f"const vec4 {name}_data[{width}] = vec4[{width}]({items});\n"
-                      f"vec4 {name}_fetch(float u) {{ return {name}_data[clamp(int(floor(u * {width}.0)), 0, {width - 1})]; }}\n")
+        helpers.append(f"vec4 {name}_fetch(float u) {{ return ocio_tables.data[{offset} + "
+                       f"clamp(int(floor(u * {width}.0)), 0, {width - 1})]; }}\n")
         text = re.sub(r"uniform\s+sampler1D\s+" + re.escape(sampler) + r"\s*;", "", text)
         text = re.sub(r"\btexture\(\s*" + re.escape(sampler) + r"\s*,", f"{name}_fetch(", text)
-    if re.search(r"\buniform\b|\bsampler[123]D\b", text):
-        raise Unsupported("view shader declares uniforms or samplers the card path does not bind")
-    return "".join(tables), text
+    for match in list(re.finditer(r"const\s+float\s+(\w+)\s*\[\s*(\d+)\s*\]\s*=\s*float\s*\[\s*\d+\s*\]\s*\(([^)]*)\)\s*;", text)):
+        name, count = match.group(1), int(match.group(2))
+        values = np.array([float(v) for v in match.group(3).split(",")], np.float32)
+        if values.size != count:
+            raise Unsupported(f"could not read the {name} table")
+        offset = len(rows)
+        rows.extend(np.pad(values[:, None], ((0, 0), (0, 3))))
+        text = text.replace(match.group(0), "")
+        text = re.sub(r"\b" + re.escape(name) + r"\[([^\]]*)\]", rf"ocio_tables.data[{offset} + (\1)].x", text)
+    if re.search(r"\buniform\b|\bsampler[123]D\b|\bconst\s+\w+\s+\w+\s*\[", text):
+        raise Unsupported("view shader declares uniforms, samplers or arrays the card path does not bind")
+    table = np.array(rows, np.float32).reshape(-1, 4) if rows else np.zeros((1, 4), np.float32)
+    return "".join(helpers) + text, table
 
 
 @lru_cache(maxsize=16)
-def view_source(view):
-    """GLSL defining `vec4 OCIODisplay(vec4)` for `view` (identity for Linear and Raw)."""
+def view_program(view):
+    """(GLSL defining `vec4 OCIODisplay(vec4)` for `view`, its lookup rows) (identity for Linear and Raw)."""
     if view in IDENTITY_VIEWS:
-        return f"vec4 {FUNCTION}(vec4 c) {{ return c; }}\n"
+        return f"vec4 {FUNCTION}(vec4 c) {{ return c; }}\n", np.zeros((1, 4), np.float32)
     import PyOpenColorIO as ocio
     try:
         desc = ocio.GpuShaderDesc.CreateShaderDesc()
@@ -96,8 +107,15 @@ def view_source(view):
         raise
     except Exception as exc:
         raise Unsupported(str(exc)) from exc
-    tables, body = _inline_tables(desc.getShaderText(), desc)
-    return tables + body
+    return _move_tables(desc.getShaderText(), desc)
+
+
+def view_source(view):
+    return view_program(view)[0]
+
+
+def view_tables(view):
+    return view_program(view)[1]
 
 
 FRAGMENT = """#version 450
@@ -112,6 +130,7 @@ layout(set = 0, binding = 1) uniform View {
     vec4 disp1;            // checker, checker level 0, checker level 1, unused
 } v;
 layout(set = 0, binding = 2) uniform sampler smp;
+layout(set = 1, binding = 0, std430) readonly buffer OcioTables { vec4 data[]; } ocio_tables;
 layout(location = 0) out vec4 fragColor;
 
 %(view)s

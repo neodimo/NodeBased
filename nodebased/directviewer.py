@@ -342,20 +342,28 @@ class RetainedPresenter:
              "texture": {"sample_type": "unfilterable-float", "view_dimension": "2d"}},
             {"binding": 1, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": "uniform"}},
             {"binding": 2, "visibility": wgpu.ShaderStage.FRAGMENT, "sampler": {"type": "non-filtering"}}])
+        self.tables_layout = self.device.create_bind_group_layout(entries=[
+            {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": "read-only-storage"}}])
         self.linear_sampler = self.device.create_sampler()
         self.linear_pipelines = {}
 
     def linear_pipeline(self, view):
-        """The display-transform pipeline for `view`, built once; raises carddisplay.Unsupported."""
+        """(pipeline, tables bind group) for `view`, built once; raises carddisplay.Unsupported."""
         from . import carddisplay
+        wgpu = self.wgpu
         if view not in self.linear_pipelines:
             source = carddisplay.fragment_source(view)
+            tables = carddisplay.view_tables(view)
             try:
                 module = self.device.create_shader_module(code=source, label=f"display_{view}_frag")
-                self.linear_pipelines[view] = self.device.create_render_pipeline(
-                    layout=self.device.create_pipeline_layout(bind_group_layouts=[self.linear_layout]),
+                pipeline = self.device.create_render_pipeline(
+                    layout=self.device.create_pipeline_layout(bind_group_layouts=[self.linear_layout, self.tables_layout]),
                     vertex={"module": self.vertex_module, "entry_point": "vs"},
                     fragment={"module": module, "entry_point": "main", "targets": [{"format": self.format}]})
+                buffer = self.device.create_buffer_with_data(data=tables.tobytes(), usage=wgpu.BufferUsage.STORAGE)
+                group = self.device.create_bind_group(layout=self.tables_layout, entries=[
+                    {"binding": 0, "resource": {"buffer": buffer, "offset": 0, "size": tables.nbytes}}])
+                self.linear_pipelines[view] = (pipeline, group, buffer)
             except Exception as exc:
                 self.linear_pipelines[view] = None
                 self.counters["linear_shader_failures"] += 1
@@ -381,7 +389,8 @@ class RetainedPresenter:
                 self.counters["idle_wait_failures"] += 1
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
-        for resource in (self.texture, self.linear_texture, self.uniform):
+        tables = [entry[2] for entry in self.linear_pipelines.values() if entry is not None]
+        for resource in (self.texture, self.linear_texture, self.uniform, *tables):
             self._destroy(resource)
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
@@ -558,10 +567,11 @@ class RetainedPresenter:
             cx, cy, zoom = view
             if self.linear is not None:
                 from . import carddisplay
-                pipeline, bind_group, size = self.linear_pipeline(self.linear[3]), self.linear_bind_group, self.linear_size
+                pipeline, tables, _ = self.linear_pipeline(self.linear[3])
+                bind_group, size = self.linear_bind_group, self.linear_size
                 display = carddisplay.uniform_values(self.linear)
             else:
-                pipeline, bind_group, size, display = self.pipeline, self.bind_group, self.texture_size, [0.0] * 8
+                pipeline, bind_group, size, display, tables = self.pipeline, self.bind_group, self.texture_size, [0.0] * 8, None
             data = np.array([*physical_size, cx, cy, *rect, *format_rect, *size, zoom,
                              1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0, *display], np.float32)
             self.device.queue.write_buffer(self.uniform, 0, data)
@@ -569,6 +579,8 @@ class RetainedPresenter:
             rp = encoder.begin_render_pass(color_attachments=[self._attachment(target)])
             rp.set_pipeline(pipeline)
             rp.set_bind_group(0, bind_group)
+            if tables is not None:
+                rp.set_bind_group(1, tables)
             rp.draw(3)
             if self.overlay:
                 rp.set_pipeline(self.overlay_pipeline)

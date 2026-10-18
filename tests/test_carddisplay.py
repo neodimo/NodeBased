@@ -111,10 +111,12 @@ class CardDisplayAgreementTests(unittest.TestCase):
 
 
 class ShaderSourceTests(unittest.TestCase):
-    def test_aces_tables_are_inlined_and_no_sampler_is_left(self):
+    def test_aces_tables_move_to_the_storage_buffer(self):
+        # Constant arrays in the shader cost 17 ms a draw (naga copies them per dynamic index).
         source = carddisplay.fragment_source("ACES 2.0")
         self.assertNotIn("sampler1D", source)
-        self.assertIn("_data[363]", source)
+        self.assertNotRegex(source, r"const\s+float\s+\w+\s*\[")
+        self.assertEqual(carddisplay.view_tables("ACES 2.0").shape, (363 * 3, 4))
 
     def test_unknown_view_and_channel_are_unsupported(self):
         with self.assertRaises(carddisplay.Unsupported):
@@ -127,7 +129,7 @@ class ShaderSourceTests(unittest.TestCase):
             def get3DTextures(self):
                 return [object()]
         with self.assertRaises(carddisplay.Unsupported):
-            carddisplay._inline_tables("", Desc())
+            carddisplay._move_tables("", Desc())
 
 
 def fake_widget_class():
