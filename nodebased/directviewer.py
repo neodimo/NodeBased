@@ -43,6 +43,7 @@ import numpy as np
 ENV = "NODEBASED_DIRECT_VIEWER"
 ADAPTER_ENV = "NODEBASED_DIRECT_ADAPTER"
 RETIRE_PRESENTS = 3
+UNIFORM_BYTES = 112           # the 80-byte view block, then carddisplay's two display vec4s
 ZOOM_RANGE = (0.05, 20.0)     # logical zoom, the same bounds PanZoomView.wheelEvent applies
 SURROUND = (0.0, 0.0, 0.0)    # VIEWER_SURROUND is pure black in every theme
 RECOVERY_LIMIT = (3, 30.0)    # at most this many device recoveries in this many seconds, then the dock gives up
@@ -224,8 +225,9 @@ def pick_display_adapter(context, preference=None):
 class RetainedPresenter:
     """Owns the device, the retained picture texture and the two pipelines; draws into the surface."""
 
-    def __init__(self, context, adapter=None, preference=None):
+    def __init__(self, context, adapter=None, preference=None, overlay=True):
         import wgpu
+        self.overlay = overlay
         self.wgpu = wgpu
         self.context = context
         self.selection_note = ""
@@ -243,8 +245,14 @@ class RetainedPresenter:
         self.texture_size = None
         self.bind_group = None
         self.picture = None          # the scene geometry of the retained picture
+        self.linear = None           # display settings when the retained picture is a linear float frame
+        self.linear_texture = None
+        self.linear_size = None
+        self.linear_bind_group = None
+        self.linear_pipelines = {}   # view -> pipeline running carddisplay's fragment shader
+        self.linear_error = ""
         self.uploaded_sequence = 0
-        self.last_frame = None       # (qimage, rect, format_rect): the CPU picture the texture was made from
+        self.last_frame = None       # the ledger payload ("qimage"|"linear", ...) the texture was made from
         self.recoveries = []         # perf_counter stamps of device recoveries
         self.recovery_reason = ""
         self.loss_watch = LossWatch()
@@ -267,17 +275,49 @@ class RetainedPresenter:
         self.overlay_pipeline = self.device.create_render_pipeline(
             layout="auto", vertex={"module": module, "entry_point": "vs"},
             fragment={"module": module, "entry_point": "fs_overlay", "targets": [overlay_target]})
-        self.uniform = self.device.create_buffer(size=80, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self.uniform = self.device.create_buffer(size=UNIFORM_BYTES, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self.overlay_bind_group = None
+        self.vertex_module = module
+        self.linear_layout = self.device.create_bind_group_layout(entries=[
+            {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT,
+             "texture": {"sample_type": "unfilterable-float", "view_dimension": "2d"}},
+            {"binding": 1, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": "uniform"}},
+            {"binding": 2, "visibility": wgpu.ShaderStage.FRAGMENT, "sampler": {"type": "non-filtering"}}])
+        self.linear_sampler = self.device.create_sampler()
+        self.linear_pipelines = {}
+
+    def linear_pipeline(self, view):
+        """The display-transform pipeline for `view`, built once; raises carddisplay.Unsupported."""
+        from . import carddisplay
+        if view not in self.linear_pipelines:
+            source = carddisplay.fragment_source(view)
+            try:
+                module = self.device.create_shader_module(code=source, label=f"display_{view}_frag")
+                self.linear_pipelines[view] = self.device.create_render_pipeline(
+                    layout=self.device.create_pipeline_layout(bind_group_layouts=[self.linear_layout]),
+                    vertex={"module": self.vertex_module, "entry_point": "vs"},
+                    fragment={"module": module, "entry_point": "main", "targets": [{"format": self.format}]})
+            except Exception as exc:
+                self.linear_pipelines[view] = None
+                self.counters["linear_shader_failures"] += 1
+                self.linear_error = str(exc)
+            if self.linear_pipelines[view] is None:
+                raise carddisplay.Unsupported(f"the card could not build the {view} shader")
+        if self.linear_pipelines[view] is None:
+            raise carddisplay.Unsupported(f"the card could not build the {view} shader")
+        return self.linear_pipelines[view]
 
     def lose_device(self):
         """Drop every resource and bump the epoch; the caller makes a new presenter or reports failure."""
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
-        for resource in (self.texture, self.uniform):
+        for resource in (self.texture, self.linear_texture, self.uniform):
             self._destroy(resource)
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
+        self.linear_texture = self.linear_bind_group = self.linear = None
+        self.linear_size = None
+        self.linear_pipelines = {}
         self.device = None
         logging.getLogger("wgpu").removeHandler(self.loss_watch)
 
@@ -300,10 +340,12 @@ class RetainedPresenter:
         old_device = self.device
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
-        for resource in (self.texture, self.uniform):
+        for resource in (self.texture, self.linear_texture, self.uniform):
             self._destroy(resource)
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
+        self.linear_texture = self.linear_bind_group = self.linear = None
+        self.linear_size = None
         self.picture = None
         try:
             if old_device is not None:
@@ -329,7 +371,37 @@ class RetainedPresenter:
     # -- picture --------------------------------------------------------------------------------
     def offer(self, qimage, rect, format_rect, generation=None):
         """Queue the newest picture (no GPU work here). `rect` and `format_rect` are scene rectangles."""
-        return self.ledger.offer((qimage, tuple(rect), tuple(format_rect)), generation, self.ledger.epoch)
+        return self.ledger.offer(("qimage", qimage, tuple(rect), tuple(format_rect)), generation, self.ledger.epoch)
+
+    def offer_linear(self, frame, settings, rect, format_rect, generation=None):
+        """Queue a premultiplied scene-linear float frame (H x W x 4) and its display settings
+        (`carddisplay.settings_from`). The card does the display transform; nothing converts it here."""
+        return self.ledger.offer(("linear", frame, settings, tuple(rect), tuple(format_rect)), generation, self.ledger.epoch)
+
+    def _upload_linear(self, frame):
+        """Write the float frame into the retained rgba32float texture (one copy, no conversion)."""
+        wgpu = self.wgpu
+        frame = np.ascontiguousarray(frame, np.float32)
+        height, width = frame.shape[:2]
+        if self.linear_texture is None or self.linear_size != (width, height):
+            if self.linear_texture is not None:
+                self.ledger.retire(self.linear_texture)
+            self.linear_texture = self.device.create_texture(
+                size=(width, height, 1), format="rgba32float",
+                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
+            self.linear_size = (width, height)
+            self.linear_bind_group = self.device.create_bind_group(layout=self.linear_layout, entries=[
+                {"binding": 0, "resource": self.linear_texture.create_view()},
+                {"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": UNIFORM_BYTES}},
+                {"binding": 2, "resource": self.linear_sampler}])
+            if self.overlay_bind_group is None:
+                self.overlay_bind_group = self.device.create_bind_group(
+                    layout=self.overlay_pipeline.get_bind_group_layout(0),
+                    entries=[{"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
+            self.counters["texture_creates"] += 1
+        self.device.queue.write_texture({"texture": self.linear_texture}, frame,
+                                        {"bytes_per_row": width * 16, "rows_per_image": height}, (width, height, 1))
+        self.counters["linear_uploads"] += 1
 
     def _upload(self, qimage):
         """Convert once to RGBA8 and write it to the retained texture; returns True when a size change made a new texture."""
@@ -351,7 +423,8 @@ class RetainedPresenter:
                 layout=self.pipeline.get_bind_group_layout(0),
                 entries=[{"binding": 0, "resource": self.texture.create_view()},
                          {"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
-            self.overlay_bind_group = self.device.create_bind_group(
+            if self.overlay_bind_group is None:
+                self.overlay_bind_group = self.device.create_bind_group(
                 layout=self.overlay_pipeline.get_bind_group_layout(0),
                 entries=[{"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
             self.counters["texture_creates"] += 1
@@ -361,7 +434,7 @@ class RetainedPresenter:
         return new_texture
 
     def has_picture(self):
-        return self.texture is not None
+        return self.texture is not None or self.linear_texture is not None
 
     # -- drawing --------------------------------------------------------------------------------
     def draw(self, view, physical_size):
@@ -373,9 +446,17 @@ class RetainedPresenter:
             self.recover(self.loss_watch.message)
         taken = self.ledger.take()
         if taken is not None:
-            qimage, rect, format_rect = taken[1]
             self.last_frame = taken[1]
-            self._upload(qimage)
+            kind, payload = taken[1][0], taken[1][1:]
+            if kind == "linear":
+                frame, settings, rect, format_rect = payload
+                self.linear_pipeline(settings[3])
+                self._upload_linear(frame)
+                self.linear = settings
+            else:
+                qimage, rect, format_rect = payload
+                self._upload(qimage)
+                self.linear = None
             self.picture = (rect, format_rect)
             self.uploaded_sequence = taken[0]
         started = time.perf_counter()
@@ -388,17 +469,24 @@ class RetainedPresenter:
         else:
             rect, format_rect = self.picture
             cx, cy, zoom = view
-            data = np.array([*physical_size, cx, cy, *rect, *format_rect, *self.texture_size, zoom,
-                             1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0], np.float32)
+            if self.linear is not None:
+                from . import carddisplay
+                pipeline, bind_group, size = self.linear_pipeline(self.linear[3]), self.linear_bind_group, self.linear_size
+                display = carddisplay.uniform_values(self.linear)
+            else:
+                pipeline, bind_group, size, display = self.pipeline, self.bind_group, self.texture_size, [0.0] * 8
+            data = np.array([*physical_size, cx, cy, *rect, *format_rect, *size, zoom,
+                             1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0, *display], np.float32)
             self.device.queue.write_buffer(self.uniform, 0, data)
             encoder = self.device.create_command_encoder()
             rp = encoder.begin_render_pass(color_attachments=[self._attachment(target)])
-            rp.set_pipeline(self.pipeline)
-            rp.set_bind_group(0, self.bind_group)
+            rp.set_pipeline(pipeline)
+            rp.set_bind_group(0, bind_group)
             rp.draw(3)
-            rp.set_pipeline(self.overlay_pipeline)
-            rp.set_bind_group(0, self.overlay_bind_group)
-            rp.draw(3)
+            if self.overlay:
+                rp.set_pipeline(self.overlay_pipeline)
+                rp.set_bind_group(0, self.overlay_bind_group)
+                rp.draw(3)
             rp.end()
             self.device.queue.submit([encoder.finish()])
         self.counters["draws"] += 1
