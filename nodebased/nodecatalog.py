@@ -67,7 +67,7 @@ NODE_CATEGORIES = {
     },
     "Color": {
         "Grade": "Exposure, multiply and offset colour correction.",
-        "ColorCorrect": "Lift, gamma, gain and saturation colour correction.",
+        "ColorCorrect": "Saturation, contrast, gamma, gain and offset for master, shadows, midtones and highlights.",
         "Invert": "Inverts selected channels.",
         "Clamp": "Clamps values to a minimum and maximum.",
         "Multiply": "Multiplies selected channels by a value.",

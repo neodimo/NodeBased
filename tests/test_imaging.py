@@ -281,15 +281,19 @@ class ImageTests(unittest.TestCase):
         np.testing.assert_allclose(result[0, :, 0], [0, 1 / 3, 1 / 3, 1 / 3, 0], atol=1e-6)
         np.testing.assert_array_equal(Evaluator._kernel('Blur', {'radius': 0}, [src]), src)
 
-    def test_color_correct_lift_gamma_gain(self):
+    def test_color_correct_master_gain_then_offset(self):
         src = np.array([[[0.2, 0.3, 0.4, 1.0]]], np.float32)
-        result = Evaluator._kernel('ColorCorrect', {'lift': 0.1, 'gamma': 1.0, 'gain': 2.0, 'saturation': 1.0}, [src])
-        np.testing.assert_allclose(result, [[[0.48, 0.67, 0.86, 1.0]]], atol=1e-6)
+        result = Evaluator._kernel('ColorCorrect', {'offset': 0.1, 'gain': 2.0}, [src])
+        np.testing.assert_allclose(result, [[[0.5, 0.7, 0.9, 1.0]]], atol=1e-6)
 
     def test_color_correct_is_sign_safe_under_gamma(self):
         src = np.array([[[0.2, 0.5, 0.5, 1.0]]], np.float32)
-        result = Evaluator._kernel('ColorCorrect', {'lift': -5.0, 'gamma': 2.0, 'gain': 1.0, 'saturation': 1.0}, [src])
+        result = Evaluator._kernel('ColorCorrect', {'offset': -5.0, 'gamma': 2.0}, [src])
         self.assertFalse(np.isnan(result).any())
+        self.assertLess(result[0, 0, 0], 0)
+        negative = np.array([[[-0.5, 0.5, 0.5, 1.0]]], np.float32)
+        result = Evaluator._kernel('ColorCorrect', {'gamma': 2.0, 'contrast': 1.5}, [negative])
+        self.assertTrue(np.isfinite(result).all())
         self.assertLess(result[0, 0, 0], 0)
 
     def test_crop_masks_without_resizing_canvas(self):

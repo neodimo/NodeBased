@@ -121,11 +121,19 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("multiply",), soft_range=(-4, 4)),
         KnobGroup("float_slider", ("offset",), soft_range=(-10, 10)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    # Laid out like Nuke's: a section per range, each with the same five sliders, then the Ranges
+    # lookup curves (Nuke keeps those on a second tab), then mix.
     "ColorCorrect": _groups(
-        KnobGroup("float_slider", ("lift",), soft_range=(-2, 2)),
-        KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
-        KnobGroup("float_slider", ("gain",), soft_range=LIMITS["gain"]),
-        KnobGroup("float_slider", ("saturation",), soft_range=LIMITS["saturation"]),
+        *[KnobGroup("float_slider", (f"{prefix}{name}",), label=name.title(), soft_range=soft,
+                    section=section)
+          for prefix, section in (("", "Master"), ("shadows_", "Shadows"), ("midtones_", "Midtones"),
+                                  ("highlights_", "Highlights"))
+          for name, soft in (("saturation", (0, 4)), ("contrast", (0, 4)), ("gamma", (0.2, 5)),
+                             ("gain", (0, 4)), ("offset", (-1, 1)))],
+        KnobGroup("curve", ("shadows_curve",), label="Shadows curve", section="Ranges",
+                  help="How much of a pixel counts as shadow, by its luminance. Midtones are whatever "
+                       "the shadow and highlight curves leave."),
+        KnobGroup("curve", ("highlights_curve",), label="Highlights curve", section="Ranges"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Blur": _groups(
         KnobGroup("float_slider", ("radius",), soft_range=(0, 100)),

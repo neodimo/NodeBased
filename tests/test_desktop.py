@@ -2759,15 +2759,16 @@ class PropertiesRedesignTests(unittest.TestCase):
         return panel
 
     def test_color_wheel_drag_sets_bound_knob_and_undo_restores_it(self):
-        panel = self._panel_for("wheel_color_correct", "ColorCorrect")
-        wheel = panel.findChild(QWidget, "lift-color-wheel")
+        # ColorCorrect is a section of sliders per range since 10/18; Grade keeps the wheels.
+        panel = self._panel_for("wheel_grade", "Grade")
+        wheel = panel.findChild(QWidget, "offset-color-wheel")
         self.assertIsNotNone(wheel)
-        before = self.window.graph_nodes()["wheel_color_correct"]["params"]["lift"]
+        before = self.window.graph_nodes()["wheel_grade"]["params"]["offset"]
         QTest.mouseClick(wheel, Qt.MouseButton.LeftButton, pos=QPoint(74, 46))
-        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["wheel_color_correct"]
-                                   ["params"]["lift"] != before))
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["wheel_grade"]
+                                   ["params"]["offset"] != before))
         self.window.command({"op": "undo"}, render=False)
-        self.assertEqual(self.window.graph_nodes()["wheel_color_correct"]["params"]["lift"], before)
+        self.assertEqual(self.window.graph_nodes()["wheel_grade"]["params"]["offset"], before)
 
     def test_boolean_control_is_a_switch_and_toggles_its_existing_knob(self):
         panel = self._panel_for("switch_clamp", "Clamp")
