@@ -198,5 +198,95 @@ class KnobSizingTests(unittest.TestCase):
         self.assertGreater(pair.slider.width(), 150)
 
 
+class PanelHeaderTests(unittest.TestCase):
+    """One header row per node panel; its own chevron collapses the panel to that row (DiMo 10/18:
+    the floating arrow above each panel collapsed into an unnamed arrow)."""
+
+    def setUp(self):
+        self.window = Window()
+        self.window.resize(1400, 900)
+        self.window.show()
+        APP.processEvents()
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def key_of(self, node_type):
+        return next(k for k, n in self.window.graph_nodes().items() if n["type"] == node_type)
+
+    def test_header_row_has_chevron_family_glyph_name_type_view_and_menu(self):
+        from PySide6.QtWidgets import QLabel, QLineEdit, QWidget
+        from nodebased.app import PanelChevron, PanelFamilyChip, PropertiesIconButton
+        w = self.window
+        key = self.key_of("Grade")
+        w.inspect(key)
+        APP.processEvents()
+        panel = w.properties.widget()
+        header = panel.findChild(QWidget, "node-panel-header")
+        chip = header.findChild(QLabel, "properties-family-badge")
+        self.assertIsInstance(chip, PanelFamilyChip)
+        self.assertEqual(chip.family, "Color")
+        self.assertEqual(chip.text(), "")                 # the glyph, not the old letter tile
+        image = chip.grab().toImage()
+        self.assertGreater(len({image.pixelColor(x, image.height() // 2).name()
+                                for x in range(image.width())}), 3)
+        self.assertIsInstance(header.findChild(PanelChevron), PanelChevron)
+        self.assertEqual(header.findChild(QLineEdit, "node-name-header").text(), "Grade")
+        self.assertEqual(header.findChild(QLabel, "properties-node-type").text(), "Color · Grade")
+        self.assertIsNotNone(header.findChild(PropertiesIconButton, "view-node"))
+        self.assertIsNotNone(header.findChild(PropertiesIconButton, "properties-menu"))
+        tops = {widget.mapTo(panel, QPoint(0, widget.height() // 2)).y()
+                for widget in (chip, header.findChild(PanelChevron),
+                               header.findChild(QLineEdit, "node-name-header"))}
+        self.assertLessEqual(max(tops) - min(tops), 2)    # one row
+
+    def test_chevron_collapses_to_the_header_and_survives_a_rebuild(self):
+        from PySide6.QtWidgets import QLineEdit, QTabWidget
+        from nodebased.app import PanelChevron
+        w = self.window
+        key = self.key_of("Grade")
+        w.inspect(key)
+        APP.processEvents()
+        panel = w.properties.widget()
+        QTest.mouseClick(panel.findChild(PanelChevron), Qt.MouseButton.LeftButton)
+        APP.processEvents()
+        self.assertFalse(panel.findChild(QTabWidget, "node-tabs").isVisible())
+        self.assertTrue(panel.findChild(QLineEdit, "node-name-header").isVisible())
+        w.command({"op": "set", "id": key, "param": "exposure", "value": 0.5})
+        w.inspect(key)
+        APP.processEvents()
+        panel = w.properties.widget()
+        self.assertFalse(panel.findChild(QTabWidget, "node-tabs").isVisible())
+        QTest.mouseClick(panel.findChild(PanelChevron), Qt.MouseButton.LeftButton)
+        APP.processEvents()
+        self.assertTrue(panel.findChild(QTabWidget, "node-tabs").isVisible())
+
+    def test_stacked_panels_have_no_floating_arrow_and_collapsed_sections_keep_their_names(self):
+        from PySide6.QtWidgets import QLineEdit, QPushButton, QTabWidget, QWidget
+        from nodebased.app import PanelChevron
+        w = self.window
+        for node_type in ("Grade", "Merge", "Constant"):
+            w.pin_panel(self.key_of(node_type))
+        APP.processEvents()
+        container = w.properties.widget()
+        self.assertEqual(container.findChildren(QPushButton, "panel-collapse"), [])
+        sections = container.findChildren(QWidget, "stacked-panel-section")
+        self.assertEqual(len(sections), 3)
+        for section in sections:
+            QTest.mouseClick(section.findChild(PanelChevron), Qt.MouseButton.LeftButton)
+        for _ in range(5):
+            APP.processEvents()
+        container = w.properties.widget()
+        for section in container.findChildren(QWidget, "stacked-panel-section"):
+            self.assertFalse(section.findChild(QTabWidget, "node-tabs").isVisible())
+            name = section.findChild(QLineEdit, "node-name-header")
+            self.assertTrue(name.isVisible())
+            self.assertTrue(name.text())
+            self.assertLess(section.height(), 60)
+
+
 if __name__ == "__main__":
     unittest.main()
