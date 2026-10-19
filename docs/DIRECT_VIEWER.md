@@ -1,6 +1,6 @@
 # Direct picture (experimental GPU viewer slice)
 
-Status: VP1 of 2, opt-in, default off. The Viewer (a QGraphicsView fed by `Window._show_image`) is unchanged and remains the default, the fallback, the export source and the pixel-sampling source.
+Status: VP1 of 2 plus the VP2a playback work (10/19), opt-in, default off. The Viewer (a QGraphicsView fed by `Window._show_image`) is unchanged and remains the default, the fallback, the export source and the pixel-sampling source.
 
 ## What it is
 
@@ -10,7 +10,10 @@ During playback the dock takes the scene-linear float frame instead (`submit_lin
 
 ## Contracts
 
-- **Ownership.** `FrameLedger` holds the rules; `RetainedPresenter` is the only code that creates or destroys GPU objects. A same-size picture is written into the existing texture; a size change makes a new texture and the old one is destroyed after the draw that replaced it is submitted. WebGPU's `destroy()` frees memory only once the queue has completed the submissions that used it, so this is a GPU-completion rule, not a count of presents (VP1 held it for 3 presents). Closing waits for the queue to go idle (`wait_idle`, a 4-byte mapped copy: wgpu-py 0.32's `on_submitted_work_done` cannot be called against wgpu-native 29). Pending pictures are bounded to the newest one; older pending pictures are dropped before conversion.
+- **Ownership.** `FrameLedger` holds the rules; `RetainedPresenter` is the only code that creates or destroys GPU objects. A picture that fits the retained texture is copied into it (a smaller one uses its top-left corner; the shader reads only the picture's own size); a larger one grows the texture and the old one is destroyed after the draw that replaced it is submitted. Float pictures keep one texture per format, so a 4K half-float frame and a float32 crop do not replace each other. WebGPU's `destroy()` frees memory only once the queue has completed the submissions that used it, so this is a GPU-completion rule, not a count of presents (VP1 held it for 3 presents). Closing waits for the queue to go idle (`wait_idle`, a 4-byte mapped copy: wgpu-py 0.32's `on_submitted_work_done` cannot be called against wgpu-native 29). Pending pictures are bounded to the newest one; older pending pictures are dropped before conversion.
+- **Upload (VP2a).** Pictures go to the card through `StagingRing`: three reused `MAP_WRITE` buffers. When a picture is offered and no other picture is being filled or waiting for its draw, the Qt thread maps the slot the card finished with longest ago and a filler thread copies the picture into it (a float frame as it is, a cropped cache view included; a QImage converted to RGBA8888 there; a float frame over four million pixels cast to half floats on eight threads straight into the buffer). The filler wakes the widget through a queued signal, and the draw only records `copy_buffer_to_texture` before its render pass. One picture sits between offer and copy at a time, so newer offers replace the pending one and no picture is converted only to be dropped. Closing the dock waits for a fill in flight before it unmaps anything.
+- **Size limit.** The device asks for the adapter's own `max-buffer-size` and `max-texture-dimension-2d`. A picture wider or taller than the texture limit, or larger than one upload buffer, raises `TooLarge` naming its size and the card's limit; the status bar shows that sentence and the Viewer shows the picture. During playback the worker checks the same limits before it hands a float frame to the card, so an oversized frame is converted on the worker and never on the Qt thread.
+- **Retained picture.** The presenter keeps the newest picture only (the CPU copy that device-loss recovery re-uploads). Closing the dock releases it with the device, the textures and the upload buffers; the next picture starts a fresh presenter. The cache inspector shows the retained picture and the upload buffers in megabytes while the dock is open, and "closed, holds no memory" once it is closed.
 - **Revision and epoch.** Offers carry the source generation and the device epoch. An older generation or an older epoch is rejected. Equal generations are accepted (playback).
 - **Surface textures.** `get_current_texture()` is called inside one draw and nothing from it survives the draw.
 - **Pacing.** Input handlers change view state and call `request_draw()`; rendercanvas schedules the draw from Qt callbacks (capped at 120 per second). Nothing spins or waits for a surface.
@@ -28,7 +31,8 @@ During playback the dock takes the scene-linear float frame instead (`submit_lin
 - **Windows** (D3D12/Vulkan backend choice, DWM) and macOS: not run; this workstation cannot.
 - **Device loss.** Exercised by destroying the device under the presenter (wgpu then reports "Parent device is lost" on the next call) and by a logged loss message, on the RTX 3080 Ti, the Radeon and llvmpipe; recovery rebuilt the picture from the retained CPU image. A physical event (eGPU unplugged, driver reset) was not provoked.
 - **Latency.** Present return is when the application call returns, not screen response. Nothing here measures input-to-photon time. rendercanvas caps drawing at 120 per second, so a wheel event waits up to 8.3 ms for its draw (measured median 8.3 ms to present return) on top of the compositor.
-- **Hidden or occluded dock** still receives offers; the newest-only rule bounds the cost to one conversion per drawn frame.
+- **Hidden or occluded dock** still receives offers; the newest-only rule bounds the cost to one conversion per drawn frame. A closed dock receives none and holds nothing.
+- **Radeon on a private display.** Xvfb has no DRI3, so the Radeon 8060S cannot present to it and a request for it selects the RTX 3080 Ti (recorded in the selection note). The playback-response and frame-order numbers below therefore cover the RTX and llvmpipe; the Radeon's upload times come from the offscreen measurement. Real-display runs are left for an interactive session.
 
 ## Display transform on the card
 
@@ -59,3 +63,41 @@ Tools: `tools/viewer_direct_bench.py` (cadence, conversion and upload counts, pr
 Reading it: the Viewer's repaint is a synchronous Qt raster into the X backing store, so its 154 per second and 1.2 ms say nothing about what reaches the glass; the direct widget is paced by rendercanvas at its 120 per second cap on this 120 Hz display. What the comparison does support: on the display's own Radeon the direct path uses about 40 percent less CPU per new picture and about 60 percent less per pan or zoom step, converts and uploads each picture once and never again on a view change (counters in the JSON), and shows the picture exactly. The eGPU draws correctly but pays for crossing USB4 (9.4 ms of CPU per picture), and llvmpipe is a fallback that costs far more than the Viewer. The 8.3 ms wheel response is the 120 per second cap, not the work. Whether the artist feels it as faster is not measured here.
 
 The first-pass Xvfb numbers (no GPU presentation) stay in the repository and describe that display server, not a screen.
+
+## Playback (VP2a, 10/19)
+
+Tools: `tools/viewer_direct_playback.py` (the real Window on a private X display, a Checker with an animated cell size playing at 24 fps with the dock open, real `xdotool` presses and drags on the graph and drags on the frame bar, each timed from the moment xdotool is told to act to the end of the next paint, plus a 4 ms timer on the Qt thread), `tools/viewer_direct_upload.py` (one picture at a time from hand-over to on the card, no window), `tools/viewer_direct_screen.py --playback` (each played frame carries its number as a strip of cells; `tools/x_frame_probe.py` reads the strip off the window as it plays). Results in `benchmarks/viewer/direct-vp2a-*`. Measured on this workstation only (RTX 3080 Ti over USB4, Radeon 8060S, llvmpipe); the A6000 and the hybrid laptop were not measured.
+
+**What blocked.** Before this step, at 4K the dock's draw took up to 262 ms on the RTX: during playback the Viewer asks for its visible crop, so pictures alternated between a 544x146 crop and the whole 3840x2160 frame, and every size change made a new 133 MB float texture, followed by a 34 to 38 ms `write_texture` on the Qt thread. At 1080p the dock was never the long pole: the Qt thread's longest stalls came from presenting to Xvfb (no DRI3, so the swapchain image is copied out by the processor) and from the Properties panel being rebuilt after a graph press.
+
+**Input while the dock plays** (95th percentile, ms; xdotool send to next paint; 10 s each):
+
+| | graph press | graph drag | timeline scrub |
+|---|---:|---:|---:|
+| RTX 3080 Ti, 1080p, before | 20.5 | 23.4 | 22.5 |
+| RTX 3080 Ti, 1080p, after | 30.4 | 20.3 | 23.7 |
+| RTX 3080 Ti, 4K, before | 9.3 | 8.5 | 17.0 |
+| RTX 3080 Ti, 4K, after | 14.8 | 7.4 | 8.8 |
+| llvmpipe, 1080p, after | 8.9 | 7.9 | 9.0 |
+| llvmpipe, 4K, after | 4.5 | 8.7 | 10.4 |
+
+All under the 50 ms gate (six presses per run, so the press column's 95th percentile is its largest value). The dock's Qt-thread time per picture (hand-over plus the draw that records the copy and renders) is now about 2.5 ms at the 95th percentile on the RTX and up to 8 ms on llvmpipe at 4K, which draws on the processor; its largest single draw at 4K on the RTX went from 262 ms to 2 to 6 ms. The remaining hand-over spikes of 24 to 120 ms happen a few times a session: the display shader is built for the first picture and an upload buffer is made or grown (four times per run here, as the crop and the whole frame first arrive).
+
+**4K upload, one picture** (3840x2160 float32 handed over; ms, median / 95th percentile):
+
+| | Qt thread, hand-over + draw | filler thread copy | hand-over to on the card | VP1 `write_texture`, Qt thread | VP1, to on the card |
+|---|---:|---:|---:|---:|---:|
+| RTX 3080 Ti | 0.2 + 0.8 | 9.4 / 10.6 | 32.0 / 33.6 | 25.3 / 30.0 | 250 / 334 |
+| Radeon 8060S | 0.1 + 0.5 | 8.9 / 12.0 | 10.9 / 14.2 | 11.2 / 12.1 | 14.0 / 15.1 |
+| llvmpipe | 0.1 + 0.5 | 8.4 / 11.1 | 13.5 / 17.3 | 20.1 / 20.3 | 32.2 / 33.4 |
+
+The new path sends a 4K float frame as half floats (66 MB): as float32 it took 48 ms to reach the RTX over its USB4 link, more than a frame at 24 fps. 1080p stays float32. The display cache already keeps settled frames as half floats.
+
+**Frames reaching the window in order** (10 s at 24 fps, 241 frames produced, private Xvfb display where the window's pixels are what is shown):
+
+| | 1080p shown | 4K shown | out of order | produced to shown, median |
+|---|---:|---:|---:|---|
+| RTX 3080 Ti | 241 | 171 | 0 | 27 ms (1080p), 100 ms (4K) |
+| llvmpipe | 241 | 241 | 0 | 7 ms (1080p), 22 ms (4K) |
+
+At 4K on the RTX the card side is the limit: 171 frames in 10 s is about 58 ms a frame, against 32 ms for the upload alone offscreen; the rest is most likely Xvfb's copy-out, which brings every presented image back over the same USB4 link. The newest-only rule shows 17 of every 24 frames and never shows one out of order. A real screen does not copy the image back through the processor; that run is left for an interactive session.

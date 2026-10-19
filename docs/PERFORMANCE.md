@@ -168,6 +168,16 @@ What still holds the animated checker below 24 fps:
 - At 4K full resolution the frame is 128 MB of float32 per upload; keeping the render on the card
   (the later L4 step: same device as Render3D) removes it.
 
+### Direct picture playback (VP2a, 10/19)
+
+The Direct picture's uploads no longer run on the Qt thread: a filler thread copies each picture into one
+of three reused staging buffers and the draw only records the GPU copy; 4K float frames go up as half
+floats. At 4K the dock's largest draw on the RTX 3080 Ti went from 262 ms to under 6 ms, and a 4K picture
+costs the Qt thread about 1 ms (VP1: 25 ms of `write_texture`). Graph press, drag and timeline scrub stay
+under 31 ms at the 95th percentile while the dock plays, at 1080p and 4K, on the RTX and llvmpipe (private
+Xvfb display). Numbers per adapter, the frame-order check and what was not measured are in
+docs/DIRECT_VIEWER.md, "Playback (VP2a)".
+
 ### Still slow
 
 - In the default Viewer, `to_qimage` is about 41 ms per 1080p frame and 170 ms at 4K (ten
