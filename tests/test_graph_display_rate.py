@@ -202,6 +202,25 @@ class GraphDisplayRateTests(unittest.TestCase):
         self.assertIn('rb', flat)
         self.assertEqual(full, [])
 
+    def test_the_opengl_graph_is_a_setting_that_is_off_by_default(self):
+        from nodebased.app import ProjectSettingsDialog
+        w = self.window
+        prefs = w.preferences
+        saved = os.environ.pop('NODEBASED_GRAPH_OPENGL', None)
+        try:
+            self.assertFalse(prefs.graph_opengl())
+            self.assertNotIn('QOpenGLWidget', [cls.__name__ for cls in type(self.graph.viewport()).__mro__])
+            self.assertFalse(ProjectSettingsDialog(w.dispatcher.document['settings'], w).graph_opengl.isChecked())
+            prefs.set_graph_opengl(True)
+            self.assertTrue(prefs.graph_opengl())
+            os.environ['NODEBASED_GRAPH_OPENGL'] = '0'
+            self.assertFalse(prefs.graph_opengl())
+        finally:
+            os.environ.pop('NODEBASED_GRAPH_OPENGL', None)
+            if saved is not None:
+                os.environ['NODEBASED_GRAPH_OPENGL'] = saved
+            prefs.set_graph_opengl(False)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -692,6 +692,7 @@ class Preferences:
     LAST_PROJECT_DIRECTORY = "interface/last_project_directory"
     VIEWER_AUTO_3D = "interface/viewer_auto_3d"
     WIRE_MODE = "interface/wire_mode"
+    GRAPH_OPENGL = "interface/graph_opengl"
     LOCK_PANELS = "interface/lock_panels"
     GRAPHICS_ADAPTER = gpu3d.ADAPTER_SETTING
     WORKSPACE = "workspace"
@@ -717,6 +718,18 @@ class Preferences:
         if mode in graphlook.WIRE_MODES:
             self._store.setValue(self.WIRE_MODE, mode)
             self._store.sync()
+
+    def graph_opengl(self):
+        """Draw the node graph through OpenGL (off by default: see docs/PERFORMANCE.md, "Graph at
+        display rate"). NODEBASED_GRAPH_OPENGL=1 or 0 overrides the setting for one run."""
+        forced = os.environ.get("NODEBASED_GRAPH_OPENGL")
+        if forced in ("0", "1"):
+            return forced == "1"
+        return self._store.value(self.GRAPH_OPENGL, False) not in (False, "false", "0", 0, None)
+
+    def set_graph_opengl(self, enabled):
+        self._store.setValue(self.GRAPH_OPENGL, bool(enabled))
+        self._store.sync()
 
     def thumbnails(self):
         value = self._store.value(self.THUMBNAILS, True)
@@ -6255,6 +6268,15 @@ class Graph(PanZoomView):
         # than one full-screen graph at 175 percent, so they would be thrown out and redrawn every frame.
         QPixmapCache.setCacheLimit(max(QPixmapCache.cacheLimit(), 160 * 1024))
         super().__init__(QGraphicsScene())
+        if window.preferences.graph_opengl():
+            # Set before anything is parented to the viewport: replacing it deletes its children.
+            from PySide6.QtOpenGLWidgets import QOpenGLWidget
+            # wgpu's OpenGL adapter probe fails (EGL BadAccess, an abort) once a Qt OpenGL context
+            # exists on this thread, so the adapters are listed (and cached) first.
+            gpu3d.enumerate_adapters()
+            surface = QOpenGLWidget()
+            surface.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.PartialUpdate)
+            self.setViewport(surface)
         self.setBackgroundBrush(QColor(TOKENS["bg0"]))
         self.wire_mode = window.preferences.wire_mode()
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
@@ -6323,6 +6345,8 @@ class Graph(PanZoomView):
     def paintEvent(self, event):
         super().paintEvent(event)
         self.corner.sync()
+        if self.viewport() is not None and hasattr(self.viewport(), "doneCurrent"):
+            self.viewport().doneCurrent()   # leave no OpenGL context current for wgpu on this thread
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -7589,7 +7613,7 @@ class ProjectSettingsDialog(QDialog):
 
     def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
                  max_panels=5, cache_float32=False, auto_3d=False,
-                 adapters=(), graphics_adapter=""):
+                 adapters=(), graphics_adapter="", graph_opengl=False):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -7632,6 +7656,12 @@ class ProjectSettingsDialog(QDialog):
         self.auto_3d.setToolTip("The 2D and 3D views share one panel (Tab over it switches). Off: viewing "
                                 "a 3D node, or pressing 1 on it, leaves the panel on the view you chose.")
         interface.addRow("Viewer", self.auto_3d)
+        self.graph_opengl = QCheckBox("Draw the node graph with OpenGL")
+        self.graph_opengl.setObjectName("graph-opengl")
+        self.graph_opengl.setChecked(bool(graph_opengl))
+        self.graph_opengl.setToolTip("Off by default: on the software renderer it measured slower than the "
+                                     "standard drawing. Takes effect the next time NodeBased starts.")
+        interface.addRow("Node graph drawing", self.graph_opengl)
         self.graphics_adapter = QComboBox()
         self.graphics_adapter.setObjectName("graphics-adapter")
         self.graphics_adapter.addItem("Automatic (discrete preferred)", "")
@@ -10276,7 +10306,8 @@ class Window(QMainWindow):
                                        cache_float32=self.preferences.display_cache_float32(),
                                        auto_3d=self.preferences.viewer_auto_3d(),
                                        adapters=gpu3d.enumerate_adapters(),
-                                       graphics_adapter=self.preferences.graphics_adapter())
+                                       graphics_adapter=self.preferences.graphics_adapter(),
+                                       graph_opengl=self.preferences.graph_opengl())
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -10294,6 +10325,9 @@ class Window(QMainWindow):
             if chosen_adapter != self.preferences.graphics_adapter():
                 self.preferences.set_graphics_adapter(chosen_adapter)
                 self.statusBar().showMessage("Graphics adapter changed: restart NodeBased to use it", 8000)
+            if dialog.graph_opengl.isChecked() != self.preferences.graph_opengl():
+                self.preferences.set_graph_opengl(dialog.graph_opengl.isChecked())
+                self.statusBar().showMessage("Node graph drawing changed: restart NodeBased to use it", 8000)
             new_cache_float32 = dialog.cache_float32.isChecked()
             if new_cache_float32 != self.preferences.display_cache_float32():
                 self.preferences.set_display_cache_float32(new_cache_float32)
