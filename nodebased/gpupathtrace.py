@@ -27,6 +27,7 @@ that sets `stats["skip_noise_maps"]` gets the image finished on the card (`_RESO
 Scope, named rather than assumed: textures, more than one environment and particles raise
 `gpu3d.Unsupported` (callers fall back to the CPU reference).
 """
+import contextlib
 import math
 import struct
 import threading
@@ -2968,6 +2969,40 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
     wait()                     # the card may still owe the last passes: the final readback then times the transfer alone
 
 
+_PREPARED = threading.local()
+
+
+@contextlib.contextmanager
+def reusing_scene():
+    """Within this block the renders of one scene, camera position, ambient and volume share one `build_scene` and `pack`
+    (the beauty and the albedo, normals and depth guides of an interactive first look: about 70 ms of host work apiece at
+    1080p-class scenes). The caller promises not to change the scene's arrays inside the block; the entry is dropped on exit."""
+    outer = getattr(_PREPARED, "entry", False)
+    if outer is False:
+        _PREPARED.entry = None
+    try:
+        yield
+    finally:
+        if outer is False:
+            del _PREPARED.entry
+
+
+def _scene_key(scene, ambient, eye, volume):
+    return (id(scene), float(ambient), tuple(float(v) for v in eye), id(volume))
+
+
+def _prepared_scene(scene, ambient, eye, volume):
+    entry = getattr(_PREPARED, "entry", None)
+    if entry is not None and entry[0] == _scene_key(scene, ambient, eye, volume):
+        return entry[3], entry[4]
+    return None
+
+
+def _remember_scene(scene, ambient, eye, volume, ps, packed):
+    if getattr(_PREPARED, "entry", False) is not False:     # inside `reusing_scene`; the entry holds the scene so its id stays unique
+        _PREPARED.entry = (_scene_key(scene, ambient, eye, volume), scene, volume, ps, packed)
+
+
 def render(scene, camera, width, height, background, ambient, output, settings, cancel=None, progress=None,
            stats=None, volume=None, merge_volumes=True):
     """Path trace on the GPU; raises `gpu3d.Unsupported` for what it cannot take (the caller falls back).
@@ -2997,16 +3032,23 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         phases[name] = phases.get(name, 0.0) + now - mark
         mark = now
     raytrace._cancel(cancel)
-    ps = pt.build_scene(scene, ambient, eye=s._view_basis(camera)[0], volume=volume)
-    lap("scene build")
-    if (ps.splats is not None or ps.volumes is not None) and not soft_supported(state):
-        raise gpu3d.Unsupported("splats and smoke are path traced on the GPU on NVIDIA adapters only for now")
-    try:
-        packed = pack(ps, cancel=cancel)
-    except ValueError as exc:
-        if "traversal stack" in str(exc):
-            raise gpu3d.Unsupported(str(exc)) from exc
-        raise
+    eye = s._view_basis(camera)[0]
+    reused = _prepared_scene(scene, ambient, eye, volume)
+    if reused is not None:
+        ps, packed = reused
+        lap("scene build")
+    else:
+        ps = pt.build_scene(scene, ambient, eye=eye, volume=volume)
+        lap("scene build")
+        if (ps.splats is not None or ps.volumes is not None) and not soft_supported(state):
+            raise gpu3d.Unsupported("splats and smoke are path traced on the GPU on NVIDIA adapters only for now")
+        try:
+            packed = pack(ps, cancel=cancel)
+        except ValueError as exc:
+            if "traversal stack" in str(exc):
+                raise gpu3d.Unsupported(str(exc)) from exc
+            raise
+        _remember_scene(scene, ambient, eye, volume, ps, packed)
     lap("pack")
     width, height = int(width), int(height)
     tiles_x, tiles_y = -(-width // pt.TILE), -(-height // pt.TILE)

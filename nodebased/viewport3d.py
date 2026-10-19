@@ -23,7 +23,6 @@ from PySide6.QtWidgets import QWidget, QToolTip, QMenu, QLabel
 
 from . import handles3d, progressiverender, scene3d, viewportgpu, viewportlens, particleinspect
 from .core import GEOMETRY_TYPES
-from .imaging import linear_to_srgb
 
 # The progressive "Render" mode's own idle-repaint cadence (R6 "next", closed): fast enough to look
 # responsive while converging, slow enough to leave the event loop room for mouse/keyboard input.
@@ -993,7 +992,7 @@ class Viewport3D(QWidget):
             moments = [(moment_scene, lens.camera(moment_camera)) for moment_scene, moment_camera in moments] if moments else moments
             width, height = lens.render_width, lens.render_height
         try:
-            self._progressive_state = progressiverender.step(
+            self._progressive_state = progressiverender.step_interactive(
                 self._progressive_state, scene, lens.camera(camera) if lens else camera, width, height, BACKGROUND,
                 0.15, key, moments=moments)
         except Exception as error:  # a scene the path tracer refuses (e.g. particles slipped through)
@@ -1005,9 +1004,7 @@ class Viewport3D(QWidget):
         if state.image is None:
             return False
         self.splat_note = self.volume_note = self.shadow_note = ""   # the progressive image already carries their look
-        rgb = np.clip(state.image[..., :3] / np.maximum(state.image[..., 3:4], 1e-6), 0, 1)
-        rgba = np.concatenate((linear_to_srgb(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2)
-        rgba = np.ascontiguousarray(rgba.astype(np.uint8))
+        rgba = progressiverender.display_rgba8(state.image)
         if lens is not None:
             rgba = viewportlens.redistort(lens, viewportlens.fit(lens, rgba))
         qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0],
@@ -1016,7 +1013,9 @@ class Viewport3D(QWidget):
         painter.drawImage(self.rect(), qimage)
         done = progressiverender.converged(state, width, height)
         label = f"{state.samples} sample{'s' if state.samples != 1 else ''}"
-        if state.low_res:
+        if state.preview:       # an enlarged internal pass, denoised: not a render at the view's size
+            label += f" · denoised preview from {state.traced_width}×{state.traced_height}"
+        elif state.low_res:
             label += " · low-res"
         label += f" · pass {state.passes}"
         if state.converged_fraction is not None:

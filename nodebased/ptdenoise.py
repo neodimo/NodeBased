@@ -45,18 +45,32 @@ def _tap(a, dy, dx):
     return a[ys][:, xs]
 
 
+def _padded(a, reach):
+    """`a` with `reach` repeated edge pixels on each side of its first two axes, so `_shifted` reads a clamped tap as a view."""
+    return np.pad(a, ((reach, reach), (reach, reach)) + ((0, 0),) * (a.ndim - 2), mode="edge")
+
+
+def _shifted(padded, reach, dy, dx, h, w):
+    """`_tap` of the array `padded` was made from (`_padded(a, reach)`, `|dy|, |dx| <= reach`): a view, no copy."""
+    return padded[reach + dy:reach + dy + h, reach + dx:reach + dx + w]
+
+
 def _box3(a):
     """3 x 3 mean with repeated edges."""
-    return sum(_tap(a, dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1)) / 9.0
+    h, w = a.shape[:2]
+    padded = _padded(a, 1)
+    return sum(_shifted(padded, 1, dy, dx, h, w) for dy in (-1, 0, 1) for dx in (-1, 0, 1)) / 9.0
 
 
 def local_variance(luma, radius=3):
     """A stand-in for the variance of the mean when the renderer gives none: the spread of `luma` in a
     (2 radius + 1)-square window (an upper bound, edges included)."""
     total, squares, count = 0.0, 0.0, 0
+    h, w = luma.shape[:2]
+    padded = _padded(luma, radius)
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
-            v = _tap(luma, dy, dx)
+            v = _shifted(padded, radius, dy, dx, h, w)
             total, squares, count = total + v, squares + v * v, count + 1
     mean = total / count
     return np.maximum(squares / count - mean * mean, 0.0)
@@ -86,20 +100,22 @@ def temporal_blend(current, previous, vectors, blend=TEMPORAL_BLEND):
 
 
 def denoise(color, albedo, normal, depth, variance=None, *, iterations=ITERATIONS, phi_color=PHI_COLOR,
-            phi_normal=PHI_NORMAL, phi_depth=PHI_DEPTH, sigma_albedo=SIGMA_ALBEDO, strength=1.0, history=None):
+            phi_normal=PHI_NORMAL, phi_depth=PHI_DEPTH, sigma_albedo=SIGMA_ALBEDO, strength=1.0, history=None, dtype=np.float64):
     """Filter a premultiplied RGBA beauty `color` (H, W, 4) with its guides: `albedo` (H, W, 3, premultiplied like
     the beauty), `normal` (H, W, 3) world normals, `depth` (H, W) view depth (any value where nothing is hit) and,
     optionally, `variance` (H, W) of the luminance of `color`'s mean. `strength` 0 skips the filter entirely and
     returns `color` unchanged (the knob's contract: 0 is the raw beauty); 1 is the filter as computed. `history`,
     when given, is `(previous, vectors)` for `temporal_blend`, applied to the filtered result before `strength`
-    mixes it back toward the raw beauty. Returns float32 (H, W, 4)."""
+    mixes it back toward the raw beauty. `dtype` is the working precision (float32 for the interactive first look, about
+    twice as fast). Returns float32 (H, W, 4)."""
     strength = float(strength)
     if strength <= 0.0:
         return np.asarray(color, np.float32).copy()
-    color = np.asarray(color, np.float64)
-    albedo = np.asarray(albedo, np.float64)[..., :3]
-    normal = np.asarray(normal, np.float64)[..., :3]
-    depth = np.asarray(depth, np.float64)
+    color = np.asarray(color, dtype)
+    albedo = np.asarray(albedo, dtype)[..., :3]
+    normal = np.asarray(normal, dtype)[..., :3]
+    depth = np.asarray(depth, dtype)
+    luma = LUMA.astype(dtype)
     if depth.ndim == 3:
         depth = depth[..., 0]
     rgb, alpha = color[..., :3], color[..., 3]
@@ -109,33 +125,35 @@ def denoise(color, albedo, normal, depth, variance=None, *, iterations=ITERATION
     demod = a_max > ALBEDO_FLOOR
     denominator = np.where(demod[..., None], np.maximum(albedo, ALBEDO_FLOOR), 1.0)
     e = rgb / denominator
-    a_lum = np.maximum(albedo @ LUMA, ALBEDO_FLOOR)
+    a_lum = np.maximum(albedo @ luma, ALBEDO_FLOOR)
     if variance is None:
-        var = local_variance(e @ LUMA) * 0.25
+        var = local_variance(e @ luma) * 0.25
     else:
-        var = np.asarray(variance, np.float64) / np.where(demod, a_lum, 1.0) ** 2
+        var = np.asarray(variance, dtype) / np.where(demod, a_lum, 1.0) ** 2
     var = _box3(var)
     a_unit = np.where(demod[..., None], albedo / np.maximum(alpha, 1e-6)[..., None], 0.0)
     z = np.where(covered, depth, 0.0)
     gzy, gzx = np.gradient(z)
     for i in range(int(iterations)):
         step = 2 ** i
-        l_center = e @ LUMA
+        l_center = e @ luma
         sigma_l = phi_color * np.sqrt(np.maximum(_box3(var), 0.0)) + 1e-4
         e_sum, v_sum, w_sum = np.zeros_like(e), np.zeros_like(var), np.zeros_like(var)
+        reach = 2 * step
+        p_normal, p_z, p_e, p_var, p_a, p_c = (_padded(a, reach) for a in (normal, z, e, var, a_unit, covered))
         for ky in range(-2, 3):
             for kx in range(-2, 3):
                 dy, dx = ky * step, kx * step
-                h_k = KERNEL[ky + 2] * KERNEL[kx + 2]
+                h_k = float(KERNEL[ky + 2] * KERNEL[kx + 2])
                 if dy == 0 and dx == 0:
-                    weight, e_q, v_q = np.full((h, w), h_k), e, var
+                    weight, e_q, v_q = np.full((h, w), h_k, dtype), e, var
                 else:
-                    n_q, z_q = _tap(normal, dy, dx), _tap(z, dy, dx)
-                    e_q, v_q, a_q, c_q = _tap(e, dy, dx), _tap(var, dy, dx), _tap(a_unit, dy, dx), _tap(covered, dy, dx)
+                    n_q, z_q = (_shifted(p, reach, dy, dx, h, w) for p in (p_normal, p_z))
+                    e_q, v_q, a_q, c_q = (_shifted(p, reach, dy, dx, h, w) for p in (p_e, p_var, p_a, p_c))
                     w_n = np.maximum(0.0, np.sum(normal * n_q, axis=-1)) ** phi_normal
                     plane = np.abs(gzx * dx) + np.abs(gzy * dy)
                     w_z = np.exp(-np.abs(z - z_q) / (phi_depth * plane + 1e-3 * np.maximum(z, 1e-3)))
-                    w_l = np.exp(-np.abs(l_center - e_q @ LUMA) / sigma_l)
+                    w_l = np.exp(-np.abs(l_center - e_q @ luma) / sigma_l)
                     w_a = np.exp(-np.sum((a_unit - a_q) ** 2, axis=-1) / (2 * sigma_albedo ** 2))
                     weight = h_k * w_n * w_z * w_l * w_a * (covered == c_q)
                 e_sum, v_sum, w_sum = e_sum + weight[..., None] * e_q, v_sum + weight * weight * v_q, w_sum + weight
@@ -153,3 +171,30 @@ def denoise(color, albedo, normal, depth, variance=None, *, iterations=ITERATION
         out[..., :3] = color[..., :3] * (1.0 - strength) + out[..., :3] * strength
         out = out.astype(np.float32)
     return out
+
+
+def halo(iterations=ITERATIONS):
+    """Rows a strip needs beyond its own for `denoise` to give the same pixels there as on the whole image: the a-trous
+    reach (2 * (2**iterations - 1)), plus the 3-pixel variance window, the 3 x 3 variance blur and the depth gradient."""
+    return 2 * (2 ** int(iterations) - 1) + 3 + 1 + 1
+
+
+def denoise_strips(color, albedo, normal, depth, variance=None, *, workers=8, min_rows=24, **kwargs):
+    """`denoise` run on horizontal strips in a thread pool (numpy releases the GIL in the heavy array work), each strip
+    carrying `halo` extra rows so every interior pixel matches the single-call result. Same arguments as `denoise`
+    (`history` excepted: reproject the result yourself); too small an image for the strips to pay falls through to one call."""
+    from concurrent.futures import ThreadPoolExecutor
+    h = np.asarray(color).shape[0]
+    count = max(1, min(int(workers), h // max(int(min_rows), 1)))
+    if count < 2 or kwargs.get("history") is not None:
+        return denoise(color, albedo, normal, depth, variance, **kwargs)
+    pad = halo(kwargs.get("iterations", ITERATIONS))
+    edges = np.linspace(0, h, count + 1).astype(int)
+
+    def one(i):
+        lo, hi = max(edges[i] - pad, 0), min(edges[i + 1] + pad, h)
+        part = denoise(color[lo:hi], albedo[lo:hi], normal[lo:hi], depth[lo:hi],
+                       None if variance is None else variance[lo:hi], **kwargs)
+        return part[edges[i] - lo:edges[i + 1] - lo]
+    with ThreadPoolExecutor(count) as pool:
+        return np.concatenate(list(pool.map(one, range(count))), axis=0)
