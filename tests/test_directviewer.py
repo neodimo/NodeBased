@@ -349,6 +349,7 @@ class StubPresenter:
         pass
 
 
+@needs_wgpu
 class HitOrderTests(unittest.TestCase):
     """While the direct dock is open the Viewer keeps every overlay and every hit; the direct surface only navigates."""
 
