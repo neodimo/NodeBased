@@ -1,3 +1,24 @@
+## 2026-10-19 — Lane 2 VP2a (Opus sprint): the direct picture plays smoothly beside the Viewer and takes 4K pictures
+
+- **What was done:** found what blocked playback at 4K: the Viewer's visible crop and the whole frame alternated, every
+  size change made a new 133 MB float texture (draws up to 262 ms on the RTX 3080 Ti) followed by a 34 to 38 ms
+  `write_texture` on the Qt thread. Uploads now go through a staging ring of three reused buffers filled on a filler
+  thread; the draw records the copy only; one picture waits between offer and copy, newer offers replace it; textures
+  grow and are reused, one per float format; 4K float frames go up as half floats (48 ms over the RTX's USB4 link as
+  float32, 32 ms now). Pictures over the card's texture or buffer limit are refused by name and the Viewer shows them;
+  the worker converts such frames itself. Closing the dock releases the device, buffers and the retained picture
+  (newest only); the cache inspector shows its size.
+- **Measured** (this workstation; private Xvfb display; the A6000 and the laptop not measured): graph press, drag and
+  timeline scrub under 31 ms at the 95th percentile while the dock plays, 1080p and 4K, RTX and llvmpipe; a 4K picture
+  costs the Qt thread about 1 ms on all three adapters (VP1: 11 to 25 ms); 241 of 241 frames reached the window in
+  order at 1080p on the RTX and llvmpipe, 171 of 241 at 4K on the RTX (card side), 241 of 241 at 4K on llvmpipe.
+- **Tested:** `tests.test_directviewer_playback` (new), `tests.test_directviewer`, `tests.test_carddisplay` on the
+  RTX, the Radeon and llvmpipe and with wgpu hidden; `tests.test_artisttools`, `tests.test_artist_tools_wiring`,
+  `tests.test_topbar`, `tests.test_e2e5_ui_punchlist`, `tests.test_knowledge`.
+- **Not done:** real-display runs (workers may not use display :0); the Radeon cannot present to Xvfb; the hot pour
+  comp was not played (a path-traced fluid shot that needs a bake); not pushed; no full suite. Report:
+  `scratch/nb-lanes/run/report-L2-vp2a.md`.
+
 ## 2026-10-19 — Lane 2: sprint branches integrated (wire disconnect, Properties overhaul, viewer colour on the card)
 
 - **What was done:** Lane 2's branch was reset to `main` (0.39.0; backup branch `backup/nb-2d-parity-pre-sprints-1019`) and

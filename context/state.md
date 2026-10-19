@@ -1,3 +1,15 @@
+## 2026-10-19 — Lane 2 VP2a (Opus sprint): direct picture playback and 4K pictures
+
+On `openclaw/nb-2d-parity` on top of the sprint integration (`819d2be3`). `nodebased/directviewer.py`: pictures go
+to the card through `StagingRing` (three reused MAP_WRITE buffers, filled on a filler thread, the draw only records
+`copy_buffer_to_texture`); textures grow and are reused for smaller pictures, one float texture per format; 4K
+float frames go up as half floats cast in bands; the device asks for the adapter's buffer and texture limits and a
+picture over them raises `TooLarge` by name (status bar; the worker converts such frames itself); closing the dock
+releases the device, buffers and retained picture, and the cache inspector shows what the dock holds
+(`CacheInspectorPanel.set_direct_memory`). Tools: `viewer_direct_playback.py`, `viewer_direct_upload.py`,
+`viewer_direct_screen.py --playback` with `x_frame_probe.py`. Numbers and gaps: docs/DIRECT_VIEWER.md
+"Playback (VP2a)". Not measured: real display, the A6000, the hybrid laptop, the Radeon on a private display.
+
 ## 2026-10-18 — Lane 4 H1: a denoised 1080p first look within one second (DONE, local on `openclaw/nb-3d-astra-lane`)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (4:58 PM on 2026-10-19 PDT)
