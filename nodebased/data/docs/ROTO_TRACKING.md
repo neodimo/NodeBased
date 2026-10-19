@@ -381,7 +381,11 @@ Tracker and Stabilize analysis requests only the reference pattern and each
 candidate search region through TileExecutor's ROI path. PlanarTracker requests
 the selected quadrilateral's bounding box plus a search margin. Tracker analysis
 cache digests are unchanged. PlanarTracker still uses a rectangular padded ROI;
-curved Roto masks are not an analysis-region option.
+curved Roto masks are not an analysis-region option. Tracker and PlanarTracker
+analysis run on the preview worker, report frame progress in the status bar,
+and expose cancellation in the properties panel. PlanarTracker checks cancellation
+between frame renders and adjacent-frame flow solves; an in-progress flow solve
+finishes before cancellation is observed.
 
 #### Lane 8 Q1 baseline profile (before optimization)
 
@@ -537,6 +541,8 @@ Transform handle never consumes a Roto point edit or tracker point-picking
 click.
 
 ## Lane 8 step notes
+
+**2026-10-19, Lane 8 step T2 (partial).** PlanarTracker analysis now runs on the existing single-owner preview worker, shows completed/total frames and the current frame in the status bar, and can be cancelled from Properties. Cancellation is checked between input-frame renders and flow steps; a flow solve already in progress finishes before cancellation is observed. The result is discarded if the node or track payload changes during analysis. CPU tests cover cancellation and the progress callback contract. The 10/15 QA timings remain baseline evidence; no new 12 GB/llvmpipe interaction timing is claimed. The demo-plate cube-face failure remains unclassified pending a controlled plane-pick comparison.
 
 ### Lane 8 T1: ROI correctness
 

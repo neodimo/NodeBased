@@ -88,7 +88,8 @@ def fit_homography_ransac(reference_points, current_points, threshold=2.0, max_t
 
 
 def track_region(frames, corners, reference_frame, *, samples_per_axis=8, vector_detail=4,
-                 smoothness=1.0, backend="auto", threshold=2.0):
+                 smoothness=1.0, backend="auto", threshold=2.0, cancel=None,
+                 progress=None):
     """Track a quadrilateral through a frame mapping using Lucas-Kanade dense flow.
 
     `frames` maps integer frame numbers to HxWxRGBA arrays. Dense adjacent-frame
@@ -119,9 +120,14 @@ def track_region(frames, corners, reference_frame, *, samples_per_axis=8, vector
         raise PlanarTrackingError("all frames must have matching image dimensions")
     ref = int(reference_frame)
     positions = {ref: points.copy()}
+    total_steps = max(0, len(numbers) - 1)
+    completed = 0
     for direction in (1, -1):
         current = ref
         while numbers[0] <= current + direction <= numbers[-1]:
+            if cancel is not None and cancel.is_set():
+                from concurrent.futures import CancelledError
+                raise CancelledError()
             nxt = current + direction
             first, second = np.asarray(frames[current], np.float32), np.asarray(frames[nxt], np.float32)
             fw, bw, occ = flow_pair(first, second, vector_detail=vector_detail,
@@ -142,6 +148,9 @@ def track_region(frames, corners, reference_frame, *, samples_per_axis=8, vector
             # one occluded patch from poisoning every later frame in the traversal.
             positions[nxt] = project_points(step_h, positions[current])
             current = nxt
+            completed += 1
+            if progress is not None:
+                progress(current, completed, total_steps)
     result = {}
     for frame in numbers:
         if frame == ref:

@@ -35,6 +35,22 @@ if __name__ == "__main__":
     unittest.main()
 
 class PlanarSequenceTests(unittest.TestCase):
+    def test_analysis_cancellation_and_progress_are_observed_between_frames(self):
+        import threading
+        from concurrent.futures import CancelledError
+        from nodebased.planar import track_region
+        plate = np.random.default_rng(4).random((48, 48, 4), dtype=np.float32)
+        plate[..., 3] = 1
+        cancel = threading.Event()
+        cancel.set()
+        progress = []
+        with self.assertRaises(CancelledError):
+            track_region({1: plate, 2: plate.copy()},
+                         np.array([[8, 8], [40, 8], [40, 40], [8, 40]], float), 1,
+                         samples_per_axis=3, vector_detail=1, backend="cpu",
+                         cancel=cancel, progress=lambda *args: progress.append(args))
+        self.assertEqual(progress, [])
+
     def test_lucas_kanade_region_tracks_24_homography_frames(self):
         from nodebased.flow_nodes import warp_by_homography
         from nodebased.planar import track_region
@@ -59,6 +75,55 @@ class PlanarSequenceTests(unittest.TestCase):
 
 
 class PlanarNodeTests(unittest.TestCase):
+    def test_planar_worker_keeps_ui_responsive_and_cancellation_click_lands(self):
+        import threading
+        import time
+        from unittest import mock
+        import tests.isolation  # noqa: F401
+        from PySide6.QtCore import QSettings, Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QPushButton
+        from tests.test_roto_ui import APP
+        from tests.waiting import wait_until
+        from nodebased.app import Window
+        from nodebased.core import Dispatcher, empty_document
+        QSettings("NodeBased", "NodeBased").clear()
+        dispatcher = Dispatcher(empty_document())
+        dispatcher.execute({"op": "create", "id": "plate", "type": "Constant",
+                            "params": {"width": 64, "height": 64}})
+        dispatcher.execute({"op": "create", "id": "plane", "type": "PlanarTracker"})
+        dispatcher.execute({"op": "connect", "id": "plane", "input": "image", "source": "plate"})
+        dispatcher.execute({"op": "view", "id": "plane"})
+        window = Window(dispatcher.document)
+        self.addCleanup(lambda: (setattr(window, "saved_document", window.dispatcher.document),
+                                 window.close(), window.executor.shutdown(wait=True, cancel_futures=True),
+                                 APP.processEvents()))
+        window.show()
+        window.inspect("plane")
+        window.set_planar_region("plane", [(12, 12), (52, 12), (52, 52), (12, 52)])
+        entered, release = threading.Event(), threading.Event()
+        original = __import__("nodebased.tileexec", fromlist=["TileExecutor"]).TileExecutor.compose_region
+
+        def slow_compose(*args, **kwargs):
+            entered.set()
+            release.wait(2)
+            return original(*args, **kwargs)
+
+        with mock.patch("nodebased.app.TileExecutor.compose_region", side_effect=slow_compose):
+            self.assertTrue(window.analyse_planar("plane", 1, 2))
+            self.assertTrue(entered.wait(1), "analysis worker did not start")
+            self.assertTrue(wait_until(lambda: "PlanarTracker analysis:" in window.statusBar().currentMessage(),
+                                       timeout=1), "analysis progress was not visible")
+            cancel_button = window.properties.widget().findChild(QPushButton, "planar-cancel-analysis")
+            self.assertIsNotNone(cancel_button)
+            started = time.perf_counter()
+            QTest.mouseClick(cancel_button, Qt.MouseButton.LeftButton)
+            click_ms = (time.perf_counter() - started) * 1000
+            self.assertLess(click_ms, 100, f"cancel click took {click_ms:.1f} ms")
+            self.assertTrue(window._planar_cancel.is_set())
+            release.set()
+            self.assertTrue(wait_until(lambda: window._planar_future is None, timeout=3))
+
     def test_node_is_registered_and_passes_image_identically_on_evaluator_and_tiles(self):
         from nodebased.core import Dispatcher, SPECS, empty_document
         from nodebased.imaging import Evaluator

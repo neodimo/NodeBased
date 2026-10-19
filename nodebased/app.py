@@ -8222,6 +8222,9 @@ class Window(QMainWindow):
         self._tracker_selected_index = None
         self._tracker_key = None
         self._tracker_job = None
+        self._planar_future = None
+        self._planar_cancel = None
+        self._planar_job = None
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
         self.cache_budget = SharedMemoryBudget()
@@ -11740,6 +11743,11 @@ class Window(QMainWindow):
                 analyse.clicked.connect(lambda checked=False, k=key, a=first, b=last:
                                         self.analyse_planar(k, a.value(), b.value()))
                 form.addRow(analyse)
+                cancel_planar = QPushButton("Cancel plane analysis")
+                cancel_planar.setObjectName("planar-cancel-analysis")
+                cancel_planar.setEnabled(self._planar_future is not None)
+                cancel_planar.clicked.connect(self.cancel_planar_analysis)
+                form.addRow(cancel_planar)
                 form.addRow("From frame", first); form.addRow("Through frame", last)
                 export_pin = QPushButton("Export CornerPin")
                 export_pin.clicked.connect(lambda checked=False, k=key: self.export_tracker_cornerpin(k))
@@ -12268,6 +12276,8 @@ class Window(QMainWindow):
         return True
 
     def analyse_planar(self, key, first_frame=None, last_frame=None):
+        if self._planar_future is not None or self._tracker_future is not None:
+            return False
         context = self._planar_context(key)
         if context is None:
             return False
@@ -12286,7 +12296,13 @@ class Window(QMainWindow):
         if hi-lo > 5000:
             self._show_command_error(ValueError("Planar analysis is limited to 5,001 frames")); return False
         from . import planar
-        try:
+        cancel = threading.Event()
+        job = {"key": key, "base_tracks": copy.deepcopy(payload.get("tracks", [])),
+               "progress": {"frame": ref, "completed": 0, "total": max(0, hi-lo)}}
+        self._planar_job = job
+        self._planar_cancel = cancel
+
+        def analyze():
             corners = planar.resolve_corners(payload, ref)
             roi_executor = TileExecutor(tile_edge=self.tile_executor.tile_edge)
             bounds = roi_executor.canvas_region(doc, source, ref, tier=1)
@@ -12298,26 +12314,71 @@ class Window(QMainWindow):
             bottom = min(bounds.bottom, int(math.ceil(float(corners[:, 1].max()) + margin)))
             roi = TileRegion(left, top, right-left, bottom-top, full_width=bounds.width,
                              full_height=bounds.height, full_x=bounds.x, full_y=bounds.y)
-            frames = {f: roi_executor.compose_region(doc, source, roi, frame=f, tier=1).pixels
-                      for f in range(lo, hi+1)}
+            frames = {}
+            for f in range(lo, hi+1):
+                if cancel.is_set():
+                    raise CancelledError()
+                frames[f] = roi_executor.compose_region(doc, source, roi, frame=f, tier=1,
+                                                        cancel=cancel).pixels
+                job["progress"].update(frame=f, completed=len(frames)-1, total=hi-lo)
             local_corners = corners - np.asarray([left, top], dtype=np.float64)
             results = planar.track_region(frames, local_corners, ref,
                 samples_per_axis=int(node["params"].get("samples_per_axis", 8)),
                 vector_detail=int(node["params"].get("vector_detail", 4)),
                 smoothness=float(node["params"].get("smoothness", 1.0)), backend="cpu",
-                threshold=float(node["params"].get("ransac_threshold", 2.0)))
+                threshold=float(node["params"].get("ransac_threshold", 2.0)), cancel=cancel,
+                progress=lambda f, n, total: job["progress"].update(
+                    frame=f, completed=n, total=total))
             to_global = np.array([[1.0, 0.0, left], [0.0, 1.0, top], [0.0, 0.0, 1.0]])
             from_global = np.linalg.inv(to_global)
             for result in results.values():
                 result["corners"] = (np.asarray(result["corners"]) + [left, top]).tolist()
                 result["matrix"] = (to_global @ np.asarray(result["matrix"]) @ from_global).tolist()
-            tracks = planar.tracks_from_results(results)
-            self.command({"op": "set_tracks", "id": key, "tracks": tracks})
-        except (ValueError, np.linalg.LinAlgError) as error:
-            self._show_command_error(error); return False
-        self.statusBar().showMessage(f"PlanarTracker: tracked {len(results)} frames")
-        self.viewer.viewport().update()
+            return planar.tracks_from_results(results), len(results)
+
+        self._planar_future = self.executor.submit(analyze)
+        self.statusBar().showMessage(f"PlanarTracker analysis: 0/{hi-lo} frames")
+        self.inspect(key)
+        QTimer.singleShot(50, self._poll_planar_analysis)
         return True
+
+    def cancel_planar_analysis(self):
+        if self._planar_cancel is not None:
+            self._planar_cancel.set()
+            self.statusBar().showMessage("PlanarTracker analysis: cancelling…")
+
+    def _poll_planar_analysis(self):
+        future = self._planar_future
+        if future is None:
+            return
+        if not future.done():
+            progress = (self._planar_job or {}).get("progress", {})
+            self.statusBar().showMessage(
+                f"PlanarTracker analysis: {progress.get('completed', 0)}/"
+                f"{progress.get('total', 0)} frames · frame {progress.get('frame', '?')}")
+            QTimer.singleShot(50, self._poll_planar_analysis)
+            return
+        self._planar_future = None
+        cancel, job = self._planar_cancel, self._planar_job
+        self._planar_cancel = self._planar_job = None
+        try:
+            if cancel is not None and cancel.is_set():
+                raise CancelledError()
+            tracks, count = future.result()
+            node = self.dispatcher.document["nodes"].get(job["key"])
+            current = self.dispatcher.document.get("node_data", {}).get(job["key"], {}).get("tracks", [])
+            if node is None or node["type"] != "PlanarTracker" or current != job["base_tracks"]:
+                raise ValueError("PlanarTracker changed during analysis; results discarded")
+            self.command({"op": "set_tracks", "id": job["key"], "tracks": tracks})
+        except CancelledError:
+            self.statusBar().showMessage("PlanarTracker analysis cancelled")
+            return
+        except Exception as error:
+            self._show_command_error(error)
+            return
+        self.statusBar().showMessage(f"PlanarTracker: tracked {count} frames")
+        self.viewer.viewport().update()
+        self.rebuild_properties_dock()
 
     def _tracker_context(self, key=None):
         selected = key or self.graph.selected_id()
@@ -12811,6 +12872,8 @@ class Window(QMainWindow):
     def cancel_tracker_analysis(self):
         if self._tracker_cancel is not None:
             self._tracker_cancel.set()
+        if self._planar_cancel is not None:
+            self._planar_cancel.set()
             self.statusBar().showMessage("Tracker analysis: cancelling…")
 
     def analyse_tracker(self, key, direction="forward", first_frame=None, last_frame=None):
