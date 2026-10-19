@@ -152,6 +152,23 @@ class StagingRingTests(unittest.TestCase):
         self.assertEqual(self.presenter.counters["linear_uploads"], 3)
         self.assertEqual(self.presenter.counters["texture_creates"], 1)
 
+    def test_a_large_frame_and_a_crop_alternating_keep_one_texture_each(self):
+        # During playback the 4K frame (half floats) and the Viewer's visible crop (float32) alternate.
+        from nodebased import carddisplay
+        settings = carddisplay.settings_from(0.0, "RGB", "black", "Linear", None)
+        with unittest.mock.patch.object(dv, "HALF_ABOVE", 2000):
+            for step in range(6):
+                size = (64, 48) if step % 2 == 0 else (32, 24)
+                value = 0.25 if step % 2 == 0 else 0.75
+                frame = np.full((size[1], size[0], 4), value, np.float32)
+                frame[..., 3] = 1.0
+                rect = (0, 0, *size)
+                self.presenter.offer_linear(frame, settings, rect, rect, step)
+                pixels = self.settle_and_draw((size[0] / 2, size[1] / 2, 2.0))
+                self.assertLessEqual(abs(int(pixels[60, 80, 0]) - round(value * 255)), 1, f"step {step}")
+        self.assertEqual(sorted(self.presenter.linear_by_format), ["rgba16float", "rgba32float"])
+        self.assertEqual(self.presenter.counters["texture_creates"], 2)
+
     def test_close_waits_for_a_fill_in_flight(self):
         gate = threading.Event()
         original = dv.fill_rows

@@ -564,6 +564,7 @@ class RetainedPresenter:
         self.linear_size = None
         self.linear_capacity = (0, 0)
         self.linear_bind_group = None
+        self.linear_by_format = {}   # texture format -> (texture, capacity, bind group)
         self.limits = {}
         self.refusal = ""            # why the last picture was refused (too large for this card), or ""
         self.linear_pipelines = {}   # view -> pipeline running carddisplay's fragment shader
@@ -658,8 +659,10 @@ class RetainedPresenter:
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
         tables = [entry[2] for entry in self.linear_pipelines.values() if entry is not None]
-        for resource in (self.texture, self.linear_texture, self.uniform, *tables):
+        floats = [entry[0] for entry in self.linear_by_format.values()]
+        for resource in (self.texture, *floats, self.uniform, *tables):
             self._destroy(resource)
+        self.linear_by_format = {}
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
         self.texture_capacity = self.linear_capacity = (0, 0)
@@ -695,8 +698,9 @@ class RetainedPresenter:
             self.ring = None
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
-        for resource in (self.texture, self.linear_texture, self.uniform):
+        for resource in (self.texture, *[entry[0] for entry in self.linear_by_format.values()], self.uniform):
             self._destroy(resource)
+        self.linear_by_format = {}
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
         self.texture_capacity = self.linear_capacity = (0, 0)
@@ -794,17 +798,23 @@ class RetainedPresenter:
         return self.ring.bytes() if self.ring is not None else 0
 
     def _texture_for(self, kind, width, height, fmt):
-        """The retained texture for `kind`, grown (never shrunk) so a width x height picture fits."""
+        """The retained texture for `kind`, grown (never shrunk) so a width x height picture fits.
+
+        Float pictures keep one texture per format: during playback a 4K frame (half floats) and the
+        Viewer's visible crop (float32) alternate, and neither should replace the other's texture."""
         wgpu = self.wgpu
         linear = kind == "linear"
-        texture = self.linear_texture if linear else self.texture
-        capacity = self.linear_capacity if linear else self.texture_capacity
-        if texture is not None and texture.format == fmt and capacity[0] >= width and capacity[1] >= height:
-            return texture
+        if linear:
+            texture, capacity, group = self.linear_by_format.get(fmt, (None, (0, 0), None))
+            if texture is not None and capacity[0] >= width and capacity[1] >= height:
+                self.linear_texture, self.linear_capacity, self.linear_bind_group = texture, capacity, group
+                return texture
+        else:
+            texture, capacity = self.texture, self.texture_capacity
+            if texture is not None and capacity[0] >= width and capacity[1] >= height:
+                return texture
         if texture is not None:
             self.ledger.retire(texture)
-            if texture.format != fmt:
-                capacity = (0, 0)
         capacity = (max(capacity[0], width), max(capacity[1], height))
         texture = self.device.create_texture(size=(*capacity, 1), format=fmt,
                                              usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
@@ -814,6 +824,7 @@ class RetainedPresenter:
                 {"binding": 0, "resource": texture.create_view()},
                 {"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": UNIFORM_BYTES}},
                 {"binding": 2, "resource": self.linear_sampler}])
+            self.linear_by_format[fmt] = (texture, capacity, self.linear_bind_group)
         else:
             self.texture, self.texture_capacity = texture, capacity
             self.bind_group = self.device.create_bind_group(
