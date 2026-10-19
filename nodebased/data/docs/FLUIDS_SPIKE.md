@@ -1577,7 +1577,7 @@ A separate 8/32/128-sample sweep was captured before correcting the offset secon
 
 **What still looks wrong:** steam remains sparse and speckled rather than a soft column; the stream's top looks like a rounded blob; the liquid pool is hard to read through the pale glass; the tabletop shadow has a hard edge. These are visual observations from the three replacement stills.
 
-The corrected 8/32/128 timing sweep expired after its 30-minute exclusive-lock wait while the integrator's full-suite runner held the shared lock. The 1920 × 1080 progressive Render first-look/settle measurement and 64-cell Radeon preview rate/stop measurement were not started. The step remains partial until the full timing matrix is recorded, first look is under one second, and Radeon preview reaches 12 FPS with a stop under one second.
+A follow-up finish attempt on 2026-10-19 queued the corrected 8/32/128 sweep with the required exclusive GPU lock. Its 30-minute wait expired while the integrator's full-suite runner still held the shared lock; no lock was bypassed and no corrected sample timings were produced. The 1920 × 1080 progressive Render first-look/settle measurement and 64-cell Radeon preview rate/stop measurement also remain unmeasured. The step remains partial until the full timing matrix is recorded, first look is under one second, and Radeon preview reaches 12 FPS with a stop under one second.
 
 ## K2 rigid bodies — finish 1
 

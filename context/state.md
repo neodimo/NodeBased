@@ -6445,3 +6445,6 @@ The Windows `v0.38.0` package attempt 2 remains failed and no release exists. Fi
 ## 2026-10-18, 2:04 AM — 0.38.1 tagged
 
 Combined exact-HEAD gate on `1a8e646e` green (5,489 tests). Main now carries the playback, graph-input and adapter-choice performance work plus the Windows test repair and Properties group fix; release commit `cdff2993`, tag `v0.38.1` pushed. `v0.38.0` stays tagged and unpublished. Tag workflows running; the tick announces on publish. Research paused pending DiMo's GPT priority.
+## 2026-10-19 — Lane 6 S2 finish attempt
+
+The follow-up exclusive-lock wait for the corrected 8/32/128 matrix expired at 30 minutes while the integrator's full-suite process still held a shared GPU lock. No lock was bypassed and no new GPU timings were measured. The docs record this attempt; knowledge-copy validation passed. Progressive 1920 × 1080 first-look/settle and the 64-cell Radeon preview/stop row remain unmeasured. Needs Gonzo to rerun the three benchmark commands listed in `scratch/nb-lanes/run/report-L6.md` after the shared lock clears.
