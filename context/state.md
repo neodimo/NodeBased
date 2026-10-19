@@ -1,5 +1,27 @@
 ## 2026-10-18 — Lane 3 W1: Windows hybrid viewer research
 
+## Continuous mode merge: Lane 3 (Research, GPT-6 Astra) (10:37 PM on 2026-10-18 PDT)
+
+`main` moved `d0e617b1` -> `b79ad150` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 16 tests in 29.280 s, OK. Full suite on
+the stacked tip `b79ad150` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1018-1647.log`, started 4:47 PM): **Ran 5510 tests in 20777.282 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 3 (Research, GPT-6 Astra), step W1 of 1: the direct viewer on a Windows hybrid laptop.** Commits:
+  - `dbba5b82` docs: publish Windows hybrid research radar and W1 handoff
+  - `b3bce038` docs: recommend DX12 viewer gate and provide Windows laptop probe
+  - `854f599f` docs: audit Windows backend selection and direct viewer integration risks
+  - `83778e28` docs: map Windows hybrid presentation and bound CASO claims
+  Diff: 7 files changed, 711 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done — evidence:** Read the 10/15 profile, main performance documentation and lane 2 VP1 snapshot `34206646`. Inspected Microsoft/NVIDIA/Qt documentation, pinned wgpu/rendercanvas source and upstream issues. Added the Windows presentation/copy map, version-specific adapter/backend audit, three-option cost model, RTX/D3D12-first VP2 recommendation, and full proposed field-kit Python probe. All four requested documentation parts are present. Knowledge tests pass; the embedded probe compiles and its CPU-only self-check passes. No GPU APIs, shaders, Windows tests or weights executed/downloaded.
 - **Inference:** D3D12 is the best first Windows candidate because its DXGI flip path has documented hybrid/CASO eligibility; Vulkan remains a measured comparator. Laptop milliseconds/FPS are unknown. VP1 still receives converted QImage data, so it has not removed changed-picture conversion.
 - **Artifacts:** `docs/WINDOWS_HYBRID_PRESENTATION.md`, `docs/RESEARCH_RADAR.md`, byte-identical bundled copies, and `briefs/proposed/W1-laptop-present-check.md`; committed locally on the research branch, not pushed. This worktree's `TASKLOG.md` and `context/state.md` carry the handoff. Small targeted-test logs are deliberate integrator scratch under `scratch/nb-lanes/run/tests-L3-W1-p1.log` through `tests-L3-W1-p4.log` relative to the shared workspace. No new large scratch or caches. The final plain-English report is `scratch/nb-lanes/run/report-L3.md` there.
