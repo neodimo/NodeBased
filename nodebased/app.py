@@ -3223,6 +3223,36 @@ class Viewer(PanZoomView):
             self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
         return True
 
+    def _preview_document_drag(self, drag_attribute, commit):
+        """Apply a drag to an isolated document snapshot for preview without an undo edit."""
+        drag = getattr(self, drag_attribute)
+        if drag is None:
+            return False
+        from .core import Dispatcher
+        real_dispatcher = self.window.dispatcher
+        preview_dispatcher = Dispatcher(copy.deepcopy(real_dispatcher.document))
+        real_command = self.window.command
+        try:
+            self.window.dispatcher = preview_dispatcher
+            self.window.command = lambda command, render=True: preview_dispatcher.execute(
+                self.window.scoped_command(command))
+            commit()
+            preview_document = copy.deepcopy(preview_dispatcher.document)
+        finally:
+            self.window.dispatcher = real_dispatcher
+            self.window.command = real_command
+            setattr(self, drag_attribute, drag)
+        self.window.request_preview(progressive=True, document_override=preview_document)
+        return True
+
+    def _preview_roto_drag(self):
+        """Render the current Roto drag without creating an undo edit."""
+        return self._preview_document_drag("roto_drag", self._commit_roto_drag)
+
+    def _preview_tracker_drag(self):
+        """Render the current Tracker drag without creating an undo edit."""
+        return self._preview_document_drag("tracker_drag", self._commit_tracker_drag)
+
     def keyPressEvent(self, event):
         if (event.key() == Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier
                 and self.hasFocus() and self._roto_context() is not None):
@@ -4252,6 +4282,8 @@ class Viewer(PanZoomView):
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
             self.roto_drag["shift"] = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             self.viewport().update()
+            if self.roto_drag["moved"] and self.roto_drag.get("kind") != "marquee":
+                self._preview_roto_drag()
             self._update_pixel_readout(event)
             event.accept()
             return
@@ -4259,6 +4291,8 @@ class Viewer(PanZoomView):
             self.tracker_drag["scene"] = scene_pos
             self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
             self.viewport().update()
+            if self.tracker_drag["moved"]:
+                self._preview_tracker_drag()
             self._update_pixel_readout(event)
             event.accept()
             return
@@ -13640,14 +13674,15 @@ class Window(QMainWindow):
                           full_width=bounds.width, full_height=bounds.height)
 
     def request_preview(self, *_, playhead_only=False, tier_override=None, progressive=False,
-                        progressive_target=None):
+                        progressive_target=None, document_override=None):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
         self.generation += 1
         self._compact_stop.set()
         self.rendered_identity = self.render_identity()
-        snapshot = copy.deepcopy(self.dispatcher.document)
+        snapshot = copy.deepcopy(self.dispatcher.document if document_override is None
+                                 else document_override)
         frame = snapshot["time"]["current"]
         if progressive and not self.playing:
             self._progressive_target = int(self.proxy.currentData())

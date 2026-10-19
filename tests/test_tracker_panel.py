@@ -16,6 +16,39 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 class TrackerPointListTests(unittest.TestCase):
+    def test_tracker_point_drag_queues_tier8_snapshot_without_mutating_document(self):
+        QSettings("NodeBased", "NodeBased").clear()
+        dispatcher = Dispatcher(empty_document())
+        dispatcher.execute({"op": "create", "id": "plate", "type": "Checker"})
+        dispatcher.execute({"op": "create", "id": "t", "type": "Tracker"})
+        dispatcher.execute({"op": "connect", "id": "t", "input": "image", "source": "plate"})
+        dispatcher.execute({"op": "view", "id": "t"})
+        dispatcher.execute({"op": "set_tracks", "id": "t", "tracks": [
+            {"name": "track1", "enabled": 1, "x": 20.0, "y": 20.0}]})
+        window = Window(dispatcher.document)
+        self.addCleanup(lambda: (setattr(window, "saved_document", window.dispatcher.document),
+                                 window.close(), window.executor.shutdown(wait=True, cancel_futures=True),
+                                 APP.processEvents()))
+        window.show()
+        viewer = window.viewer
+        window.graph.items_by_id["t"].setSelected(True)
+        window.timer.stop()
+        drag = {"kind": "point", "index": 0, "start": QPointF(20, 20),
+                "scene": QPointF(30, 40), "moved": True}
+        viewer.tracker_drag = drag
+        before = len(window.dispatcher.undo_stack)
+        self.assertTrue(viewer._preview_tracker_drag())
+        window.timer.stop()
+        request, _cancel = window.preview_queue.take()
+        self.assertEqual(request.tier, 8)
+        preview = request.document["node_data"]["t"]["tracks"][0]
+        self.assertAlmostEqual(preview["x"], 30.0)
+        self.assertAlmostEqual(preview["y"], 40.0)
+        stored = window.dispatcher.document["node_data"]["t"]["tracks"][0]
+        self.assertEqual((stored["x"], stored["y"]), (20.0, 20.0))
+        self.assertEqual(len(window.dispatcher.undo_stack), before)
+        self.assertIs(viewer.tracker_drag, drag)
+
     def test_list_select_rename_and_delete_update_roto_link(self):
         QSettings("NodeBased", "NodeBased").clear()
         dispatcher = Dispatcher(empty_document())

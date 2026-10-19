@@ -74,6 +74,25 @@ class RotoOverlayTests(unittest.TestCase):
     def scene_pixel_tolerance(self):
         return 1.0 / max(abs(self.window.viewer.transform().m11()), 0.05) + 0.05
 
+    def test_point_drag_queues_tier8_picture_without_touching_document_or_undo(self):
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": [triangle()]}, render=False)
+        self.window.timer.stop()
+        viewer = self.window.viewer
+        drag = {"kind": "point", "point": (0, 0), "start": QPointF(10, 10),
+                "scene": QPointF(25, 30), "moved": True}
+        viewer.roto_drag = drag
+        before = len(self.window.dispatcher.undo_stack)
+        self.assertTrue(viewer._preview_roto_drag())
+        self.window.timer.stop()
+        request, _cancel = self.window.preview_queue.take()
+        self.assertEqual(request.tier, 8)
+        preview_point = request.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertEqual((preview_point["x"], preview_point["y"]), (25.0, 30.0))
+        stored_point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertEqual((stored_point["x"], stored_point["y"]), (10.0, 10.0))
+        self.assertEqual(len(self.window.dispatcher.undo_stack), before)
+        self.assertIs(viewer.roto_drag, drag)
+
     def test_enter_ends_an_open_spline(self):
         viewer = self.window.viewer
         self.assertTrue(viewer.begin_roto_draw("r"))
