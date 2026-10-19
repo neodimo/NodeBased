@@ -1,3 +1,13 @@
+## 2026-10-18 — Lane 4 H1: a denoised 1080p first look within one second (DONE, local on `openclaw/nb-3d-astra-lane`)
+
+`progressiverender.step_interactive` gives Render mode a denoised, enlarged first look (480 x 270, 4 samples, then 960 x 540, 16 samples)
+before the unchanged doubling steps. Measured first-look latency at 1920 x 1080, warm: RTX 3080 Ti 0.47 s furnished room, 0.78 s with
+splats and smoke; Radeon 8060S 0.50 / 0.75 s; llvmpipe 0.76 s; cold 0.61 / 0.97 s on the RTX (llvmpipe 1.16 s misses). Previously a
+denoised 1080p render took 10.1 s and 19.4 s. Evidence: `benchmarks/first_look/*.json`, `tools/benchmark_first_look.py`, `tests/test_3d_first_look.py`
+(25 OK). Limits: measured under a shared GPU lock beside the suite; A6000, hybrid laptop and Windows not measured; denoiser on the processor;
+no real-display visual QA; the doubling step after the preview is raw and can look noisier than the preview. Gate for Gonzo: merge after
+the running suite, then H2 (GPU denoiser, all passes denoised, A6000 and laptop numbers).
+
 ## 2026-10-18 — Lane 2 VP1 finish: real-display checks, device-loss recovery, Wayland refusal (PARTIAL)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (4:47 AM on 2026-10-19 PDT)
