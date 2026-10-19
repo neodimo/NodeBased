@@ -7,7 +7,7 @@ from concurrent.futures import CancelledError, Future
 
 import numpy as np
 
-from nodebased.core import Dispatcher, SCHEMA_VERSION, empty_document, upgrade_document
+from nodebased.core import Dispatcher, empty_document, upgrade_document
 from nodebased.imaging import Evaluator
 from nodebased.tracker import analyse, solve
 
@@ -118,7 +118,7 @@ class TrackerAcceptanceTests(unittest.TestCase):
         for name in ("smoothing", "pattern_radius", "search_radius", "adaptive_update", "tracking_channels"):
             old["nodes"]["tracker"]["params"].pop(name, None)
         old["node_data"]["tracker"]["tracks"][0].pop("error", None)
-        old["version"] = SCHEMA_VERSION-1
+        old["version"] = 15        # the literal: tracker defaults arrived in the v15 -> v16 step
         before = Evaluator().evaluate_raster(old, target="tracker", frame=1).pixels.copy()
         upgraded = upgrade_document(old)
         after = Evaluator().evaluate_raster(upgraded, target="tracker", frame=1).pixels
