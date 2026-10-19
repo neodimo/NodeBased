@@ -4972,12 +4972,57 @@ class NodeItem(QGraphicsRectItem):
                                                        int(rect.width() - 20)))
         painter.restore()
 
-    def paint_family_body(self, painter, option):
+    # Node bodies drawn once per look and screen scale: nodes of one family share a picture, which
+    # is redrawn only when the look (selection, level of detail) or the zoom changes.
+    _body_cache = {}
+    body_renders = 0      # bodies drawn into the cache (tests count them)
+    BODY_MARGIN = 2
+
+    def body_pixmap(self, selected, detailed, zoom, ratio):
+        """The body of this node for `zoom` (scene units to logical pixels) on a screen of pixel
+        ratio `ratio`, at full device resolution so the icon and edges stay crisp at 175 percent."""
+        rect = self.rect()
+        key = (self.form, rect.width(), rect.height(), self.accent.rgba(), self.family, getattr(self, "rule", None),
+               None if self.icon_rect is None else self.icon_rect.getRect(), selected, detailed, round(zoom, 4), ratio)
+        cached = NodeItem._body_cache.get(key)
+        if cached is None:
+            if len(NodeItem._body_cache) > 256:
+                NodeItem._body_cache.clear()
+            NodeItem.body_renders += 1
+            margin = self.BODY_MARGIN
+            cached = QPixmap(max(1, math.ceil((rect.width() + 2 * margin) * zoom * ratio)),
+                             max(1, math.ceil((rect.height() + 2 * margin) * zoom * ratio)))
+            cached.setDevicePixelRatio(ratio)
+            cached.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(cached)
+            painter.scale(zoom, zoom)
+            painter.translate(margin, margin)
+            self.draw_family_body(painter, selected, detailed)
+            painter.end()
+            NodeItem._body_cache[key] = cached
+        return cached
+
+    def paint_family_body(self, painter, option, widget=None):
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        transform = QTransform(painter.worldTransform())   # a copy: the binding hands back the painter's own
+        detailed = option.levelOfDetailFromTransform(transform) >= 0.35
+        if transform.m12() or transform.m21() or transform.m11() <= 0 or transform.m11() != transform.m22():
+            self.draw_family_body(painter, selected, detailed)
+            return
+        # The view's viewport; an offscreen render (scene.render into an image) passes none.
+        ratio = widget.devicePixelRatioF() if widget is not None else 1.0
+        pixmap = self.body_pixmap(selected, detailed, transform.m11(), ratio)
+        corner = transform.map(QPointF(-self.BODY_MARGIN, -self.BODY_MARGIN))
+        painter.save()
+        painter.setWorldTransform(QTransform())
+        # Snapped to whole device pixels: a picture drawn between pixels would be resampled.
+        painter.drawPixmap(QPointF(round(corner.x() * ratio) / ratio, round(corner.y() * ratio) / ratio), pixmap)
+        painter.restore()
+
+    def draw_family_body(self, painter, selected, detailed):
         """A node as in the mockup: a dark interior tinted with the family colour, a 2 px outline in
         the colour, a faint inner glow, a highlight along the top edge, the family icon and a hairline
         above the details line."""
-        selected = bool(option.state & QStyle.StateFlag.State_Selected)
-        detailed = option.levelOfDetailFromTransform(painter.worldTransform()) >= 0.35
         color, rect = self.accent, self.rect()
         outline = self.outline()
         painter.save()
@@ -5017,7 +5062,7 @@ class NodeItem(QGraphicsRectItem):
             self.paint_backdrop(painter)
             return
         if not self.is_dot:
-            self.paint_family_body(painter, option)
+            self.paint_family_body(painter, option, widget)
             if self.wire_lit:
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
