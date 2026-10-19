@@ -1,3 +1,7 @@
+## 2026-10-18 — Lane 2 VP1 finish: real-display checks, device-loss recovery, Wayland refusal (PARTIAL)
+
+Added on `openclaw/nb-2d-parity` (`be614014`, `0801262a`, `bf285057`): `RetainedPresenter.recover()` / `LossWatch` for device loss; `unsupported_platform()` refuses native Wayland (rendercanvas 2.7.2 has X11 surface ids only, the process used to die with an X BadWindow); `tools/viewer_direct_screen.py` (Spectacle capture of the composited desktop, all three adapters, pixel ratio 1.0 and 1.5, every check true); bench pinned to equal output size and isolated from the real Qt settings; `HitOrderTests`. Radeon direct path: 121 pictures/s, 2.8 ms CPU per picture against the Viewer's 4.7 ms; the Viewer's number is synchronous raster and says nothing about the glass. Still owed to the VP2 gate: dock walk on the live display for the Radeon and RTX (card lock held by the suite), overlay parity (Roto, Tracker, A/B, ROI), Windows, physical device loss, input-to-photon latency. Details in docs/DIRECT_VIEWER.md and TASKLOG.md.
+
 ## 2026-10-18 — Lane 3 W1: Windows hybrid viewer research
 
 ## Continuous mode merge: Lane 3 (Research, GPT-6 Astra) (10:37 PM on 2026-10-18 PDT)
