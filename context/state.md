@@ -1,5 +1,26 @@
 ## 2026-10-18 — Lane 4 H1: a denoised 1080p first look within one second (DONE, local on `openclaw/nb-3d-astra-lane`)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (4:58 PM on 2026-10-19 PDT)
+
+`main` moved `e08cc94e` -> `0a89b108` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 41 tests in 31.145 s, OK. Full suite on
+the stacked tip `0a89b108` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1019-1058.log`, started 10:58 AM): **Ran 5547 tests in 21350.370 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step H1 of 2: a denoised 1080p first look within one second.** Commits:
+  - `e3586cf5` notes: Lane 4 H1 completion in TASKLOG and state
+  - `b5370652` First look: size the first stage from measured cost, share the scene with the guide passes, keep the preview ladder from restarting; benchmark, tests, docs
+  - `55821821` Progressive Render: a denoised first look within a second (enlarged internal pass, threaded float32 denoiser, shared scene preparation, fast display conversion)
+  Diff: 14 files changed, 1159 insertions(+), 38 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 `progressiverender.step_interactive` gives Render mode a denoised, enlarged first look (480 x 270, 4 samples, then 960 x 540, 16 samples)
 before the unchanged doubling steps. Measured first-look latency at 1920 x 1080, warm: RTX 3080 Ti 0.47 s furnished room, 0.78 s with
 splats and smoke; Radeon 8060S 0.50 / 0.75 s; llvmpipe 0.76 s; cold 0.61 / 0.97 s on the RTX (llvmpipe 1.16 s misses). Previously a
