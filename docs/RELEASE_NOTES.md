@@ -1,3 +1,34 @@
+# NodeBased 0.39.0 — an experimental GPU picture for the 2D viewer
+
+## What changed since 0.38.1
+
+- **Direct picture (experimental).** Window menu → "Direct picture (experimental GPU)", or start with
+  `NODEBASED_DIRECT_VIEWER=1`, opens a floating dock that uploads each new picture to the graphics card once, then pans,
+  zooms and resizes it there without redoing the colour conversion. It is off by default; the existing Viewer is unchanged
+  and stays the default. `docs/DIRECT_VIEWER.md` describes it.
+- **Adapter choice for the dock.** The direct picture picks its display adapter through wgpu's surface filter, so it lands on
+  a card that can actually present to the window. A bench tool compares it against the current viewer.
+- **Lost graphics device.** If the card resets or the driver restarts, the direct picture gets a new device and rebuilds the
+  picture from the copy it keeps in memory, so the dock comes back without reopening it.
+- **Native Wayland refused cleanly.** On a native Wayland session the dock now says it needs `QT_QPA_PLATFORM=xcb` and the
+  Viewer carries on, where before the app could crash.
+- **Windows laptop research.** `docs/WINDOWS_HYBRID_PRESENTATION.md` maps how a picture reaches the screen on a hybrid
+  Intel + NVIDIA laptop and recommends DirectX 12 as the first Windows path for the direct picture, with a probe for the field kit.
+- **Tests.** Drawing, pan, zoom and stale-picture rules are covered by automated tests on the RTX 3080 Ti, the Radeon and the
+  software renderer, plus a walk through changing pictures, pan, zoom, resize, docking, reopen and 1.5x display scaling.
+
+## Known limits
+
+- The direct picture has no Roto, Tracker, A/B or region overlays; use the default Viewer for those.
+- It is untested on Windows. Device-loss recovery is tested by destroying the device in software; a physical card reset has
+  not been tried.
+- Screen delay is not measured. Windows is tested by the automated suite on the CI runner only.
+
+## Moved to 0.40.0
+
+- The parity gate (VP2): overlays on the direct surface and the decision whether it can become the default Viewer.
+- A Windows run of the direct picture on the hybrid laptop.
+
 # NodeBased 0.38.1 — faster playback and graph clicks, a graphics adapter choice, and the Windows package repaired
 
 ## What changed since 0.38.0
