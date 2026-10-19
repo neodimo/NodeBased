@@ -4866,7 +4866,7 @@ class NodeItem(QGraphicsRectItem):
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and hasattr(self, "output"):
-            self.graph.update_edges()
+            self.graph.update_edges((self.key,))
         elif change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged and getattr(self, "halo", None):
             self.halo.update()
         return super().itemChange(change, value)
@@ -5083,6 +5083,8 @@ class Edge(QGraphicsPathItem):
         self.hovered = False     # the pointer is on the wire
         self.selected = False    # clicked: Delete or Backspace disconnects it
         self.cutting = False     # the knife line currently crosses it
+        self.route_key = None    # the ends the current path was built for
+        self.routes = 0          # how many times the path has been rebuilt (tests count re-routes)
 
     def set_wire_state(self, hovered=None, selected=None, cutting=None):
         """Hover, selection and the knife's crossing each change how the wire is drawn."""
@@ -5103,7 +5105,13 @@ class Edge(QGraphicsPathItem):
         return super().boundingRect().adjusted(-self.GLOW, -self.GLOW, self.GLOW, self.GLOW)
 
     def set_route(self, start, end, end_dir=graphlook.UP, start_dir=graphlook.DOWN):
-        """Route the wire from `start` (an output facing `start_dir`) to `end` (an input facing `end_dir`)."""
+        """Route the wire from `start` (an output facing `start_dir`) to `end` (an input facing `end_dir`).
+        The path is kept until one of its ends, their facing or the wire mode changes."""
+        key = (start.x(), start.y(), end.x(), end.y(), start_dir.x(), start_dir.y(), end_dir.x(), end_dir.y(), self.mode)
+        if key == self.route_key:
+            return
+        self.route_key = key
+        self.routes += 1
         self.prepareGeometryChange()
         path = graphlook.wire_path(start, end, self.mode, start_dir, end_dir)
         unit = graphlook.end_heading(path, end)
@@ -6165,7 +6173,7 @@ class Graph(PanZoomView):
         self.setAcceptDrops(True)
         self.setSceneRect(-5000, -5000, 10000, 10000)
         self.viewport().setMouseTracking(True)
-        self.items_by_id, self.edges = {}, []
+        self.items_by_id, self.edges, self.edges_by_node = {}, [], {}
         self.wire_source = None
         self.wire_output = "rgba"
         self.wire_input = None
@@ -6622,6 +6630,7 @@ class Graph(PanZoomView):
                          for key, item in self.items_by_id.items()}
         self.scene().blockSignals(True)
         self.edges = []
+        self.edges_by_node = {}
         self.insert_target = None
         self.items_by_id = {}
         self.scene().clear()
@@ -6665,7 +6674,11 @@ class Graph(PanZoomView):
                     edge.setZValue(-2 if node["type"] == "Viewer" else -1)
                     self.scene().addItem(edge)
                     out_name = node.get("input_outputs", {}).get(slot, "out1" if doc["nodes"][source]["type"] == "ShuffleCopy" else "rgba")
-                    self.edges.append((edge, source, key, slot, out_name))
+                    record = (edge, source, key, slot, out_name)
+                    self.edges.append(record)
+                    self.edges_by_node.setdefault(source, []).append(record)
+                    if key != source:
+                        self.edges_by_node.setdefault(key, []).append(record)
         self.update_edges()
         live = {self.wire_key(record) for record in self.edges}
         self.selected_wires &= live
@@ -6681,8 +6694,16 @@ class Graph(PanZoomView):
             else:
                 self.cancel_wire()
 
-    def update_edges(self):
-        for edge, source, key, slot, out_name in self.edges:
+    def update_edges(self, keys=None):
+        """Route the wires: all of them, or with `keys` only those attached to these nodes (a node
+        moved). A wire whose ends did not move keeps its path (`Edge.set_route`)."""
+        if keys is None:
+            records = self.edges
+        elif len(keys) == 1:
+            records = self.edges_by_node.get(keys[0], ())
+        else:
+            records = list({id(record): record for key in keys for record in self.edges_by_node.get(key, ())}.values())
+        for edge, source, key, slot, out_name in records:
             output, port = self.items_by_id[source].outputs[out_name], self.items_by_id[key].inputs[slot]
             edge.set_route(output.scenePos(), port.scenePos(), port.facing, output.facing)
         # Called when a node moves and after a rebuild; the minimap draws a rectangle per node.
