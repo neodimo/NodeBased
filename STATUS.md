@@ -1,3 +1,7 @@
+# Lane 8 T2 — live pictures while working (PARTIAL, 2026-10-19)
+
+Implementation and targeted checks are committed on `openclaw/nb-2d-parity-b`. 72 targeted tests passed. Progressive edit/scrub previews, adaptive playback tiering, and PlanarTracker worker progress/cancel are in place. Real-display latency and playback FPS on 12 GB and llvmpipe remain unverified because the integrator full suite holds the shared GPU lock. Gonzo owns follow-up using `/var/home/omid/.openclaw/workspace/scratch/nb-qa/1015-roi/scripts/s12_t2.py` after the lock clears.
+
 # Lane 6 P4 finish 1 — stop-time cache reuse (active, 2026-10-12)
 
 The preview budgets pass. Root cause is fixed in `11370fc`: whitewater now loads liquid frames from the upstream ParticleCache3D store, avoiding eviction by its smaller store. Six focused P4 modules pass (22 tests). A clean current-code 120-frame bake is at `scratch/nb-lanes/run/L6-p4-cache`; its 49.32 GB cache contains 120 whitewater states and 119 surface meshes. The Radeon stop benchmark is queued behind the active full-suite GPU lock; stop results at frames 1, 60 and 120 remain pending.
