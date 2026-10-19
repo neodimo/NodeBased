@@ -366,6 +366,10 @@ class HitOrderTests(unittest.TestCase):
         patcher = unittest.mock.patch.object(dv, "RetainedPresenter", StubPresenter)
         patcher.start()
         self.addCleanup(patcher.stop)
+        if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")) and os.name != "nt":
+            # rendercanvas needs a real window-system id for the screen surface; GitHub's Linux packaging job has
+            # wgpu but no display, so the dock cannot open there (10/19, v0.39.0 package job). Real machines run it.
+            self.skipTest("no display server: the direct dock needs a real window")
         self.window.direct_action.setChecked(True)
         APP.processEvents()
         self.assertIsNotNone(self.window.direct_widget)
