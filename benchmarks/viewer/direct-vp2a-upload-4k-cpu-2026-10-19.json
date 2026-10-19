@@ -1,0 +1,63 @@
+{
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "backend": "Vulkan",
+ "machine": "bazzite",
+ "picture": "3840x2160 float32",
+ "bytes_per_picture": 132710400,
+ "pictures": 24,
+ "hand_over_qt_thread_ms": {
+  "n": 24,
+  "p50": 0.1,
+  "p95": 0.13,
+  "max": 13.9,
+  "mean": 0.67
+ },
+ "filler_thread_copy_ms": {
+  "n": 24,
+  "p50": 8.35,
+  "p95": 11.09,
+  "max": 12.47,
+  "mean": 8.7
+ },
+ "draw_qt_thread_ms": {
+  "n": 24,
+  "p50": 0.48,
+  "p95": 0.68,
+  "max": 0.7,
+  "mean": 0.51
+ },
+ "hand_over_to_on_card_ms": {
+  "n": 24,
+  "p50": 13.49,
+  "p95": 17.25,
+  "max": 28.52,
+  "mean": 14.28
+ },
+ "vp1_write_texture_qt_thread_ms": {
+  "n": 24,
+  "p50": 20.09,
+  "p95": 20.26,
+  "max": 35.68,
+  "mean": 20.65
+ },
+ "vp1_write_texture_to_on_card_ms": {
+  "n": 24,
+  "p50": 32.17,
+  "p95": 33.38,
+  "max": 82.22,
+  "mean": 34.31
+ },
+ "counters": {
+  "buffer_creates": 3,
+  "map_ms_total": 43.7,
+  "fills": 26,
+  "conversions": 26,
+  "fill_ms_total": 227.5,
+  "texture_creates": 1,
+  "linear_uploads": 26,
+  "upload_bytes": 1725235200,
+  "copy_record_ms_total": 98.0,
+  "draws": 26,
+  "draw_ms_total": 74.7
+ }
+}

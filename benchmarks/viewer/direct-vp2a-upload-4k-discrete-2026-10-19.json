@@ -1,0 +1,63 @@
+{
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "backend": "Vulkan",
+ "machine": "bazzite",
+ "picture": "3840x2160 float32",
+ "bytes_per_picture": 132710400,
+ "pictures": 24,
+ "hand_over_qt_thread_ms": {
+  "n": 24,
+  "p50": 0.18,
+  "p95": 0.71,
+  "max": 2.74,
+  "mean": 0.32
+ },
+ "filler_thread_copy_ms": {
+  "n": 24,
+  "p50": 9.43,
+  "p95": 10.57,
+  "max": 10.59,
+  "mean": 9.32
+ },
+ "draw_qt_thread_ms": {
+  "n": 24,
+  "p50": 0.77,
+  "p95": 0.9,
+  "max": 1.13,
+  "mean": 0.76
+ },
+ "hand_over_to_on_card_ms": {
+  "n": 24,
+  "p50": 32.0,
+  "p95": 33.61,
+  "max": 34.2,
+  "mean": 31.78
+ },
+ "vp1_write_texture_qt_thread_ms": {
+  "n": 24,
+  "p50": 25.25,
+  "p95": 30.04,
+  "max": 31.11,
+  "mean": 26.14
+ },
+ "vp1_write_texture_to_on_card_ms": {
+  "n": 24,
+  "p50": 250.16,
+  "p95": 334.22,
+  "max": 355.85,
+  "mean": 254.17
+ },
+ "counters": {
+  "buffer_creates": 3,
+  "map_ms_total": 25.5,
+  "fills": 26,
+  "conversions": 26,
+  "fill_ms_total": 253.4,
+  "texture_creates": 1,
+  "linear_uploads": 26,
+  "upload_bytes": 1725235200,
+  "copy_record_ms_total": 96.3,
+  "draws": 26,
+  "draw_ms_total": 79.5
+ }
+}

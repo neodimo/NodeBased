@@ -51,6 +51,8 @@ SURROUND = (0.0, 0.0, 0.0)    # VIEWER_SURROUND is pure black in every theme
 RECOVERY_LIMIT = (3, 30.0)    # at most this many device recoveries in this many seconds, then the dock gives up
 STAGING_SLOTS = 3             # reused upload buffers: one being filled, one waiting for a draw, one the card copies from
 ROW_ALIGN = 256               # WebGPU's bytes_per_row alignment for a buffer-to-texture copy
+HALF_ABOVE = 4_000_000        # float pictures with more pixels than this go to the card as half floats
+FILL_BANDS = 8                # a large picture is copied into the staging buffer in this many bands at once
 
 
 class TooLarge(ValueError):
@@ -310,25 +312,56 @@ def padded_row(width, texel):
 
 
 def picture_layout(kind, source):
-    """(width, height, texture format, bytes per texel) of a ledger payload's picture."""
+    """(width, height, texture format, bytes per texel) of a ledger payload's picture.
+
+    Float frames above HALF_ABOVE pixels (4K and up) go up as half floats: a 4K float32 frame is 133 MB
+    and took 48 ms to reach the RTX 3080 Ti over its USB4 link, more than a frame at 24 fps; as half
+    floats it is 25 ms. The display cache already keeps settled frames as half floats."""
     if kind == "linear":
-        half = source.dtype == np.float16
-        return int(source.shape[1]), int(source.shape[0]), ("rgba16float" if half else "rgba32float"), (8 if half else 16)
+        width, height = int(source.shape[1]), int(source.shape[0])
+        half = source.dtype == np.float16 or width * height > HALF_ABOVE
+        return width, height, ("rgba16float" if half else "rgba32float"), (8 if half else 16)
     return int(source.width()), int(source.height()), "rgba8unorm", 4
 
 
-def fill_rows(view, kind, source, width, height, row):
+_band_pool = None
+
+
+def _bands(height):
+    """Row ranges that split a copy across FILL_BANDS threads (numpy releases the GIL while it copies)."""
+    step = max(1, -(-height // FILL_BANDS))
+    return [(top, min(height, top + step)) for top in range(0, height, step)]
+
+
+def _copy_in_bands(dst, src):
+    global _band_pool
+    if dst.shape[0] * dst.shape[1] < 1_000_000:
+        np.copyto(dst, src, casting="unsafe")
+        return
+    if _band_pool is None:
+        import concurrent.futures
+        _band_pool = concurrent.futures.ThreadPoolExecutor(FILL_BANDS, thread_name_prefix="direct-band")
+    jobs = [_band_pool.submit(np.copyto, dst[top:bottom], src[top:bottom], casting="unsafe")
+            for top, bottom in _bands(dst.shape[0])]
+    for job in jobs:
+        job.result()
+
+
+def fill_rows(view, kind, source, width, height, row, fmt=None):
     """Copy one picture into a mapped staging buffer (`view`, writable bytes), row by padded row.
 
-    Runs on the filler thread. A float frame is copied as it is (a cropped, non-contiguous cache view
-    included: numpy walks the strides, no intermediate array); a QImage is converted to RGBA8888 first
-    unless it already is. Returns True when a conversion was needed."""
+    Runs on the filler thread. A float frame is copied straight into the buffer (a cropped,
+    non-contiguous cache view included: numpy walks the strides, no intermediate array), cast to half
+    floats on the way when `fmt` says so, in bands on several threads for a large picture; a QImage is
+    converted to RGBA8888 first unless it already is. Returns True when a conversion was needed."""
     converted = False
     if kind == "linear":
-        dtype = np.float16 if source.dtype == np.float16 else np.float32
+        fmt = fmt or picture_layout(kind, source)[2]
+        dtype = np.float16 if fmt == "rgba16float" else np.float32
         itemsize = np.dtype(dtype).itemsize
         dst = np.ndarray((height, row // itemsize), dtype, buffer=view)[:, :width * 4].reshape(height, width, 4)
-        np.copyto(dst, source[..., :4], casting="unsafe")
+        _copy_in_bands(dst, source[..., :4])
+        converted = dtype != source.dtype
     else:
         from PySide6.QtGui import QImage
         image = source
@@ -410,7 +443,7 @@ class StagingRing:
         payload, width, height, fmt, texel, row = slot["meta"]
         started = time.perf_counter()
         try:
-            converted = fill_rows(view, payload[0], payload[1], width, height, row)
+            converted = fill_rows(view, payload[0], payload[1], width, height, row, fmt)
             state = "ready"
         except Exception:
             converted, state = False, "failed"

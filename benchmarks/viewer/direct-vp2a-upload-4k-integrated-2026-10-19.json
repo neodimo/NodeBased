@@ -1,0 +1,63 @@
+{
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "backend": "Vulkan",
+ "machine": "bazzite",
+ "picture": "3840x2160 float32",
+ "bytes_per_picture": 132710400,
+ "pictures": 24,
+ "hand_over_qt_thread_ms": {
+  "n": 24,
+  "p50": 0.12,
+  "p95": 0.21,
+  "max": 4.14,
+  "mean": 0.28
+ },
+ "filler_thread_copy_ms": {
+  "n": 24,
+  "p50": 8.91,
+  "p95": 11.98,
+  "max": 11.98,
+  "mean": 9.24
+ },
+ "draw_qt_thread_ms": {
+  "n": 24,
+  "p50": 0.5,
+  "p95": 0.86,
+  "max": 1.08,
+  "mean": 0.54
+ },
+ "hand_over_to_on_card_ms": {
+  "n": 24,
+  "p50": 10.9,
+  "p95": 14.22,
+  "max": 15.47,
+  "mean": 11.34
+ },
+ "vp1_write_texture_qt_thread_ms": {
+  "n": 24,
+  "p50": 11.2,
+  "p95": 12.11,
+  "max": 12.16,
+  "mean": 11.33
+ },
+ "vp1_write_texture_to_on_card_ms": {
+  "n": 24,
+  "p50": 14.02,
+  "p95": 15.14,
+  "max": 15.7,
+  "mean": 14.05
+ },
+ "counters": {
+  "buffer_creates": 3,
+  "map_ms_total": 14.3,
+  "fills": 26,
+  "conversions": 26,
+  "fill_ms_total": 239.9,
+  "texture_creates": 1,
+  "linear_uploads": 26,
+  "upload_bytes": 1725235200,
+  "copy_record_ms_total": 97.9,
+  "draws": 26,
+  "draw_ms_total": 79.2
+ }
+}

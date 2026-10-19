@@ -50,6 +50,21 @@ class PlainRulesTests(unittest.TestCase):
         got = np.frombuffer(memory, np.float32).reshape(height, row // 4)[:, :width * 4].reshape(height, width, 4)
         np.testing.assert_array_equal(got, crop)
 
+    def test_4k_float_frames_go_up_as_half_floats_and_1080p_stays_float(self):
+        self.assertEqual(dv.picture_layout("linear", np.zeros((2160, 3840, 4), np.float32))[2:], ("rgba16float", 8))
+        self.assertEqual(dv.picture_layout("linear", np.zeros((1080, 1920, 4), np.float32))[2:], ("rgba32float", 16))
+
+    def test_a_large_frame_is_cast_in_bands_exactly_like_one_cast(self):
+        full = (np.random.default_rng(2).random((1300, 1100, 4)).astype(np.float32) - 0.2) * 300.0
+        crop = full[3:1203, 5:1005]                          # 1000 x 1200: over the band threshold
+        width, height = 1000, 1200
+        row = dv.padded_row(width, 8)
+        memory = bytearray(row * height)
+        self.assertTrue(dv.fill_rows(memoryview(memory), "linear", crop, width, height, row, "rgba16float"))
+        got = np.frombuffer(memory, np.float16).reshape(height, row // 2)[:, :width * 4].reshape(height, width, 4)
+        np.testing.assert_array_equal(got, crop.astype(np.float16))
+        self.assertEqual(sum(b - a for a, b in dv._bands(height)), height)
+
     def test_fill_keeps_half_floats_as_they_are(self):
         frame = (np.arange(6 * 4 * 4, dtype=np.float32).reshape(6, 4, 4) / 7).astype(np.float16)
         width, height, fmt, texel = dv.picture_layout("linear", frame)
@@ -171,7 +186,9 @@ class FourKTests(unittest.TestCase):
         self.assertEqual(presenter.counters["linear_uploads"], 2)
         self.assertEqual(presenter.counters["texture_creates"], 1)
         self.assertLessEqual(presenter.counters["buffer_creates"], 2)
-        self.assertEqual(presenter.staging_bytes() // presenter.counters["buffer_creates"], 3840 * 16 * 2160)
+        # 4K float32 goes up as half floats (HALF_ABOVE): one 66 MB buffer instead of 133 MB.
+        self.assertEqual(presenter.linear_texture.format, "rgba16float")
+        self.assertEqual(presenter.staging_bytes() // presenter.counters["buffer_creates"], 3840 * 8 * 2160)
 
     def test_a_too_large_picture_is_refused_and_the_last_picture_stays(self):
         presenter, context = make_presenter()
