@@ -83,6 +83,36 @@ class SliderDrawTests(unittest.TestCase):
                 self.assertLessEqual(soft[1], hi, (node_type, group.params))
 
 
+class WrappingRowHysteresisTests(unittest.TestCase):
+    """CI's DejaVu fonts put PointsTo3D's x/y row exactly where one line fit only without the
+    Properties scroll bar; the row and the bar flipped each other until the stack overflowed (10/18)."""
+
+    def test_a_wrapped_row_widens_again_only_with_a_scroll_bar_to_spare(self):
+        from PySide6.QtWidgets import QWidget
+        from nodebased.knobfit import WrappingRow
+        units = []
+        for _ in range(2):
+            unit = QWidget()
+            unit.setMinimumWidth(50)
+            units.append(unit)
+        host = QWidget()                             # a window would hold the row at its layout's minimum
+        self.addCleanup(host.deleteLater)
+        row = WrappingRow(units, spacing=4, parent=host)    # one line needs 50 + 4 + 50 = 104px
+        row.resize(110, 30)
+        host.show()
+        APP.processEvents()
+        self.assertEqual(row._columns, 2)
+        row.resize(100, 30)
+        APP.processEvents()
+        self.assertEqual(row._columns, 1)
+        row.resize(104 + WrappingRow.WIDEN_SLACK - 1, 30)   # fits, but a returning scroll bar would undo it
+        APP.processEvents()
+        self.assertEqual(row._columns, 1)
+        row.resize(104 + WrappingRow.WIDEN_SLACK, 30)
+        APP.processEvents()
+        self.assertEqual(row._columns, 2)
+
+
 class SliderInputTests(unittest.TestCase):
     def make(self, value=0.5):
         pair = FloatSliderControl((-100.0, 100.0), (0.0, 1.0), value)

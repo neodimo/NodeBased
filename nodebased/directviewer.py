@@ -379,8 +379,7 @@ class RetainedPresenter:
 
         Closing while work is queued waits for the queue to finish first, so the device and the
         surface go away with nothing in flight. A device wgpu reported lost, or one after a failed draw
-        (that caller passes wait=False), is not waited on.
-        caller passes wait=False."""
+        (that caller passes wait=False), is not waited on."""
         if self.device is not None and wait and not self.device_lost():
             try:
                 self.wait_idle()

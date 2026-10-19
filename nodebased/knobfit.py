@@ -325,9 +325,18 @@ class WrappingRow(QWidget):
                 return columns
         return 1
 
+    # Going back to more units per line needs this much width to spare. In a scrolling panel the
+    # wider arrangement makes the panel shorter, the vertical scroll bar (10px in the theme) goes
+    # away, the row gets wider still, and on the way back the bar returns and narrows it again: with
+    # no margin the two arrangements fed each other through QScrollArea's resize handling until the
+    # stack overflowed (CI segfault in tests.test_knob_sliders, PointsTo3D with DejaVu fonts, 10/18).
+    WIDEN_SLACK = 16
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         columns = self.best_columns(self.width())
+        if columns > self._columns:
+            columns = max(self._columns, self.best_columns(self.width() - self.WIDEN_SLACK))
         if columns != self._columns:
             self._place(columns)
 

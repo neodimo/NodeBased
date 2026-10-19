@@ -13995,7 +13995,10 @@ class Window(QMainWindow):
         def run():
             while not stop.is_set() and cache.compact(limit=1):
                 pass
-        self.executor.submit(run)
+        try:
+            self.executor.submit(run)
+        except RuntimeError:
+            pass        # a preview that lands after the window closed: the worker has already stopped
 
     def schedule_thumbnails(self):
         """Render postage stamps for nodes whose upstream picture changed, when the viewer is idle."""
