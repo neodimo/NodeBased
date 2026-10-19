@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 from nodebased import carddisplay
 from nodebased import directviewer as dv
 from nodebased.imaging import to_qimage
-from tests.test_directviewer import FakeContext
+from tests.test_directviewer import FakeContext, needs_wgpu
 
 
 def test_frames(width=96, height=64):
@@ -59,6 +59,7 @@ def card_adapter():
     return next((a for a in adapters if a.info.get("device") == name), None)
 
 
+@needs_wgpu
 class CardDisplayAgreementTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
