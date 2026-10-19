@@ -4355,7 +4355,7 @@ class Port(QGraphicsEllipseItem):
                          f"empty canvas, right-click it, or click the wire's x. Ctrl+Alt-drag cuts every wire it crosses")
         self.label = None
         if (slot or label_text) and not node.is_dot:
-            label = self.label = QGraphicsSimpleTextItem(label_text or slot, node)
+            label = self.label = NodeText(label_text or slot, node)   # hidden when zoomed out, like the names
             label.setBrush(QColor(TOKENS["tx1"]))
             if label_center is None:
                 label.setPos(x + 9, y - 18)
