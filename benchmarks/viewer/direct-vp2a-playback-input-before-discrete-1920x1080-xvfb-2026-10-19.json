@@ -1,0 +1,109 @@
+{
+ "display": ":79",
+ "platform": "xcb",
+ "size": [
+  1920,
+  1080
+ ],
+ "seconds": 10.68,
+ "direct": true,
+ "selection": {
+  "requested_kind": "discrete",
+  "requested_backends": [
+   "auto"
+  ],
+  "selected_device": "NVIDIA GeForce RTX 3080 Ti",
+  "selected_backend": "Vulkan",
+  "attempts": [
+   {
+    "request": "power_preference=high-performance, backend=auto",
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "backend": "Vulkan"
+   }
+  ],
+  "note": "",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti"
+ },
+ "proxy_while_playing": false,
+ "graph_press_to_paint_ms": {
+  "n": 6,
+  "p50": 3.21,
+  "p95": 20.52,
+  "max": 20.52,
+  "mean": 7.65
+ },
+ "graph_drag_move_to_paint_ms": {
+  "n": 72,
+  "p50": 3.79,
+  "p95": 23.42,
+  "max": 29.27,
+  "mean": 5.86
+ },
+ "timeline_scrub_to_paint_ms": {
+  "n": 68,
+  "p50": 5.14,
+  "p95": 22.48,
+  "max": 30.86,
+  "mean": 9.25
+ },
+ "qt_thread_gap_ms": {
+  "n": 1046,
+  "p50": 4.87,
+  "p95": 38.33,
+  "max": 69.03,
+  "mean": 10.19
+ },
+ "qt_thread_gaps_over_50ms": 25,
+ "frames_produced": 233,
+ "frames_uploaded_by_dock": 179,
+ "qt_thread_ms": {
+  "hand-over to the dock": {
+   "n": 257,
+   "p50": 0.04,
+   "p95": 0.05,
+   "max": 37.11,
+   "mean": 0.18
+  },
+  "Window._show_image": {
+   "n": 257,
+   "p50": 0.04,
+   "p95": 0.05,
+   "max": 37.12,
+   "mean": 0.19
+  },
+  "Window.preview_ready": {
+   "n": 498,
+   "p50": 0.95,
+   "p95": 1.57,
+   "max": 39.37,
+   "mean": 0.91
+  },
+  "float upload": {
+   "n": 200,
+   "p50": 0.34,
+   "p95": 1.74,
+   "max": 2.48,
+   "mean": 0.66
+  },
+  "dock draw (upload included)": {
+   "n": 200,
+   "p50": 0.86,
+   "p95": 2.31,
+   "max": 3.23,
+   "mean": 1.18
+  }
+ },
+ "presenter_counters": {
+  "conversions": 1,
+  "texture_creates": 3,
+  "uploads": 1,
+  "draws": 203,
+  "draw_ms_total": 184.68307924922556,
+  "linear_uploads": 200
+ },
+ "last_scrub_events": {
+  "paint_bar": 19,
+  "press_bar": 1,
+  "move_bar": 12
+ }
+}

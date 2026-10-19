@@ -1,0 +1,114 @@
+{
+ "display": ":79",
+ "platform": "xcb",
+ "size": [
+  3840,
+  2160
+ ],
+ "seconds": 11.31,
+ "direct": true,
+ "selection": {
+  "requested_kind": "discrete",
+  "requested_backends": [
+   "auto"
+  ],
+  "selected_device": "NVIDIA GeForce RTX 3080 Ti",
+  "selected_backend": "Vulkan",
+  "attempts": [
+   {
+    "request": "power_preference=high-performance, backend=auto",
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "backend": "Vulkan"
+   }
+  ],
+  "note": "",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti"
+ },
+ "proxy_while_playing": false,
+ "graph_press_to_paint_ms": {
+  "n": 6,
+  "p50": 3.08,
+  "p95": 9.28,
+  "max": 9.28,
+  "mean": 4.35
+ },
+ "graph_drag_move_to_paint_ms": {
+  "n": 72,
+  "p50": 3.44,
+  "p95": 8.52,
+  "max": 23.4,
+  "mean": 4.61
+ },
+ "timeline_scrub_to_paint_ms": {
+  "n": 67,
+  "p50": 5.65,
+  "p95": 16.95,
+  "max": 22.99,
+  "mean": 5.63
+ },
+ "qt_thread_gap_ms": {
+  "n": 1275,
+  "p50": 4.26,
+  "p95": 42.06,
+  "max": 279.51,
+  "mean": 8.87
+ },
+ "qt_thread_gaps_over_50ms": 16,
+ "frames_produced": 85,
+ "frames_uploaded_by_dock": 79,
+ "qt_thread_ms": {
+  "hand-over to the dock": {
+   "n": 91,
+   "p50": 0.04,
+   "p95": 0.05,
+   "max": 30.14,
+   "mean": 0.37
+  },
+  "Window._show_image": {
+   "n": 91,
+   "p50": 0.04,
+   "p95": 0.06,
+   "max": 30.15,
+   "mean": 0.37
+  },
+  "Window.preview_ready": {
+   "n": 167,
+   "p50": 1.06,
+   "p95": 1.8,
+   "max": 32.7,
+   "mean": 1.22
+  },
+  "float upload": {
+   "n": 84,
+   "p50": 0.27,
+   "p95": 33.68,
+   "max": 37.95,
+   "mean": 4.1
+  },
+  "dock draw (upload included)": {
+   "n": 84,
+   "p50": 0.82,
+   "p95": 252.7,
+   "max": 262.93,
+   "mean": 24.01
+  }
+ },
+ "presenter_counters": {
+  "conversions": 1,
+  "texture_creates": 6,
+  "uploads": 1,
+  "draws": 87,
+  "draw_ms_total": 1745.634101331234,
+  "linear_uploads": 84
+ },
+ "last_scrub_events": {
+  "press_bar": 1,
+  "paint_bar": 21,
+  "move_bar": 12
+ },
+ "uploaded_frames": {
+  "3840x2160 float32": 15,
+  "544x146 float32": 36,
+  "544x135 float32": 33
+ }
+}

@@ -13,6 +13,11 @@ does not matter.
     QT_QPA_PLATFORM=wayland ...   # native Wayland: Qt gives no display id, so rendercanvas takes its Wayland path
 
 No pointer is moved: input is delivered to the widget as Qt events. It takes about ten seconds.
+
+    DISPLAY=:79 QT_QPA_PLATFORM=xcb python tools/viewer_direct_screen.py OUT.json --playback
+
+plays 10 s of 1080p float frames at 24 fps on a private X display and reads each frame's number off the
+window while it plays (see `playback_order`): frames produced, frames on the window, and their order.
 """
 import json
 import os
@@ -113,6 +118,105 @@ def shot(name, **extra):
 
 
 from nodebased import directviewer as dv
+
+
+def playback_order(seconds=10.0, fps=24.0, size=(1920, 1080), bits=8):
+    """--playback: play float frames into the direct picture at `fps` and read each frame's code back off the
+    X window while it plays (tools/x_frame_probe.py, run by the system python with python-xlib).
+
+    Every frame carries its number (1..255, repeating) as `bits` white or black cells along its top edge,
+    so the probe can tell which frame is on the window at each moment. Only for a private X display
+    (Xvfb): there the swapchain image is copied into the X window, so the window's pixels are what is shown.
+    A real compositor's screen-presented surface is not visible to X reads (Spectacle captures it, but
+    about once a second, too slow to follow 24 frames per second)."""
+    import threading
+    from nodebased import carddisplay
+    width, height = size
+    view_w, view_h = width // 2, height // 2
+    picture_cell = width // 16                                  # the code strip covers half the picture width
+    widget = dv.make_widget()
+    widget.resize(view_w, view_h)
+    widget.move(0, 0)
+    widget.show()
+    pump(0.5)
+    settings = carddisplay.settings_from(0.0, "RGB", "black", "Linear", None)
+    rng = np.random.default_rng(5)
+    pool = []
+    for _ in range(8):                                          # reused in turn; the presenter holds at most three
+        frame = rng.random((height, width, 4), np.float32) * 0.3
+        frame[..., 3] = 1.0
+        pool.append(frame)
+
+    def stamp(frame, number):
+        for k in range(bits):
+            frame[:picture_cell, k * picture_cell:(k + 1) * picture_cell, :3] = 1.0 if (number >> k) & 1 else 0.0
+
+    stamp(pool[0], 0)
+    widget.submit_linear(pool[0], settings, (0, 0, width, height))
+    pump(1.0)
+    if widget.error:
+        return {"error": widget.error}
+    presenter = widget.presenter
+    cell_on_window = round(picture_cell * widget.view[2])           # physical window px per cell
+    probe = subprocess.Popen(["python3", os.path.join(os.path.dirname(os.path.abspath(__file__)), "x_frame_probe.py"),
+                              str(int(widget.winId())), str(seconds + 1.5), str(cell_on_window), str(bits)],
+                             stdout=subprocess.PIPE, text=True)
+    lines = []
+    reader = threading.Thread(target=lambda: lines.extend(probe.stdout), daemon=True)
+    reader.start()
+    pump(0.5)
+    produced, accepted = [], 0
+    uploads0 = presenter.counters["linear_uploads"]
+    start = time.perf_counter()
+    wall0 = time.time()
+    number = 0
+    while time.perf_counter() - start < seconds:
+        due = start + number / fps
+        while time.perf_counter() < due:
+            app.processEvents()
+            time.sleep(0.0005)
+        number += 1
+        code = (number - 1) % 255 + 1
+        frame = pool[number % len(pool)]
+        stamp(frame, code)
+        produced.append((time.time(), code))
+        accepted += bool(widget.submit_linear(frame, settings, (0, 0, width, height), generation=number))
+    pump(1.0)
+    probe.wait(timeout=10)
+    reader.join(timeout=2)
+    events = [json.loads(line) for line in lines if line.strip()]
+    summary = events.pop() if events and "samples" in events[-1] else {}
+    seen = [(e["t"], e["code"]) for e in events if e.get("code")]
+    seen = [(t, c) for t, c in seen if t >= wall0]
+    order = [c for _, c in seen]
+    first_seen = {}
+    for t, c in seen:
+        first_seen.setdefault(c, t)
+    produced_at = {}
+    for t, c in produced:
+        produced_at.setdefault(c, t)
+    latency = [(first_seen[c] - produced_at[c]) * 1000 for c in first_seen if c in produced_at]
+    backwards = sum(1 for a, b in zip(order, order[1:]) if b < a and not (a > 200 and b < 50))   # 255 -> 1 wraps
+    unknown = sum(1 for e in events if e.get("code") is None)
+    widget.close()
+    lat = sorted(latency)
+    return {"adapter": presenter.adapter_info.get("device"), "selection_note": presenter.selection_note,
+            "seconds": seconds, "fps": fps, "picture": f"{width}x{height} float32", "window": [view_w, view_h],
+            "frames_produced": len(produced), "frames_accepted": accepted,
+            "frames_uploaded": presenter.counters["linear_uploads"] - uploads0,
+            "frames_seen_on_window": len(first_seen), "steps_backwards": backwards,
+            "unreadable_reads": unknown, "probe_reads": summary.get("samples"),
+            "produced_to_seen_ms": {"p50": round(lat[len(lat) // 2], 1), "p95": round(lat[int(len(lat) * 0.95)], 1),
+                                    "max": round(lat[-1], 1)} if lat else {},
+            "first_codes_seen": order[:30]}
+
+
+if "--playback" in sys.argv:
+    size = sys.argv[sys.argv.index("--size") + 1] if "--size" in sys.argv else "1920x1080"
+    result = playback_order(size=tuple(int(v) for v in size.lower().split("x")))
+    json.dump(result, open(OUT, "w"), indent=1)
+    print(json.dumps({k: v for k, v in result.items() if k != "first_codes_seen"}))
+    sys.exit(0 if "error" not in result else 1)
 
 widget = dv.make_widget()
 widget.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)

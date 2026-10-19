@@ -1,0 +1,133 @@
+{
+ "display": ":79",
+ "platform": "xcb",
+ "size": [
+  1920,
+  1080
+ ],
+ "seconds": 10.76,
+ "direct": true,
+ "selection": {
+  "requested_kind": "discrete",
+  "requested_backends": [
+   "auto"
+  ],
+  "selected_device": "NVIDIA GeForce RTX 3080 Ti",
+  "selected_backend": "Vulkan",
+  "attempts": [
+   {
+    "request": "power_preference=high-performance, backend=auto",
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "backend": "Vulkan"
+   }
+  ],
+  "note": "",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti"
+ },
+ "proxy_while_playing": false,
+ "graph_press_to_paint_ms": {
+  "n": 6,
+  "p50": 2.92,
+  "p95": 30.43,
+  "max": 30.43,
+  "mean": 7.6
+ },
+ "graph_drag_move_to_paint_ms": {
+  "n": 72,
+  "p50": 3.94,
+  "p95": 20.27,
+  "max": 26.6,
+  "mean": 6.49
+ },
+ "timeline_scrub_to_paint_ms": {
+  "n": 68,
+  "p50": 6.35,
+  "p95": 23.66,
+  "max": 45.44,
+  "mean": 10.91
+ },
+ "qt_thread_gap_ms": {
+  "n": 1046,
+  "p50": 4.87,
+  "p95": 38.77,
+  "max": 101.25,
+  "mean": 10.29
+ },
+ "qt_thread_gaps_over_50ms": 20,
+ "frames_produced": 230,
+ "frames_uploaded_by_dock": 185,
+ "qt_thread_ms": {
+  "hand-over to the dock": {
+   "n": 254,
+   "p50": 0.28,
+   "p95": 0.44,
+   "max": 24.76,
+   "mean": 0.45
+  },
+  "Window._show_image": {
+   "n": 254,
+   "p50": 0.29,
+   "p95": 0.45,
+   "max": 24.77,
+   "mean": 0.45
+  },
+  "Window.preview_ready": {
+   "n": 461,
+   "p50": 1.12,
+   "p95": 2.07,
+   "max": 27.19,
+   "mean": 1.14
+  },
+  "copy recorded": {
+   "n": 209,
+   "p50": 0.07,
+   "p95": 0.11,
+   "max": 0.29,
+   "mean": 0.07
+  },
+  "dock draw (upload included)": {
+   "n": 211,
+   "p50": 0.71,
+   "p95": 1.21,
+   "max": 2.36,
+   "mean": 0.79
+  }
+ },
+ "presenter_counters": {
+  "buffer_creates": 4,
+  "map_ms_total": 78.22939439211041,
+  "fills": 210,
+  "conversions": 1,
+  "fill_ms_total": 129.65129141230136,
+  "texture_creates": 2,
+  "uploads": 1,
+  "upload_bytes": 1933042688,
+  "copy_record_ms_total": 117.84187785815448,
+  "draws": 214,
+  "draw_ms_total": 215.90197854675353,
+  "linear_uploads": 209
+ },
+ "last_scrub_events": {
+  "paint_bar": 20,
+  "press_bar": 1,
+  "move_bar": 12
+ },
+ "qt_thread_stall_samples": {
+  "viewer_direct_playback.py:spin < viewer_direct_playback.py:<module>": 106,
+  "_helpers.py:proxy_func < _api.py:_present_screen < _classes.py:present < wgpucontext.py:_rc_present": 63,
+  "app.py:set_properties_widget < app.py:_show_cached_panel < app.py:inspect < app.py:command": 7,
+  "timeline.py:paintEvent < timeline.py:event < viewer_direct_playback.py:spin < viewer_direct_playback.py:<module>": 6,
+  "app.py:minimumSizeHint < app.py:set_properties_widget < app.py:_show_cached_panel < app.py:inspect": 5,
+  "knobfit.py:stable_width < knobfit.py:sizeHint < app.py:minimumSizeHint < app.py:set_properties_widget": 5,
+  "app.py:set_properties_widget < app.py:_show_cached_panel < app.py:inspect < app.py:flush_inspect": 1,
+  "_helpers.py:proxy_func < _api.py:_create_texture_screen < _classes.py:get_current_texture < wgpucontext.py:_get_current_texture": 1,
+  "timeline.py:setValue < app.py:sync_timeline < app.py:set_time < app.py:playback_tick": 1,
+  "app.py:sizeHint < app.py:set_properties_widget < app.py:_show_cached_panel < app.py:inspect": 1,
+  "topbar.py:sizeHint < topbar.py:set_icon_only < topbar.py:_fit < topbar.py:floor_width": 1,
+  "threading.py:wait < threading.py:wait < _api.py:_sync_wait < _async.py:sync_wait": 1
+ },
+ "uploaded_frames": {
+  "1920x1080 rgba32float": 52,
+  "544x146 rgba32float": 157
+ }
+}

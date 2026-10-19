@@ -1,0 +1,134 @@
+{
+ "display": ":79",
+ "platform": "xcb",
+ "size": [
+  3840,
+  2160
+ ],
+ "seconds": 10.29,
+ "direct": true,
+ "selection": {
+  "requested_kind": "cpu",
+  "requested_backends": [
+   "auto"
+  ],
+  "selected_device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+  "selected_backend": "Vulkan",
+  "attempts": [
+   {
+    "request": "force_fallback_adapter=True, backend=auto",
+    "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+    "backend": "Vulkan"
+   }
+  ],
+  "note": "",
+  "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)"
+ },
+ "proxy_while_playing": false,
+ "graph_press_to_paint_ms": {
+  "n": 6,
+  "p50": 2.93,
+  "p95": 4.52,
+  "max": 4.52,
+  "mean": 3.07
+ },
+ "graph_drag_move_to_paint_ms": {
+  "n": 72,
+  "p50": 3.15,
+  "p95": 8.65,
+  "max": 9.52,
+  "mean": 3.71
+ },
+ "timeline_scrub_to_paint_ms": {
+  "n": 68,
+  "p50": 5.75,
+  "p95": 10.42,
+  "max": 11.78,
+  "mean": 5.23
+ },
+ "qt_thread_gap_ms": {
+  "n": 1541,
+  "p50": 4.25,
+  "p95": 39.3,
+  "max": 57.96,
+  "mean": 6.67
+ },
+ "qt_thread_gaps_over_50ms": 7,
+ "frames_produced": 78,
+ "frames_uploaded_by_dock": 76,
+ "qt_thread_ms": {
+  "hand-over to the dock": {
+   "n": 86,
+   "p50": 0.36,
+   "p95": 0.96,
+   "max": 42.36,
+   "mean": 1.32
+  },
+  "Window._show_image": {
+   "n": 86,
+   "p50": 0.36,
+   "p95": 0.97,
+   "max": 42.37,
+   "mean": 1.32
+  },
+  "Window.preview_ready": {
+   "n": 154,
+   "p50": 1.44,
+   "p95": 2.42,
+   "max": 44.23,
+   "mean": 1.83
+  },
+  "dock draw (upload included)": {
+   "n": 100,
+   "p50": 0.6,
+   "p95": 7.04,
+   "max": 24.75,
+   "mean": 1.71
+  },
+  "copy recorded": {
+   "n": 84,
+   "p50": 0.07,
+   "p95": 0.09,
+   "max": 0.35,
+   "mean": 0.08
+  }
+ },
+ "presenter_counters": {
+  "buffer_creates": 4,
+  "map_ms_total": 81.13755087833852,
+  "fills": 85,
+  "conversions": 17,
+  "fill_ms_total": 217.13993337471038,
+  "texture_creates": 3,
+  "uploads": 1,
+  "upload_bytes": 1178784768,
+  "copy_record_ms_total": 110.47645332291722,
+  "draws": 103,
+  "draw_ms_total": 255.4282780038193,
+  "linear_uploads": 84
+ },
+ "last_scrub_events": {
+  "paint_bar": 22,
+  "press_bar": 1,
+  "move_bar": 12
+ },
+ "qt_thread_stall_samples": {
+  "viewer_direct_playback.py:spin < viewer_direct_playback.py:<module>": 113,
+  "app.py:set_properties_widget < app.py:_show_cached_panel < app.py:inspect < app.py:command": 27,
+  "app.py:minimumSizeHint < app.py:set_properties_widget < app.py:_show_cached_panel < app.py:inspect": 16,
+  "timeline.py:paintEvent < timeline.py:event < viewer_direct_playback.py:spin < viewer_direct_playback.py:<module>": 7,
+  "knobfit.py:stable_width < knobfit.py:sizeHint < app.py:minimumSizeHint < app.py:set_properties_widget": 6,
+  "timeline.py:setValue < timeline.py:mouseMoveEvent < timeline.py:event < viewer_direct_playback.py:spin": 5,
+  "knobfit.py:stable_width < knobfit.py:sizeHint < app.py:set_properties_widget < app.py:_show_cached_panel": 3,
+  "knobfit.py:sizeHint < app.py:minimumSizeHint < app.py:set_properties_widget < app.py:_show_cached_panel": 2,
+  "timeline.py:event < viewer_direct_playback.py:spin < viewer_direct_playback.py:<module>": 2,
+  "_helpers.py:proxy_func < _api.py:_present_screen < _classes.py:present < wgpucontext.py:_rc_present": 2,
+  "_helpers.py:proxy_func < _api.py:submit < directviewer.py:draw < viewer_direct_playback.py:g": 2,
+  "knobfit.py:fitted_width < knobfit.py:minimumSizeHint < app.py:set_properties_widget < app.py:_show_cached_panel": 2
+ },
+ "uploaded_frames": {
+  "3840x2160 rgba16float": 16,
+  "544x146 rgba32float": 42,
+  "544x135 rgba32float": 26
+ }
+}
