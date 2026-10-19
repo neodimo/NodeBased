@@ -49,6 +49,30 @@ UNIFORM_BYTES = 112           # the 80-byte view block, then carddisplay's two d
 ZOOM_RANGE = (0.05, 20.0)     # logical zoom, the same bounds PanZoomView.wheelEvent applies
 SURROUND = (0.0, 0.0, 0.0)    # VIEWER_SURROUND is pure black in every theme
 RECOVERY_LIMIT = (3, 30.0)    # at most this many device recoveries in this many seconds, then the dock gives up
+STAGING_SLOTS = 3             # reused upload buffers: one being filled, one waiting for a draw, one the card copies from
+ROW_ALIGN = 256               # WebGPU's bytes_per_row alignment for a buffer-to-texture copy
+
+
+class TooLarge(ValueError):
+    """A picture this card cannot hold as one texture; the Viewer keeps showing it."""
+
+
+def too_large(limits, width, height, texel, device=""):
+    """Why a width x height picture (texel bytes per pixel) does not fit this card, or "" when it does.
+
+    Safe to call from any thread: `limits` is the presenter's plain dict of the device's limits."""
+    if not limits:
+        return ""
+    card = device or "this card"
+    side = limits.get("max-texture-dimension-2d", 8192)
+    if width > side or height > side:
+        return (f"Direct picture: the picture is {width} x {height} pixels and {card} takes at most {side} "
+                f"pixels on a side; the Viewer shows it")
+    size = padded_row(width, texel) * height
+    if size > limits.get("max-buffer-size", 1 << 28):
+        return (f"Direct picture: the picture is {width} x {height} pixels ({size / 1048576:.0f} MB to upload) and "
+                f"{card} takes at most {limits['max-buffer-size'] / 1048576:.0f} MB at once; the Viewer shows it")
+    return ""
 
 
 class LossWatch(logging.Handler):
@@ -280,12 +304,209 @@ def pick_display_adapter(context, preference=None, backend=None):
     return adapter, context.get_preferred_format(adapter), selection["note"]
 
 
+def padded_row(width, texel):
+    """Bytes per row in a staging buffer: the picture's row rounded up to WebGPU's 256-byte copy alignment."""
+    return (width * texel + ROW_ALIGN - 1) // ROW_ALIGN * ROW_ALIGN
+
+
+def picture_layout(kind, source):
+    """(width, height, texture format, bytes per texel) of a ledger payload's picture."""
+    if kind == "linear":
+        half = source.dtype == np.float16
+        return int(source.shape[1]), int(source.shape[0]), ("rgba16float" if half else "rgba32float"), (8 if half else 16)
+    return int(source.width()), int(source.height()), "rgba8unorm", 4
+
+
+def fill_rows(view, kind, source, width, height, row):
+    """Copy one picture into a mapped staging buffer (`view`, writable bytes), row by padded row.
+
+    Runs on the filler thread. A float frame is copied as it is (a cropped, non-contiguous cache view
+    included: numpy walks the strides, no intermediate array); a QImage is converted to RGBA8888 first
+    unless it already is. Returns True when a conversion was needed."""
+    converted = False
+    if kind == "linear":
+        dtype = np.float16 if source.dtype == np.float16 else np.float32
+        itemsize = np.dtype(dtype).itemsize
+        dst = np.ndarray((height, row // itemsize), dtype, buffer=view)[:, :width * 4].reshape(height, width, 4)
+        np.copyto(dst, source[..., :4], casting="unsafe")
+    else:
+        from PySide6.QtGui import QImage
+        image = source
+        if image.format() != QImage.Format.Format_RGBA8888:
+            image = image.convertToFormat(QImage.Format.Format_RGBA8888)
+            converted = True
+        line = image.bytesPerLine()
+        raw = np.frombuffer(image.constBits(), np.uint8, count=image.sizeInBytes()).reshape(height, line)
+        dst = np.ndarray((height, row), np.uint8, buffer=view)
+        dst[:, :width * 4] = raw[:, :width * 4]
+    return converted
+
+
+class StagingRing:
+    """A few reused upload buffers, filled off the Qt thread, copied into the texture inside a draw.
+
+    A slot moves free -> filling -> ready -> free. `stage` (Qt thread) maps a free slot (it is the one the
+    card finished with longest ago, so the map does not wait in practice) and hands the newest pending
+    picture to the filler thread, which copies it into the mapped memory. `take_newest` (Qt thread, inside
+    a draw) returns the newest filled slot and puts any older filled slot back as free: only the newest
+    ready picture is ever copied to the card. `release` unmaps a slot whose copy has been recorded.
+    The buffers are made once and grow only when a larger picture arrives."""
+
+    def __init__(self, device, wgpu, count=STAGING_SLOTS, threaded=True, notify=None, counters=None):
+        import concurrent.futures
+        self.device, self.wgpu = device, wgpu
+        self.slots = [{"buffer": None, "capacity": 0, "state": "free", "sequence": 0, "used": 0, "meta": None}
+                      for _ in range(count)]
+        self.lock = threading.Lock()
+        self.notify = notify
+        self.pool = concurrent.futures.ThreadPoolExecutor(1, thread_name_prefix="direct-fill") if threaded else None
+        self.jobs = []
+        self.counters = counters if counters is not None else collections.Counter()
+        self.clock = 0
+
+    def idle_slot(self):
+        with self.lock:
+            free = [slot for slot in self.slots if slot["state"] == "free"]
+            if not free:
+                return None
+            slot = min(free, key=lambda s: s["used"])
+            slot["state"] = "filling"
+            return slot
+
+    def stage(self, sequence, payload, layout):
+        """Start filling a slot with `payload` (a ledger payload). False when every slot is busy."""
+        width, height, fmt, texel = layout
+        row = padded_row(width, texel)
+        size = row * height
+        slot = self.idle_slot()
+        if slot is None:
+            return False
+        wgpu = self.wgpu
+        started = time.perf_counter()
+        buffer = slot["buffer"]
+        if buffer is None or slot["capacity"] < size:
+            if buffer is not None:
+                if buffer.map_state == "mapped":
+                    buffer.unmap()
+                buffer.destroy()
+            buffer = self.device.create_buffer(size=size, usage=wgpu.BufferUsage.MAP_WRITE | wgpu.BufferUsage.COPY_SRC,
+                                               mapped_at_creation=True)
+            slot["buffer"], slot["capacity"] = buffer, size
+            self.counters["buffer_creates"] += 1
+        elif buffer.map_state != "mapped":
+            buffer.map_sync("WRITE")
+        self.counters["map_ms_total"] += (time.perf_counter() - started) * 1000.0
+        view = buffer._experimental_get_mapped_range(0, size)
+        slot["meta"] = (payload, width, height, fmt, texel, row)
+        slot["sequence"] = sequence
+        if self.pool is None:
+            self._fill(slot, view)
+        else:
+            self.jobs = [job for job in self.jobs if not job.done()]
+            self.jobs.append(self.pool.submit(self._fill, slot, view))
+        return True
+
+    def _fill(self, slot, view):
+        payload, width, height, fmt, texel, row = slot["meta"]
+        started = time.perf_counter()
+        try:
+            converted = fill_rows(view, payload[0], payload[1], width, height, row)
+            state = "ready"
+        except Exception:
+            converted, state = False, "failed"
+        with self.lock:
+            slot["state"] = state
+            self.counters["fills"] += 1
+            self.counters["conversions"] += int(converted)
+            self.counters["fill_ms_total"] += (time.perf_counter() - started) * 1000.0
+        if self.notify is not None:
+            try:
+                self.notify()
+            except Exception:
+                pass
+
+    def take_newest(self):
+        """The newest filled slot, unmapped and ready to copy from, or None. Older filled slots go back to free
+        (still mapped, so the next `stage` writes into them without a map)."""
+        with self.lock:
+            ready = [slot for slot in self.slots if slot["state"] in ("ready", "failed")]
+            if not ready:
+                return None
+            newest = max(ready, key=lambda s: s["sequence"])
+            for slot in ready:
+                if slot is not newest:
+                    slot["state"] = "free"
+                    self.counters["dropped_ready"] += 1
+            if newest["state"] == "failed":
+                newest["state"] = "free"
+                return None
+            newest["state"] = "copying"
+        newest["buffer"].unmap()          # a copy source must be unmapped before the submit
+        return newest
+
+    def release(self, slot):
+        """After the copy from `slot` was submitted: the slot is free again (mapped afresh when next used)."""
+        self.clock += 1
+        with self.lock:
+            slot["used"] = self.clock
+            slot["state"] = "free"
+            slot["meta"] = None
+
+    def newest_unshown(self, after):
+        """(sequence, payload) of the newest staged picture newer than sequence `after`, waiting for fills first."""
+        self.wait()
+        with self.lock:
+            staged = [slot for slot in self.slots if slot["meta"] is not None and slot["sequence"] > after
+                      and slot["state"] in ("ready", "filling", "copying")]
+            if not staged:
+                return None
+            newest = max(staged, key=lambda s: s["sequence"])
+            return newest["sequence"], newest["meta"][0]
+
+    def waiting(self):
+        """True while a picture is being filled or is filled and waiting for its draw. One picture at a time
+        sits between the offer and the copy, so a newer offer replaces the pending one and an older picture
+        is never converted only to be dropped."""
+        with self.lock:
+            return any(slot["state"] in ("filling", "ready") for slot in self.slots)
+
+    def wait(self):
+        """Until every fill in flight has finished (tests, close, device loss)."""
+        for job in list(self.jobs):
+            try:
+                job.result()
+            except Exception:
+                pass
+        self.jobs = []
+
+    def bytes(self):
+        return sum(slot["capacity"] for slot in self.slots)
+
+    def close(self):
+        self.wait()
+        if self.pool is not None:
+            self.pool.shutdown(wait=True)
+        for slot in self.slots:
+            buffer = slot["buffer"]
+            if buffer is not None:
+                try:
+                    if buffer.map_state == "mapped":
+                        buffer.unmap()
+                    buffer.destroy()
+                except Exception:
+                    pass
+            slot.update(buffer=None, capacity=0, state="free", meta=None)
+
+
 class RetainedPresenter:
     """Owns the device, the retained picture texture and the two pipelines; draws into the surface."""
 
-    def __init__(self, context, adapter=None, preference=None, overlay=True):
+    def __init__(self, context, adapter=None, preference=None, overlay=True, fill_thread=True, notify=None):
         import wgpu
         self.overlay = overlay
+        self.fill_thread = fill_thread
+        self.notify = notify         # called from the filler thread when a picture is ready to copy
+        self.ring = None
         self.wgpu = wgpu
         self.context = context
         self.selection_note = ""
@@ -301,13 +522,17 @@ class RetainedPresenter:
         self.counters = collections.Counter()
         self.device = None
         self.texture = None
-        self.texture_size = None
+        self.texture_size = None     # size of the picture in the texture (the texture may be larger)
+        self.texture_capacity = (0, 0)
         self.bind_group = None
         self.picture = None          # the scene geometry of the retained picture
         self.linear = None           # display settings when the retained picture is a linear float frame
         self.linear_texture = None
         self.linear_size = None
+        self.linear_capacity = (0, 0)
         self.linear_bind_group = None
+        self.limits = {}
+        self.refusal = ""            # why the last picture was refused (too large for this card), or ""
         self.linear_pipelines = {}   # view -> pipeline running carddisplay's fragment shader
         self.linear_error = ""
         self.uploaded_sequence = 0
@@ -321,7 +546,15 @@ class RetainedPresenter:
     # -- device ---------------------------------------------------------------------------------
     def _start_device(self):
         wgpu = self.wgpu
-        self.device = self.adapter.request_device_sync()
+        # A 4K float picture is 133 MB in one staging buffer; ask for what the adapter can do, not the 256 MB default.
+        offered = dict(self.adapter.limits)
+        wanted = {key: offered[key] for key in ("max-buffer-size", "max-texture-dimension-2d") if key in offered}
+        try:
+            self.device = self.adapter.request_device_sync(required_limits=wanted)
+        except Exception:
+            self.device = self.adapter.request_device_sync()
+        self.limits = {key: int(self.device.limits[key]) for key in ("max-buffer-size", "max-texture-dimension-2d")}
+        self.ring = StagingRing(self.device, wgpu, threaded=self.fill_thread, notify=self.notify, counters=self.counters)
         self.context.configure(device=self.device, format=self.format, alpha_mode="opaque")
         module = self.device.create_shader_module(code=SHADER)
         target = {"format": self.format}
@@ -386,6 +619,9 @@ class RetainedPresenter:
                 self.counters["idle_waits"] += 1
             except Exception:
                 self.counters["idle_wait_failures"] += 1
+        if self.ring is not None:
+            self.ring.close()
+            self.ring = None
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
         tables = [entry[2] for entry in self.linear_pipelines.values() if entry is not None]
@@ -393,9 +629,11 @@ class RetainedPresenter:
             self._destroy(resource)
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
+        self.texture_capacity = self.linear_capacity = (0, 0)
         self.linear_texture = self.linear_bind_group = self.linear = None
         self.linear_size = None
         self.linear_pipelines = {}
+        self.last_frame = None       # the retained CPU picture goes with the device (dock closed)
         self.device = None
         logging.getLogger("wgpu").removeHandler(self.loss_watch)
 
@@ -416,12 +654,19 @@ class RetainedPresenter:
         self.recoveries.append(now)
         pending = self.ledger.pending            # newer than anything uploaded; survives the new epoch
         old_device = self.device
+        if self.ring is not None:
+            staged = self.ring.newest_unshown(self.uploaded_sequence)
+            if staged is not None and (pending is None or staged[0] > pending[0]):
+                pending = staged                 # staged but never copied: newer than the retained picture
+            self.ring.close()
+            self.ring = None
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
         for resource in (self.texture, self.linear_texture, self.uniform):
             self._destroy(resource)
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
+        self.texture_capacity = self.linear_capacity = (0, 0)
         self.linear_texture = self.linear_bind_group = self.linear = None
         self.linear_size = None
         self.picture = None
@@ -435,6 +680,7 @@ class RetainedPresenter:
         frame = pending[1] if pending is not None else self.last_frame
         if frame is not None:
             self.ledger.offer(frame, None, self.ledger.epoch)
+            self.stage_pending()
         self.counters["recoveries"] += 1
         self.recovery_reason = reason
 
@@ -460,73 +706,110 @@ class RetainedPresenter:
             pass
 
     # -- picture --------------------------------------------------------------------------------
+    def check_size(self, width, height, texel):
+        """Raise TooLarge when this card cannot hold a width x height picture as one texture."""
+        reason = too_large(self.limits, width, height, texel, self.adapter_info.get("device", ""))
+        if reason:
+            raise TooLarge(reason)
+
+    def _queue(self, payload, generation):
+        width, height, _, texel = picture_layout(payload[0], payload[1])
+        try:
+            self.check_size(width, height, texel)
+        except TooLarge as exc:
+            self.refusal = str(exc)
+            self.counters["refused_too_large"] += 1
+            raise
+        self.refusal = ""
+        fresh = self.ledger.offer(payload, generation, self.ledger.epoch)
+        if fresh:
+            self.stage_pending()
+        return fresh
+
     def offer(self, qimage, rect, format_rect, generation=None):
-        """Queue the newest picture (no GPU work here). `rect` and `format_rect` are scene rectangles."""
-        return self.ledger.offer(("qimage", qimage, tuple(rect), tuple(format_rect)), generation, self.ledger.epoch)
+        """Queue the newest picture. `rect` and `format_rect` are scene rectangles. The copy into a staging
+        buffer starts at once on the filler thread when a slot is free; the draw only records the GPU copy.
+        Raises TooLarge for a picture the card cannot hold."""
+        return self._queue(("qimage", qimage, tuple(rect), tuple(format_rect)), generation)
 
     def offer_linear(self, frame, settings, rect, format_rect, generation=None):
         """Queue a premultiplied scene-linear float frame (H x W x 4) and its display settings
         (`carddisplay.settings_from`). The card does the display transform; nothing converts it here."""
-        return self.ledger.offer(("linear", frame, settings, tuple(rect), tuple(format_rect)), generation, self.ledger.epoch)
+        return self._queue(("linear", frame, settings, tuple(rect), tuple(format_rect)), generation)
 
-    def _upload_linear(self, frame):
-        """Write the float frame into the retained rgba32float texture (one copy, no conversion)."""
+    def stage_pending(self):
+        """Hand the newest pending picture to a free staging slot (Qt thread). While another picture is still
+        being filled or waits for its draw, it stays pending: the next draw tries again, and a newer offer
+        replaces it meanwhile."""
+        if self.ring is None or self.ledger.pending is None or self.ring.waiting():
+            return False
+        sequence, payload = self.ledger.pending
+        if not self.ring.stage(sequence, payload, picture_layout(payload[0], payload[1])):
+            return False
+        self.ledger.take()
+        return True
+
+    def retained_bytes(self):
+        """CPU memory the presenter holds for recovery: the newest picture only (the ledger payload)."""
+        frame = self.last_frame
+        if frame is None:
+            return 0
+        source = frame[1]
+        return int(source.nbytes) if frame[0] == "linear" else int(source.sizeInBytes())
+
+    def staging_bytes(self):
+        return self.ring.bytes() if self.ring is not None else 0
+
+    def _texture_for(self, kind, width, height, fmt):
+        """The retained texture for `kind`, grown (never shrunk) so a width x height picture fits."""
         wgpu = self.wgpu
-        # The display cache keeps settled frames as float16: those go up as half floats, as they are.
-        half = frame.dtype == np.float16
-        frame = np.ascontiguousarray(frame, np.float16 if half else np.float32)
-        height, width = frame.shape[:2]
-        texel = 8 if half else 16
-        fmt = "rgba16float" if half else "rgba32float"
-        if self.linear_texture is None or self.linear_size != (width, height) or self.linear_texture.format != fmt:
-            if self.linear_texture is not None:
-                self.ledger.retire(self.linear_texture)
-            self.linear_texture = self.device.create_texture(
-                size=(width, height, 1), format=fmt,
-                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
-            self.linear_size = (width, height)
+        linear = kind == "linear"
+        texture = self.linear_texture if linear else self.texture
+        capacity = self.linear_capacity if linear else self.texture_capacity
+        if texture is not None and texture.format == fmt and capacity[0] >= width and capacity[1] >= height:
+            return texture
+        if texture is not None:
+            self.ledger.retire(texture)
+            if texture.format != fmt:
+                capacity = (0, 0)
+        capacity = (max(capacity[0], width), max(capacity[1], height))
+        texture = self.device.create_texture(size=(*capacity, 1), format=fmt,
+                                             usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
+        if linear:
+            self.linear_texture, self.linear_capacity = texture, capacity
             self.linear_bind_group = self.device.create_bind_group(layout=self.linear_layout, entries=[
-                {"binding": 0, "resource": self.linear_texture.create_view()},
+                {"binding": 0, "resource": texture.create_view()},
                 {"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": UNIFORM_BYTES}},
                 {"binding": 2, "resource": self.linear_sampler}])
-            if self.overlay_bind_group is None:
-                self.overlay_bind_group = self.device.create_bind_group(
-                    layout=self.overlay_pipeline.get_bind_group_layout(0),
-                    entries=[{"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
-            self.counters["texture_creates"] += 1
-        self.device.queue.write_texture({"texture": self.linear_texture}, frame,
-                                        {"bytes_per_row": width * texel, "rows_per_image": height}, (width, height, 1))
-        self.counters["linear_uploads"] += 1
-
-    def _upload(self, qimage):
-        """Convert once to RGBA8 and write it to the retained texture; returns True when a size change made a new texture."""
-        from PySide6.QtGui import QImage
-        wgpu = self.wgpu
-        rgba = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
-        self.counters["conversions"] += 1
-        width, height = rgba.width(), rgba.height()
-        raw = np.frombuffer(rgba.constBits(), np.uint8, count=rgba.sizeInBytes())
-        new_texture = self.texture is None or self.texture_size != (width, height)
-        if new_texture:
-            if self.texture is not None:
-                self.ledger.retire(self.texture)
-            self.texture = self.device.create_texture(
-                size=(width, height, 1), format="rgba8unorm",
-                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
-            self.texture_size = (width, height)
+        else:
+            self.texture, self.texture_capacity = texture, capacity
             self.bind_group = self.device.create_bind_group(
                 layout=self.pipeline.get_bind_group_layout(0),
-                entries=[{"binding": 0, "resource": self.texture.create_view()},
+                entries=[{"binding": 0, "resource": texture.create_view()},
                          {"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
-            if self.overlay_bind_group is None:
-                self.overlay_bind_group = self.device.create_bind_group(
+        if self.overlay_bind_group is None:
+            self.overlay_bind_group = self.device.create_bind_group(
                 layout=self.overlay_pipeline.get_bind_group_layout(0),
                 entries=[{"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
-            self.counters["texture_creates"] += 1
-        self.device.queue.write_texture({"texture": self.texture}, raw,
-                                        {"bytes_per_row": rgba.bytesPerLine(), "rows_per_image": height}, (width, height, 1))
-        self.counters["uploads"] += 1
-        return new_texture
+        self.counters["texture_creates"] += 1
+        return texture
+
+    def _copy_slot(self, encoder, slot):
+        """Record the copy from a filled staging slot into the retained texture; returns the payload."""
+        payload, width, height, fmt, texel, row = slot["meta"]
+        kind = payload[0]
+        texture = self._texture_for(kind, width, height, fmt)
+        encoder.copy_buffer_to_texture(
+            {"buffer": slot["buffer"], "offset": 0, "bytes_per_row": row, "rows_per_image": height},
+            {"texture": texture, "mip_level": 0, "origin": (0, 0, 0)}, (width, height, 1))
+        if kind == "linear":
+            self.linear_size = (width, height)
+            self.counters["linear_uploads"] += 1
+        else:
+            self.texture_size = (width, height)
+            self.counters["uploads"] += 1
+        self.counters["upload_bytes"] += row * height
+        return payload
 
     def has_picture(self):
         return self.texture is not None or self.linear_texture is not None
@@ -539,26 +822,31 @@ class RetainedPresenter:
         texture and its view are locals here and are gone when this returns."""
         if self.device_lost():
             self.recover(self.loss_watch.message)
-        taken = self.ledger.take()
-        if taken is not None:
-            self.last_frame = taken[1]
-            kind, payload = taken[1][0], taken[1][1:]
-            if kind == "linear":
-                frame, settings, rect, format_rect = payload
-                self.linear_pipeline(settings[3])
-                self._upload_linear(frame)
+        self.stage_pending()
+        encoder = self.device.create_command_encoder()
+        slot = self.ring.take_newest()
+        if slot is not None and slot["sequence"] > self.uploaded_sequence:
+            started = time.perf_counter()
+            payload = slot["meta"][0]
+            if payload[0] == "linear":
+                self.linear_pipeline(payload[2][3])
+            self._copy_slot(encoder, slot)
+            self.uploaded_sequence = slot["sequence"]
+            self.last_frame = payload
+            if payload[0] == "linear":
+                _, frame, settings, rect, format_rect = payload
                 self.linear = settings
             else:
-                qimage, rect, format_rect = payload
-                self._upload(qimage)
+                _, qimage, rect, format_rect = payload
                 self.linear = None
             self.picture = (rect, format_rect)
-            self.uploaded_sequence = taken[0]
+            self.counters["copy_record_ms_total"] += (time.perf_counter() - started) * 1000.0
+        elif slot is not None:
+            self.counters["dropped_ready"] += 1
         started = time.perf_counter()
         surface = self.context.get_current_texture()
         target = surface.create_view()
         if self.picture is None:
-            encoder = self.device.create_command_encoder()
             encoder.begin_render_pass(color_attachments=[self._attachment(target)]).end()
             self.device.queue.submit([encoder.finish()])
         else:
@@ -574,7 +862,6 @@ class RetainedPresenter:
             data = np.array([*physical_size, cx, cy, *rect, *format_rect, *size, zoom,
                              1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0, *display], np.float32)
             self.device.queue.write_buffer(self.uniform, 0, data)
-            encoder = self.device.create_command_encoder()
             rp = encoder.begin_render_pass(color_attachments=[self._attachment(target)])
             rp.set_pipeline(pipeline)
             rp.set_bind_group(0, bind_group)
@@ -587,6 +874,9 @@ class RetainedPresenter:
                 rp.draw(3)
             rp.end()
             self.device.queue.submit([encoder.finish()])
+        if slot is not None:
+            self.ring.release(slot)
+            self.stage_pending()          # a pending picture that found every slot busy goes now
         self.counters["draws"] += 1
         self.counters["draw_ms_total"] += (time.perf_counter() - started) * 1000.0
         for resource in self.ledger.note_present():
@@ -623,6 +913,7 @@ def make_widget(parent=None):
 
     class DirectViewerWidget(QRenderWidget):
         failed = Signal(str)
+        filled = Signal()              # emitted on the filler thread; Qt queues it to this widget's thread
 
         def __init__(self, parent=None):
             super().__init__(parent=parent, present_method="screen", update_mode="ondemand", max_fps=120)
@@ -635,6 +926,8 @@ def make_widget(parent=None):
             self._pan = None
             self.draw_requests = 0
             self.recoveries = 0
+            self.refusal = ""             # why the last picture was refused (too large for the card), or ""
+            self.filled.connect(self._request)
             self.request_draw(self._draw)
 
         # -- feeding ----------------------------------------------------------------------------
@@ -642,11 +935,16 @@ def make_widget(parent=None):
             """Hand over the newest picture. No GPU work and no waiting: the draw callback does the upload."""
             if self.error is not None:
                 return False
-            self.rect = tuple(rect)
-            self.format_rect = tuple(format_rect or rect)
             if self.presenter is None and not self._start():
                 return False
-            fresh = self.presenter.offer(qimage, self.rect, self.format_rect, generation)
+            try:
+                fresh = self.presenter.offer(qimage, tuple(rect), tuple(format_rect or rect), generation)
+            except TooLarge as exc:
+                self.refusal = str(exc)
+                return False
+            self.refusal = ""
+            self.rect = tuple(rect)
+            self.format_rect = tuple(format_rect or rect)
             if fresh:
                 self._request()
             return fresh
@@ -663,16 +961,21 @@ def make_widget(parent=None):
                 self.presenter.linear_pipeline(settings[3])
             except carddisplay.Unsupported:
                 return False
+            try:
+                fresh = self.presenter.offer_linear(frame, settings, tuple(rect), tuple(format_rect or rect), generation)
+            except TooLarge as exc:
+                self.refusal = str(exc)
+                return False
+            self.refusal = ""
             self.rect = tuple(rect)
             self.format_rect = tuple(format_rect or rect)
-            fresh = self.presenter.offer_linear(frame, settings, self.rect, self.format_rect, generation)
             if fresh:
                 self._request()
             return fresh
 
         def _start(self):
             try:
-                self.presenter = RetainedPresenter(self.get_wgpu_context())
+                self.presenter = RetainedPresenter(self.get_wgpu_context(), notify=self.filled.emit)
             except Exception as exc:
                 self._fail(f"direct viewer could not start: {exc}")
                 return False
@@ -765,10 +1068,18 @@ def make_widget(parent=None):
             super().resizeEvent(event)
             self._request()
 
-        def closeEvent(self, event):
+        def release(self):
+            """Drop the device, the textures, the staging buffers and the retained CPU picture (dock closed).
+            The next picture handed over starts a fresh presenter."""
             if self.presenter is not None:
                 self.presenter.lose_device()
                 self.presenter = None
+
+        def retained_bytes(self):
+            return 0 if self.presenter is None else self.presenter.retained_bytes()
+
+        def closeEvent(self, event):
+            self.release()
             super().closeEvent(event)
 
     return DirectViewerWidget(parent)

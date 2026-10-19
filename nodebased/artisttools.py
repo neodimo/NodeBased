@@ -204,6 +204,11 @@ class CacheInspectorPanel(QWidget):
         self.start_frame = 1
         self.end_frame = 1
         layout = QVBoxLayout(self)
+        # What the Direct picture holds in memory (Window._refresh_direct_memory); hidden while it is closed.
+        self.direct_memory = QLabel("")
+        self.direct_memory.setObjectName("direct-memory")
+        self.direct_memory.hide()
+        layout.addWidget(self.direct_memory)
         header = QHBoxLayout()
         header.addWidget(QLabel("Invalidate from frame"))
         self.invalidate_spin = QSpinBox()
@@ -227,6 +232,15 @@ class CacheInspectorPanel(QWidget):
         # `resolve_callback(start, end)`, set by whoever owns the actual solve loop (the app);
         # left `None` in tests that only check invalidation and listing.
         self.resolve_callback = None
+
+    def set_direct_memory(self, retained_bytes, staging_bytes, open_=True):
+        """Show the Direct picture's retained picture (CPU copy kept for recovery) and its upload buffers."""
+        if not open_:
+            self.direct_memory.setText("Direct picture: closed, holds no memory")
+        else:
+            self.direct_memory.setText(f"Direct picture: retained picture {retained_bytes / 1048576:.1f} MB, "
+                                       f"upload buffers {staging_bytes / 1048576:.1f} MB")
+        self.direct_memory.show()
 
     def set_cache(self, cache, run: str, start_frame: int, end_frame: int):
         self.cache, self.run = cache, run

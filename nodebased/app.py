@@ -13503,7 +13503,7 @@ class Window(QMainWindow):
                                                    crop.left():crop.left() + crop.width()]
                     height, width = cached_or_cropped.shape[:2]
                     image = None
-                    if request.display and self._direct_linear_for(request, view):
+                    if request.display and self._direct_linear_for(request, view, cached_or_cropped):
                         image = carddisplay.LazyPicture(cached_or_cropped, exposure, channel, background, view, look)
                     elif request.display:
                         # The picture for this exact frame, region and display setup is kept from
@@ -13569,7 +13569,7 @@ class Window(QMainWindow):
                 self.display_cache.put(display_key, frame, region_key,
                                        is_data=static or _is_data_target(request.document, target),
                                        lazy=True)
-                direct = request.display and self._direct_linear_for(request, view)
+                direct = request.display and self._direct_linear_for(request, view, frame)
                 image = (carddisplay.LazyPicture(frame, exposure, channel, background, view, look) if direct
                          else to_qimage(frame, exposure, channel, background=background, view=view, look=look)
                          if request.display else None)
@@ -13595,13 +13595,18 @@ class Window(QMainWindow):
                     "This is a NodeBased bug, not a problem with the graph.", None)
         self.executor.submit(work)
 
-    def _direct_linear_for(self, request, view):
+    def _direct_linear_for(self, request, view, frame=None):
         """Runs on the worker. True when this playback frame goes to the direct viewer as floats and
-        skips `to_qimage`: the direct picture is up, the card can run `view`, and no B buffer is in play
-        (compare pictures are still built on the processor)."""
+        skips `to_qimage`: the direct picture is up, the card can run `view`, no B buffer is in play
+        (compare pictures are still built on the processor) and the frame fits the card (a larger one
+        is converted here, on the worker, and the Viewer shows it)."""
         if not (getattr(self, "_direct_linear_on", False) and request.playing):
             return False
         if compare_model.active_b(request.document)[1] is not None:
+            return False
+        limits = getattr(self, "_direct_limits", None)
+        if frame is not None and limits and directviewer.too_large(
+                limits, frame.shape[1], frame.shape[0], 8 if frame.dtype == np.float16 else 16, limits.get("device", "")):
             return False
         return carddisplay.supported(view)
 
@@ -13820,6 +13825,11 @@ class Window(QMainWindow):
             self._direct_linear_on = False
             if dock is not None:
                 dock.hide()
+                # Closing the dock gives back its device, textures, upload buffers and retained picture.
+                if getattr(self, "direct_widget", None) is not None:
+                    self.direct_widget.release()
+                self._direct_limits = None
+            self._refresh_direct_memory()
             return
         if dock is None:
             dock = QDockWidget(self.DIRECT_TITLE, self)
@@ -13859,6 +13869,33 @@ class Window(QMainWindow):
             self.direct_dock = None
             self.direct_widget = None
 
+    def _refresh_direct_memory(self):
+        """The Direct picture's memory in the cache inspector: its retained picture and upload buffers."""
+        inspector = getattr(self, "cache_inspector", None)
+        if inspector is None:
+            return
+        widget = getattr(self, "direct_widget", None)
+        dock = getattr(self, "direct_dock", None)
+        presenter = getattr(widget, "presenter", None)
+        if widget is None or dock is None or not dock.isVisible() or presenter is None:
+            inspector.set_direct_memory(0, 0, open_=False)
+            return
+        inspector.set_direct_memory(presenter.retained_bytes(), presenter.staging_bytes())
+
+    def _direct_handed_over(self, accepted):
+        """After a hand-over: name a refusal (too large for the card) once, keep the card limits for the
+        worker, and refresh the memory line when the cache inspector shows it."""
+        widget = self.direct_widget
+        presenter = getattr(widget, "presenter", None)
+        if presenter is not None:
+            self._direct_limits = dict(presenter.limits, device=presenter.adapter_info.get("device", ""))
+        refusal = getattr(widget, "refusal", "")
+        if not accepted and refusal and refusal != getattr(self, "_direct_refusal_shown", ""):
+            self.statusBar().showMessage(refusal, 8000)
+        self._direct_refusal_shown = refusal
+        if self.cache_inspector_dock.isVisible():
+            self._refresh_direct_memory()
+
     def _show_direct_linear(self, picture, scale, render_region, generation):
         """Playback with the direct picture up: the float frame goes straight to the card and the
         Viewer keeps its last picture until playback stops (the stop's refresh repaints it). The
@@ -13874,9 +13911,12 @@ class Window(QMainWindow):
                            render_region.full_width * scale, render_region.full_height * scale)
         else:
             rect = format_rect = (0.0, 0.0, width * scale, height * scale)
-        if not self.direct_widget.submit_linear(picture.frame, picture.settings, rect, format_rect, generation):
+        accepted = self.direct_widget.submit_linear(picture.frame, picture.settings, rect, format_rect, generation)
+        if self.direct_widget is not None:
+            self._direct_handed_over(accepted)
+        if not accepted:
             if self.direct_widget is not None and self.direct_widget.error is None:
-                return False   # this view only: the next frame tries again, and falls back again
+                return False   # this view only (or too large): the next frame tries again, and falls back again
             self._direct_linear_on = False
             return False
         self.direct_lazy = picture
@@ -13894,7 +13934,9 @@ class Window(QMainWindow):
         else:
             rect = (0.0, 0.0, image.width() * scale, image.height() * scale)
         format_rect = (scene_rect.x(), scene_rect.y(), scene_rect.width(), scene_rect.height())
-        self.direct_widget.submit(image, rect, format_rect, generation)
+        accepted = self.direct_widget.submit(image, rect, format_rect, generation)
+        if self.direct_widget is not None:
+            self._direct_handed_over(accepted)
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload

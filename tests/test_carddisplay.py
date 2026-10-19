@@ -70,7 +70,7 @@ class CardDisplayAgreementTests(unittest.TestCase):
         cls.frames = test_frames()
         cls.size = (96, 64)
         cls.context = FakeContext(cls.size)
-        cls.presenter = dv.RetainedPresenter(cls.context, adapter=adapter, overlay=False)
+        cls.presenter = dv.RetainedPresenter(cls.context, adapter=adapter, overlay=False, fill_thread=False)
 
     @classmethod
     def tearDownClass(cls):

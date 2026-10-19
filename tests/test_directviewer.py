@@ -118,7 +118,7 @@ class FakeContext:
         return np.frombuffer(data, np.uint8).reshape(self.size[1], self.size[0], 4)
 
 
-def make_presenter(size=(160, 120), adapter=None):
+def make_presenter(size=(160, 120), adapter=None, fill_thread=False):
     import wgpu
     from nodebased import gpu3d
     adapters = gpu3d.rank_adapters(list(wgpu.gpu.enumerate_adapters_sync()))
@@ -126,7 +126,9 @@ def make_presenter(size=(160, 120), adapter=None):
     if kind:   # run the pixel tests on one named adapter: NB_TEST_ADAPTER=integrated|cpu|discrete
         adapters = [a for a in adapters if gpu3d._kind_of(a.info) == kind] or adapters
     context = FakeContext(size)
-    presenter = dv.RetainedPresenter(context, adapter=adapter or adapters[0])
+    # The pixel tests fill the staging buffer inline so a draw right after an offer shows it;
+    # StagingRingTests run the filler thread.
+    presenter = dv.RetainedPresenter(context, adapter=adapter or adapters[0], fill_thread=fill_thread)
     return presenter, context
 
 
@@ -176,16 +178,23 @@ class RetainedPresenterTests(unittest.TestCase):
         self.assertEqual(self.presenter.counters["uploads"], 2)
         self.assertEqual(tuple(pixels[13, 21, :3]), (200, 120, 40))   # parity flipped
 
-    def test_size_change_destroys_the_old_texture_after_the_replacing_submit(self):
+    def test_a_smaller_picture_reuses_the_texture_and_a_larger_one_grows_it(self):
         self.draw((32.0, 24.0, 2.0), checker_image())
         old = self.presenter.texture
+        pixels = self.draw((16.0, 12.0, 4.0), checker_image(width=32, height=24, shift=1), rect=(0, 0, 32, 24), generation=2)
+        self.assertIs(self.presenter.texture, old)                    # the crop fits: no new texture
+        self.assertEqual(self.presenter.texture_size, (32, 24))
+        self.assertEqual(tuple(pixels[13, 21, :3]), (200, 120, 40))   # and the shader reads only the crop
+        self.assertEqual(tuple(pixels[13, 142, :3]), (20, 60, 180))  # last column of the crop, not the old picture
         destroyed = []
         original = self.presenter._destroy
         self.presenter._destroy = lambda resource: (destroyed.append(resource), original(resource))
-        self.draw((32.0, 24.0, 2.0), checker_image(width=32, height=24), rect=(0, 0, 32, 24), generation=2)
+        self.draw((48.0, 36.0, 1.0), checker_image(width=96, height=72), rect=(0, 0, 96, 72), generation=3)
         self.assertIsNot(self.presenter.texture, old)
+        self.assertEqual(self.presenter.texture_capacity, (96, 72))
         self.assertEqual(destroyed, [old])
         self.assertEqual(self.presenter.ledger._retired, [])
+        self.assertEqual(self.presenter.counters["texture_creates"], 2)
 
     def test_resize_and_close_while_work_is_queued(self):
         # Many submits in flight, then a size change mid-stream: the picture after it is right
@@ -202,11 +211,16 @@ class RetainedPresenterTests(unittest.TestCase):
         self.assertIsNone(self.presenter.device)
 
     def test_dropped_pending_pictures_are_never_converted(self):
+        # The first picture goes into a staging slot at once; while it waits for a draw, newer offers
+        # replace each other in the pending slot and only the newest of them is ever converted.
         for shift in range(5):
             self.presenter.offer(checker_image(shift=shift), (0, 0, 64, 48), (0, 0, 64, 48), 1)
         self.presenter.draw((32.0, 24.0, 2.0), self.context.size)
-        self.assertEqual(self.presenter.counters["conversions"], 1)
-        self.assertEqual(self.presenter.ledger.stats["dropped_pending"], 4)
+        pixels = self.draw((32.0, 24.0, 2.0))
+        self.assertEqual(self.presenter.counters["conversions"], 2)
+        self.assertEqual(self.presenter.counters["uploads"], 2)
+        self.assertEqual(self.presenter.ledger.stats["dropped_pending"], 3)
+        self.assertEqual(tuple(pixels[13, 21, :3]), (20, 60, 180))   # shift 4, the newest
 
     def test_overlay_marks_the_corner_and_the_format_edge(self):
         pixels = self.draw((32.0, 24.0, 2.0), checker_image())
@@ -346,7 +360,7 @@ class PlatformGuardTests(unittest.TestCase):
 class StubPresenter:
     """Takes pictures and draws nothing: these tests are about which surface gets which input."""
 
-    def __init__(self, context, adapter=None, preference=None):
+    def __init__(self, context, adapter=None, preference=None, **kwargs):
         self.offers = []
         self.ledger = dv.FrameLedger()
         self.counters = {}
@@ -360,6 +374,9 @@ class StubPresenter:
 
     def lose_device(self):
         pass
+
+    def retained_bytes(self):
+        return 0
 
 
 @needs_wgpu
@@ -437,7 +454,7 @@ class SrgbSurfaceTests(unittest.TestCase):
         from nodebased import gpu3d
         adapter = gpu3d.rank_adapters(list(wgpu.gpu.enumerate_adapters_sync()))[0]
         context = FakeContext((160, 120), fmt="rgba8unorm-srgb")
-        presenter = dv.RetainedPresenter(context, adapter=adapter)
+        presenter = dv.RetainedPresenter(context, adapter=adapter, fill_thread=False)
         self.addCleanup(presenter.lose_device)
         presenter.offer(checker_image(), (0, 0, 64, 48), (0, 0, 64, 48), 1)
         presenter.draw((32.0, 24.0, 2.0), (160, 120))
