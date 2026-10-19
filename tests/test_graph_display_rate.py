@@ -110,6 +110,31 @@ class GraphDisplayRateTests(unittest.TestCase):
         self.assertGreater(box.width() * box.height(), 1000)
         self.assertLessEqual(worst, 8, 'the cached node looks different from the drawn one')
 
+    def test_cached_wires_match_the_drawn_ones(self):
+        from PySide6.QtWidgets import QGraphicsItem
+        graph = self.graph
+        self.frame_on(['rb'])
+        graph.viewport().repaint()
+        cached = graph.viewport().grab().toImage()
+        edges = [edge for edge, *_ in graph.edges]
+        self.assertTrue(all(edge.cacheMode() == QGraphicsItem.CacheMode.DeviceCoordinateCache for edge in edges))
+        for edge in edges:
+            edge.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+        graph.viewport().repaint()
+        direct = graph.viewport().grab().toImage()
+        self.assertEqual(cached.size(), direct.size())
+        wire = self.wire('ra', 'rb')
+        box = graph.mapFromScene(wire.sceneBoundingRect()).boundingRect()
+        ratio = cached.devicePixelRatio()
+        worst = 0
+        for y in range(int(box.top() * ratio), int(box.bottom() * ratio)):
+            for x in range(int(box.left() * ratio), int(box.right() * ratio)):
+                if 0 <= x < cached.width() and 0 <= y < cached.height():
+                    a, b = cached.pixelColor(x, y), direct.pixelColor(x, y)
+                    worst = max(worst, abs(a.red() - b.red()), abs(a.green() - b.green()), abs(a.blue() - b.blue()))
+        self.assertGreater(box.width() * box.height(), 100)
+        self.assertLessEqual(worst, 8, 'a cached wire looks different from a drawn one')
+
     def test_the_body_is_cached_at_full_device_resolution(self):
         item = self.graph.items_by_id['rb']
         pixmap = item.body_pixmap(False, True, 1.0, 1.75)
@@ -117,6 +142,65 @@ class GraphDisplayRateTests(unittest.TestCase):
         self.assertEqual(pixmap.devicePixelRatio(), 1.75)
         self.assertEqual(pixmap.width(), math.ceil((item.rect().width() + 2 * margin) * 1.75))
         self.assertEqual(pixmap.height(), math.ceil((item.rect().height() + 2 * margin) * 1.75))
+
+    def send_mouse(self, kind, point, buttons, button=None):
+        from PySide6.QtCore import QEvent, QPointF, Qt
+        from PySide6.QtGui import QMouseEvent
+        viewport = self.graph.viewport()
+        local = QPointF(point)
+        event = QMouseEvent({'press': QEvent.Type.MouseButtonPress, 'move': QEvent.Type.MouseMove,
+                             'release': QEvent.Type.MouseButtonRelease}[kind], local,
+                            QPointF(viewport.mapToGlobal(point)), button or Qt.MouseButton.NoButton, buttons,
+                            Qt.KeyboardModifier.NoModifier)
+        APP.sendEvent(viewport, event)
+
+    def test_wires_are_plain_only_while_a_node_is_dragged(self):
+        from PySide6.QtCore import QPoint, Qt
+        graph = self.graph
+        self.frame_on(['rb'])
+        item = graph.items_by_id['rb']
+        start = graph.mapFromScene(item.mapToScene(item.rect().center()))
+        left = Qt.MouseButton.LeftButton
+        self.assertFalse(getattr(graph.scene(), 'fast_wires', False))
+        self.send_mouse('press', start, left, left)
+        for step in range(1, 4):
+            self.send_mouse('move', start + QPoint(6 * step, 0), left)
+        self.assertTrue(graph.scene().fast_wires, 'a node drag should draw wires without smoothing')
+        self.send_mouse('release', start + QPoint(18, 0), Qt.MouseButton.NoButton, left)
+        self.assertFalse(graph.scene().fast_wires, 'letting go should bring the smooth wires back')
+
+    def test_zoomed_out_nodes_are_flat_cards_without_text(self):
+        from PySide6.QtGui import QImage, QPainter, QColor
+        from PySide6.QtWidgets import QStyleOptionGraphicsItem
+        import nodebased.app as appmodule
+        item = self.graph.items_by_id['rb']
+        title = next(child for child in item.childItems() if isinstance(child, appmodule.NodeText))
+
+        def ink(zoom):
+            image = QImage(400, 200, QImage.Format.Format_ARGB32)
+            image.fill(QColor(0, 0, 0, 0))
+            painter = QPainter(image)
+            painter.scale(zoom, zoom)
+            option = QStyleOptionGraphicsItem()
+            title.paint(painter, option, None)
+            painter.end()
+            return sum(1 for y in range(0, 200, 2) for x in range(0, 400, 2) if image.pixelColor(x, y).alpha())
+        self.assertGreater(ink(1.0), 0)
+        self.assertEqual(ink(appmodule.GRAPH_DETAIL_ZOOM * 0.9), 0)
+        flat, full = [], []
+        real_flat, real_full = appmodule.NodeItem.draw_flat_body, appmodule.NodeItem.draw_family_body
+        appmodule.NodeItem.draw_flat_body = lambda node, *a: (flat.append(node.key), real_flat(node, *a))
+        appmodule.NodeItem.draw_family_body = lambda node, *a: (full.append(node.key), real_full(node, *a))
+        try:
+            appmodule.NodeItem._body_cache.clear()
+            self.graph.resetTransform()
+            self.graph.scale(0.3, 0.3)
+            self.graph.centerOn(item)
+            self.graph.viewport().repaint()
+        finally:
+            appmodule.NodeItem.draw_flat_body, appmodule.NodeItem.draw_family_body = real_flat, real_full
+        self.assertIn('rb', flat)
+        self.assertEqual(full, [])
 
 
 if __name__ == '__main__':

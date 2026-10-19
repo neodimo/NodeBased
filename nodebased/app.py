@@ -22,7 +22,7 @@ from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTi
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
-                           QConicalGradient, QRadialGradient, QTransform)
+                           QConicalGradient, QRadialGradient, QTransform, QPixmapCache)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -4687,6 +4687,19 @@ class NodeHalo(QGraphicsItem):
         painter.drawPixmap(self.boundingRect().topLeft(), self.pixmap())
 
 
+# Below this zoom a node is a flat rounded card with no name, details or icon: they are too small to
+# read, and drawing them for hundreds of nodes is most of the cost of a zoomed-out graph.
+GRAPH_DETAIL_ZOOM = 0.4
+
+
+class NodeText(QGraphicsSimpleTextItem):
+    """A node's name or details line, left out when the graph is zoomed out past `GRAPH_DETAIL_ZOOM`."""
+
+    def paint(self, painter, option, widget=None):
+        if option.levelOfDetailFromTransform(painter.worldTransform()) >= GRAPH_DETAIL_ZOOM:
+            super().paint(painter, option, widget)
+
+
 class NodeItem(QGraphicsRectItem):
     def __init__(self, graph, key, node):
         self.form = node_form(node)
@@ -4735,7 +4748,7 @@ class NodeItem(QGraphicsRectItem):
             self.output = Port(self, None, 10, 20)
             self.outputs = {"rgba": self.output}
             return
-        title = QGraphicsSimpleTextItem(node["name"][:26], self)
+        title = NodeText(node["name"][:26], self)
         title.setBrush(QColor(TOKENS["tx0"]))
         # Sizes come from the font's own metrics, so a card reads the same where the UI font differs.
         title_font = graphlook.css_font(TYPE["family"], TYPE["base"], QFont.Weight.DemiBold)
@@ -4778,7 +4791,7 @@ class NodeItem(QGraphicsRectItem):
                                    "viewing" if graph.window.dispatcher.document["view"] == key else "")
                  if part]
         details = "  ·  ".join(parts) or graphlook.param_summary(node, SPECS[node["type"]]["params"])
-        subtitle = QGraphicsSimpleTextItem(details, self)
+        subtitle = NodeText(details, self)
         self.setToolTip(f"{node['name']} ({node['type']})" + (f"\n{label}" if label else ""))
         subtitle.setBrush(graphlook.mix(QColor(TOKENS["tx2"]), self.accent, 0.35))
         details_font = graphlook.css_font(TYPE["mono"], TYPE["caption"], mono=True)
@@ -5005,7 +5018,11 @@ class NodeItem(QGraphicsRectItem):
     def paint_family_body(self, painter, option, widget=None):
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         transform = QTransform(painter.worldTransform())   # a copy: the binding hands back the painter's own
-        detailed = option.levelOfDetailFromTransform(transform) >= 0.35
+        zoom = option.levelOfDetailFromTransform(transform)
+        if zoom < GRAPH_DETAIL_ZOOM:
+            self.draw_flat_body(painter, selected)
+            return
+        detailed = zoom >= 0.35
         if transform.m12() or transform.m21() or transform.m11() <= 0 or transform.m11() != transform.m22():
             self.draw_family_body(painter, selected, detailed)
             return
@@ -5017,6 +5034,17 @@ class NodeItem(QGraphicsRectItem):
         painter.setWorldTransform(QTransform())
         # Snapped to whole device pixels: a picture drawn between pixels would be resampled.
         painter.drawPixmap(QPointF(round(corner.x() * ratio) / ratio, round(corner.y() * ratio) / ratio), pixmap)
+        painter.restore()
+
+    def draw_flat_body(self, painter, selected):
+        """The zoomed-out node: its silhouette in the body colour with the family outline."""
+        color = self.accent
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        edge = graphlook.mix(color, QColor("#ffffff"), 0.4) if selected else color
+        painter.setPen(QPen(edge, NODE_OUTLINE * (2 if selected else 1)))
+        painter.setBrush(graphlook.mix(QColor(graphlook.BODY_DARK), color, 0.25))
+        painter.drawPath(self.outline(NODE_OUTLINE / 2))
         painter.restore()
 
     def draw_family_body(self, painter, selected, detailed):
@@ -5173,9 +5201,18 @@ class Edge(QGraphicsPathItem):
         # Keep the wire stroked. Combining a closed arrow polygon with the curve
         # in one path causes Qt to fill the implied region as a ribbon.
         painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Plain lines while the graph is being dragged, panned or zoomed; smooth again when it stops.
+        scene = self.scene()
+        fast = getattr(scene, "fast_wires", False)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, not fast)
+        if fast and scene is not None:
+            # Redrawn smooth when the drag ends (Graph.set_fast_wires).
+            scene.rough_wires = getattr(scene, "rough_wires", set())
+            scene.rough_wires.add(self)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         stroke = self.pen()
+        # Zoomed out, the glow and the arrowhead are a pixel or two wide: the stroke alone reads the same.
+        zoomed_out = option.levelOfDetailFromTransform(painter.worldTransform()) < GRAPH_DETAIL_ZOOM
         if self.cutting or self.selected or self.hovered or self.highlighted:
             if self.cutting:
                 bright, extra = QColor(WIRE_CUT_COLOR), 1.5
@@ -5190,14 +5227,14 @@ class Edge(QGraphicsPathItem):
             painter.setPen(QPen(graphlook.with_alpha(bright, 70), stroke.widthF() + 8, Qt.PenStyle.SolidLine,
                                 Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             painter.drawPath(self.path())
-        elif self.glow:
+        elif self.glow and not zoomed_out:
             halo = QPen(graphlook.with_alpha(self.color, 40), self.pen().widthF() + 5, Qt.PenStyle.SolidLine,
                         Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
             painter.setPen(halo)
             painter.drawPath(self.path())
         painter.setPen(stroke)
         painter.drawPath(self.path())
-        if self.arrow and not self.arrowhead.isEmpty():
+        if self.arrow and not zoomed_out and not self.arrowhead.isEmpty():
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(stroke.color())
             painter.drawPolygon(self.arrowhead)
@@ -6209,8 +6246,14 @@ def upstream_of(nodes, key):
 
 
 class Graph(PanZoomView):
+    GRID_BLOCK = 1024
+    _grid_points = None
+
     def __init__(self, window):
         self.window = window
+        # The wires' screen pictures live in Qt's shared picture cache; its default 10 MB holds less
+        # than one full-screen graph at 175 percent, so they would be thrown out and redrawn every frame.
+        QPixmapCache.setCacheLimit(max(QPixmapCache.cacheLimit(), 160 * 1024))
         super().__init__(QGraphicsScene())
         self.setBackgroundBrush(QColor(TOKENS["bg0"]))
         self.wire_mode = window.preferences.wire_mode()
@@ -6717,6 +6760,9 @@ class Graph(PanZoomView):
                     else:
                         edge = Edge(color=tint, mode=self.wire_mode)
                     edge.setZValue(-2 if node["type"] == "Viewer" else -1)
+                    # A placed wire is kept as a picture on screen: a pan or a click elsewhere reuses it,
+                    # and it is redrawn when it is re-routed, restyled or the zoom changes.
+                    edge.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
                     self.scene().addItem(edge)
                     out_name = node.get("input_outputs", {}).get(slot, "out1" if doc["nodes"][source]["type"] == "ShuffleCopy" else "rgba")
                     record = (edge, source, key, slot, out_name)
@@ -6950,8 +6996,34 @@ class Graph(PanZoomView):
             item = item.parentItem()
         return None
 
+    def set_fast_wires(self, on):
+        """Wires drawn without antialiasing while a node drag, a pan or a wheel zoom is under way."""
+        scene = self.scene()
+        if getattr(scene, "fast_wires", False) != on:
+            scene.fast_wires = on
+            if not on:
+                for edge in getattr(scene, "rough_wires", ()):
+                    try:
+                        edge.update()
+                    except RuntimeError:
+                        pass   # removed by a rebuild during the drag
+                scene.rough_wires = set()
+                self.viewport().update()
+
+    def wheelEvent(self, event):
+        self.set_fast_wires(True)
+        if not hasattr(self, "_smooth_timer"):
+            self._smooth_timer = QTimer(self)
+            self._smooth_timer.setSingleShot(True)
+            self._smooth_timer.setInterval(200)
+            self._smooth_timer.timeout.connect(lambda: self.set_fast_wires(False))
+        self._smooth_timer.start()
+        super().wheelEvent(event)
+
     def mouseMoveEvent(self, event):
         self.last_hover_scene_pos = self.mapToScene(event.position().toPoint())
+        if event.buttons() and (self.pan is not None or isinstance(self.scene().mouseGrabberItem(), NodeItem)):
+            self.set_fast_wires(True)
         if self.radial_menu.is_open() and not self.radial_menu.sustained:
             # Tracking a live flick: nothing else on the graph reacts to the pointer until Q
             # comes back up (see finish_radial_gesture).
@@ -6982,6 +7054,7 @@ class Graph(PanZoomView):
             self.set_insert_target(self.wire_to_insert_into(self.drag_item()))
 
     def mouseReleaseEvent(self, event):
+        self.set_fast_wires(False)
         if self.pan is not None:
             PanZoomView.mouseReleaseEvent(self, event)
             return
@@ -7406,9 +7479,15 @@ class Graph(PanZoomView):
         if self.transform().m11() < 0.25:
             return
         painter.setPen(getattr(self, "grid_pen", None) or QPen(QColor(grid_color()), 1))
-        left, top = math.floor(rect.left() / 32) * 32, math.floor(rect.top() / 32) * 32
-        points = [QPointF(x, y) for x in range(left, int(rect.right()), 32) for y in range(top, int(rect.bottom()), 32)]
-        painter.drawPoints(points)
+        # The dots every 32 units, drawn a block of 32 x 32 at a time from one prepared set of points.
+        block = Graph.GRID_BLOCK
+        if Graph._grid_points is None:
+            Graph._grid_points = QPolygonF([QPointF(x, y) for x in range(0, block, 32) for y in range(0, block, 32)])
+        for bx in range(math.floor(rect.left() / block) * block, int(math.ceil(rect.right())), block):
+            for by in range(math.floor(rect.top() / block) * block, int(math.ceil(rect.bottom())), block):
+                painter.translate(bx, by)
+                painter.drawPoints(Graph._grid_points)
+                painter.translate(-bx, -by)
 
     def drawForeground(self, painter, rect):
         super().drawForeground(painter, rect)
