@@ -1,3 +1,42 @@
+# NodeBased 0.40.0 — a denoised first look in half a second, and an experimental GPU picture for the 2D viewer
+
+0.39.0 was tagged but never published (its Linux package build failed on two viewer tests that need a display); everything
+from it ships here.
+
+## What changed since 0.38.1
+
+- **A denoised first look within a second.** Press P in the 3D viewport and a clean, denoised full-size picture shows up
+  first, labelled "denoised preview from 480x270", then the render refines as before. On the RTX 3080 Ti the first picture
+  takes 0.47 s for a furnished room and 0.78 s for the same room with 40,000 splats and smoke; the Radeon 8060S takes 0.50 s
+  and 0.75 s. Before, a denoised 1080p render took 10 s and 19 s. The first stage is sized from measured cost and shares
+  the scene with the guide passes.
+- **Direct picture (experimental).** Window menu → "Direct picture (experimental GPU)", or start with
+  `NODEBASED_DIRECT_VIEWER=1`, opens a floating dock that uploads each new picture to the graphics card once, then pans,
+  zooms and resizes it there without redoing the colour conversion. It is off by default; the existing Viewer is unchanged
+  and stays the default. `docs/DIRECT_VIEWER.md` describes it.
+- **Adapter choice for the dock.** The direct picture picks its display adapter through wgpu's surface filter, so it lands on
+  a card that can actually present to the window. A bench tool compares it against the current viewer.
+- **Lost graphics device.** If the card resets or the driver restarts, the direct picture gets a new device and rebuilds the
+  picture from the copy it keeps in memory, so the dock comes back without reopening it.
+- **Native Wayland refused cleanly.** On a native Wayland session the dock now says it needs `QT_QPA_PLATFORM=xcb` and the
+  Viewer carries on, where before the app could crash.
+- **Windows laptop research.** `docs/WINDOWS_HYBRID_PRESENTATION.md` maps how a picture reaches the screen on a hybrid
+  Intel + NVIDIA laptop and recommends DirectX 12 as the first Windows path for the direct picture, with a probe for the field kit.
+- **Tests.** Drawing, pan, zoom and stale-picture rules are covered by automated tests on the RTX 3080 Ti, the Radeon and the
+  software renderer, plus a walk through changing pictures, pan, zoom, resize, docking, reopen and 1.5x display scaling.
+
+## Known limits
+
+- First look: the software renderer's very first call takes 1.16 s; the A6000, the laptop and Windows were not measured;
+  the denoiser still runs on the processor, and the raw step right after the preview can look noisier than the preview.
+- The direct picture has no Roto, Tracker, A/B or region overlays; use the default Viewer for those. It is untested on
+  Windows. Device-loss recovery is tested by destroying the device in software; a physical card reset has not been tried.
+
+## Coming next (0.41.0)
+
+- The Properties panel overhaul (sliders everywhere, a linear float colour picker, ColorCorrect like Nuke's), easy wire
+  disconnect, the node graph at display rate with hundreds of nodes, and direct-picture playback and 4K.
+
 # NodeBased 0.39.0 — an experimental GPU picture for the 2D viewer
 
 ## What changed since 0.38.1
