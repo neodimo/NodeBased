@@ -2054,11 +2054,12 @@ def merge_volume_depth(scene, camera, width, height, data, settings, cancel=None
     return merge_volume_data(scene, camera, width, height, data, "depth", settings, data, cancel)
 
 
-def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend="cpu", volume=None, stats=None):
+def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend="cpu", volume=None, stats=None, ambient=0.0):
     """The passes an external denoiser reads next to the raw beauty: `{"albedo", "normals", "depth"}` as (H, W, 4)
     float32 (premultiplied albedo and the un-jittered normals and view depth). `stats`, the dict a beauty render
     filled, supplies the albedo (and its coverage alpha) the render already gathered; without it the albedo is
-    traced at a few samples."""
+    traced at a few samples. `ambient` is the level the beauty was traced with: the passes do not depend on it, but a GPU render
+    shares one prepared scene with the beauty only when the two agree (`gpupathtrace.reusing_scene`)."""
     settings = (settings or PathSettings()).clamped()
     out = {}
     if stats is not None and "albedo" in stats and stats["albedo"].shape[:2] == (height, width):
@@ -2068,10 +2069,10 @@ def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend
         out["albedo"] = _read_only(albedo)
     else:
         few = replace(settings, samples=min(settings.samples, 8), time_limit=0.0, noise_threshold=0.0, sampling="fixed")
-        out["albedo"] = render(scene, camera, width, height, (0, 0, 0, 0), 0.0, "albedo", few, cancel=cancel,
+        out["albedo"] = render(scene, camera, width, height, (0, 0, 0, 0), ambient, "albedo", few, cancel=cancel,
                                backend=backend, volume=volume)
     for name in ("normals", "depth"):
-        out[name] = render(scene, camera, width, height, (0, 0, 0, 0), 0.0, name, settings, cancel=cancel,
+        out[name] = render(scene, camera, width, height, (0, 0, 0, 0), ambient, name, settings, cancel=cancel,
                            backend=backend, volume=volume)
     return out
 

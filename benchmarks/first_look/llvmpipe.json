@@ -1,0 +1,56 @@
+{
+ "adapter": "wgpu adapter: llvmpipe (LLVM 22.1.8, 256 bits)\n  type CPU, backend Vulkan, vendor llvmpipe, driver Mesa 26.2.2 (LLVM 22.1.8), wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 134217728, max texture 16384",
+ "results": [
+  {
+   "scene": "furnished",
+   "output": [
+    1920,
+    1080
+   ],
+   "cold_seconds": 1.164455134072341,
+   "cold_phases": {
+    "render": 0.5301,
+    "guides": 0.2782,
+    "denoise": 0.2702,
+    "enlarge": 0.0501
+   },
+   "traced": [
+    480,
+    270
+   ],
+   "samples": 4,
+   "warm_seconds": {
+    "median": 0.7633952054893598,
+    "worst": 0.7823001160286367,
+    "best": 0.7444902949500829,
+    "runs": 2
+   },
+   "warm_traced": [
+    [
+     411,
+     231
+    ],
+    [
+     429,
+     241
+    ]
+   ],
+   "warm_phases_median": {
+    "render": 0.2619,
+    "guides": 0.1882,
+    "denoise": 0.2276,
+    "enlarge": 0.0483
+   },
+   "target_seconds": 1.0,
+   "target_met_warm": true,
+   "target_met_cold": false,
+   "nonempty": true,
+   "stage_two_ran": true,
+   "stage_two_seconds": 6.578664348926395,
+   "stage_two_traced": [
+    960,
+    540
+   ]
+  }
+ ]
+}

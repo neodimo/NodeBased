@@ -3276,3 +3276,31 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   to the Radeon's 1.8 ms), the viewport's lens is an approximation for alignment (display-encoded bilinear), the
   data outputs and Cryptomatte are refused with the lens, and `conditioning_verify` still reprojects with the ideal
   projection.
+- Step H1 of 2 (Rendering "Progress", a denoised 1080p first look within one second): the viewport's Render mode (**P**) now
+  opens with a denoised picture of the full output size instead of a noisy quarter-size pass. `progressiverender.step_interactive`
+  traces 480 x 270 pixels at 4 samples (stage one), takes the albedo, normals and depth guides from the same prepared scene
+  (`gpupathtrace.reusing_scene`: one scene build and pack for the four GPU renders, about 70 ms each on a furnished room and
+  about 350 ms on one with 40,000 splats), filters it with the threaded float32 `ptdenoise.denoise_strips` (the same pixels as one
+  `denoise` call: strips carry the filter's reach as a halo), enlarges it bilinearly and composites the background. Stage two does
+  the same at 960 x 540 and 16 samples (skipped when stage one took over 0.75 s); the doubling steps then continue raw at full
+  size as before (32, then 64 samples). Both preview states say `preview=True` and `denoised=True`, and the note reads "denoised
+  preview from 480x270": the picture is an enlarged internal pass, never the final 1080p render. The first stage sizes itself from
+  what the last one cost per traced pixel on that adapter (surface scenes and scenes with splats or smoke counted apart; a
+  scene never seen starts at 240 x 135 when it has splats or smoke), so a slow scene gets a smaller first look rather than a
+  slower one. `ptdenoise.denoise` also runs about twice as fast with the same pixels (edge taps as views of a padded copy,
+  not index copies) and takes `dtype`; the viewport's 8-bit conversion went from a float64 power per channel to a table lookup
+  (`display_rgba8`, within one level of the sRGB curve).
+  Measured with `tools/benchmark_first_look.py` (results in `benchmarks/first_look/`), time from the call to the 8-bit RGBA the
+  viewport paints, 1920 x 1080 output, a camera nudged for every warm run, taken while the integrator's full suite held a shared
+  lock (in an earlier run of the same benchmark the card read 0 percent in 58 of 80 one-second samples; one CPU core was busy): RTX 3080 Ti, furnished room
+  (150 instances, glass, mirror, area light and sky): cold 0.61 s, warm median 0.47 s (worst 0.51 s); the same room with a 40,000-splat
+  shell and a smoke puff: cold 0.97 s, warm median 0.78 s (worst 0.83 s, first look 240 x 135 growing to 273 x 154 as the cost model
+  settled). Radeon 8060S: furnished cold 0.64 s, warm 0.50 s; mixed cold 0.70 s, warm 0.75 s. llvmpipe: furnished cold 1.16 s (over
+  the target), warm 0.76 s. Before this step the same 1920 x 1080 denoised render (`pathtrace.render(output="denoise")`, 4 samples)
+  took 10.1 s on the furnished room and 19.4 s on the mixed one on the RTX 3080 Ti, and Render mode showed no denoised picture at
+  all. Stage two on the furnished room measured 1.25 s (RTX) and 1.6 s (Radeon); the full-size doubling step after it is as slow as
+  it always was on the mixed scene (5.6 s at 8 samples on the RTX). Not measured: the A6000 and the hybrid Iris Xe + RTX 4070
+  laptop (neither is reachable from here); Windows. Left out: the denoiser still runs on the processor (a GPU filter would take
+  the 0.27 s a 480 x 270 frame costs there to a few milliseconds and let stage two and later passes be denoised too), and
+  the mixed scene's scene build (350 ms for the splat shell, redone every time the camera moves) is the floor under its first look.
+  Tests: `tests/test_3d_first_look.py`.

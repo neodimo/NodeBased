@@ -139,7 +139,17 @@ def converged(state, width, height):
 PREVIEW_STAGES = ((480 * 270, 4), (960 * 540, 16))
 PREVIEW_BOUNCES = 3
 PREVIEW_WORKERS = 8
-FIRST_LOOK_SECONDS = 1.0         # the target `first_look_seconds` is compared with; a goal, reported, never assumed
+FIRST_LOOK_SECONDS = 1.0         # the target the benchmark compares with; a goal, reported, never assumed
+# The first stage sizes itself to the target from what the last one cost on this adapter (`_COST`): seconds per traced pixel,
+# for surface scenes and for scenes with splats or smoke apart (those take a slower GPU variant, 10 to 20 times the cost per
+# pixel). A scene never seen on this adapter starts at the stage's own pixel count, or at `HEAVY_FIRST_PIXELS` when it has
+# splats or smoke; the next first look is sized to fit `FIRST_LOOK_SECONDS * FIT_FRACTION` less the enlargement's allowance.
+FIT_FRACTION = 0.85
+ENLARGE_ALLOWANCE = 0.06
+HEAVY_FIRST_PIXELS = 240 * 135
+MIN_FIRST_PIXELS = 120 * 68
+STAGE_TWO_MAX_FIRST_SECONDS = 0.75      # a first stage slower than this (a heavy scene) goes straight to the doubling steps
+_COST = {}
 
 
 def internal_size(width, height, pixels):
@@ -185,6 +195,33 @@ def display_rgba8(image):
     return out
 
 
+def _cost_key(scene):
+    from . import gpu3d
+    heavy = bool(getattr(scene, "splats", ()) or getattr(scene, "volumes", ()))
+    try:
+        adapter = gpu3d.adapter_report().splitlines()[0]
+    except Exception:       # no adapter: the CPU reference takes the render, and costs its own way
+        adapter = "cpu"
+    return adapter, heavy
+
+
+def first_stage_pixels(scene, stage_pixels):
+    """How many pixels stage one traces for `scene`: `stage_pixels`, or fewer when the last first look of this kind of scene on this
+    adapter cost too much per pixel to finish inside `FIRST_LOOK_SECONDS`; more than `stage_pixels` never."""
+    key = _cost_key(scene)
+    cost = _COST.get(key)
+    if cost is None:
+        return min(stage_pixels, HEAVY_FIRST_PIXELS) if key[1] else stage_pixels
+    fit = (FIRST_LOOK_SECONDS * FIT_FRACTION - ENLARGE_ALLOWANCE) / cost
+    return int(min(stage_pixels, max(MIN_FIRST_PIXELS, fit)))
+
+
+def _record_cost(scene, seconds, pixels):
+    key = _cost_key(scene)
+    cost = seconds / max(pixels, 1)
+    _COST[key] = cost if key not in _COST else 0.5 * _COST[key] + 0.5 * cost
+
+
 def _preview(scene, camera, width, height, background, ambient, pixels, samples, backend, max_bounces, moments, cancel):
     """One denoised preview stage: trace `pixels` pixels at `samples` samples with guides from one prepared scene, filter,
     enlarge to `width` by `height`, composite over `background`. Returns (image float32, (traced_w, traced_h), phases)."""
@@ -208,7 +245,7 @@ def _preview(scene, camera, width, height, background, ambient, pixels, samples,
             beauty = pathtrace.render(scene, camera, tw, th, clear, ambient=ambient, output="rgba", settings=settings,
                                       backend=backend, stats=stats, cancel=cancel)
         lap("render")
-        guides = pathtrace.guide_aovs(scene, camera, tw, th, settings, cancel=cancel, backend=backend)
+        guides = pathtrace.guide_aovs(scene, camera, tw, th, settings, cancel=cancel, backend=backend, ambient=ambient)
         lap("guides")
     filtered = ptdenoise.denoise_strips(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0],
                                         None, workers=PREVIEW_WORKERS, dtype=np.float32)
@@ -230,13 +267,21 @@ def step_interactive(state, scene, camera, width, height, background, ambient, k
     stages = PREVIEW_STAGES if stages is None else stages
     if state is None or state.key != key:
         state = ProgressiveState(key=key)
-    if state.stage >= len(stages) or stages[state.stage][0] >= width * height or state.samples >= SAMPLE_CAP:
-        return step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments)
+    if (state.stage >= len(stages) or stages[state.stage][0] >= width * height or state.samples >= SAMPLE_CAP
+            or (state.stage == 1 and state.seconds > STAGE_TWO_MAX_FIRST_SECONDS)):
+        # the preview ladder is over for this key (`stage` says so, or the next `step_interactive` would start it again)
+        return replace(step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments),
+                       stage=len(stages))
     pixels, samples = stages[state.stage]
+    if state.stage == 0:
+        pixels = first_stage_pixels(scene, pixels)
     started = time.perf_counter()
     image, traced, phases = _preview(_drop_particles(scene), camera, width, height, background, ambient, pixels, samples,
                                      backend, min(max_bounces, PREVIEW_BOUNCES), moments, cancel)
+    seconds = time.perf_counter() - started
+    if state.stage == 0:
+        _record_cost(scene, seconds - dict(phases)["enlarge"], traced[0] * traced[1])
     return ProgressiveState(key=key, samples=samples, width=width, height=height, image=image,
-                            seconds=time.perf_counter() - started, low_res=True, passes=state.passes + 1,
+                            seconds=seconds, low_res=True, passes=state.passes + 1,
                             preview=True, denoised=True, stage=state.stage + 1,
                             traced_width=traced[0], traced_height=traced[1], phases=phases)

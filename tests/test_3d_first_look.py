@@ -17,7 +17,7 @@ import numpy as np
 
 from nodebased import gpupathtrace, pathtrace, progressiverender as P, ptdenoise, scene3d as s
 from nodebased.cancellation import Cancelled
-from tests.test_3d_pathtrace import CORNELL_CAMERA, cornell
+from tests.test_3d_pathtrace import CORNELL_CAMERA, cornell, gpu_ready
 from tests.test_3d_progressive_render import BACKGROUND, CAMERA, _SKIP, _scene
 
 WIDTH, HEIGHT = 160, 90
@@ -60,6 +60,17 @@ class DenoiseStripsTests(unittest.TestCase):
         np.testing.assert_array_equal(out, ref)
 
 
+class GuideAmbientTests(unittest.TestCase):
+    def test_the_guide_passes_do_not_depend_on_the_ambient_level(self):
+        """`guide_aovs(ambient=...)` only lets a GPU render share the beauty's prepared scene; the passes must stay the same."""
+        room = cornell()
+        settings = pathtrace.PathSettings(samples=2, max_bounces=3)
+        dark = pathtrace.guide_aovs(room, CORNELL_CAMERA, 16, 12, settings, backend="cpu")
+        lit = pathtrace.guide_aovs(room, CORNELL_CAMERA, 16, 12, settings, backend="cpu", ambient=0.5)
+        for name in dark:
+            np.testing.assert_array_equal(dark[name], lit[name])
+
+
 class DisplayHelperTests(unittest.TestCase):
     def test_enlarge_keeps_a_flat_image_and_the_size(self):
         flat = np.full((9, 16, 4), 0.25, np.float32)
@@ -92,6 +103,13 @@ class DisplayHelperTests(unittest.TestCase):
 
 @unittest.skipIf(_SKIP, f"no working path tracer backend: {_SKIP}")
 class FirstLookTests(unittest.TestCase):
+    def setUp(self):
+        P._COST.clear()
+        patch = mock.patch.object(P, "STAGE_TWO_MAX_FIRST_SECONDS", 1e9)      # a loaded test machine must not skip stage two
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(P._COST.clear)
+
     def test_the_first_look_is_an_output_sized_nonempty_denoised_preview(self):
         state = look()
         self.assertEqual(state.image.shape, (HEIGHT, WIDTH, 4))
@@ -135,6 +153,9 @@ class FirstLookTests(unittest.TestCase):
         self.assertEqual((three.width, three.height), (WIDTH, HEIGHT))
         self.assertEqual(three.samples, STAGES[1][1] * 2)
         self.assertEqual(three.image.shape, (HEIGHT, WIDTH, 4))
+        four = look(three)                           # the ladder does not start over while the key stays
+        self.assertFalse(four.preview)
+        self.assertEqual(four.samples, three.samples * 2)
 
     def test_a_view_no_larger_than_the_first_stage_starts_the_doubling_directly(self):
         state = P.step_interactive(None, _scene(), CAMERA, 64, 48, BACKGROUND, 0.1, "a", stages=((64 * 48, 4),))
@@ -161,6 +182,17 @@ class FirstLookTests(unittest.TestCase):
         again = look(first)
         self.assertEqual(again.stage, 2)
 
+    @unittest.skipUnless(gpu_ready(), "the GPU path tracer is not available")
+    def test_a_first_look_prepares_the_scene_once_for_the_beauty_and_all_three_guides(self):
+        calls = []
+        real = pathtrace.build_scene
+        def counting(*args, **kwargs):
+            calls.append(1)
+            return real(*args, **kwargs)
+        with mock.patch.object(pathtrace, "build_scene", counting):
+            P.step_interactive(None, _scene(), CAMERA, WIDTH, HEIGHT, BACKGROUND, 0.1, "a", stages=STAGES, backend="gpu")
+        self.assertEqual(len(calls), 1)
+
     def test_the_final_render_is_the_same_with_and_without_scene_reuse(self):
         scene = _scene()
         settings = pathtrace.PathSettings(samples=8, max_bounces=3)
@@ -172,6 +204,7 @@ class FirstLookTests(unittest.TestCase):
         np.testing.assert_array_equal(plain, reused)
         np.testing.assert_array_equal(plain, after)
 
+    @unittest.skipUnless(gpu_ready(), "the GPU path tracer is not available")
     def test_scene_reuse_builds_once_per_scene_and_camera_and_not_outside_the_block(self):
         scene = _scene()
         settings = pathtrace.PathSettings(samples=1, max_bounces=2)
@@ -195,6 +228,93 @@ class FirstLookTests(unittest.TestCase):
             trace(scene, CAMERA)
             trace(scene, CAMERA)
             self.assertEqual(len(calls) - before, 2)       # outside the block every render prepares its own
+
+
+@unittest.skipIf(_SKIP, f"no working path tracer backend: {_SKIP}")
+class ViewportTests(unittest.TestCase):
+    """The viewport's Render mode shows the denoised first look and labels it as an enlarged preview."""
+
+    def _widget(self):
+        from tests.test_3d_viewport_render_mode import APP, graph      # APP: the one QApplication
+        from nodebased.viewport3d import Viewport3D
+        widget = Viewport3D()
+        self.addCleanup(widget.close)
+        widget.resize(640, 360)           # more pixels than the first stage traces, so the first look applies
+        widget.set_document(graph().document)
+        widget.render_mode = True
+        return widget
+
+    def setUp(self):
+        P._COST.clear()
+        self.addCleanup(P._COST.clear)
+
+    def test_the_first_paint_is_a_labelled_denoised_preview_then_the_doubling_steps_follow(self):
+        widget = self._widget()
+        image = widget.grab().toImage()
+        self.assertFalse(image.isNull())
+        state = widget._progressive_state
+        self.assertTrue(state.preview and state.denoised)
+        self.assertEqual(state.image.shape[:2], (360, 640))
+        self.assertIn("denoised preview from", widget.render_note)
+        self.assertIn("converging", widget.render_note)
+        widget.grab()
+        later = widget._progressive_state
+        self.assertFalse(later.preview)
+        self.assertNotIn("denoised preview", widget.render_note)
+        self.assertGreater(later.samples, state.samples)
+
+    def test_orbiting_starts_a_new_first_look(self):
+        widget = self._widget()
+        for _ in range(3):
+            widget.grab()
+        self.assertFalse(widget._progressive_state.preview)
+        widget.azimuth += 30.0
+        widget.grab()
+        self.assertTrue(widget._progressive_state.preview)
+        self.assertEqual(widget._progressive_state.stage, 1)
+
+
+class BudgetTests(unittest.TestCase):
+    """The first stage sizes itself to the one-second target from what the last first look cost per pixel."""
+
+    def setUp(self):
+        P._COST.clear()
+        self.addCleanup(P._COST.clear)
+        self.surface, self.heavy = s.Scene(), s.Scene(volumes=(object(),))
+        self.key = P._cost_key(self.surface)
+
+    def test_an_unseen_surface_scene_starts_at_the_stage_size_and_a_heavy_one_smaller(self):
+        stage = 480 * 270
+        self.assertEqual(P.first_stage_pixels(self.surface, stage), stage)
+        self.assertEqual(P.first_stage_pixels(self.heavy, stage), P.HEAVY_FIRST_PIXELS)
+
+    def test_a_costly_scene_shrinks_the_next_first_look_to_fit_the_target(self):
+        stage = 480 * 270
+        P._record_cost(self.surface, 1.2, stage)                       # 1.2 s for the full stage: too slow
+        pixels = P.first_stage_pixels(self.surface, stage)
+        self.assertLess(pixels, stage)
+        predicted = pixels * (1.2 / stage) + P.ENLARGE_ALLOWANCE
+        self.assertAlmostEqual(predicted, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
+
+    def test_a_cheap_scene_never_grows_past_the_stage_and_a_dear_one_never_below_the_floor(self):
+        stage = 480 * 270
+        P._record_cost(self.surface, 0.01, stage)
+        self.assertEqual(P.first_stage_pixels(self.surface, stage), stage)
+        P._COST[self.key] = 1.0                                         # a second per pixel
+        self.assertEqual(P.first_stage_pixels(self.surface, stage), P.MIN_FIRST_PIXELS)
+
+    def test_heavy_and_surface_scenes_keep_separate_costs(self):
+        P._record_cost(self.heavy, 2.0, 100000)
+        self.assertEqual(P.first_stage_pixels(self.surface, 480 * 270), 480 * 270)
+
+    @unittest.skipIf(_SKIP, f"no working path tracer backend: {_SKIP}")
+    def test_a_slow_first_stage_goes_straight_to_the_doubling_steps(self):
+        one = look()
+        slow = replace(one, seconds=P.STAGE_TWO_MAX_FIRST_SECONDS + 0.5)
+        state = look(slow)
+        self.assertFalse(state.preview)
+        self.assertEqual(state.samples, STAGES[0][1] * 2)
+        self.assertEqual((state.width, state.height), (WIDTH, HEIGHT))
 
 
 if __name__ == "__main__":

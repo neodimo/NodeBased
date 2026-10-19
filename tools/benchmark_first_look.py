@@ -62,18 +62,21 @@ def measure(name, scene, warm, with_baseline):
     out["cold_phases"] = {k: round(v, 4) for k, v in state.phases}
     out["traced"] = [state.traced_width, state.traced_height]
     out["samples"] = state.samples
-    times, phases = [], []
+    times, phases, sizes = [], [], []
     for i in range(1, warm + 1):
         state, computed, shown_at, shown = first_look(scene, moved(i), ("warm", name, i))
         times.append(shown_at)
+        sizes.append([state.traced_width, state.traced_height])
         phases.append({k: v for k, v in state.phases})
     out["warm_seconds"] = {"median": statistics.median(times), "worst": max(times), "best": min(times), "runs": len(times)}
+    out["warm_traced"] = sizes
     out["warm_phases_median"] = {k: round(statistics.median(p[k] for p in phases), 4) for k in phases[0]}
     out["target_seconds"] = P.FIRST_LOOK_SECONDS
     out["target_met_warm"] = out["warm_seconds"]["worst"] <= P.FIRST_LOOK_SECONDS
     out["target_met_cold"] = out["cold_seconds"] <= P.FIRST_LOOK_SECONDS
     out["nonempty"] = bool(shown[..., :3].std() > 0)
     state2 = P.step_interactive(state, scene, moved(warm), WIDTH, HEIGHT, BACKGROUND, 0.05, state.key)
+    out["stage_two_ran"] = state2.preview
     out["stage_two_seconds"] = state2.seconds
     out["stage_two_traced"] = [state2.traced_width, state2.traced_height]
     if with_baseline:

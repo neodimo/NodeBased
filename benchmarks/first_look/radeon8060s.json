@@ -1,0 +1,131 @@
+{
+ "adapter": "wgpu adapter: AMD Radeon 8060S Graphics (RADV STRIX_HALO)\n  type IntegratedGPU, backend Vulkan, vendor radv, driver Mesa 26.2.2, wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 2147483644, max texture 16384",
+ "results": [
+  {
+   "scene": "furnished",
+   "output": [
+    1920,
+    1080
+   ],
+   "cold_seconds": 0.6368097309023142,
+   "cold_phases": {
+    "render": 0.238,
+    "guides": 0.0415,
+    "denoise": 0.2727,
+    "enlarge": 0.0483
+   },
+   "traced": [
+    480,
+    270
+   ],
+   "samples": 4,
+   "warm_seconds": {
+    "median": 0.5030021780403331,
+    "worst": 0.5086243000114337,
+    "best": 0.4960516650462523,
+    "runs": 5
+   },
+   "warm_traced": [
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ]
+   ],
+   "warm_phases_median": {
+    "render": 0.1117,
+    "guides": 0.0374,
+    "denoise": 0.2725,
+    "enlarge": 0.0456
+   },
+   "target_seconds": 1.0,
+   "target_met_warm": true,
+   "target_met_cold": true,
+   "nonempty": true,
+   "stage_two_ran": true,
+   "stage_two_seconds": 1.6061862220522016,
+   "stage_two_traced": [
+    960,
+    540
+   ]
+  },
+  {
+   "scene": "mixed",
+   "output": [
+    1920,
+    1080
+   ],
+   "cold_seconds": 0.6987235629931092,
+   "cold_phases": {
+    "render": 0.4391,
+    "guides": 0.0621,
+    "denoise": 0.1185,
+    "enlarge": 0.0445
+   },
+   "traced": [
+    240,
+    135
+   ],
+   "samples": 4,
+   "warm_seconds": {
+    "median": 0.7518504159525037,
+    "worst": 0.7800408040639013,
+    "best": 0.7459947010502219,
+    "runs": 5
+   },
+   "warm_traced": [
+    [
+     271,
+     152
+    ],
+    [
+     282,
+     159
+    ],
+    [
+     294,
+     165
+    ],
+    [
+     306,
+     172
+    ],
+    [
+     316,
+     178
+    ]
+   ],
+   "warm_phases_median": {
+    "render": 0.4406,
+    "guides": 0.0883,
+    "denoise": 0.1468,
+    "enlarge": 0.0453
+   },
+   "target_seconds": 1.0,
+   "target_met_warm": true,
+   "target_met_cold": true,
+   "nonempty": true,
+   "stage_two_ran": true,
+   "stage_two_seconds": 3.13902170304209,
+   "stage_two_traced": [
+    960,
+    540
+   ]
+  }
+ ]
+}

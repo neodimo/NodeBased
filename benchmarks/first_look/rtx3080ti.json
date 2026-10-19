@@ -1,0 +1,149 @@
+{
+ "adapter": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti\n  type DiscreteGPU, backend Vulkan, vendor NVIDIA, driver 615.71.09, wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 2147483644, max texture 32768",
+ "results": [
+  {
+   "scene": "furnished",
+   "output": [
+    1920,
+    1080
+   ],
+   "cold_seconds": 0.6093891899799928,
+   "cold_phases": {
+    "render": 0.223,
+    "guides": 0.022,
+    "denoise": 0.2794,
+    "enlarge": 0.0486
+   },
+   "traced": [
+    480,
+    270
+   ],
+   "samples": 4,
+   "warm_seconds": {
+    "median": 0.4650310920551419,
+    "worst": 0.5105537220370024,
+    "best": 0.45199956092983484,
+    "runs": 7
+   },
+   "warm_traced": [
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ],
+    [
+     480,
+     270
+    ]
+   ],
+   "warm_phases_median": {
+    "render": 0.0897,
+    "guides": 0.0204,
+    "denoise": 0.2719,
+    "enlarge": 0.0466
+   },
+   "target_seconds": 1.0,
+   "target_met_warm": true,
+   "target_met_cold": true,
+   "nonempty": true,
+   "stage_two_ran": true,
+   "stage_two_seconds": 1.2519247611053288,
+   "stage_two_traced": [
+    960,
+    540
+   ],
+   "baseline_denoise_1080p_4spp_seconds": 10.302038548979908
+  },
+  {
+   "scene": "mixed",
+   "output": [
+    1920,
+    1080
+   ],
+   "cold_seconds": 0.9694699359824881,
+   "cold_phases": {
+    "render": 0.673,
+    "guides": 0.1053,
+    "denoise": 0.1149,
+    "enlarge": 0.0414
+   },
+   "traced": [
+    240,
+    135
+   ],
+   "samples": 4,
+   "warm_seconds": {
+    "median": 0.781738722929731,
+    "worst": 0.8267560489475727,
+    "best": 0.7312926900340244,
+    "runs": 7
+   },
+   "warm_traced": [
+    [
+     226,
+     127
+    ],
+    [
+     236,
+     133
+    ],
+    [
+     246,
+     139
+    ],
+    [
+     254,
+     143
+    ],
+    [
+     261,
+     147
+    ],
+    [
+     268,
+     151
+    ],
+    [
+     273,
+     154
+    ]
+   ],
+   "warm_phases_median": {
+    "render": 0.4673,
+    "guides": 0.1133,
+    "denoise": 0.1268,
+    "enlarge": 0.044
+   },
+   "target_seconds": 1.0,
+   "target_met_warm": true,
+   "target_met_cold": true,
+   "nonempty": true,
+   "stage_two_ran": false,
+   "stage_two_seconds": 5.624313259031624,
+   "stage_two_traced": [
+    0,
+    0
+   ],
+   "baseline_denoise_1080p_4spp_seconds": 19.418905293918215
+  }
+ ]
+}
