@@ -23,6 +23,10 @@ Contracts (the tests in tests/test_directviewer.py pin each one):
 * Device. The presenter owns one device, requested from the adapter that the surface reports it can
   present to (`pick_display_adapter`); the texture, pipelines and surface configuration all come from
   that one device. Sharing the renderer's device or a renderer texture is the later L4 step.
+* Device loss. `LossWatch` hears wgpu's "device lost" log line and a failed draw counts as a loss;
+  `RetainedPresenter.recover()` starts a new epoch, releases the old resources and device, builds a new
+  device from the same adapter and queues the retained CPU picture again. Too many recoveries in a row end
+  in the dock hiding itself, like any other failure.
 
 Known gaps are listed in docs/DIRECT_VIEWER.md and shown in the dock's title.
 """
