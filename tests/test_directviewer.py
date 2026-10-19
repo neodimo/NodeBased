@@ -14,6 +14,13 @@ from PySide6.QtWidgets import QApplication
 from nodebased import directviewer as dv
 from tests.waiting import wait_until
 
+try:
+    import wgpu  # noqa: F401
+    HAVE_WGPU = True
+except ImportError:   # CI machines without the card library (10/18 red Desktop conformance)
+    HAVE_WGPU = False
+needs_wgpu = unittest.skipUnless(HAVE_WGPU, "wgpu unavailable")
+
 APP = QApplication.instance() or QApplication([])
 
 
@@ -125,6 +132,7 @@ def make_presenter(size=(160, 120), adapter=None):
     return presenter, context
 
 
+@needs_wgpu
 class RetainedPresenterTests(unittest.TestCase):
     def setUp(self):
         self.presenter, self.context = make_presenter()
@@ -204,6 +212,7 @@ class RetainedPresenterTests(unittest.TestCase):
         self.assertFalse(self.presenter.ledger.offer("late", 9, epoch))
 
 
+@needs_wgpu
 class SrgbSurfaceTests(unittest.TestCase):
     def test_srgb_surface_shows_the_same_bytes_the_cpu_image_holds(self):
         import wgpu
@@ -220,6 +229,7 @@ class SrgbSurfaceTests(unittest.TestCase):
             self.assertLessEqual(abs(int(have) - want), 1)
 
 
+@needs_wgpu
 class AdapterChoiceTests(unittest.TestCase):
     """The display adapter comes from wgpu's own surface filter, never from get_preferred_format alone."""
 
