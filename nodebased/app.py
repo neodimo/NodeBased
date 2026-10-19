@@ -8264,6 +8264,8 @@ class Window(QMainWindow):
         self.playback_origin_frame = 0
         self.playback_origin_time = 0.0
         self._stop_refine_pending = False
+        self._progressive_target = None
+        self._progressive_generation = None
         self.playback_elapsed_frames = 0
         self.playback_dropped_frames = 0
         # Monotonic times of the frames shown during playback, newest last (achieved_fps).
@@ -9279,6 +9281,33 @@ class Window(QMainWindow):
         if finished:
             self.toggle_playback(False)
 
+    def _adapt_playback_proxy(self, request, elapsed_ms):
+        """Lower an automatic playback tier when the measured render misses the chosen fps."""
+        if (not self.playing or not self.playback_proxy.isChecked()
+                or int(request.tier) != int(self.proxy.currentData() or 1)):
+            return False
+        fps = max(1.0, float(self.dispatcher.document["time"].get("fps", 24.0)))
+        if float(elapsed_ms) <= 1000.0 / fps:
+            return False
+        original_index = self.playback_auto_proxy_index
+        current_tier = int(self.proxy.currentData() or 1)
+        if original_index is None:
+            # Preserve an explicit proxy choice; adaptation owns only the artist's Full choice.
+            if current_tier != 1:
+                return False
+            original_index = self.proxy.currentIndex()
+        next_tier = next((tier for tier in PROXY_TIERS if tier > current_tier), None)
+        if next_tier is None:
+            return False
+        next_index = self.proxy.findData(next_tier)
+        if next_index < 0:
+            return False
+        self.playback_auto_proxy_index = original_index
+        self.proxy.setCurrentIndex(next_index)
+        self.statusBar().showMessage(
+            f"Playback proxy 1/{next_tier}: adapting to {fps:g} fps target")
+        return True
+
     def _menus(self):
         file = self.menuBar().addMenu("File")
         edit = self.menuBar().addMenu("Edit")
@@ -9967,7 +9996,7 @@ class Window(QMainWindow):
                     # same shared panel path used for document edits so every node stays in sync.
                     self.inspect(self.graph.selected_id())
                 if render:
-                    self.request_preview()
+                    self.request_preview(progressive=not bool(cmd.get("transient", False)))
             else:
                 self.after_command(render, sync_settings=cmd.get("op") in ("load", "undo", "redo"),
                                    revision=before, moves=self._moves_only(cmd))
@@ -10284,7 +10313,7 @@ class Window(QMainWindow):
         # Only an edit that can change the viewed picture re-renders. Moving, renaming or
         # labelling a node -- or editing a branch the viewer does not see -- leaves it alone.
         if render and self.render_identity() != self.rendered_identity:
-            self.request_preview()
+            self.request_preview(progressive=not self.playing)
 
     def render_identity(self):
         document = self.dispatcher.document
@@ -13610,7 +13639,8 @@ class Window(QMainWindow):
         return TileRegion(x0, y0, x1 - x0, y1 - y0, full_x=bounds.x, full_y=bounds.y,
                           full_width=bounds.width, full_height=bounds.height)
 
-    def request_preview(self, *_, playhead_only=False, tier_override=None):
+    def request_preview(self, *_, playhead_only=False, tier_override=None, progressive=False,
+                        progressive_target=None):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
@@ -13619,7 +13649,16 @@ class Window(QMainWindow):
         self.rendered_identity = self.render_identity()
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = snapshot["time"]["current"]
-        tier = self.proxy.currentData() if tier_override is None else int(tier_override)
+        if progressive and not self.playing:
+            self._progressive_target = int(self.proxy.currentData())
+            tier = 8
+        elif progressive_target is not None and not self.playing:
+            self._progressive_target = int(progressive_target)
+            tier = self.proxy.currentData() if tier_override is None else int(tier_override)
+        else:
+            self._progressive_target = None
+            self._progressive_generation = None
+            tier = self.proxy.currentData() if tier_override is None else int(tier_override)
         self.evaluator.preview_direction = -1 if self.playing and getattr(self, "play_direction", 1) < 0 else 1
         future = self.future_frames(frame) if self.playing else ()
         viewport = None
@@ -13660,6 +13699,8 @@ class Window(QMainWindow):
                                    tier=tier, viewport=viewport,
                                    playing=self.playing,
                                    cancel_active=cancel_active)
+        if (progressive or progressive_target is not None) and not self.playing:
+            self._progressive_generation = self.generation
         # The decode-ahead pool only ever gets consulted by the tier != 1 Read path (tileexec.py's
         # `_generator_tile`); a tier-1 request takes the bounded-region-read fast path instead and
         # never looks at it. Prefetching at tier 1 would just spend the decode pool's own worker
@@ -14255,6 +14296,20 @@ class Window(QMainWindow):
                 text.setTextWidth(520)   # a long, actionable message wraps instead of shrinking to a line
                 self.viewer.fit()
                 self.viewer.draw_format_overlay(None)
+        if (request.display and frame is not None and fresh and not self.playing
+                and self._progressive_generation == request.generation):
+            target_tier = self._progressive_target
+            next_tier = (4 if request.tier == 8 and target_tier != 8 else
+                         target_tier if request.tier == 4 and target_tier not in (None, 4) else None)
+            if next_tier is None or next_tier == request.tier:
+                self._progressive_target = None
+                self._progressive_generation = None
+            else:
+                QTimer.singleShot(0, lambda tier=next_tier, target=target_tier:
+                                  self.request_preview(tier_override=tier,
+                                                      progressive_target=target))
+        if request.display and frame is not None and (fresh or catching_up):
+            self._adapt_playback_proxy(request, self.last_frame_ms or float("inf"))
         if self._stop_refine_pending and not self.playing and request.tier == 2:
             self._stop_refine_pending = False
             if fresh:

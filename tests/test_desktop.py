@@ -1628,6 +1628,66 @@ class PlaybackProxyToggleTests(unittest.TestCase):
         w.toggle_playback(False)
         self.assertEqual(w.proxy.currentData(), 4)
 
+    def test_measured_slow_playback_drops_one_tier_and_restores_artist_choice(self):
+        w = self.window
+        w.toggle_playback(True)
+        request = FrameRequest(w.generation, w.dispatcher.document['time']['current'], True,
+                               copy.deepcopy(w.dispatcher.document), tier=w.proxy.currentData(),
+                               playing=True)
+        self.assertTrue(w._adapt_playback_proxy(request, 1000 / 24 + 1))
+        self.assertEqual(w.proxy.currentData(), 4)
+        self.assertFalse(w._adapt_playback_proxy(request, 1000 / 24 + 1),
+                         'an obsolete tier result must not drive another adaptation')
+        w.toggle_playback(False)
+        self.assertEqual(w.proxy.currentData(), 1)
+
+
+class ProgressivePreviewTests(unittest.TestCase):
+    def setUp(self):
+        self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None),
+                        f'no first frame cooked within {WAIT_TIMEOUT:.0f}s')
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def test_progressive_request_shows_tier8_then_tier4_then_selected_detail(self):
+        w = self.window
+        w.request_preview(progressive=True)
+        request, cancel = w.preview_queue.take()
+        self.assertEqual(request.tier, 8)
+        tier8 = np.zeros((68, 120, 4), dtype=np.float32)
+        w.preview_ready((request, cancel), tier8, to_qimage(tier8), '20 ms')
+        self.assertTrue(wait_until(lambda: len(w.preview_queue) > 0))
+        request, cancel = w.preview_queue.take()
+        self.assertEqual(request.tier, 4)
+        tier4 = np.zeros((135, 240, 4), dtype=np.float32)
+        w.preview_ready((request, cancel), tier4, to_qimage(tier4), '30 ms')
+        self.assertTrue(wait_until(lambda: len(w.preview_queue) > 0))
+        request, cancel = w.preview_queue.take()
+        self.assertEqual(request.tier, 1)
+        final = np.zeros((540, 960, 4), dtype=np.float32)
+        w.preview_ready((request, cancel), final, to_qimage(final), '40 ms')
+        self.assertEqual(w.viewer.last_scale, 1)
+
+    def test_knob_edit_and_uncached_scrub_begin_at_tier8(self):
+        w = self.window
+        w.timer.stop()
+        w.command({'op': 'set', 'id': 'grade', 'param': 'exposure', 'value': 1.25})
+        w.timer.stop()
+        request, cancel = w.preview_queue.take()
+        self.assertEqual(request.tier, 8)
+        w.preview_queue.finish(cancel)
+        w.set_time(current=2)
+        w.timer.stop()
+        request, _ = w.preview_queue.take()
+        self.assertEqual(request.tier, 8)
+
     def test_fluid_stop_requests_half_surface_then_full_detail(self):
         w = self.window
         w.dispatcher.document["nodes"]["fluid_surface_marker"] = {"type": "FluidSurface3D"}
