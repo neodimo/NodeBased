@@ -1,5 +1,28 @@
 ## 2026-10-18 — Lane 2 VP1 finish: real-display checks, device-loss recovery, Wayland refusal (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (4:47 AM on 2026-10-19 PDT)
+
+`main` moved `5ca57a81` -> `638121a5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 49 tests in 36.299 s, OK. Full suite on
+the stacked tip `638121a5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1018-2250.log`, started 10:50 PM): **Ran 5522 tests in 20876.618 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), VP1 of 2: opt-in retained-texture 2D viewer vertical slice (finish 1).** Commits:
+  - `231d24ad` tests: direct viewer hit-order tests skip where wgpu is not installed (the dock needs it)
+  - `be8dfdf1` notes: Lane 2 VP1 finish in TASKLOG and state
+  - `93fddc24` viewer: direct picture docs for device recovery, Wayland refusal and the real-display measurements; llvmpipe dock walk on the live display
+  - `1ccf5b9a` viewer: refuse the direct picture on native Wayland, real-screen capture check, bench pinned to equal output size, hit-order tests
+  - `2cbc6b03` viewer: direct picture replaces a lost device and rebuilds the picture from the retained CPU image
+  Diff: 19 files changed, 2334 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Added on `openclaw/nb-2d-parity` (`be614014`, `0801262a`, `bf285057`): `RetainedPresenter.recover()` / `LossWatch` for device loss; `unsupported_platform()` refuses native Wayland (rendercanvas 2.7.2 has X11 surface ids only, the process used to die with an X BadWindow); `tools/viewer_direct_screen.py` (Spectacle capture of the composited desktop, all three adapters, pixel ratio 1.0 and 1.5, every check true); bench pinned to equal output size and isolated from the real Qt settings; `HitOrderTests`. Radeon direct path: 121 pictures/s, 2.8 ms CPU per picture against the Viewer's 4.7 ms; the Viewer's number is synchronous raster and says nothing about the glass. Still owed to the VP2 gate: dock walk on the live display for the Radeon and RTX (card lock held by the suite), overlay parity (Roto, Tracker, A/B, ROI), Windows, physical device loss, input-to-photon latency. Details in docs/DIRECT_VIEWER.md and TASKLOG.md.
 
 ## 2026-10-18 — Lane 3 W1: Windows hybrid viewer research
