@@ -214,6 +214,12 @@ The difference is memory: 48 GB against 12 GB, and it is a workstation card with
 - **No offload for SDXL.** On 12 GB the provider runs with model CPU offload (peak 7.9 GiB allocated, 24 s a frame at version 1.2).
   With `--big` the report also runs the demo shot with `NODEBASED_SDXL_OFFLOAD=never`, so the whole pipeline stays on the card. That
   is the "faster, needs the card to itself" path the provider has but we cannot run here.
+- **Render mode feel.** The `bench_render_mode` step (`tools/benchmark_progression.py --field`) records the adapter name and backend, the
+  time to the first denoised picture, how long an edit takes to stop the pass in flight, the edit to the new first look, and the time to
+  settle, on the furnished room and the mixed mesh and splat scene at 1920 x 1080. The report shows what that machine measured; the
+  targets (abandon under 50 ms, first look plus 60 ms after an edit) are only gated on the RTX 3080 Ti workstation, and nothing here
+  claims a figure for the A6000 or the laptop until a report from them exists. `--quick` runs the furnished room only and stops each view
+  at its first full-size pass, so it records no settle time.
 - **Bigger simulations.** `benchmark_hot_pour.py` takes `--liquid-cells` and `--smoke-cells`; `--big` bakes 384 / 256 instead of 256 / 192,
   and the report records the peak card memory.
 - **More instances.** `benchmark_instances.py --count`; `--big` uses 400,000 instead of 100,000.

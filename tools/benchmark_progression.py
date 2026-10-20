@@ -2,7 +2,8 @@
 settled picture, plus the latencies an artist feels (lane 4, plan "Progress", step H2).
 
     flock /tmp/nb-gpu.lock python tools/benchmark_progression.py [--adapter default|discrete|integrated|cpu]
-        [--scene furnished|mixed|both] [--warm N] [--frames DIR] [--json out.json]
+        [--scene furnished|mixed|both] [--warm N] [--edits N] [--frames DIR] [--json out.json]
+        [--field PATH [--quick]]
 
 Per scene it reports, on the adapter in use (the scene, the camera, the seed and the render settings are fixed in this file):
 
@@ -16,6 +17,17 @@ Per scene it reports, on the adapter in use (the scene, the camera, the seed and
   worker took to abandon the pass it was in (``cancel_latency``), the number of first looks it actually started for the burst
   (the debounce collapses the rest) and the seconds from the last nudge to the first denoised picture on screen.
 * ``responsive_during_refinement``: the worst paint time while a long full-size pass is in flight.
+
+* ``edit_latency`` (lane 4, step A of 3; ``--edits N`` trials per kind, default 10): a camera nudge and a material knob change
+  (the floor's roughness) land while a full-size pass (16 samples or more done, the next running) is in flight, at spread-out
+  moments of the pass. Per trial: ``abandon_ms``, the edit to the moment the worker has stopped the obsolete pass, and
+  ``edit_to_first_look_ms``, the edit to the new view's first denoised picture converted for display (the debounce included),
+  beside ``idle_first_look_ms``, the same first look asked of an idle worker. Gates, applied on the RTX 3080 Ti only (no target
+  on other adapters, whose rows are recorded): 95th-percentile abandon under 50 ms, and the 95th-percentile edit-to-first-look
+  no worse than the idle first look plus 60 ms, on both scenes. ``--no-edits`` leaves the series out.
+* ``--field PATH`` writes one small JSON (adapter name, backend, first look, abandon and settle times) and nothing else, for
+  ``tools/field_report.py``; ``--quick`` with it runs the furnished room only with fewer trials and stops each view at its first
+  full-size pass instead of waiting for it to settle (no settle time then).
 
 ``--frames DIR`` writes the first look, each later stage and the settled picture as PNGs named with their time stamps. Run it
 under the exclusive GPU lock: the timings are meaningless next to another job on the card.
@@ -49,11 +61,16 @@ def moved(i):
     return replace(CAMERA, transform=replace(CAMERA.transform, position=s.Vec3(position.x + 0.01 * i, position.y, position.z)))
 
 
+SETTLE = True     # False (the field kit's --quick): a progression ends at the first full-size pass and reports no settle time
+
+
 def progression(job, scene, camera, identity):
     """Submit one view, wait for it to settle, return its record."""
     submitted = time.perf_counter()
     job.submit(Request(identity, scene, camera, WIDTH, HEIGHT, BACKGROUND, AMBIENT))
-    if not job.wait(lambda state, phase: phase in ("settled", "failed"), SETTLE_TIMEOUT):
+    reached = (lambda state, phase: phase in ("settled", "failed")) if SETTLE else \
+        (lambda state, phase: phase in ("settled", "failed") or (state is not None and state.samples >= 16 and phase == "tracing"))
+    if not job.wait(reached, SETTLE_TIMEOUT):
         raise RuntimeError("the view did not settle in time")
     if job.error is not None:
         raise job.error
@@ -69,7 +86,7 @@ def progression(job, scene, camera, identity):
         if shown is None:
             shown = rgba
     return {"frames": frames, "first_image_seconds": frames[0]["display_seconds"],
-            "settled_seconds": frames[-1]["seconds"], "frame_count": len(frames),
+            "settled_seconds": frames[-1]["seconds"] if SETTLE else None, "frame_count": len(frames),
             "wall_seconds": round(time.perf_counter() - submitted, 4)}, [frame.state for frame in job.frames]
 
 
@@ -140,7 +157,98 @@ def interaction(scene, camera):
                                              "worst_ms": round(max(during), 2) if during else None}}
 
 
-def measure(name, scene, warm, frames_dir, with_interaction):
+EDIT_DELAYS = (0.0, 0.021, 0.047, 0.083, 0.131, 0.19, 0.27, 0.36, 0.05, 0.11)     # seconds into the pass the edit lands
+ABANDON_GATE_MS = 50.0
+EDIT_EXTRA_MS = 60.0
+
+
+def percentile(values, q):
+    """Nearest-rank percentile (q in 0..100) of a non-empty list."""
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, max(0, int(np.ceil(q / 100.0 * len(ordered))) - 1))]
+
+
+def summary(values_ms):
+    if not values_ms:
+        return None
+    return {"n": len(values_ms), "median": round(statistics.median(values_ms), 2), "p95": round(percentile(values_ms, 95), 2),
+            "worst": round(max(values_ms), 2)}
+
+
+def edited_scene(scene, i):
+    """`scene` with the first geometry's (the floor's) roughness knob turned to a value of its own for trial `i`."""
+    geometry = scene.geometries[0]
+    rough = 0.05 + 0.9 * ((i * 0.37) % 1.0)
+    return replace(scene, geometries=(replace(geometry, pbr_roughness=rough),) + tuple(scene.geometries[1:]))
+
+
+def edit_request(kind, scene, i, tag):
+    camera = moved(200 + i) if kind == "camera" else CAMERA
+    return Request(("edit", kind, i, tag), edited_scene(scene, i) if kind == "material" else scene, camera, WIDTH, HEIGHT,
+                   BACKGROUND, AMBIENT)
+
+
+def edit_latency(job, scene, trials, label=None):
+    """The edit-latency series (see the module docstring). `job` is warm. Returns the per-kind records and the pooled summary."""
+    kinds = {}
+    for kind in ("camera", "material"):
+        rows = []
+        for i in range(trials):
+            # the idle first look of this very edit: nothing running when it arrives
+            job.cancel()
+            job.wait(timeout=60)
+            job.submit(edit_request(kind, scene, 2 * i, "idle"))
+            if not job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT):
+                raise RuntimeError("no first look")
+            idle = job.frames[0].since_submit * 1000.0
+            # a long full-size pass in flight, then the edit
+            if not job.wait(lambda state, phase: state is not None and state.samples >= 16 and phase == "tracing",
+                            SETTLE_TIMEOUT):
+                raise RuntimeError("the view never reached a full-size pass")
+            time.sleep(EDIT_DELAYS[i % len(EDIT_DELAYS)])
+            before = len(job.cancel_latencies)
+            job.submit(edit_request(kind, scene, 2 * i + 1, "live"))
+            deadline = time.perf_counter() + 30.0
+            while len(job.cancel_latencies) == before and time.perf_counter() < deadline:
+                time.sleep(0.0005)
+            abandon = job.cancel_latencies[before] * 1000.0 if len(job.cancel_latencies) > before else None
+            if not job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT):
+                raise RuntimeError("no first look after the edit")
+            first = job.frames[0].since_submit * 1000.0
+            rows.append({"delay_s": EDIT_DELAYS[i % len(EDIT_DELAYS)], "idle_first_look_ms": round(idle, 2),
+                         "abandon_ms": None if abandon is None else round(abandon, 2), "edit_to_first_look_ms": round(first, 2)})
+        kinds[kind] = {"trials": rows,
+                       "abandon_ms": summary([r["abandon_ms"] for r in rows if r["abandon_ms"] is not None]),
+                       "edit_to_first_look_ms": summary([r["edit_to_first_look_ms"] for r in rows]),
+                       "idle_first_look_ms": summary([r["idle_first_look_ms"] for r in rows])}
+    every = [r for k in kinds.values() for r in k["trials"]]
+    pooled = {"abandon_ms": summary([r["abandon_ms"] for r in every if r["abandon_ms"] is not None]),
+              "edit_to_first_look_ms": summary([r["edit_to_first_look_ms"] for r in every]),
+              "idle_first_look_ms": summary([r["idle_first_look_ms"] for r in every]),
+              "abandoned_trials": sum(1 for r in every if r["abandon_ms"] is not None), "trials": len(every)}
+    job.cancel()
+    return {"by_kind": kinds, **pooled, "gate": edit_gate(pooled)}
+
+
+def on_rtx_3080_ti():
+    try:
+        return "3080 Ti" in gpu3d.adapter_report().splitlines()[0]
+    except Exception:
+        return False
+
+
+def edit_gate(pooled):
+    if not on_rtx_3080_ti():
+        return {"applies": False, "note": "no target on this adapter; the row is recorded"}
+    abandon, first, idle = pooled["abandon_ms"], pooled["edit_to_first_look_ms"], pooled["idle_first_look_ms"]
+    abandon_ok = abandon is not None and pooled["abandoned_trials"] == pooled["trials"] and abandon["p95"] < ABANDON_GATE_MS
+    first_ok = first["p95"] <= idle["p95"] + EDIT_EXTRA_MS
+    return {"applies": True, "abandon_p95_under_ms": ABANDON_GATE_MS, "abandon_ok": bool(abandon_ok),
+            "edit_to_first_look_p95_within_ms_of_idle_p95": EDIT_EXTRA_MS, "edit_to_first_look_ok": bool(first_ok),
+            "met": bool(abandon_ok and first_ok)}
+
+
+def measure(name, scene, warm, frames_dir, with_interaction, edits=0):
     out = {"scene": name, "output": [WIDTH, HEIGHT], "seed": "default", "ambient": AMBIENT}
     job = ProgressiveJob(keep_images=bool(frames_dir))
     try:
@@ -155,13 +263,16 @@ def measure(name, scene, warm, frames_dir, with_interaction):
         out["warm"] = {"runs": len(runs),
                        "first_image_seconds": {"median": round(statistics.median(r["first_image_seconds"] for r in runs), 4),
                                                "worst": round(max(r["first_image_seconds"] for r in runs), 4)},
-                       "settled_seconds": {"median": round(statistics.median(r["settled_seconds"] for r in runs), 3),
-                                           "worst": round(max(r["settled_seconds"] for r in runs), 3)},
+                       "settled_seconds": ({"median": round(statistics.median(r["settled_seconds"] for r in runs), 3),
+                                            "worst": round(max(r["settled_seconds"] for r in runs), 3)} if SETTLE
+                                           else {"median": None, "worst": None}),
                        "frames_median_seconds": [round(statistics.median(r["frames"][k]["seconds"] for r in runs), 3)
                                                  for k in range(min(len(r["frames"]) for r in runs))],
                        "last_run_frames": runs[-1]["frames"]}
         if frames_dir and runs:
             save_frames(frames_dir, f"{name}-warm", states, runs[-1])
+        if edits:
+            out["edit_latency"] = edit_latency(job, scene, edits)      # the job is warm: pipelines compiled, scene uploaded
     finally:
         job.close()
     out["target_seconds"] = P.FIRST_LOOK_SECONDS
@@ -172,6 +283,33 @@ def measure(name, scene, warm, frames_dir, with_interaction):
     return out
 
 
+def backend_name():
+    """The backend a tiny path-traced render really ran on (`gpu`, also on llvmpipe, or `cpu`)."""
+    from nodebased import pathtrace
+    stats = {}
+    pathtrace.render(furnished_scene(), CAMERA, 32, 18, BACKGROUND, AMBIENT, "rgba", pathtrace.PathSettings(samples=1),
+                     backend="auto", stats=stats)
+    return stats.get("backend", "unknown")
+
+
+def field_record(results):
+    """The small record the field kit keeps: what this machine measured, nothing from any other machine."""
+    scenes = {}
+    for result in results:
+        edit = result.get("edit_latency") or {}
+        scenes[result["scene"]] = {
+            "first_look_seconds": {"cold": result["cold"]["first_image_seconds"],
+                                   "warm_median": result["warm"]["first_image_seconds"]["median"],
+                                   "warm_worst": result["warm"]["first_image_seconds"]["worst"]},
+            "settled_seconds": {"cold": result["cold"]["settled_seconds"], "warm_median": result["warm"]["settled_seconds"]["median"]},
+            "abandon_ms": edit.get("abandon_ms"), "edit_to_first_look_ms": edit.get("edit_to_first_look_ms"),
+            "idle_first_look_ms": edit.get("idle_first_look_ms"), "edit_trials": edit.get("trials"),
+            "gate": edit.get("gate")}
+    report = gpu3d.adapter_report()
+    return {"schema": 1, "output": [WIDTH, HEIGHT], "adapter": report.splitlines()[0], "adapter_report": report,
+            "backend": backend_name(), "first_look_target_seconds": P.FIRST_LOOK_SECONDS, "scenes": scenes}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter", default=None)
@@ -179,20 +317,36 @@ def main():
     parser.add_argument("--warm", type=int, default=3)
     parser.add_argument("--frames", default=None)
     parser.add_argument("--no-interaction", action="store_true")
+    parser.add_argument("--edits", type=int, default=10, help="edit-latency trials per kind (camera, material)")
+    parser.add_argument("--no-edits", action="store_true")
+    parser.add_argument("--field", default=None, metavar="PATH", help="write the small field-kit JSON here and nothing else")
+    parser.add_argument("--quick", action="store_true", help="with --field: the furnished room only, fewer trials")
     parser.add_argument("--json", default=None)
     args = parser.parse_args()
     if args.adapter:
         gpu3d._states.setdefault("default", gpu3d._state(args.adapter))
     print(gpu3d.adapter_report())
+    if args.field:
+        global SETTLE
+        SETTLE = not args.quick
+        args.warm, args.no_interaction, args.no_edits = 1, True, False
+        args.edits = 3 if args.quick else 5
+        args.scene = "furnished" if args.quick else "both"
     results = []
     for name in (("furnished", "mixed") if args.scene == "both" else (args.scene,)):
         scene = furnished_scene() if name == "furnished" else soft_scene()
         P._COST.clear()
-        result = measure(name, scene, args.warm, args.frames, not args.no_interaction)
+        result = measure(name, scene, args.warm, args.frames, not args.no_interaction, 0 if args.no_edits else args.edits)
         results.append(result)
-        print(json.dumps({k: v for k, v in result.items() if k not in ("cold", "warm")}, indent=1))
+        print(json.dumps({k: v for k, v in result.items() if k not in ("cold", "warm", "edit_latency")}, indent=1))
         print("cold:", [(f["seconds"], f["samples"], "preview" if f["preview"] else "pass") for f in result["cold"]["frames"]])
         print("warm median first image:", result["warm"]["first_image_seconds"], "settled:", result["warm"]["settled_seconds"])
+        edit = result.get("edit_latency")
+        if edit:
+            print("edit latency:", json.dumps({k: edit[k] for k in ("abandon_ms", "edit_to_first_look_ms", "idle_first_look_ms",
+                                                                    "abandoned_trials", "trials", "gate")}))
+    if args.field:
+        Path(args.field).write_text(json.dumps(field_record(results), indent=1))
     if args.json:
         Path(args.json).write_text(json.dumps({"adapter": gpu3d.adapter_report(), "results": results}, indent=1))
 

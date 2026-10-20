@@ -108,6 +108,35 @@ class FieldReportSurvivesFailures(unittest.TestCase):
         for module in field_report.QUICK_TEST_MODULES:
             self.assertTrue((ROOT / "tests" / f"{module}.py").exists(), module)
 
+    def test_the_render_mode_step_runs_the_progression_benchmark_and_keeps_its_numbers(self):
+        record = {"adapter": "wgpu adapter: test card", "backend": "gpu", "scenes": {"furnished": {
+            "first_look_seconds": {"cold": 0.9, "warm_median": 0.52, "warm_worst": 0.55},
+            "settled_seconds": {"cold": 9.0, "warm_median": 8.1},
+            "abandon_ms": {"n": 6, "median": 12.0, "p95": 31.5, "worst": 31.5},
+            "edit_to_first_look_ms": {"n": 6, "median": 580.0, "p95": 620.0, "worst": 620.0}}}}
+        seen = []
+
+        def fake_run(argv, log, timeout, **more):
+            seen.append([str(a) for a in argv])
+            Path(argv[argv.index("--field") + 1]).write_text(json.dumps(record), encoding="utf-8")
+            return dict(returncode=0, timed_out=False, seconds=1.0, output="", output_tail="")
+        with tempfile.TemporaryDirectory(prefix="field-report-test-") as tmp:
+            ctx = field_report.Context(Path(tmp) / "out", "test", True, False)
+            ctx.work.mkdir(parents=True)
+            step = field_report.Step("bench_render_mode", "Render mode")
+            with mock.patch.object(field_report, "run_command", fake_run):
+                field_report.step_render_mode(ctx, step)
+        self.assertEqual(step.status, "ok")
+        self.assertIn("benchmark_progression.py", seen[0][1])
+        self.assertIn("--quick", seen[0])
+        keys = {h["key"]: h["value"] for h in step.headlines}
+        self.assertEqual(keys["rendermode.furnished.first_look"], 520)
+        self.assertEqual(keys["rendermode.furnished.abandon_p95"], 31.5)
+        self.assertEqual(keys["rendermode.furnished.edit_first_look_p95"], 620.0)
+        self.assertEqual(keys["rendermode.furnished.settled"], 8.1)
+        self.assertEqual(step.data["adapter"], "wgpu adapter: test card")
+        self.assertIn("bench_render_mode", [name for name, _, _ in field_report.STEPS])
+
     def test_every_headline_baseline_names_a_source(self):
         for key, (value, unit, source) in field_report.BASELINES.items():
             self.assertGreater(value, 0, key)

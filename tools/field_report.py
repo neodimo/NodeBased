@@ -6,7 +6,7 @@
 
 It records the machine (OS, CPU, RAM, Python, every wgpu adapter with its limits, torch and CUDA, the NVIDIA driver, the
 NodeBased version and git hash), runs the GPU-related test modules through tools/run_tests.py in fresh interpreters, runs the
-benchmarks that take --json (4K viewport, lens warp, path tracer, portable render, instances, Hot pour) and the SDXL
+benchmarks that take --json (4K viewport, lens warp, path tracer, portable render, Render mode, instances, Hot pour) and the SDXL
 ControlNet provider on the demo shot when its weights are present, then writes DIR/field-report.md (plain-language summary
 first, headline numbers beside the RTX 3080 Ti figures the repository recorded), DIR/field-report.json (everything), DIR/logs/
 (the raw output of every step) and DIR.zip.
@@ -468,6 +468,35 @@ def step_render(ctx, step):
     step.tail = ""
 
 
+def step_render_mode(ctx, step):
+    """The viewport's Render mode: first look, edit latency and settle time (tools/benchmark_progression.py --field). The
+    numbers are what this machine measured; no target is claimed here for any machine but the RTX 3080 Ti workstation."""
+    json_path = ctx.work / "render-mode.json"
+    args = ["--field", json_path] + (["--quick"] if ctx.quick else [])
+    result = run_command([PY, "tools/benchmark_progression.py", *args], ctx.log("bench-render-mode"), 1800 if ctx.quick else 4 * 3600)
+    finish_command(step, ctx, result, "bench-render-mode")
+    if json_path.exists():
+        data = read_json(json_path)
+        step.data = data
+        for name, scene in data.get("scenes", {}).items():
+            look = scene.get("first_look_seconds") or {}
+            if look.get("warm_median") is not None:
+                step.number(f"rendermode.{name}.first_look", f"Render mode first look, {name} scene", round(look["warm_median"] * 1000), "ms")
+            abandon = scene.get("abandon_ms") or {}
+            if abandon.get("p95") is not None:
+                step.number(f"rendermode.{name}.abandon_p95", f"Render mode: edit to the old pass stopping, {name} (95th percentile)",
+                            abandon["p95"], "ms")
+            edit = scene.get("edit_to_first_look_ms") or {}
+            if edit.get("p95") is not None:
+                step.number(f"rendermode.{name}.edit_first_look_p95", f"Render mode: edit to the new first look, {name} (95th percentile)",
+                            edit["p95"], "ms")
+            settled = (scene.get("settled_seconds") or {}).get("warm_median")
+            if settled is not None:
+                step.number(f"rendermode.{name}.settled", f"Render mode settle time, {name} scene", settled, "s")
+    elif step.status == "ok":
+        step.status, step.reason = "failed", "the benchmark wrote no JSON"
+
+
 def step_hot_pour(ctx, step):
     json_path = ctx.work / "hot-pour.json"
     if ctx.quick:
@@ -612,6 +641,7 @@ STEPS = [
     ("bench_lens", "Lens warp (Undistort / Redistort)", "step_lens"),
     ("bench_pathtrace", "GPU path tracer", "step_pathtrace"),
     ("bench_render", "Portable final render", "step_render"),
+    ("bench_render_mode", "Render mode: first look and edit latency", "step_render_mode"),
     ("bench_instances", "Instances", "step_instances"),
     ("bench_hot_pour", "Hot pour (bake and preview playback)", "step_hot_pour"),
     ("sdxl", "SDXL ControlNet on the demo shot", "step_sdxl"),
