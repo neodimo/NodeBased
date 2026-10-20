@@ -216,7 +216,8 @@ def edit_latency(job, scene, trials, label=None):
                 raise RuntimeError("no first look after the edit")
             first = job.frames[0].since_submit * 1000.0
             rows.append({"delay_s": EDIT_DELAYS[i % len(EDIT_DELAYS)], "idle_first_look_ms": round(idle, 2),
-                         "abandon_ms": None if abandon is None else round(abandon, 2), "edit_to_first_look_ms": round(first, 2)})
+                         "abandon_ms": None if abandon is None else round(abandon, 2), "edit_to_first_look_ms": round(first, 2),
+                         "first_look_phases_ms": {k: round(1000 * v, 1) for k, v in job.frames[0].state.phases}})
         kinds[kind] = {"trials": rows,
                        "abandon_ms": summary([r["abandon_ms"] for r in rows if r["abandon_ms"] is not None]),
                        "edit_to_first_look_ms": summary([r["edit_to_first_look_ms"] for r in rows]),
@@ -319,6 +320,7 @@ def main():
     parser.add_argument("--no-interaction", action="store_true")
     parser.add_argument("--edits", type=int, default=10, help="edit-latency trials per kind (camera, material)")
     parser.add_argument("--no-edits", action="store_true")
+    parser.add_argument("--no-settle", action="store_true", help="end each progression at its first full-size pass (no settle times)")
     parser.add_argument("--field", default=None, metavar="PATH", help="write the small field-kit JSON here and nothing else")
     parser.add_argument("--quick", action="store_true", help="with --field: the furnished room only, fewer trials")
     parser.add_argument("--json", default=None)
@@ -326,8 +328,9 @@ def main():
     if args.adapter:
         gpu3d._states.setdefault("default", gpu3d._state(args.adapter))
     print(gpu3d.adapter_report())
+    global SETTLE
+    SETTLE = not args.no_settle
     if args.field:
-        global SETTLE
         SETTLE = not args.quick
         args.warm, args.no_interaction, args.no_edits = 1, True, False
         args.edits = 3 if args.quick else 5
