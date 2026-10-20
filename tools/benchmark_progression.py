@@ -19,8 +19,10 @@ Per scene it reports, on the adapter in use (the scene, the camera, the seed and
 * ``responsive_during_refinement``: the worst paint time while a long full-size pass is in flight.
 
 * ``edit_latency`` (lane 4, step A of 3; ``--edits N`` trials per kind, default 10): a camera nudge and a material knob change
-  (the floor's roughness) land while a full-size pass (16 samples or more done, the next running) is in flight, at spread-out
-  moments of the pass. Per trial: ``abandon_ms``, the edit to the moment the worker has stopped the obsolete pass, and
+  (the floor's roughness) land while a full-size pass (16 samples or more done, the next running) is in flight, spread from 5% to
+  95% of the pass's length; three more per kind land 0, 25 and 50 ms after a picture was published (``after_publish``, reported
+  apart and not gated: on the mixed scene the card idles for over half a second while the next scene is built on the processor,
+  drops its clocks, and the first dispatches then run 3 to 5 times slower). Per trial: ``abandon_ms``, the edit to the moment the worker has stopped the obsolete pass, and
   ``edit_to_first_look_ms``, the edit to the new view's first denoised picture converted for display (the debounce included),
   beside ``idle_first_look_ms``, the same first look asked of an idle worker. Gates, applied on the RTX 3080 Ti only (no target
   on other adapters, whose rows are recorded): 95th-percentile abandon under 50 ms, and the 95th-percentile edit-to-first-look
@@ -157,7 +159,8 @@ def interaction(scene, camera):
                                              "worst_ms": round(max(during), 2) if during else None}}
 
 
-EDIT_DELAYS = (0.0, 0.021, 0.047, 0.083, 0.131, 0.19, 0.27, 0.36, 0.05, 0.11)     # seconds into the pass the edit lands
+EDIT_SPREAD = (0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95)   # where in the pass in flight the edits land (share of its length)
+AFTER_PUBLISH = (0.0, 0.025, 0.05)       # seconds after a picture is published: the edit meets the start of the next pass
 ABANDON_GATE_MS = 50.0
 EDIT_EXTRA_MS = 60.0
 
@@ -188,47 +191,61 @@ def edit_request(kind, scene, i, tag):
                    BACKGROUND, AMBIENT)
 
 
+def edit_trial(job, scene, kind, n, delay_of):
+    """One trial: the idle first look of an edit, then the same kind of edit landing in a pass in flight, `delay_of(pass_seconds)`
+    seconds after the picture before it was published. `pass_seconds` is twice the last interval between pictures (the passes
+    double)."""
+    job.cancel()
+    job.wait(timeout=60)
+    job.submit(edit_request(kind, scene, 2 * n, "idle"))
+    if not job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT):
+        raise RuntimeError("no first look")
+    idle = job.frames[0].since_submit * 1000.0
+    # a long full-size pass in flight, then the edit
+    if not job.wait(lambda state, phase: state is not None and state.samples >= 16 and phase == "tracing", SETTLE_TIMEOUT):
+        raise RuntimeError("the view never reached a full-size pass")
+    frames = job.frames
+    interval = frames[-1].since_submit - frames[-2].since_submit if len(frames) >= 2 else 0.5
+    delay = delay_of(2.0 * interval)
+    time.sleep(delay)
+    before = len(job.cancel_latencies)
+    job.submit(edit_request(kind, scene, 2 * n + 1, "live"))
+    deadline = time.perf_counter() + 30.0
+    while len(job.cancel_latencies) == before and time.perf_counter() < deadline:
+        time.sleep(0.0005)
+    abandon = job.cancel_latencies[before] * 1000.0 if len(job.cancel_latencies) > before else None
+    if not job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT):
+        raise RuntimeError("no first look after the edit")
+    first = job.frames[0].since_submit * 1000.0
+    return {"delay_s": round(delay, 3), "idle_first_look_ms": round(idle, 2),
+            "abandon_ms": None if abandon is None else round(abandon, 2), "edit_to_first_look_ms": round(first, 2),
+            "first_look_phases_ms": {k: round(1000 * v, 1) for k, v in job.frames[0].state.phases}}
+
+
 def edit_latency(job, scene, trials, label=None):
-    """The edit-latency series (see the module docstring). `job` is warm. Returns the per-kind records and the pooled summary."""
-    kinds = {}
+    """The edit-latency series (see the module docstring). `job` is warm. Returns the per-kind records, the pooled summary the
+    gates read (edits spread over the pass in flight) and, apart, the edits that land just after a picture is published."""
+    kinds, after = {}, {}
     for kind in ("camera", "material"):
-        rows = []
-        for i in range(trials):
-            # the idle first look of this very edit: nothing running when it arrives
-            job.cancel()
-            job.wait(timeout=60)
-            job.submit(edit_request(kind, scene, 2 * i, "idle"))
-            if not job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT):
-                raise RuntimeError("no first look")
-            idle = job.frames[0].since_submit * 1000.0
-            # a long full-size pass in flight, then the edit
-            if not job.wait(lambda state, phase: state is not None and state.samples >= 16 and phase == "tracing",
-                            SETTLE_TIMEOUT):
-                raise RuntimeError("the view never reached a full-size pass")
-            time.sleep(EDIT_DELAYS[i % len(EDIT_DELAYS)])
-            before = len(job.cancel_latencies)
-            job.submit(edit_request(kind, scene, 2 * i + 1, "live"))
-            deadline = time.perf_counter() + 30.0
-            while len(job.cancel_latencies) == before and time.perf_counter() < deadline:
-                time.sleep(0.0005)
-            abandon = job.cancel_latencies[before] * 1000.0 if len(job.cancel_latencies) > before else None
-            if not job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT):
-                raise RuntimeError("no first look after the edit")
-            first = job.frames[0].since_submit * 1000.0
-            rows.append({"delay_s": EDIT_DELAYS[i % len(EDIT_DELAYS)], "idle_first_look_ms": round(idle, 2),
-                         "abandon_ms": None if abandon is None else round(abandon, 2), "edit_to_first_look_ms": round(first, 2),
-                         "first_look_phases_ms": {k: round(1000 * v, 1) for k, v in job.frames[0].state.phases}})
-        kinds[kind] = {"trials": rows,
+        rows = [edit_trial(job, scene, kind, i, lambda seconds, f=EDIT_SPREAD[i % len(EDIT_SPREAD)]: f * seconds)
+                for i in range(trials)]
+        late = [edit_trial(job, scene, kind, trials + i, lambda seconds, d=d: d) for i, d in enumerate(AFTER_PUBLISH[:max(1, min(3, trials))])]
+        kinds[kind] = {"trials": rows, "after_publish_trials": late,
                        "abandon_ms": summary([r["abandon_ms"] for r in rows if r["abandon_ms"] is not None]),
                        "edit_to_first_look_ms": summary([r["edit_to_first_look_ms"] for r in rows]),
                        "idle_first_look_ms": summary([r["idle_first_look_ms"] for r in rows])}
+        after[kind] = late
     every = [r for k in kinds.values() for r in k["trials"]]
     pooled = {"abandon_ms": summary([r["abandon_ms"] for r in every if r["abandon_ms"] is not None]),
               "edit_to_first_look_ms": summary([r["edit_to_first_look_ms"] for r in every]),
               "idle_first_look_ms": summary([r["idle_first_look_ms"] for r in every]),
               "abandoned_trials": sum(1 for r in every if r["abandon_ms"] is not None), "trials": len(every)}
+    late = [r for rows in after.values() for r in rows]
     job.cancel()
-    return {"by_kind": kinds, **pooled, "gate": edit_gate(pooled)}
+    return {"by_kind": kinds, **pooled, "gate": edit_gate(pooled),
+            "after_publish": {"abandon_ms": summary([r["abandon_ms"] for r in late if r["abandon_ms"] is not None]),
+                              "edit_to_first_look_ms": summary([r["edit_to_first_look_ms"] for r in late]),
+                              "idle_first_look_ms": summary([r["idle_first_look_ms"] for r in late]), "trials": len(late)}}
 
 
 def on_rtx_3080_ti():
