@@ -1456,6 +1456,8 @@ class Viewer(PanZoomView):
     def __init__(self, window):
         self.window = window
         self.format_rect = None
+        self._overlay_view = None      # set while render_overlay paints for the direct picture
+        self.readout_geometry = None   # (scale, render region, (w, h)) of a picture only the direct dock shows
         # Roto editing is a viewer overlay, not a scene item.  Keeping it out of the scene is
         # important: itemsBoundingRect() is the rendered display window and must not grow when
         # a point or a control path is painted (especially for EXR overscan and tiled previews).
@@ -1697,29 +1699,31 @@ class Viewer(PanZoomView):
         self._pixel_readout_active = False
         self.pixel_readout.hide()
 
-    def _update_pixel_readout(self, event):
+    def pixel_readout_info(self, scene_pos):
+        """What the readout shows for a scene point, read from the float picture (`window.frame`),
+        or None when the point is off the picture. Shared by the Viewer and the direct picture."""
         frame = self.window.frame
-        if frame is None or self.last_frame_size is None or not hasattr(frame, "shape"):
-            self._hide_pixel_readout()
-            return
-        scene_pos = self._event_scene_pos(event)
-        scale = max(float(self.last_scale), 1.0)
-        render_region = self.last_render_region
+        # While the direct picture plays, the Viewer holds its last picture and the frame on screen is the card's:
+        # its size and place come from the hand-over (`readout_geometry`), not from the held picture.
+        last_scale, render_region, frame_size = self.readout_geometry or (
+            self.last_scale, self.last_render_region, self.last_frame_size)
+        if frame is None or frame_size is None or not hasattr(frame, "shape"):
+            return None
+        scale = max(float(last_scale), 1.0)
         if render_region is None:
             image_x, image_y = 0.0, 0.0
-            full_width = self.last_frame_size[0] * scale
-            full_height = self.last_frame_size[1] * scale
+            full_width = frame_size[0] * scale
+            full_height = frame_size[1] * scale
         else:
             image_x, image_y = render_region.x * scale, render_region.y * scale
             full_width = render_region.full_width * scale
             full_height = render_region.full_height * scale
-        image_width = self.last_frame_size[0] * scale
-        image_height = self.last_frame_size[1] * scale
+        image_width = frame_size[0] * scale
+        image_height = frame_size[1] * scale
         local_x = scene_pos.x() - image_x
         local_y = scene_pos.y() - image_y
         if not (0 <= local_x < image_width and 0 <= local_y < image_height):
-            self._hide_pixel_readout()
-            return
+            return None
         full_x = math.floor(scene_pos.x())
         full_y = math.floor(scene_pos.y())
         array_x = math.floor(local_x / scale)
@@ -1741,16 +1745,24 @@ class Viewer(PanZoomView):
                 raise IndexError
             red, green, blue, alpha = (float(values[index]) for index in range(4))
         except (IndexError, TypeError, ValueError):
+            return None
+        nuke_y = math.floor(full_height) - 1 - full_y
+        shown_buffer = buffer if self.window.frame_b is not None and self.compare_mode() != "A only" else ""
+        return {"text": f"{full_x}, {nuke_y}  {red:.5f} {green:.5f} {blue:.5f} {alpha:.5f}",
+                "position": f"x {full_x}  y {nuke_y}", "values": f"{red:.3f} {green:.3f} {blue:.3f}",
+                "rgba": (red, green, blue, alpha), "buffer": shown_buffer, "raw_buffer": buffer}
+
+    def _update_pixel_readout(self, event):
+        info = self.pixel_readout_info(self._event_scene_pos(event))
+        if info is None:
             self._hide_pixel_readout()
             return
-        nuke_y = math.floor(full_height) - 1 - full_y
+        red, green, blue, _ = info["rgba"]
         color = QColor.fromRgbF(min(max(red, 0.0), 1.0), min(max(green, 0.0), 1.0),
                                 min(max(blue, 0.0), 1.0), 1.0)
-        self.pixel_readout.set_value(
-            f"{full_x}, {nuke_y}  {red:.5f} {green:.5f} {blue:.5f} {alpha:.5f}", color,
-            buffer if self.window.frame_b is not None and self.compare_mode() != "A only" else "",
-            position=f"x {full_x}  y {nuke_y}", values=f"{red:.3f} {green:.3f} {blue:.3f}")
-        self.readout_buffer = buffer
+        self.pixel_readout.set_value(info["text"], color, info["buffer"],
+                                     position=info["position"], values=info["values"])
+        self.readout_buffer = info["raw_buffer"]
         self._pixel_readout_active = True
         if self._place_pixel_readout():
             self.pixel_readout.show()
@@ -1843,7 +1855,7 @@ class Viewer(PanZoomView):
                          rect.top() + self.wipe["y"] * rect.height())
         dx, dy = compare_model.wipe_direction(self.wipe["angle"])
         nx, ny = compare_model.wipe_normal(self.wipe["angle"])
-        reach = 70.0 / max(abs(self.transform().m11()), 0.05)
+        reach = 70.0 / max(abs(self.view_zoom()), 0.05)
         return centre, (dx, dy), (nx, ny), QPointF(centre.x() + dx * reach, centre.y() + dy * reach)
 
     def _wipe_side_at(self, scene_pos):
@@ -1855,7 +1867,7 @@ class Viewer(PanZoomView):
 
     def _wipe_hit(self, scene_pos):
         centre, (dx, dy), _, handle = self._wipe_scene_geometry()
-        zoom = max(abs(self.transform().m11()), 0.05)
+        zoom = max(abs(self.view_zoom()), 0.05)
         if math.hypot(scene_pos.x() - handle.x(), scene_pos.y() - handle.y()) <= 12.0 / zoom:
             return "rotate"
         if math.hypot(scene_pos.x() - centre.x(), scene_pos.y() - centre.y()) <= 12.0 / zoom:
@@ -1895,7 +1907,7 @@ class Viewer(PanZoomView):
 
     def _draw_wipe_handles(self, painter):
         centre, (dx, dy), _, handle = self._wipe_scene_geometry()
-        zoom = max(abs(self.transform().m11()), 0.05)
+        zoom = max(abs(self.view_zoom()), 0.05)
         reach = 1e6
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -2073,7 +2085,7 @@ class Viewer(PanZoomView):
 
     def _warp_hit(self, context, scene_pos):
         key, node, payload, tier = context
-        radius = 12.0 / max(abs(self.transform().m11()), 0.05)
+        radius = 12.0 / max(abs(self.view_zoom()), 0.05)
         best, best_distance = None, radius
         if node["type"] == "SplineWarp":
             resolved = shape_model.resolve_warp_data("SplineWarp", payload,
@@ -2146,7 +2158,7 @@ class Viewer(PanZoomView):
                 point[0], point[1] = x, y
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        zoom = max(abs(self.transform().m11()), 0.05)
+        zoom = max(abs(self.view_zoom()), 0.05)
         radius = 5.0 / zoom
         def draw_bezier(points):
             if not points:
@@ -2546,7 +2558,7 @@ class Viewer(PanZoomView):
         frame = int(self.window.dispatcher.document["time"]["current"])
         tracks = shape_model.resolve_tracks(payload, frame)
         point = self._tracker_data_point(scene_pos)
-        zoom = max(abs(self.transform().m11()), 0.05)
+        zoom = max(abs(self.view_zoom()), 0.05)
         hit_radius = 10.0 / zoom
         pattern = float(node["params"].get("pattern_radius", 8))
         search = float(node["params"].get("search_radius", 24))
@@ -2609,7 +2621,7 @@ class Viewer(PanZoomView):
         tracks = shape_model.resolve_tracks(payload, frame)
         first = int(self.window.dispatcher.document["time"]["first"])
         last = int(self.window.dispatcher.document["time"]["last"])
-        zoom = max(abs(self.transform().m11()), 0.05)
+        zoom = max(abs(self.view_zoom()), 0.05)
         marker = 4.0 / zoom
         selected_index = self.window._tracker_selected_index
         painter.save()
@@ -2664,7 +2676,7 @@ class Viewer(PanZoomView):
         except ValueError:
             return
         frame = int(document["time"]["current"])
-        zoom = max(abs(self.transform().m11()), 0.05)
+        zoom = max(abs(self.view_zoom()), 0.05)
         arm = 7.0 / zoom
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -2705,7 +2717,7 @@ class Viewer(PanZoomView):
             self._reconcile_overlay_cache = cache
         points = cache[1].get("points", ())
         frame = int(doc["time"]["current"])
-        zoom = max(abs(self.transform().m11()), 0.05)
+        zoom = max(abs(self.view_zoom()), 0.05)
         path = QPainterPath()
         open_path = False
         for point in points:
@@ -2763,7 +2775,7 @@ class Viewer(PanZoomView):
 
     def _roto_hit_point(self, scene_pos, resolved, tier):
         # A constant physical hit target remains usable at any viewer zoom.
-        radius = 12.0 / max(abs(self.transform().m11()), 0.05)
+        radius = 12.0 / max(abs(self.view_zoom()), 0.05)
         best = None
         best_distance = radius
         for shape_index, shape in enumerate(resolved):
@@ -3423,7 +3435,7 @@ class Viewer(PanZoomView):
                     distance = (scene_pos - start).manhattanLength()
                     if (len(self.roto_draw_points) >= shape_model.MINIMUM_SHAPE_POINTS and
                             math.hypot(scene_pos.x()-self.roto_draw_points[0]["scene"].x(),
-                                       scene_pos.y()-self.roto_draw_points[0]["scene"].y()) < 12/max(abs(self.transform().m11()), .05)):
+                                       scene_pos.y()-self.roto_draw_points[0]["scene"].y()) < 12/max(abs(self.view_zoom()), .05)):
                         self.finish_roto_draw(closed=True)
                     else:
                         dx, dy = (end[0]-point[0], end[1]-point[1]) if distance > 3 else (0.0, 0.0)
@@ -3560,7 +3572,7 @@ class Viewer(PanZoomView):
         """Which part of the ROI box is under the pointer: a corner or edge name, "move" for the
         inside, None for outside."""
         box = self.roi_scene_rect()
-        tolerance = 8.0 / max(abs(self.transform().m11()), 0.05)
+        tolerance = 8.0 / max(abs(self.view_zoom()), 0.05)
         x, y = scene_pos.x(), scene_pos.y()
         if not (box.left() - tolerance <= x <= box.right() + tolerance
                 and box.top() - tolerance <= y <= box.bottom() + tolerance):
@@ -3663,7 +3675,7 @@ class Viewer(PanZoomView):
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(box)
-            size = 4.0 / max(abs(self.transform().m11()), 0.05)
+            size = 4.0 / max(abs(self.view_zoom()), 0.05)
             painter.setBrush(QColor("#f4c542"))
             for x in (box.left(), box.center().x(), box.right()):
                 for y in (box.top(), box.center().y(), box.bottom()):
@@ -3676,7 +3688,7 @@ class Viewer(PanZoomView):
             painter.save()
             painter.resetTransform()
             painter.setPen(QColor("#f4c542"))
-            painter.drawText(self.viewport().width() - 100, 18, "  ".join(labels))
+            painter.drawText(self.overlay_width() - 100, 18, "  ".join(labels))
             painter.restore()
 
     def draw_format_overlay(self, scene_rect):
@@ -3687,8 +3699,83 @@ class Viewer(PanZoomView):
         self.format_rect = scene_rect
         self.viewport().update()
 
+    # ---- the overlay painted by two surfaces ----------------------------------------------
+    # `paint_overlays` is the one place every overlay is drawn. The Viewer's drawForeground calls it
+    # with the widget's own transform; the direct picture calls it through `render_overlay` with the
+    # transform of its own view, and these three helpers answer for that view.
+    def view_zoom(self):
+        """Logical pixels per scene unit of the surface being painted."""
+        override = self._overlay_view
+        return self.transform().m11() if override is None else override["zoom"]
+
+    def overlay_map_from_scene(self, point):
+        override = self._overlay_view
+        if override is None:
+            return self.mapFromScene(point)
+        return override["transform"].map(point).toPoint()
+
+    def overlay_width(self):
+        override = self._overlay_view
+        return self.viewport().width() if override is None else override["width"]
+
+    def render_overlay(self, view, physical_size, ratio, readout=None):
+        """The overlays as a premultiplied RGBA image of `physical_size` for the direct picture.
+
+        `view` is the direct widget's (centre_x, centre_y, zoom) with zoom in physical pixels per scene
+        unit. The image carries `ratio` as its device pixel ratio, so a cosmetic pen is as many physical
+        pixels wide as it is on the Viewer at that scale. Returns None when there is no picture yet."""
+        if self.format_rect is None:
+            return None
+        width, height = physical_size
+        cx, cy, zoom = view
+        logical = zoom / ratio
+        image = QImage(int(width), int(height), QImage.Format.Format_RGBA8888_Premultiplied)
+        image.setDevicePixelRatio(ratio)
+        image.fill(0)
+        transform = QTransform(logical, 0, 0, logical,
+                               width / ratio / 2.0 - cx * logical, height / ratio / 2.0 - cy * logical)
+        painter = QPainter(image)
+        painter.setRenderHints(self.renderHints())      # the hints the Viewer paints its own foreground with
+        painter.setTransform(transform)
+        scene_rect = transform.inverted()[0].mapRect(QRectF(0, 0, width / ratio, height / ratio))
+        self._overlay_view = {"zoom": logical, "transform": transform, "width": width / ratio}
+        try:
+            self.paint_overlays(painter, scene_rect)
+            if readout is not None:
+                self._paint_readout(painter, QRectF(0, 0, width / ratio, height / ratio), readout)
+        finally:
+            self._overlay_view = None
+            painter.end()
+        return image
+
+    @staticmethod
+    def _paint_readout(painter, area, info):
+        """The pixel readout, bottom left of the surface: position, then the float values."""
+        painter.resetTransform()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        font = painter.font()
+        font.setPointSizeF(max(font.pointSizeF(), 9.0))
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        text = info["text"] + (f"  {info['buffer']}" if info["buffer"] else "")
+        box = QRectF(8, area.height() - metrics.height() - 14, metrics.horizontalAdvance(text) + 36, metrics.height() + 6)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 170))
+        painter.drawRect(box)
+        red, green, blue, _ = info["rgba"]
+        painter.setBrush(QColor.fromRgbF(min(max(red, 0.0), 1.0), min(max(green, 0.0), 1.0), min(max(blue, 0.0), 1.0), 1.0))
+        painter.setPen(QColor("#e8e8f0"))
+        painter.drawRect(QRectF(box.left() + 4, box.top() + 4, 14, box.height() - 8))
+        painter.drawText(QPointF(box.left() + 24, box.bottom() - 4 - metrics.descent()), text)
+
     def drawForeground(self, painter, rect):
         super().drawForeground(painter, rect)
+        self.paint_overlays(painter, rect)
+        hook = getattr(self.window, "overlay_repainted", None)
+        if hook is not None:
+            hook()
+
+    def paint_overlays(self, painter, rect):
         if self.paint_drag is not None and self.paint_drag["points"]:
             painter.save()
             pen = QPen(QColor("#ff5c48"), max(1.0, self.paint_size))
@@ -3766,7 +3853,7 @@ class Viewer(PanZoomView):
                 painter.drawPath(path)
                 for point_index, point in enumerate(points):
                     center = self._roto_scene_point(point, tier)
-                    radius = 5.0 / max(abs(self.transform().m11()), 0.05)
+                    radius = 5.0 / max(abs(self.view_zoom()), 0.05)
                     painter.setBrush(QColor("#f4ce63") if (shape_index, point_index) in self.roto_selected_points else QColor("#202127"))
                     painter.drawEllipse(center, radius, radius)
                     if shape_index == self.roto_selected_shape_index:
@@ -3793,7 +3880,7 @@ class Viewer(PanZoomView):
             geometry = self._roto_box_geometry(resolved, tier)
             if geometry is not None:
                 _, bounds, _, box_pivot = geometry
-                pad = 6.0 / max(abs(self.transform().m11()), .05)
+                pad = 6.0 / max(abs(self.view_zoom()), .05)
                 box_pen = QPen(QColor("#f4ce63"), 1); box_pen.setCosmetic(True)
                 box_pen.setStyle(Qt.PenStyle.DashLine); painter.setPen(box_pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(bounds)
@@ -3802,7 +3889,7 @@ class Viewer(PanZoomView):
                               QPointF(bounds.center().x(), bounds.top()), QPointF(bounds.center().x(), bounds.bottom()),
                               QPointF(bounds.left(), bounds.center().y()), QPointF(bounds.right(), bounds.center().y())):
                     painter.drawEllipse(point, pad*.55, pad*.55)
-                rotate = QPointF(box_pivot.x(), bounds.top()-28.0/max(abs(self.transform().m11()),.05))
+                rotate = QPointF(box_pivot.x(), bounds.top()-28.0/max(abs(self.view_zoom()),.05))
                 painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawLine(QPointF(box_pivot.x(), bounds.top()), rotate)
                 painter.setBrush(QColor("#202127")); painter.drawEllipse(rotate, pad*.7, pad*.7)
                 painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawEllipse(box_pivot, pad*.7, pad*.7)
@@ -3831,11 +3918,11 @@ class Viewer(PanZoomView):
                     painter.drawPath(path)
                     painter.setBrush(QColor("#f4ce63"))
                     for point in draw_points:
-                        radius = 4.0 / max(abs(self.transform().m11()), 0.05)
+                        radius = 4.0 / max(abs(self.view_zoom()), 0.05)
                         painter.drawEllipse(point, radius, radius)
             if self.roto_drag is not None:
                 point = self.roto_drag["scene"]
-                radius = 6.0 / max(abs(self.transform().m11()), 0.05)
+                radius = 6.0 / max(abs(self.view_zoom()), 0.05)
                 painter.setBrush(QColor("#f4ce63"))
                 painter.drawEllipse(point, radius, radius)
             painter.restore()
@@ -3868,7 +3955,7 @@ class Viewer(PanZoomView):
                 painter.setPen(ring_pen)
                 pivot_scene = self._transform_scene_point(*pivot)
                 painter.drawEllipse(pivot_scene, radius, radius)
-                handle_radius = 5.0 / max(abs(self.transform().m11()), 0.05)
+                handle_radius = 5.0 / max(abs(self.view_zoom()), 0.05)
                 painter.setPen(pen)
                 painter.setBrush(QColor("#202127"))
                 for x, y in corners + handles2d.edge_midpoints(corners):
@@ -3886,7 +3973,7 @@ class Viewer(PanZoomView):
                              f"scale {values['scale']:.4f}")
                     painter.save()
                     painter.resetTransform()
-                    point = self.mapFromScene(self.transform_drag["scene"])
+                    point = self.overlay_map_from_scene(self.transform_drag["scene"])
                     painter.setPen(QColor("#c9e26a"))
                     painter.drawText(point.x() + 12, point.y() - 12, label)
                     painter.restore()
@@ -3894,7 +3981,7 @@ class Viewer(PanZoomView):
         if analysis_context is not None:
             key, node = analysis_context
             values = self._analysis_values() or node["params"]
-            zoom = max(abs(self.transform().m11()), 0.05)
+            zoom = max(abs(self.view_zoom()), 0.05)
             radius = 6.0 / zoom
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -3924,7 +4011,7 @@ class Viewer(PanZoomView):
             values = self._flare_values(self.flare_drag)
             if values is not None:
                 centre = self._transform_scene_point(values["position_x"], values["position_y"])
-                radius = 8.0 / max(abs(self.transform().m11()), 0.05)
+                radius = 8.0 / max(abs(self.view_zoom()), 0.05)
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                 pen = QPen(QColor("#ffd26b"), 2); pen.setCosmetic(True)
@@ -3937,7 +4024,7 @@ class Viewer(PanZoomView):
                 painter.restore()
                 if self.flare_drag is not None:
                     painter.save(); painter.resetTransform()
-                    point = self.mapFromScene(self.flare_drag["scene"])
+                    point = self.overlay_map_from_scene(self.flare_drag["scene"])
                     painter.setPen(QColor("#ffd26b"))
                     painter.drawText(point.x() + 12, point.y() - 12,
                                      f"position {values['position_x']:.1f}, {values['position_y']:.1f}")
@@ -4042,7 +4129,7 @@ class Viewer(PanZoomView):
             geometry = self._roto_box_geometry(resolved, context[3])
             if geometry is not None:
                 selected, bounds, _, box_pivot = geometry
-                action, handle = self._roto_box_action(scene_pos, bounds, abs(self.transform().m11()), box_pivot)
+                action, handle = self._roto_box_action(scene_pos, bounds, abs(self.view_zoom()), box_pivot)
                 if action is not None:
                     shape_indices = {si for si, _ in selected}
                     alt_shape = None
@@ -4064,7 +4151,7 @@ class Viewer(PanZoomView):
                 if selected_scene:
                     bounds = QRectF(selected_scene[0], selected_scene[0])
                     for point in selected_scene[1:]: bounds = bounds.united(QRectF(point, point))
-                    pad = 8.0 / max(abs(self.transform().m11()), .05)
+                    pad = 8.0 / max(abs(self.view_zoom()), .05)
                     bounds.adjust(-pad, -pad, pad, pad)
                     if bounds.contains(scene_pos) and not any(
                             math.hypot(scene_pos.x()-p.x(), scene_pos.y()-p.y()) <= pad for p in selected_scene):
@@ -4075,7 +4162,7 @@ class Viewer(PanZoomView):
                         self.setCursor(Qt.CursorShape.ClosedHandCursor); event.accept(); return
             if 0 <= self.roto_selected_shape_index < len(resolved):
                 shape_index = self.roto_selected_shape_index
-                radius = 12.0 / max(abs(self.transform().m11()), .05)
+                radius = 12.0 / max(abs(self.view_zoom()), .05)
                 selected_shape = resolved[shape_index]
                 if (not selected_shape.get("locked") and selected_shape.get("feather_model") == "edge"
                         and (selected_shape["feather"] != 0 or any(p.get("feather_x", 0) or p.get("feather_y", 0)
@@ -4150,7 +4237,7 @@ class Viewer(PanZoomView):
             if context is not None:
                 key, node = context; p = self._analysis_params(key)
                 point = self._transform_data_point(scene_pos)
-                hit = 12.0 / max(abs(self.transform().m11()), 0.05)
+                hit = 12.0 / max(abs(self.view_zoom()), 0.05)
                 part = None
                 if node["type"] in analysisregion.LINE_KINDS:
                     endpoints = [(p["sample_x0"], p["sample_y0"]), (p["sample_x1"], p["sample_y1"])]
@@ -4186,7 +4273,7 @@ class Viewer(PanZoomView):
                                                 p["scale"], p["center_x"], p["center_y"])
                 pivot = handles2d.pivot_point(p["translate_x"], p["translate_y"], p["center_x"], p["center_y"])
                 point = self._transform_data_point(scene_pos)
-                hit_radius = 12.0 / max(abs(self.transform().m11()), 0.05)
+                hit_radius = 12.0 / max(abs(self.view_zoom()), 0.05)
                 kind = None
                 if any(math.hypot(point[0] - x, point[1] - y) <= hit_radius for x, y in corners):
                     kind = "scale"
@@ -4196,7 +4283,7 @@ class Viewer(PanZoomView):
                 else:
                     ring_radius = 1.15 * math.hypot(corners[0][0] - pivot[0], corners[0][1] - pivot[1])
                     distance = math.hypot(point[0] - pivot[0], point[1] - pivot[1])
-                    if abs(distance - ring_radius) < 10.0 / max(abs(self.transform().m11()), 0.05):
+                    if abs(distance - ring_radius) < 10.0 / max(abs(self.view_zoom()), 0.05):
                         kind = "rotate"
                     elif (handles2d.point_in_quad(point[0], point[1], corners)
                           or distance <= hit_radius):
@@ -4217,7 +4304,7 @@ class Viewer(PanZoomView):
             if values is not None:
                 point = self._transform_data_point(scene_pos)
                 position = (values["position_x"], values["position_y"])
-                hit_radius = 14.0 / max(abs(self.transform().m11()), 0.05)
+                hit_radius = 14.0 / max(abs(self.view_zoom()), 0.05)
                 if math.hypot(point[0] - position[0], point[1] - position[1]) <= hit_radius:
                     dx, dy = self._flare_link_delta(context[1])
                     self.flare_drag = {"key": context[0], "start": scene_pos, "scene": scene_pos,
@@ -9400,8 +9487,8 @@ class Window(QMainWindow):
         self.direct_widget = None
         self.direct_action = QAction("Direct picture (experimental GPU)", self, checkable=True)
         self.direct_action.setObjectName("direct-picture")
-        self.direct_action.setToolTip("A floating picture with GPU pan and zoom. Experimental: no Roto, "
-                                      "Tracker, A/B or region overlays; the Viewer stays the default.")
+        self.direct_action.setToolTip("A floating picture with GPU pan and zoom. Experimental: overlays and "
+                                      "the pixel readout are shown, but clicks only pan and zoom; edit in the Viewer.")
         self.direct_action.toggled.connect(self.set_direct_viewer)
         window_menu.addAction(self.direct_action)
         if directviewer.enabled():
@@ -14083,6 +14170,7 @@ class Window(QMainWindow):
         self.viewer.last_scale = scale
         self.viewer.last_render_region = render_region
         self.viewer.last_frame_size = (image.width(), image.height())
+        self.viewer.readout_geometry = None
         self.viewer.last_display_image = image
         if self.output_preview_dock.isVisible():
             self.refresh_output_preview()
@@ -14139,7 +14227,7 @@ class Window(QMainWindow):
     # The opt-in retained-texture picture (nodebased/directviewer.py). The default Viewer above keeps
     # painting and stays the fallback, export source and pixel-sampling source; this dock only shows the
     # same picture with GPU pan and zoom, and has none of the Viewer's overlays.
-    DIRECT_TITLE = "DIRECT PICTURE (experimental GPU, no overlays)"
+    DIRECT_TITLE = "DIRECT PICTURE (experimental GPU, view only)"
 
     def set_direct_viewer(self, on):
         dock = getattr(self, "direct_dock", None)
@@ -14162,6 +14250,8 @@ class Window(QMainWindow):
                 self._direct_failed(f"Direct picture is unavailable: {exc}")
                 return
             widget.failed.connect(self._direct_failed)
+            widget.overlay_provider = self._direct_overlay
+            widget.hover = self._direct_hover
             dock.visibilityChanged.connect(lambda visible: self.direct_action.setChecked(visible))
             widget.setMinimumSize(160, 90)
             dock.setWidget(widget)
@@ -14175,6 +14265,29 @@ class Window(QMainWindow):
         if image is not None:
             self._offer_direct(image, self.viewer.last_scale, self.viewer.last_render_region,
                                self.viewer.sceneRect(), None)
+
+    def overlay_repainted(self):
+        """The Viewer just painted its overlays: whatever changed them changes the direct picture's too."""
+        widget = getattr(self, "direct_widget", None)
+        if widget is not None and widget.isVisible() and not getattr(self, "_direct_painting", False):
+            widget.overlay_dirty()
+
+    def _direct_overlay(self, view, physical_size, ratio):
+        self._direct_painting = True
+        try:
+            return self.viewer.render_overlay(view, physical_size, ratio, readout=self._direct_readout)
+        finally:
+            self._direct_painting = False
+
+    _direct_readout = None
+
+    def _direct_hover(self, scene_point):
+        """The pointer moved over the direct picture: the same readout the Viewer shows, from the float frame."""
+        info = None if scene_point is None else self.viewer.pixel_readout_info(QPointF(*scene_point))
+        previous = self._direct_readout
+        self._direct_readout = info
+        if (info or {}).get("text") != (previous or {}).get("text") and self.direct_widget is not None:
+            self.direct_widget.overlay_dirty()
 
     def _direct_failed(self, message):
         self._direct_linear_on = False
@@ -14241,6 +14354,7 @@ class Window(QMainWindow):
                 return False   # this view only (or too large): the next frame tries again, and falls back again
             self._direct_linear_on = False
             return False
+        self.viewer.readout_geometry = (scale, render_region, (width, height))
         self.direct_lazy = picture
         self.direct_linear_shown = getattr(self, "direct_linear_shown", 0) + 1
         if self.output_preview_dock.isVisible():

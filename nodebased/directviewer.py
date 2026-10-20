@@ -174,6 +174,28 @@ def zoom_about(view, cursor, size, factor):
     return (sx - (cursor[0] - size[0] / 2.0) / new_zoom, sy - (cursor[1] - size[1] / 2.0) / new_zoom, new_zoom)
 
 
+PAINT_SHADER = """
+// The painted overlay (wipe, region of interest, masks, Roto/Tracker/Transform handles, the pixel readout):
+// a premultiplied RGBA8 picture the size of the surface, drawn one texel per surface pixel over the picture.
+@group(0) @binding(0) var paint: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> srgb: vec4f;
+struct Out { @builtin(position) p: vec4f };
+@vertex fn vs(@builtin(vertex_index) i: u32) -> Out {
+    var p = array<vec2f, 3>(vec2f(-1., -1.), vec2f(3., -1.), vec2f(-1., 3.));
+    var o: Out; o.p = vec4f(p[i], 0., 1.); return o;
+}
+fn encode(c: vec3f) -> vec3f {
+    if (srgb.x < 0.5) { return c; }
+    let lo = c / 12.92; let hi = pow((c + vec3f(0.055)) / 1.055, vec3f(2.4));
+    return select(hi, lo, c <= vec3f(0.04045));
+}
+@fragment fn fs(o: Out) -> @location(0) vec4f {
+    let t = textureLoad(paint, vec2i(o.p.xy), 0);
+    if (t.a <= 0.0) { discard; }
+    return vec4f(encode(t.rgb / t.a) * t.a, t.a);
+}
+"""
+
 SHADER = """
 struct View {
     viewport: vec2f, centre: vec2f,
@@ -568,6 +590,10 @@ class RetainedPresenter:
         self.limits = {}
         self.refusal = ""            # why the last picture was refused (too large for this card), or ""
         self.linear_pipelines = {}   # view -> pipeline running carddisplay's fragment shader
+        self.paint_texture = None    # the painted overlay, one texel per surface pixel (RGBA8, premultiplied)
+        self.paint_size = None
+        self.paint_group = None
+        self.paint_key = None        # what the texture was painted for; the widget compares before painting again
         self.linear_error = ""
         self.uploaded_sequence = 0
         self.last_frame = None       # the ledger payload ("qimage"|"linear", ...) the texture was made from
@@ -602,6 +628,16 @@ class RetainedPresenter:
             layout="auto", vertex={"module": module, "entry_point": "vs"},
             fragment={"module": module, "entry_point": "fs_overlay", "targets": [overlay_target]})
         self.uniform = self.device.create_buffer(size=UNIFORM_BYTES, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        paint_module = self.device.create_shader_module(code=PAINT_SHADER)
+        self.paint_pipeline = self.device.create_render_pipeline(
+            layout="auto", vertex={"module": paint_module, "entry_point": "vs"},
+            fragment={"module": paint_module, "entry_point": "fs", "targets": [{"format": self.format, "blend": {
+                "color": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"},
+                "alpha": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"}}}]})
+        self.paint_flags = self.device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self.device.queue.write_buffer(self.paint_flags, 0, np.array(
+            [1.0 if self.format.endswith("srgb") else 0.0, 0, 0, 0], np.float32))
+        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = None
         self.overlay_bind_group = None
         self.vertex_module = module
         self.linear_layout = self.device.create_bind_group_layout(entries=[
@@ -660,8 +696,9 @@ class RetainedPresenter:
             self._destroy(resource)
         tables = [entry[2] for entry in self.linear_pipelines.values() if entry is not None]
         floats = [entry[0] for entry in self.linear_by_format.values()]
-        for resource in (self.texture, *floats, self.uniform, *tables):
+        for resource in (self.texture, *floats, self.uniform, self.paint_texture, self.paint_flags, *tables):
             self._destroy(resource)
+        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = None
         self.linear_by_format = {}
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
@@ -698,8 +735,10 @@ class RetainedPresenter:
             self.ring = None
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
-        for resource in (self.texture, *[entry[0] for entry in self.linear_by_format.values()], self.uniform):
+        for resource in (self.texture, *[entry[0] for entry in self.linear_by_format.values()], self.uniform,
+                         self.paint_texture, self.paint_flags):
             self._destroy(resource)
+        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = None
         self.linear_by_format = {}
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
@@ -855,6 +894,28 @@ class RetainedPresenter:
         self.counters["upload_bytes"] += row * height
         return payload
 
+    def set_paint(self, image, key):
+        """Show `image` (a premultiplied RGBA8888 QImage the size of the surface) over the picture, or nothing
+        for None. `key` records what it was painted for. One small upload when it changes, none otherwise."""
+        self.paint_key = key
+        if image is None:
+            self.paint_size = None
+            return
+        width, height = image.width(), image.height()
+        if self.paint_texture is None or self.paint_texture.size[:2] != (width, height):
+            self.ledger.retire(self.paint_texture)
+            self.paint_texture = self.device.create_texture(
+                size=(width, height, 1), format="rgba8unorm",
+                usage=self.wgpu.TextureUsage.TEXTURE_BINDING | self.wgpu.TextureUsage.COPY_DST)
+            self.paint_group = self.device.create_bind_group(
+                layout=self.paint_pipeline.get_bind_group_layout(0),
+                entries=[{"binding": 0, "resource": self.paint_texture.create_view()},
+                         {"binding": 1, "resource": {"buffer": self.paint_flags, "offset": 0, "size": 16}}])
+        self.device.queue.write_texture({"texture": self.paint_texture}, image.constBits(),
+                                        {"bytes_per_row": image.bytesPerLine()}, (width, height, 1))
+        self.paint_size = (width, height)
+        self.counters["paint_uploads"] += 1
+
     def has_picture(self):
         return self.texture is not None or self.linear_texture is not None
 
@@ -916,6 +977,10 @@ class RetainedPresenter:
                 rp.set_pipeline(self.overlay_pipeline)
                 rp.set_bind_group(0, self.overlay_bind_group)
                 rp.draw(3)
+            if self.paint_size is not None and tuple(physical_size) == self.paint_size:
+                rp.set_pipeline(self.paint_pipeline)
+                rp.set_bind_group(0, self.paint_group)
+                rp.draw(3)
             rp.end()
             self.device.queue.submit([encoder.finish()])
         if slot is not None:
@@ -971,6 +1036,11 @@ def make_widget(parent=None):
             self.draw_requests = 0
             self.recoveries = 0
             self.refusal = ""             # why the last picture was refused (too large for the card), or ""
+            self.overlay_provider = None  # (view, physical_size, ratio) -> premultiplied RGBA QImage or None
+            self.hover = None             # (scene point or None) -> None; the owner updates its readout
+            self.overlay_serial = 0       # bumped by the owner when the overlays changed
+            self.overlay_draws = 0
+            self.setMouseTracking(True)
             self.filled.connect(self._request)
             self.request_draw(self._draw)
 
@@ -1029,6 +1099,32 @@ def make_widget(parent=None):
             self.draw_requests += 1
             self.request_draw()
 
+        def overlay_dirty(self):
+            """The overlays (or the readout) changed: paint them again at the next draw."""
+            self.overlay_serial += 1
+            self._request()
+
+        def scene_point(self, x, y):
+            """Scene point under physical surface pixel (x, y)."""
+            cx, cy, zoom = self.view
+            width, height = self._physical()
+            return cx + (x - width / 2.0) / zoom, cy + (y - height / 2.0) / zoom
+
+        def _paint_overlay(self, size):
+            provider = self.overlay_provider
+            presenter = self.presenter
+            if provider is None:
+                if presenter.paint_size is not None:
+                    presenter.set_paint(None, None)
+                return
+            ratio = self.get_pixel_ratio()
+            key = (self.view, tuple(size), ratio, self.overlay_serial)
+            if presenter.paint_key == key:
+                return
+            image = provider(self.view, tuple(size), ratio)
+            presenter.set_paint(image, key)
+            self.overlay_draws += 1
+
         def _fail(self, message):
             self.error = message
             if self.presenter is not None:
@@ -1049,6 +1145,7 @@ def make_widget(parent=None):
                 self.view = fit_view(size, self.rect)
             try:
                 try:
+                    self._paint_overlay(size)
                     self.presenter.draw(self.view, size)
                 except Exception as exc:
                     # A lost or failing device is replaced once; the same draw is then repeated on the new one.
@@ -1089,6 +1186,8 @@ def make_widget(parent=None):
             event.accept()
 
         def mouseMoveEvent(self, event):
+            if self._pan is None and self.hover is not None and self.rect is not None:
+                self.hover(self.scene_point(*self._cursor(event)))
             if self._pan is not None:
                 (px, py), button = self._pan
                 x, y = self._cursor(event)
@@ -1103,6 +1202,11 @@ def make_widget(parent=None):
             if self._pan is not None and event.button() == self._pan[1]:
                 self._pan = None
             event.accept()
+
+        def leaveEvent(self, event):
+            if self.hover is not None:
+                self.hover(None)
+            super().leaveEvent(event)
 
         def mouseDoubleClickEvent(self, event):
             self.fit()

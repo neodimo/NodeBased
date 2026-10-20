@@ -444,7 +444,7 @@ class HitOrderTests(unittest.TestCase):
         APP.processEvents()
         self.assertEqual(viewer.wipe, wipe)
         self.assertEqual(viewer.compare_mode(), mode)
-        self.assertIn("no overlays", self.window.direct_dock.windowTitle())
+        self.assertIn("view only", self.window.direct_dock.windowTitle())
 
 
 @needs_wgpu
