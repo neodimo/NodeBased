@@ -148,9 +148,11 @@ FIRST_LOOK_SECONDS = 1.0         # the target the benchmark compares with; a goa
 # pixel). A scene never seen on this adapter starts at the stage's own pixel count, or at `HEAVY_FIRST_PIXELS` when it has
 # splats or smoke; the next first look is sized to fit `FIRST_LOOK_SECONDS * FIT_FRACTION` less the enlargement's allowance.
 FIT_FRACTION = 0.85
+CATCHER_FIT_FRACTION = 0.3  # leave room for fixed scene/guide overhead on Hot pour-style catcher previews
 ENLARGE_ALLOWANCE = 0.06
 HEAVY_FIRST_PIXELS = 240 * 135
 MIN_FIRST_PIXELS = 120 * 68
+CATCHER_MIN_FIRST_PIXELS = 64 * 36  # keep a useful thumbnail while leaving room for fixed setup cost
 STAGE_TWO_MAX_FIRST_SECONDS = 0.75      # a first stage slower than this (a heavy scene) goes straight to the doubling steps
 _COST = {}
 
@@ -176,6 +178,15 @@ def enlarge(image, width, height):
     image = np.asarray(image, np.float32)
     rows = image[y0] * (1 - wy)[:, None, None] + image[y1] * wy[:, None, None]
     return rows[:, x0] * (1 - wx)[None, :, None] + rows[:, x1] * wx[None, :, None]
+
+
+def _thumbnail_guides(image):
+    """Spatial-only guides for the one initial catcher thumbnail; later passes use traced guides."""
+    h, w = image.shape[:2]
+    albedo = np.zeros((h, w, 3), np.float32)
+    normals = np.zeros((h, w, 3), np.float32)
+    normals[..., 2] = 1.0
+    return {"albedo": albedo, "normals": normals, "depth": np.zeros((h, w, 1), np.float32)}
 
 
 _SRGB_LUT_SIZE = 8192
@@ -205,7 +216,7 @@ def _cost_key(scene):
         adapter = gpu3d.adapter_report().splitlines()[0]
     except Exception:       # no adapter: the CPU reference takes the render, and costs its own way
         adapter = "cpu"
-    return adapter, heavy
+    return adapter, heavy, bool(scene3d.has_shadow_catchers(scene))
 
 
 def first_stage_pixels(scene, stage_pixels):
@@ -215,8 +226,10 @@ def first_stage_pixels(scene, stage_pixels):
     cost = _COST.get(key)
     if cost is None:
         return min(stage_pixels, HEAVY_FIRST_PIXELS) if key[1] else stage_pixels
-    fit = (FIRST_LOOK_SECONDS * FIT_FRACTION - ENLARGE_ALLOWANCE) / cost
-    return int(min(stage_pixels, max(MIN_FIRST_PIXELS, fit)))
+    fraction = CATCHER_FIT_FRACTION if key[2] else FIT_FRACTION
+    fit = (FIRST_LOOK_SECONDS * fraction - ENLARGE_ALLOWANCE) / cost
+    floor = CATCHER_MIN_FIRST_PIXELS if key[2] else MIN_FIRST_PIXELS
+    return int(min(stage_pixels, max(floor, fit)))
 
 
 def _record_cost(scene, seconds, pixels):
@@ -225,7 +238,8 @@ def _record_cost(scene, seconds, pixels):
     _COST[key] = cost if key not in _COST else 0.5 * _COST[key] + 0.5 * cost
 
 
-def _preview(scene, camera, width, height, background, ambient, pixels, samples, backend, max_bounces, moments, cancel):
+def _preview(scene, camera, width, height, background, ambient, pixels, samples, backend, max_bounces, moments, cancel,
+             *, trace_scene=None):
     """One denoised preview stage: trace `pixels` pixels at `samples` samples with guides from one prepared scene, filter,
     enlarge to `width` by `height`, composite over `background`. Returns (image float32, (traced_w, traced_h), phases)."""
     tw, th = internal_size(width, height, pixels)
@@ -239,16 +253,19 @@ def _preview(scene, camera, width, height, background, ambient, pixels, samples,
         mark = now
     clear = (0.0, 0.0, 0.0, 0.0)
     stats = {"skip_noise_maps": True}
+    trace_scene = scene if trace_scene is None else trace_scene
     with gpupathtrace.reusing_scene():
         if moments:
             moments = [(_drop_particles(scene_at), camera_at) for scene_at, camera_at in moments]
-            beauty = pathtrace.render_motion(moments, tw, th, clear, ambient=ambient, output="rgba", settings=settings,
+            trace_moments = [(trace_scene if scene_at is scene else scene_at, camera_at) for scene_at, camera_at in moments]
+            beauty = pathtrace.render_motion(trace_moments, tw, th, clear, ambient=ambient, output="rgba", settings=settings,
                                              backend=backend, stats=stats, cancel=cancel)
         else:
-            beauty = pathtrace.render(scene, camera, tw, th, clear, ambient=ambient, output="rgba", settings=settings,
+            beauty = pathtrace.render(trace_scene, camera, tw, th, clear, ambient=ambient, output="rgba", settings=settings,
                                       backend=backend, stats=stats, cancel=cancel)
         lap("render")
-        guides = pathtrace.guide_aovs(scene, camera, tw, th, settings, cancel=cancel, backend=backend, ambient=ambient)
+        guides = (_thumbnail_guides(beauty) if trace_scene is not scene else
+                  pathtrace.guide_aovs(scene, camera, tw, th, settings, cancel=cancel, backend=backend, ambient=ambient))
         lap("guides")
     filtered = ptdenoise.denoise_strips(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0],
                                         None, workers=PREVIEW_WORKERS, dtype=np.float32)
@@ -328,9 +345,18 @@ def step_interactive(state, scene, camera, width, height, background, ambient, k
     pixels, samples = stages[state.stage]
     if state.stage == 0:
         pixels = first_stage_pixels(scene, pixels)
+    trace_scene = None
+    if state.stage == 0 and not moments and scene3d.has_shadow_catchers(scene):
+        # The initial picture is a framing aid; shadowcatch.render otherwise launches extra full
+        # path-traced passes to measure a catcher shadow before the artist can see anything. Keep
+        # the catcher as a holdout so the foreground/plate composition is intact, then let later
+        # refinement passes render the real shadow layer.
+        from . import shadowcatch
+        trace_scene = shadowcatch.hold_scene(_drop_particles(scene))
     started = time.perf_counter()
     image, traced, phases = _preview(_drop_particles(scene), camera, width, height, background, ambient, pixels, samples,
-                                     backend, min(max_bounces, PREVIEW_BOUNCES), moments, cancel)
+                                     backend, min(max_bounces, PREVIEW_BOUNCES), moments, cancel,
+                                     trace_scene=trace_scene)
     seconds = time.perf_counter() - started
     if state.stage == 0:
         _record_cost(scene, seconds - dict(phases)["enlarge"], traced[0] * traced[1])
