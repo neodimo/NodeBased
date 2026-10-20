@@ -1,3 +1,7 @@
+## 2026-10-20 — Lane 2 VP2b: overlays, readout, laptop kit, decision memo
+
+Overlays: `Viewer.paint_overlays` is the single painter; `render_overlay(view, size, ratio, readout)` paints it for the direct view into an RGBA image drawn by a third pass (`PAINT_SHADER`) one texel per pixel. The Window bumps an overlay serial on every Viewer foreground repaint (`overlay_repainted`) and on readout changes; the image is rebuilt only when view, size, ratio or serial change. Clicks on the direct surface still only pan and zoom (no routing setting). Readout: `Viewer.pixel_readout_info` (float frame; shared with the Viewer's readout), `Viewer.readout_geometry` for played frames. Field kit: `tools/laptop_present_check.py`, `--self-check`, `--read`, `result.json` per run. Memo: `docs/DIRECT_VIEWER.md` ("Can the direct picture become the default Viewer?"): not yet; blockers Windows unmeasured, native Wayland, HDR surfaces, click editing on the Viewer only, overlays static during playback, 8-bit display image outside playback and B buffer on the processor path, real-display 4K and Radeon runs, scaling resample. Tests: 93 OK on RTX 3080 Ti, Radeon and llvmpipe. Next: DiMo's laptop run, real-display walk.
+
 ## 2026-10-20 — Lane 2 VP1 respawn: no change (DONE, already on main)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (5:33 AM on 2026-10-20 PDT)
