@@ -1,3 +1,9 @@
+## 2026-10-20 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step A of 2: the Hot pour's first look in under a second (integrator tick)
+
+- **What was done:** `main` `89c3b9e1` -> `05a538ec` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `05a538ec`: Ran 5704 tests in 507.047 s, OK (skipped=20), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-20 — Lane 6 step A of 2: the Hot pour's first look in under a second (PARTIAL)
 
 - **What was done — evidence:** catcher-first thumbnail defers the floor-shadow layer and uses lightweight spatial guides for the first picture; later progressive passes retain full guides and shadow-catcher rendering. Press-to-picture on frame 60 at 1920 × 1080 measured 1.138 s cold / 0.418–0.429 s warm on RTX 3080 Ti and 1.004 s cold / 0.434 s warm on Radeon 8060S. GPU/CPU at 96 × 54, 4 samples: mean absolute RGB error 9.96e-5 on both adapters. Targeted checks: 37 NVIDIA, 14 integrated, 7 knowledge/docs tests passed.

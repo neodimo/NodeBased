@@ -1,5 +1,26 @@
 ## 2026-10-20 — Lane 6 step A of 2: the Hot pour's first look in under a second (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (10:12 AM on 2026-10-20 PDT)
+
+`main` moved `89c3b9e1` -> `05a538ec` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `05a538ec` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1020-1002.log`, started 10:02 AM): **Ran 5704 tests in 507.047 s, OK (skipped=20), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step A of 2: the Hot pour's first look in under a second.** Commits:
+  - `02a9ed46` Record Lane 6 first-look handoff
+  - `6f1ab913` Speed up Hot pour first-look preview
+  - `9a65f5f7` Measure Hot pour first-look timeline
+  Diff: 9 files changed, 868 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done — evidence:** catcher-first thumbnail defers the floor-shadow layer and uses lightweight spatial guides for the first picture; later progressive passes retain full guides and shadow-catcher rendering. Press-to-picture on frame 60 at 1920 × 1080 measured 1.138 s cold / 0.418–0.429 s warm on RTX 3080 Ti and 1.004 s cold / 0.434 s warm on Radeon 8060S. GPU/CPU at 96 × 54, 4 samples: mean absolute RGB error 9.96e-5 on both adapters. Targeted checks: 37 NVIDIA, 14 integrated, 7 knowledge/docs tests passed.
 - **Inference / remaining:** first-picture gates pass. Acceleration build/packing remains ~144–146 ms per view; camera-move cancellation measured 78 ms RTX / 64 ms integrated versus ~50 ms target. No Windows or real-display review. The task is partial.
 - **Artifacts:** commits `9a65f5f7` (timelines and synchronized docs) and `6f1ab913` (preview optimization, tests and runner) on `openclaw/nb-fluids-spike`; no push. JSONs: `benchmarks/hot_pour/firstlook-timeline-2026-10-20.json`, `benchmarks/hot_pour/firstlook-integrated-2026-10-20.json`. Runner: `tools/benchmark_fluid_firstlook.py`. Report: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L6.md` (scratch, local).
