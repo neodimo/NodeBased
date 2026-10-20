@@ -1,5 +1,37 @@
 ## 2026-10-20 — Lane 8 T2 finish 1: real-display gates measured, still partial
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (6:31 AM on 2026-10-20 PDT)
+
+`main` moved `5bea8768` -> `e9588d4b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e9588d4b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1020-0622.log`, started 6:22 AM): **Ran 5700 tests in 500.166 s, OK (skipped=20), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), VP2b of 2: overlays on the direct picture, the laptop check, and the default-viewer decision.** Commits:
+  - `3a646fdf` notes: Lane 2 VP2b in TASKLOG and state
+  - `9fd2ac7a` tests: the stub presenters take the painted overlay too
+  - `60a8fdd8` docs: direct picture overlays, laptop check steps and the default-viewer decision memo
+  - `d0c8005c` field kit: laptop presentation check with a self-check and a JSON result Gonzo reads back
+  - `ef379700` direct picture: the Viewer's overlays and the float pixel readout are painted over the card's picture, read-only
+  Diff: 12 files changed, 1314 insertions(+), 62 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step H2 of 2: keep the image refining after the first look (finish 1).** Commits:
+  - `50180ca6` Render mode: 1080p progression numbers on RTX 3080 Ti, Radeon 8060S and llvmpipe, H2 docs and notes
+  Diff: 8 files changed, 1168 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step T2 of 2: a live picture while the artist works: the drag refreshes within a third of a second and refines after, playback honours the proxy tier, analysis never freezes the window (finish 1).** Commits:
+  - `727a1da3` docs: record Lane 8 T2 display measurements
+  - `b6920d21` notes: start Lane 8 T2 measurement pass
+  Diff: 5 files changed, 21 insertions(+), 4 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The merged T2 viewer was measured on the 1920 × 1080 QA comp with the RTX 3080 Ti and llvmpipe. RTX drag first picture: 1.142 s after the first move, after release; full-tier settle: 3.888 s. Uncached scrub: tier 8 at 0.595 s, tier 4 at 0.978 s, tier 1 at 4.914 s. Playback at a 24 fps target measured 0.125 fps at tier 1, 2.624 fps at tier 4, and 12.84 fps automatic (tier changes 1→2→4). llvmpipe was measured while Lane 4's integrated-adapter progression benchmark ran: drag first picture 1.414 s after release, settle 4.416 s; scrub first picture 0.808 s, settle 9.446 s; playback 0.125 fps at tier 1, 1.618 fps at tier 4, 0.125 fps automatic (tiers 1 and 2). The first-picture and set-rate gates are unmet; the llvmpipe rates are contention-affected. See the newest `TASKLOG.md` entry and Lane 8's T2 paragraph in `docs/ROTO_TRACKING.md`.
 
 ## Lane 4 step H2 of 2 finish 1 (5:33 AM on 2026-10-20 PDT)
