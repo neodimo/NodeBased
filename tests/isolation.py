@@ -53,6 +53,7 @@ os.environ["NODEBASED_GPU_LOCK"] = _GPU_LOCK.name
 from PySide6.QtCore import QCoreApplication, QEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from nodebased import guigc  # noqa: E402
 from nodebased.app import Window  # noqa: E402
 
 if not hasattr(Window.closeEvent, "marks_closed"):
@@ -91,6 +92,9 @@ def _do_cleanups_and_delete_closed_windows(self):
         for widget in closed:
             widget.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        # While a window lives the app collects reference cycles on the GUI thread only
+        # (nodebased/guigc.py); with the last one gone, finish that here instead of in an event loop.
+        guigc.release_if_idle()
     return outcome
 
 

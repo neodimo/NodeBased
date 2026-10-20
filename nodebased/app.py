@@ -42,6 +42,7 @@ from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_descr
 from . import radialcommands
 from . import graphlook
 from . import gpu3d
+from . import guigc
 from . import lensview
 from .graphcorner import GraphCorner
 from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow, hide_spin_buttons,
@@ -8268,6 +8269,7 @@ class Window(QMainWindow):
 
     def __init__(self, document=None, agent_name=None):
         super().__init__()
+        guigc.attach(self)   # reference cycles holding Qt objects are freed here, never on a render worker
         self._inspect_pending = False
         self._panel_cache = {}  # node key -> the wrapped Properties panel last built for it
         self._panel_cache_stamp_seen = None
@@ -8331,7 +8333,10 @@ class Window(QMainWindow):
         # it is built lazily on nodebased-preview (the single worker thread above) on its
         # first display request and used only from that thread afterward. See the design
         # note at the top of gpudisplay.py.
-        gpu_surface = QOffscreenSurface()
+        # Parented to the window so it goes with it, on this thread. Parentless, a closed window's
+        # surface (an invisible QWindow where offscreen surfaces are not native) waited for the garbage
+        # collector, which can run on any thread.
+        gpu_surface = QOffscreenSurface(parent=self)
         gpu_surface.setFormat(gpudisplay.context_format())
         gpu_surface.create()
         gpudisplay.configure_surface(gpu_surface, owner_thread_prefix="nodebased-preview")
