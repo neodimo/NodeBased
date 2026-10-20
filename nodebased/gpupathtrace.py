@@ -3064,7 +3064,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         ps, packed = reused
         lap("scene build")
     else:
-        ps = pt.build_scene(scene, ambient, eye=eye, volume=volume)
+        ps = pt.build_scene(scene, ambient, eye=eye, volume=volume, cancel=cancel)
         lap("scene build")
         if (ps.splats is not None or ps.volumes is not None) and not soft_supported(state):
             raise gpu3d.Unsupported("splats and smoke are path traced on the GPU on NVIDIA adapters only for now")

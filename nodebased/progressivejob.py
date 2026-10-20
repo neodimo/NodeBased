@@ -25,7 +25,7 @@ import threading
 import time
 from dataclasses import dataclass, field, replace
 
-from . import progressiverender
+from . import gpupathtrace, progressiverender
 from .cancellation import Cancelled
 
 SETTLE_SECONDS = 0.04      # requests this close together collapse into the last one
@@ -221,12 +221,23 @@ class ProgressiveJob:
                     self._cond.notify_all()
 
     def _work(self, request, submitted):
+        # One prepared scene (`build_scene` and `pack`, about 0.35 s on the mixed mesh and splat scene) serves every pass of the
+        # view: the scene and camera do not change inside a request. Particles are dropped here once, so the id the cache keys on
+        # stays the same from pass to pass.
+        with gpupathtrace.reusing_scene():
+            self._passes(request, submitted)
+
+    def _passes(self, request, submitted):
         cancel = self._cancel
         state = None
+        scene = progressiverender.drop_particles(request.scene)
+        moments = request.moments
+        if moments:
+            moments = [(progressiverender.drop_particles(scene_at), camera_at) for scene_at, camera_at in moments]
         while not cancel.is_set():
             try:
-                state = self._step(state, request.scene, request.camera, request.width, request.height, request.background,
-                                   request.ambient, request.identity, request.backend, request.max_bounces, request.moments,
+                state = self._step(state, scene, request.camera, request.width, request.height, request.background,
+                                   request.ambient, request.identity, request.backend, request.max_bounces, moments,
                                    cancel)
             except Cancelled:
                 return

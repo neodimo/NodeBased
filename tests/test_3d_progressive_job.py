@@ -373,6 +373,32 @@ class InterruptibleTracerTests(unittest.TestCase):
         if whole_stats["backend"] == "gpu":                 # on a card: many short submissions instead of a few long ones
             self.assertGreater(cut_stats["readbacks"]["waits"], whole_stats["readbacks"]["waits"] + 8)
 
+    def test_every_pass_of_a_view_shares_one_prepared_scene(self):
+        from unittest import mock
+        from nodebased import gpu3d, pathtrace
+        if not gpu3d.available():
+            self.skipTest("the passes build their scene on the processor without a GPU adapter")
+        calls = []
+        real = pathtrace.build_scene
+
+        def counted(*args, **more):
+            calls.append(1)
+            return real(*args, **more)
+        job = ProgressiveJob(settle=0.0)
+        self.addCleanup(job.close)
+        with mock.patch.object(pathtrace, "build_scene", counted):
+            self.final_image(job, CAMERA, "shared")
+        self.assertGreater(len(job.frames), 3)                  # several passes ...
+        self.assertEqual(len(calls), 1)                         # ... one scene build
+
+    def test_a_scene_build_stops_when_cancelled(self):
+        from nodebased import pathtrace
+        quiet, raised = threading.Event(), threading.Event()
+        raised.set()
+        pathtrace.build_scene(_scene(), 0.1, cancel=quiet)
+        with self.assertRaises(Cancelled):
+            pathtrace.build_scene(_scene(), 0.1, cancel=raised)
+
     def test_an_abandoned_view_asked_for_again_converges_to_the_uninterrupted_picture(self):
         camera_b = replace(CAMERA, transform=replace(CAMERA.transform, position=s.Vec3(0.5, 4, 9)))
         plain = ProgressiveJob(settle=0.0)

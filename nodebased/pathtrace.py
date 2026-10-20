@@ -218,7 +218,7 @@ class _Blas:
     hi: np.ndarray
 
 
-def _blas_of(geometry):
+def _blas_of(geometry, cancel=None):
     v = geometry.vertices.astype(np.float64)
     tri = geometry.triangles
     v0, v1, v2 = (v[tri[:, i]] for i in range(3)) if len(tri) else (np.zeros((0, 3)),) * 3
@@ -234,7 +234,7 @@ def _blas_of(geometry):
     uvs = geometry.uvs.astype(np.float64)[tri] if geometry.uvs is not None and len(tri) else None
     tangent = _flat_tangents(v0, e1, e2, uvs) if uvs is not None else None
     tris = raytrace.TriangleSet(v0, e1, e2, np.ones(len(tri), np.float32))
-    bvh = raytrace.Bvh.build(*tris.aabbs()) if len(tri) > _BRUTE_TRIANGLES else None
+    bvh = raytrace.Bvh.build(*tris.aabbs(), cancel=cancel) if len(tri) > _BRUTE_TRIANGLES else None
     lo = np.minimum(np.minimum(v0, v1), v2).min(0) if len(tri) else np.zeros(3)
     hi = np.maximum(np.maximum(v0, v1), v2).max(0) if len(tri) else np.zeros(3)
     return _Blas(tris, bvh, v0, e1, e2, n, smooth, uvs, tangent, lo, hi)
@@ -454,9 +454,10 @@ def _holdout_flags(entries):
     return on if on.any() else None
 
 
-def build_scene(scene, ambient=0.0, eye=None, volume=None):
+def build_scene(scene, ambient=0.0, eye=None, volume=None, cancel=None):
     """Pack `scene` (instances kept as instances) for tracing; `eye` only feeds the splat normal smoothing and
-    `volume` (`volumerender.VolumeSettings`) is the smoke knobs."""
+    `volume` (`volumerender.VolumeSettings`) is the smoke knobs. `cancel` (an event) stops the build with
+    `cancellation.Cancelled` between meshes and splat clouds and inside the tree builds."""
     geometries = list(scene.geometries)
     blases, cache = [], {}
 
@@ -464,7 +465,8 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
         key = (id(geometry.vertices), id(geometry.triangles), id(geometry.normals), id(geometry.uvs))
         if key not in cache:
             cache[key] = len(blases)
-            blases.append(_blas_of(geometry))
+            raytrace._cancel(cancel)
+            blases.append(_blas_of(geometry, cancel))
         return cache[key]
 
     entries = []   # (geometry, matrix, tint or None, light link); an instance copy takes its source's render switches
@@ -548,7 +550,8 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
         return link_masks[link]
 
     excl = np.array([mask_of(entry[3]) for entry in entries], np.int64)
-    layer = ptsplats.build(scene, eye) if getattr(scene, "splats", ()) else None
+    layer = ptsplats.build(scene, eye, cancel) if getattr(scene, "splats", ()) else None
+    raytrace._cancel(cancel)
     smoke = ptvolume.build(scene, volume) if getattr(scene, "volumes", ()) else None
     if smoke is not None:
         volume_excl = np.array([mask_of(getattr(v, "light_link", s.LIGHT_LINK_ALL)) for v in scene.volumes], np.int64)

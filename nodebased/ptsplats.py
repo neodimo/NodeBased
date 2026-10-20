@@ -87,12 +87,14 @@ class SplatLayer:
         return bool(np.any(self.relight < 1.0))
 
 
-def build(scene, eye=None):
-    """The `SplatLayer` of `scene.splats`, or None when no splat can draw."""
+def build(scene, eye=None, cancel=None):
+    """The `SplatLayer` of `scene.splats`, or None when no splat can draw. `cancel` (an event) is looked at between splat
+    clouds and inside the tree build (`cancellation.Cancelled`), so an obsolete interactive build stops at once."""
     positions, rotations, scales, opacity, cast = [], [], [], [], []
     albedo, normal, confidence, roughness, metallic, pbr, relight, instance = [], [], [], [], [], [], [], []
     groups, first = [], 0
     for index, item in enumerate(scene.splats):
+        raytrace._cancel(cancel)
         geometry = splatshade.instance_geometry(item)
         cloud = geometry["cloud"]
         count = len(cloud)
@@ -149,7 +151,7 @@ def build(scene, eye=None):
     hit = raytrace.SplatSet(p, rot, sc, opacity[keep])
     shadow = raytrace.SplatSet(p, rot, sc, opacity[keep] * cst)
     lo, hi = hit.aabbs()
-    bvh = raytrace.Bvh.build(lo, hi)
+    bvh = raytrace.Bvh.build(lo, hi, cancel=cancel)
     layer = SplatLayer(hit, shadow, bvh, take(albedo), take(normal), take(confidence), take(roughness),
                        take(metallic), take(pbr), take(relight), take(instance), sc.min(axis=1), sc.max(axis=1),
                        kept_groups, lo.min(axis=0), hi.max(axis=0))

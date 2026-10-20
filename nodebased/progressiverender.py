@@ -85,6 +85,9 @@ def _drop_particles(scene):
     return replace(scene, particles=()) if getattr(scene, "particles", ()) else scene
 
 
+drop_particles = _drop_particles      # the job drops them once per view, so every pass shares one prepared scene
+
+
 def step(state, scene, camera, width, height, background, ambient, key, backend="auto",
         max_bounces=MAX_BOUNCES, moments=None, cancel=None):
     """One progressive step: `state` (or a fresh one when `key` differs from its own) advanced by a
