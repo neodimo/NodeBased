@@ -1662,7 +1662,9 @@ class ProgressivePreviewTests(unittest.TestCase):
         held = unittest.mock.patch.object(w, 'start_preview')
         held.start()
         self.addCleanup(held.stop)
-        w.request_preview(progressive=True)
+        changed = copy.deepcopy(w.dispatcher.document)
+        changed['nodes']['grade']['params']['exposure'] = 0.75
+        w.request_preview(progressive=True, document_override=changed)
         request, cancel = w.preview_queue.take()
         self.assertEqual(request.tier, 8)
         tier8 = np.zeros((68, 120, 4), dtype=np.float32)
@@ -1715,6 +1717,23 @@ class ProgressivePreviewTests(unittest.TestCase):
         self.assertEqual(w.viewer.last_scale, 8)
         latest, _ = w.preview_queue.take()
         self.assertEqual(latest.document['nodes']['grade']['params']['exposure'], 2.0)
+
+    def test_progressive_edit_uses_cached_selected_tier_without_proxy_refinements(self):
+        w = self.window
+        held = unittest.mock.patch.object(w, 'start_preview')
+        held.start()
+        self.addCleanup(held.stop)
+        doc = copy.deepcopy(w.dispatcher.document)
+        target = doc['view']
+        frame = doc['time']['current']
+        key = DisplayCache.key(doc, target, frame, 1)
+        w.display_cache.put(key, w.frame, None, lazy=False)
+        w.request_preview(progressive=True, document_override=doc)
+        self.assertEqual(len(w.preview_queue), 1, 'cached selected-tier preview queued extra work')
+        request, _ = w.preview_queue.take()
+        self.assertEqual(request.tier, 1, 'cached full picture still started at tier 8')
+        self.assertIsNone(w._progressive_generation,
+                          'cached selected-tier picture incorrectly scheduled progressive refinements')
 
     def test_knob_edit_and_uncached_scrub_begin_at_tier8(self):
         w = self.window

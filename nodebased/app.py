@@ -13761,6 +13761,22 @@ class Window(QMainWindow):
         return TileRegion(x0, y0, x1 - x0, y1 - y0, full_x=bounds.x, full_y=bounds.y,
                           full_width=bounds.width, full_height=bounds.height)
 
+    def _selected_tier_is_cached(self, document, target, frame, tier):
+        """Whether a full selected-tier display frame can satisfy this preview directly."""
+        if not target:
+            return False
+        key = DisplayCache.key(document, target, frame, int(tier))
+        if self.display_cache.get(key, None, copy=False) is not None:
+            return True
+        if self.tile_executor.supports_tiled(document, target):
+            try:
+                bounds = self.tile_executor.canvas_region(document, target, frame=frame, tier=int(tier))
+                region = (bounds.x, bounds.y, bounds.width, bounds.height)
+                return self.display_cache.get(key, region, copy=False) is not None
+            except (KeyError, ValueError, TypeError):
+                return False
+        return False
+
     def request_preview(self, *_, playhead_only=False, tier_override=None, progressive=False,
                         progressive_target=None, document_override=None):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
@@ -13772,6 +13788,13 @@ class Window(QMainWindow):
         snapshot = copy.deepcopy(self.dispatcher.document if document_override is None
                                  else document_override)
         frame = snapshot["time"]["current"]
+        selected_tier = int(self.proxy.currentData())
+        if progressive and not self.playing and self._selected_tier_is_cached(
+                snapshot, snapshot.get("view"), frame, selected_tier):
+            # A cached selected-tier picture is already the best possible first look. Skip the
+            # lower proxy renders and let the ordinary display-cache path show it directly.
+            progressive = False
+            progressive_target = None
         if progressive and not self.playing:
             self._progressive_target = int(self.proxy.currentData())
             # A drag preview refines the dragged picture, not the document the drag has not yet changed.
