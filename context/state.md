@@ -1,5 +1,67 @@
 ## 2026-10-19 — Lane 2 VP2a (Opus sprint): direct picture playback and 4K pictures
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (5:00 AM on 2026-10-20 PDT)
+
+`main` moved `9fe51455` -> `667e0e81` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `aca39b06` (parallel runner; rebased onto 9fe51455 as `667e0e81`, which adds only the roto timing-test headroom) (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1019-1801.log`, started 4:50 AM): **Ran 5641 tests in 642.700 s, OK (skipped=16), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), VP1 of 2: opt-in retained-texture 2D viewer vertical slice (finish 1).** Commits:
+  - `0a9cbb41` docs: socket labels in the zoomed-out graph
+  - `5f1c63a7` Graph: socket labels are left out when zoomed out, like node names
+  - `9ddcd574` docs: Graph at display rate, with before and after numbers
+  - `76c21b7d` Graph: optional OpenGL drawing behind a setting, off by default
+  - `ca5b6eba` Graph: plain wires while dragging, cached wire pictures, and flat cards when zoomed out
+  - `4b9f43fc` Graph: node bodies are drawn once per look and screen scale and reused
+  - `3dc62ee1` Graph: a node move re-routes only its own wires, and a wire keeps its path until an end moves
+  - `c32ceef5` notes: Lane 2 VP2a in TASKLOG and state
+  - `93eef474` docs: Direct picture playback (VP2a) contracts, measurements and gaps
+  - `04a373ea` direct picture: playback order check reads each played frame's number off the window
+  - `e06c24eb` direct picture: one float texture per format, so a 4K half-float frame and a float32 crop do not replace each other
+  - `e4521023` direct picture: 4K float frames go up as half floats, cast in bands straight into the staging buffer
+  - `b955de4f` direct picture: playback through a reused staging ring filled off the Qt thread; 4K pictures; too-large pictures refused by name; retained picture released on close and shown in the cache inspector
+  - `dcb6bcfd` notes: Lane 2 sprint integration in TASKLOG
+  - `e0ebfd06` tests: the card display agreement tests skip cleanly where wgpu is not installed
+  - `d841b77d` properties: a wrapped knob row widens again only with a scroll bar's width to spare
+  - `940d2ca5` docs: Direct viewer display transform in PERFORMANCE.md, card path in DIRECT_VIEWER.md
+  - `903f0a1b` viewer: OCIO lookup tables in a storage buffer, ACES draw 17 ms to 0.4 ms
+  - `650181f2` viewer: W1's VP1 requests: completion-based retirement, D3D12 first on Windows, honest selection
+  - `17d77ba7` viewer: playback hands float frames to the direct picture and skips to_qimage
+  - `5fab27b5` viewer: the direct viewer's display transform runs on the card
+  - `67cd30fb` tests: tracker migration test names its schema version (15) instead of SCHEMA_VERSION-1
+  - `de184668` A linear float colour picker for every colour knob
+  - `56808788` ColorCorrect like Nuke's: master, shadows, midtones, highlights and Ranges (schema 25)
+  - `d2197800` properties: one header row per node panel, with its own collapse
+  - `f923d595` properties: knobs take the width their content needs
+  - `aa608080` properties: knob sliders draw again, and every float knob has one
+  - `e7976399` docs: UI_REDESIGN wiring section lists the disconnect gestures
+  - `457be179` Wires: the input tooltip and the ? overlay list every way to disconnect
+  - `0dd38772` Wires: Ctrl+Alt-drag a knife line across wires to cut every one it crosses
+  - `45b9253c` Wires: hover a wire, click to select it, Delete or Backspace disconnects; hovered wire shows an x handle
+  - `3795ee28` Wires: dragging an input wire off onto empty canvas disconnects it, as in Nuke
+  Diff: 60 files changed, 6890 insertions(+), 297 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step S2 of 2: the Hot pour reads as a pour (finish 2: the auto-solver crash, then the card numbers) (finish 1).** Commits:
+  - `a06b847b` docs: record Lane 6 GPU lock timeout
+  Diff: 4 files changed, 12 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step T2 of 2: a live picture while the artist works: the drag refreshes within a third of a second and refines after, playback honours the proxy tier, analysis never freezes the window.** Commits:
+  - `d6bc59db` docs: record exhausted Lane 8 QA lock wait
+  - `c4602f22` notes: hand off partial Lane 8 T2
+  - `3b0c3927` fix: show live roto and tracker drag previews
+  - `3fbba399` feat: add progressive edits and adaptive playback proxy
+  - `fae62337` fix: move planar tracking analysis off the UI thread
+  Diff: 11 files changed, 384 insertions(+), 19 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 On `openclaw/nb-2d-parity` on top of the sprint integration (`819d2be3`). `nodebased/directviewer.py`: pictures go
 to the card through `StagingRing` (three reused MAP_WRITE buffers, filled on a filler thread, the draw only records
 `copy_buffer_to_texture`); textures grow and are reused for smaller pictures, one float texture per format; 4K
