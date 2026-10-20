@@ -566,15 +566,15 @@ Largest inclusive graph-root evaluation costs, in milliseconds:
 | Uncached scrub | 1: 3,738; 4: 351; 8: 204; Read at 8: 0.7 | 1: 4,118; 4: 357; 8: 201; Read at 8: 0.6 | Four graph evaluations on each adapter; one of five display-cache lookups hits. |
 | Tier-4 playback | 4: 384, 371, 370, 364, 362 | 4: 378, 375, 372, 370, 366 | RTX: 45 lookups, 23 hits, 22 graph evaluations in 8 s. llvmpipe: 13 lookups, 7 hits, 6 evaluations in 2 s. |
 
-The drag timeline records requests arriving after successive mouse moves while graph work is still running, followed by release and a later delivered frame. This supports request supersession during the move as the reason no picture arrives in-drag. Tile detail still reports “tile fallback,” while the trace says `tiled: false` with an empty fallback-node list; the specific node and conditional reason remain unattributed. Qt-thread and worker cProfile captures are in each `benchmarks/live-picture/profile-1020-<series>.txt`; event timelines are in matching JSON files. Two optimizations landed: an active live-drag render can finish and appear while newer snapshots queue, and a selected-tier cache hit skips the lower progressive renders. The targeted offscreen preview and playback-queue tests pass.
+The drag timeline records requests arriving after successive mouse moves while graph work is still running, followed by release and a later delivered frame. This supports request supersession during the move as the reason no picture arrives in-drag. The baseline trace did not attribute the “tile fallback” status to a node; the after-run trace now identifies Roto and records the condition: requests covering at least 80% of the canvas use the full-frame evaluator. Qt-thread and worker cProfile captures are in each `benchmarks/live-picture/profile-1020-<series>.txt`; event timelines are in matching JSON files. Two optimizations landed: an active live-drag render can finish and appear while newer snapshots queue, and a selected-tier cache hit skips the lower progressive renders. The targeted offscreen preview and playback-queue tests pass.
 
 
-Post-fix comparison (the RTX after-run is still waiting for the exclusive card lock):
+Post-fix comparison (RTX after-run held the exclusive card lock):
 
 | Series | RTX 3080 Ti before → after | llvmpipe before → after |
 |---|---|---|
-| Roto drag first picture | 1.039 s after release → pending | 1.026 s after release → 1.166 s after release in the latest run (no picture during drag) |
-| Uncached scrub first picture | 0.566 s → pending | 0.569 s → 0.732 s |
-| Tier-4 playback | 2.622 fps → pending | 2.493 fps → 1.994 fps |
+| Roto drag first picture | 1.039 s after release → 0.518 s during drag (one frame) | 1.026 s after release → 1.166 s after release in the latest run (no picture during drag) |
+| Uncached scrub first picture | 0.566 s → 0.576 s | 0.569 s → 0.732 s |
+| Tier-4 playback | 2.622 fps → 2.498 fps | 2.493 fps → 1.994 fps |
 
-The laptop stand-in used the integrated adapter, CPUs 0–3 and 2× UI scaling. Its 2-second playback sample was 1.990 fps, while the drag picture did not arrive in the measured window; this run does not verify the laptop drag gate. The llvmpipe repeat varied substantially from an earlier in-drag result, so a performance gain is not claimed. The unchanged top costs remain the full-resolution Roto evaluation and repeated tier-4 Roto misses; the 0.5-second first-picture and 24 fps playback gates remain open.
+The laptop stand-in used the integrated adapter, CPUs 0–3 and 2× UI scaling. Its 2-second playback sample was 1.990 fps, while the drag picture did not arrive in the measured window; this run does not verify the laptop drag gate. The RTX run verifies a picture during drag, and improves its first-picture latency by about half, though 0.518 s remains just above the 0.5-second gate. The llvmpipe repeat varied substantially from an earlier in-drag result, so a cross-adapter performance gain is not claimed. The largest remaining costs are full-resolution Roto evaluation (3.911 s in the RTX drag trace; 4.204 s on uncached scrub) and repeated tier-4 Roto misses (about 0.36–0.38 s each). The 24 fps playback gate remains open. The cached selected-tier bypass is covered by a targeted unit test; an on-display paused bypass measurement was not part of this driver.
