@@ -1,3 +1,9 @@
+## 2026-10-20 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (integrator tick)
+
+- **What was done:** `main` `5d3a10db` -> `a40e37c8` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `a40e37c8`: Ran 5706 tests in 496.222 s, OK (skipped=20), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-20 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step A of 2: the Hot pour's first look in under a second (integrator tick)
 
 - **What was done:** `main` `89c3b9e1` -> `05a538ec` plus this docs commit. Evidence and per-lane commit
