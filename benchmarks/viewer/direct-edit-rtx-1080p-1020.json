@@ -1,0 +1,73 @@
+{
+ "display": ":93",
+ "platform": "xcb",
+ "size": [
+  1920,
+  1080
+ ],
+ "adapter": {
+  "requested_kind": "discrete",
+  "requested_backends": [
+   "auto"
+  ],
+  "selected_device": "NVIDIA GeForce RTX 3080 Ti",
+  "selected_backend": "Vulkan",
+  "attempts": [
+   {
+    "request": "power_preference=high-performance, backend=auto",
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "backend": "Vulkan"
+   }
+  ],
+  "note": "",
+  "device": "NVIDIA GeForce RTX 3080 Ti"
+ },
+ "driver": "xdotool",
+ "draws": 626,
+ "handles": [
+  {
+   "handle": "roto point",
+   "drags": 25,
+   "moves_sent": 200,
+   "moves_without_a_frame": 0,
+   "taken_by_the_hit_test": {
+    "press": 25,
+    "move": 200,
+    "release": 25
+   },
+   "undo_entries_from_drags": 25,
+   "move_to_presented_overlay_ms": {
+    "n": 200,
+    "p50": 27.8,
+    "p95": 40.97,
+    "max": 191.46,
+    "mean": 30.59
+   }
+  },
+  {
+   "handle": "transform centre",
+   "drags": 25,
+   "moves_sent": 200,
+   "moves_without_a_frame": 0,
+   "taken_by_the_hit_test": {
+    "press": 25,
+    "move": 200,
+    "release": 25
+   },
+   "undo_entries_from_drags": 25,
+   "move_to_presented_overlay_ms": {
+    "n": 200,
+    "p50": 17.8,
+    "p95": 22.46,
+    "max": 54.38,
+    "mean": 19.08
+   }
+  }
+ ],
+ "gate": {
+  "limit_ms": 50.0,
+  "worst_p95_ms": 40.97,
+  "failed": [],
+  "passed": true
+ }
+}

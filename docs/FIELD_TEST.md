@@ -191,12 +191,19 @@ python tools\laptop_present_check.py --self-check                 # a few second
 python tools\laptop_present_check.py --matrix --out laptop-check  # four runs of 60 s: DX12 first, Vulkan as the comparator, auto, DX12 low power
 python tools\laptop_present_check.py --backend Dx12 --seconds 60 --maximize --out laptop-check-stress   # move and click in the picture, resize, Toggle dock
 python tools\laptop_present_check.py --read laptop-check
+python tools\laptop_present_check.py --edit --out laptop-edit          # about a minute: real mouse drags on the direct picture; do not touch the mouse
+python tools\laptop_present_check.py --edit --preference low-power --out laptop-edit-igpu   # the same on the Intel graphics
 ```
 
 During each run move the pointer and click inside the window. Write down by hand which adapter Windows Settings, System, Display, Advanced display
 shows as "Connected to", the refresh rate and whether HDR is on. Bring back the `laptop-check` and `laptop-check-stress` folders (`result.json` is
 the one Gonzo reads: the adapter and backend actually used, a flag when the adapter class differs from the one asked for, and the frame interval
 and frames per second for a held and a changing picture). The numbers are when each frame call returned, not when light left the panel.
+
+`--edit` opens the real NodeBased window with the direct picture, then drives the mouse itself: it drags a Roto point and the Transform centre 25 times
+each and times every step from the mouse move to the end of the first frame that shows the moved handle. Leave the machine alone while it runs, because
+the pointer moves. `laptop-edit\result.json` ("edit") holds the 50th and 95th percentile per handle, the adapter used and the 50 ms limit. It has not been
+run on Windows yet, so the first run may need a fix to the input driver; bring back `laptop-edit\edit.log` as well.
 
 ## What the A6000 lets us test that the 3080 Ti cannot
 
