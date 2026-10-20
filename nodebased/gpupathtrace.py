@@ -42,6 +42,7 @@ ADAPTIVE_PATHS_PER_DISPATCH = 1 << 20   # adaptive sampling: paths one indirect 
 ADAPTIVE_MAX_GROUPS = 32768              # and work-groups, well under the 65535 a dispatch dimension allows
 ADAPTIVE_SPARSE_PIXELS = 1 << 17         # at most this many open pixels get their pass's samples run side by side (sample-parallel tail)
 ADAPTIVE_SPARSE_THREADS = 1 << 21        # and at most this many (pixel, sample) threads: 64 MiB of per-sample sums after the image
+ADAPTIVE_CHUNK_SECONDS = 0.012           # an interruptible adaptive pass (cancel given) submits dispatches in chunks the card runs in about this long, one in flight
 ADAPTIVE_PACE = 4                        # passes the host lets the card run ahead before it waits (it waits every pass when asked for progress)
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
 BAND_TARGET_SECONDS = 0.008   # a smoke or splat render grows its row bands until one dispatch takes about this long (0: fixed bands)
@@ -2911,6 +2912,7 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
     device.queue.submit([encoder.finish()])
     sample_index, passes = 0, 0
     asked = progress is not None or bool(settings.time_limit) or cancel is not None
+    per_dispatch = None        # seconds the card took for one chunk's dispatch, as last measured (sizes the next submissions)
     while sample_index < total_samples:
         raytrace._cancel(cancel)
         take = min(settings.min_samples if sample_index == 0 else settings.adaptive_pass_size, total_samples - sample_index)
@@ -2931,27 +2933,51 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
             compute = encoder.begin_compute_pass()
             sparse(compute)
             compaction(compute)
-        else:
-            encoder = device.create_command_encoder()
-            compute = encoder.begin_compute_pass()
-            compute.set_pipeline(pipeline)
-            for c in range(chunks):
-                # a sample's dispatches are interchangeable (each pixel counts its own samples), so a chunk's samples run
-                # back to back under one bind group instead of re-binding it for every sample
-                compute.set_bind_group(0, groups[c])
-                for _ in range(take):
-                    compute.dispatch_workgroups_indirect(args, c * 16)
-            sparse(compute)
-            compaction(compute)
-        compute.end()
-        device.queue.submit([encoder.finish()])
-        sample_index += take
-        passes += 1
-        pixels_open = None
-        if asked or heavy or passes % ADAPTIVE_PACE == 0:
+            compute.end()
+            device.queue.submit([encoder.finish()])
             pixels_open = wait()
         else:
-            lap("encode")
+            # a sample's dispatches are interchangeable (each pixel counts its own samples), so a chunk's samples run
+            # back to back under one bind group instead of re-binding it for every sample
+            dispatches = [c for c in range(chunks) for _ in range(take)]
+            # A render nobody can interrupt goes out as one submission. One that can be cancelled (or reports progress, or has a
+            # time limit) goes in submissions of about ADAPTIVE_CHUNK_SECONDS of card time, each waited for before the next is
+            # sent, so the queue never holds work ahead of a cancel; the order of the dispatches, and so the image, is the same.
+            first = 0
+            while True:
+                raytrace._cancel(cancel)
+                count = len(dispatches) - first
+                if asked and per_dispatch is not None:
+                    count = max(1, min(count, int(ADAPTIVE_CHUNK_SECONDS / max(per_dispatch, 1e-6))))
+                elif asked:
+                    count = 1                      # the first one measures what a dispatch costs here
+                last = first + count == len(dispatches)
+                encoder = device.create_command_encoder()
+                compute = encoder.begin_compute_pass()
+                compute.set_pipeline(pipeline)
+                bound = None
+                for c in dispatches[first:first + count]:
+                    if c != bound:
+                        compute.set_bind_group(0, groups[c])
+                        bound = c
+                    compute.dispatch_workgroups_indirect(args, c * 16)
+                if last:
+                    sparse(compute)
+                    compaction(compute)
+                compute.end()
+                began = time.perf_counter()
+                device.queue.submit([encoder.finish()])
+                first += count
+                if last:
+                    break
+                wait()
+                took = (time.perf_counter() - began) / count
+                per_dispatch = took if per_dispatch is None else 0.5 * per_dispatch + 0.5 * took
+            pixels_open = wait() if asked or passes % ADAPTIVE_PACE == ADAPTIVE_PACE - 1 else None
+            if pixels_open is None:
+                lap("encode")
+        sample_index += take
+        passes += 1
         if progress is not None:
             if pixels_open is None:
                 pixels_open = int(np.frombuffer(device.queue.read_buffer(ctl, (header + 2) * 4, 4), "u4")[0])

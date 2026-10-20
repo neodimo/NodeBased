@@ -12,10 +12,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from nodebased import progressivejob, progressiverender as P
+from dataclasses import replace
+
+from nodebased import progressivejob, progressiverender as P, scene3d as s
 from nodebased.cancellation import Cancelled
 from nodebased.progressivejob import ProgressiveJob, Request
 from nodebased.progressiverender import ProgressiveState
+from tests.test_3d_progressive_render import BACKGROUND, CAMERA, _SKIP, _scene
 
 
 def request(identity, width=64, height=48):
@@ -232,6 +235,156 @@ class JobTests(unittest.TestCase):
         script.open()
         self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
         self.assertEqual(job.working_seconds(), 0.0)
+
+
+class ChunkedStep:
+    """A step that works in chunks of `chunk` seconds and looks at `cancel` between them, like the tracer between submissions."""
+
+    def __init__(self, chunks=60, chunk=0.01):
+        self.chunks, self.chunk = chunks, chunk
+        self.done = []                   # (key, chunks finished) at the moment each pass ended
+        self.in_pass = threading.Event()
+        self.after_cancel = 0            # chunks that started after the cancel flag was already up
+
+    def __call__(self, state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments, cancel):
+        count = 0
+        self.in_pass.set()
+        try:
+            for _ in range(self.chunks):
+                if cancel.is_set():
+                    raise Cancelled()
+                time.sleep(self.chunk)
+                count += 1
+        finally:
+            self.done.append((key, count))
+        return final(key, width, height)
+
+
+class InterruptibleTests(unittest.TestCase):
+    """Lane 4 step A (10/20): an edit during a long pass is picked up at the next chunk boundary, not at the end of the pass."""
+
+    def test_a_pass_stops_within_one_chunk_of_the_edit(self):
+        step = ChunkedStep(chunks=100, chunk=0.01)            # a pass of a full second
+        job = ProgressiveJob(step=step, settle=0.0)
+        self.addCleanup(job.close)
+        job.submit(request("old"))
+        self.assertTrue(step.in_pass.wait(5))
+        time.sleep(0.1)
+        step.in_pass.clear()
+        asked = time.perf_counter()
+        job.submit(request("new"))
+        self.assertTrue(step.in_pass.wait(5))              # the next view's pass started: the old one has let go
+        self.assertLess(time.perf_counter() - asked, 0.1)
+        old = [n for key, n in step.done if key == "old"]
+        self.assertEqual(len(old), 1)
+        self.assertLess(old[0], 100)                          # it did not run to the end
+        self.assertLess(job.cancel_latencies[0], 0.06)        # one 10 ms chunk plus scheduling slack
+
+    def test_a_cancelled_then_restarted_view_publishes_nothing_of_the_cancelled_pass(self):
+        step = ChunkedStep(chunks=30, chunk=0.01)
+        job = ProgressiveJob(step=step, settle=0.0)
+        self.addCleanup(job.close)
+        job.submit(request("a"))
+        self.assertTrue(step.in_pass.wait(5))
+        time.sleep(0.05)
+        job.submit(request("b"))
+        job.submit(request("a2"))
+        self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
+        self.assertEqual({frame.state.key for frame in job.frames}, {"a2"})
+        self.assertEqual(job.view("a"), (None, "idle"))
+
+    def test_the_denoiser_stops_between_taps_and_a_pass_that_finishes_is_unchanged(self):
+        from nodebased import ptdenoise
+        rng = np.random.default_rng(7)
+        h, w = 96, 128
+        color = rng.random((h, w, 4)).astype(np.float32)
+        albedo, normal = rng.random((h, w, 3)).astype(np.float32), rng.random((h, w, 3)).astype(np.float32)
+        normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
+        depth = rng.random((h, w)).astype(np.float32) + 1.0
+        plain = ptdenoise.denoise_strips(color, albedo, normal, depth, None, workers=4, dtype=np.float32)
+        quiet = threading.Event()
+        again = ptdenoise.denoise_strips(color, albedo, normal, depth, None, workers=4, dtype=np.float32, cancel=quiet)
+        self.assertTrue(np.array_equal(plain, again))                          # bit-identical when not cancelled
+        raised = threading.Event()
+        raised.set()
+        for call in (ptdenoise.denoise, ptdenoise.denoise_strips):
+            with self.assertRaises(Cancelled):
+                call(color, albedo, normal, depth, None, dtype=np.float32, cancel=raised)
+
+    def test_the_display_conversion_in_bands_gives_the_same_pixels_and_stops_when_cancelled(self):
+        rng = np.random.default_rng(3)
+        image = (rng.random((200, 90, 4)) * 1.4).astype(np.float32)
+        quiet = threading.Event()
+        self.assertTrue(np.array_equal(P.display_rgba8(image), P.display_rgba8(image, quiet)))
+        quiet.set()
+        with self.assertRaises(Cancelled):
+            P.display_rgba8(image, quiet)
+
+    def test_a_cancel_raised_during_the_conversion_publishes_no_picture(self):
+        converted = threading.Event()
+        real = P.display_rgba8
+
+        def slow(image, cancel=None):
+            converted.set()
+            while not cancel.is_set():
+                time.sleep(0.002)
+            raise Cancelled()
+        P.display_rgba8 = slow
+        self.addCleanup(setattr, P, "display_rgba8", real)
+        job = ProgressiveJob(step=Script([final], gated=False), settle=0.0)
+        self.addCleanup(job.close)
+        job.submit(request("old"))
+        self.assertTrue(converted.wait(5))
+        job.submit(request("new"))
+        P.display_rgba8 = real
+        self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
+        self.assertEqual({frame.state.key for frame in job.frames}, {"new"})
+        self.assertEqual(len(job.cancel_latencies), 1)
+
+
+@unittest.skipIf(_SKIP, f"no working path tracer backend: {_SKIP}")
+class InterruptibleTracerTests(unittest.TestCase):
+    """The real tracer on whatever adapter the process has: cutting a pass into chunks changes how it is submitted, never what
+    it draws, and a view that was abandoned and asked for again converges to the picture an uninterrupted run gives."""
+
+    def final_image(self, job, camera, identity, width=96, height=64):
+        job.submit(Request(identity, _scene(), camera, width, height, BACKGROUND, 0.1))
+        self.assertTrue(job.wait(lambda state, phase: phase == "settled", 300))
+        return job.view(identity)[0].image
+
+    def test_a_pass_cut_into_chunks_draws_the_same_picture(self):
+        from nodebased import gpupathtrace, pathtrace
+        scene = _scene()
+        settings = pathtrace.PathSettings(samples=24, max_bounces=3, sampling="adaptive", noise_threshold=0.01, min_samples=8,
+                                          max_samples=24, adaptive_pass_size=8)
+
+        def run(cancel):
+            stats = {"skip_noise_maps": True}
+            image = pathtrace.render(scene, CAMERA, 96, 64, BACKGROUND, ambient=0.1, output="rgba", settings=settings,
+                                     backend="auto", stats=stats, cancel=cancel)
+            return image, stats
+        whole, whole_stats = run(None)                      # nobody can interrupt it: one submission per pass
+        previous = gpupathtrace.ADAPTIVE_CHUNK_SECONDS
+        gpupathtrace.ADAPTIVE_CHUNK_SECONDS = 1e-9          # every dispatch its own submission, each waited for
+        self.addCleanup(setattr, gpupathtrace, "ADAPTIVE_CHUNK_SECONDS", previous)
+        cut, cut_stats = run(threading.Event())
+        self.assertTrue(np.array_equal(whole, cut))
+        self.assertTrue(np.array_equal(whole_stats["samples"], cut_stats["samples"]))
+        if whole_stats["backend"] == "gpu":                 # on a card: many short submissions instead of a few long ones
+            self.assertGreater(cut_stats["readbacks"]["waits"], whole_stats["readbacks"]["waits"] + 8)
+
+    def test_an_abandoned_view_asked_for_again_converges_to_the_uninterrupted_picture(self):
+        camera_b = replace(CAMERA, transform=replace(CAMERA.transform, position=s.Vec3(0.5, 4, 9)))
+        plain = ProgressiveJob(settle=0.0)
+        self.addCleanup(plain.close)
+        expected = self.final_image(plain, CAMERA, "plain")
+        job = ProgressiveJob(settle=0.0)
+        self.addCleanup(job.close)
+        job.submit(Request("a1", _scene(), CAMERA, 96, 64, BACKGROUND, 0.1))
+        self.assertTrue(job.wait(lambda state, phase: state is not None, 120))
+        job.submit(Request("b", _scene(), camera_b, 96, 64, BACKGROUND, 0.1))          # abandon the pass in flight
+        again = self.final_image(job, CAMERA, "a2")
+        self.assertTrue(np.array_equal(expected, again))
 
 
 class NextSamplesTests(unittest.TestCase):

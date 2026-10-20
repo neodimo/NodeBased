@@ -26,6 +26,8 @@ such as OpenImageDenoise reads; see docs/3D_FOUNDATION.md, "Denoising", for what
 """
 import numpy as np
 
+from .cancellation import Cancelled
+
 LUMA = np.array((0.2126, 0.7152, 0.0722))
 KERNEL = np.array((1 / 16, 1 / 4, 3 / 8, 1 / 4, 1 / 16))
 ITERATIONS = 4
@@ -100,14 +102,16 @@ def temporal_blend(current, previous, vectors, blend=TEMPORAL_BLEND):
 
 
 def denoise(color, albedo, normal, depth, variance=None, *, iterations=ITERATIONS, phi_color=PHI_COLOR,
-            phi_normal=PHI_NORMAL, phi_depth=PHI_DEPTH, sigma_albedo=SIGMA_ALBEDO, strength=1.0, history=None, dtype=np.float64):
+            phi_normal=PHI_NORMAL, phi_depth=PHI_DEPTH, sigma_albedo=SIGMA_ALBEDO, strength=1.0, history=None, dtype=np.float64, cancel=None):
     """Filter a premultiplied RGBA beauty `color` (H, W, 4) with its guides: `albedo` (H, W, 3, premultiplied like
     the beauty), `normal` (H, W, 3) world normals, `depth` (H, W) view depth (any value where nothing is hit) and,
     optionally, `variance` (H, W) of the luminance of `color`'s mean. `strength` 0 skips the filter entirely and
     returns `color` unchanged (the knob's contract: 0 is the raw beauty); 1 is the filter as computed. `history`,
     when given, is `(previous, vectors)` for `temporal_blend`, applied to the filtered result before `strength`
     mixes it back toward the raw beauty. `dtype` is the working precision (float32 for the interactive first look, about
-    twice as fast). Returns float32 (H, W, 4)."""
+    twice as fast). `cancel` (an event) is checked between the filter's taps and raises `Cancelled`, so an obsolete interactive
+    pass stops within a few milliseconds (the result of a pass that finishes is the same with or without it). Returns float32
+    (H, W, 4)."""
     strength = float(strength)
     if strength <= 0.0:
         return np.asarray(color, np.float32).copy()
@@ -143,6 +147,8 @@ def denoise(color, albedo, normal, depth, variance=None, *, iterations=ITERATION
         p_normal, p_z, p_e, p_var, p_a, p_c = (_padded(a, reach) for a in (normal, z, e, var, a_unit, covered))
         for ky in range(-2, 3):
             for kx in range(-2, 3):
+                if cancel is not None and cancel.is_set():
+                    raise Cancelled()
                 dy, dx = ky * step, kx * step
                 h_k = float(KERNEL[ky + 2] * KERNEL[kx + 2])
                 if dy == 0 and dx == 0:

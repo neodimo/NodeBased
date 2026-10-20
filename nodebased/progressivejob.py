@@ -238,7 +238,11 @@ class ProgressiveJob:
                 self._notify()
                 return
             done = progressiverender.converged(state, request.width, request.height)
-            rgba = progressiverender.display_rgba8(state.image) if self.convert and state.image is not None else None
+            try:
+                rgba = (progressiverender.display_rgba8(state.image, cancel)
+                        if self.convert and state.image is not None else None)
+            except Cancelled:
+                return
             with self._cond:
                 if cancel.is_set() or self._identity != request.identity:
                     return          # superseded while the pass finished: its picture belongs to a view nobody shows now

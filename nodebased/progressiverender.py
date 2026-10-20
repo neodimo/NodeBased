@@ -45,6 +45,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from . import gpupathtrace, pathtrace, ptdenoise, scene3d
+from .cancellation import Cancelled
 
 FIRST_PASS_SCALE = 4     # the reset step renders at 1/this size on each side, for interactive framing
 FIRST_PASS_SAMPLES = 1
@@ -193,19 +194,28 @@ _SRGB_LUT_SIZE = 8192
 _SRGB_LUT = None
 
 
-def display_rgba8(image):
+DISPLAY_BAND_ROWS = 64
+
+
+def display_rgba8(image, cancel=None):
     """The viewport's 8-bit sRGB RGBA for a premultiplied linear `image` (h, w, 4): the colour un-premultiplied, clipped to
     [0, 1] and passed through a table (within one level of the exact curve), alpha opaque. A float32 table lookup instead of
-    a float64 power on every channel: about a tenth of the time at 1080p."""
+    a float64 power on every channel: about a tenth of the time at 1080p. With `cancel` (an event) the conversion runs in
+    bands of `DISPLAY_BAND_ROWS` rows and raises `Cancelled` between them; the pixels are the same."""
     global _SRGB_LUT
     if _SRGB_LUT is None:
         x = np.linspace(0.0, 1.0, _SRGB_LUT_SIZE + 1)
         y = np.where(x <= 0.0031308, x * 12.92, 1.055 * x ** (1 / 2.4) - 0.055)
         _SRGB_LUT = np.round(y * 255.0).astype(np.uint8)
-    rgb = np.clip(image[..., :3] / np.maximum(image[..., 3:4], 1e-6), 0.0, 1.0)
     out = np.empty(image.shape[:2] + (4,), np.uint8)
-    out[..., :3] = _SRGB_LUT[(rgb * _SRGB_LUT_SIZE + 0.5).astype(np.int32)]
     out[..., 3] = 255
+    rows = image.shape[0] if cancel is None else DISPLAY_BAND_ROWS
+    for y in range(0, image.shape[0], rows):
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
+        band = image[y:y + rows]
+        rgb = np.clip(band[..., :3] / np.maximum(band[..., 3:4], 1e-6), 0.0, 1.0)
+        out[y:y + rows, :, :3] = _SRGB_LUT[(rgb * _SRGB_LUT_SIZE + 0.5).astype(np.int32)]
     return out
 
 
@@ -268,7 +278,7 @@ def _preview(scene, camera, width, height, background, ambient, pixels, samples,
                   pathtrace.guide_aovs(scene, camera, tw, th, settings, cancel=cancel, backend=backend, ambient=ambient))
         lap("guides")
     filtered = ptdenoise.denoise_strips(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0],
-                                        None, workers=PREVIEW_WORKERS, dtype=np.float32)
+                                        None, workers=PREVIEW_WORKERS, dtype=np.float32, cancel=cancel)
     lap("denoise")
     big = enlarge(filtered, width, height)
     image = pathtrace.over_background(big, background).astype(np.float32)
@@ -297,7 +307,7 @@ def _denoised_step(state, scene, camera, width, height, background, ambient, key
             guides = (traced["albedo"], traced["normals"][..., :3], traced["depth"][..., 0])
     guided = time.perf_counter()
     filtered = ptdenoise.denoise_strips(raw.image, guides[0], guides[1], guides[2], None, workers=DENOISE_WORKERS,
-                                        dtype=np.float32)
+                                        dtype=np.float32, cancel=cancel)
     image = pathtrace.over_background(filtered, background).astype(np.float32)
     done = time.perf_counter()
     return replace(raw, image=image, denoised=True, guides=guides, seconds=raw.seconds + done - started,
