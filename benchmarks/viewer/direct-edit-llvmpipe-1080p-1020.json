@@ -1,0 +1,73 @@
+{
+ "display": ":94",
+ "platform": "xcb",
+ "size": [
+  1920,
+  1080
+ ],
+ "adapter": {
+  "requested_kind": "cpu",
+  "requested_backends": [
+   "auto"
+  ],
+  "selected_device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+  "selected_backend": "Vulkan",
+  "attempts": [
+   {
+    "request": "force_fallback_adapter=True, backend=auto",
+    "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+    "backend": "Vulkan"
+   }
+  ],
+  "note": "",
+  "device": "llvmpipe (LLVM 22.1.8, 256 bits)"
+ },
+ "driver": "xdotool",
+ "draws": 621,
+ "handles": [
+  {
+   "handle": "roto point",
+   "drags": 25,
+   "moves_sent": 200,
+   "moves_without_a_frame": 0,
+   "taken_by_the_hit_test": {
+    "press": 25,
+    "move": 200,
+    "release": 25
+   },
+   "undo_entries_from_drags": 25,
+   "move_to_presented_overlay_ms": {
+    "n": 200,
+    "p50": 14.05,
+    "p95": 47.71,
+    "max": 193.8,
+    "mean": 19.13
+   }
+  },
+  {
+   "handle": "transform centre",
+   "drags": 25,
+   "moves_sent": 200,
+   "moves_without_a_frame": 0,
+   "taken_by_the_hit_test": {
+    "press": 25,
+    "move": 200,
+    "release": 25
+   },
+   "undo_entries_from_drags": 25,
+   "move_to_presented_overlay_ms": {
+    "n": 200,
+    "p50": 11.68,
+    "p95": 17.03,
+    "max": 23.69,
+    "mean": 11.66
+   }
+  }
+ ],
+ "gate": {
+  "limit_ms": 50.0,
+  "worst_p95_ms": 47.71,
+  "failed": [],
+  "passed": true
+ }
+}

@@ -9,6 +9,8 @@ measures nothing about a GPU. Basis and limits: docs/WINDOWS_HYBRID_PRESENTATION
     python tools\\laptop_present_check.py --matrix --out laptop-check              (4 runs of 60 s)
     python tools\\laptop_present_check.py --backend Dx12 --seconds 60 --maximize --out laptop-check-stress
     python tools\\laptop_present_check.py --read laptop-check                      (print the summary, any machine)
+    python tools\\laptop_present_check.py --edit --out laptop-edit                 (drag timing on the direct picture)
+    python tools\\laptop_present_check.py --edit --preference low-power --out laptop-edit-igpu
 
 What it records, per run (`result.json` next to `metadata.json` and `frames.json`):
   * the adapter actually used (name, type, driver, backend), next to the one asked for (a mismatch is flagged);
@@ -16,6 +18,12 @@ What it records, per run (`result.json` next to `metadata.json` and `frames.json
   * frame cadence: present-return interval p50 / p95 / max and frames per second, for a retained picture and for
     one changed picture upload per frame; plus input-to-present-return proxies.
 `--matrix` also writes `result.json` in the output folder, one entry per case, which is what Gonzo reads back.
+`--edit` (Lane 2, 10/20) runs `tools/viewer_direct_edit.py` in the real NodeBased window: real pointer input drags a
+Roto point and the Transform centre on the direct picture, and each move is timed to the first presented frame whose
+overlay shows it. It needs the NodeBased package importable (run it from the repository or the install folder) and
+writes the 50th and 95th percentile per handle, the adapter used, the input driver and the 50 ms gate into
+`result.json` under "edit". Nothing is claimed for a machine until its own `result.json` exists; `--self-check`
+covers the record's fields on a synthetic run and measures nothing.
 Present return is when the call returns, not when light leaves the panel; no photon measurement is claimed.
 """
 from __future__ import annotations
@@ -51,6 +59,9 @@ def parse_args(argv=None):
     p.add_argument("--matrix", action="store_true")
     p.add_argument("--maximize", action="store_true")
     p.add_argument("--self-check", action="store_true")
+    p.add_argument("--edit", action="store_true",
+                   help="time Roto-point and Transform-centre drags on the direct picture (needs NodeBased importable)")
+    p.add_argument("--edit-drags", type=int, default=25, help="drags per handle for --edit")
     p.add_argument("--read", metavar="DIR", help="print the summary of a finished run or matrix folder and exit")
     a = p.parse_args(argv)
     if a.seconds < 10 or a.seconds > 120:
@@ -60,6 +71,8 @@ def parse_args(argv=None):
 
 MATRIX = [("Dx12", "high-performance"), ("Vulkan", "high-performance"),
           ("auto", "high-performance"), ("Dx12", "low-power")]
+EDIT_KEYS = ("status", "platform", "driver", "adapter", "size", "gate_limit_ms", "worst_p95_ms", "failed", "handles",
+             "measured_on_windows")
 RESULT_KEYS = ("status", "platform", "requested_backend", "requested_preference", "selected_adapter",
                "selected_backend", "selection_matches_requested_class", "cadence")
 
@@ -92,7 +105,65 @@ def build_result(meta):
             "note": "present-return proxy; not GPU completion, not photons; display owner recorded by hand"}
 
 
+def build_edit_result(raw, preference="high-performance"):
+    """The compact record for the drag timing: built from `tools/viewer_direct_edit.py`'s JSON, never invented."""
+    gate = raw.get("gate") or {}
+    handles = {}
+    for entry in raw.get("handles") or []:
+        timing = entry.get("move_to_presented_overlay_ms") or {}
+        handles[entry.get("handle")] = {
+            "drags": entry.get("drags"), "moves": timing.get("n"), "p50_ms": timing.get("p50"),
+            "p95_ms": timing.get("p95"), "max_ms": timing.get("max"),
+            "undo_entries": entry.get("undo_entries_from_drags"),
+            "moves_without_a_frame": entry.get("moves_without_a_frame")}
+    adapter = raw.get("adapter") or {}
+    return {"status": "passed" if gate.get("passed") else "failed", "requested_preference": preference,
+            "platform": raw.get("platform"), "driver": raw.get("driver"), "size": raw.get("size"),
+            "adapter": adapter.get("device"), "gate_limit_ms": gate.get("limit_ms"),
+            "worst_p95_ms": gate.get("worst_p95_ms"), "failed": gate.get("failed") or [], "handles": handles,
+            "measured_on_windows": str(raw.get("platform", "")).lower() == "windows",
+            "note": "overlay redraw after a drag step, to the end of the draw that shows it; "
+                    "present return, not photons; the picture's re-render follows later"}
+
+
+def describe_edit(edit):
+    lines = [f"  drag timing on the direct picture: {edit.get('status')} "
+             f"(adapter {edit.get('adapter')}, input {edit.get('driver')}, limit {edit.get('gate_limit_ms')} ms)"]
+    for name, h in (edit.get("handles") or {}).items():
+        lines.append(f"    {name}: {h.get('moves')} moves, p50 {h.get('p50_ms')} ms, p95 {h.get('p95_ms')} ms, "
+                     f"max {h.get('max_ms')} ms; {h.get('undo_entries')} undo entries for {h.get('drags')} drags")
+    return lines
+
+
+def run_edit(a, out):
+    """Run the drag timing in a child process (a native abort cannot take the check down) and write result.json."""
+    out.mkdir(parents=True, exist_ok=True)
+    raw_file = out / "edit-raw.json"
+    env = dict(os.environ)
+    env["NODEBASED_DIRECT_ADAPTER"] = "discrete" if a.preference == "high-performance" else "integrated"
+    tool = Path(__file__).resolve().with_name("viewer_direct_edit.py")
+    cmd = [sys.executable, str(tool), str(raw_file), "--drags", str(a.edit_drags)]
+    print("Starting the drag timing:", " ".join(cmd), flush=True)
+    with (out / "edit.log").open("w", encoding="utf-8") as log:
+        try:
+            code = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, env=env,
+                                  cwd=str(tool.parent.parent), timeout=600).returncode
+        except subprocess.TimeoutExpired:
+            code = "timeout; child stopped"
+    if raw_file.exists():
+        edit = build_edit_result(json.loads(raw_file.read_text(encoding="utf-8")), a.preference)
+    else:
+        edit = {"status": "no result (" + str(code) + ")", "requested_preference": a.preference, "handles": {},
+                "failed": [], "measured_on_windows": False}
+    edit["returncode"] = code
+    save(out / "result.json", {"edit": edit})
+    print("\n".join(describe_edit(edit)), "\ndetails in", str(out / "edit.log"), flush=True)
+    return 0 if edit.get("status") == "passed" else 1
+
+
 def describe(result):
+    if "edit" in result and "selected_adapter" not in result:
+        return describe_edit(result["edit"])
     adapter = result.get("selected_adapter") or {}
     lines = [f"  {result.get('requested_backend')}/{result.get('requested_preference')}: {result.get('status')}",
              f"    adapter used: {adapter.get('device')} ({adapter.get('adapter_type')}, backend {adapter.get('backend_type')})"
@@ -100,6 +171,8 @@ def describe(result):
     for phase, c in (result.get("cadence") or {}).items():
         lines.append(f"    {phase}: {c.get('frames')} frames, interval p50 {c.get('interval_p50_ms')} ms, "
                      f"p95 {c.get('interval_p95_ms')} ms, max {c.get('interval_max_ms')} ms")
+    if result.get("edit"):
+        lines.extend(describe_edit(result["edit"]))
     return lines
 
 
@@ -142,6 +215,26 @@ def self_check():
     assert result["selected_adapter"]["device"] == "Synthetic GPU"
     assert result["cadence"]["retained"]["fps_at_p50"] == 1000.0 / 8.75
     assert result["measured_on_windows"] is False
+    assert parse_args(["--edit"]).edit is True and parse_args([]).edit is False
+    raw = {"platform": "windows", "driver": "windows", "size": [1920, 1080],
+           "adapter": {"device": "Synthetic GPU"},
+           "handles": [{"handle": "roto point", "drags": 25, "undo_entries_from_drags": 25, "moves_without_a_frame": 0,
+                        "move_to_presented_overlay_ms": {"n": 4, "p50": 13.0, "p95": 30.0, "max": 30.0}},
+                       {"handle": "transform centre", "drags": 25, "undo_entries_from_drags": 25,
+                        "moves_without_a_frame": 0,
+                        "move_to_presented_overlay_ms": {"n": 4, "p50": 9.5, "p95": 60.0, "max": 60.0}}],
+           "gate": {"limit_ms": 50.0, "worst_p95_ms": 60.0, "failed": ["transform centre"], "passed": False}}
+    edit = build_edit_result(raw)
+    assert all(key in edit for key in EDIT_KEYS), sorted(set(EDIT_KEYS) - set(edit))
+    assert edit["status"] == "failed" and edit["failed"] == ["transform centre"]
+    assert edit["handles"]["roto point"]["p95_ms"] == 30.0 and edit["handles"]["roto point"]["undo_entries"] == 25
+    assert edit["measured_on_windows"] is True and build_edit_result(dict(raw, platform="xcb"))["measured_on_windows"] is False
+    raw["gate"] = {"limit_ms": 50.0, "worst_p95_ms": 30.0, "failed": [], "passed": True}
+    assert build_edit_result(raw)["status"] == "passed"
+    assert describe_edit(edit)[0].startswith("  drag timing")
+    with tempfile.TemporaryDirectory() as folder:
+        save(Path(folder) / "result.json", {"edit": edit})
+        assert read_back(folder) == 0
     with tempfile.TemporaryDirectory() as folder:
         case = Path(folder) / "Dx12-high-performance"
         case.mkdir()
@@ -164,6 +257,8 @@ def main():
         return read_back(a.read)
     if a.self_check:
         return self_check()
+    if a.edit and not a.matrix:
+        return run_edit(a, Path(a.out))
     if sys.platform != "win32":
         raise SystemExit("Windows measurement only; --self-check is safe on other systems")
     if a.matrix:
