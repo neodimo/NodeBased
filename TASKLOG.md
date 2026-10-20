@@ -16,14 +16,13 @@
   list in the dated `context/state.md` section. Full suite at `05a538ec`: Ran 5704 tests in 507.047 s, OK (skipped=20), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
 
-## 2026-10-20 — Lane 6 step A of 2: the Hot pour's first look in under a second (PARTIAL)
+## 2026-10-20 — Lane 6 step A finish pass: first look and refinement responsiveness (DONE on lane branch)
 
-- **What was done — evidence:** catcher-first thumbnail defers the floor-shadow layer and uses lightweight spatial guides for the first picture; later progressive passes retain full guides and shadow-catcher rendering. Press-to-picture on frame 60 at 1920 × 1080 measured 1.138 s cold / 0.418–0.429 s warm on RTX 3080 Ti and 1.004 s cold / 0.434 s warm on Radeon 8060S. GPU/CPU at 96 × 54, 4 samples: mean absolute RGB error 9.96e-5 on both adapters. Targeted checks: 37 NVIDIA, 14 integrated, 7 knowledge/docs tests passed.
-- **Inference / remaining:** first-picture gates pass. Acceleration build/packing remains ~144–146 ms per view; camera-move cancellation measured 78 ms RTX / 64 ms integrated versus ~50 ms target. No Windows or real-display review. The task is partial.
-- **Artifacts:** commits `9a65f5f7` (timelines and synchronized docs) and `6f1ab913` (preview optimization, tests and runner) on `openclaw/nb-fluids-spike`; no push. JSONs: `benchmarks/hot_pour/firstlook-timeline-2026-10-20.json`, `benchmarks/hot_pour/firstlook-integrated-2026-10-20.json`. Runner: `tools/benchmark_fluid_firstlook.py`. Report: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L6.md` (scratch, local).
-- **State:** partial; first-look targets proven on both adapters; acceleration reuse and ~50 ms cancellation follow-up remain.
-- **Next owner + concrete artifact:** Gonzo; use `tools/benchmark_fluid_firstlook.py`, the two JSONs above, and the camera-move reuse/cancel coverage in `tests/test_fluid_firstlook.py`.
-- **Failure mode:** the first final benchmark attempt stopped after tests because the new CPU/GPU comparison path lacked its NumPy import. Added the import and reran both adapters successfully; the first attempt's stale JSON was replaced by the committed rerun.
+- **What was done — evidence:** the progressive worker now retains camera-independent liquid/geometry preparation across equivalent scene evaluations and uses shorter heavy-scene GPU dispatches. Warm acceleration build/packing fell from 144–146 ms to 1.5–2.9 ms. Camera-move cancellation measured 2.0 ms RTX / 1.8 ms Radeon. Frame-60 CPU/GPU mean absolute RGB error stayed 9.96e-5 on both adapters. Cold/warm press-to-picture: RTX 1.170 s / 0.214–0.249 s; Radeon 1.048 s / 0.225 s.
+- **Artifacts:** `nodebased/gpupathtrace.py`, `tests/test_fluid_firstlook.py`, `benchmarks/hot_pour/firstlook-timeline-2026-10-20.json` and `benchmarks/hot_pour/firstlook-integrated-2026-10-20.json`, `docs/FLUIDS_SPIKE.md`, `docs/INTERACTIVE_VOLUMES_LIQUIDS.md` and byte-identical bundled copies are committed on `openclaw/nb-fluids-spike` (local, not pushed). Test logs are deliberate scratch: `tests-L6-finish-a.log`, `tests-L6-finish-a-integrated.log`, `tests-L6-finish-a-cpuadapter.log` and `tests-L6-finish-a-docs.log` in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`.
+- **State:** done against the brief's timing, acceleration, cancellation and comparison gates. Windows and real-display review remain unverified.
+- **Next owner + concrete artifact:** Gonzo; perform visual review on the real display, using the two first-look JSONs and `tools/benchmark_fluid_firstlook.py`.
+- **Failure mode:** an identity-only scene key missed acceleration reuse because camera-move evaluation creates equivalent new scene objects; lowering the fixed-band target did not change adaptive dispatch sizes. Content comparison and adaptive chunk sizing address those misses.
 
 ## 2026-10-20 — continuous mode merge: Lane 3 (Research, GPT-6 Astra) step R5 of 1: a first look under a second for volumes and liquids: what production renderers do (integrator tick)
 

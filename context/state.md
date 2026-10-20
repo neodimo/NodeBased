@@ -1,4 +1,4 @@
-## 2026-10-20 — Lane 6 step A of 2: the Hot pour's first look in under a second (PARTIAL)
+## 2026-10-20 — Lane 6 step A of 2: the Hot pour's first look in under a second (DONE on lane branch; merge pending)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (1:52 AM on 2026-10-22 PDT)
 
@@ -100,7 +100,11 @@ real display owed by Gonzo. Lane-reported limits are in each lane's report file 
 - **Artifacts:** commits `9a65f5f7` (timelines and synchronized docs) and `6f1ab913` (preview optimization, tests and runner) on `openclaw/nb-fluids-spike`; no push. JSONs: `benchmarks/hot_pour/firstlook-timeline-2026-10-20.json`, `benchmarks/hot_pour/firstlook-integrated-2026-10-20.json`. Runner: `tools/benchmark_fluid_firstlook.py`. Report: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L6.md` (scratch, local).
 - **State:** partial; first-look targets proven on both adapters; acceleration reuse and ~50 ms cancellation follow-up remain.
 - **Next owner + concrete artifact:** Gonzo; use `tools/benchmark_fluid_firstlook.py`, the two JSONs above, and the camera-move reuse/cancel coverage in `tests/test_fluid_firstlook.py`.
-- **Failure mode:** the first final benchmark attempt stopped after tests because the new CPU/GPU comparison path lacked its NumPy import. Added the import and reran both adapters successfully; the first attempt's stale JSON was replaced by the committed rerun.
+- **Finish pass evidence:** camera-move evaluations now reuse equivalent prepared scene data. Warm acceleration build/packing measured 1.5–2.9 ms (previously 144–146 ms); cancellation measured 2.0 ms RTX / 1.8 ms Radeon. Cold/warm press-to-picture measured 1.170 s / 0.214–0.249 s RTX and 1.048 s / 0.225 s Radeon. Frame-60 CPU/GPU mean absolute RGB error was 9.96e-5 on both.
+- **Finish pass artifacts:** renderer cache and adaptive dispatch changes, strengthened camera-move build-count test, refreshed benchmark JSONs and synchronized docs are committed on the lane branch, local and not pushed. Knowledge checks and first-look tests pass on RTX, integrated Radeon and llvmpipe. Windows and real-display review remain unverified.
+- **State:** step deliverables done on the lane branch; main integration remains pending.
+- **Next owner + concrete artifact:** Gonzo; real-display visual review with the two benchmark JSONs and `tools/benchmark_fluid_firstlook.py`.
+- **Failure mode:** identity-only scene keys missed reuse for equivalent freshly evaluated scenes; fixed-band chunk tuning did not affect adaptive dispatch. Content comparison and adaptive chunk sizing address those paths.
 
 ## 2026-10-20 — Lane 3 R5: interactive volumes/liquids research complete
 
