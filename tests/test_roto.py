@@ -10,6 +10,7 @@ import tempfile
 import copy
 import math
 import sys
+import os
 import time
 from pathlib import Path
 
@@ -584,8 +585,14 @@ class RenderTests(unittest.TestCase):
             times.append(time.perf_counter() - start)
         elapsed = min(times)
         self.assertEqual(result.shape, (1080, 1920, 4))
-        # The quarter second is the workstation and Linux figure; the Windows runner measures 0.29 to 0.33 s.
-        limit = 0.25 if sys.platform != "win32" else 0.5
+        # The quarter second is the workstation figure; the Windows runner measures 0.29 to 0.33 s and the
+        # Linux release runner measured 0.264 s on the 0.40.0 tag.
+        if sys.platform == "win32":
+            limit = 0.5
+        elif os.environ.get("GITHUB_ACTIONS"):
+            limit = 0.4
+        else:
+            limit = 0.25
         self.assertLess(elapsed, limit, f"edge feather render took {elapsed:.4f}s")
 
     def test_uniform_shape_transform_scales_feather_outline_and_point_offsets(self):
