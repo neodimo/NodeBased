@@ -1,0 +1,376 @@
+{
+ "adapter": "wgpu adapter: llvmpipe (LLVM 22.1.8, 256 bits)\n  type CPU, backend Vulkan, vendor llvmpipe, driver Mesa 26.2.2 (LLVM 22.1.8), wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 134217728, max texture 16384",
+ "results": [
+  {
+   "scene": "furnished",
+   "output": [
+    1920,
+    1080
+   ],
+   "seed": "default",
+   "ambient": 0.05,
+   "cold": {
+    "frames": [
+     {
+      "seconds": 1.2057,
+      "display_seconds": 1.2057,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       480,
+       270
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.5145,
+       "guides": 0.2918,
+       "denoise": 0.2758,
+       "enlarge": 0.0516
+      }
+     },
+     {
+      "seconds": 14.5413,
+      "display_seconds": 14.5413,
+      "samples": 8,
+      "pass": 2,
+      "preview": false,
+      "denoised": true,
+      "traced": [
+       1920,
+       1080
+      ],
+      "converged_fraction": 0.08013310185185185,
+      "phases": {
+       "render": 7.4219,
+       "guides": 4.3599,
+       "denoise": 1.5233
+      }
+     },
+     {
+      "seconds": 32.5104,
+      "display_seconds": 32.5104,
+      "samples": 16,
+      "pass": 3,
+      "preview": false,
+      "denoised": true,
+      "traced": [
+       1920,
+       1080
+      ],
+      "converged_fraction": 0.1416044560185185,
+      "phases": {
+       "render": 16.4106,
+       "guides": 0.0,
+       "denoise": 1.5287
+      }
+     }
+    ],
+    "first_image_seconds": 1.2057,
+    "settled_seconds": null,
+    "frame_count": 3,
+    "wall_seconds": 32.5109
+   },
+   "warm": {
+    "runs": 1,
+    "first_image_seconds": {
+     "median": 0.7926,
+     "worst": 0.7926
+    },
+    "settled_seconds": {
+     "median": null,
+     "worst": null
+    },
+    "frames_median_seconds": [
+     0.793,
+     7.129
+    ],
+    "last_run_frames": [
+     {
+      "seconds": 0.7926,
+      "display_seconds": 0.7926,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       410,
+       231
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.2586,
+       "guides": 0.1895,
+       "denoise": 0.2264,
+       "enlarge": 0.0486
+      }
+     },
+     {
+      "seconds": 7.1293,
+      "display_seconds": 7.1293,
+      "samples": 16,
+      "pass": 2,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       960,
+       540
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 3.6627,
+       "guides": 1.9076,
+       "denoise": 0.6834,
+       "enlarge": 0.0535
+      }
+     }
+    ]
+   },
+   "edit_latency": {
+    "by_kind": {
+     "camera": {
+      "trials": [
+       {
+        "delay_s": 1.802,
+        "idle_first_look_ms": 835.29,
+        "abandon_ms": 9.55,
+        "edit_to_first_look_ms": 847.0,
+        "first_look_phases_ms": {
+         "render": 268.7,
+         "guides": 205.0,
+         "denoise": 249.2,
+         "enlarge": 53.7
+        }
+       },
+       {
+        "delay_s": 5.655,
+        "idle_first_look_ms": 896.37,
+        "abandon_ms": 8.92,
+        "edit_to_first_look_ms": 884.04,
+        "first_look_phases_ms": {
+         "render": 276.5,
+         "guides": 226.6,
+         "denoise": 257.0,
+         "enlarge": 51.0
+        }
+       },
+       {
+        "delay_s": 9.573,
+        "idle_first_look_ms": 911.92,
+        "abandon_ms": 14.28,
+        "edit_to_first_look_ms": 906.05,
+        "first_look_phases_ms": {
+         "render": 294.5,
+         "guides": 226.2,
+         "denoise": 264.6,
+         "enlarge": 48.8
+        }
+       }
+      ],
+      "after_publish_trials": [
+       {
+        "delay_s": 0.0,
+        "idle_first_look_ms": 898.44,
+        "abandon_ms": 43.8,
+        "edit_to_first_look_ms": 904.05,
+        "first_look_phases_ms": {
+         "render": 287.1,
+         "guides": 223.8,
+         "denoise": 269.7,
+         "enlarge": 48.8
+        }
+       },
+       {
+        "delay_s": 0.025,
+        "idle_first_look_ms": 932.84,
+        "abandon_ms": 25.34,
+        "edit_to_first_look_ms": 918.51,
+        "first_look_phases_ms": {
+         "render": 300.6,
+         "guides": 226.5,
+         "denoise": 270.7,
+         "enlarge": 49.1
+        }
+       },
+       {
+        "delay_s": 0.05,
+        "idle_first_look_ms": 896.83,
+        "abandon_ms": 14.08,
+        "edit_to_first_look_ms": 934.01,
+        "first_look_phases_ms": {
+         "render": 302.8,
+         "guides": 244.8,
+         "denoise": 265.0,
+         "enlarge": 48.9
+        }
+       }
+      ],
+      "abandon_ms": {
+       "n": 3,
+       "median": 9.55,
+       "p95": 14.28,
+       "worst": 14.28
+      },
+      "edit_to_first_look_ms": {
+       "n": 3,
+       "median": 884.04,
+       "p95": 906.05,
+       "worst": 906.05
+      },
+      "idle_first_look_ms": {
+       "n": 3,
+       "median": 896.37,
+       "p95": 911.92,
+       "worst": 911.92
+      }
+     },
+     "material": {
+      "trials": [
+       {
+        "delay_s": 1.95,
+        "idle_first_look_ms": 910.66,
+        "abandon_ms": 15.35,
+        "edit_to_first_look_ms": 916.98,
+        "first_look_phases_ms": {
+         "render": 301.4,
+         "guides": 234.0,
+         "denoise": 261.6,
+         "enlarge": 48.5
+        }
+       },
+       {
+        "delay_s": 5.724,
+        "idle_first_look_ms": 919.51,
+        "abandon_ms": 13.5,
+        "edit_to_first_look_ms": 900.99,
+        "first_look_phases_ms": {
+         "render": 290.7,
+         "guides": 226.1,
+         "denoise": 266.8,
+         "enlarge": 46.6
+        }
+       },
+       {
+        "delay_s": 9.926,
+        "idle_first_look_ms": 912.99,
+        "abandon_ms": 10.73,
+        "edit_to_first_look_ms": 933.46,
+        "first_look_phases_ms": {
+         "render": 308.9,
+         "guides": 243.4,
+         "denoise": 260.5,
+         "enlarge": 50.3
+        }
+       }
+      ],
+      "after_publish_trials": [
+       {
+        "delay_s": 0.0,
+        "idle_first_look_ms": 931.54,
+        "abandon_ms": 49.34,
+        "edit_to_first_look_ms": 901.87,
+        "first_look_phases_ms": {
+         "render": 289.6,
+         "guides": 220.8,
+         "denoise": 263.4,
+         "enlarge": 48.7
+        }
+       },
+       {
+        "delay_s": 0.025,
+        "idle_first_look_ms": 902.13,
+        "abandon_ms": 28.72,
+        "edit_to_first_look_ms": 898.59,
+        "first_look_phases_ms": {
+         "render": 289.4,
+         "guides": 226.2,
+         "denoise": 261.7,
+         "enlarge": 50.5
+        }
+       },
+       {
+        "delay_s": 0.05,
+        "idle_first_look_ms": 934.9,
+        "abandon_ms": 11.08,
+        "edit_to_first_look_ms": 900.16,
+        "first_look_phases_ms": {
+         "render": 291.6,
+         "guides": 222.3,
+         "denoise": 264.2,
+         "enlarge": 50.4
+        }
+       }
+      ],
+      "abandon_ms": {
+       "n": 3,
+       "median": 13.5,
+       "p95": 15.35,
+       "worst": 15.35
+      },
+      "edit_to_first_look_ms": {
+       "n": 3,
+       "median": 916.98,
+       "p95": 933.46,
+       "worst": 933.46
+      },
+      "idle_first_look_ms": {
+       "n": 3,
+       "median": 912.99,
+       "p95": 919.51,
+       "worst": 919.51
+      }
+     }
+    },
+    "abandon_ms": {
+     "n": 6,
+     "median": 12.12,
+     "p95": 15.35,
+     "worst": 15.35
+    },
+    "edit_to_first_look_ms": {
+     "n": 6,
+     "median": 903.52,
+     "p95": 933.46,
+     "worst": 933.46
+    },
+    "idle_first_look_ms": {
+     "n": 6,
+     "median": 911.29,
+     "p95": 919.51,
+     "worst": 919.51
+    },
+    "abandoned_trials": 6,
+    "trials": 6,
+    "gate": {
+     "applies": false,
+     "note": "no target on this adapter; the row is recorded"
+    },
+    "after_publish": {
+     "abandon_ms": {
+      "n": 6,
+      "median": 27.03,
+      "p95": 49.34,
+      "worst": 49.34
+     },
+     "edit_to_first_look_ms": {
+      "n": 6,
+      "median": 902.96,
+      "p95": 934.01,
+      "worst": 934.01
+     },
+     "idle_first_look_ms": {
+      "n": 6,
+      "median": 916.84,
+      "p95": 934.9,
+      "worst": 934.9
+     },
+     "trials": 6
+    }
+   },
+   "target_seconds": 1.0,
+   "first_look_target_met_warm": true,
+   "first_look_target_met_cold": false
+  }
+ ]
+}

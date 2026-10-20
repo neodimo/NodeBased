@@ -3318,7 +3318,47 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   23.6 ms (worst 34 ms), cancel 403 ms; Radeon first image 0.77 s cold, 0.83 s warm, settled 34.9 s, paint 10 ms (worst 23 ms),
   cancel 406 ms. llvmpipe (furnished room only, correctness run, no hardware target claimed): first image 1.25 s cold, 0.82 s
   warm, settled 97 s. The responsive-during-refinement check (a long full-size pass in flight) kept every paint under 6 ms on all
-  three adapters. Still slow: the mixed scene's full-size passes (the RTX is slower than the Radeon on it, 82 s against 35 s), and a
-  cancel waits for the pass in flight to end, so on the mixed scene an edit takes about 0.4 s to be picked up; passes cannot be
-  interrupted midway. Still wrong visually: the first look is an enlarged internal pass (480 x 270 at 4 samples) and softer than the
+  three adapters. Still slow: the mixed scene's full-size passes (the RTX is slower than the Radeon on it, 82 s against 35 s), and (until
+  step A of 3 below) a cancel waited for the pass in flight to end, so on the mixed scene an edit took about 0.4 s to be picked up.
+  Still wrong visually: the first look is an enlarged internal pass (480 x 270 at 4 samples) and softer than the
   settled frame. Not measured: the A6000 and the hybrid Iris Xe + RTX 4070 laptop (not reachable from here); Windows.
+- Step A of 3 (Rendering "Progress", an edit in Render mode is picked up at once): passes stop midway instead of finishing first.
+  Every stage of a pass now looks at the job's cancel flag between short pieces of work. The denoiser checks it between filter
+  taps and the display conversion between 64-row bands (both give the same pixels when they finish); the scene build checks it
+  between meshes and splat clouds and inside the tree builds; the adaptive GPU passes of a render that can be cancelled go out in
+  submissions of about 12 ms of card time (surface scenes) and in dispatches fitted to about 20 ms (splat and smoke scenes), each
+  waited for before the next is sent, so at most one is in flight and a cancel is never queued behind submitted work. The dispatch
+  size starts at 65 536 paths for splats and smoke (measured on the RTX 3080 Ti at 1080p: 131 072 paths took 44 ms and 5.59 s for an
+  8 sample pass, 65 536 took 24 ms and 6.12 s, 32 768 took 14 ms and 7.2 s, 16 384 took 8.5 ms and 8.7 s) and is then fitted to the
+  rate measured on that adapter; a surface dispatch of 1 048 576 paths takes 25 ms. A cancelled render keeps the uploaded scene and
+  leaves nothing queued on the card, so the next first look does not start behind it, and its partial samples are dropped. Two
+  changes found by profiling the worker with stack samples: the mixed scene's 0.36 s scene build and 0.05 s pack were repeated by
+  every pass of a view (and were what the 0.4 s "cancel" of step H2 was waiting for), so the passes of one view now share one
+  prepared scene; and the debounce now counts from the edit, not from when the worker got free. Same picture as before: the CPU
+  path and the surface GPU path are bit-identical with and without chunking; splat and smoke scenes agree to 1e-5 (the dispatch size
+  moves which pixels take the sample-parallel tail, so the float sums differ in the last place).
+  Gates, `tools/benchmark_progression.py` (`--edits 10`: ten camera nudges and ten changes of the floor's roughness during a long
+  full-size pass, spread from 5% to 95% of its length), RTX 3080 Ti, 10/20, under the exclusive GPU lock, results in
+  `benchmarks/progression/rtx3080ti-edit-1020.json`. Furnished room: edit to the old pass stopping 14 ms median, 24 ms at the 95th
+  percentile (worst of 20: 68.5 ms, one roughness edit); edit to the new first look 510 ms median, 553 ms at the 95th percentile,
+  against 502 ms and 541 ms for the same first look on an idle worker. Mixed mesh and splat scene: abandon 16 ms median, 36 ms at
+  the 95th percentile (worst 39 ms), against 400 ms before; edit to first look 880 ms median, 939 ms at the 95th percentile,
+  against 865 ms and 921 ms idle (the mixed scene's first look is still about one second: 0.96 s cold, 1.05 s warm). Both gates
+  (abandon under 50 ms and edit to first look within 60 ms of the idle first look, at the 95th percentile, on both scenes) hold.
+  Other adapters, no target there: Radeon 8060S abandon 22 ms (furnished) and 19 ms (mixed) at the 95th percentile, edit to first
+  look 599 and 985 ms against 548 and 925 ms idle, settled 17.5 s and 31 s; laptop stand-in (the Radeon on `taskset -c 0-3`)
+  abandon 20 and 27 ms, first look 0.71 s and 0.79 s warm, edit to first look 782 and 981 ms against 729 and 906 ms idle;
+  llvmpipe (furnished room, correctness only) abandon 15 ms, edit to first look 933 ms against 920 ms idle. Orbiting a real
+  widget at 1080p kept the paint handler at 7 ms median (furnished) and 23 ms (mixed), and the worker let go of a pass in 1.3 and
+  0.4 ms median. Known limit: an edit that lands in the 0.2 s after a picture is published, on the mixed scene, waits about 150 ms
+  longer than the idle first look (1.03 s median against 0.88 s over six trials on the RTX; no difference on the Radeon, the stand-in or
+  llvmpipe, nor on the furnished room): the card sits idle for over half a second while the processor builds the next scene,
+  drops its clocks, and the first dispatches run 3 to 5 times slower (reported apart as `after_publish`, not gated). Overlapping the
+  processor's denoise and display conversion with the next pass's trace would keep the card busy; not done. Not measured: the A6000
+  and the hybrid Iris Xe + RTX 4070 laptop (neither is reachable from here); the stand-in is the Radeon on four cores, not that
+  laptop. The field kit gains a `bench_render_mode` step (`tools/benchmark_progression.py --field PATH`: adapter name, backend, first
+  look, abandon, edit to first look and settle times; `--quick` runs the furnished room only and records no settle time), so the A6000
+  and laptop runs produce those numbers; none is claimed here. Tests: `tests/test_3d_progressive_job.py` (cancel within one chunk,
+  a restarted view converges to the same picture, chunked equals whole on the surface and the splat and smoke scenes, one scene
+  build per view, a cancelled render keeps the uploaded scene, the debounce), plus the convergence, first-look, viewport, lens,
+  adaptive-sampling and frame-reuse modules on the RTX 3080 Ti, the Radeon and llvmpipe.
