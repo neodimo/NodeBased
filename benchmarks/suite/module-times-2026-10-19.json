@@ -1,0 +1,2564 @@
+{
+ "gpu_jobs": 3,
+ "gpu_mib": 400,
+ "jobs": 12,
+ "modules": {
+  "test_2d_parity_aa1_merge": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.697,
+   "tests": 4
+  },
+  "test_2d_parity_aa1_shortcuts": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.91,
+   "tests": 4
+  },
+  "test_2d_parity_aa1_typing": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 16.169,
+   "tests": 3
+  },
+  "test_2d_parity_close1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.696,
+   "tests": 30
+  },
+  "test_2d_parity_close2": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.695,
+   "tests": 26
+  },
+  "test_2d_parity_e1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.695,
+   "tests": 6
+  },
+  "test_2d_parity_e2": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.705,
+   "tests": 19
+  },
+  "test_2d_parity_e2_warps": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.694,
+   "tests": 10
+  },
+  "test_2d_parity_feedback_y3": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 15.156,
+   "tests": 16
+  },
+  "test_2d_parity_group_2c5": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.328,
+   "tests": 16
+  },
+  "test_2d_parity_group_3a_filters": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.692,
+   "tests": 23
+  },
+  "test_2d_parity_group_3a_merge": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.489,
+   "tests": 22
+  },
+  "test_2d_parity_group_3b": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.807,
+   "tests": 42
+  },
+  "test_2d_parity_group_4a": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.605,
+   "tests": 25
+  },
+  "test_2d_parity_group_4c": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.634,
+   "tests": 22
+  },
+  "test_2d_parity_group_b": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.008,
+   "tests": 28
+  },
+  "test_2d_parity_group_c1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.238,
+   "tests": 20
+  },
+  "test_2d_parity_group_c2": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.602,
+   "tests": 19
+  },
+  "test_2d_parity_group_c3": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.602,
+   "tests": 23
+  },
+  "test_2d_parity_group_c4": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.607,
+   "tests": 15
+  },
+  "test_2d_parity_knob_fit_z1": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 17.365,
+   "tests": 12
+  },
+  "test_2d_parity_lut_tile_d3": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.605,
+   "tests": 8
+  },
+  "test_2d_parity_placement_y2": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 55.456,
+   "tests": 15
+  },
+  "test_2d_parity_q2": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.625,
+   "tests": 3
+  },
+  "test_2d_parity_shortcut_wiring_z2": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 194.565,
+   "tests": 6
+  },
+  "test_2d_parity_step_4b": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.825,
+   "tests": 28
+  },
+  "test_2d_parity_step_5a": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.824,
+   "tests": 14
+  },
+  "test_2d_parity_step_5b": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.823,
+   "tests": 34
+  },
+  "test_2d_parity_step_5c": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.808,
+   "tests": 23
+  },
+  "test_2d_parity_step_5c_bundle": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 202,
+   "seconds": 3.246,
+   "tests": 12
+  },
+  "test_2d_parity_step_c1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.604,
+   "tests": 6
+  },
+  "test_2d_parity_step_c2": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.406,
+   "tests": 7
+  },
+  "test_2d_parity_step_d1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.609,
+   "tests": 4
+  },
+  "test_2d_parity_step_f1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.405,
+   "tests": 4
+  },
+  "test_2d_parity_step_f1b": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.608,
+   "tests": 7
+  },
+  "test_2d_parity_step_f2": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.607,
+   "tests": 10
+  },
+  "test_2d_parity_step_k1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.808,
+   "tests": 35
+  },
+  "test_2d_parity_step_k2": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.807,
+   "tests": 23
+  },
+  "test_2d_parity_step_k3": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.807,
+   "tests": 27
+  },
+  "test_2d_parity_step_k3_ui": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.836,
+   "tests": 3
+  },
+  "test_2d_parity_step_s3": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.825,
+   "tests": 44
+  },
+  "test_2d_parity_step_s3_ui": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 3.455,
+   "tests": 4
+  },
+  "test_2d_parity_step_w3": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.024,
+   "tests": 39
+  },
+  "test_2d_parity_stream_aa2": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 12.013,
+   "tests": 6
+  },
+  "test_2d_parity_t2": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.42,
+   "tests": 9
+  },
+  "test_2d_parity_time_d2": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.602,
+   "tests": 7
+  },
+  "test_2d_parity_time_e1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.601,
+   "tests": 19
+  },
+  "test_2d_parity_time_row_y1": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 20.011,
+   "tests": 11
+  },
+  "test_2d_parity_v3_effects": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 10
+  },
+  "test_2d_parity_w2": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 9.78,
+   "tests": 15
+  },
+  "test_3d_adaptive_sampling": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 251,
+   "seconds": 16.353,
+   "tests": 52
+  },
+  "test_3d_alembic": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.601,
+   "tests": 30
+  },
+  "test_3d_alembic_nodes": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.419,
+   "tests": 6
+  },
+  "test_3d_aovs": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 142,
+   "seconds": 6.947,
+   "tests": 14
+  },
+  "test_3d_area_lights": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.205,
+   "tests": 6
+  },
+  "test_3d_axis_transform_geo": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 18
+  },
+  "test_3d_cryptomatte": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.603,
+   "tests": 8
+  },
+  "test_3d_environment_light": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.262,
+   "tests": 13
+  },
+  "test_3d_export": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.25,
+   "tests": 9
+  },
+  "test_3d_fill_rule": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.229,
+   "tests": 6
+  },
+  "test_3d_film_back": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.62,
+   "tests": 9
+  },
+  "test_3d_first_look": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 5.475,
+   "tests": 25
+  },
+  "test_3d_foundation": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 7.53,
+   "tests": 26
+  },
+  "test_3d_gltf": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.603,
+   "tests": 32
+  },
+  "test_3d_gpu": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 535,
+   "seconds": 23.901,
+   "tests": 62
+  },
+  "test_3d_gpu_adapter_report": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.653,
+   "tests": 1
+  },
+  "test_3d_gpu_bvh": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 176,
+   "seconds": 7.977,
+   "tests": 9
+  },
+  "test_3d_gpu_instance": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 200,
+   "seconds": 6.5,
+   "tests": 12
+  },
+  "test_3d_gpu_node": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 2.033,
+   "tests": 10
+  },
+  "test_3d_gpu_particles": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 2.244,
+   "tests": 11
+  },
+  "test_3d_gpu_rt": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 5.513,
+   "tests": 9
+  },
+  "test_3d_gpu_rt_aovs": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 470,
+   "seconds": 5.894,
+   "tests": 17
+  },
+  "test_3d_gpu_rt_integration": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 470,
+   "seconds": 3.283,
+   "tests": 11
+  },
+  "test_3d_gpu_rt_materials": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 534,
+   "seconds": 20.99,
+   "tests": 13
+  },
+  "test_3d_gpu_rt_render": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 605,
+   "seconds": 15.075,
+   "tests": 11
+  },
+  "test_3d_gpu_rt_splat_slab": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.604,
+   "tests": 3
+  },
+  "test_3d_gpu_rt_splats": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 470,
+   "seconds": 19.125,
+   "tests": 9
+  },
+  "test_3d_gpu_shadows": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 142,
+   "seconds": 9.303,
+   "tests": 13
+  },
+  "test_3d_gpu_splat_data": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 144,
+   "seconds": 18.499,
+   "tests": 21
+  },
+  "test_3d_gpu_splat_layers": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 473,
+   "seconds": 19.705,
+   "tests": 24
+  },
+  "test_3d_gpu_splat_render": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 142,
+   "seconds": 12.968,
+   "tests": 13
+  },
+  "test_3d_gpu_splat_shadows": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 470,
+   "seconds": 8.273,
+   "tests": 23
+  },
+  "test_3d_gpu_splats": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 9.229,
+   "tests": 12
+  },
+  "test_3d_gpu_tiles": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 181,
+   "seconds": 15.69,
+   "tests": 11
+  },
+  "test_3d_gpu_volumes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 146,
+   "seconds": 10.325,
+   "tests": 12
+  },
+  "test_3d_holdout": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 924,
+   "seconds": 157.474,
+   "tests": 46
+  },
+  "test_3d_instance": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.459,
+   "tests": 12
+  },
+  "test_3d_lens": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 40.166,
+   "tests": 21
+  },
+  "test_3d_lens_ui": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 3.91,
+   "tests": 3
+  },
+  "test_3d_light_groups": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 44.675,
+   "tests": 16
+  },
+  "test_3d_light_linking": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 471,
+   "seconds": 51.637,
+   "tests": 29
+  },
+  "test_3d_light_linking_gpu": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 531,
+   "seconds": 7.747,
+   "tests": 6
+  },
+  "test_3d_light_linking_media": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 471,
+   "seconds": 28.985,
+   "tests": 32
+  },
+  "test_3d_material_preview": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.256,
+   "tests": 6
+  },
+  "test_3d_materials": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 142,
+   "seconds": 5.89,
+   "tests": 11
+  },
+  "test_3d_merge_normals_displace": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.847,
+   "tests": 32
+  },
+  "test_3d_mixed_scene_gate": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 473,
+   "seconds": 35.125,
+   "tests": 10
+  },
+  "test_3d_motion_blur": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 17.703,
+   "tests": 21
+  },
+  "test_3d_motion_time": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 7.547,
+   "tests": 14
+  },
+  "test_3d_multichannel_exr": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 8.853,
+   "tests": 16
+  },
+  "test_3d_node_shapes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 7.366,
+   "tests": 6
+  },
+  "test_3d_occlusion_lobe": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 5.639,
+   "tests": 3
+  },
+  "test_3d_pathtrace": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 293,
+   "seconds": 28.388,
+   "tests": 67
+  },
+  "test_3d_pathtrace_denoise": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 28.23,
+   "tests": 28
+  },
+  "test_3d_pathtrace_gpu_soft": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 328,
+   "seconds": 31.17,
+   "tests": 51
+  },
+  "test_3d_pathtrace_splats": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 8.51,
+   "tests": 18
+  },
+  "test_3d_pathtrace_volumes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 250,
+   "seconds": 5.08,
+   "tests": 24
+  },
+  "test_3d_pbr_mesh_material": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 470,
+   "seconds": 3.851,
+   "tests": 10
+  },
+  "test_3d_pbr_textures": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 4.051,
+   "tests": 19
+  },
+  "test_3d_progressive_render": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 5.332,
+   "tests": 8
+  },
+  "test_3d_project_node": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.643,
+   "tests": 19
+  },
+  "test_3d_projection": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.86,
+   "tests": 16
+  },
+  "test_3d_raytrace": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 10.394,
+   "tests": 10
+  },
+  "test_3d_raytrace_render": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 17.18,
+   "tests": 22
+  },
+  "test_3d_read_splat_node": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 3.04,
+   "tests": 10
+  },
+  "test_3d_relight_bundle": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.205,
+   "tests": 6
+  },
+  "test_3d_relight_node": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 11
+  },
+  "test_3d_render_switches": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 583,
+   "seconds": 20.447,
+   "tests": 26
+  },
+  "test_3d_rows_columns_cylinder_matrices": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.802,
+   "tests": 17
+  },
+  "test_3d_shadow_catcher": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 521,
+   "seconds": 114.54,
+   "tests": 52
+  },
+  "test_3d_shadow_controls": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 537,
+   "seconds": 10.338,
+   "tests": 17
+  },
+  "test_3d_shadows": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.002,
+   "tests": 15
+  },
+  "test_3d_shrinkwrap": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.451,
+   "tests": 10
+  },
+  "test_3d_splat_cast_toggle": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.605,
+   "tests": 7
+  },
+  "test_3d_splat_indirect": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 4.449,
+   "tests": 25
+  },
+  "test_3d_splat_intrinsics": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 6.501,
+   "tests": 22
+  },
+  "test_3d_splat_normals": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 3.781,
+   "tests": 16
+  },
+  "test_3d_splat_pbr": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 473,
+   "seconds": 6.845,
+   "tests": 19
+  },
+  "test_3d_splat_progress": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.622,
+   "tests": 7
+  },
+  "test_3d_splat_relight": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.603,
+   "tests": 13
+  },
+  "test_3d_splat_relight_benchmark": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 534,
+   "seconds": 114.108,
+   "tests": 18
+  },
+  "test_3d_splat_render": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 7.276,
+   "tests": 43
+  },
+  "test_3d_splat_shadow_cache": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 5.914,
+   "tests": 9
+  },
+  "test_3d_splat_shadow_catch": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.622,
+   "tests": 10
+  },
+  "test_3d_splat_shadows": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.827,
+   "tests": 12
+  },
+  "test_3d_splat_specular": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 3.853,
+   "tests": 9
+  },
+  "test_3d_splats": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.405,
+   "tests": 16
+  },
+  "test_3d_spot_light": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.405,
+   "tests": 14
+  },
+  "test_3d_spot_render": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 5,
+   "seconds": 2.037,
+   "tests": 10
+  },
+  "test_3d_transform_knobs": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.009,
+   "tests": 7
+  },
+  "test_3d_usd": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.213,
+   "tests": 31
+  },
+  "test_3d_usd_nodes": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.604,
+   "tests": 11
+  },
+  "test_3d_viewport_gpu": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 3.666,
+   "tests": 15
+  },
+  "test_3d_viewport_instances": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 4.045,
+   "tests": 10
+  },
+  "test_3d_viewport_particles": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 2.649,
+   "tests": 10
+  },
+  "test_3d_viewport_render_mode": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.87,
+   "tests": 9
+  },
+  "test_3d_viewport_shading": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 204,
+   "seconds": 3.444,
+   "tests": 11
+  },
+  "test_3d_viewport_shadow_cull": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.856,
+   "tests": 7
+  },
+  "test_3d_viewport_shadows": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 204,
+   "seconds": 3.039,
+   "tests": 19
+  },
+  "test_3d_viewport_splats": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.435,
+   "tests": 15
+  },
+  "test_3d_viewport_volumes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 204,
+   "seconds": 3.073,
+   "tests": 8
+  },
+  "test_3d_write_splat_node": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.603,
+   "tests": 13
+  },
+  "test_3d_write_vdb_node": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.026,
+   "tests": 13
+  },
+  "test_agent": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 36.011,
+   "tests": 6
+  },
+  "test_agentloop": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 9.969,
+   "tests": 33
+  },
+  "test_agentpanel": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.62,
+   "tests": 5
+  },
+  "test_analysis_handles_ui": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 4.482,
+   "tests": 2
+  },
+  "test_animation": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.203,
+   "tests": 62
+  },
+  "test_artifacts": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.448,
+   "tests": 4
+  },
+  "test_artist_tools_wiring": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 3.072,
+   "tests": 3
+  },
+  "test_artisttools": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.61,
+   "tests": 6
+  },
+  "test_benchmark_adaptive_overhead": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.403,
+   "tests": 3
+  },
+  "test_benchmark_hot_pour": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.603,
+   "tests": 3
+  },
+  "test_benchmark_portable_render": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.455,
+   "tests": 8
+  },
+  "test_boundingbox": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.604,
+   "tests": 15
+  },
+  "test_bypass": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 67.475,
+   "tests": 9
+  },
+  "test_cache_correctness": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 26.076,
+   "tests": 1
+  },
+  "test_cachecontext": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.42,
+   "tests": 4
+  },
+  "test_cacheinspector": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 9
+  },
+  "test_cachetier": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.604,
+   "tests": 23
+  },
+  "test_camera_solve": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.808,
+   "tests": 19
+  },
+  "test_camera_solve_lens": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 168.519,
+   "tests": 27
+  },
+  "test_camera_solve_mast3r": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.434,
+   "tests": 18
+  },
+  "test_conditioned_read": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.601,
+   "tests": 6
+  },
+  "test_conditioning_verify": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 3.854,
+   "tests": 8
+  },
+  "test_copybbox": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.601,
+   "tests": 1
+  },
+  "test_core": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.421,
+   "tests": 23
+  },
+  "test_decodepool": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.602,
+   "tests": 7
+  },
+  "test_demo_shot": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 93.856,
+   "tests": 8
+  },
+  "test_desktop": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 323.248,
+   "tests": 196
+  },
+  "test_determinism": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 3.71,
+   "tests": 16
+  },
+  "test_directviewer": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 738,
+   "seconds": 11.272,
+   "tests": 33
+  },
+  "test_display_transform": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 0.605,
+   "tests": 13
+  },
+  "test_e2e5_ui_punchlist": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 537,
+   "seconds": 169.555,
+   "tests": 18
+  },
+  "test_expressions": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.677,
+   "tests": 9
+  },
+  "test_f2_tviscale_precomp_assert": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.668,
+   "tests": 21
+  },
+  "test_field_report": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 9.245,
+   "tests": 15
+  },
+  "test_flare_handle_ui": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 16.928,
+   "tests": 3
+  },
+  "test_flip3d": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 6.432,
+   "tests": 20
+  },
+  "test_flip_gpu_resident": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 396,
+   "seconds": 4.263,
+   "tests": 36
+  },
+  "test_flip_gpu_transfer": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 1.833,
+   "tests": 4
+  },
+  "test_flow2_f1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.003,
+   "tests": 3
+  },
+  "test_flow2_f1_finish": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.071,
+   "tests": 6
+  },
+  "test_flow2b_gridwarp_tracker": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.458,
+   "tests": 12
+  },
+  "test_flow_node_accuracy": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 3.488,
+   "tests": 2
+  },
+  "test_flow_nodes_v1": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 10.586,
+   "tests": 3
+  },
+  "test_fluid2d": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 2.445,
+   "tests": 13
+  },
+  "test_fluid3d": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 19.919,
+   "tests": 57
+  },
+  "test_fluid3d_nodes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 10.22,
+   "tests": 46
+  },
+  "test_fluid_artist_presets": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 10.361,
+   "tests": 2
+  },
+  "test_fluid_geo_track_cache": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.674,
+   "tests": 4
+  },
+  "test_fluid_gpu_shape": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 4.87,
+   "tests": 2
+  },
+  "test_fluid_gpu_solver": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 398,
+   "seconds": 5.547,
+   "tests": 30
+  },
+  "test_fluid_preview_ring": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.807,
+   "tests": 3
+  },
+  "test_fluid_resize": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.028,
+   "tests": 14
+  },
+  "test_fluid_surface_cache": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 3.93,
+   "tests": 3
+  },
+  "test_fluid_upres": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 32.41,
+   "tests": 15
+  },
+  "test_fluidshelf": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.603,
+   "tests": 4
+  },
+  "test_generative": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 11.031,
+   "tests": 19
+  },
+  "test_golden_2d": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.045,
+   "tests": 5
+  },
+  "test_gpu_band_growth": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 1.627,
+   "tests": 1
+  },
+  "test_gpu_frame_reuse": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 250,
+   "seconds": 2.035,
+   "tests": 13
+  },
+  "test_gpulens": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 714,
+   "seconds": 45.005,
+   "tests": 22
+  },
+  "test_gpulock": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.831,
+   "tests": 5
+  },
+  "test_gpumemory": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.869,
+   "tests": 14
+  },
+  "test_gpuvolume_persistent": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.403,
+   "tests": 1
+  },
+  "test_graph_input_latency": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 13.168,
+   "tests": 5
+  },
+  "test_graph_look": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 121.87,
+   "tests": 30
+  },
+  "test_graph_structure": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 9.381,
+   "tests": 8
+  },
+  "test_graphics_adapter": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.403,
+   "tests": 15
+  },
+  "test_group_ui": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 10.172,
+   "tests": 8
+  },
+  "test_groups": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.647,
+   "tests": 26
+  },
+  "test_handles2d": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.443,
+   "tests": 10
+  },
+  "test_handles3d": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.606,
+   "tests": 32
+  },
+  "test_handles3d_rotate_scale": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.61,
+   "tests": 12
+  },
+  "test_hostile_media_2d": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.821,
+   "tests": 14
+  },
+  "test_hot_pour": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 152,
+   "seconds": 4.713,
+   "tests": 8
+  },
+  "test_hot_pour_shot": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 5.698,
+   "tests": 2
+  },
+  "test_hotpour_fixes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 10,
+   "seconds": 7.945,
+   "tests": 23
+  },
+  "test_imaging": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.656,
+   "tests": 23
+  },
+  "test_interactive_cancellation": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 10.762,
+   "tests": 3
+  },
+  "test_issues": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.605,
+   "tests": 7
+  },
+  "test_jobs": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.058,
+   "tests": 6
+  },
+  "test_knobs": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 6.403,
+   "tests": 9
+  },
+  "test_knowledge": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.851,
+   "tests": 7
+  },
+  "test_lens_l1": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 8.589,
+   "tests": 33
+  },
+  "test_lens_shot_l3": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 252,
+   "seconds": 82.283,
+   "tests": 14
+  },
+  "test_lens_view_l3": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 6.111,
+   "tests": 4
+  },
+  "test_lightmixer": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 24.428,
+   "tests": 17
+  },
+  "test_liquid_gpu_viscosity": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.033,
+   "tests": 2
+  },
+  "test_liquid_nodes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 6.314,
+   "tests": 31
+  },
+  "test_liquid_render": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 936,
+   "seconds": 8.311,
+   "tests": 26
+  },
+  "test_liquid_surface": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 394,
+   "seconds": 34.45,
+   "tests": 21
+  },
+  "test_local_gpu": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.403,
+   "tests": 3
+  },
+  "test_loops": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.805,
+   "tests": 7
+  },
+  "test_lut_3dl": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.658,
+   "tests": 4
+  },
+  "test_m2_latency_gate": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.832,
+   "tests": 2
+  },
+  "test_m2_throughput_gate": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 18.069,
+   "tests": 1
+  },
+  "test_m3_reprojection": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 6.763,
+   "tests": 4
+  },
+  "test_m3_vram_budget": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 595,
+   "seconds": 7.898,
+   "tests": 8
+  },
+  "test_mcpserver": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 30.458,
+   "tests": 17
+  },
+  "test_media": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.81,
+   "tests": 30
+  },
+  "test_memory_ceiling_gate": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 125.51,
+   "tests": 1
+  },
+  "test_motion": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.647,
+   "tests": 4
+  },
+  "test_navigation": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 17.143,
+   "tests": 7
+  },
+  "test_new_look_final_pass": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 473,
+   "seconds": 17.48,
+   "tests": 4
+  },
+  "test_new_look_graph_help_nl5": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 13.782,
+   "tests": 6
+  },
+  "test_new_look_time_row_nl5": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 16.947,
+   "tests": 9
+  },
+  "test_new_look_viewer_strip_nl5": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 56.087,
+   "tests": 16
+  },
+  "test_node_rail": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 38.307,
+   "tests": 31
+  },
+  "test_nodecatalog": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.806,
+   "tests": 3
+  },
+  "test_nodeicons": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.848,
+   "tests": 10
+  },
+  "test_ocio_nodes": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.004,
+   "tests": 11
+  },
+  "test_opticalflow": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.967,
+   "tests": 4
+  },
+  "test_opticalflow_gpu": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.426,
+   "tests": 2
+  },
+  "test_particle_collisions_gpu": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.031,
+   "tests": 2
+  },
+  "test_particle_materials": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.852,
+   "tests": 28
+  },
+  "test_particle_presets": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.007,
+   "tests": 4
+  },
+  "test_particleinspect": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.604,
+   "tests": 11
+  },
+  "test_particles_animated": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 7.788,
+   "tests": 16
+  },
+  "test_particles_bounce": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 10.256,
+   "tests": 23
+  },
+  "test_particles_collide": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 44.679,
+   "tests": 15
+  },
+  "test_particles_deforming_gpu": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.061,
+   "tests": 2
+  },
+  "test_particles_forces": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.483,
+   "tests": 25
+  },
+  "test_particles_nodes": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.804,
+   "tests": 30
+  },
+  "test_particles_render": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.826,
+   "tests": 15
+  },
+  "test_particles_shapes": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.601,
+   "tests": 16
+  },
+  "test_particles_solver": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.605,
+   "tests": 24
+  },
+  "test_particletools": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 8
+  },
+  "test_pathtrace_volume_skip": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 202,
+   "seconds": 2.631,
+   "tests": 2
+  },
+  "test_perf_playback": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.426,
+   "tests": 26
+  },
+  "test_phase_a": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.629,
+   "tests": 48
+  },
+  "test_phase_b": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.407,
+   "tests": 28
+  },
+  "test_pids": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.429,
+   "tests": 4
+  },
+  "test_planar_tracking": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 11.098,
+   "tests": 8
+  },
+  "test_playback": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.619,
+   "tests": 19
+  },
+  "test_playback_qa_order": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 3
+  },
+  "test_presets": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.603,
+   "tests": 12
+  },
+  "test_profile": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.602,
+   "tests": 6
+  },
+  "test_profile_host_phases": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.627,
+   "tests": 2
+  },
+  "test_proxy": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.816,
+   "tests": 11
+  },
+  "test_queuepanel": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.067,
+   "tests": 3
+  },
+  "test_radial_commands": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.607,
+   "tests": 14
+  },
+  "test_radial_menu": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 3.919,
+   "tests": 35
+  },
+  "test_reference_bridge": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 4.118,
+   "tests": 10
+  },
+  "test_render_progress": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 3.052,
+   "tests": 6
+  },
+  "test_render_through_lens_g2": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 7.816,
+   "tests": 27
+  },
+  "test_rigid3d": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 9.346,
+   "tests": 9
+  },
+  "test_rigid_nodes": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.277,
+   "tests": 8
+  },
+  "test_roi_qa_fixture": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 14.62,
+   "tests": 1
+  },
+  "test_roto": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.875,
+   "tests": 73
+  },
+  "test_roto_artist_panel": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 96.788,
+   "tests": 14
+  },
+  "test_roto_bg_plate": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.238,
+   "tests": 3
+  },
+  "test_roto_paint": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.602,
+   "tests": 15
+  },
+  "test_roto_paint_first_stroke": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 7.237,
+   "tests": 11
+  },
+  "test_roto_paint_ui": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 86.436,
+   "tests": 14
+  },
+  "test_roto_paint_w1": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.804,
+   "tests": 16
+  },
+  "test_roto_ui": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 187.48,
+   "tests": 18
+  },
+  "test_runtimes": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.403,
+   "tests": 11
+  },
+  "test_scene3d_proxy": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 7
+  },
+  "test_scene_state": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 3.071,
+   "tests": 5
+  },
+  "test_sdxl_controlnet": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 8738,
+   "seconds": 164.832,
+   "tests": 14
+  },
+  "test_simcache": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.626,
+   "tests": 14
+  },
+  "test_simstats": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.402,
+   "tests": 6
+  },
+  "test_slice3d": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.608,
+   "tests": 14
+  },
+  "test_smartvector": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 202,
+   "seconds": 5.883,
+   "tests": 10
+  },
+  "test_sparse_gpu_pathtrace": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 263,
+   "seconds": 6.184,
+   "tests": 10
+  },
+  "test_sparse_gpu_volumes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 212,
+   "seconds": 7.282,
+   "tests": 22
+  },
+  "test_sparse_light_links": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 326,
+   "seconds": 8.103,
+   "tests": 9
+  },
+  "test_survey_panel": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 8.741,
+   "tests": 4
+  },
+  "test_survey_verify": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.001,
+   "tests": 5
+  },
+  "test_temporal": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.624,
+   "tests": 7
+  },
+  "test_tiers": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 45
+  },
+  "test_tile_layers": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 1.622,
+   "tests": 8
+  },
+  "test_tileexec": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.001,
+   "tests": 38
+  },
+  "test_tiles": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.426,
+   "tests": 25
+  },
+  "test_time": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.806,
+   "tests": 9
+  },
+  "test_timeline": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.428,
+   "tests": 16
+  },
+  "test_topbar": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 15.005,
+   "tests": 27
+  },
+  "test_track3d": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.602,
+   "tests": 7
+  },
+  "test_tracker_analysis": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 2.036,
+   "tests": 11
+  },
+  "test_tracker_completion": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 3.458,
+   "tests": 8
+  },
+  "test_tracker_panel": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.629,
+   "tests": 1
+  },
+  "test_transform_handle_ui": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 34.821,
+   "tests": 8
+  },
+  "test_transform_resample_perf": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 1
+  },
+  "test_ui_punchlist2": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 17.435,
+   "tests": 18
+  },
+  "test_updater": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.401,
+   "tests": 11
+  },
+  "test_vdbio": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 202,
+   "seconds": 3.863,
+   "tests": 51
+  },
+  "test_viewer_compare": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 47.699,
+   "tests": 23
+  },
+  "test_viewer_frame": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 15.172,
+   "tests": 16
+  },
+  "test_viewer_look": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 4.244,
+   "tests": 14
+  },
+  "test_viewer_mode": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 13.335,
+   "tests": 22
+  },
+  "test_viewport3d_gizmo": {
+   "gpu": true,
+   "opens_card": true,
+   "peak_card_mib": 460,
+   "seconds": 46.963,
+   "tests": 10
+  },
+  "test_viewport3d_gizmo_rs": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 43.299,
+   "tests": 9
+  },
+  "test_viewport3d_marker_handles": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 42.296,
+   "tests": 12
+  },
+  "test_viewport3d_picking": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 140,
+   "seconds": 14.617,
+   "tests": 7
+  },
+  "test_viewport_fluid_stats": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 2.229,
+   "tests": 3
+  },
+  "test_viewport_lens_g2": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 202,
+   "seconds": 4.674,
+   "tests": 21
+  },
+  "test_viewport_renderer": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 0.601,
+   "tests": 5
+  },
+  "test_volume_data_passes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 250,
+   "seconds": 16.223,
+   "tests": 17
+  },
+  "test_volume_fire_look": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 146,
+   "seconds": 9.524,
+   "tests": 29
+  },
+  "test_volume_gpu_passes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 208,
+   "seconds": 4.253,
+   "tests": 10
+  },
+  "test_volume_majorant_grid": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 186,
+   "seconds": 12.317,
+   "tests": 9
+  },
+  "test_volume_motion_blur": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 4.244,
+   "tests": 7
+  },
+  "test_volume_passes": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 2.222,
+   "tests": 17
+  },
+  "test_volume_path_motion_blur": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 250,
+   "seconds": 13.134,
+   "tests": 11
+  },
+  "test_volume_render": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 142,
+   "seconds": 2.428,
+   "tests": 18
+  },
+  "test_volume_scene": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 0.43,
+   "tests": 8
+  },
+  "test_volume_shadow_exchange": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 3.536,
+   "tests": 8
+  },
+  "test_whitewater": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 138,
+   "seconds": 2.436,
+   "tests": 9
+  },
+  "test_whitewater_gpu": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 1.603,
+   "tests": 3
+  },
+  "test_wire_feel": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 51.3,
+   "tests": 19
+  },
+  "test_wire_insert": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 26.448,
+   "tests": 12
+  },
+  "test_workers": {
+   "gpu": false,
+   "opens_card": false,
+   "peak_card_mib": 0,
+   "seconds": 1.426,
+   "tests": 5
+  },
+  "test_workspace_layout": {
+   "gpu": false,
+   "opens_card": true,
+   "peak_card_mib": 0,
+   "seconds": 6.692,
+   "tests": 12
+  }
+ },
+ "note": "Each test module timed in its own fresh process by tools/run_tests_parallel.py on 2026-10-19 at origin/main 0.40.0 (12 modules at a time, at most 3 card modules at once, a serial merge-round suite running alongside, so times include contention). peak_card_mib = most NVIDIA memory the module's processes held (sampled every 2 s); gpu = peak at or over gpu_mib, the modules the runner caps; opens_card = it opened an NVIDIA or DRI device at all. Serial unittest discover on the same commit: 5547 tests in 21350 s.",
+ "wall_seconds": 521.9
+}
