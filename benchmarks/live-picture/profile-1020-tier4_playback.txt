@@ -1,12 +1,12 @@
-Lane 8 live-picture profile · tier4_playback · llvmpipe baseline
-Measured result: {"series": "tier4_playback", "adapter": "llvmpipe", "fps": 2.493, "rendered_frame_changes": 5, "elapsed_s": 2.006, "fps_target": 24.0, "status": "1920 × 1080  ·  proxy 1/4  ·  5 ms  ·  display cache hit  ·  display GPU  ·  ahead 3/3  ·  dropped 0"}
+Lane 8 live-picture profile · tier4_playback · baseline measurements
 
-Largest measured graph evaluations (inclusive wall time):
-1. Roto tier 4: 377.523 ms
-2. Roto tier 4: 374.796 ms
-3. Roto tier 4: 371.973 ms
-4. Roto tier 4: 369.988 ms
-5. Roto tier 4: 366.356 ms
+RTX 3080 Ti: {"series": "tier4_playback", "adapter": "NVIDIA GeForce RTX 3080 Ti", "fps": 2.622, "rendered_frame_changes": 21, "elapsed_s": 8.009, "fps_target": 24.0, "status": "1920 × 1080  ·  proxy 1/4  ·  4 ms  ·  display cache hit  ·  display GPU  ·  ahead 3/3  ·  dropped 0"}
+Top graph-root evaluations (inclusive): tier 4 384.169 ms, tier 4 371.261 ms, tier 4 370.324 ms, tier 4 364.084 ms, tier 4 361.524 ms
+Display cache lookups: 45; hits: 23.
+
+llvmpipe: {"series": "tier4_playback", "adapter": "llvmpipe", "fps": 2.493, "rendered_frame_changes": 5, "elapsed_s": 2.006, "fps_target": 24.0, "status": "1920 × 1080  ·  proxy 1/4  ·  5 ms  ·  display cache hit  ·  display GPU  ·  ahead 3/3  ·  dropped 0"}
+Top graph-root evaluations (inclusive): tier 4 377.523 ms, tier 4 374.796 ms, tier 4 371.973 ms, tier 4 369.988 ms, tier 4 366.356 ms
+Display cache lookups: 13; hits: 7.
 
 Thread profiles (cProfile; isolated passes because CPython 3.12 allows one active profiler per process):
 

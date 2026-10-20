@@ -1,0 +1,2356 @@
+{
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "results": [
+    {
+      "series": "roto_drag",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "first_picture_s": 1.0387,
+      "picture_during_drag": false,
+      "frames_during_drag": 0,
+      "settle_s": 3.7684,
+      "status": "1920 \u00d7 1080  \u00b7  2564 ms  \u00b7  tile fallback  \u00b7  cache 442.1 / 4096 MiB  \u00b7  display GPU"
+    },
+    {
+      "series": "uncached_scrub",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "first_picture_s": 0.5656,
+      "settle_s": 5.0981,
+      "status": "1920 \u00d7 1080  \u00b7  3789 ms  \u00b7  tile fallback  \u00b7  cache 851.6 / 4096 MiB  \u00b7  display GPU"
+    },
+    {
+      "series": "tier4_playback",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "fps": 2.622,
+      "rendered_frame_changes": 21,
+      "elapsed_s": 8.009,
+      "fps_target": 24.0,
+      "status": "1920 \u00d7 1080  \u00b7  proxy 1/4  \u00b7  4 ms  \u00b7  display cache hit  \u00b7  display GPU  \u00b7  ahead 3/3  \u00b7  dropped 0"
+    }
+  ],
+  "timeline": [
+    {
+      "stage": "paint",
+      "t": 1082650.399549453
+    },
+    {
+      "stage": "paint",
+      "t": 1082650.408689929
+    },
+    {
+      "stage": "paint",
+      "t": 1082650.410848847
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082650.412743672
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082650.413703364
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082650.413709684,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082650.415097314
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082650.415112003,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082650.416216301
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082650.416220031,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082650.416812274
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082650.416813464,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082650.416822494,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1082650.418654161
+    },
+    {
+      "stage": "scenario_start",
+      "t": 1082651.43596387
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082654.330323715,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 3913.408,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082654.330349984,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082654.330407213
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082654.401960973
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082654.730117093
+    },
+    {
+      "stage": "paint",
+      "t": 1082654.733832246
+    },
+    {
+      "stage": "paint",
+      "t": 1082654.737656215
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082654.994303813
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082655.100751404,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 106.416,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082655.100761074
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082655.103432397
+    },
+    {
+      "stage": "series_start",
+      "t": 1082655.741523073,
+      "series": "roto_drag"
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1082655.74648141,
+      "type": 5
+    },
+    {
+      "stage": "paint",
+      "t": 1082655.74993439
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1082656.001846375,
+      "type": 2
+    },
+    {
+      "stage": "paint",
+      "t": 1082656.330086192
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1082656.34085556,
+      "type": 5
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082656.345989222,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "paint",
+      "t": 1082656.348569857
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082656.384541857
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082656.385595687
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082656.385601226,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082656.385622676,
+      "tier": 8
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1082656.406837972,
+      "type": 5
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082656.413013974,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "paint",
+      "t": 1082656.415864311
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082656.486884947,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 101.122,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082656.486899347,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082656.489740095
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082656.490191682
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082656.490194022,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082656.490198612,
+      "tier": 8
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1082656.493860606,
+      "type": 5
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082656.499175392,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "paint",
+      "t": 1082656.501886443
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1082656.57840837,
+      "type": 3
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082656.579353723
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082656.581765423,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 91.509,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082656.581785433,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082656.906404565,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "paint",
+      "t": 1082656.909162875
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082656.924580179
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082656.925380986
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082656.925387506,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082656.925399115,
+      "tier": 8
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082657.014782911,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 89.25,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082657.0147942,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082657.014826809
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082657.01654361
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082657.035299247,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082657.038131625
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082657.039130106
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082657.039133016,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082657.039139366,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082657.042703103
+    },
+    {
+      "stage": "paint",
+      "t": 1082657.059636913
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082657.39238086,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 353.155,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082657.39239409,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082657.392424869
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082657.396679666
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082657.400878405,
+      "tier": 1,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082657.403920447
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082657.404353474
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082657.404356424,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082657.404744823
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082657.404745653,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082657.405112112
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082657.405333276,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082657.405334996
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082657.408954861
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082657.40899706,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1082657.412511448
+    },
+    {
+      "stage": "paint",
+      "t": 1082657.44493794
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082659.906657527,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 2497.528,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082659.906674897,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082659.906719785
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082659.9677744
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082659.972881282
+    },
+    {
+      "stage": "paint",
+      "t": 1082659.975446758
+    },
+    {
+      "stage": "series_end",
+      "t": 1082660.343464355,
+      "series": "roto_drag"
+    },
+    {
+      "stage": "series_start",
+      "t": 1082660.343467335,
+      "series": "uncached_scrub"
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082660.349025674
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082660.679002311,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "paint",
+      "t": 1082660.701292986
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082660.716118438
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082660.717165417
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082660.717168337,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082660.717174467,
+      "tier": 8
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082660.921602665,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 204.332,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082660.921618745,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082660.921668703
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082660.922960716
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082660.929853597,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082660.93283321
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082660.933285097
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082660.933288097,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082660.933294787,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082660.938067299
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082661.284615007,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 351.227,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082661.284628726,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082661.284656046
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082661.288283361
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082661.293807711,
+      "tier": 1,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082661.296820684
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082661.29798822
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082661.29799129,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082661.298383709
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082661.298384579,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082661.298745778
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082661.299007171,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082661.29901216
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082661.302304635
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082661.302335484,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1082661.303224159
+    },
+    {
+      "stage": "paint",
+      "t": 1082661.316429777
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082665.040454251,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 3737.988,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082665.040471361,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082665.040519949
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082665.086125766
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082665.091243323
+    },
+    {
+      "stage": "paint",
+      "t": 1082665.093167565
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082665.330948475
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082665.331682723,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 0.69,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082665.331711662
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082665.333432771
+    },
+    {
+      "stage": "series_end",
+      "t": 1082665.458359505,
+      "series": "uncached_scrub"
+    },
+    {
+      "stage": "series_start",
+      "t": 1082665.458362885,
+      "series": "tier4_playback"
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082665.45851598,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "paint",
+      "t": 1082665.460898449
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082665.495813945
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082665.497213363
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082665.498382828,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082665.498445366
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082665.502964431
+    },
+    {
+      "stage": "paint",
+      "t": 1082665.511752408
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082665.872177621,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082665.8745383
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082665.875329536
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082665.875896239,
+      "hit": true
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082665.88188015
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082665.883057785
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082665.883060295,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082665.883066815,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082665.885591339
+    },
+    {
+      "stage": "paint",
+      "t": 1082665.895890891
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082665.915251592
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082665.919173355,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082666.234904804,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 351.732,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082666.234918433,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082666.237909344
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082666.238419129
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082666.238423429,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082666.238437048
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082666.2417332
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082666.24675674
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082666.247620884
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082666.247623554,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082666.247629473,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082666.251199517
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082666.260019403
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082666.26344878,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082666.631918652,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 384.169,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082666.631934272,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082666.63400282
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082666.635224363
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082666.635228833,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082666.635245533
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082666.638798046
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082666.643919573
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082666.645135197
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082666.645138317,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082666.645145517,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082666.648619953
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082666.65738986
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082666.660836297,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082666.991045153,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 345.793,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082666.991057423,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082666.993609697
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082666.994132451
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082666.994137651,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082666.99415041
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082666.997734203
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082667.003556809
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082667.004300207
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082667.004303817,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082667.004311567,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082667.008443073
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082667.019333207
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082667.022884271,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082667.36504012,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 360.6,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082667.365053759,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082667.367622523
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082667.368508216
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082667.368514126,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082667.368530045
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082667.371767659
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082667.377197796
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082667.378356372
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082667.378358941,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082667.378365701,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082667.382176227
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082667.392049212
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082667.395642265,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082667.749738626,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 371.261,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082667.749752816,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082667.75261402
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082667.753115065
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082667.753120445,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082667.753134265
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082667.756696068
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082667.761611021
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082667.762149535
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082667.762152995,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082667.762160625,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082667.76899176
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082667.778297122
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082667.781899854,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082668.12381206,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 361.524,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082668.12383191,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082668.125936167
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082668.12648826
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082668.1264941,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082668.1265113
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082668.130545919
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082668.136219499
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082668.136727704
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082668.136731044,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082668.136736714,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082668.14155105
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082668.152527592
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082668.157460734,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082668.507173807,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 370.324,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082668.507188346,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082668.509686702
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082668.510227915
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082668.510233995,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082668.510251165
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082668.513536066
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082668.518708472
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082668.519237426
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082668.519240296,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082668.519247206,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082668.52244629
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082668.531319325
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082668.534897598,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082668.874276989,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 354.899,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082668.874292899,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082668.876563161
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082668.877143204
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082668.877150423,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082668.877168793
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082668.879715367
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082668.884542902
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082668.885065797
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082668.885070526,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082668.885076396,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082668.890125685
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082668.899566623
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082668.903544634,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082669.233850937,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 348.663,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082669.233864886,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082669.236809439
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082669.237698262
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082669.237703632,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082669.237717551
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082669.241560606
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082669.246734152
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082669.247278146
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082669.247281735,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082669.247288595,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082669.252108741
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082669.262196359
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082669.265816151,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082669.60025869,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 352.847,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082669.60027511,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082669.602778615
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082669.604115025
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082669.604129575,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082669.604165624
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082669.607584091
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082669.613274041
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082669.613815765
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082669.613818215,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082669.613823875,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082669.618204724
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082669.627173795
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082669.630472137,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082669.966493709,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 352.547,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082669.966507459,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082669.969511129
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082669.97047858
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082669.97048373,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082669.970499599
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082669.974452751
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082669.979878279
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082669.98115844
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082669.98116403,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082669.98117566,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082669.984781542
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082669.993711815
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082669.996981167,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082670.333942181,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 352.655,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082670.333956201,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082670.336598392
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082670.33766007
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082670.33766544,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082670.337678659
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082670.340841355
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082670.346315741
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082670.346832566
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082670.346835726,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082670.346841805,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082670.349890794
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082670.358755229
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082670.362328082,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082670.700686494,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 353.734,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082670.700699534,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082670.702936267
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082670.704346155
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082670.704360515,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082670.704395294
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082670.707961707
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082670.713472812
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082670.714390695
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082670.714393645,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082670.714400074,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082670.717782453
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082670.728233871
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082670.731832773,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082671.062967481,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 348.442,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082671.062983391,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082671.065088868
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082671.065609622
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082671.065614532,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082671.065630152
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082671.069081368
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082671.074148807
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082671.075449318
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082671.075453438,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082671.075459518,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082671.078458988
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082671.087007852
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082671.09044519,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082671.430430043,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 354.854,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082671.430441993,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082671.432779763
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082671.433704035
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082671.433715075,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082671.433745144
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082671.437299858
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082671.443050936
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082671.44425475
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082671.446300928
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082671.446306728,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082671.446318658,
+      "tier": 4
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082671.448373116,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "paint",
+      "t": 1082671.45426268
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082671.802574735,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 356.087,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082671.802587914,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082671.807334903
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082671.808642823
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082671.808653443,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082671.808683952
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082671.812728031
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082671.82011345
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082671.82080517
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082671.82080923,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082671.820817039,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082671.825058852
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082671.834189759
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082671.837667256,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082672.172329428,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 351.377,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082672.172342848,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082672.175032327
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082672.175557412
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082672.175561942,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082672.175575431
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082672.179131175
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082672.184797065
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082672.186054858
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082672.186060258,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082672.186072777,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082672.190635161
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082672.199642871
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082672.203100878,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082672.539534198,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 353.325,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082672.539550557,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082672.542031803
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082672.542569197
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082672.542573737,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082672.542589446
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082672.546659935
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082672.552232488
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082672.552794631
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082672.552797571,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082672.552804191,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082672.556102372
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082672.565565109
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082672.569127703,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082672.910767347,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 357.844,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082672.910781926,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082672.912883974
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082672.914185145
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082672.914196074,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082672.914211484
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082672.917754798
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082672.922908344
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082672.923431988
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082672.923434758,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082672.923440908,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082672.927216685
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082672.936701371
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082672.940267535,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082673.281582568,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 357.979,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082673.281596928,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082673.284505811
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082673.285030755
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082673.285035135,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082673.285050915
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082673.288665137
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082673.293828222
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082673.294820353
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082673.294823233,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082673.294830652,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082673.299129944
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082673.307902411
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082673.31129897,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082673.648933234,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 353.986,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082673.648946143,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082673.652312473
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082673.652821177
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082673.652825727,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082673.652838917
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082673.656609124
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082673.662150138
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082673.662663343
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082673.662666843,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082673.662674003,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082673.666731631
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082673.675363213
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082673.678634995,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082674.026878172,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 364.084,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082674.026894012,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082674.028986029
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082674.268349191
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082674.370147247,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 101.773,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082674.370155577
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082674.371844686
+    },
+    {
+      "stage": "series_end",
+      "t": 1082674.380803759,
+      "series": "tier4_playback"
+    }
+  ],
+  "profiles": []
+}

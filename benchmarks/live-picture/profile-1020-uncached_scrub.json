@@ -1,318 +1,635 @@
 {
-  "adapter": "llvmpipe",
   "series": "uncached_scrub",
-  "result": {
-    "series": "uncached_scrub",
-    "adapter": "llvmpipe",
-    "first_picture_s": 0.5693,
-    "settle_s": 5.5087,
-    "status": "1920 \u00d7 1080  \u00b7  4183 ms  \u00b7  tile fallback  \u00b7  cache 851.1 / 4096 MiB  \u00b7  display GPU"
-  },
-  "timeline": [
+  "measurements": [
     {
-      "stage": "series_start",
-      "t": 1082439.23026431,
-      "series": "uncached_scrub",
-      "t_from_series_start_s": 0.0
+      "adapter": "RTX 3080 Ti",
+      "result": {
+        "series": "uncached_scrub",
+        "adapter": "NVIDIA GeForce RTX 3080 Ti",
+        "first_picture_s": 0.5656,
+        "settle_s": 5.0981,
+        "status": "1920 \u00d7 1080  \u00b7  3789 ms  \u00b7  tile fallback  \u00b7  cache 851.6 / 4096 MiB  \u00b7  display GPU"
+      },
+      "timeline": [
+        {
+          "stage": "series_start",
+          "t": 1082660.343467335,
+          "series": "uncached_scrub",
+          "t_from_series_start_s": 0.0
+        },
+        {
+          "stage": "document_edit_applied",
+          "t": 1082660.349025674,
+          "t_from_series_start_s": 0.005558
+        },
+        {
+          "stage": "preview_requested",
+          "t": 1082660.679002311,
+          "tier": null,
+          "progressive": true,
+          "t_from_series_start_s": 0.335535
+        },
+        {
+          "stage": "paint",
+          "t": 1082660.701292986,
+          "t_from_series_start_s": 0.357826
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082660.716118438,
+          "t_from_series_start_s": 0.372651
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082660.717165417,
+          "t_from_series_start_s": 0.373698
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082660.717168337,
+          "hit": false,
+          "t_from_series_start_s": 0.373701
+        },
+        {
+          "stage": "tier_resample_and_graph_start",
+          "t": 1082660.717174467,
+          "tier": 8,
+          "t_from_series_start_s": 0.373707
+        },
+        {
+          "stage": "graph_node_evaluated",
+          "t": 1082660.921602665,
+          "node": "roto",
+          "kind": "Roto",
+          "tier": 8,
+          "elapsed_ms": 204.332,
+          "fallback": false,
+          "reason": null,
+          "t_from_series_start_s": 0.578135
+        },
+        {
+          "stage": "graph_evaluation_end",
+          "t": 1082660.921618745,
+          "tier": 8,
+          "tiled": false,
+          "fallback_nodes": [],
+          "t_from_series_start_s": 0.578151
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082660.921668703,
+          "t_from_series_start_s": 0.578201
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082660.922960716,
+          "t_from_series_start_s": 0.579493
+        },
+        {
+          "stage": "preview_requested",
+          "t": 1082660.929853597,
+          "tier": 4,
+          "progressive": false,
+          "t_from_series_start_s": 0.586386
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082660.93283321,
+          "t_from_series_start_s": 0.589366
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082660.933285097,
+          "t_from_series_start_s": 0.589818
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082660.933288097,
+          "hit": false,
+          "t_from_series_start_s": 0.589821
+        },
+        {
+          "stage": "tier_resample_and_graph_start",
+          "t": 1082660.933294787,
+          "tier": 4,
+          "t_from_series_start_s": 0.589827
+        },
+        {
+          "stage": "paint",
+          "t": 1082660.938067299,
+          "t_from_series_start_s": 0.5946
+        },
+        {
+          "stage": "graph_node_evaluated",
+          "t": 1082661.284615007,
+          "node": "roto",
+          "kind": "Roto",
+          "tier": 4,
+          "elapsed_ms": 351.227,
+          "fallback": false,
+          "reason": null,
+          "t_from_series_start_s": 0.941148
+        },
+        {
+          "stage": "graph_evaluation_end",
+          "t": 1082661.284628726,
+          "tier": 4,
+          "tiled": false,
+          "fallback_nodes": [],
+          "t_from_series_start_s": 0.941161
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082661.284656046,
+          "t_from_series_start_s": 0.941189
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082661.288283361,
+          "t_from_series_start_s": 0.944816
+        },
+        {
+          "stage": "preview_requested",
+          "t": 1082661.293807711,
+          "tier": 1,
+          "progressive": false,
+          "t_from_series_start_s": 0.95034
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082661.296820684,
+          "t_from_series_start_s": 0.953353
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082661.29798822,
+          "t_from_series_start_s": 0.954521
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082661.29799129,
+          "hit": false,
+          "t_from_series_start_s": 0.954524
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082661.298383709,
+          "t_from_series_start_s": 0.954916
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082661.298384579,
+          "hit": false,
+          "t_from_series_start_s": 0.954917
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082661.298745778,
+          "t_from_series_start_s": 0.955278
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082661.299007171,
+          "hit": true,
+          "t_from_series_start_s": 0.95554
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082661.29901216,
+          "t_from_series_start_s": 0.955545
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082661.302304635,
+          "t_from_series_start_s": 0.958837
+        },
+        {
+          "stage": "tier_resample_and_graph_start",
+          "t": 1082661.302335484,
+          "tier": 1,
+          "t_from_series_start_s": 0.958868
+        },
+        {
+          "stage": "paint",
+          "t": 1082661.303224159,
+          "t_from_series_start_s": 0.959757
+        },
+        {
+          "stage": "paint",
+          "t": 1082661.316429777,
+          "t_from_series_start_s": 0.972962
+        },
+        {
+          "stage": "graph_node_evaluated",
+          "t": 1082665.040454251,
+          "node": "roto",
+          "kind": "Roto",
+          "tier": 1,
+          "elapsed_ms": 3737.988,
+          "fallback": false,
+          "reason": null,
+          "t_from_series_start_s": 4.696987
+        },
+        {
+          "stage": "graph_evaluation_end",
+          "t": 1082665.040471361,
+          "tier": 1,
+          "tiled": false,
+          "fallback_nodes": [],
+          "t_from_series_start_s": 4.697004
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082665.040519949,
+          "t_from_series_start_s": 4.697053
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082665.086125766,
+          "t_from_series_start_s": 4.742658
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082665.091243323,
+          "t_from_series_start_s": 4.747776
+        },
+        {
+          "stage": "paint",
+          "t": 1082665.093167565,
+          "t_from_series_start_s": 4.7497
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082665.330948475,
+          "t_from_series_start_s": 4.987481
+        },
+        {
+          "stage": "graph_node_evaluated",
+          "t": 1082665.331682723,
+          "node": "plate",
+          "kind": "Read",
+          "tier": 8,
+          "elapsed_ms": 0.69,
+          "fallback": false,
+          "reason": null,
+          "t_from_series_start_s": 4.988215
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082665.331711662,
+          "t_from_series_start_s": 4.988244
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082665.333432771,
+          "t_from_series_start_s": 4.989965
+        },
+        {
+          "stage": "series_end",
+          "t": 1082665.458359505,
+          "series": "uncached_scrub",
+          "t_from_series_start_s": 5.114892
+        }
+      ],
+      "largest_graph_evaluations_ms": [
+        {
+          "kind": "Roto",
+          "tier": 1,
+          "ms": 3737.988
+        },
+        {
+          "kind": "Roto",
+          "tier": 4,
+          "ms": 351.227
+        },
+        {
+          "kind": "Roto",
+          "tier": 8,
+          "ms": 204.332
+        },
+        {
+          "kind": "Read",
+          "tier": 8,
+          "ms": 0.69
+        }
+      ],
+      "cache_lookups": 5,
+      "cache_hits": 1
     },
     {
-      "stage": "document_edit_applied",
-      "t": 1082439.235137988,
-      "t_from_series_start_s": 0.004874
-    },
-    {
-      "stage": "preview_requested",
-      "t": 1082439.569658196,
-      "tier": null,
-      "progressive": true,
-      "t_from_series_start_s": 0.339394
-    },
-    {
-      "stage": "paint",
-      "t": 1082439.592156463,
-      "t_from_series_start_s": 0.361892
-    },
-    {
-      "stage": "worker_start",
-      "t": 1082439.60745224,
-      "t_from_series_start_s": 0.377188
-    },
-    {
-      "stage": "display_cache_lookup_start",
-      "t": 1082439.608366903,
-      "t_from_series_start_s": 0.378103
-    },
-    {
-      "stage": "display_cache_lookup_end",
-      "t": 1082439.608370353,
-      "hit": false,
-      "t_from_series_start_s": 0.378106
-    },
-    {
-      "stage": "tier_resample_and_graph_start",
-      "t": 1082439.608377003,
-      "tier": 8,
-      "t_from_series_start_s": 0.378113
-    },
-    {
-      "stage": "graph_node_evaluated",
-      "t": 1082439.809251076,
-      "node": "roto",
-      "kind": "Roto",
-      "tier": 8,
-      "elapsed_ms": 200.764,
-      "fallback": false,
-      "reason": null,
-      "t_from_series_start_s": 0.578987
-    },
-    {
-      "stage": "graph_evaluation_end",
-      "t": 1082439.809267146,
-      "tier": 8,
-      "tiled": false,
-      "fallback_nodes": [],
-      "t_from_series_start_s": 0.579003
-    },
-    {
-      "stage": "to_qimage_start",
-      "t": 1082439.809315895,
-      "t_from_series_start_s": 0.579052
-    },
-    {
-      "stage": "to_qimage_end",
-      "t": 1082439.81155397,
-      "t_from_series_start_s": 0.58129
-    },
-    {
-      "stage": "preview_requested",
-      "t": 1082439.824033778,
-      "tier": 4,
-      "progressive": false,
-      "t_from_series_start_s": 0.593769
-    },
-    {
-      "stage": "worker_start",
-      "t": 1082439.828162978,
-      "t_from_series_start_s": 0.597899
-    },
-    {
-      "stage": "display_cache_lookup_start",
-      "t": 1082439.829449301,
-      "t_from_series_start_s": 0.599185
-    },
-    {
-      "stage": "display_cache_lookup_end",
-      "t": 1082439.829452431,
-      "hit": false,
-      "t_from_series_start_s": 0.599188
-    },
-    {
-      "stage": "tier_resample_and_graph_start",
-      "t": 1082439.82945771,
-      "tier": 4,
-      "t_from_series_start_s": 0.599193
-    },
-    {
-      "stage": "paint",
-      "t": 1082439.834096246,
-      "t_from_series_start_s": 0.603832
-    },
-    {
-      "stage": "graph_node_evaluated",
-      "t": 1082440.186291211,
-      "node": "roto",
-      "kind": "Roto",
-      "tier": 4,
-      "elapsed_ms": 356.741,
-      "fallback": false,
-      "reason": null,
-      "t_from_series_start_s": 0.956027
-    },
-    {
-      "stage": "graph_evaluation_end",
-      "t": 1082440.18630805,
-      "tier": 4,
-      "tiled": false,
-      "fallback_nodes": [],
-      "t_from_series_start_s": 0.956044
-    },
-    {
-      "stage": "to_qimage_start",
-      "t": 1082440.186361359,
-      "t_from_series_start_s": 0.956097
-    },
-    {
-      "stage": "to_qimage_end",
-      "t": 1082440.189984604,
-      "t_from_series_start_s": 0.95972
-    },
-    {
-      "stage": "preview_requested",
-      "t": 1082440.194434415,
-      "tier": 1,
-      "progressive": false,
-      "t_from_series_start_s": 0.96417
-    },
-    {
-      "stage": "worker_start",
-      "t": 1082440.197448207,
-      "t_from_series_start_s": 0.967184
-    },
-    {
-      "stage": "display_cache_lookup_start",
-      "t": 1082440.197878875,
-      "t_from_series_start_s": 0.967615
-    },
-    {
-      "stage": "display_cache_lookup_end",
-      "t": 1082440.197881844,
-      "hit": false,
-      "t_from_series_start_s": 0.967618
-    },
-    {
-      "stage": "display_cache_lookup_start",
-      "t": 1082440.198293643,
-      "t_from_series_start_s": 0.968029
-    },
-    {
-      "stage": "display_cache_lookup_end",
-      "t": 1082440.198294873,
-      "hit": false,
-      "t_from_series_start_s": 0.968031
-    },
-    {
-      "stage": "display_cache_lookup_start",
-      "t": 1082440.198681731,
-      "t_from_series_start_s": 0.968417
-    },
-    {
-      "stage": "display_cache_lookup_end",
-      "t": 1082440.198920184,
-      "hit": true,
-      "t_from_series_start_s": 0.968656
-    },
-    {
-      "stage": "to_qimage_start",
-      "t": 1082440.198922494,
-      "t_from_series_start_s": 0.968658
-    },
-    {
-      "stage": "to_qimage_end",
-      "t": 1082440.202802372,
-      "t_from_series_start_s": 0.972538
-    },
-    {
-      "stage": "tier_resample_and_graph_start",
-      "t": 1082440.202835171,
-      "tier": 1,
-      "t_from_series_start_s": 0.972571
-    },
-    {
-      "stage": "paint",
-      "t": 1082440.204715936,
-      "t_from_series_start_s": 0.974452
-    },
-    {
-      "stage": "paint",
-      "t": 1082440.217322141,
-      "t_from_series_start_s": 0.987058
-    },
-    {
-      "stage": "graph_node_evaluated",
-      "t": 1082444.320931148,
-      "node": "roto",
-      "kind": "Roto",
-      "tier": 1,
-      "elapsed_ms": 4117.966,
-      "fallback": false,
-      "reason": null,
-      "t_from_series_start_s": 5.090667
-    },
-    {
-      "stage": "graph_evaluation_end",
-      "t": 1082444.320945298,
-      "tier": 1,
-      "tiled": false,
-      "fallback_nodes": [],
-      "t_from_series_start_s": 5.090681
-    },
-    {
-      "stage": "to_qimage_start",
-      "t": 1082444.321003576,
-      "t_from_series_start_s": 5.090739
-    },
-    {
-      "stage": "to_qimage_end",
-      "t": 1082444.380792692,
-      "t_from_series_start_s": 5.150528
-    },
-    {
-      "stage": "worker_start",
-      "t": 1082444.386234244,
-      "t_from_series_start_s": 5.15597
-    },
-    {
-      "stage": "paint",
-      "t": 1082444.388498598,
-      "t_from_series_start_s": 5.158234
-    },
-    {
-      "stage": "worker_start",
-      "t": 1082444.649193267,
-      "t_from_series_start_s": 5.418929
-    },
-    {
-      "stage": "graph_node_evaluated",
-      "t": 1082444.64979098,
-      "node": "plate",
-      "kind": "Read",
-      "tier": 8,
-      "elapsed_ms": 0.559,
-      "fallback": false,
-      "reason": null,
-      "t_from_series_start_s": 5.419527
-    },
-    {
-      "stage": "to_qimage_start",
-      "t": 1082444.649818759,
-      "t_from_series_start_s": 5.419554
-    },
-    {
-      "stage": "to_qimage_end",
-      "t": 1082444.652025005,
-      "t_from_series_start_s": 5.421761
-    },
-    {
-      "stage": "series_end",
-      "t": 1082444.756014529,
-      "series": "uncached_scrub",
-      "t_from_series_start_s": 5.52575
-    }
-  ],
-  "largest_graph_evaluations_ms": [
-    {
-      "node": "roto",
-      "kind": "Roto",
-      "tier": 1,
-      "ms": 4117.966
-    },
-    {
-      "node": "roto",
-      "kind": "Roto",
-      "tier": 4,
-      "ms": 356.741
-    },
-    {
-      "node": "roto",
-      "kind": "Roto",
-      "tier": 8,
-      "ms": 200.764
-    },
-    {
-      "node": "plate",
-      "kind": "Read",
-      "tier": 8,
-      "ms": 0.559
+      "adapter": "llvmpipe",
+      "result": {
+        "series": "uncached_scrub",
+        "adapter": "llvmpipe",
+        "first_picture_s": 0.5693,
+        "settle_s": 5.5087,
+        "status": "1920 \u00d7 1080  \u00b7  4183 ms  \u00b7  tile fallback  \u00b7  cache 851.1 / 4096 MiB  \u00b7  display GPU"
+      },
+      "timeline": [
+        {
+          "stage": "series_start",
+          "t": 1082439.23026431,
+          "series": "uncached_scrub",
+          "t_from_series_start_s": 0.0
+        },
+        {
+          "stage": "document_edit_applied",
+          "t": 1082439.235137988,
+          "t_from_series_start_s": 0.004874
+        },
+        {
+          "stage": "preview_requested",
+          "t": 1082439.569658196,
+          "tier": null,
+          "progressive": true,
+          "t_from_series_start_s": 0.339394
+        },
+        {
+          "stage": "paint",
+          "t": 1082439.592156463,
+          "t_from_series_start_s": 0.361892
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082439.60745224,
+          "t_from_series_start_s": 0.377188
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082439.608366903,
+          "t_from_series_start_s": 0.378103
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082439.608370353,
+          "hit": false,
+          "t_from_series_start_s": 0.378106
+        },
+        {
+          "stage": "tier_resample_and_graph_start",
+          "t": 1082439.608377003,
+          "tier": 8,
+          "t_from_series_start_s": 0.378113
+        },
+        {
+          "stage": "graph_node_evaluated",
+          "t": 1082439.809251076,
+          "node": "roto",
+          "kind": "Roto",
+          "tier": 8,
+          "elapsed_ms": 200.764,
+          "fallback": false,
+          "reason": null,
+          "t_from_series_start_s": 0.578987
+        },
+        {
+          "stage": "graph_evaluation_end",
+          "t": 1082439.809267146,
+          "tier": 8,
+          "tiled": false,
+          "fallback_nodes": [],
+          "t_from_series_start_s": 0.579003
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082439.809315895,
+          "t_from_series_start_s": 0.579052
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082439.81155397,
+          "t_from_series_start_s": 0.58129
+        },
+        {
+          "stage": "preview_requested",
+          "t": 1082439.824033778,
+          "tier": 4,
+          "progressive": false,
+          "t_from_series_start_s": 0.593769
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082439.828162978,
+          "t_from_series_start_s": 0.597899
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082439.829449301,
+          "t_from_series_start_s": 0.599185
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082439.829452431,
+          "hit": false,
+          "t_from_series_start_s": 0.599188
+        },
+        {
+          "stage": "tier_resample_and_graph_start",
+          "t": 1082439.82945771,
+          "tier": 4,
+          "t_from_series_start_s": 0.599193
+        },
+        {
+          "stage": "paint",
+          "t": 1082439.834096246,
+          "t_from_series_start_s": 0.603832
+        },
+        {
+          "stage": "graph_node_evaluated",
+          "t": 1082440.186291211,
+          "node": "roto",
+          "kind": "Roto",
+          "tier": 4,
+          "elapsed_ms": 356.741,
+          "fallback": false,
+          "reason": null,
+          "t_from_series_start_s": 0.956027
+        },
+        {
+          "stage": "graph_evaluation_end",
+          "t": 1082440.18630805,
+          "tier": 4,
+          "tiled": false,
+          "fallback_nodes": [],
+          "t_from_series_start_s": 0.956044
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082440.186361359,
+          "t_from_series_start_s": 0.956097
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082440.189984604,
+          "t_from_series_start_s": 0.95972
+        },
+        {
+          "stage": "preview_requested",
+          "t": 1082440.194434415,
+          "tier": 1,
+          "progressive": false,
+          "t_from_series_start_s": 0.96417
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082440.197448207,
+          "t_from_series_start_s": 0.967184
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082440.197878875,
+          "t_from_series_start_s": 0.967615
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082440.197881844,
+          "hit": false,
+          "t_from_series_start_s": 0.967618
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082440.198293643,
+          "t_from_series_start_s": 0.968029
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082440.198294873,
+          "hit": false,
+          "t_from_series_start_s": 0.968031
+        },
+        {
+          "stage": "display_cache_lookup_start",
+          "t": 1082440.198681731,
+          "t_from_series_start_s": 0.968417
+        },
+        {
+          "stage": "display_cache_lookup_end",
+          "t": 1082440.198920184,
+          "hit": true,
+          "t_from_series_start_s": 0.968656
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082440.198922494,
+          "t_from_series_start_s": 0.968658
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082440.202802372,
+          "t_from_series_start_s": 0.972538
+        },
+        {
+          "stage": "tier_resample_and_graph_start",
+          "t": 1082440.202835171,
+          "tier": 1,
+          "t_from_series_start_s": 0.972571
+        },
+        {
+          "stage": "paint",
+          "t": 1082440.204715936,
+          "t_from_series_start_s": 0.974452
+        },
+        {
+          "stage": "paint",
+          "t": 1082440.217322141,
+          "t_from_series_start_s": 0.987058
+        },
+        {
+          "stage": "graph_node_evaluated",
+          "t": 1082444.320931148,
+          "node": "roto",
+          "kind": "Roto",
+          "tier": 1,
+          "elapsed_ms": 4117.966,
+          "fallback": false,
+          "reason": null,
+          "t_from_series_start_s": 5.090667
+        },
+        {
+          "stage": "graph_evaluation_end",
+          "t": 1082444.320945298,
+          "tier": 1,
+          "tiled": false,
+          "fallback_nodes": [],
+          "t_from_series_start_s": 5.090681
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082444.321003576,
+          "t_from_series_start_s": 5.090739
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082444.380792692,
+          "t_from_series_start_s": 5.150528
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082444.386234244,
+          "t_from_series_start_s": 5.15597
+        },
+        {
+          "stage": "paint",
+          "t": 1082444.388498598,
+          "t_from_series_start_s": 5.158234
+        },
+        {
+          "stage": "worker_start",
+          "t": 1082444.649193267,
+          "t_from_series_start_s": 5.418929
+        },
+        {
+          "stage": "graph_node_evaluated",
+          "t": 1082444.64979098,
+          "node": "plate",
+          "kind": "Read",
+          "tier": 8,
+          "elapsed_ms": 0.559,
+          "fallback": false,
+          "reason": null,
+          "t_from_series_start_s": 5.419527
+        },
+        {
+          "stage": "to_qimage_start",
+          "t": 1082444.649818759,
+          "t_from_series_start_s": 5.419554
+        },
+        {
+          "stage": "to_qimage_end",
+          "t": 1082444.652025005,
+          "t_from_series_start_s": 5.421761
+        },
+        {
+          "stage": "series_end",
+          "t": 1082444.756014529,
+          "series": "uncached_scrub",
+          "t_from_series_start_s": 5.52575
+        }
+      ],
+      "largest_graph_evaluations_ms": [
+        {
+          "kind": "Roto",
+          "tier": 1,
+          "ms": 4117.966
+        },
+        {
+          "kind": "Roto",
+          "tier": 4,
+          "ms": 356.741
+        },
+        {
+          "kind": "Roto",
+          "tier": 8,
+          "ms": 200.764
+        },
+        {
+          "kind": "Read",
+          "tier": 8,
+          "ms": 0.559
+        }
+      ],
+      "cache_lookups": 5,
+      "cache_hits": 1
     }
   ]
 }

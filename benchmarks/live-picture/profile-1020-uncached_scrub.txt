@@ -1,11 +1,12 @@
-Lane 8 live-picture profile · uncached_scrub · llvmpipe baseline
-Measured result: {"series": "uncached_scrub", "adapter": "llvmpipe", "first_picture_s": 0.5693, "settle_s": 5.5087, "status": "1920 × 1080  ·  4183 ms  ·  tile fallback  ·  cache 851.1 / 4096 MiB  ·  display GPU"}
+Lane 8 live-picture profile · uncached_scrub · baseline measurements
 
-Largest measured graph evaluations (inclusive wall time):
-1. Roto tier 1: 4117.966 ms
-2. Roto tier 4: 356.741 ms
-3. Roto tier 8: 200.764 ms
-4. Read tier 8: 0.559 ms
+RTX 3080 Ti: {"series": "uncached_scrub", "adapter": "NVIDIA GeForce RTX 3080 Ti", "first_picture_s": 0.5656, "settle_s": 5.0981, "status": "1920 × 1080  ·  3789 ms  ·  tile fallback  ·  cache 851.6 / 4096 MiB  ·  display GPU"}
+Top graph-root evaluations (inclusive): tier 1 3737.988 ms, tier 4 351.227 ms, tier 8 204.332 ms, tier 8 0.690 ms
+Display cache lookups: 5; hits: 1.
+
+llvmpipe: {"series": "uncached_scrub", "adapter": "llvmpipe", "first_picture_s": 0.5693, "settle_s": 5.5087, "status": "1920 × 1080  ·  4183 ms  ·  tile fallback  ·  cache 851.1 / 4096 MiB  ·  display GPU"}
+Top graph-root evaluations (inclusive): tier 1 4117.966 ms, tier 4 356.741 ms, tier 8 200.764 ms, tier 8 0.559 ms
+Display cache lookups: 5; hits: 1.
 
 Thread profiles (cProfile; isolated passes because CPython 3.12 allows one active profiler per process):
 

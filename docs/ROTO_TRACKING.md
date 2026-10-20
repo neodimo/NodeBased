@@ -556,14 +556,14 @@ On the 12 GB RTX 3080 Ti at tier 1, five ROI-off runs before the reveal painted 
 
 ### Lane 8 step A: live-picture profile (partial)
 
-The committed bench records monotonic mouse, edit, request, worker, graph, display-cache, conversion, card-handoff and paint events. The unprofiled llvmpipe baseline (1920 × 1080; 2-second playback sample) measured first Roto-drag picture at 1.026 s, after release; settle took 3.728 s. Uncached scrub showed its first picture at 0.569 s and settled in 5.509 s. Tier-4 playback delivered 2.493 distinct frames per second against a 24 fps target; the final status read “display cache hit · 5 ms.”
+The committed bench records monotonic mouse, edit, request, worker, graph, display-cache, conversion, card-handoff and paint events. Both baselines use the 1920 × 1080 QA comp. The RTX 3080 Ti measured first Roto-drag picture at 1.039 s after release, 3.768 s to settle, 0.566 s to first uncached-scrub picture, 5.098 s to settle, and 2.622 distinct tier-4 playback frames per second against a 24 fps target. llvmpipe measured 1.026 s after release, 3.728 s to settle, 0.569 s to first scrub picture, 5.509 s to settle, and 2.493 playback frames per second. Final playback status read “display cache hit · 4 ms” on the RTX and “display cache hit · 5 ms” on llvmpipe; these describe individual cache-hit requests, while the misses trigger the expensive graph work below. Playback samples were 8 seconds on the RTX and 2 seconds on llvmpipe.
 
 Largest inclusive graph-root evaluation costs, in milliseconds:
 
-| Series | Ranked graph-root evaluations (tier: ms) | Other observed cost evidence |
-|---|---|---|
-| Roto drag | 1: 2,495; 4: 365; 8: 122, 95 (four evaluations observed) | Six preview requests and six worker starts overlapped the drag; zero new frames were delivered during it. |
-| Uncached scrub | 1: 4,118; 4: 357; 8: 201, 1 (four evaluations observed) | Five display-cache lookups; one hit. |
-| Tier-4 playback | 4: 378, 375, 372, 370, 366 | Thirteen cache lookups; seven hits and six graph evaluations in the short sample. The 5 ms status is a cache-hit request and does not describe the slower misses. |
+| Series | RTX 3080 Ti, tier: ms | llvmpipe, tier: ms | Other measured evidence |
+|---|---|---|---|
+| Roto drag | 1: 2,498; 4: 353; 8: 101, 92, 89 | 1: 2,495; 4: 365; 8: 122, 95 (four calls) | Six preview requests and six worker starts overlap the drag; zero new frames arrive before release. |
+| Uncached scrub | 1: 3,738; 4: 351; 8: 204; Read at 8: 0.7 | 1: 4,118; 4: 357; 8: 201; Read at 8: 0.6 | Four graph evaluations on each adapter; one of five display-cache lookups hits. |
+| Tier-4 playback | 4: 384, 371, 370, 364, 362 | 4: 378, 375, 372, 370, 366 | RTX: 45 lookups, 23 hits, 22 graph evaluations in 8 s. llvmpipe: 13 lookups, 7 hits, 6 evaluations in 2 s. |
 
-The drag timeline records a new preview request after successive mouse moves while the previous graph work is still running, then release and a later delivered frame. This points to requests being superseded during the move as the reason no picture arrives in-drag. Tile detail still reports “tile fallback,” while the trace says `tiled: false` with no fallback-node name; the specific node and conditional reason remain unattributed. Qt-thread and worker cProfile captures are in each `benchmarks/live-picture/profile-1020-<series>.txt`; event timelines are in matching JSON files. The fresh RTX run is queued behind another lane’s exclusive card lock. No optimization is included in this partial pass.
+The drag timeline records requests arriving after successive mouse moves while graph work is still running, followed by release and a later delivered frame. This supports request supersession during the move as the reason no picture arrives in-drag. Tile detail still reports “tile fallback,” while the trace says `tiled: false` with an empty fallback-node list; the specific node and conditional reason remain unattributed. Qt-thread and worker cProfile captures are in each `benchmarks/live-picture/profile-1020-<series>.txt`; event timelines are in matching JSON files. No optimization is included in this partial pass.

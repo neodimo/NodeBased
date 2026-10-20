@@ -1,11 +1,14 @@
-Lane 8 live-picture profile · roto_drag · llvmpipe baseline
-Measured result: {"series": "roto_drag", "adapter": "llvmpipe", "first_picture_s": 1.0257, "picture_during_drag": false, "frames_during_drag": 0, "settle_s": 3.728, "status": "1920 × 1080  ·  2561 ms  ·  tile fallback  ·  cache 441.6 / 4096 MiB  ·  display GPU"}
+Lane 8 live-picture profile · roto_drag · baseline measurements
 
-Largest measured graph evaluations (inclusive wall time):
-1. Roto tier 1: 2495.230 ms
-2. Roto tier 4: 364.923 ms
-3. Roto tier 8: 121.608 ms
-4. Roto tier 8: 94.882 ms
+RTX 3080 Ti: {"series": "roto_drag", "adapter": "NVIDIA GeForce RTX 3080 Ti", "first_picture_s": 1.0387, "picture_during_drag": false, "frames_during_drag": 0, "settle_s": 3.7684, "status": "1920 × 1080  ·  2564 ms  ·  tile fallback  ·  cache 442.1 / 4096 MiB  ·  display GPU"}
+Top graph-root evaluations (inclusive): tier 1 2497.528 ms, tier 4 353.155 ms, tier 8 101.122 ms, tier 8 91.509 ms, tier 8 89.250 ms
+Display cache lookups: 7; hits: 1.
+
+llvmpipe: {"series": "roto_drag", "adapter": "llvmpipe", "first_picture_s": 1.0257, "picture_during_drag": false, "frames_during_drag": 0, "settle_s": 3.728, "status": "1920 × 1080  ·  2561 ms  ·  tile fallback  ·  cache 441.6 / 4096 MiB  ·  display GPU"}
+Top graph-root evaluations (inclusive): tier 1 2495.230 ms, tier 4 364.923 ms, tier 8 121.608 ms, tier 8 94.882 ms
+Display cache lookups: 7; hits: 2.
+
+Diagnosis from the event timeline: successive mouse moves issue requests while graph work is active; no new frame is delivered before release. Requests being superseded during the drag is the strongest supported explanation. The reported tile fallback has tiled=false but no fallback-node attribution in the trace.
 
 Thread profiles (cProfile; isolated passes because CPython 3.12 allows one active profiler per process):
 
