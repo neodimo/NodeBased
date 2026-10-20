@@ -127,6 +127,7 @@ QUIET = (
     'test_interactive_cancellation',    # tile cancel within 100 ms: took 119 ms under load
     'test_m2_latency_gate',             # Grade edit p95 at 1080p within 54 ms: took 77 ms under load
     'test_profile_host_phases',         # profiled host time within 30% of the measured one
+    'test_3d_viewport_shadow_cull',     # 100k copies under four lights within 33 ms: took 35 ms under load
 )
 
 
@@ -142,6 +143,10 @@ class Job:
         self.current_path = os.path.join(self.dir, 'current')
         self.log_path = os.path.join(self.dir, 'output.log')
         env = dict(os.environ)
+        # Offscreen only: a DISPLAY inherited from a desktop session let tests open windows on the user's
+        # screen and turned display-gated skips into failures (10/19). suite.sh's runs have none either.
+        for name in ('DISPLAY', 'WAYLAND_DISPLAY'):
+            env.pop(name, None)
         env.update(QT_QPA_PLATFORM='offscreen', XDG_CONFIG_HOME=os.path.join(self.dir, 'xdg'),
                    TMPDIR=self.tmp, PYTHONPATH=ROOT,
                    NB_TEST_MODULE_TIMEOUT=str(timeout), PYTHONUNBUFFERED='1')
@@ -217,6 +222,9 @@ def main(argv=None):
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
 
     modules = args.modules or discover_modules()
+    unknown = [m for m in modules if not os.path.exists(os.path.join(TESTS, m + '.py'))]
+    if unknown:
+        ap.error('no such test module: %s' % ', '.join(unknown))
     times = latest_times()
     def is_gpu(m):
         return times[m]['gpu'] if m in times and 'gpu' in times[m] else statically_gpu(m)
@@ -285,7 +293,7 @@ def main(argv=None):
                 shutil.rmtree(job.tmp, ignore_errors=True)
                 if not args.keep:
                     shutil.rmtree(job.dir, ignore_errors=True)
-    except (KeyboardInterrupt, SystemExit):
+    except BaseException:                          # never leave workers behind, whatever stopped us
         for job in running:
             job.kill()
             shutil.rmtree(job.tmp, ignore_errors=True)

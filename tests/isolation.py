@@ -42,23 +42,43 @@ import os  # noqa: E402
 _GPU_LOCK = tempfile.NamedTemporaryFile(prefix="nodebased-test-gpu-", suffix=".lock")
 os.environ["NODEBASED_GPU_LOCK"] = _GPU_LOCK.name
 
-# Closed windows are only destroyed by the DeferredDelete events that `deleteLater()` posts, and
-# `processEvents()` never delivers those, so without an event loop every Window a test closed stayed
-# alive (timers, panels, application-wide filters) for the rest of the process. Each later Window
-# then opened slower than the one before: 11 windows in one test took 145 s on 10/19 where one takes
-# under a second. Deliver them after every test, as the app's own event loop would.
+# Closed windows are only destroyed by a DeferredDelete event, and nothing delivers one without an event
+# loop: `close()` alone never deletes a Window, and `processEvents()` does not deliver what
+# `deleteLater()` posts. So every Window a test closed stayed alive (hidden, with its timers and panels)
+# for the rest of the process, and each later Window opened slower than the one before, mostly in
+# QApplication.setStyleSheet re-polishing every live widget: the eleven windows of one shortcut wiring
+# test took 145 s on 10/19 where one takes under a second, and a test_roto_paint_ui test took 10 s
+# where alone it takes 1. After every test, windows that accepted a close are deleted, as the app's
+# own event loop would do on quit.
 from PySide6.QtCore import QCoreApplication, QEvent  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from nodebased.app import Window  # noqa: E402
+
+if not hasattr(Window.closeEvent, "marks_closed"):
+    _CLOSE_EVENT = Window.closeEvent
+
+    def _close_event_and_mark(self, event):
+        _CLOSE_EVENT(self, event)
+        if event.isAccepted():
+            self._closed_by_test = True
+
+    _close_event_and_mark.marks_closed = True
+    Window.closeEvent = _close_event_and_mark
 
 _DO_CLEANUPS = unittest.TestCase.doCleanups
 
 
-def _do_cleanups_and_deferred_deletes(self):
+def _do_cleanups_and_delete_closed_windows(self):
     outcome = _DO_CLEANUPS(self)
     if QCoreApplication.instance() is not None:
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, Window) and getattr(widget, "_closed_by_test", False):
+                widget.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     return outcome
 
 
-if not getattr(unittest.TestCase.doCleanups, "delivers_deferred_deletes", False):
-    _do_cleanups_and_deferred_deletes.delivers_deferred_deletes = True
-    unittest.TestCase.doCleanups = _do_cleanups_and_deferred_deletes
+if not getattr(unittest.TestCase.doCleanups, "deletes_closed_windows", False):
+    _do_cleanups_and_delete_closed_windows.deletes_closed_windows = True
+    unittest.TestCase.doCleanups = _do_cleanups_and_delete_closed_windows
