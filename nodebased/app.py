@@ -5,6 +5,7 @@ import argparse
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, CancelledError
 import collections
+import contextlib
 import copy
 import json
 import math
@@ -695,6 +696,7 @@ class Preferences:
     WIRE_MODE = "interface/wire_mode"
     GRAPH_OPENGL = "interface/graph_opengl"
     LOCK_PANELS = "interface/lock_panels"
+    DIRECT_EDIT = "interface/direct_picture_edit"
     GRAPHICS_ADAPTER = gpu3d.ADAPTER_SETTING
     WORKSPACE = "workspace"
 
@@ -779,6 +781,16 @@ class Preferences:
 
     def set_viewer_auto_3d(self, enabled):
         self._store.setValue(self.VIEWER_AUTO_3D, bool(enabled))
+        self._store.sync()
+
+    def direct_edit(self):
+        """Whether clicks and drags on the direct picture edit the handles the Viewer would pick. On by default;
+        off leaves the direct picture view only (pan and zoom)."""
+        value = self._store.value(self.DIRECT_EDIT, True)
+        return value not in (False, "false", "0", 0)
+
+    def set_direct_edit(self, enabled):
+        self._store.setValue(self.DIRECT_EDIT, bool(enabled))
         self._store.sync()
 
     def lock_panels(self):
@@ -1458,6 +1470,8 @@ class Viewer(PanZoomView):
         self.window = window
         self.format_rect = None
         self._overlay_view = None      # set while render_overlay paints for the direct picture
+        self._hit_zoom = None          # logical pixels per scene unit while the direct picture drives the hit tests
+        self.cursor_sink = None        # called with the cursor (or None) so the direct picture shows the same shape
         self.readout_geometry = None   # (scale, render region, (w, h)) of a picture only the direct dock shows
         # Roto editing is a viewer overlay, not a scene item.  Keeping it out of the scene is
         # important: itemsBoundingRect() is the rendered display window and must not grow when
@@ -2242,7 +2256,8 @@ class Viewer(PanZoomView):
         context = self._paint_context()
         if context is None: return False
         value = self._roto_data_point(scene_pos, context[1], 1)
-        pressure = float(event.pressure()) if callable(getattr(event, "pressure", None)) else 1.0
+        if isinstance(event, (int, float)): pressure = float(event)
+        else: pressure = float(event.pressure()) if callable(getattr(event, "pressure", None)) else 1.0
         sample = {"x": value[0], "y": value[1], "pressure": min(1.0, max(0.0, pressure))}
         if start: self.paint_drag = {"key": context[0], "points": [sample]}
         elif self.paint_drag is not None: self.paint_drag["points"].append(sample)
@@ -2471,6 +2486,10 @@ class Viewer(PanZoomView):
                 - shape_model.resolve_scalar(track["x"], reference, "x"),
                 shape_model.resolve_scalar(track["y"], frame, "y")
                 - shape_model.resolve_scalar(track["y"], reference, "y"))
+
+    @staticmethod
+    def _event_pressure(event):
+        return float(event.pressure()) if callable(getattr(event, "pressure", None)) else 1.0
 
     def _event_scene_pos(self, event):
         """Map a viewport mouse event into scene coordinates (Qt sends QMouseEvent here)."""
@@ -3401,32 +3420,26 @@ class Viewer(PanZoomView):
         else:
             super().keyPressEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        if self.pan is not None:
-            PanZoomView.mouseReleaseEvent(self, event)
-            return
-        scene_pos = self._event_scene_pos(event)
-        if event.button() == Qt.MouseButton.LeftButton and self.paint_drag is not None:
-            self._paint_sample(scene_pos, event)
+    def hit_release(self, scene_pos, button, modifiers, pressure=1.0):
+        """A release at a scene point. True when it ended or finished a drag."""
+        if button == Qt.MouseButton.LeftButton and self.paint_drag is not None:
+            self._paint_sample(scene_pos, pressure)
             self._finish_paint()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.wipe_drag is not None:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.wipe_drag is not None:
             self._wipe_drag_to(scene_pos)
             self.wipe_drag = None
             self.unsetCursor()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.roi_drag is not None:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.roi_drag is not None:
             self._roi_drag_to(scene_pos)
             rect = self.roi_drag["rect"]
             self.roi_drag = None
             self.unsetCursor()
             self.window.set_viewer_roi(rect=rect)
             self.viewport().update()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.roto_drawing:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.roto_drawing:
             if self.roto_draw_cursor is not None:
                 context = self._roto_context()
                 if context is not None:
@@ -3445,21 +3458,18 @@ class Viewer(PanZoomView):
                     self.roto_draw_cursor = None
                     self.roto_draw_press = None
                     self.viewport().update()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.warp_drawing:
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.warp_drag is not None:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.warp_drawing:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.warp_drag is not None:
             self._warp_drag_to(scene_pos)
             self._commit_warp_drag()
             self.unsetCursor()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.roto_drag is not None:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.roto_drag is not None:
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
-            self.roto_drag["shift"] = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            self.roto_drag["shift"] = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
             if self.roto_drag.get("kind") == "marquee":
                 drag=self.roto_drag; self.roto_drag=None
                 if drag["moved"]:
@@ -3476,25 +3486,22 @@ class Viewer(PanZoomView):
                         pt=self._roto_data_point(scene_pos,context[1],context[3])
                         self.roto_draw_points.append({"x":pt[0],"y":pt[1],"in_x":0.0,"in_y":0.0,"out_x":0.0,"out_y":0.0,"scene":scene_pos})
                         self.roto_draw_cursor=None
-                self.viewport().update(); event.accept(); return
+                self.viewport().update(); return True
             if not self.roto_drag["moved"]:
                 self.roto_drag = None
                 self.unsetCursor()
-                event.accept()
-                return
+                return True
             self._commit_roto_drag()
             self.unsetCursor()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.tracker_drag is not None:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.tracker_drag is not None:
             self.tracker_drag["scene"] = scene_pos
             self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
             self._commit_tracker_drag()
             self.unsetCursor()
             self.viewport().update()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.analysis_drag is not None:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.analysis_drag is not None:
             drag = self.analysis_drag
             drag["scene"] = scene_pos
             drag["moved"] = (scene_pos - drag["start"]).manhattanLength() > 2
@@ -3513,8 +3520,8 @@ class Viewer(PanZoomView):
                 if node is not None:
                     self.window.preview_knobs(drag["key"], node["params"])
             self.analysis_drag = None
-            self.unsetCursor(); self.viewport().update(); event.accept(); return
-        if event.button() == Qt.MouseButton.LeftButton and self.flare_drag is not None:
+            self.unsetCursor(); self.viewport().update(); return True
+        if button == Qt.MouseButton.LeftButton and self.flare_drag is not None:
             drag = self.flare_drag
             drag["scene"] = scene_pos
             drag["moved"] = (scene_pos - drag["start"]).manhattanLength() > 2
@@ -3528,23 +3535,29 @@ class Viewer(PanZoomView):
             self.flare_drag = None
             self.unsetCursor()
             self.viewport().update()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.transform_drag is not None:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.transform_drag is not None:
             drag = self.transform_drag
             drag["scene"] = scene_pos
             drag["moved"] = (scene_pos - drag["start"]).manhattanLength() > 2
             if not drag["moved"]:
                 self.transform_drag = None
                 self.unsetCursor()
-                event.accept()
-                return
+                return True
             values = self._transform_values(drag)
             if values is not None:
                 touched = {param: values[param] for param in drag["original"]}
                 self.window.command({"op": "batch", "commands": self._transform_commands(drag["key"], touched)})
             self.transform_drag = None
             self.unsetCursor()
+            return True
+        return False
+
+    def mouseReleaseEvent(self, event):
+        if self.pan is not None:
+            PanZoomView.mouseReleaseEvent(self, event)
+            return
+        if self.hit_release(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event)):
             event.accept()
             return
         was_panning = self.pan is not None
@@ -3704,10 +3717,32 @@ class Viewer(PanZoomView):
     # `paint_overlays` is the one place every overlay is drawn. The Viewer's drawForeground calls it
     # with the widget's own transform; the direct picture calls it through `render_overlay` with the
     # transform of its own view, and these three helpers answer for that view.
+    def setCursor(self, cursor):
+        super().setCursor(cursor)
+        if self.cursor_sink is not None:
+            self.cursor_sink(cursor)
+
+    def unsetCursor(self):
+        super().unsetCursor()
+        if self.cursor_sink is not None:
+            self.cursor_sink(None)
+
+    @contextlib.contextmanager
+    def hit_surface(self, zoom):
+        """Run the hit functions for a surface other than this widget: every pixel tolerance divides by
+        `zoom` (logical pixels per scene unit of that surface) instead of this view's own."""
+        previous, self._hit_zoom = self._hit_zoom, zoom
+        try:
+            yield
+        finally:
+            self._hit_zoom = previous
+
     def view_zoom(self):
         """Logical pixels per scene unit of the surface being painted."""
         override = self._overlay_view
-        return self.transform().m11() if override is None else override["zoom"]
+        if override is not None:
+            return override["zoom"]
+        return self.transform().m11() if self._hit_zoom is None else self._hit_zoom
 
     def overlay_map_from_scene(self, point):
         override = self._overlay_view
@@ -4037,44 +4072,35 @@ class Viewer(PanZoomView):
         self._draw_roi_and_masks(painter)
         self._draw_overscan_edge(painter)
 
-    def mousePressEvent(self, event):
-        if self.starts_pan(event):
-            # A pan never places a tracker, a roto point or a roto drag.
-            PanZoomView.mousePressEvent(self, event)
-            return
-        scene_pos = self._event_scene_pos(event)
-        if event.button() == Qt.MouseButton.LeftButton and self.color_sampling is not None:
+    def hit_press(self, scene_pos, button, modifiers, pressure=1.0):
+        """A press at a scene point. True when a handle, pick or drag took it; the Viewer and the direct
+        picture both call this, so a click lands on the same handle on either surface."""
+        if button == Qt.MouseButton.LeftButton and self.color_sampling is not None:
             callback, self.color_sampling = self.color_sampling, None
             self.unsetCursor()
             callback(self.linear_pixel_at(scene_pos))
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.zdefocus_picking:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.zdefocus_picking:
             self.window.zdefocus_pick(self.zdefocus_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.focus_picking:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.focus_picking:
             self.window.focus_pick(self.focus_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.track3d_picking:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.track3d_picking:
             self.window.points_to_3d_pick(self.track3d_picking,
                                           math.floor(scene_pos.x()), math.floor(scene_pos.y()))
             self.track3d_picking = None
             self.unsetCursor()
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.survey_picking:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.survey_picking:
             # Each click adds a survey pick on the current frame; picking stays on until Esc.
             self.window.survey_pick(self.survey_picking, *self._tracker_data_point(scene_pos))
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.crypto_picking:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.crypto_picking:
             # Each click adds the object under the cursor to the matte list; picking stays on until Esc.
             self.window.crypto_pick(self.crypto_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton and self.planar_picking:
+            return True
+        if button == Qt.MouseButton.LeftButton and self.planar_picking:
             self.planar_pick_points.append(self._tracker_data_point(scene_pos))
             if len(self.planar_pick_points) == 4:
                 key = self.planar_pick_key
@@ -4085,18 +4111,17 @@ class Viewer(PanZoomView):
             else:
                 self.window.statusBar().showMessage(
                     f"Planar region: corner {len(self.planar_pick_points)+1} of 4 · click clockwise · Esc cancels")
-            self.viewport().update(); event.accept(); return
-        if event.button() == Qt.MouseButton.LeftButton and self.tracker_picking:
+            self.viewport().update(); return True
+        if button == Qt.MouseButton.LeftButton and self.tracker_picking:
             context = self.window._tracker_context()
             if context is not None:
                 point = self._tracker_data_point(scene_pos)
                 self.tracker_picking = False
                 self.unsetCursor()
                 self.window.add_tracker_point(point)
-                event.accept()
-                return
+                return True
         tracker_context = self.window._tracker_context()
-        if event.button() == Qt.MouseButton.LeftButton and tracker_context is not None:
+        if button == Qt.MouseButton.LeftButton and tracker_context is not None:
             hit = self._tracker_hit(tracker_context, scene_pos)
             if hit is not None:
                 if hit["kind"] == "point":
@@ -4105,27 +4130,24 @@ class Viewer(PanZoomView):
                            frame=int(self.window.dispatcher.document["time"]["current"]))
                 self.tracker_drag = hit
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                event.accept()
-                return
+                return True
         # ROI handles take priority over shape creation and point editing. Shift explicitly
         # starts a fresh ROI; an ordinary press on a handle always resizes or moves it.
-        if event.button() == Qt.MouseButton.LeftButton and self._roi_active():
-            shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        if button == Qt.MouseButton.LeftButton and self._roi_active():
+            shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
             kind = "new" if shift else self._roi_hit(scene_pos)
             if kind is not None:
                 self.roi_drag = self._roi_start(kind, scene_pos)
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                event.accept()
-                return
+                return True
         context = self._roto_context()
-        if event.button() == Qt.MouseButton.LeftButton and context is not None:
+        if button == Qt.MouseButton.LeftButton and context is not None:
             if self.roto_drawing:
                 self.roto_draw_cursor = scene_pos
                 self.roto_draw_press = scene_pos
-                event.accept()
-                return
-            if (event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier)) == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier):
-                if self._insert_roto_point(scene_pos, context): event.accept(); return
+                return True
+            if (modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier)) == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier):
+                if self._insert_roto_point(scene_pos, context): return True
             resolved = self._roto_resolved(context)
             geometry = self._roto_box_geometry(resolved, context[3])
             if geometry is not None:
@@ -4134,7 +4156,7 @@ class Viewer(PanZoomView):
                 if action is not None:
                     shape_indices = {si for si, _ in selected}
                     alt_shape = None
-                    if event.modifiers() & Qt.KeyboardModifier.AltModifier and len(shape_indices) == 1:
+                    if modifiers & Qt.KeyboardModifier.AltModifier and len(shape_indices) == 1:
                         candidate = next(iter(shape_indices))
                         if selected == {(candidate, pi) for pi in range(len(resolved[candidate]["points"]))}:
                             alt_shape = candidate
@@ -4143,7 +4165,7 @@ class Viewer(PanZoomView):
                         "start": scene_pos, "scene": scene_pos, "tier": context[3],
                         "initial": {(si, pi): dict(resolved[si]["points"][pi]) for si, pi in selected},
                         "alt_shape": alt_shape, "moved": False}
-                    self.setCursor(Qt.CursorShape.ClosedHandCursor); event.accept(); return
+                    self.setCursor(Qt.CursorShape.ClosedHandCursor); return True
             if len(self.roto_selected_points) >= 2:
                 selected = {(si, pi) for si, pi in self.roto_selected_points
                             if si < len(resolved) and pi < len(resolved[si]["points"])}
@@ -4160,7 +4182,7 @@ class Viewer(PanZoomView):
                                           "selected": selected, "start": scene_pos, "scene": scene_pos,
                                           "start_data": self._roto_data_point(scene_pos, context[1], context[3]),
                                           "moved": False}
-                        self.setCursor(Qt.CursorShape.ClosedHandCursor); event.accept(); return
+                        self.setCursor(Qt.CursorShape.ClosedHandCursor); return True
             if 0 <= self.roto_selected_shape_index < len(resolved):
                 shape_index = self.roto_selected_shape_index
                 radius = 12.0 / max(abs(self.view_zoom()), .05)
@@ -4176,7 +4198,7 @@ class Viewer(PanZoomView):
                             self.roto_selected_points.add(hit)
                             self.roto_drag = {"point": hit, "kind": "feather_handle", "scene": scene_pos,
                                               "start": scene_pos, "moved": False}
-                            self.setCursor(Qt.CursorShape.ClosedHandCursor); event.accept(); return
+                            self.setCursor(Qt.CursorShape.ClosedHandCursor); return True
                 for point_index, point in enumerate(resolved[shape_index]["points"]):
                     for hx, hy, label in (("in_x", "in_y", "in"), ("out_x", "out_y", "out")):
                         if point[hx] == 0 and point[hy] == 0: continue
@@ -4185,24 +4207,23 @@ class Viewer(PanZoomView):
                             hit = (shape_index, point_index)
                             self.roto_selected_points.add(hit)
                             self.roto_drag = {"point": hit, "kind": "tangent", "handle": label,
-                                              "broken": bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier),
+                                              "broken": bool(modifiers & Qt.KeyboardModifier.ControlModifier),
                                               "scene": scene_pos, "start": scene_pos, "moved": False}
-                            self.setCursor(Qt.CursorShape.ClosedHandCursor); event.accept(); return
+                            self.setCursor(Qt.CursorShape.ClosedHandCursor); return True
             hit = self._roto_hit_point(scene_pos, resolved, context[3])
             if hit is not None:
                 if resolved[hit[0]].get("locked"):
-                    event.accept(); return
+                    return True
                 self.roto_selected_shape_index = hit[0]
-                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier: self.roto_selected_points.add(hit)
+                if modifiers & Qt.KeyboardModifier.ShiftModifier: self.roto_selected_points.add(hit)
                 else: self.roto_selected_points = {hit}
                 self.window.rebuild_properties_dock()
                 self.roto_key = context[0]
-                self.roto_drag = {"point": hit, "kind": "feather_point" if event.modifiers() & Qt.KeyboardModifier.ControlModifier else "point",
+                self.roto_drag = {"point": hit, "kind": "feather_point" if modifiers & Qt.KeyboardModifier.ControlModifier else "point",
                                   "scene": scene_pos, "start": scene_pos,
                                   "moved": False}
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                event.accept()
-                return
+                return True
             # A selected Roto node with nothing to drag starts drawing on the press. The
             # release below places the first point, and a drag from this press gives it handles.
             # RotoPaint is excluded: an unclaimed click there is a paint-tool stroke, handled
@@ -4211,29 +4232,25 @@ class Viewer(PanZoomView):
                 if self.begin_roto_draw(context[0]):
                     self.roto_draw_cursor = scene_pos
                     self.roto_draw_press = scene_pos
-                    event.accept()
-                    return
+                    return True
         warp_context = self._warp_context()
-        if event.button() == Qt.MouseButton.LeftButton and warp_context is not None:
+        if button == Qt.MouseButton.LeftButton and warp_context is not None:
             if self.warp_drawing:
                 point = self._roto_data_point(scene_pos, warp_context[1], warp_context[3])
                 self.warp_draw_points.append(QPointF(*point))
                 self.warp_draw_cursor = scene_pos
                 self.viewport().update()
-                event.accept()
-                return
+                return True
             hit = self._warp_hit(warp_context, scene_pos)
             if hit is not None:
                 hit.update(start=scene_pos, scene=scene_pos, moved=False)
                 self.warp_drag = hit
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                event.accept()
-                return
-        if event.button() == Qt.MouseButton.LeftButton and self._paint_context() is not None:
-            self._paint_sample(scene_pos, event, start=True)
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.LeftButton:
+                return True
+        if button == Qt.MouseButton.LeftButton and self._paint_context() is not None:
+            self._paint_sample(scene_pos, pressure, start=True)
+            return True
+        if button == Qt.MouseButton.LeftButton:
             context = self._analysis_context()
             if context is not None:
                 key, node = context; p = self._analysis_params(key)
@@ -4263,8 +4280,8 @@ class Viewer(PanZoomView):
                     self.analysis_drag={"key":key,"part":part,"start":scene_pos,"scene":scene_pos,
                                         "moved":False,"original":original}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                    event.accept(); return
-        if event.button() == Qt.MouseButton.LeftButton:
+                    return True
+        if button == Qt.MouseButton.LeftButton:
             context = self._transform_context()
             if context is not None:
                 key, node = context
@@ -4288,7 +4305,7 @@ class Viewer(PanZoomView):
                         kind = "rotate"
                     elif (handles2d.point_in_quad(point[0], point[1], corners)
                           or distance <= hit_radius):
-                        kind = "pivot" if event.modifiers() & Qt.KeyboardModifier.ControlModifier else "translate"
+                        kind = "pivot" if modifiers & Qt.KeyboardModifier.ControlModifier else "translate"
                 if kind is not None:
                     touched = {"translate": ("translate_x", "translate_y"),
                                "pivot": ("center_x", "center_y", "translate_x", "translate_y"),
@@ -4297,9 +4314,8 @@ class Viewer(PanZoomView):
                                            "moved": False, "pivot": pivot,
                                            "original": {param: p[param] for param in touched}}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                    event.accept()
-                    return
-        if event.button() == Qt.MouseButton.LeftButton:
+                    return True
+        if button == Qt.MouseButton.LeftButton:
             context = self._flare_context()
             values = self._flare_values() if context is not None else None
             if values is not None:
@@ -4312,14 +4328,13 @@ class Viewer(PanZoomView):
                                        "moved": False, "position": position,
                                        "base": (values["position_x"] - dx, values["position_y"] - dy)}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
-                    event.accept()
-                    return
+                    return True
         # The wipe comes last on purpose: a roto point, a tracker pick or a Transform handle under
         # the pointer has already taken the click above, so the compare never steals one.
-        if event.button() == Qt.MouseButton.LeftButton and self._wipe_active():
+        if button == Qt.MouseButton.LeftButton and self._wipe_active():
             hit = self._wipe_hit(scene_pos)
             if hit is not None:
-                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                if modifiers & Qt.KeyboardModifier.ControlModifier:
                     self.reset_wipe()
                 else:
                     centre = self._wipe_scene_geometry()[0]
@@ -4328,70 +4343,59 @@ class Viewer(PanZoomView):
                     self.wipe_drag = {"kind": hit, "offset": offset}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     self._wipe_drag_to(scene_pos)
-                event.accept()
-                return
+                return True
+        return False
+
+    def mousePressEvent(self, event):
+        if self.starts_pan(event):
+            # A pan never places a tracker, a roto point or a roto drag.
+            PanZoomView.mousePressEvent(self, event)
+            return
+        if self.hit_press(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event)):
+            event.accept()
+            return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
-        # The pixel readout follows every move, including roto edits: the point of the numbers
-        # is to read the picture under the pointer, which is exactly what an artist placing a
-        # shape wants. This is the viewer's only mouse-move handler; a second definition would
-        # silently replace it (the readout was dead for exactly that reason once).
-        scene_pos = self._event_scene_pos(event)
-        if self.wipe_drag is not None and self.pan is None:
+    def hit_move(self, scene_pos, modifiers, pressure=1.0):
+        """A move to a scene point while a handle is held. True when a drag took it."""
+        if self.wipe_drag is not None:
             self._wipe_drag_to(scene_pos)
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.roi_drag is not None and self.pan is None:
+            return True
+        if self.roi_drag is not None:
             self._roi_drag_to(scene_pos)
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.roto_drawing and self.pan is None:
+            return True
+        if self.roto_drawing:
             self.roto_draw_cursor = scene_pos
             self.viewport().update()
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.warp_drawing and self.pan is None:
+            return True
+        if self.warp_drawing:
             self.warp_draw_cursor = scene_pos
             self.viewport().update()
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.warp_drag is not None and self.pan is None:
+            return True
+        if self.warp_drag is not None:
             self._warp_drag_to(scene_pos)
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.roto_drag is not None and self.pan is None:
+            return True
+        if self.roto_drag is not None:
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
-            self.roto_drag["shift"] = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            self.roto_drag["shift"] = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
             self.viewport().update()
             if self.roto_drag["moved"] and self.roto_drag.get("kind") != "marquee":
                 self._preview_roto_drag()
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.tracker_drag is not None and self.pan is None:
+            return True
+        if self.tracker_drag is not None:
             self.tracker_drag["scene"] = scene_pos
             self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
             self.viewport().update()
             if self.tracker_drag["moved"]:
                 self._preview_tracker_drag()
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.flare_drag is not None and self.pan is None:
+            return True
+        if self.flare_drag is not None:
             self.flare_drag["scene"] = scene_pos
             self.flare_drag["moved"] = (scene_pos - self.flare_drag["start"]).manhattanLength() > 2
             self.viewport().update()
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.analysis_drag is not None and self.pan is None:
+            return True
+        if self.analysis_drag is not None:
             self.analysis_drag["scene"] = scene_pos
             self.analysis_drag["moved"] = (scene_pos - self.analysis_drag["start"]).manhattanLength() > 2
             values = self._analysis_values()
@@ -4399,16 +4403,23 @@ class Viewer(PanZoomView):
             if values is not None and context is not None:
                 names = analysisregion.region_params(context[1]["type"])
                 self.window.preview_knobs(self.analysis_drag["key"], {name: values[name] for name in names})
-            self.viewport().update(); self._update_pixel_readout(event); event.accept(); return
-        if self.transform_drag is not None and self.pan is None:
+            self.viewport().update(); return True
+        if self.transform_drag is not None:
             self.transform_drag["scene"] = scene_pos
             self.transform_drag["moved"] = (scene_pos - self.transform_drag["start"]).manhattanLength() > 2
             self.viewport().update()
-            self._update_pixel_readout(event)
-            event.accept()
-            return
-        if self.paint_drag is not None and self.pan is None:
-            self._paint_sample(scene_pos, event)
+            return True
+        if self.paint_drag is not None:
+            self._paint_sample(scene_pos, pressure)
+            return True
+        return False
+
+    def mouseMoveEvent(self, event):
+        # The pixel readout follows every move, including roto edits: the point of the numbers
+        # is to read the picture under the pointer, which is exactly what an artist placing a
+        # shape wants. This is the viewer's only mouse-move handler; a second definition would
+        # silently replace it (the readout was dead for exactly that reason once).
+        if self.pan is None and self.hit_move(self._event_scene_pos(event), event.modifiers(), self._event_pressure(event)):
             self._update_pixel_readout(event)
             event.accept()
             return
@@ -7735,7 +7746,7 @@ class ProjectSettingsDialog(QDialog):
 
     def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
                  max_panels=5, cache_float32=False, auto_3d=False,
-                 adapters=(), graphics_adapter="", graph_opengl=False):
+                 adapters=(), graphics_adapter="", graph_opengl=False, direct_edit=True):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -7784,6 +7795,13 @@ class ProjectSettingsDialog(QDialog):
         self.graph_opengl.setToolTip("Off by default: on the software renderer it measured slower than the "
                                      "standard drawing. Takes effect the next time NodeBased starts.")
         interface.addRow("Node graph drawing", self.graph_opengl)
+        self.direct_edit = QCheckBox("Edit on the direct picture")
+        self.direct_edit.setObjectName("direct-edit")
+        self.direct_edit.setChecked(bool(direct_edit))
+        self.direct_edit.setToolTip("Clicks and drags on the experimental direct picture move the same handles the "
+                                    "Viewer would (Roto, Tracker, Transform, region of interest, wipe). Off: the "
+                                    "direct picture only pans and zooms.")
+        interface.addRow("Direct picture", self.direct_edit)
         self.graphics_adapter = QComboBox()
         self.graphics_adapter.setObjectName("graphics-adapter")
         self.graphics_adapter.addItem("Automatic (discrete preferred)", "")
@@ -10466,7 +10484,8 @@ class Window(QMainWindow):
                                        auto_3d=self.preferences.viewer_auto_3d(),
                                        adapters=gpu3d.enumerate_adapters(),
                                        graphics_adapter=self.preferences.graphics_adapter(),
-                                       graph_opengl=self.preferences.graph_opengl())
+                                       graph_opengl=self.preferences.graph_opengl(),
+                                       direct_edit=self.preferences.direct_edit())
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -10480,6 +10499,7 @@ class Window(QMainWindow):
             self.set_show_thumbnails(dialog.thumbnails.isChecked())
             self.set_panel_cap(dialog.chosen_max_panels())
             self.preferences.set_viewer_auto_3d(dialog.auto_3d.isChecked())
+            self.set_direct_edit(dialog.direct_edit.isChecked())
             chosen_adapter = dialog.graphics_adapter.currentData() or ""
             if chosen_adapter != self.preferences.graphics_adapter():
                 self.preferences.set_graphics_adapter(chosen_adapter)
@@ -13903,6 +13923,11 @@ class Window(QMainWindow):
                                                               frame=request.frame, tier=request.tier)
                     if request.display and request.viewport is not None:
                         x0, y0, x1, y1 = request.viewport
+                        # The viewport is in scene units (full resolution); the bounds are at the request's tier.
+                        # A proxy-tier drag preview with the view zoomed onto the lower right used to ask for a
+                        # region beyond the bounds, an empty frame, and "Internal error" (10/20, hit-order test).
+                        shrink = max(1, int(request.tier))
+                        x0, y0, x1, y1 = x0 // shrink, y0 // shrink, -(-x1 // shrink), -(-y1 // shrink)
                         wanted = TileRegion(x0, y0, max(0, x1 - x0), max(0, y1 - y0),
                                             full_x=bounds.x, full_y=bounds.y,
                                             full_width=bounds.width, full_height=bounds.height)
@@ -14265,6 +14290,41 @@ class Window(QMainWindow):
     # painting and stays the fallback, export source and pixel-sampling source; this dock only shows the
     # same picture with GPU pan and zoom, and has none of the Viewer's overlays.
     DIRECT_TITLE = "DIRECT PICTURE (experimental GPU, view only)"
+    DIRECT_EDIT_TITLE = "DIRECT PICTURE (experimental GPU)"
+
+    def direct_title(self):
+        return self.DIRECT_EDIT_TITLE if self.preferences.direct_edit() else self.DIRECT_TITLE
+
+    def set_direct_edit(self, enabled):
+        """Route clicks on the direct picture to the Viewer's hit functions (or leave it view only)."""
+        self.preferences.set_direct_edit(enabled)
+        widget = getattr(self, "direct_widget", None)
+        dock = getattr(self, "direct_dock", None)
+        if widget is not None:
+            widget.edit = self._direct_edit if enabled else None
+            if hasattr(widget, "edit_release"):
+                widget.edit_release()
+        if dock is not None:
+            dock.setWindowTitle(self.direct_title())
+
+    def _direct_edit(self, kind, point, button, modifiers, zoom, pressure=1.0):
+        """A press, move or release on the direct picture, as a scene point. Goes through the Viewer's own
+        hit functions with the direct picture's zoom, so the tolerances and the hit order are the Viewer's."""
+        viewer = self.viewer
+        if viewer.format_rect is None:
+            return False
+        scene = QPointF(*point)
+        with viewer.hit_surface(zoom):
+            if kind == "press":
+                handled = viewer.hit_press(scene, button, modifiers, pressure)
+            elif kind == "move":
+                handled = viewer.hit_move(scene, modifiers, pressure)
+            else:
+                handled = viewer.hit_release(scene, button, modifiers, pressure)
+        widget = self.direct_widget
+        if handled and widget is not None:
+            widget.overlay_dirty()
+        return handled
 
     def set_direct_viewer(self, on):
         dock = getattr(self, "direct_dock", None)
@@ -14279,7 +14339,7 @@ class Window(QMainWindow):
             self._refresh_direct_memory()
             return
         if dock is None:
-            dock = QDockWidget(self.DIRECT_TITLE, self)
+            dock = QDockWidget(self.direct_title(), self)
             dock.setObjectName("direct-viewer-dock")
             try:
                 widget = directviewer.make_widget()
@@ -14289,6 +14349,8 @@ class Window(QMainWindow):
             widget.failed.connect(self._direct_failed)
             widget.overlay_provider = self._direct_overlay
             widget.hover = self._direct_hover
+            widget.edit = self._direct_edit if self.preferences.direct_edit() else None
+            self.viewer.cursor_sink = getattr(widget, "mirror_cursor", None)
             dock.visibilityChanged.connect(lambda visible: self.direct_action.setChecked(visible))
             widget.setMinimumSize(160, 90)
             dock.setWidget(widget)
@@ -14328,6 +14390,7 @@ class Window(QMainWindow):
 
     def _direct_failed(self, message):
         self._direct_linear_on = False
+        self.viewer.cursor_sink = None
         self.statusBar().showMessage(message, 8000)
         action = getattr(self, "direct_action", None)
         if action is not None and action.isChecked():

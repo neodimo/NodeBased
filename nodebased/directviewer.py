@@ -1076,6 +1076,8 @@ def make_widget(parent=None):
             self.refusal = ""             # why the last picture was refused (too large for the card), or ""
             self.overlay_provider = None  # (view, physical_size, ratio) -> premultiplied RGBA QImage or None
             self.hover = None             # (scene point or None) -> None; the owner updates its readout
+            self.edit = None              # (kind, scene point, button, modifiers, zoom, pressure) -> handled?; None: view only
+            self._editing = False         # a left press was taken by a handle and its release is owed
             self.overlay_serial = 0       # bumped by the owner when the overlays changed
             self.overlay_draws = 0
             self.waiting = ""             # why the surface is not made yet (no area, no native window), or ""
@@ -1240,11 +1242,37 @@ def make_widget(parent=None):
                     self._request()
             event.accept()
 
+        def _edit_point(self, event):
+            return self.scene_point(*self._cursor(event))
+
+        def _edit_zoom(self):
+            """Logical pixels per scene unit: the Viewer's tolerances are in these."""
+            return self.view[2] / self.get_pixel_ratio()
+
+        @staticmethod
+        def _pressure(event):
+            return float(event.pressure()) if callable(getattr(event, "pressure", None)) else 1.0
+
+        def mirror_cursor(self, cursor):
+            """The Viewer set (or cleared) its cursor for a handle drag or a pick; show the same here."""
+            if cursor is None:
+                self.unsetCursor()
+            else:
+                self.setCursor(cursor)
+
+        def edit_release(self):
+            """Forget a press in flight (editing switched off, or the dock closing)."""
+            self._editing = False
+
         def mousePressEvent(self, event):
             mods = event.modifiers()
-            if self._pan is None and (event.button() == Qt.MouseButton.MiddleButton or (
-                    event.button() == Qt.MouseButton.LeftButton and mods == Qt.KeyboardModifier.AltModifier)):
-                self._pan = (self._cursor(event), event.button())
+            button = event.button()
+            if self._pan is None and (button == Qt.MouseButton.MiddleButton or (
+                    button == Qt.MouseButton.LeftButton and mods == Qt.KeyboardModifier.AltModifier)):
+                self._pan = (self._cursor(event), button)
+            elif button == Qt.MouseButton.LeftButton and self.edit is not None and self.rect is not None:
+                self._editing = bool(self.edit("press", self._edit_point(event), button, mods,
+                                               self._edit_zoom(), self._pressure(event)))
             event.accept()
 
         def mouseMoveEvent(self, event):
@@ -1258,11 +1286,19 @@ def make_widget(parent=None):
                 self._pan = ((x, y), button)
                 self.auto_fit = False
                 self._request()
+            elif self.edit is not None and self.rect is not None:
+                # Nothing is held except while a press was taken, or a Roto/warp shape is being drawn.
+                self.edit("move", self._edit_point(event), None, event.modifiers(), self._edit_zoom(),
+                          self._pressure(event))
             event.accept()
 
         def mouseReleaseEvent(self, event):
             if self._pan is not None and event.button() == self._pan[1]:
                 self._pan = None
+            elif self._editing and event.button() == Qt.MouseButton.LeftButton and self.edit is not None:
+                self._editing = False
+                self.edit("release", self._edit_point(event), event.button(), event.modifiers(),
+                          self._edit_zoom(), self._pressure(event))
             event.accept()
 
         def leaveEvent(self, event):

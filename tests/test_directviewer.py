@@ -475,7 +475,8 @@ class StubPresenter:
 
 @needs_wgpu
 class HitOrderTests(unittest.TestCase):
-    """While the direct dock is open the Viewer keeps every overlay and every hit; the direct surface only navigates."""
+    """With "Edit on the direct picture" off, the Viewer keeps every hit and the direct surface only navigates.
+    (With it on, tests/test_directviewer_hit_order.py holds the two surfaces to the same edits.)"""
 
     def setUp(self):
         from tests.test_roto_ui import roto_document
@@ -487,6 +488,7 @@ class HitOrderTests(unittest.TestCase):
         self.addCleanup(self.close_if_skipped)
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.preferences.set_direct_edit(False)
         self.window.graph.items_by_id["r"].setSelected(True)
         APP.processEvents()
         patcher = unittest.mock.patch.object(dv, "RetainedPresenter", StubPresenter)
