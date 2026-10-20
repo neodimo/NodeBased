@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--output", type=pathlib.Path, default=pathlib.Path("live-picture.json"))
     parser.add_argument("--display", default=os.environ.get("DISPLAY"))
     parser.add_argument("--adapter", default=os.environ.get("QA_ADAPTER", "unknown"))
+    parser.add_argument("--force-adapter", choices=("default", "integrated", "cpu"), default="default")
     parser.add_argument("--seconds", type=float, default=8)
     args = parser.parse_args()
     if args.self_check:
@@ -49,7 +50,7 @@ def main():
         parser.error(f"QA comp is missing: {fixture}")
     driver = pathlib.Path(__file__).with_name("_live_picture_driver.py")
     result = subprocess.run([sys.executable, str(driver), str(fixture), str(args.output),
-                             str(args.seconds), args.adapter], cwd=ROOT,
+                             str(args.seconds), args.adapter, args.force_adapter], cwd=ROOT,
                             env={**os.environ, "DISPLAY": args.display, "QT_QPA_PLATFORM": "xcb"},
                             check=False)
     raise SystemExit(result.returncode)
