@@ -117,6 +117,15 @@ class JobTests(unittest.TestCase):
         self.assertEqual(job.view("new")[0].samples, P.SAMPLE_CAP)
         self.assertEqual(script.started[-3:], [("new", 0), ("new", 1), ("new", 2)])    # a fresh first look, not the old pass's next
 
+    def test_older_pictures_are_dropped_from_the_record_unless_asked_for(self):
+        for keep in (False, True):
+            job = self.make(Script([preview, refining, final], gated=False), keep_images=keep)
+            job.submit(request(("keep", keep)))
+            self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
+            self.assertEqual([frame.state.samples for frame in job.frames], [4, 32, P.SAMPLE_CAP])    # the numbers stay
+            held = [frame.state.image is not None and frame.rgba is not None for frame in job.frames]
+            self.assertEqual(held, [True, True, True] if keep else [False, False, True])
+
     def test_the_time_to_abandon_a_pass_is_recorded(self):
         script = Script([preview, final])
         job = self.make(script)
@@ -301,7 +310,7 @@ class ViewportLabelTests(unittest.TestCase):
         widget = self.widget(Script([preview, final], gated=False))
         self.paint(widget, lambda state, phase: phase == "settled")
         frames = widget._progressive_job.frames
-        self.assertTrue(all(frame.rgba is not None and frame.rgba.dtype == np.uint8 for frame in frames))
+        self.assertEqual(frames[-1].rgba.dtype, np.uint8)
         np.testing.assert_array_equal(frames[-1].rgba, P.display_rgba8(frames[-1].state.image))
         self.assertIs(widget._progressive_image[3], frames[-1].rgba)        # no second conversion on the interface thread
 

@@ -23,7 +23,7 @@ from __future__ import annotations
 import functools
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from . import progressiverender
 from .cancellation import Cancelled
@@ -56,9 +56,10 @@ class Frame:
 
 
 class ProgressiveJob:
-    def __init__(self, on_update=None, settle=SETTLE_SECONDS, step=None, denoise_passes=True, convert=True):
+    def __init__(self, on_update=None, settle=SETTLE_SECONDS, step=None, denoise_passes=True, convert=True, keep_images=False):
         self.on_update = on_update
         self.settle = float(settle)
+        self.keep_images = keep_images   # False: `frames` keeps the numbers of older pictures, not their 1080p arrays
         self.convert = convert           # convert each picture for display on the worker, keeping the interface thread's paint cheap
         # the full-size doubling passes are filtered too, so a refinement never looks noisier than the preview before it
         self._step = step or functools.partial(progressiverender.step_interactive, denoise_passes=denoise_passes)
@@ -244,6 +245,9 @@ class ProgressiveJob:
                 self._serial += 1
                 frame = Frame(state, time.perf_counter() - submitted, self._serial, rgba)
                 self._frame, self._frame_identity = frame, request.identity
+                if self.frames and not self.keep_images:
+                    last = self.frames[-1]
+                    self.frames[-1] = replace(last, state=replace(last.state, image=None, guides=None), rgba=None)
                 self.frames.append(frame)
                 self._pass_started = time.perf_counter()
                 self._phase = "settled" if done else "tracing"

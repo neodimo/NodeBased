@@ -257,10 +257,10 @@ class ViewportTests(unittest.TestCase):
         frames = [frame.state for frame in widget._progressive_job.frames]
         state = frames[0]
         self.assertTrue(state.preview and state.denoised)
-        self.assertEqual(state.image.shape[:2], (360, 640))
+        self.assertEqual((state.height, state.width), (360, 640))
         later = next(frame for frame in frames if not frame.preview)
         self.assertGreater(later.samples, state.samples)
-        self.assertEqual(later.image.shape[:2], (360, 640))
+        self.assertEqual((later.height, later.width), (360, 640))
 
     def test_orbiting_starts_a_new_first_look(self):
         widget = self._widget()

@@ -142,7 +142,7 @@ def interaction(scene, camera):
 
 def measure(name, scene, warm, frames_dir, with_interaction):
     out = {"scene": name, "output": [WIDTH, HEIGHT], "seed": "default", "ambient": AMBIENT}
-    job = ProgressiveJob()
+    job = ProgressiveJob(keep_images=bool(frames_dir))
     try:
         cold, states = progression(job, scene, CAMERA, ("cold", name))
         out["cold"] = cold

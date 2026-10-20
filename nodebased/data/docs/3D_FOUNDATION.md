@@ -1211,23 +1211,20 @@ VIEWPORT was its own dock load normally; the old dock is dropped and its view li
   reconstructed per pixel from the four screen corners; a scene without an `Environment` is
   unaffected, and real geometry always wins over it. There is no separate full-resolution HDRI
   upload yet, so the background is as blurry as the atlas's 64x32 prefilter (open, below).
-- **Progressive "Render" mode (step R6, `progressiverender`).** **P** switches the viewport to the
-  R3/R4 path tracer instead of the rasteriser: every paint is one more trace, doubling its sample
-  count (1, 2, 4, ... up to 64) from a fresh seed each time rather than resuming a running
-  accumulation, so every step is a complete image and the sample count in the bottom-left is exact.
-  The step right after a reset -- a new camera pose, document, view or gizmo drag -- renders at a
-  quarter size on each side so it stays interactive while orbiting (measured on an RTX 3080 Ti
-  through the path tracer's GPU backend: 2 to 17 ms once its pipelines are warm, for viewport-sized
-  scenes); every later step is full size. Camera movement is detected the same way a reset is, so
-  interaction always drops back to the cheap low-res pass. From 8 samples each step is an adaptive render at noise
-  threshold 0.01 ("Adaptive sampling"): the note in the bottom-left reads `RENDER · 16 samples · pass 5 · 87% converged ·
-  converging`, and the preview stops as soon as every pixel is under the threshold, at fewer than 64 samples for a quiet
-  scene (a GPU motion-blur step is several renders averaged and measures no share). **Not denoised**: `output="denoise"`
-  measured at about 1.1 seconds a call in this environment regardless of sample count (its normals
-  and depth guide passes fall outside the fast GPU path and land on the slow CPU reference), a poor
-  fit for a per-step call here; wiring it in as an occasional off-thread final-settle pass is later
-  work (below). Particles are dropped before tracing (`progressiverender` strips them itself; the GPU
-  path tracer this preview runs on still refuses them, "Particles in the path tracer" below).
+- **Progressive "Render" mode (step R6, `progressiverender`; Lane 4 notes H1 and H2 below).** **P** switches the viewport to the
+  R3/R4 path tracer instead of the rasteriser. A worker thread (`progressivejob`) runs the steps while the interface stays free:
+  the first picture is a denoised, enlarged first look, then the passes double their sample count (to 64) from a fresh seed each
+  time rather than resuming a running accumulation, so every picture is complete and the sample count in the bottom-left is exact.
+  A reset -- a new camera pose, document edit, view, size or gizmo drag -- cancels the pass in flight and starts a new first look;
+  until it is ready the interactive rasteriser shows, so the window never freezes and an old camera's picture is never drawn.
+  Measured on an RTX 3080 Ti through the path tracer's GPU backend a quarter-size one-sample pass costs 2 to 17 ms once its
+  pipelines are warm, for viewport-sized scenes. From 8 samples each step is an adaptive render at noise threshold 0.01
+  ("Adaptive sampling"): the note in the bottom-left reads `RENDER · REFINING · denoised · 16 samples · pass 5 · tracing 32 samples
+  (1.4 s) · 87% converged`, and the preview stops as soon as every pixel is under the threshold, at fewer than 64 samples for a quiet
+  scene (a GPU motion-blur step is several renders averaged and measures no share). Every picture is denoised (the first look
+  and, since H2, the full-size passes too); Render3D's own outputs are unchanged. Particles are dropped before tracing
+  (`progressiverender` strips them itself; the GPU path tracer this preview runs on still refuses them, "Particles in the path
+  tracer" below).
 - **Material-ball preview (step R6, closes R1's "Left out of this step" note, `materialpreview`).**
   Every `Card3D`/`Cube3D`/`Sphere3D`/`Cylinder3D`/`ReadGeo3D` properties panel shows a small fixed
   sphere carrying that node's own colour, specular, PBR metallic/roughness/specular and liquid
@@ -1236,7 +1233,7 @@ VIEWPORT was its own dock load normally; the old dock is dropped and its view li
   small fixed size, built once per panel build (on reselecting the node, most simply); a slider drag
   does not refresh it live.
 - **Not done yet (step R6 "next").** More than one shadow-casting light, and shadows from splats or on
-  blended meshes; denoising the progressive "Render" mode's settled image (above); a full-resolution
+  blended meshes; a full-resolution
   HDRI background (today the same 64x32 prefiltered atlas meshes and splats sample, above); a live
   (not once-per-panel-build) material-ball preview; more than one `Environment` contributing at once.
 
