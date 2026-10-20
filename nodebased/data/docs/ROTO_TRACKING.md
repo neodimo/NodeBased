@@ -553,3 +553,17 @@ The bundled `tests/fixtures/qa.nbcomp` is compared against the full evaluator in
 At tier 1 on llvmpipe, five cold-cache ROI-off runs before the backdrop reveal left the outside dimmed until the full frame arrived in 3.92–3.98 s. Afterward, the first paint (8.4–9.3 ms) showed the current ROI patch over the saved full frame at normal strength; refinement completed in 4.02–4.58 s.
 
 On the 12 GB RTX 3080 Ti at tier 1, five ROI-off runs before the reveal painted in 8.2–9.4 ms but kept the backdrop dim until the full frame arrived in 3.78–3.90 s. After the change, first paint remained 8.3–9.2 ms and showed the saved full frame at normal strength; refinement took 3.95–4.48 s. The change fixes what is visible while refinement runs; it does not claim to accelerate that full-frame render. Raw runs are in `scratch/nb-lanes/run/bench-L8-roi-off-rtx3080ti-{before,after}.{json,log}`.
+
+### Lane 8 step A: live-picture profile (partial)
+
+The committed bench records monotonic mouse, edit, request, worker, graph, display-cache, conversion, card-handoff and paint events. The unprofiled llvmpipe baseline (1920 × 1080; 2-second playback sample) measured first Roto-drag picture at 1.026 s, after release; settle took 3.728 s. Uncached scrub showed its first picture at 0.569 s and settled in 5.509 s. Tier-4 playback delivered 2.493 distinct frames per second against a 24 fps target; the final status read “display cache hit · 5 ms.”
+
+Largest inclusive graph-root evaluation costs, in milliseconds:
+
+| Series | Ranked graph-root evaluations (tier: ms) | Other observed cost evidence |
+|---|---|---|
+| Roto drag | 1: 2,495; 4: 365; 8: 122, 95 (four evaluations observed) | Six preview requests and six worker starts overlapped the drag; zero new frames were delivered during it. |
+| Uncached scrub | 1: 4,118; 4: 357; 8: 201, 1 (four evaluations observed) | Five display-cache lookups; one hit. |
+| Tier-4 playback | 4: 378, 375, 372, 370, 366 | Thirteen cache lookups; seven hits and six graph evaluations in the short sample. The 5 ms status is a cache-hit request and does not describe the slower misses. |
+
+The drag timeline records a new preview request after successive mouse moves while the previous graph work is still running, then release and a later delivered frame. This points to requests being superseded during the move as the reason no picture arrives in-drag. Tile detail still reports “tile fallback,” while the trace says `tiled: false` with no fallback-node name; the specific node and conditional reason remain unattributed. Qt-thread and worker cProfile captures are in each `benchmarks/live-picture/profile-1020-<series>.txt`; event timelines are in matching JSON files. The fresh RTX run is queued behind another lane’s exclusive card lock. No optimization is included in this partial pass.

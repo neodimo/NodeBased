@@ -1,0 +1,61 @@
+Lane 8 live-picture profile · tier4_playback · llvmpipe baseline
+Measured result: {"series": "tier4_playback", "adapter": "llvmpipe", "fps": 2.493, "rendered_frame_changes": 5, "elapsed_s": 2.006, "fps_target": 24.0, "status": "1920 × 1080  ·  proxy 1/4  ·  5 ms  ·  display cache hit  ·  display GPU  ·  ahead 3/3  ·  dropped 0"}
+
+Largest measured graph evaluations (inclusive wall time):
+1. Roto tier 4: 377.523 ms
+2. Roto tier 4: 374.796 ms
+3. Roto tier 4: 371.973 ms
+4. Roto tier 4: 369.988 ms
+5. Roto tier 4: 366.356 ms
+
+Thread profiles (cProfile; isolated passes because CPython 3.12 allows one active profiler per process):
+
+Qt thread — full three-series session:
+         15024079 function calls (14674443 primitive calls) in 30.386 seconds
+
+   Ordered by: cumulative time
+   List reduced from 2903 to 50 due to restriction <50>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     18/9    0.001    0.000   34.085    3.787 <local-path>share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/concurrent/futures/thread.py:54(run)
+     18/9    0.000    0.000   34.051    3.783 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/tools/_live_picture_driver.py:95(run)
+     12/6    0.000    0.000   28.362    4.727 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/app.py:13860(work)
+     12/6    0.001    0.000   28.361    4.727 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/app.py:13863(render)
+     2011   10.193    0.005   28.084    0.014 {built-in method time.sleep}
+        5    0.000    0.000   27.655    5.531 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/tools/_live_picture_driver.py:49(compose)
+        5    0.000    0.000   27.653    5.531 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/tileexec.py:541(compose_region)
+       14    0.030    0.002   19.613    1.401 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:759(evaluate)
+       45    0.008    0.000   19.524    0.434 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:2639(_windowed_kernel)
+       14    0.006    0.000   19.434    1.388 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:769(evaluate_raster)
+      5/3    0.006    0.001   17.950    5.983 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/tools/_live_picture_driver.py:123(settle)
+      8/6    0.709    0.089   14.492    2.415 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/tools/_live_picture_driver.py:68(evaluate)
+       12    0.007    0.001   10.262    0.855 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:4259(_kernel)
+        2    4.123    2.061    8.583    4.291 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/gpudisplay.py:117(_make_lut_texture)
+        2    0.000    0.000    5.657    2.829 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/app.py:14522(work)
+       16    0.001    0.000    4.870    0.304 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/tools/_live_picture_driver.py:110(traced_qimage)
+       16    0.028    0.002    4.761    0.298 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:266(to_qimage)
+
+Preview worker — full three-series session:
+         8713067 function calls (8567375 primitive calls) in 16.485 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1475 to 50 due to restriction <50>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+1356/1354    7.575    0.006   21.287    0.016 {built-in method time.sleep}
+       13    0.003    0.000   10.223    0.786 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:4259(_kernel)
+    13/12    0.004    0.000    8.345    0.695 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:769(evaluate_raster)
+      7/6    0.755    0.108    6.989    1.165 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/tools/_live_picture_driver.py:68(evaluate)
+      5/4    0.000    0.000    6.974    1.744 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/tools/_live_picture_driver.py:49(compose)
+      5/4    0.002    0.000    6.972    1.743 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/tileexec.py:541(compose_region)
+    42/33    0.006    0.000    6.800    0.206 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:2639(_windowed_kernel)
+      8/7    0.009    0.001    6.604    0.943 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:759(evaluate)
+      520    0.040    0.000    4.275    0.008 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/roto.py:199(feather)
+   794223    0.205    0.000    3.787    0.000 <local-path>space/projects/nodebased/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:48(_wrapfunc)
+   264097    0.062    0.000    3.259    0.000 <local-path>space/projects/nodebased/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:2876(cumsum)
+     1040    0.511    0.000    2.713    0.003 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/imaging.py:4239(_box_blur_axis)
+       11    0.001    0.000    1.823    0.166 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/paint.py:141(rasterise)
+   264097    1.591    0.000    1.598    0.000 {method 'cumsum' of 'numpy.ndarray' objects}
+       13    0.218    0.017    1.292    0.099 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/roto.py:332(rasterise)
+      520    0.579    0.001    1.200    0.002 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/roto.py:102(coverage)
+       11    0.108    0.010    1.146    0.104 <local-path>s/dddceeaf03a43b80/nb-2d-parity-b/nodebased/media.py:274(read_exr_layers)
