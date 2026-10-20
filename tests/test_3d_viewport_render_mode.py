@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication
 from nodebased.core import Dispatcher
 from nodebased.viewport3d import Viewport3D
 from nodebased import pathtrace, scene3d as s
+from tests.progressive_widget import first_picture, paint_until, settled
 
 APP = QApplication.instance() or QApplication([])
 
@@ -67,8 +68,10 @@ class RenderMode(unittest.TestCase):
     def test_a_paint_shows_the_progressive_image_and_sample_count(self):
         widget = self._widget()
         widget.render_mode = True
-        image = widget.grab().toImage()
+        image = widget.grab().toImage()          # the first paint submits the view and shows the interactive picture meanwhile
         self.assertFalse(image.isNull())
+        self.assertIn("preparing", widget.render_note)
+        self.assertTrue(paint_until(widget, first_picture))
         self.assertIsNotNone(widget._progressive_state)
         self.assertIn("RENDER", widget.render_note)
         self.assertIn("sample", widget.render_note)
@@ -76,42 +79,43 @@ class RenderMode(unittest.TestCase):
     def test_the_note_shows_the_pass_and_then_the_converged_share(self):
         widget = self._widget()
         widget.render_mode = True
-        widget.grab()
-        self.assertIn("pass 1", widget.render_note)
-        self.assertNotIn("converged", widget.render_note.replace("converging", ""))     # the low-res reset step measures nothing
-        for _ in range(4):
-            widget.grab()
-        self.assertIn("pass 5", widget.render_note)
+        self.assertTrue(paint_until(widget, first_picture))
+        first = widget._progressive_job.frames[0].state
+        self.assertEqual(first.passes, 1)
+        self.assertIsNone(first.converged_fraction)         # the low-res reset step measures nothing
+        self.assertTrue(paint_until(widget, lambda state, phase: phase == "settled" or state.passes >= 5))
+        self.assertRegex(widget.render_note, r"pass \d+")
         self.assertRegex(widget.render_note, r"\d+% converged")
 
     def test_repeated_paints_advance_the_sample_count_while_the_camera_is_still(self):
         widget = self._widget()
         widget.render_mode = True
-        widget.grab()
-        first = widget._progressive_state.samples
-        for _ in range(4):
-            widget.grab()
+        self.assertTrue(paint_until(widget, first_picture))
+        first = widget._progressive_job.frames[0].state.samples
+        self.assertTrue(paint_until(widget, lambda state, phase: state.samples > first))
         self.assertGreater(widget._progressive_state.samples, first)
 
     def test_orbiting_resets_the_sample_count(self):
         widget = self._widget()
         widget.render_mode = True
-        for _ in range(3):
-            widget.grab()
-        self.assertGreater(widget._progressive_state.samples, 1)
+        self.assertTrue(paint_until(widget, lambda state, phase: state is not None and state.samples > 1))
         widget.azimuth += 30.0   # the same effect orbiting has, without driving real mouse events
         widget.grab()
-        self.assertEqual(widget._progressive_state.samples, 1)
-        self.assertTrue(widget._progressive_state.low_res)
+        self.assertIsNone(widget._progressive_state)         # the old camera's picture is not drawn for the new camera
+        self.assertTrue(paint_until(widget, first_picture))
+        again = widget._progressive_job.frames[0].state      # the new view starts over with a fresh low-resolution first pass
+        self.assertEqual(again.samples, 1)
+        self.assertTrue(again.low_res)
 
     def test_turning_it_off_falls_back_to_the_interactive_viewport(self):
         widget = self._widget()
         widget.render_mode = True
-        widget.grab()
+        self.assertTrue(paint_until(widget, first_picture))
         widget.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_P, Qt.KeyboardModifier.NoModifier))
         image = widget.grab().toImage()
         self.assertFalse(image.isNull())
         self.assertEqual(widget.render_note, "")
+        self.assertTrue(widget._progressive_job.wait(timeout=60))      # the cancelled pass ended
 
     def test_depth_of_field_shows_when_looking_through_a_lens_camera(self):
         """Step X2: the viewed camera's own fstop/focus (Camera3D, look-through) reaches the
@@ -126,8 +130,7 @@ class RenderMode(unittest.TestCase):
         widget.set_document(d.document)
         widget.look_through = True
         widget.render_mode = True
-        for _ in range(6):
-            widget.grab()
+        self.assertTrue(paint_until(widget, settled))
         blurred = widget._progressive_state.image.copy()
 
         pinhole_doc = graph()
@@ -137,8 +140,7 @@ class RenderMode(unittest.TestCase):
         widget2.set_document(pinhole_doc.document)
         widget2.look_through = True
         widget2.render_mode = True
-        for _ in range(6):
-            widget2.grab()
+        self.assertTrue(paint_until(widget2, settled))
         sharp = widget2._progressive_state.image.copy()
 
         self.assertFalse(np.allclose(blurred, sharp, atol=0.03))
@@ -162,8 +164,7 @@ class RenderMode(unittest.TestCase):
         widget.set_document(d.document)
         widget.look_through = True
         widget.render_mode = True
-        for _ in range(6):
-            widget.grab()
+        self.assertTrue(paint_until(widget, settled))
         blurred = widget._progressive_state.image.copy()
 
         widget2 = Viewport3D()
@@ -172,8 +173,7 @@ class RenderMode(unittest.TestCase):
         widget2.set_document(still_doc.document)
         widget2.look_through = True
         widget2.render_mode = True
-        for _ in range(6):
-            widget2.grab()
+        self.assertTrue(paint_until(widget2, settled))
         still = widget2._progressive_state.image.copy()
 
         self.assertFalse(np.allclose(blurred, still, atol=0.03))
@@ -182,7 +182,8 @@ class RenderMode(unittest.TestCase):
         widget = self._widget()
         widget.render_mode = True
         with patch("nodebased.progressiverender.pathtrace.render", side_effect=ValueError("no particles")):
-            image = widget.grab().toImage()
+            self.assertTrue(paint_until(widget, lambda state, phase: phase == "failed"))
+        image = widget.grab().toImage()
         self.assertFalse(image.isNull())
         self.assertFalse(widget.render_mode)
         self.assertIn("Render mode failed", widget.status)

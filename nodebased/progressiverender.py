@@ -38,6 +38,7 @@ builds Render3D's own), and each step traces `pathtrace.render_motion` over them
 """
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field, replace
 
@@ -76,6 +77,7 @@ class ProgressiveState:
     traced_width: int = 0
     traced_height: int = 0
     phases: tuple = ()                         # ((name, seconds), ...) of the last first-look stage: render, guides, denoise, enlarge
+    guides: object = field(default=None, compare=False, repr=False)   # (albedo, normals, depth) at the output size, kept for the next pass
 
 
 def _drop_particles(scene):
@@ -83,7 +85,7 @@ def _drop_particles(scene):
 
 
 def step(state, scene, camera, width, height, background, ambient, key, backend="auto",
-        max_bounces=MAX_BOUNCES, moments=None):
+        max_bounces=MAX_BOUNCES, moments=None, cancel=None):
     """One progressive step: `state` (or a fresh one when `key` differs from its own) advanced by a
     single, higher-sample-count re-trace. Particles are dropped first (the path tracer does not draw
     them, `pathtrace.check_scene`); everything else the viewport shows -- meshes, splats, volumes,
@@ -91,7 +93,8 @@ def step(state, scene, camera, width, height, background, ambient, key, backend=
 
     `moments`, when given, is `[(scene, camera)]` across the shutter (see the module docstring): the
     step traces `pathtrace.render_motion` over them instead of the single `scene`/`camera`, at the
-    same sample-doubling schedule.
+    same sample-doubling schedule. `cancel` (an event) stops the trace between GPU passes with
+    `cancellation.Cancelled`; nothing is stored here, so the caller's previous state stays as it was.
     """
     width, height = max(1, int(width)), max(1, int(height))
     if state is None or state.key != key:
@@ -110,11 +113,11 @@ def step(state, scene, camera, width, height, background, ambient, key, backend=
     if moments:
         moments = [(_drop_particles(scene_at), camera_at) for scene_at, camera_at in moments]
         image = pathtrace.render_motion(moments, render_width, render_height, background, ambient=ambient,
-                                        output="rgba", settings=settings, backend=backend, stats=stats)
+                                        output="rgba", settings=settings, backend=backend, stats=stats, cancel=cancel)
     else:
         scene = _drop_particles(scene)
         image = pathtrace.render(scene, camera, render_width, render_height, background, ambient=ambient,
-                                 output="rgba", settings=settings, backend=backend, stats=stats)
+                                 output="rgba", settings=settings, backend=backend, stats=stats, cancel=cancel)
     elapsed = time.perf_counter() - started
     # `stats["converged"]` is there when one render measured it (the CPU reference and the GPU path tracer; a GPU
     # motion-blur render is several renders averaged and measures nothing)
@@ -256,21 +259,71 @@ def _preview(scene, camera, width, height, background, ambient, pixels, samples,
     return image, (tw, th), tuple(phases)
 
 
+DENOISE_WORKERS = max(2, min(12, os.cpu_count() or 2))
+GUIDE_SAMPLES = 4        # the guide passes need no more than the preview's samples (normals and depth are un-jittered)
+
+
+def _denoised_step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments, cancel):
+    """`step` with its picture filtered: the same render (adaptive sampling, `converged_fraction`, `finished`) traced over a clear
+    background, filtered with the albedo, normals and depth guides, then composited over `background`. The guides are traced once
+    for the view (they do not depend on the sample count) and carried in the returned state for the next pass."""
+    scene = _drop_particles(scene)
+    clear = (0.0, 0.0, 0.0, 0.0)
+    with gpupathtrace.reusing_scene():
+        raw = step(state, scene, camera, width, height, clear, ambient, key, backend, max_bounces, moments, cancel)
+        started = time.perf_counter()
+        guides = state.guides
+        if guides is None or guides[0].shape[:2] != (raw.height, raw.width):
+            settings = pathtrace.PathSettings(samples=GUIDE_SAMPLES, max_bounces=max_bounces)
+            traced = pathtrace.guide_aovs(scene, camera, raw.width, raw.height, settings, cancel=cancel, backend=backend,
+                                          ambient=ambient)
+            guides = (traced["albedo"], traced["normals"][..., :3], traced["depth"][..., 0])
+    guided = time.perf_counter()
+    filtered = ptdenoise.denoise_strips(raw.image, guides[0], guides[1], guides[2], None, workers=DENOISE_WORKERS,
+                                        dtype=np.float32)
+    image = pathtrace.over_background(filtered, background).astype(np.float32)
+    done = time.perf_counter()
+    return replace(raw, image=image, denoised=True, guides=guides, seconds=raw.seconds + done - started,
+                   phases=(("render", raw.seconds), ("guides", guided - started), ("denoise", done - guided)))
+
+
+def _ladder_over(state, width, height, stages):
+    """True when the preview stages are done for `state` (all taken, the next no smaller than the output, the cap reached, or a
+    first stage too slow to follow with a dearer one): the doubling steps take over."""
+    return (state.stage >= len(stages) or stages[state.stage][0] >= width * height or state.samples >= SAMPLE_CAP
+            or (state.stage == 1 and state.seconds > STAGE_TWO_MAX_FIRST_SECONDS))
+
+
+def next_samples(state, width, height, stages=None):
+    """The sample count the next `step_interactive` call will reach for `state` (what a viewport can say about the pass in
+    flight); the cap once `state` has it."""
+    stages = PREVIEW_STAGES if stages is None else stages
+    if state is None:
+        return stages[0][1] if stages and stages[0][0] < width * height else FIRST_PASS_SAMPLES
+    if not _ladder_over(state, width, height, stages):
+        return stages[state.stage][1]
+    return min(max(state.samples, 1) * 2, SAMPLE_CAP)
+
+
 def step_interactive(state, scene, camera, width, height, background, ambient, key, backend="auto",
-                     max_bounces=MAX_BOUNCES, moments=None, cancel=None, stages=None):
+                     max_bounces=MAX_BOUNCES, moments=None, cancel=None, stages=None, denoise_passes=False):
     """`step` with a denoised first look. For a fresh `key` the first call returns stage one of `PREVIEW_STAGES`, the second
     stage two (a stage whose pixel count is not below the output's is skipped: a small view just starts the doubling), and
     every later call is `step` unchanged. The preview states carry the output size with `preview=True`, `denoised=True` and
     what was traced in `traced_width`/`traced_height`; `cancel` (an event) stops a stage between passes with
-    `cancellation.Cancelled`, leaving the caller's previous state as it was (nothing is stored here)."""
+    `cancellation.Cancelled`, leaving the caller's previous state as it was (nothing is stored here). With `denoise_passes` the
+    full-size doubling steps are filtered too (`_denoised_step`), so the picture never gets noisier than the preview it follows;
+    without it they are the raw `step` as before."""
     width, height = max(1, int(width)), max(1, int(height))
     stages = PREVIEW_STAGES if stages is None else stages
     if state is None or state.key != key:
         state = ProgressiveState(key=key)
-    if (state.stage >= len(stages) or stages[state.stage][0] >= width * height or state.samples >= SAMPLE_CAP
-            or (state.stage == 1 and state.seconds > STAGE_TWO_MAX_FIRST_SECONDS)):
+    if _ladder_over(state, width, height, stages):
         # the preview ladder is over for this key (`stage` says so, or the next `step_interactive` would start it again)
-        return replace(step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments),
+        if denoise_passes:
+            return replace(_denoised_step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces,
+                                          moments, cancel), stage=len(stages))
+        return replace(step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments, cancel),
                        stage=len(stages))
     pixels, samples = stages[state.stage]
     if state.stage == 0:

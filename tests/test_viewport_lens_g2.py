@@ -20,6 +20,7 @@ import tests.isolation  # noqa: F401  (Qt settings of the test run stay out of t
 from nodebased import gpu3d, gpulens, lensmodel, scene3d, viewportlens
 from nodebased.core import Dispatcher
 from nodebased.viewport3d import Viewport3D
+from tests.progressive_widget import paint_until, settled
 
 APP = QApplication.instance() or QApplication([])
 
@@ -200,6 +201,7 @@ class ViewportThroughTheLens(unittest.TestCase):
         widget = viewport(d)
         self.addCleanup(widget.close)
         widget.render_mode = True
+        self.assertTrue(paint_until(widget, settled))
         rgb = picture(widget)
         self.assertTrue(widget._lens_drawn)
         frame = viewportlens.frame_for(scene3d.camera_from_node(d.document["nodes"]["cam"]), *SIZE)

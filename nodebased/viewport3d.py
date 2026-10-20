@@ -17,16 +17,17 @@ import time
 from dataclasses import replace
 
 import numpy as np
-from PySide6.QtCore import Qt, QPointF, QTimer, QSettings
+from PySide6.QtCore import Qt, QPointF, QTimer, QSettings, Signal
 from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget, QToolTip, QMenu, QLabel
 
-from . import handles3d, progressiverender, scene3d, viewportgpu, viewportlens, particleinspect
+from . import handles3d, progressiverender, progressivejob, scene3d, viewportgpu, viewportlens, particleinspect
 from .core import GEOMETRY_TYPES
 
 # The progressive "Render" mode's own idle-repaint cadence (R6 "next", closed): fast enough to look
 # responsive while converging, slow enough to leave the event loop room for mouse/keyboard input.
-RENDER_MODE_TICK_MS = 16
+RENDER_STAGE_COLORS = {"waiting": "#8a8a96", "preview": "#f4ce63", "refining": "#5aa9e6", "settled": "#5fcf8a"}
+RENDER_MODE_TICK_MS = 200     # repaint rate of the 'seconds into this pass' counter while a worker pass runs
 
 # Textures are evaluated at this proxy tier: the viewport is for placing things, and a quarter
 # resolution plate is plenty to see where a card sits without stalling the UI on a 4K Read.
@@ -80,6 +81,8 @@ _GRID = _line_vertices([(start, end, color if color[:3] != (0.25, 0.25, 0.25) el
 
 
 class Viewport3D(QWidget):
+    progressive_ready = Signal()     # the Render mode's worker published a picture (emitted from its thread, delivered queued)
+
     def __init__(self, window=None, parent=None):
         super().__init__(parent)
         # How far down the viewer's floating strip reaches; the top lines are drawn below it.
@@ -126,8 +129,16 @@ class Viewport3D(QWidget):
         self._last_frame = None
         self.render_mode = False   # P: the progressive path-traced "Render" preview (progressiverender)
         self.render_note = ""      # what the progressive mode shows: sample count, low-res, converging
-        self._progressive_state = None
-        self._progressive_timer = QTimer(self)
+        self._progressive_state = None   # the state the last paint drew (None while the interactive picture shows)
+        self._progressive_job = None     # the worker thread that traces it (`progressivejob.ProgressiveJob`), made on first use
+        self._progressive_phase = "idle"
+        self._progressive_image = None   # (state, lens frame, QImage): the converted picture, reused while a pass is in flight
+        self._dispatcher_revision = None
+        self._scene_revision = 0         # bumped by every `set_document`: an edited scene is a new Render view
+        self.render_progress = 0.0       # 0..1, samples reached of the cap; drawn as a bar under the picture
+        self.render_stage = ""           # "waiting", "preview", "refining" or "settled"
+        self.progressive_ready.connect(self.update)
+        self._progressive_timer = QTimer(self)    # repaints the "pass in flight" seconds while a worker pass runs
         self._progressive_timer.setSingleShot(True)
         self._progressive_timer.timeout.connect(self.update)
         self.setMinimumSize(320, 220)
@@ -135,6 +146,12 @@ class Viewport3D(QWidget):
 
     def set_document(self, document):
         self.document = document
+        # Documents are edited in place, so the Render view must not keep a picture of the old scene: every edit the window's
+        # dispatcher counts (its revision) is a new view; without a dispatcher every call is.
+        revision = getattr(getattr(self.window, "dispatcher", None), "revision", None)
+        if revision is None or revision != self._dispatcher_revision:
+            self._scene_revision += 1
+        self._dispatcher_revision = revision
         self._sim_stats_identity = None
         self.refresh_sim_stats()
         self._scene_cache = (None, None)  # documents are edited in place; identity proves nothing
@@ -647,6 +664,9 @@ class Viewport3D(QWidget):
         if self.render_note:
             painter.fillRect(0, self.height() - 28, self.width(), 28, QColor(10, 10, 12, 170))
             painter.drawText(12, self.height() - 10, self.render_note)
+            colour = RENDER_STAGE_COLORS.get(self.render_stage)
+            if colour is not None:       # samples reached of the cap, in the colour of the stage: amber preview, blue refining, green settled
+                painter.fillRect(0, self.height() - 3, max(3, int(self.width() * self.render_progress)), 3, QColor(colour))
         painter.drawText(12, top + 20, f"3D VIEWPORT · {backend} · {mode}")
         if self.status:
             painter.setPen(QColor("#e06f6f"))
@@ -981,50 +1001,96 @@ class Viewport3D(QWidget):
         bend = None if lens is None else (lens.lens, lens.margin_x, lens.margin_y)
         return identity, pose, drag, motion, bend
 
+    def _job(self):
+        if self._progressive_job is None:
+            job = self._progressive_job = progressivejob.ProgressiveJob(on_update=self.progressive_ready.emit)
+            self.destroyed.connect(lambda *_: job.close())     # a widget collected without `close` still ends its worker
+        return self._progressive_job
+
+    def _stop_progressive(self):
+        """Abandon the Render mode's work (leaving the mode, hiding or closing the widget): the pass in flight stops at its next
+        GPU pass boundary and nothing more is traced until a paint asks again."""
+        self._progressive_timer.stop()
+        if self._progressive_job is not None:
+            self._progressive_job.cancel()
+        self._progressive_state = None
+        self._progressive_image = None
+        self._progressive_phase = "idle"
+        self.render_progress, self.render_stage = 0.0, ""
+
+    def hideEvent(self, event):
+        self._stop_progressive()
+        super().hideEvent(event)
+
+    def closeEvent(self, event):
+        self._stop_progressive()
+        if self._progressive_job is not None:
+            self._progressive_job.close()
+            self._progressive_job = None
+        super().closeEvent(event)
+
     def _paint_progressive(self, painter, scene, camera, authored):
+        """Draw the Render mode's newest picture for the view on screen, and make sure a worker is tracing it. The tracing happens
+        on `progressivejob.ProgressiveJob`'s thread (the interface never waits for a pass): the first paint of a view returns
+        False so the interactive picture shows underneath ("preparing" in the note) until the denoised first look arrives; every
+        later paint draws the newest published state of *this* view (a superseded view's picture is never shown) and says whether
+        it is a preview, still refining or settled."""
         ratio = self.devicePixelRatioF()
         width, height = max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio))
         render = self._render_node()
         lens = viewportlens.frame_for(camera, width, height) if self._lens_drawn else None
-        key = self._progressive_key(camera, render, lens)
+        key = (self._progressive_key(camera, render, lens), self._scene_revision)
         moments = self._motion_moments(render)
         if lens is not None:     # trace the overscan picture; the lens bends the converged image below
             moments = [(moment_scene, lens.camera(moment_camera)) for moment_scene, moment_camera in moments] if moments else moments
             width, height = lens.render_width, lens.render_height
-        try:
-            self._progressive_state = progressiverender.step_interactive(
-                self._progressive_state, scene, lens.camera(camera) if lens else camera, width, height, BACKGROUND,
-                0.15, key, moments=moments)
-        except Exception as error:  # a scene the path tracer refuses (e.g. particles slipped through)
-            self.status = f"Render mode failed, using the interactive viewport: {error}"
+        identity = (key, width, height)
+        job = self._job()
+        job.submit(progressivejob.Request(identity, scene, lens.camera(camera) if lens else camera, width, height, BACKGROUND,
+                                          0.15, moments))
+        state, phase = job.view(identity)
+        self._progressive_phase = phase
+        if phase == "failed":    # a scene the path tracer refuses (e.g. particles slipped through)
+            self.status = f"Render mode failed, using the interactive viewport: {job.error}"
             self.render_mode = False
-            self._progressive_timer.stop()
+            self._stop_progressive()
+            self.render_note = ""
             return False
-        state = self._progressive_state
-        if state.image is None:
+        if state is None or state.image is None:
+            self._progressive_state = None
+            self.render_stage, self.render_progress = "waiting", 0.0
+            self.render_note = "RENDER · preparing the denoised first look · interactive view until it is ready"
             return False
+        self._progressive_state = state
         self.splat_note = self.volume_note = self.shadow_note = ""   # the progressive image already carries their look
-        rgba = progressiverender.display_rgba8(state.image)
-        if lens is not None:
-            rgba = viewportlens.redistort(lens, viewportlens.fit(lens, rgba))
-        qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0],
-                        QImage.Format.Format_RGBA8888).copy()
+        cached, bend = self._progressive_image, (None if lens is None else (lens.lens, lens.margin_x, lens.margin_y))
+        if cached is None or cached[0] is not state or cached[1] != bend:
+            rgba = progressiverender.display_rgba8(state.image)
+            if lens is not None:
+                rgba = viewportlens.redistort(lens, viewportlens.fit(lens, rgba))
+            qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0],
+                            QImage.Format.Format_RGBA8888).copy()
+            self._progressive_image = cached = (state, bend, qimage)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.drawImage(self.rect(), qimage)
-        done = progressiverender.converged(state, width, height)
-        label = f"{state.samples} sample{'s' if state.samples != 1 else ''}"
-        if state.preview:       # an enlarged internal pass, denoised: not a render at the view's size
-            label += f" · denoised preview from {state.traced_width}×{state.traced_height}"
-        elif state.low_res:
-            label += " · low-res"
-        label += f" · pass {state.passes}"
-        if state.converged_fraction is not None:
-            label += f" · {int(100 * state.converged_fraction)}% converged"
-        self.render_note = f"RENDER · {label}" + ("" if done else " · converging")
+        painter.drawImage(self.rect(), cached[2])
+        done = phase == "settled"
+        self.render_progress = min(1.0, state.samples / progressiverender.SAMPLE_CAP)
         if done:
+            self.render_stage = "settled"
+            note = f"RENDER · SETTLED · {state.samples} samples · pass {state.passes}"
             self._progressive_timer.stop()
         else:
+            ahead = progressiverender.next_samples(state, width, height)
+            elapsed = job.working_seconds()
+            self.render_stage = "preview" if state.preview else "refining"
+            head = (f"PREVIEW · denoised, enlarged from {state.traced_width}×{state.traced_height}" if state.preview
+                    else "REFINING" + (" · denoised" if state.denoised else ""))
+            note = (f"RENDER · {head} · {state.samples} sample{'s' if state.samples != 1 else ''} · pass {state.passes}"
+                    f" · tracing {ahead} samples ({elapsed:.1f} s)")
             self._progressive_timer.start(RENDER_MODE_TICK_MS)
+        if state.converged_fraction is not None:
+            note += f" · {int(100 * state.converged_fraction)}% converged"
+        self.render_note = note
         return True
 
     def _paint_gpu(self, painter, gpu, scene, camera, authored):
@@ -1327,10 +1393,9 @@ class Viewport3D(QWidget):
                 self.update()
         elif event.key() == Qt.Key.Key_P and not event.modifiers():
             self.render_mode = not self.render_mode
+            self._stop_progressive()         # always start the next Render pass fresh
             if not self.render_mode:
-                self._progressive_timer.stop()
                 self.render_note = ""
-            self._progressive_state = None   # always start the next Render pass fresh
             self.update()
         elif event.key() == Qt.Key.Key_F:
             self.look_through = False

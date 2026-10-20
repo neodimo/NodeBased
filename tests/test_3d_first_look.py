@@ -18,6 +18,7 @@ import numpy as np
 from nodebased import gpupathtrace, pathtrace, progressiverender as P, ptdenoise, scene3d as s
 from nodebased.cancellation import Cancelled
 from tests.test_3d_pathtrace import CORNELL_CAMERA, cornell, gpu_ready
+from tests.progressive_widget import first_picture, paint_until
 from tests.test_3d_progressive_render import BACKGROUND, CAMERA, _SKIP, _scene
 
 WIDTH, HEIGHT = 160, 90
@@ -248,30 +249,29 @@ class ViewportTests(unittest.TestCase):
         P._COST.clear()
         self.addCleanup(P._COST.clear)
 
-    def test_the_first_paint_is_a_labelled_denoised_preview_then_the_doubling_steps_follow(self):
+    def test_the_first_picture_is_a_labelled_denoised_preview_then_the_doubling_steps_follow(self):
         widget = self._widget()
-        image = widget.grab().toImage()
-        self.assertFalse(image.isNull())
-        state = widget._progressive_state
+        widget.grab()
+        self.assertIn("preparing", widget.render_note)               # the interactive picture shows until the first look is ready
+        self.assertTrue(paint_until(widget, lambda state, phase: state is not None and not state.preview))
+        frames = [frame.state for frame in widget._progressive_job.frames]
+        state = frames[0]
         self.assertTrue(state.preview and state.denoised)
         self.assertEqual(state.image.shape[:2], (360, 640))
-        self.assertIn("denoised preview from", widget.render_note)
-        self.assertIn("converging", widget.render_note)
-        widget.grab()
-        later = widget._progressive_state
-        self.assertFalse(later.preview)
-        self.assertNotIn("denoised preview", widget.render_note)
+        later = next(frame for frame in frames if not frame.preview)
         self.assertGreater(later.samples, state.samples)
+        self.assertEqual(later.image.shape[:2], (360, 640))
 
     def test_orbiting_starts_a_new_first_look(self):
         widget = self._widget()
-        for _ in range(3):
-            widget.grab()
-        self.assertFalse(widget._progressive_state.preview)
+        self.assertTrue(paint_until(widget, lambda state, phase: state is not None and not state.preview))
         widget.azimuth += 30.0
         widget.grab()
-        self.assertTrue(widget._progressive_state.preview)
-        self.assertEqual(widget._progressive_state.stage, 1)
+        self.assertIsNone(widget._progressive_state)                 # not the old camera's picture
+        self.assertTrue(paint_until(widget, first_picture))
+        first = widget._progressive_job.frames[0].state
+        self.assertTrue(first.preview)
+        self.assertEqual(first.stage, 1)
 
 
 class BudgetTests(unittest.TestCase):
