@@ -361,34 +361,51 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
     for shape in shapes:
         if not shape.get("visible", True):
             continue
-        if region is not None:
-            sx0, sy0, sx1, sy1 = _shape_bounds(shape)
-            if sx1 <= rx0 or sx0 >= rx1 or sy1 <= ry0 or sy0 >= ry1:
+        # A full-frame request used to allocate, fill and feather a full-frame coverage plane
+        # once per shape. The shape's conservative bounds already include its feather/stroke
+        # expansion, so rasterise just that patch and composite it into the working canvas.
+        # Inverted shapes are the exception: their coverage outside the outline is non-zero and
+        # therefore affects every pixel.
+        inverted = bool(shape.get("invert", False))
+        if region is not None and not inverted:
+            bx0, by0, bx1, by1 = _shape_bounds(shape)
+            if bx1 <= rx0 or bx0 >= rx1 or by1 <= ry0 or by0 >= ry1:
                 if stats is not None:
                     stats["skipped_shapes"] = stats.get("skipped_shapes", 0) + 1
                 continue
+        if inverted:
+            sx0, sy0, sx1, sy1 = x0, y0, x1, y1
+        else:
+            bx0, by0, bx1, by1 = _shape_bounds(shape)
+            sx0, sy0 = max(x0, int(math.floor(bx0))), max(y0, int(math.floor(by0)))
+            sx1, sy1 = min(x1, int(math.ceil(bx1))), min(y1, int(math.ceil(by1)))
+            if sx1 <= sx0 or sy1 <= sy0:
+                if stats is not None:
+                    stats["skipped_shapes"] = stats.get("skipped_shapes", 0) + 1
+                continue
+        sw, sh = sx1 - sx0, sy1 - sy0
         if stats is not None:
             stats["rasterised_shapes"] = stats.get("rasterised_shapes", 0) + 1
         samples = shape.get("_motion_samples", ())
         falloff = shape.get("feather_falloff", "linear")
         if not shape.get("closed", True):
             layers = [shape["points"], *samples]
-            covers = [stroke_coverage(points, tw, th, shape.get("stroke_width", 1.0),
-                                      shape["feather"], falloff, origin=(x0, y0))
+            covers = [stroke_coverage(points, sw, sh, shape.get("stroke_width", 1.0),
+                                      shape["feather"], falloff, origin=(sx0, sy0))
                       for points in layers]
             cover = sum(covers) / len(covers)
         elif shape.get("feather_model", "box") == "edge":
             layers = [shape["points"], *samples]
-            covers = [edge_feather(points, coverage(points, tw, th, origin=(x0, y0),
+            covers = [edge_feather(points, coverage(points, sw, sh, origin=(sx0, sy0),
                                    flattened_cache=flattened_cache), shape["feather"], falloff,
-                                   origin=(x0, y0), flattened_cache=flattened_cache)
+                                   origin=(sx0, sy0), flattened_cache=flattened_cache)
                       for points in layers]
             cover = sum(covers) / len(covers)
         else:
-            cover = coverage(shape["points"], tw, th, origin=(x0, y0),
+            cover = coverage(shape["points"], sw, sh, origin=(sx0, sy0),
                              flattened_cache=flattened_cache)
             if samples:
-                cover = (cover + sum(coverage(points, tw, th, origin=(x0, y0),
+                cover = (cover + sum(coverage(points, sw, sh, origin=(sx0, sy0),
                                               flattened_cache=flattened_cache)
                                      for points in samples)) / (len(samples) + 1)
             cover = np.clip(feather(cover, shape["feather"]), 0.0, 1.0)
@@ -396,30 +413,34 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
                 cover = cover * cover * (3.0 - 2.0 * cover)
             elif falloff == "gaussian":
                 cover = np.exp(-4.0 * np.square(1.0 - cover)).astype(np.float32)
-        if shape.get("invert", False):
+        if inverted:
             cover = 1.0 - cover
         color = np.asarray(shape.get("color", [1, 1, 1, 1]), dtype=np.float32)
         alpha = cover * np.float32(shape["opacity"]) * color[3]
         source = color[:3] * alpha[..., None]
+        py0, py1 = sy0 - y0, sy1 - y0
+        px0, px1 = sx0 - x0, sx1 - x0
+        matte_patch = matte[py0:py1, px0:px1]
+        rgb_patch = rgb[py0:py1, px0:px1]
         # The legacy shape operation remains the coverage combine; the Nuke blend knob controls
         # colour/alpha compositing independently and defaults to over for old documents.
         if shape["mode"] == "subtract":
-            matte *= 1.0 - alpha
-            rgb *= 1.0 - alpha[..., None]
+            matte_patch *= 1.0 - alpha
+            rgb_patch *= 1.0 - alpha[..., None]
             continue
         blend = shape.get("blend_mode", "over")
         if blend == "plus":
-            rgb = np.clip(rgb + source, 0.0, 1.0)
-            matte = np.clip(matte + alpha, 0.0, 1.0)
+            rgb_patch[:] = np.clip(rgb_patch + source, 0.0, 1.0)
+            matte_patch[:] = np.clip(matte_patch + alpha, 0.0, 1.0)
         elif blend == "minus":
-            rgb = np.clip(rgb - source, 0.0, 1.0)
-            matte = np.clip(matte - alpha, 0.0, 1.0)
+            rgb_patch[:] = np.clip(rgb_patch - source, 0.0, 1.0)
+            matte_patch[:] = np.clip(matte_patch - alpha, 0.0, 1.0)
         elif blend == "multiply":
-            rgb *= 1.0 - alpha[..., None] + color[:3] * alpha[..., None]
-            matte = alpha + matte * (1.0 - alpha)
+            rgb_patch *= 1.0 - alpha[..., None] + color[:3] * alpha[..., None]
+            matte_patch[:] = alpha + matte_patch * (1.0 - alpha)
         else:
-            rgb = source + rgb * (1.0 - alpha[..., None])
-            matte = alpha + matte * (1.0 - alpha)
+            rgb_patch[:] = source + rgb_patch * (1.0 - alpha[..., None])
+            matte_patch[:] = alpha + matte_patch * (1.0 - alpha)
     if invert:
         matte = 1.0 - matte
     pixels = np.concatenate((rgb, matte[..., None]), axis=2).astype(np.float32)

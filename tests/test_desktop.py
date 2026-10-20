@@ -1310,6 +1310,41 @@ class SlowPlaybackTests(unittest.TestCase):
                                                   self.displayed_generations[1:])),
                         f'viewer accepted stale generations: {self.displayed_generations}')
 
+    def test_cached_tier_four_range_plays_at_the_requested_rate_without_graph_prefetch(self):
+        w = self.window
+        w.set_time(first=1, last=48, current=1, fps=24.0)
+        w.proxy.setCurrentIndex(w.proxy.findData(4))
+        w.playback_proxy.setChecked(False)
+        self.assertTrue(wait_until(lambda: not w.busy and not len(w.preview_queue)))
+        document = copy.deepcopy(w.dispatcher.document)
+        target = document.get('view')
+        for frame in range(1, 49):
+            bounds = w.tile_executor.canvas_region(document, target, frame=frame, tier=4)
+            pixels = np.full((bounds.height, bounds.width, 4), frame / 64.0, np.float32)
+            w.display_cache.put(
+                DisplayCache.key(document, target, frame, 4), pixels,
+                region=(bounds.x, bounds.y, bounds.width, bounds.height), lazy=False)
+
+        self.displayed.clear()
+        start = time.monotonic()
+        compose = unittest.mock.patch.object(
+            w.tile_executor, 'compose_region', side_effect=AssertionError('cache miss composed'))
+        evaluate = unittest.mock.patch.object(
+            w.evaluator, 'evaluate', side_effect=AssertionError('cache miss evaluated'))
+        with compose as compose_mock, evaluate:
+            w.toggle_playback(True)
+            end = start + 1.25
+            while time.monotonic() < end:
+                APP.processEvents()
+                pause(5)
+            elapsed = time.monotonic() - start
+            w.toggle_playback(False)
+            APP.processEvents()
+        fps = len(set(self.displayed)) / max(elapsed, 0.001)
+        self.assertEqual(compose_mock.call_count, 0)
+        self.assertGreaterEqual(fps, 22.0,
+                                f'warmed tier-4 range presented at {fps:.1f} fps, below 24 fps target')
+
     def test_transport_tick_does_not_cancel_the_render_in_flight(self):
         w = self.window
         w.set_time(first=1, last=8, current=1, fps=24.0)
@@ -1680,6 +1715,17 @@ class ProgressivePreviewTests(unittest.TestCase):
         final = np.zeros((540, 960, 4), dtype=np.float32)
         w.preview_ready((request, cancel), final, to_qimage(final), '40 ms')
         self.assertEqual(w.viewer.last_scale, 1)
+
+    def test_live_drag_preview_bypasses_the_paused_edit_debounce(self):
+        w = self.window
+        held = unittest.mock.patch.object(w, 'start_preview')
+        held.start()
+        self.addCleanup(held.stop)
+        doc = copy.deepcopy(w.dispatcher.document)
+        doc['nodes']['grade']['params']['exposure'] = 1.5
+        w.request_preview(progressive=True, document_override=doc)
+        self.assertEqual(w.timer.interval(), 0,
+                         'live drag still waits through the paused-edit coalescing delay')
 
     def test_a_drag_preview_refines_the_dragged_document(self):
         w = self.window

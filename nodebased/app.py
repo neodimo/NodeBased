@@ -13834,7 +13834,11 @@ class Window(QMainWindow):
             self._progressive_document = None
             tier = self.proxy.currentData() if tier_override is None else int(tier_override)
         self.evaluator.preview_direction = -1 if self.playing and getattr(self, "play_direction", 1) < 0 else 1
-        future = self.future_frames(frame) if self.playing else ()
+        # Playback read-ahead belongs in the independent source-decode pool. Composing future
+        # graph frames on this single preview worker can hold the next visible frame behind a
+        # hundreds-of-milliseconds Roto miss, even when that frame is already in DisplayCache.
+        future = ()
+        decode_ahead = self.future_frames(frame) if self.playing else ()
         viewport = None
         # A first preview, or one whose source canvas just changed size, has no scene extent
         # worth clamping against: request the complete data window so the first frame establishes
@@ -13884,9 +13888,11 @@ class Window(QMainWindow):
         # never looks at it. Prefetching at tier 1 would just spend the decode pool's own worker
         # threads (and the GIL) decoding full frames nobody will ever read back -- measured as a
         # net loss for full-resolution playback (docs/BENCHMARKS-v0.17-playback.md).
-        if target and future and tier != 1:
-            self.tile_executor.prefetch_reads(snapshot, target, future)
-        self.timer.start(0 if self.playing else 35)
+        if target and decode_ahead and tier != 1:
+            self.tile_executor.prefetch_reads(snapshot, target, decode_ahead)
+        # The normal 35 ms coalescing window is useful for paused property edits. A live drag
+        # already has its own gesture cadence and needs the first coarse picture promptly.
+        self.timer.start(0 if self.playing or live_preview else 35)
 
     def start_preview(self):
         if self.busy:

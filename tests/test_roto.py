@@ -309,6 +309,41 @@ class RasteriseTests(unittest.TestCase):
         matte = roto.rasterise([], 16, 16)
         self.assertEqual(float(matte.sum()), 0.0)
 
+    def test_full_frame_shape_bounds_keep_the_reference_pixels(self):
+        from unittest.mock import patch
+        width, height = 96, 72
+        shapes = [
+            square(9, 8, 52, 41, feather=5.0, color=[0.3, 0.7, 0.9, 0.8]),
+            square(24, 18, 43, 36, mode="subtract", feather=2.0),
+            square(44, 11, 71, 34, blend_mode="plus", feather_model="edge", feather=3.0),
+            square(65, 37, 81, 61, invert=True, opacity=0.2),
+        ]
+        optimized = roto.rasterise(copy.deepcopy(shapes), width, height)
+        # An all-canvas bound forces the optimized rasterizer through the former full-frame
+        # working size for every ordinary shape. Compare final pixels, including overlaps,
+        # box/edge feather, subtract, plus, and the full-canvas inverted exception.
+        with patch.object(roto, "_shape_bounds", return_value=(0.0, 0.0, width, height)):
+            reference = roto.rasterise(copy.deepcopy(shapes), width, height)
+        np.testing.assert_array_equal(optimized, reference)
+
+    def test_full_frame_shapes_use_bounded_coverage_planes(self):
+        from unittest.mock import patch
+        width, height = 1920, 1080
+        shapes = [square(100, 90, 240, 210, feather=12.0),
+                  square(700, 300, 820, 410, feather=8.0)]
+        original = roto.coverage
+        sizes = []
+
+        def observed(points, w, h, *args, **kwargs):
+            sizes.append((w, h))
+            return original(points, w, h, *args, **kwargs)
+
+        with patch.object(roto, "coverage", side_effect=observed):
+            result = roto.rasterise(shapes, width, height)
+        self.assertEqual(result.shape, (height, width, 4))
+        self.assertTrue(sizes)
+        self.assertTrue(all(w < width and h < height for w, h in sizes), sizes)
+
 
 class TrackerSolveTests(unittest.TestCase):
     def payload(self, *positions):
