@@ -2,6 +2,8 @@
 
 ## Where to look next
 
+**Volume/liquid priority:** [Volumes and liquids at interactive speed, swept 10/20](#volumes-and-liquids-at-interactive-speed-swept-1020): retain preparation, bound a useful preview, then preserve samples; the ranked R5 briefs target Hot pour without assuming production-renderer timings transfer.
+
 **Windows laptop priority:** [Windows hybrid presentation, swept 10/18](#windows-hybrid-presentation-swept-1018) recommends a surface-compatible RTX/D3D12 VP2 candidate, with Vulkan comparison and a complete field-kit check; laptop performance and actual scanout remain unmeasured.
 
 **Interface priority:** [V2 direct-presentation proof](#v2--direct-viewer-presentation-proof-2026-10-18) now recommends an opt-in retained-texture 2D viewer slice before any native-core rewrite. [V1 — Interface at display rate, swept 10/16](#interface-at-display-rate-swept-1016) compares three architecture options, recommends a staged hybrid core, and defines display/input gates; address this alongside the generation queue below.
@@ -714,6 +716,22 @@ The retained probe creates the output directory only if it already exists; make 
 
 **Field handoff:** [W1-laptop-present-check](../briefs/proposed/W1-laptop-present-check.md) contains the full proposed Python script and a ten-minute procedure: independent backend/preference processes, retained versus changed half-float uploads, native fractional DPI, focus/dock/resize stress, and matched application comparison. It prints adapter/backend and present-return cadence plus Qt-event-to-corresponding-present-return **input-to-photon proxy**. The proxy omits GPU completion, compositor queues, scanout and panel response. PresentMon/ETW and an external camera are separate evidence; the script cannot identify CASO/MPO or measure photons. Python compilation and CPU-only self-check pass; Windows execution and delivered interaction remain unverified. Gonzo owns integration and the L2 VP2 assignment; no worker or laptop test is started here.
 
+## Volumes and liquids at interactive speed, swept 10/20
+
+**2026-10-20 · Lane 3 R5 · Documentation and source inspection only.** [Interactive volumes and liquids](INTERACTIVE_VOLUMES_LIQUIDS.md) contains the dated source register, production-renderer comparison, code-level mapping, engineering-day estimates and portability risks. Cycles/EEVEE, Karma XPU, Arnold GPU/IPR, RenderMan XPU, Omniverse RTX, NanoVDB, OIDN/OptiX and recent research are covered. No weights downloaded, application code changed or graphics-device work run.
+
+**Evidence:** the assignment reports **26.69 s** to Hot pour's **480 × 270, 1-sample** first image in a **1920 × 1080** viewport, and **112–756 s** for **960 × 540, 8–128 sample** frames on the **12 GB RTX 3080 Ti** (R5 brief, **2026-10-20**). Fetched main `15e28165` still marks the corrected timing matrix/viewport measurements outstanding in [Fluids S2](FLUIDS_SPIKE.md#s2-of-2-the-hot-pour-reads-as-a-pour-in-progress-2026-10-15). These new numbers remain brief-supplied until their raw record is recovered. Do not combine the older two-cup sweep, corrected stills and new viewport clocks.
+
+**Found in current code:** sparse atlases, conservative local majorants/delta tracking, adaptive sampling, persistent device buffers, coarse denoised preview and worker cancellation already exist. Prepared-scene reuse is scope/eye dependent, and later progressive passes retrace samples. Shadow transmittance still uses fixed-step integration. This makes persistent preparation and true sample continuation more directly actionable than replacing the volume format. Renderer docs describe useful approximations and amortization, but the inspected sources do not establish comparable millisecond first looks on our card. Single-sample denoising does not guarantee faithful steam or refractive detail.
+
+**Ranked recommendations (proposals, not assigned work):**
+
+1. [R5-A: persistent render preparation](../briefs/proposed/R5-1-persistent-render-preparation.md) — Rendering profiles Hot pour and retains camera-independent preparation with explicit invalidation and byte limits.
+2. [R5-B: bounded liquid-and-steam preview](../briefs/proposed/R5-2-budgeted-liquid-volume-preview.md) — Rendering consumes existing Fluids artifacts, extends the current preview and preserves a useful liquid/steam image while full detail refines.
+3. [R5-C: persistent convergence and denoising](../briefs/proposed/R5-3-persistent-convergence-and-denoise.md) — Rendering resumes raw sums/moments and measures optional denoising only after continuation is tested.
+
+**Gate:** fresh useful warm first look **under 1 s**, accepted-quality settle **under 60 s** (R5 assignment, **2026-10-20**). Each brief includes the **12 GB** target, **48 GB A6000** repeat and **Iris Xe + RTX 4070 laptop** presentation tier; Radeon 8060S and llvmpipe correctness are mandatory for shader/buffer changes. Times and fit on untested tiers remain unknown. All expected savings are phase-bounded hypotheses; required speedups are not forecasts. Gonzo owns assignment/integration and visual acceptance using the proposed briefs and their benchmark-artifact contract.
+
 ## Lane 3 step notes
 
 - **T2 of 3, 2026-10-12 — tracking and reconstruction:** completed the dated landscape, lens/dense-scene comparison, one proposed survey-constrained worker experiment, and three alternative mechanisms. Read “Tracking and reconstruction, swept 10/12” above and `briefs/proposed/T2-survey-constrained-lens.md`. Every candidate has benchmark, resource, intrinsic/dynamic and licence evidence or an explicit unknown. Stage-9 figures remain assignment-supplied until their raw artifacts are recovered; the existing L2 refinement is the baseline, not a new proposal. No weights, GPU runs, provider adoption or measured quality improvement. Bundled copy is byte-identical. Gonzo owns integration and any experiment assignment.
@@ -727,3 +745,5 @@ The retained probe creates the output directory only if it already exists; make 
 - **V2 of 1, 2026-10-18 — direct presentation:** explicit Qt screen mode completed retained-texture, overlay and resize probes on Radeon, NVIDIA and llvmpipe, with no instrumented steady-state CPU round trip. Current static checker already reaches its 24 fps source rate; changed-image conversion remains costly. Go for the opt-in L2 viewer slice described above; Windows, device loss, full overlay/colour parity and actual scanout timing remain open. No application change or achieved product speedup.
 
 - **W1 of 1, 2026-10-18 — Windows hybrid presentation:** completed the sourced Windows copy/scanout map, installed-stack and VP1 audit, three-option recommendation and complete proposed laptop probe. The direct D3D12 RTX candidate is gated by measured Vulkan comparison, native DPI/docking/input and changed-picture colour/overlay parity. Documentation copies match; knowledge checks and CPU-only script validation pass. Laptop execution, actual scanout and application speedup are unverified. Gonzo owns the next handoff through `briefs/proposed/W1-laptop-present-check.md`.
+
+- **R5 of 1, 2026-10-20 — volumes/liquids at interactive speed:** sourced production strategies and recent papers, mapped existing renderer mechanisms and remaining reuse gaps, and committed three ranked implementation briefs. All are proposals; no runtime improvement measured. The new Hot pour timings are assignment-supplied and absent from inspected main. Gonzo owns assignment, raw-baseline reconciliation and cross-tier visual/performance verification.

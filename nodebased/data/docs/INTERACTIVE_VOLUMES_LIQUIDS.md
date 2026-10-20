@@ -20,7 +20,7 @@ No inspected source establishes a universal millisecond first image for arbitrar
 | **Arnold GPU/IPR** [A1, A2, A3] | Cached initial GPU shaders, progressive camera samples, adaptive allocation by pixel variation, interactive OptiX denoising. | Startup and refinement must be separated. Camera-AA controls on GPU differ from CPU component sampling. Neither low sample count nor denoising proves refraction convergence. No comparable 12 GB latency supplied. |
 | **RenderMan XPU** [R1, R2, R3] | Progressive Pixels integrates a fraction of the pixels, initially displayed over large regions, shrinking to actual pixels before further refinement. Volume aggregates share an acceleration structure; interactive denoising complements sampling. | R1 is updated **2024-07-05**; R3 release is **2025-11-13**. Aggregate construction amortizes unchanged volumes but has membership tradeoffs. This supports bounded preview scheduling, not blindly rebuilding all geometry for every camera move. No matched target-card cost. |
 | **Omniverse RTX** [N1, N2] | Real-Time uses neural reconstruction and approximations; Interactive accumulates samples, uses per-pixel error, OptiX denoising, cached lighting and NanoVDB-converted volumes. | Real-Time volume appearance can diverge from Interactive. Interactive offers biased marching or ratio tracking for volume transmittance. Its documentation's general denoising speed claims are not a Hot pour benchmark. Cache approximation and firefly clamping can alter energy. No matched 12 GB timing established. |
-| **NanoVDB** [N3, N4] | Compact, linearized sparse tree, cached read access and hierarchical traversal; share immutable frame grids across views and upload only changed data. | A data structure, not a complete interactive renderer. The published **2020-08-10** CUDA fog benchmark is **4.971 ms at 1024 × 1024 on RTX 8000**, versus **223.195 ms** for NanoVDB/TBB on dual Xeon E5-2696 v4 [N3]. It is a specific fog raytracing example, excludes proof of our full preparation/presentation pipeline, and uses a different GPU generation/capacity. **No conversion of that number to 12 GB Ampere is justified.** |
+| **NanoVDB** [N3, N4] | Compact, linearized sparse tree, cached read access and hierarchical traversal; share immutable frame grids across views and upload only changed data. | A data structure, not a complete interactive renderer. The published **2020-08-20** CUDA fog benchmark is **4.971 ms at 1024 × 1024 on RTX 8000**, versus **223.195 ms** for NanoVDB/TBB on dual Xeon E5-2696 v4 [N3]. It is a specific fog raytracing example, excludes proof of our full preparation/presentation pipeline, and uses a different GPU generation/capacity. **No conversion of that number to 12 GB Ampere is justified.** |
 
 ### Preparation and simulation-frame reuse
 
@@ -87,6 +87,14 @@ Hardware capacities here are **assignment-specified (R5, 2026-10-20)**, not newl
 - **Iris Xe + RTX 4070 laptop:** explicitly record physical render adapter, driver, backend and actual VRAM (capacity not assumed), plus which adapter presents. Measure event-to-visible-paint on the hybrid display path. An offscreen desktop timing cannot pass this tier. Retain CPU fallback if the chosen device is unsupported; don't silently measure CPU under an RTX label.
 - **Radeon 8060S and llvmpipe:** correctness and bounded-memory/cancellation gates on both; publish their timings honestly rather than applying the NVIDIA latency result. `gpupathtrace.soft_supported` now enables AMD/RADV and llvmpipe, with a smaller workgroup for the mixed splat/volume shader. Its failure message still mentions NVIDIA-only support; use the actual predicate, not that stale string. Microsoft software remains gated. See code and [GPU testing requirements](../context/lanes.md), inspected 2026-10-20.
 
+## Part 3 — Ranked runnable proposals
+
+1. [R5-A: persistent render preparation](../briefs/proposed/R5-1-persistent-render-preparation.md).
+2. [R5-B: bounded useful liquid-and-steam preview](../briefs/proposed/R5-2-budgeted-liquid-volume-preview.md).
+3. [R5-C: persistent convergence and optional denoising](../briefs/proposed/R5-3-persistent-convergence-and-denoise.md).
+
+Rendering owns these proposals and consumes existing Fluids cache artifacts; producer changes require a precise Fluids handoff. Gonzo assigns and integrates them. Each includes measurement, image-quality, adapter, memory, cancellation, documentation and closeout gates. They are implementation proposals, not adoption decisions. The research step's completion does not claim any performance gate has passed.
+
 ## Source register
 
 All links accessed **2026-10-20**. Dates below distinguish publication/version from access. Search excerpts were used where a full fetch failed; these limitations prohibit detailed benchmark claims.
@@ -106,7 +114,7 @@ All links accessed **2026-10-20**. Dates below distinguish publication/version f
 - **R3:** [RenderMan 27 release](https://renderman.pixar.com/news/pixar-animation-studios-releases-renderman-27), 2025-11-13, search excerpt; [current features](https://renderman.pixar.com/whats-new), living page, search excerpt.
 - **N1:** [RTX Interactive settings](https://docs.omniverse.nvidia.com/materials-and-rendering/latest/rtx-renderer_pt.html), living manual, full settings inspected.
 - **N2:** [RTX Real-Time overview](https://docs.omniverse.nvidia.com/materials-and-rendering/latest/rtx-renderer_rt_overview.html), living manual, search excerpt.
-- **N3:** [Accelerating OpenVDB with NanoVDB](https://developer.nvidia.com/blog/accelerating-openvdb-on-gpus-with-nanovdb/), 2020-08-10, full benchmark table inspected.
+- **N3:** [Accelerating OpenVDB with NanoVDB](https://developer.nvidia.com/blog/accelerating-openvdb-on-gpus-with-nanovdb/), 2020-08-20, full benchmark table inspected.
 - **N4:** [NanoVDB paper](https://research.nvidia.com/labs/prl/nanovdb/nanovdb2021.pdf), 2021 paper, search excerpt; [developer overview](https://developer.nvidia.com/nanovdb), living page, search excerpt.
 - **D1:** [OIDN API](https://www.openimagedenoise.org/documentation.html), living documentation, full API page inspected.
 - **D2:** [OptiX denoiser](https://developer.nvidia.com/optix-denoiser), living vendor overview, search excerpt.
