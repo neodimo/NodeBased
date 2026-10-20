@@ -45,13 +45,17 @@ class OverlayParityBase(ViewerCompareBase):
         viewer.centerOn(self.viewer.format_rect.center())
         APP.processEvents()
         size = viewer.viewport().size()
-        # The Viewer's own scene-to-viewport map (its translation is a whole number of logical pixels).
-        t = viewer.viewportTransform()
-        centre = QPointF((size.width() / 2.0 - t.dx()) / t.m11(), (size.height() / 2.0 - t.dy()) / t.m11())
         # The exact ratio that makes the physical image an integer size, as a real display's does.
         physical = (round(size.width() * ratio), round(size.height() * ratio))
         exact = physical[0] / size.width()
-        return (centre.x(), centre.y(), viewer.transform().m11() * exact), physical, exact
+        # The Viewer's own scene-to-viewport map (its translation is a whole number of logical pixels). The direct
+        # picture centres on half its physical size, which on the short axis is not quite half the logical size
+        # times the ratio (307 * 1.75 = 537.25 rounds to 537), so the centre is solved on the physical pixels:
+        # a thin slanted line then lands on the same sub-pixel phase as the Viewer's and antialiases identically.
+        t = viewer.viewportTransform()
+        zoom = t.m11() * exact
+        centre = QPointF((physical[0] / 2.0 - t.dx() * exact) / zoom, (physical[1] / 2.0 - t.dy() * exact) / zoom)
+        return (centre.x(), centre.y(), zoom), physical, exact
 
     def viewer_paint(self, physical, exact, with_overlays):
         """The Viewer widget's own paint, rendered at `exact` device pixel ratio."""
