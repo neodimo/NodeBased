@@ -1,0 +1,280 @@
+{
+  "adapter": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti\n  type DiscreteGPU, backend Vulkan, vendor NVIDIA, driver 615.71.09, wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 2147483644, max texture 32768",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "frame": 60,
+  "before": {
+    "first_picture_seconds": 26.69,
+    "traced_size": [
+      480,
+      270
+    ],
+    "samples": 1,
+    "path": "ordinary progressive reset step, measured before this change"
+  },
+  "target_seconds": 1.0,
+  "cold_target_met": true,
+  "warm_target_met": true,
+  "warm_median_seconds": 0.4203309111762792,
+  "warm_worst_seconds": 0.4289879612624645,
+  "stage_names": [
+    "cache_read",
+    "surface_mesh_load",
+    "scene_evaluation",
+    "volume_upload",
+    "acceleration_build",
+    "shader_pipeline_build",
+    "first_trace",
+    "guide_passes",
+    "first_present"
+  ],
+  "runs": [
+    {
+      "case": "cold",
+      "tier": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti",
+      "first_picture_seconds": 0.5207961669657379,
+      "evaluation_seconds": 0.6168828238733113,
+      "press_to_first_picture_seconds": 1.1376789908390492,
+      "traced_size": [
+        240,
+        135
+      ],
+      "stage_seconds": {
+        "cache_read": 0.004176196176558733,
+        "surface_mesh_load": 0.0,
+        "scene_evaluation": 0.6127066276967525,
+        "volume_upload": 0.025586474919691682,
+        "acceleration_build": 0.1576849150005728,
+        "shader_pipeline_build": 0.012677340768277645,
+        "first_trace": 0.2870986049529165,
+        "guide_passes": 0.0,
+        "first_present": 0.19067535898648202
+      },
+      "gpu_counter_delta": {
+        "pipelines": 2,
+        "resolve_pipelines": 1,
+        "scene_uploads": 1,
+        "scene_reuses": 0,
+        "accum_buffers": 1,
+        "accum_reuses": 0,
+        "bind_groups": 2,
+        "uniform_buffers": 1,
+        "staging_buffers": 2,
+        "submissions": 3
+      },
+      "presented_rgba": true,
+      "simcache_profile": {
+        "file_open_s": 5.5019278079271317e-05,
+        "file_read_s": 0.002349420916289091,
+        "deserialize_s": 0.00026356102898716927,
+        "decompress_s": 0.0,
+        "sparse_rebuild_s": 0.0015081949532032013
+      },
+      "gpu_stats": {
+        "scene build": 0.06850575096905231,
+        "pack": 0.08917916403152049,
+        "upload": 0.025586474919691682,
+        "mask update": 0.00019034394063055515,
+        "job list": 4.1939085349440575e-05,
+        "uniform write": 0.019500765949487686,
+        "encode": 0.03890863712877035,
+        "dispatch": 0.03560577495954931,
+        "final readback": 0.0020413289312273264,
+        "convert": 9.44770872592926e-05,
+        "stats": 1.913006417453289e-05,
+        "postprocess": 7.7798031270504e-06
+      },
+      "gpu_backend": "gpu"
+    },
+    {
+      "case": "warm-1",
+      "tier": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti",
+      "first_picture_seconds": 0.42301683011464775,
+      "evaluation_seconds": 0.005971131147816777,
+      "press_to_first_picture_seconds": 0.4289879612624645,
+      "traced_size": [
+        188,
+        106
+      ],
+      "stage_seconds": {
+        "cache_read": 0.001878434093669057,
+        "surface_mesh_load": 0.0,
+        "scene_evaluation": 0.00409269705414772,
+        "volume_upload": 0.0004459470510482788,
+        "acceleration_build": 0.14521758700720966,
+        "shader_pipeline_build": 8.329981938004494e-06,
+        "first_trace": 0.15060760593041778,
+        "guide_passes": 0.0,
+        "first_present": 0.1519704561214894
+      },
+      "gpu_counter_delta": {
+        "pipelines": 0,
+        "resolve_pipelines": 0,
+        "scene_uploads": 0,
+        "scene_reuses": 1,
+        "accum_buffers": 1,
+        "accum_reuses": 0,
+        "bind_groups": 2,
+        "uniform_buffers": 0,
+        "staging_buffers": 1,
+        "submissions": 3
+      },
+      "presented_rgba": true,
+      "simcache_profile": {
+        "file_open_s": 0.0,
+        "file_read_s": 0.0,
+        "deserialize_s": 0.0,
+        "decompress_s": 0.0,
+        "sparse_rebuild_s": 0.001878434093669057
+      },
+      "gpu_stats": {
+        "scene build": 0.06705418415367603,
+        "pack": 0.07816340285353363,
+        "upload": 0.0004459470510482788,
+        "mask update": 0.00013013603165745735,
+        "job list": 4.747905768454075e-05,
+        "uniform write": 0.00011537596583366394,
+        "encode": 0.0001576750073581934,
+        "dispatch": 0.0037923369091004133,
+        "final readback": 0.0005058350507169962,
+        "convert": 2.4419045075774193e-05,
+        "stats": 1.3639917597174644e-05,
+        "postprocess": 5.440087988972664e-06
+      },
+      "gpu_backend": "gpu"
+    },
+    {
+      "case": "warm-2",
+      "tier": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti",
+      "first_picture_seconds": 0.41251449496485293,
+      "evaluation_seconds": 0.005544614978134632,
+      "press_to_first_picture_seconds": 0.41805910994298756,
+      "traced_size": [
+        191,
+        108
+      ],
+      "stage_seconds": {
+        "cache_read": 0.0012948419898748398,
+        "surface_mesh_load": 0.0,
+        "scene_evaluation": 0.004249772988259792,
+        "volume_upload": 0.0004196569789201021,
+        "acceleration_build": 0.14442259212955832,
+        "shader_pipeline_build": 7.809838280081749e-06,
+        "first_trace": 0.14893754618242383,
+        "guide_passes": 0.0,
+        "first_present": 0.15637830435298383
+      },
+      "gpu_counter_delta": {
+        "pipelines": 0,
+        "resolve_pipelines": 0,
+        "scene_uploads": 0,
+        "scene_reuses": 1,
+        "accum_buffers": 1,
+        "accum_reuses": 0,
+        "bind_groups": 2,
+        "uniform_buffers": 0,
+        "staging_buffers": 1,
+        "submissions": 3
+      },
+      "presented_rgba": true,
+      "simcache_profile": {
+        "file_open_s": 0.0,
+        "file_read_s": 0.0,
+        "deserialize_s": 0.0,
+        "decompress_s": 0.0,
+        "sparse_rebuild_s": 0.0012948419898748398
+      },
+      "gpu_stats": {
+        "scene build": 0.06715024216100574,
+        "pack": 0.07727234996855259,
+        "upload": 0.0004196569789201021,
+        "mask update": 0.00011340691708028316,
+        "job list": 1.5789177268743515e-05,
+        "uniform write": 0.00010630697943270206,
+        "encode": 0.00015346589498221874,
+        "dispatch": 0.003043767996132374,
+        "final readback": 0.0004738159477710724,
+        "convert": 2.10590660572052e-05,
+        "stats": 9.699957445263863e-06,
+        "postprocess": 5.909940227866173e-06
+      },
+      "gpu_backend": "gpu"
+    },
+    {
+      "case": "warm-3",
+      "tier": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti",
+      "first_picture_seconds": 0.41553261410444975,
+      "evaluation_seconds": 0.004798297071829438,
+      "press_to_first_picture_seconds": 0.4203309111762792,
+      "traced_size": [
+        195,
+        110
+      ],
+      "stage_seconds": {
+        "cache_read": 0.0007816168945282698,
+        "surface_mesh_load": 0.0,
+        "scene_evaluation": 0.0040166801773011684,
+        "volume_upload": 0.00043780705891549587,
+        "acceleration_build": 0.14591170591302216,
+        "shader_pipeline_build": 9.499955922365189e-06,
+        "first_trace": 0.15062775602564216,
+        "guide_passes": 0.0,
+        "first_present": 0.1574580818414688
+      },
+      "gpu_counter_delta": {
+        "pipelines": 0,
+        "resolve_pipelines": 0,
+        "scene_uploads": 0,
+        "scene_reuses": 1,
+        "accum_buffers": 1,
+        "accum_reuses": 0,
+        "bind_groups": 2,
+        "uniform_buffers": 0,
+        "staging_buffers": 1,
+        "submissions": 3
+      },
+      "presented_rgba": true,
+      "simcache_profile": {
+        "file_open_s": 0.0,
+        "file_read_s": 0.0,
+        "deserialize_s": 0.0,
+        "decompress_s": 0.0,
+        "sparse_rebuild_s": 0.0007816168945282698
+      },
+      "gpu_stats": {
+        "scene build": 0.06789435888640583,
+        "pack": 0.07801734702661633,
+        "upload": 0.00043780705891549587,
+        "mask update": 0.0001353460829705,
+        "job list": 1.588882878422737e-05,
+        "uniform write": 0.0001084180548787117,
+        "encode": 0.00015628407709300518,
+        "dispatch": 0.003024220932275057,
+        "final readback": 0.0005572529044002295,
+        "convert": 2.2699125111103058e-05,
+        "stats": 1.1629890650510788e-05,
+        "postprocess": 6.660120561718941e-06
+      },
+      "gpu_backend": "gpu"
+    }
+  ],
+  "progressive_interaction": {
+    "camera_move_cancel_latency_ms": 78.05610587820411,
+    "new_view_first_picture_seconds": 0.3825427610427141,
+    "cancel_target_ms": 50.0
+  },
+  "frame60_cpu_gpu_comparison": {
+    "resolution": [
+      96,
+      54
+    ],
+    "samples": 4,
+    "mean_absolute_rgb_error": 9.958088776329532e-05,
+    "p95_absolute_rgb_error": 2.9124319098627893e-06,
+    "mean_absolute_alpha_error": 0.0,
+    "gpu": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti",
+    "cpu": "CPU reference"
+  }
+}

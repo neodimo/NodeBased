@@ -1,0 +1,166 @@
+{
+  "adapter": "wgpu adapter: AMD Radeon 8060S Graphics (RADV STRIX_HALO)\n  type IntegratedGPU, backend Vulkan, vendor radv, driver Mesa 26.2.2, wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 2147483644, max texture 16384",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "frame": 60,
+  "before": {
+    "first_picture_seconds": 26.69,
+    "traced_size": [
+      480,
+      270
+    ],
+    "samples": 1,
+    "path": "ordinary progressive reset step, measured before this change"
+  },
+  "target_seconds": 1.0,
+  "cold_target_met": true,
+  "warm_target_met": true,
+  "warm_median_seconds": 0.43394579319283366,
+  "warm_worst_seconds": 0.43394579319283366,
+  "stage_names": [
+    "cache_read",
+    "surface_mesh_load",
+    "scene_evaluation",
+    "volume_upload",
+    "acceleration_build",
+    "shader_pipeline_build",
+    "first_trace",
+    "guide_passes",
+    "first_present"
+  ],
+  "runs": [
+    {
+      "case": "cold",
+      "tier": "wgpu adapter: AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "first_picture_seconds": 0.5080787769984454,
+      "evaluation_seconds": 0.4959814881440252,
+      "press_to_first_picture_seconds": 1.0040602651424706,
+      "traced_size": [
+        240,
+        135
+      ],
+      "stage_seconds": {
+        "cache_read": 0.004157184157520533,
+        "surface_mesh_load": 0.0,
+        "scene_evaluation": 0.4918243039865047,
+        "volume_upload": 0.022346572019159794,
+        "acceleration_build": 0.15708041307516396,
+        "shader_pipeline_build": 0.012766257859766483,
+        "first_trace": 0.2765268408693373,
+        "guide_passes": 0.0,
+        "first_present": 0.188603020273149
+      },
+      "gpu_counter_delta": {
+        "pipelines": 2,
+        "resolve_pipelines": 1,
+        "scene_uploads": 1,
+        "scene_reuses": 0,
+        "accum_buffers": 1,
+        "accum_reuses": 0,
+        "bind_groups": 2,
+        "uniform_buffers": 1,
+        "staging_buffers": 2,
+        "submissions": 3
+      },
+      "presented_rgba": true,
+      "simcache_profile": {
+        "file_open_s": 5.952734500169754e-05,
+        "file_read_s": 0.00204802886582911,
+        "deserialize_s": 0.00026690191589295864,
+        "decompress_s": 0.0,
+        "sparse_rebuild_s": 0.0017827260307967663
+      },
+      "gpu_stats": {
+        "scene build": 0.06784926098771393,
+        "pack": 0.08923115208745003,
+        "upload": 0.022346572019159794,
+        "mask update": 0.0004055979661643505,
+        "job list": 3.765826113522053e-05,
+        "uniform write": 0.01968214171938598,
+        "encode": 0.038954545045271516,
+        "dispatch": 0.0311344088986516,
+        "final readback": 0.0013372402172535658,
+        "convert": 5.717785097658634e-05,
+        "stats": 2.083997242152691e-05,
+        "postprocess": 7.58003443479538e-06
+      },
+      "gpu_backend": "gpu"
+    },
+    {
+      "case": "warm-1",
+      "tier": "wgpu adapter: AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "first_picture_seconds": 0.42722815414890647,
+      "evaluation_seconds": 0.006717639043927193,
+      "press_to_first_picture_seconds": 0.43394579319283366,
+      "traced_size": [
+        190,
+        107
+      ],
+      "stage_seconds": {
+        "cache_read": 0.0024886750616133213,
+        "surface_mesh_load": 0.0,
+        "scene_evaluation": 0.004228963982313871,
+        "volume_upload": 0.0006827188190072775,
+        "acceleration_build": 0.1468216700013727,
+        "shader_pipeline_build": 9.150011464953423e-06,
+        "first_trace": 0.15590571821667254,
+        "guide_passes": 0.0,
+        "first_present": 0.15378501103259623
+      },
+      "gpu_counter_delta": {
+        "pipelines": 0,
+        "resolve_pipelines": 0,
+        "scene_uploads": 0,
+        "scene_reuses": 1,
+        "accum_buffers": 1,
+        "accum_reuses": 0,
+        "bind_groups": 2,
+        "uniform_buffers": 0,
+        "staging_buffers": 1,
+        "submissions": 3
+      },
+      "presented_rgba": true,
+      "simcache_profile": {
+        "file_open_s": 0.0,
+        "file_read_s": 0.0,
+        "deserialize_s": 0.0,
+        "decompress_s": 0.0,
+        "sparse_rebuild_s": 0.0024886750616133213
+      },
+      "gpu_stats": {
+        "scene build": 0.06780021288432181,
+        "pack": 0.07902145711705089,
+        "upload": 0.0006827188190072775,
+        "mask update": 0.00014345603995025158,
+        "job list": 4.0539074689149857e-05,
+        "uniform write": 9.491690434515476e-05,
+        "encode": 0.00018416508100926876,
+        "dispatch": 0.006797566078603268,
+        "final readback": 0.0008012759499251842,
+        "convert": 5.35289291292429e-05,
+        "stats": 2.6789028197526932e-05,
+        "postprocess": 9.569106623530388e-06
+      },
+      "gpu_backend": "gpu"
+    }
+  ],
+  "progressive_interaction": {
+    "camera_move_cancel_latency_ms": 63.9716770965606,
+    "new_view_first_picture_seconds": 0.37829636805690825,
+    "cancel_target_ms": 50.0
+  },
+  "frame60_cpu_gpu_comparison": {
+    "resolution": [
+      96,
+      54
+    ],
+    "samples": 4,
+    "mean_absolute_rgb_error": 9.958064038073644e-05,
+    "p95_absolute_rgb_error": 2.9206275939941406e-06,
+    "mean_absolute_alpha_error": 0.0,
+    "gpu": "wgpu adapter: AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+    "cpu": "CPU reference"
+  }
+}

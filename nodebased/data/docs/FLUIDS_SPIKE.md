@@ -1593,6 +1593,26 @@ The stills use 32 samples. Results are in `benchmarks/hot_pour/hot-pour-shot-S2-
 
 Against the step targets on the 12 GB card: the bake under 20 minutes is met (34.94 s), the Radeon preview at 12 FPS with a stop under one second is met, and the first look under one second is missed (26.69 s). The step remains partial for that reason.
 
+### A: the Hot pour's first look in under a second (2026-10-20)
+
+The earlier 26.69-second baseline used the ordinary 480 × 270, one-sample progressive reset step. The viewport's denoised first-look path was measured on the 64-cell frame-60 shot at 1920 × 1080 through `ProgressiveJob`, including its debounce and displayed RGBA conversion. On the RTX 3080 Ti, press-to-picture took **1.138 s cold** and **0.418–0.429 s** over three camera-moved warm runs. On the Radeon 8060S integrated adapter it took **1.004 s cold** and **0.434 s warm**. Both adapters pass the under-3-second cold and under-1-second warm gates. The largest cold stages are scene evaluation (613 ms RTX) and the first beauty trace (287 ms); warm cost is dominated by first presentation (152–157 ms) and acceleration build/packing (144–146 ms).
+
+| Stage | Cold | Warm range | Notes |
+| --- | ---: | ---: | --- |
+| Simulation-cache reads | 4.2 ms | 0.8–1.9 ms | Warm data was resident in the evaluator. |
+| Surface-mesh load/extraction | 0 ms | 0 ms | The already-evaluated scene supplied the mesh; no separate extraction occurred in this timing. |
+| Scene evaluation | 613 ms | 4.0–4.3 ms | Includes camera and frame-60 scene lookup. |
+| Volume and geometry GPU upload | 25.6 ms | 0.42–0.45 ms | Uploaded GPU scene buffers are reused on camera moves. |
+| Acceleration build and packing | 158 ms | 144–146 ms | Still rebuilt per view; this remains a major warm cost. |
+| Shader/pipeline build | 12.7 ms | 8–10 μs | First process build, then cached pipeline. |
+| First beauty trace | 287 ms | 149–151 ms | First image is a 240 × 135 cold preview, then adapts for warm requests. |
+| Guide passes | 0 ms | 0 ms | The first catcher thumbnail uses spatial-only guides; full traced guides return during refinement. |
+| Denoise, enlargement and display | 191 ms | 152–157 ms | First picture was published with its display conversion complete. |
+
+The initial catcher thumbnail keeps the cup/table composition and defers the expensive floor-shadow layer. It uses lightweight spatial guides for this first image only. Subsequent progressive passes keep the normal traced guides and shadow-catcher render, and the existing worker continues refining in the background. Camera moves reuse uploaded GPU scene buffers, but acceleration build/packing still costs about 145 ms per view. The measured camera-move cancellation latency was 78 ms on RTX and 64 ms integrated, above the approximately 50 ms target. At 96 × 54 and four samples, frame-60 GPU/CPU mean absolute RGB error was 9.96e-5 on both adapters (zero mean alpha error). The timing JSONs and runner are `benchmarks/hot_pour/firstlook-timeline-2026-10-20.json`, `benchmarks/hot_pour/firstlook-integrated-2026-10-20.json` and `tools/benchmark_fluid_firstlook.py`. Windows and real-display review remain unverified; the step is partial pending acceleration reuse and the cancellation target.
+
+Acceleration build, upload and pipeline measurements are subphases within the beauty-render stage; they are listed separately to expose preparation cost and should not be added to the beauty-render total a second time.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
