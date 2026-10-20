@@ -3154,6 +3154,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     raw = lean_image = lean_meta = None
     tile_of = None
     done = cancelled = False
+    accum = None
     frame.lock.acquire()
     try:
         buffers = frame.scene(device, wgpu, packed)
@@ -3307,7 +3308,14 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         lap("final readback")
         done = True
     except Cancelled:
-        cancelled = True       # every check sits between waited submissions: the card is idle and the cached frame stays good
+        cancelled = True       # every check sits between waited submissions: the cached frame stays good
+        if accum is not None:
+            # and the card is left with nothing queued (the setup's unwaited submissions may still be running), so the work
+            # that follows starts on an idle card and the time the worker reports is the time the card was free
+            try:
+                _wait_for(device, frame, wgpu, device.create_command_encoder(), accum)
+            except Exception:
+                pass
         raise
     finally:
         for resource in reversed(resources):
