@@ -156,8 +156,18 @@ def scenario():
     scrub={"series":"uncached_scrub","adapter":adapter,"first_picture_s":None if scrub_first is None else round(scrub_first-scrub_start,4),"settle_s":round(time.monotonic()-scrub_start,4),"status":win.viewer_info.text()}
     mark('series_end',series='uncached_scrub'); mark('series_start',series='tier4_playback')
     on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(4)),win.playback_proxy.setChecked(False))); settle()
-    t=time.monotonic(); g=win.frame_generation; on_main(lambda:win.toggle_playback(True)); time.sleep(duration); on_main(lambda:win.toggle_playback(False)); elapsed=time.monotonic()-t
-    playback={"series":"tier4_playback","adapter":adapter,"fps":round((win.frame_generation-g)/max(elapsed,.001),3),"elapsed_s":round(elapsed,3),"status":win.viewer_info.text()}
+    t=time.monotonic(); on_main(lambda:win.toggle_playback(True)); observations=[]
+    while time.monotonic()-t<duration:
+        observations.append((time.monotonic()-t,win.dispatcher.document['time']['current'],win.frame_generation))
+        time.sleep(.01)
+    on_main(lambda:win.toggle_playback(False)); elapsed=time.monotonic()-t
+    frame_count=0; last_generation=observations[0][2] if observations else -1
+    last_frame=observations[0][1] if observations else None
+    for _stamp,frame,generation in observations[1:]:
+        if generation>last_generation:
+            if frame!=last_frame: frame_count+=1; last_frame=frame
+            last_generation=generation
+    playback={"series":"tier4_playback","adapter":adapter,"fps":round(frame_count/max(elapsed,.001),3),"rendered_frame_changes":frame_count,"elapsed_s":round(elapsed,3),"fps_target":win.dispatcher.document['time']['fps'],"status":win.viewer_info.text()}
     settle(60); mark('series_end',series='tier4_playback')
     if profile_mode=='qt': main_profile.disable()
     profile_rows=[]
