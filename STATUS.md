@@ -1,8 +1,9 @@
-# Lane 8 T2 finish 1 — active (2026-10-20, 5:34 AM PDT)
+# Lane 8 T2 finish 1 — PARTIAL (2026-10-20)
 
-The merged implementation is under measurement on the current integrated source. Remaining gates: real-display Roto drag first-picture and settle latency, uncached scrub first-look timing, and tier-1/tier-4/automatic playback FPS and target-rate behavior on the 12 GB RTX 3080 Ti and llvmpipe. The previous 30-minute GPU-lock wait expired; an unrelated progression benchmark currently owns the exclusive lock. Prior targeted checks passed (72 tests); this pass has no new measurements yet.
+Real-display measurements on the merged 1920 × 1080 QA comp: RTX 3080 Ti drag first picture 1.142 s after the move (after release), settle 3.888 s; scrub first picture 0.595 s, with tier 8/4/1 at 0.595/0.978/4.914 s. Playback: 0.125 fps at tier 1, 2.624 fps at tier 4, 12.84 fps with automatic tier changes 1→2→4 against a 24 fps target. llvmpipe during Lane 4's integrated-adapter progression benchmark: drag first picture 1.414 s after release, settle 4.416 s; scrub first picture 0.808 s, settle 9.446 s; playback 0.125 fps at tier 1, 1.618 fps at tier 4, 0.125 fps automatic. Latency and rate gates remain unmet. Detailed logs are in `scratch/nb-lanes/run/qa-L8-T2-{llvmpipe-1020-r2,rtx3080ti-1020}.log`.
 
-# Lane 8 T2 — live pictures while working (PARTIAL, 2026-10-19)
+
+# Lane 8 T2 initial implementation handoff (PARTIAL, 2026-10-19)
 
 Implementation and targeted checks are committed on `openclaw/nb-2d-parity-b`. 72 targeted tests passed. Progressive edit/scrub previews, adaptive playback tiering, and PlanarTracker worker progress/cancel are in place. Real-display latency and playback FPS on 12 GB and llvmpipe remain unverified because the integrator full suite holds the shared GPU lock. Gonzo owns follow-up using `/var/home/omid/.openclaw/workspace/scratch/nb-qa/1015-roi/scripts/s12_t2.py` after the lock clears.
 

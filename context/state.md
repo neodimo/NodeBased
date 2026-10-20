@@ -1,3 +1,7 @@
+## 2026-10-20 — Lane 8 T2 finish 1: real-display gates measured, still partial
+
+The merged T2 viewer was measured on the 1920 × 1080 QA comp with the RTX 3080 Ti and llvmpipe. RTX drag first picture: 1.142 s after the first move, after release; full-tier settle: 3.888 s. Uncached scrub: tier 8 at 0.595 s, tier 4 at 0.978 s, tier 1 at 4.914 s. Playback at a 24 fps target measured 0.125 fps at tier 1, 2.624 fps at tier 4, and 12.84 fps automatic (tier changes 1→2→4). llvmpipe was measured while Lane 4's integrated-adapter progression benchmark ran: drag first picture 1.414 s after release, settle 4.416 s; scrub first picture 0.808 s, settle 9.446 s; playback 0.125 fps at tier 1, 1.618 fps at tier 4, 0.125 fps automatic (tiers 1 and 2). The first-picture and set-rate gates are unmet; the llvmpipe rates are contention-affected. See the newest `TASKLOG.md` entry and Lane 8's T2 paragraph in `docs/ROTO_TRACKING.md`.
+
 ## Lane 4 step H2 of 2 finish 1 (5:33 AM on 2026-10-20 PDT)
 
 DONE. Render mode refines on a worker thread with cancel-and-restart; 1080p progression measured on RTX 3080 Ti, Radeon 8060S and llvmpipe (`benchmarks/progression/*-1020.json`, numbers in `docs/3D_FOUNDATION.md`). Mixed mesh+splat first image 1.02 s warm on the RTX (target 1 s missed); mixed cancel latency about 0.4 s. A6000, the hybrid laptop and Windows not measured.
