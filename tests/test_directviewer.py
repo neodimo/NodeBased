@@ -364,6 +364,10 @@ class StubPresenter:
         self.offers = []
         self.ledger = dv.FrameLedger()
         self.counters = {}
+        self.paint_size = self.paint_key = None
+
+    def set_paint(self, image, key):
+        self.paint_key = key
 
     def offer(self, qimage, rect, format_rect, generation=None):
         self.offers.append(generation)
