@@ -49,6 +49,13 @@ original_compose=win.tile_executor.compose_region
 def compose(*a,**k):
     before={node:len(rows) for node,rows in win.evaluator.profile_log.items()}
     mark('tier_resample_and_graph_start',tier=k.get('tier')); result=original_compose(*a,**k)
+    if not result.tiled:
+        document,target,region=a[0],a[1],a[2]
+        flat,target=groups.flatten_groups(document,target)
+        ancestors=_all_ancestors(flat,target)
+        fraction=region.width*region.height/max(1,region.full_width*region.full_height)
+        if fraction>=.80 and any(flat['nodes'][key]['type']=='Roto' for key in ancestors):
+            mark('tile_fallback_reason',node='Roto',reason='requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator')
     for node,rows in win.evaluator.profile_log.items():
         for row in rows[before.get(node,0):]:
             mark('graph_node_timing',node=node,frame=row['frame'],elapsed_ms=round(row['wall_time_ms'],3),cache_hits=row['cache_hits'])
