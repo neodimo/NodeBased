@@ -2940,16 +2940,16 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
             # a sample's dispatches are interchangeable (each pixel counts its own samples), so a chunk's samples run
             # back to back under one bind group instead of re-binding it for every sample
             dispatches = [c for c in range(chunks) for _ in range(take)]
-            # A render nobody can interrupt goes out as one submission. One that can be cancelled (or reports progress, or has a
-            # time limit) goes in submissions of about ADAPTIVE_CHUNK_SECONDS of card time, each waited for before the next is
-            # sent, so the queue never holds work ahead of a cancel; the order of the dispatches, and so the image, is the same.
+            # A render nobody can cancel goes out as one submission per pass. One that can be cancelled goes in submissions of
+            # about ADAPTIVE_CHUNK_SECONDS of card time, each waited for before the next is sent, so the queue never holds
+            # work ahead of a cancel; the order of the dispatches, and so the image, is the same.
             first = 0
             while True:
                 raytrace._cancel(cancel)
                 count = len(dispatches) - first
-                if asked and per_dispatch is not None:
+                if cancel is not None and per_dispatch is not None:
                     count = max(1, min(count, int(ADAPTIVE_CHUNK_SECONDS / max(per_dispatch, 1e-6))))
-                elif asked:
+                elif cancel is not None:
                     count = 1                      # the first one measures what a dispatch costs here
                 last = first + count == len(dispatches)
                 encoder = device.create_command_encoder()
