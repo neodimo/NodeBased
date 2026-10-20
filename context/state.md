@@ -1,3 +1,7 @@
+## 2026-10-20 — Lane 2 VP1 respawn: no change (DONE, already on main)
+
+The tick re-spawned VP1 at 5:02 AM. VP1 (opt-in retained-texture direct picture, default off) and its 10/18 finish and VP2a playback work are already on main; the lane branch was fast-forwarded to `ce83279b` and nothing was added. The VP1 modules (66 tests) pass there, offscreen. Three-adapter and real-display runs were not repeated (GPU lock held). Gaps remain as listed in `docs/DIRECT_VIEWER.md`. Next: `briefs/L2-vp2b.md`.
+
 ## 2026-10-19 — Lane 2 VP2a (Opus sprint): direct picture playback and 4K pictures
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (5:00 AM on 2026-10-20 PDT)
