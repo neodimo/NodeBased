@@ -180,6 +180,24 @@ To post it: copy the zip to the stick or move it however you normally move files
 the file is too large for Discord, paste the contents of `field-report.md` instead and keep the zip until we can fetch it. The kit uploads
 nothing by itself.
 
+## Laptop presentation check (hybrid Windows laptop, ten minutes)
+
+For the Windows laptop whose panel is driven by the Intel graphics while the NVIDIA card is the second adapter. It needs the field-kit Python
+environment (`numpy`, `PySide6`, `wgpu`, `rendercanvas`) and nothing else; it installs and downloads nothing and changes no graphics setting.
+Connect power, close other GPU work, leave the display scale as you use it, then in PowerShell from the repository folder:
+
+```powershell
+python tools\laptop_present_check.py --self-check                 # a few seconds; proves the script runs, measures nothing
+python tools\laptop_present_check.py --matrix --out laptop-check  # four runs of 60 s: DX12 first, Vulkan as the comparator, auto, DX12 low power
+python tools\laptop_present_check.py --backend Dx12 --seconds 60 --maximize --out laptop-check-stress   # move and click in the picture, resize, Toggle dock
+python tools\laptop_present_check.py --read laptop-check
+```
+
+During each run move the pointer and click inside the window. Write down by hand which adapter Windows Settings, System, Display, Advanced display
+shows as "Connected to", the refresh rate and whether HDR is on. Bring back the `laptop-check` and `laptop-check-stress` folders (`result.json` is
+the one Gonzo reads: the adapter and backend actually used, a flag when the adapter class differs from the one asked for, and the frame interval
+and frames per second for a held and a changing picture). The numbers are when each frame call returned, not when light left the panel.
+
 ## What the A6000 lets us test that the 3080 Ti cannot
 
 The A6000 is the same Ampere generation as the 3080 Ti, with a similar amount of raw speed, so most per-frame numbers should land close.
