@@ -186,5 +186,5 @@ def scenario():
     print(json.dumps(payload,ensure_ascii=False),flush=True)
   except BaseException:
     import traceback; traceback.print_exc()
-  finally: app.quit(); os._exit(0)
+  finally: os._exit(0)
 win.setGeometry(0,0,1920,1080); win.show(); win.raise_(); win.activateWindow(); QTimer.singleShot(1000,lambda:threading.Thread(target=scenario,daemon=True).start()); app.exec()
