@@ -1,0 +1,228 @@
+{
+ "adapter": "wgpu adapter: llvmpipe (LLVM 22.1.8, 256 bits)\n  type CPU, backend Vulkan, vendor llvmpipe, driver Mesa 26.2.2 (LLVM 22.1.8), wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 134217728, max texture 16384",
+ "results": [
+  {
+   "scene": "furnished",
+   "output": [
+    1920,
+    1080
+   ],
+   "seed": "default",
+   "ambient": 0.05,
+   "cold": {
+    "frames": [
+     {
+      "seconds": 1.2462,
+      "display_seconds": 1.2462,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       480,
+       270
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.5577,
+       "guides": 0.2632,
+       "denoise": 0.2947,
+       "enlarge": 0.0531
+      }
+     },
+     {
+      "seconds": 15.0936,
+      "display_seconds": 15.0936,
+      "samples": 8,
+      "pass": 2,
+      "preview": false,
+      "denoised": true,
+      "traced": [
+       1920,
+       1080
+      ],
+      "converged_fraction": 0.08013310185185185,
+      "phases": {
+       "render": 7.7532,
+       "guides": 4.4901,
+       "denoise": 1.566
+      }
+     },
+     {
+      "seconds": 31.6928,
+      "display_seconds": 31.6928,
+      "samples": 16,
+      "pass": 3,
+      "preview": false,
+      "denoised": true,
+      "traced": [
+       1920,
+       1080
+      ],
+      "converged_fraction": 0.1416044560185185,
+      "phases": {
+       "render": 15.0051,
+       "guides": 0.0001,
+       "denoise": 1.5586
+      }
+     },
+     {
+      "seconds": 62.0732,
+      "display_seconds": 62.0732,
+      "samples": 32,
+      "pass": 4,
+      "preview": false,
+      "denoised": true,
+      "traced": [
+       1920,
+       1080
+      ],
+      "converged_fraction": 0.37070408950617284,
+      "phases": {
+       "render": 28.7747,
+       "guides": 0.0001,
+       "denoise": 1.5697
+      }
+     },
+     {
+      "seconds": 113.116,
+      "display_seconds": 113.116,
+      "samples": 64,
+      "pass": 5,
+      "preview": false,
+      "denoised": true,
+      "traced": [
+       1920,
+       1080
+      ],
+      "converged_fraction": 0.767373649691358,
+      "phases": {
+       "render": 49.4327,
+       "guides": 0.0001,
+       "denoise": 1.5731
+      }
+     }
+    ],
+    "first_image_seconds": 1.2462,
+    "settled_seconds": 113.116,
+    "frame_count": 5,
+    "wall_seconds": 113.1162
+   },
+   "warm": {
+    "runs": 1,
+    "first_image_seconds": {
+     "median": 0.822,
+     "worst": 0.822
+    },
+    "settled_seconds": {
+     "median": 97.174,
+     "worst": 97.174
+    },
+    "frames_median_seconds": [
+     0.822,
+     8.077,
+     46.288,
+     97.174
+    ],
+    "last_run_frames": [
+     {
+      "seconds": 0.822,
+      "display_seconds": 0.822,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       404,
+       227
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.2651,
+       "guides": 0.1955,
+       "denoise": 0.2349,
+       "enlarge": 0.0482
+      }
+     },
+     {
+      "seconds": 8.0774,
+      "display_seconds": 8.0774,
+      "samples": 16,
+      "pass": 2,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       960,
+       540
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 4.2213,
+       "guides": 2.2283,
+       "denoise": 0.7117,
+       "enlarge": 0.0555
+      }
+     },
+     {
+      "seconds": 46.2878,
+      "display_seconds": 46.2878,
+      "samples": 32,
+      "pass": 3,
+      "preview": false,
+      "denoised": true,
+      "traced": [
+       1920,
+       1080
+      ],
+      "converged_fraction": 0.37080729166666665,
+      "phases": {
+       "render": 31.8356,
+       "guides": 4.7585,
+       "denoise": 1.581
+      }
+     },
+     {
+      "seconds": 97.1745,
+      "display_seconds": 97.1745,
+      "samples": 64,
+      "pass": 4,
+      "preview": false,
+      "denoised": true,
+      "traced": [
+       1920,
+       1080
+      ],
+      "converged_fraction": 0.7674204282407407,
+      "phases": {
+       "render": 49.3243,
+       "guides": 0.0001,
+       "denoise": 1.5277
+      }
+     }
+    ]
+   },
+   "target_seconds": 1.0,
+   "first_look_target_met_warm": true,
+   "first_look_target_met_cold": false,
+   "interaction": {
+    "nudges": 30,
+    "interval_ms": 33,
+    "paint_ms_during_orbit": {
+     "median": 193.99,
+     "worst": 206.31
+    },
+    "cancel_latency_ms": {
+     "count": 30,
+     "median": 10.99,
+     "worst": 14.81
+    },
+    "last_nudge_to_first_look_seconds": 0.8578,
+    "responsive_during_refinement": {
+     "paints": 186,
+     "median_ms": 1.05,
+     "worst_ms": 4.33
+    }
+   }
+  }
+ ]
+}

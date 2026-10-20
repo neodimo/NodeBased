@@ -3301,3 +3301,24 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   the 0.27 s a 480 x 270 frame costs there to a few milliseconds and let stage two and later passes be denoised too), and
   the mixed scene's scene build (350 ms for the splat shell, redone every time the camera moves) is the floor under its first look.
   Tests: `tests/test_3d_first_look.py`.
+- Step H2 of 2 (Rendering "Progress", keep the image refining after the first look): Render mode traces on a worker thread
+  (`progressivejob`): every picture from the first look to the settled one is denoised and converted for display on the worker, a
+  new camera pose or document edit cancels the pass in flight at the next pass boundary after a 40 ms debounce and starts a new
+  first look, and a stale scene is never drawn (the rasteriser shows until the new first look is ready, so there is no blank
+  frame). The bottom-left note names the state (preview, refining, settled) with the sample count, pass number and a colour bar.
+  Convergence tests compare the settled viewport image with Render3D inside the noise tolerance of the path-tracing tests for a
+  mesh room, depth of field, lens distortion and a mixed mesh and splat scene (RTX 3080 Ti, Radeon 8060S, llvmpipe);
+  `tests/test_3d_progressive_job.py` and `tests/test_3d_progressive_convergence.py`. Raw, final and AOV outputs are unchanged.
+  Measured with `tools/benchmark_progression.py` on 10/20 on a quiet card under the exclusive GPU lock (results in
+  `benchmarks/progression/`, time-stamped PNG frames kept local), 1920 x 1080, 64 samples to settle. Furnished room: RTX 3080 Ti
+  first denoised image cold 0.66 s, warm median 0.52 s, settled 8.2 s; paint time while orbiting median 8.6 ms (worst 16 ms);
+  the worker abandons a pass in 35 ms (worst 44 ms); last camera nudge to a new first look 0.62 s. Radeon 8060S: 0.69 s cold,
+  0.54 s warm, settled 16.7 s, paint 5.7 ms (worst 10 ms), cancel 22 ms, nudge to first look in under a second. Mixed
+  mesh and splat scene: RTX first image 1.13 s cold and 1.02 s warm (over the one-second target), settled 82.5 s, paint median
+  23.6 ms (worst 34 ms), cancel 403 ms; Radeon first image 0.77 s cold, 0.83 s warm, settled 34.9 s, paint 10 ms (worst 23 ms),
+  cancel 406 ms. llvmpipe (furnished room only, correctness run, no hardware target claimed): first image 1.25 s cold, 0.82 s
+  warm, settled 97 s. The responsive-during-refinement check (a long full-size pass in flight) kept every paint under 6 ms on all
+  three adapters. Still slow: the mixed scene's full-size passes (the RTX is slower than the Radeon on it, 82 s against 35 s), and a
+  cancel waits for the pass in flight to end, so on the mixed scene an edit takes about 0.4 s to be picked up; passes cannot be
+  interrupted midway. Still wrong visually: the first look is an enlarged internal pass (480 x 270 at 4 samples) and softer than the
+  settled frame. Not measured: the A6000 and the hybrid Iris Xe + RTX 4070 laptop (not reachable from here); Windows.
