@@ -1577,7 +1577,21 @@ A separate 8/32/128-sample sweep was captured before correcting the offset secon
 
 **What still looks wrong:** steam remains sparse and speckled rather than a soft column; the stream's top looks like a rounded blob; the liquid pool is hard to read through the pale glass; the tabletop shadow has a hard edge. These are visual observations from the three replacement stills.
 
-A follow-up finish attempt on 2026-10-19 queued the corrected 8/32/128 sweep with the required exclusive GPU lock. Its 30-minute wait expired while the integrator's full-suite runner still held the shared lock; no lock was bypassed and no corrected sample timings were produced. The 1920 × 1080 progressive Render first-look/settle measurement and 64-cell Radeon preview rate/stop measurement also remain unmeasured. The step remains partial until the full timing matrix is recorded, first look is under one second, and Radeon preview reaches 12 FPS with a stop under one second.
+**Measured 2026-10-20 on the 12 GB RTX 3080 Ti, 64-cell shot, GPU path tracer at 960 × 540 (corrected single-glass composition):**
+
+| Samples | Frame 60 | Frame 90 | Frame 120 |
+| ---: | ---: | ---: | ---: |
+| 8 | 112.01 s | 123.62 s | 125.96 s |
+| 32 | 201.12 s | 200.80 s | 199.44 s |
+| 128 | 756.25 s | 753.62 s | 744.31 s |
+
+The stills use 32 samples. Results are in `benchmarks/hot_pour/hot-pour-shot-S2-2026-10-15.json`. The 8-sample renders take about 2 minutes and the 32-sample renders about 3.3 minutes, both over the one-minute wait limit; 128 samples takes about 12.5 minutes.
+
+**Progressive Render at 1920 × 1080, frame 60, 12 GB RTX 3080 Ti:** the first look (a 480 × 270 quarter-resolution picture, one sample) took 26.69 seconds against the 1 second target, which it misses. The next step, the full 1920 × 1080 picture at 2 samples, took 397.22 seconds (424 s after the start). The measurement was stopped there to leave time for the other runs, so the time to a settled image is unmeasured: the image had not settled after 424 seconds.
+
+**Radeon 8060S preview, 64-cell liquid and 64-cell steam, 120 frames (`tools/benchmark_hot_pour.py --adapter integrated`, offscreen, 960 × 540):** the bake took 30.5 seconds. The quarter-resolution whole-scene preview played at a median 127.27 FPS cold and 136.37 FPS warm (median fetch plus draw 7.9 ms cold, 7.3 ms warm), above the 12 FPS target. The stop back to full detail took 13.1 ms at frame 60 (4.5 ms fetch, 8.6 ms draw), 21.8 ms at frame 1 and 14.0 ms at frame 120, under the one-second target. This benchmark bakes the Hot pour preset at 64 cells, not the shot's own graph. The data is in `benchmarks/hot_pour/radeon-preview-64cell-2026-10-20.json`.
+
+Against the step targets on the 12 GB card: the bake under 20 minutes is met (34.94 s), the Radeon preview at 12 FPS with a stop under one second is met, and the first look under one second is missed (26.69 s). The step remains partial for that reason.
 
 ## K2 rigid bodies — finish 1
 
