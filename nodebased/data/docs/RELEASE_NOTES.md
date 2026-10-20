@@ -1,3 +1,44 @@
+# NodeBased 0.41.0 — a rebuilt Properties panel, easy wire disconnect, a faster node graph, and live pictures while you edit
+
+## What changed since 0.40.0
+
+- **Properties panel overhaul.** Every number knob has a visible slider again, and fields take the width their numbers
+  need. Each node has one header row with its own collapse. ColorCorrect now works like Nuke's: master, shadows, midtones
+  and highlights, with Ranges, and old scripts convert automatically. Every colour knob opens a linear float colour picker
+  in place of the 0-255 one.
+- **Easy wire disconnect.** Drag an input wire off onto empty canvas, hover a wire and press Delete, or Ctrl+Alt-drag a
+  knife line across wires. The tooltip and the ? overlay list all three.
+- **The node graph at display rate.** A moved node re-routes only its own wires. Node bodies and wires are cached as sharp
+  pictures, wires stay plain while you drag, pan or zoom, and below 40 percent zoom nodes become flat cards. On this
+  workstation dragging in a 500-node graph went from 19 to 120 repaints a second (205 nodes: 31 to 120), the
+  press-to-highlight time went from 25 to 8 ms and a pan repaint from 10 to 2.7 ms. OpenGL graph drawing is available as a
+  setting and is off by default.
+- **Viewer colour on the graphics card.** The Direct picture runs the display transform, OCIO and ACES included, on the
+  card. An ACES draw went from 17 ms to 0.4 ms.
+- **Direct picture playback and 4K.** Play a comp with the Direct picture open and the graph, timeline and Viewer keep
+  answering within 31 ms, at 1080p and 4K. A 4K frame used to freeze the window for up to a quarter second and now costs it
+  about 1 ms. A picture too big for the card is named in the status bar, closing the dock frees its memory, and the cache
+  inspector shows what it holds.
+- **A live picture while you work.** Roto, RotoPaint and Tracker controls show progressive pictures while you drag them,
+  scrubbing refines progressively, and playback steps down one proxy level when rendering misses the frame budget.
+  PlanarTracker analysis shows progress and can be cancelled.
+- **Hot pour shot.** The corrected fluid shot has a visible stream and pool, its holdout matches the plate, and a solver
+  failure on a stale grid is fixed.
+- **Fixes.** A layout loop that could crash the Properties panel with some fonts, and the "cannot schedule new futures"
+  errors from a cache tidy-up after the window had closed.
+
+## Known limits
+
+- The graph, playback and live-picture timings come from this workstation on a private display. The laptop, the A6000 and
+  Windows were not measured, and panning with most of a 500-node graph in view (27 ms) and wheel zoom are still slow.
+  OpenGL graph drawing was slower on the software renderer, and three graph tests fail with it on, so leave it off.
+- Live pictures while editing: the first-picture and settle times and the playback frame rates are still to be measured on
+  the 12 GB card and the software renderer.
+- Hot pour: the corrected 8/32/128-sample timings, the 1080p progressive first look and settle times, and the 64-cell
+  Radeon preview rate are still to be measured.
+- Direct picture: 4K playback on the RTX reached the window in order for 171 of 241 frames, limited by its external link.
+  It has not been checked on a real screen, on Windows or on the Radeon.
+
 # NodeBased 0.40.0 — a denoised first look in half a second, and an experimental GPU picture for the 2D viewer
 
 0.39.0 was tagged but never published (its Linux package build failed on two viewer tests that need a display); everything
