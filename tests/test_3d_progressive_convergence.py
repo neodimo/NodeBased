@@ -22,7 +22,7 @@ import numpy as np
 from PySide6.QtWidgets import QApplication
 
 import tests.isolation  # noqa: F401  (Qt settings of the test run stay out of the user's real ones)
-from nodebased import pathtrace, progressiverender as P, scene3d, viewportlens
+from nodebased import gpu3d, pathtrace, progressiverender as P, scene3d, viewportlens
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator
 from nodebased.progressivejob import ProgressiveJob, Request
@@ -45,6 +45,14 @@ NOISE_FLOOR = 0.01
 BIAS = 0.03                       # raw picture
 DENOISED_BIAS = 0.05              # the filter softens bright speckle and thin splats, which moves the mean a little
 DISPLAY_LEVELS = 4.0              # mean 8-bit levels between the viewport's lens picture and Render3D's, see `test_lens`
+
+
+def _software_adapter():
+    """True when the process's graphics adapter is a CPU rasteriser (llvmpipe, a CI runner without a GPU)."""
+    try:
+        return gpu3d._kind_of(gpu3d._state()["info"]) == "cpu"
+    except Exception:
+        return False
 
 
 def room(camera=None, **render):
@@ -152,6 +160,7 @@ class ConvergenceTests(unittest.TestCase):
         ideal = P.display_rgba8(render3d(room(), REFERENCE_SAMPLES))[..., :3].astype(np.float64)
         self.assertGreater(float(np.abs(ideal - reference).mean()), 2 * shown)      # the bend is a real difference, and the viewport has it
 
+    @unittest.skipIf(_software_adapter(), "the 1024-sample mixed-scene reference does not settle in minutes on a software adapter")
     def test_a_mixed_mesh_and_splat_scene_agrees_with_the_path_tracer(self):
         from benchmark_pathtrace import furnished_scene, scene3d_instance, splat_shell
         room_scene = furnished_scene()
