@@ -1,6 +1,6 @@
 # Lane 8 step A finish 1 — active (2026-10-20, 11:02 AM PDT)
 
-Scope from the posted partial report: bring RTX drag-first-picture below 0.5 s, reach 24 fps cached tier-4 playback, and address the ranked full-resolution Roto / tier-4 Roto costs. Original brief and COMMON.md read. Branch is at integrated `7eeafdcf` (same as local `main` ref); worktree clean at start. Implemented: bounded per-shape Roto patches, immediate live-drag scheduling, and decode-only playback read-ahead; warmed tier-4 playback now has a targeted frame-rate test. Targeted tests passed (107). Next: measure Roto timings and rerun adapter benchmarks after the card lock clears.
+Scope from the posted partial report: bring RTX drag-first-picture below 0.5 s, reach 24 fps cached tier-4 playback, and address the ranked full-resolution Roto / tier-4 Roto costs. Original brief and COMMON.md read. Branch is at integrated `7eeafdcf` (same as local `main` ref); worktree clean at start. Committed first fixes at 4919011a. Added a 128 MiB bounded resolved-matte cache, with shape edits and proxy tiers in its key; animated source frames reuse static shape coverage. Targeted Roto, playback and preview checks pass (108). RTX benchmark waits behind Lane 4 at the exclusive card lock; next remeasure all adapters.
 
 # Lane 8 T2 finish 1 — PARTIAL (2026-10-20)
 

@@ -551,6 +551,14 @@ class Evaluator:
         self.disk = cachetier.DiskCache(enabled=False) if disk is None else disk
         self.cache = OrderedDict()
         self.bytes = 0
+        # Roto coverage is independent of the connected plate's frame. Keep a separate bounded
+        # cache for the matte so an animated/read-sequence background does not rerasterize static
+        # shapes on every frame.
+        self._roto_mattes = OrderedDict()
+        self._roto_matte_bytes = 0
+        self._roto_matte_budget = 128 << 20
+        self.roto_matte_hits = 0
+        self.roto_matte_misses = 0
         self.hits = 0
         self.misses = 0
         self.disk_hits = 0
@@ -671,6 +679,8 @@ class Evaluator:
         """
         self.cache.clear()
         self.bytes = 0
+        self._roto_mattes.clear()
+        self._roto_matte_bytes = 0
 
     _PROFILE_LOG_LIMIT = 500
 
@@ -704,6 +714,26 @@ class Evaluator:
                 self.disk.put_raster(old_digest, old)
         self.cache[digest] = raster
         self.bytes += raster.nbytes
+
+    def _roto_matte(self, params, data):
+        """Return the Roto raster for resolved shapes, reused across changing plate frames."""
+        key = hashlib.sha256(json.dumps([params, data], sort_keys=True,
+                                        separators=(",", ":")).encode()).digest()
+        cached = self._roto_mattes.pop(key, None)
+        if cached is not None:
+            self.roto_matte_hits += 1
+            self._roto_mattes[key] = cached
+            return cached
+        self.roto_matte_misses += 1
+        raster = self._kernel("Roto", params, [], data=data)
+        raster.flags.writeable = False
+        if raster.nbytes <= self._roto_matte_budget:
+            while self._roto_mattes and self._roto_matte_bytes + raster.nbytes > self._roto_matte_budget:
+                _, old = self._roto_mattes.popitem(last=False)
+                self._roto_matte_bytes -= old.nbytes
+            self._roto_mattes[key] = raster
+            self._roto_matte_bytes += raster.nbytes
+        return raster
 
     def _motion_inputs(self, doc, node, params, frame, tier, cancel, base):
         """Render3D's scene and camera at the times motion blur and the `motion` pass need, and the cache fingerprint.
@@ -2598,8 +2628,9 @@ class Evaluator:
                             raise ValueError(f'{node["name"]}: {params["message"]}')
                         raster = source
                     else:
-                        raster = self._windowed_kernel(kind, params, images, frame, data, cancel=cancel,
-                                                       progress=self)
+                        raster = self._windowed_kernel(
+                            kind, params, images, frame, data, cancel=cancel, progress=self,
+                            roto_rasterizer=(self._roto_matte if kind == "Roto" else None))
                     if raster.meta is None and not any(raster is image for image in images):
                         raster.meta = _inherited_metadata(kind, images)
                 if tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:
@@ -2637,7 +2668,8 @@ class Evaluator:
     # cannot accidentally invent its own window convention. See docs/BOUNDING_BOX.md.
 
     @staticmethod
-    def _windowed_kernel(kind, p, inputs, frame=None, data=None, cancel=None, progress=None):
+    def _windowed_kernel(kind, p, inputs, frame=None, data=None, cancel=None, progress=None,
+                         roto_rasterizer=None):
         """Run a kernel with its inputs aligned to the output's data window.
 
         Two rules decide every case:
@@ -2791,13 +2823,17 @@ class Evaluator:
             # could disagree with it about the data window and produce a matte that silently
             # fails to line up with the thing it is masking.
             plate = inputs[0] if inputs else None
+            def render_matte(params):
+                if roto_rasterizer is not None:
+                    return roto_rasterizer(params, data)
+                return Evaluator._kernel(kind, params, [], frame, data)
             if plate is None:
-                return Raster.of(Evaluator._kernel(kind, p, [], frame, data))
+                return Raster.of(render_matte(p))
             # Wired bg (Nuke's Roto default output): the plate's colour with the shape's coverage
             # as its alpha, drawn at the plate's own display format.
             out = plate.display
             plate_pixels = plate.fit(out)
-            coverage = Evaluator._kernel(kind, {**p, "width": out.width, "height": out.height}, [], frame, data)[..., 3]
+            coverage = render_matte({**p, "width": out.width, "height": out.height})[..., 3]
             if not data:
                 # An empty Roto is still a useful plate viewer while the artist is setting up.
                 # Once shapes exist, their matte owns alpha as in Nuke's default output=alpha.

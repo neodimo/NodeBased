@@ -344,6 +344,31 @@ class RasteriseTests(unittest.TestCase):
         self.assertTrue(sizes)
         self.assertTrue(all(w < width and h < height for w, h in sizes), sizes)
 
+    def test_static_matte_is_reused_across_animated_background_frames(self):
+        dispatcher = Dispatcher(empty_document())
+        dispatcher.execute({"op": "batch", "commands": [
+            {"op": "create", "id": "plate", "type": "Constant"},
+            *sets("plate", width=64, height=64),
+            {"op": "create", "id": "r", "type": "Roto"},
+            *sets("r", width=64, height=64),
+            {"op": "connect", "id": "r", "input": "bg", "source": "plate"},
+            {"op": "set_key", "id": "plate", "param": "red", "frame": 1, "value": 0.2},
+            {"op": "set_key", "id": "plate", "param": "red", "frame": 2, "value": 0.8},
+            {"op": "set_shapes", "id": "r", "shapes": [square(8, 8, 40, 40)]},
+        ]})
+        evaluator = Evaluator()
+        first = evaluator.evaluate(dispatcher.document, "r", frame=1)
+        second = evaluator.evaluate(dispatcher.document, "r", frame=2)
+        self.assertEqual((evaluator.roto_matte_misses, evaluator.roto_matte_hits), (1, 1))
+        self.assertNotEqual(float(first[16, 16, 0]), float(second[16, 16, 0]))
+        self.assertEqual(float(first[16, 16, 3]), float(second[16, 16, 3]))
+
+        changed = copy.deepcopy(dispatcher.document)
+        changed["node_data"]["r"]["shapes"][0]["points"][0]["x"] += 1.0
+        evaluator.evaluate(changed, "r", frame=2)
+        self.assertEqual(evaluator.roto_matte_misses, 2,
+                         "a changed shape reused an old frame-independent matte")
+
 
 class TrackerSolveTests(unittest.TestCase):
     def payload(self, *positions):
