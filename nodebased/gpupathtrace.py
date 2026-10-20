@@ -42,6 +42,9 @@ ADAPTIVE_PATHS_PER_DISPATCH = 1 << 20   # adaptive sampling: paths one indirect 
 ADAPTIVE_MAX_GROUPS = 32768              # and work-groups, well under the 65535 a dispatch dimension allows
 ADAPTIVE_SPARSE_PIXELS = 1 << 17         # at most this many open pixels get their pass's samples run side by side (sample-parallel tail)
 ADAPTIVE_SPARSE_THREADS = 1 << 21        # and at most this many (pixel, sample) threads: 64 MiB of per-sample sums after the image
+ADAPTIVE_HEAVY_CANCEL_PATHS = 1 << 16    # a splat or smoke dispatch of a render that can be cancelled covers this many paths at first (about 24 ms on the RTX 3080 Ti, 10% slower in all than 1 << 17; 14 ms at 1 << 15 cost 28%)
+ADAPTIVE_HEAVY_MIN_PATHS = 1 << 13       # and is never made smaller than this, however slow the card: below it the card idles between dispatches
+ADAPTIVE_HEAVY_SECONDS = 0.020           # the size is then fitted to this many seconds from the rate the last such render measured
 ADAPTIVE_CHUNK_SECONDS = 0.012           # an interruptible adaptive pass (cancel given) submits dispatches in chunks the card runs in about this long, one in flight
 ADAPTIVE_PACE = 4                        # passes the host lets the card run ahead before it waits (it waits every pass when asked for progress)
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
@@ -2849,6 +2852,14 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
     npix = width * height
     threads = wg * wg
     budget = ADAPTIVE_PATHS_PER_DISPATCH // (SOFT_SLOWDOWN if heavy else 1)
+    rate_key = None
+    if heavy and cancel is not None:
+        # a heavy dispatch of a render that can be cancelled is sized to take about ADAPTIVE_HEAVY_SECONDS: from the seconds a
+        # path cost the last time on this adapter, or ADAPTIVE_HEAVY_CANCEL_PATHS when none is known
+        rate_key = _adapter_key(state)
+        rate = _HEAVY_RATE.get(rate_key)
+        budget = ADAPTIVE_HEAVY_CANCEL_PATHS if rate is None else int(
+            min(budget, max(ADAPTIVE_HEAVY_MIN_PATHS, ADAPTIVE_HEAVY_SECONDS / rate)))
     chunk_groups = int(max(1, min(ADAPTIVE_MAX_GROUPS, budget // threads)))
     chunks = -(-npix // (chunk_groups * threads))
     sparse_args, reduce_args = chunks * 16, chunks * 16 + 16      # byte offsets of the other two indirect arguments
@@ -2927,8 +2938,12 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
                     compute.set_bind_group(0, groups[c])
                     compute.dispatch_workgroups_indirect(args, c * 16)
                     compute.end()
+                    began = time.perf_counter()
                     device.queue.submit([encoder.finish()])
                     wait()
+                    if rate_key is not None and passes == 0 and c < chunks - 1:     # the first pass has every pixel open: a full chunk
+                        seen = (time.perf_counter() - began) / (chunk_groups * threads)
+                        _HEAVY_RATE[rate_key] = seen if rate_key not in _HEAVY_RATE else 0.7 * _HEAVY_RATE[rate_key] + 0.3 * seen
             encoder = device.create_command_encoder()
             compute = encoder.begin_compute_pass()
             sparse(compute)
@@ -2993,6 +3008,16 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
         if settings.time_limit and time.perf_counter() - started >= settings.time_limit:
             break
     wait()                     # the card may still owe the last passes: the final readback then times the transfer alone
+
+
+_HEAVY_RATE = {}      # adapter -> seconds one path of a splat or smoke scene took in a full dispatch, as last measured
+
+
+def _adapter_key(state):
+    try:
+        return gpu3d.adapter_report().splitlines()[0]
+    except Exception:
+        return "adapter"
 
 
 _PREPARED = threading.local()

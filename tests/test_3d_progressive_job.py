@@ -373,6 +373,31 @@ class InterruptibleTracerTests(unittest.TestCase):
         if whole_stats["backend"] == "gpu":                 # on a card: many short submissions instead of a few long ones
             self.assertGreater(cut_stats["readbacks"]["waits"], whole_stats["readbacks"]["waits"] + 8)
 
+    def test_a_splat_and_smoke_pass_cut_into_smaller_dispatches_draws_the_same_picture(self):
+        from nodebased import gpu3d, gpupathtrace, pathtrace
+        if not (gpu3d.available() and gpupathtrace.soft_supported(gpu3d._state())):
+            self.skipTest("no adapter cleared for splats and smoke in the path tracer")
+        from tests.test_3d_pathtrace_gpu_soft import CAMERA as SOFT_CAMERA, FLOOR, SMOKE, SUN, blob, sheet_on_floor
+        scene = s.Scene((FLOOR,), lights=(SUN,), splats=(sheet_on_floor(relight=0.6),), volumes=(blob(),))
+        settings = pathtrace.PathSettings(samples=16, max_bounces=3, sampling="adaptive", noise_threshold=0.01, min_samples=8,
+                                          max_samples=16, adaptive_pass_size=8, seed=5)
+
+        def run(cancel):
+            stats = {"skip_noise_maps": True}
+            image = pathtrace.render(scene, SOFT_CAMERA, 48, 32, BACKGROUND, ambient=0.05, output="rgba", settings=settings,
+                                     backend="auto", stats=stats, cancel=cancel, volume=SMOKE)
+            return image, stats
+        whole, _ = run(None)
+        gpupathtrace._HEAVY_RATE.clear()
+        previous = gpupathtrace.ADAPTIVE_HEAVY_CANCEL_PATHS
+        gpupathtrace.ADAPTIVE_HEAVY_CANCEL_PATHS = 64              # many tiny dispatches
+        self.addCleanup(setattr, gpupathtrace, "ADAPTIVE_HEAVY_CANCEL_PATHS", previous)
+        self.addCleanup(gpupathtrace._HEAVY_RATE.clear)
+        cut, stats = run(threading.Event())
+        # the dispatch size moves which pixels take the sample-parallel tail, so the float sums differ in the last place
+        np.testing.assert_allclose(whole, cut, rtol=1e-4, atol=1e-5)
+        self.assertTrue(gpupathtrace._HEAVY_RATE)                   # the first pass left a measured rate behind for the next render
+
     def test_every_pass_of_a_view_shares_one_prepared_scene(self):
         from unittest import mock
         from nodebased import gpu3d, pathtrace
