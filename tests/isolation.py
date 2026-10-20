@@ -72,9 +72,24 @@ _DO_CLEANUPS = unittest.TestCase.doCleanups
 def _do_cleanups_and_delete_closed_windows(self):
     outcome = _DO_CLEANUPS(self)
     if QCoreApplication.instance() is not None:
-        for widget in QApplication.topLevelWidgets():
-            if isinstance(widget, Window) and getattr(widget, "_closed_by_test", False):
-                widget.deleteLater()
+        closed = [w for w in QApplication.topLevelWidgets()
+                  if isinstance(w, Window) and getattr(w, "_closed_by_test", False)]
+        # closeEvent stops several pools without waiting for them. A thread still running when the
+        # Window is deleted can post a result to it, and the next test's processEvents then delivers
+        # that to a deleted object (10/20: two segfaults in test_e2e5_ui_punchlist under the parallel
+        # runner). Wait for the pools, deliver what they posted, then delete.
+        for widget in closed:
+            for pool in (getattr(getattr(widget, "queue_panel", None), "runner", None),
+                         getattr(getattr(widget, "job_queue", None), "_pool", None)):
+                if pool is not None:
+                    pool.shutdown(wait=True, cancel_futures=True)
+            decode = getattr(widget, "decode_pool", None)
+            if decode is not None:
+                decode.shutdown(wait=True, timeout=10)
+        if closed:
+            QCoreApplication.processEvents()
+        for widget in closed:
+            widget.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     return outcome
 
