@@ -1,5 +1,27 @@
 ## 2026-10-20 — Lane 3 R5: interactive volumes/liquids research complete
 
+## Continuous mode merge: Lane 3 (Research, GPT-6 Astra) (9:42 AM on 2026-10-20 PDT)
+
+`main` moved `403fc9ec` -> `392217d5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `392217d5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1020-0932.log`, started 9:32 AM): **Ran 5700 tests in 504.190 s, OK (skipped=20), exit 0**.
+
+**What landed.**
+
+- **Lane 3 (Research, GPT-6 Astra), step R5 of 1: a first look under a second for volumes and liquids: what production renderers do.** Commits:
+  - `cb683895` docs: publish R5 research radar priorities and lane handoff
+  - `cdd3cbdd` docs: propose ranked volume preparation preview and convergence briefs
+  - `d4738905` docs: map interactive rendering research to current CPU and wgpu paths
+  - `409c148e` docs: survey production volume and liquid preview techniques
+  Diff: 9 files changed, 405 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done:** researched production preview/preparation/sampling strategies and recent papers; inspected main `15e28165` renderer paths; wrote a dated evidence register, implementation mapping with labelled effort estimates and three ranked proposed Rendering briefs using Fluids artifacts. Evidence: existing sparse majorants, scoped preparation reuse, device-buffer reuse and retracing progression are visible in code. Inference: persistent preparation, bounded previews and sample continuation are the most direct next experiments; their speed gains remain unmeasured.
 - **Artifacts:** `docs/INTERACTIVE_VOLUMES_LIQUIDS.md`, dated R5 section and priority line in `docs/RESEARCH_RADAR.md`, byte-identical `nodebased/data/docs/` copies, and `briefs/proposed/R5-{1-persistent-render-preparation,2-budgeted-liquid-volume-preview,3-persistent-convergence-and-denoise}.md`. Committed on the research lane branch, not pushed; no app code, weights or GPU execution. Targeted knowledge-test logs are deliberate lane-run scratch, named `tests-L3-R5-part*.log`; integrator report is `report-L3.md` in the lane-run directory.
 - **State:** research deliverables done; knowledge-document validation passed before each documentation commit. No implementation/hardware performance or image-quality gate claimed. The brief's new Hot pour timings are missing from inspected main, which still marks that sweep outstanding; source fetch limitations are recorded in the source register.
