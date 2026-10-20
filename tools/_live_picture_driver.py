@@ -13,18 +13,16 @@ from nodebased.app import Window, STYLE
 import nodebased.app as app_module
 from nodebased.core import load_document
 from nodebased.imaging import to_qimage as _to_qimage
-from nodebased.tileexec import SUPPORTED_TILED_KINDS
+from nodebased.tileexec import SUPPORTED_TILED_KINDS, _all_ancestors
+from nodebased import groups
 
 comp, output, duration, adapter = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4]
 timeline=[]; profiles={}; lock=threading.Lock()
 def mark(stage, **fields):
     with lock: timeline.append({"stage":stage,"t":time.perf_counter(),**fields})
-def profile_thread(*_):
-    prof=cProfile.Profile()
-    with lock: profiles[threading.get_ident()]=prof
-    prof.enable()
-threading.setprofile(profile_thread)
-main_profile=cProfile.Profile(); main_profile.enable()
+profile_mode=sys.argv[6]
+main_profile=cProfile.Profile()
+if profile_mode=='qt': main_profile.enable()
 app=QApplication(sys.argv[:1]); app.setApplicationName("NodeBased"); app.setStyle("Fusion"); app.setStyleSheet(STYLE)
 doc=load_document(comp)
 plate=os.environ.get('NB_QA_PLATE')
@@ -62,12 +60,42 @@ def render_tile(document,node_id,frame,tier,region,node_digests,cancel):
          reason='kind has no tile kernel' if fallback else None)
     return result
 win.tile_executor._render_tile=render_tile
+original_evaluate=win.evaluator.evaluate
+def evaluate(document,target=None,*a,**k):
+    node_id=target or document.get('view'); node=document.get('nodes',{}).get(node_id,{})
+    start=time.perf_counter(); result=original_evaluate(document,target,*a,**k)
+    mark('graph_node_evaluated',node=node_id,kind=node.get('type','?'),tier=k.get('tier',1),
+         elapsed_ms=round((time.perf_counter()-start)*1000,3),fallback=False,reason=None)
+    return result
+win.evaluator.evaluate=evaluate
+original_supports=win.tile_executor.supports_tiled
+def supports(document,target):
+    result=original_supports(document,target)
+    if not result:
+        flat,target=groups.flatten_groups(document,target); nodes=flat['nodes']
+        for node_id in _all_ancestors(flat,target):
+            node=nodes[node_id]; reason=None
+            if node['type'] not in SUPPORTED_TILED_KINDS: reason='node kind has no tile kernel'
+            elif node['type']=='Denoise' and node['params'].get('temporal'): reason='temporal denoise requires full frame'
+            elif node['type']=='RotoPaint' and any(float(i.get('patch_blend',0))>0 for i in document.get('node_data',{}).get(node_id,{}).get('items',[]) if i.get('kind')=='stroke'): reason='paint patch blend reads the full painted region'
+            elif node.get('input_outputs'): reason='named output layers require full-frame raster'
+            elif node['type']=='DirBlur' and node['params'].get('blur_type','linear')!='linear': reason='zoom/radial blur reads the full frame'
+            if reason: mark('tile_fallback_reason',node=node_id,kind=node['type'],reason=reason); break
+    return result
+win.tile_executor.supports_tiled=supports
 original_execute=win.dispatcher.execute
 def execute(*a,**k): mark('document_edit_applied'); return original_execute(*a,**k)
 win.dispatcher.execute=execute
 original_submit=win.executor.submit
 def submit(fn,*a,**k):
-    def run(): mark('worker_start'); return fn(*a,**k)
+    def run():
+        mark('worker_start'); prof=cProfile.Profile() if profile_mode=='worker' else None
+        if prof: prof.enable()
+        try: return fn(*a,**k)
+        finally:
+            if prof:
+                prof.disable()
+                with lock: profiles.setdefault(threading.get_ident(),[]).append(prof)
     return original_submit(run)
 win.executor.submit=submit
 original_cache_get=win.display_cache.get
@@ -89,9 +117,15 @@ def on_main(fn):
 def xd(*args): subprocess.run(['xdotool',*map(str,args)],env={**os.environ,'DISPLAY':os.environ['DISPLAY']},check=True)
 def busy(): return bool(win.busy) or len(win.preview_queue)>0
 def settle(timeout=90):
-    until=time.monotonic()+timeout
-    while time.monotonic()<until and (busy() or win.frame is None): time.sleep(.02)
-    time.sleep(.25)
+    until=time.monotonic()+timeout; stable=None
+    while time.monotonic()<until:
+        ready=(not busy() and win.frame is not None and on_main(lambda:win.viewer.last_scale)==int(on_main(lambda:win.proxy.currentData())))
+        now=time.monotonic()
+        if ready:
+            if stable is None: stable=now
+            elif now-stable>=.35: return
+        else: stable=None
+        time.sleep(.01)
 def wait_new(generation, timeout=30):
     until=time.monotonic()+timeout
     while time.monotonic()<until:
@@ -101,6 +135,7 @@ def wait_new(generation, timeout=30):
 def scenario():
   try:
     mark('scenario_start'); settle(); on_main(lambda:(win.graph.items_by_id['roto'].setSelected(True),win.set_viewer_roi(on=False))); settle()
+    mark('series_start',series='roto_drag')
     shape=win.dispatcher.document['node_data']['roto']['shapes'][0]['points'][0]
     def xy():
       p=win.viewer.viewport().mapToGlobal(win.viewer.mapFromScene(QPointF(shape['x'],shape['y'])))
@@ -116,15 +151,21 @@ def scenario():
     if first is None: first=wait_new(g0,45)
     settle()
     drag={"series":"roto_drag","adapter":adapter,"first_picture_s":None if first is None else round(first-start,4),"picture_during_drag":first is not None and first<drag_end,"frames_during_drag":frames,"settle_s":round(time.monotonic()-drag_end,4),"status":win.viewer_info.text()}
+    mark('series_end',series='roto_drag'); mark('series_start',series='uncached_scrub')
     g=win.frame_generation; xd('key','Right'); scrub_start=time.monotonic(); scrub_first=wait_new(g,60); settle()
     scrub={"series":"uncached_scrub","adapter":adapter,"first_picture_s":None if scrub_first is None else round(scrub_first-scrub_start,4),"settle_s":round(time.monotonic()-scrub_start,4),"status":win.viewer_info.text()}
+    mark('series_end',series='uncached_scrub'); mark('series_start',series='tier4_playback')
     on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(4)),win.playback_proxy.setChecked(False))); settle()
     t=time.monotonic(); g=win.frame_generation; on_main(lambda:win.toggle_playback(True)); time.sleep(duration); on_main(lambda:win.toggle_playback(False)); elapsed=time.monotonic()-t
     playback={"series":"tier4_playback","adapter":adapter,"fps":round((win.frame_generation-g)/max(elapsed,.001),3),"elapsed_s":round(elapsed,3),"status":win.viewer_info.text()}
-    settle(60)
-    main_profile.disable(); profile_rows=[]
-    for tid,prof in [(threading.get_ident(),main_profile),*list(profiles.items())]:
-      txt=io.StringIO(); pstats.Stats(prof,stream=txt).sort_stats('cumtime').print_stats(50)
+    settle(60); mark('series_end',series='tier4_playback')
+    if profile_mode=='qt': main_profile.disable()
+    profile_rows=[]
+    selected=([(threading.get_ident(),[main_profile])] if profile_mode=='qt' else list(profiles.items()))
+    for tid,profs in selected:
+      stats=pstats.Stats(profs[0])
+      for prof in profs[1:]: stats.add(prof)
+      txt=io.StringIO(); stats.stream=txt; stats.sort_stats('cumtime').print_stats(50)
       profile_rows.append({'thread_id':tid,'top':txt.getvalue()})
     payload={'adapter':adapter,'results':[drag,scrub,playback],'timeline':timeline,'profiles':profile_rows}
     with open(output,'w') as f: json.dump(payload,f,indent=2)
@@ -132,4 +173,4 @@ def scenario():
   except BaseException:
     import traceback; traceback.print_exc()
   finally: app.quit()
-win.setGeometry(0,0,1920,1080); win.show(); win.raise_(); win.activateWindow(); QTimer.singleShot(1000,lambda:threading.Thread(target=scenario,daemon=True).start()); app.exec()
+win.setGeometry(0,0,1920,1080); win.show(); win.raise_(); win.activateWindow(); QTimer.singleShot(1000,lambda:threading.Thread(target=scenario,daemon=True).start()); app.exec(); os._exit(0)
