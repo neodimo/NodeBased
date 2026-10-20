@@ -36,6 +36,7 @@ import time
 import numpy as np
 
 from . import gpu3d, gpurt, gpuvolume, lens, pathtrace as pt, raytrace, scene3d as s
+from .cancellation import Cancelled
 
 GPU_PATHS_PER_SUBMISSION = 1 << 19
 ADAPTIVE_PATHS_PER_DISPATCH = 1 << 20   # adaptive sampling: paths one indirect dispatch may cover (a heavy scene gets SOFT_SLOWDOWN times fewer)
@@ -3152,7 +3153,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     lean = stats is None or bool(stats.get("skip_noise_maps"))
     raw = lean_image = lean_meta = None
     tile_of = None
-    done = False
+    done = cancelled = False
     frame.lock.acquire()
     try:
         buffers = frame.scene(device, wgpu, packed)
@@ -3305,10 +3306,13 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         readbacks["image"] += 1
         lap("final readback")
         done = True
+    except Cancelled:
+        cancelled = True       # every check sits between waited submissions: the card is idle and the cached frame stays good
+        raise
     finally:
         for resource in reversed(resources):
             resource.destroy()
-        if not done or frame.nbytes() > CACHE_LIMIT_BYTES:
+        if not (done or cancelled) or frame.nbytes() > CACHE_LIMIT_BYTES:
             frame.release()
         frame.lock.release()
     if lean:

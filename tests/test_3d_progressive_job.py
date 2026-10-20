@@ -412,6 +412,25 @@ class InterruptibleTracerTests(unittest.TestCase):
         np.testing.assert_allclose(whole, cut, rtol=1e-4, atol=1e-5)
         self.assertTrue(gpupathtrace._PATH_RATE)                   # the first pass left a measured rate behind for the next render
 
+    def test_a_cancelled_render_keeps_the_uploaded_scene_for_the_next_one(self):
+        from nodebased import gpu3d, gpupathtrace, pathtrace
+        if not gpu3d.available():
+            self.skipTest("no GPU adapter")
+        scene = _scene()
+        settings = pathtrace.PathSettings(samples=48, max_bounces=3, pass_samples=2)
+
+        def render(**more):
+            return pathtrace.render(scene, CAMERA, 96, 64, BACKGROUND, ambient=0.1, output="rgba", settings=settings,
+                                    backend="gpu", **more)
+        first = render()
+        uploads = gpupathtrace.COUNTERS["scene_uploads"]
+        cancel = threading.Event()
+        with self.assertRaises(Cancelled):
+            render(cancel=cancel, progress=lambda stage, fraction, info: cancel.set())
+        again = render()
+        self.assertEqual(gpupathtrace.COUNTERS["scene_uploads"], uploads)       # the cancelled render did not throw the frame away
+        self.assertTrue(np.array_equal(first, again))
+
     def test_every_pass_of_a_view_shares_one_prepared_scene(self):
         from unittest import mock
         from nodebased import gpu3d, pathtrace
