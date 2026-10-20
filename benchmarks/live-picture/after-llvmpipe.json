@@ -1,0 +1,1216 @@
+{
+  "adapter": "llvmpipe",
+  "results": [
+    {
+      "series": "roto_drag",
+      "adapter": "llvmpipe",
+      "first_picture_s": 1.1656,
+      "picture_during_drag": false,
+      "frames_during_drag": 0,
+      "settle_s": 4.7786,
+      "status": "1920 \u00d7 1080  \u00b7  3348 ms  \u00b7  tile fallback  \u00b7  cache 441.1 / 4096 MiB  \u00b7  display GPU"
+    },
+    {
+      "series": "uncached_scrub",
+      "adapter": "llvmpipe",
+      "first_picture_s": 0.7317,
+      "settle_s": 7.3084,
+      "status": "1920 \u00d7 1080  \u00b7  5733 ms  \u00b7  tile fallback  \u00b7  cache 850.6 / 4096 MiB  \u00b7  display GPU"
+    },
+    {
+      "series": "tier4_playback",
+      "adapter": "llvmpipe",
+      "fps": 1.994,
+      "rendered_frame_changes": 4,
+      "elapsed_s": 2.006,
+      "fps_target": 24.0,
+      "status": "1920 \u00d7 1080  \u00b7  proxy 1/4  \u00b7  7 ms  \u00b7  display cache hit  \u00b7  display GPU  \u00b7  ahead 3/3  \u00b7  dropped 0"
+    }
+  ],
+  "timeline": [
+    {
+      "stage": "worker_start",
+      "t": 1083395.903644997
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083395.904266861
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083395.904272321,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083395.904843985
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083395.904845695,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083395.905266424
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083395.905267374,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083395.905675043
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083395.905675923,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083395.905682173,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1083395.954290657
+    },
+    {
+      "stage": "paint",
+      "t": 1083395.972520655
+    },
+    {
+      "stage": "paint",
+      "t": 1083395.976994056
+    },
+    {
+      "stage": "paint",
+      "t": 1083395.982273297
+    },
+    {
+      "stage": "scenario_start",
+      "t": 1083396.935530708
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083401.358561902,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 5452.815,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083401.358603141,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083401.358608981,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083401.358672179
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083401.432675291
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083402.3380147
+    },
+    {
+      "stage": "paint",
+      "t": 1083402.342888631
+    },
+    {
+      "stage": "paint",
+      "t": 1083402.347600686
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083402.577467565
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083402.697538338,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 120.038,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083402.697552768
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083402.699177275
+    },
+    {
+      "stage": "series_start",
+      "t": 1083403.490614597,
+      "series": "roto_drag"
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1083403.494311939,
+      "type": 5
+    },
+    {
+      "stage": "paint",
+      "t": 1083403.499132641
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1083403.747582318,
+      "type": 2
+    },
+    {
+      "stage": "paint",
+      "t": 1083404.224063483
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1083404.242025797,
+      "type": 5
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083404.248872066,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.25060366
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.2506084,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.250693008
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.250694438,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1083404.253832575
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1083404.269745484,
+      "type": 5
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083404.276041287,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.277680994
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.277685724,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.277756892
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.277758132,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1083404.279055938
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083404.312526092
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.313270062
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.313274752,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083404.313286932,
+      "tier": 8
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1083404.354164361,
+      "type": 3
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1083404.354981069
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083404.450919551,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 137.538,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083404.45095823,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083404.45096383,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083404.451015618
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083404.452651995
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083404.861913918,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.863540425
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.863544714,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.863585463
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.863586753,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1083404.865833894
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083404.912899209
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.914238543
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.914253573,
+      "hit": true
+    },
+    {
+      "stage": "paint",
+      "t": 1083404.946572278
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083404.966631977,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083404.9706981
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083404.972136022
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083404.972140271,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083404.972149651,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1083404.9812643
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083405.397574556,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 425.32,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083405.397606705,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083405.397610685,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083405.397665334
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083405.401104753
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083405.40500581,
+      "tier": 1,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083405.40838154
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083405.408971065
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083405.408974945,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083405.409426263
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083405.409427623,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083405.409861231
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083405.409991048,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083405.409994798
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083405.413433997
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083405.413507155,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1083405.418286528
+    },
+    {
+      "stage": "paint",
+      "t": 1083405.453112177
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083408.70027383,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 3286.593,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083408.700307159,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083408.700316619,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083408.700384057
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083408.756032025
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083408.761321785
+    },
+    {
+      "stage": "paint",
+      "t": 1083408.765789217
+    },
+    {
+      "stage": "series_end",
+      "t": 1083409.128434333,
+      "series": "roto_drag"
+    },
+    {
+      "stage": "series_start",
+      "t": 1083409.128437953,
+      "series": "uncached_scrub"
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1083409.133282165
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083409.575780668,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083409.577786245
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083409.577790515,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083409.577833284
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083409.577834424,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1083409.607429481
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083409.621873968
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083409.622643788
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083409.622649208,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083409.622661008,
+      "tier": 8
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083409.872656274,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 249.822,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083409.872701833,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083409.872706762,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083409.87278195
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083409.875763382
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083409.881570368,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083409.885201272
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083409.886318872
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083409.886322782,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083409.886331122,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1083409.891644741
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083410.335362992,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 448.895,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083410.335406121,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083410.335412271,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083410.335475379
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083410.340184095
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083410.34639717,
+      "tier": 1,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083410.351892625
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083410.352719563
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083410.352724273,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083410.353286148
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083410.353288408,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083410.353754886
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083410.353998619,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083410.354003369
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083410.358457201
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083410.35852922,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1083410.361265397
+    },
+    {
+      "stage": "paint",
+      "t": 1083410.37966324
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083416.035792891,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 5677.018,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083416.03582594,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083416.03582896,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083416.035888238
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083416.085316361
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083416.090105629
+    },
+    {
+      "stage": "paint",
+      "t": 1083416.09348651
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083416.330034453
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083416.330339894,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 0.289,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083416.330359344
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083416.338423696
+    },
+    {
+      "stage": "series_end",
+      "t": 1083416.455254271,
+      "series": "uncached_scrub"
+    },
+    {
+      "stage": "series_start",
+      "t": 1083416.455258031,
+      "series": "tier4_playback"
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083416.455413536,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "paint",
+      "t": 1083416.457934811
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083416.494838153
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083416.495661409
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083416.49630764,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083416.496330339
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083416.499878985
+    },
+    {
+      "stage": "paint",
+      "t": 1083416.509778783
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083416.879096371,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083416.881591147
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083416.88251973
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083416.883615448,
+      "hit": true
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083416.89030578
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083416.891389088
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083416.891392908,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083416.891401098,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1083416.895783289
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1083416.922095363
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083416.926821743,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083417.303837735,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 412.326,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083417.303868244,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083417.303870924,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083417.306353551
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083417.307477947
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083417.307483937,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083417.307503207
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083417.311262586
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083417.317382135
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083417.318469283
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083417.318472683,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083417.318480603,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1083417.321882603
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1083417.334482381
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083417.339674288,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083417.754584012,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 435.97,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083417.754621021,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083417.75462779,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083417.758145117
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083417.759406109
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083417.759418949,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083417.759465168
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083417.763951455
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083417.770795234
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083417.771477863
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083417.771481653,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083417.771491153,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1083417.779833797
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1083417.790382066
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083417.794725368,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083418.216319524,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 444.689,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083418.216351933,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083418.216355563,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083418.218938417
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083418.219594778
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083418.219608007,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083418.219639596
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083418.224194652
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083418.230848976
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083418.231535816
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083418.231541166,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083418.231550735,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1083418.237265947
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1083418.24936043
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083418.25377055,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083418.669574607,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 437.886,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083418.669612246,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083418.669619236,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083418.673041135
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083418.674487832
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083418.674497972,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1083418.674525871
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1083418.680144116
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083418.687975645
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1083418.689209658
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1083418.689215348,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1083418.689227298,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1083418.694858912
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1083418.706531177
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1083418.710995106,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1083419.116541826,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 427.17,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1083419.116575465,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1083419.116579584,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083419.119196077
+    },
+    {
+      "stage": "worker_start",
+      "t": 1083419.359206939
+    },
+    {
+      "stage": "series_end",
+      "t": 1083419.47616356,
+      "series": "tier4_playback"
+    }
+  ],
+  "profiles": []
+}

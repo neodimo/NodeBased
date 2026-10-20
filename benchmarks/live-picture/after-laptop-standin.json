@@ -1,0 +1,821 @@
+{
+  "adapter": "integrated laptop stand-in",
+  "results": [
+    {
+      "series": "roto_drag",
+      "adapter": "integrated laptop stand-in",
+      "first_picture_s": null,
+      "picture_during_drag": false,
+      "frames_during_drag": 0,
+      "settle_s": 45.3588,
+      "status": "1920 \u00d7 1080  \u00b7  4349 ms  \u00b7  tile fallback  \u00b7  cache 379.8 / 4096 MiB  \u00b7  display GPU"
+    },
+    {
+      "series": "uncached_scrub",
+      "adapter": "integrated laptop stand-in",
+      "first_picture_s": 0.8136,
+      "settle_s": 6.5019,
+      "status": "1920 \u00d7 1080  \u00b7  4822 ms  \u00b7  tile fallback  \u00b7  cache 791.7 / 4096 MiB  \u00b7  display GPU"
+    },
+    {
+      "series": "tier4_playback",
+      "adapter": "integrated laptop stand-in",
+      "fps": 1.99,
+      "rendered_frame_changes": 4,
+      "elapsed_s": 2.01,
+      "fps_target": 24.0,
+      "status": "1920 \u00d7 1080  \u00b7  proxy 1/4  \u00b7  5 ms  \u00b7  display cache hit  \u00b7  display GPU  \u00b7  ahead 3/3  \u00b7  dropped 3"
+    }
+  ],
+  "timeline": [
+    {
+      "stage": "paint",
+      "t": 1082847.274971869
+    },
+    {
+      "stage": "paint",
+      "t": 1082847.289235947
+    },
+    {
+      "stage": "paint",
+      "t": 1082847.293084354
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082847.295399775
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082847.296324908
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082847.296329418,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082847.296728626
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082847.296729946,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082847.297087455
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082847.297088185,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082847.297433525
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082847.297434025,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082847.297438215,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1082847.302787257
+    },
+    {
+      "stage": "scenario_start",
+      "t": 1082848.300713102
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082851.501646893,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 4204.154,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082851.501672842,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082851.501729341
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082851.644429992
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082851.980469096
+    },
+    {
+      "stage": "paint",
+      "t": 1082851.987934396
+    },
+    {
+      "stage": "paint",
+      "t": 1082851.991978436
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082852.243719113
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082852.467710741,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 223.958,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082852.46772672
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082852.469034941
+    },
+    {
+      "stage": "series_start",
+      "t": 1082853.083576992,
+      "series": "roto_drag"
+    },
+    {
+      "stage": "paint",
+      "t": 1082853.087663161
+    },
+    {
+      "stage": "paint",
+      "t": 1082853.341270733
+    },
+    {
+      "stage": "paint",
+      "t": 1082853.466307716
+    },
+    {
+      "stage": "paint",
+      "t": 1082853.469820132
+    },
+    {
+      "stage": "paint",
+      "t": 1082853.88861854
+    },
+    {
+      "stage": "series_end",
+      "t": 1082899.243977859,
+      "series": "roto_drag"
+    },
+    {
+      "stage": "series_start",
+      "t": 1082899.243981629,
+      "series": "uncached_scrub"
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082899.247787995
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082899.683357229,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "paint",
+      "t": 1082899.714205673
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082899.730838558
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082899.731534847
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082899.731538707,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082899.731549917,
+      "tier": 8
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082900.066774164,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 335.134,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082900.066800533,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082900.066862281
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082900.068422095
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082900.074346369,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082900.077543054
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082900.078045339
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082900.078049738,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082900.078058978,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082900.101482412
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082900.552828287,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 474.645,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082900.552845957,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082900.552892535
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082900.557197667
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082900.561512879,
+      "tier": 1,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082900.564456411
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082900.564917428
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082900.564920658,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082900.565320346
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082900.565322246,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082900.565690965
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082900.565913418,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082900.565915878
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082900.569726055
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082900.569777483,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1082900.586841476
+    },
+    {
+      "stage": "paint",
+      "t": 1082900.637201169
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082905.32695592,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 4757.028,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082905.32697055,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082905.327026538
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082905.38686291
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082905.391734835
+    },
+    {
+      "stage": "paint",
+      "t": 1082905.397835214
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082905.655555934
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082905.656140287,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 0.554,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082905.656168066
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082905.658953593
+    },
+    {
+      "stage": "series_end",
+      "t": 1082905.762182175,
+      "series": "uncached_scrub"
+    },
+    {
+      "stage": "series_start",
+      "t": 1082905.762183745,
+      "series": "tier4_playback"
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082905.76233166,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "paint",
+      "t": 1082905.764585683
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082905.798731008
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082905.799433587
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082905.800192205,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082905.800216444
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082905.805920375
+    },
+    {
+      "stage": "paint",
+      "t": 1082905.818100393
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082906.188801125,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082906.191173034
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082906.192077937
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082906.192757857,
+      "hit": true
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082906.19873194
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082906.199983392
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082906.199986032,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082906.199992722,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082906.206551087
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082906.234798108
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082906.248793252,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082906.670124369,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 470.021,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082906.670141838,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082906.672604765
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082906.673133669
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082906.673141269,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082906.673160849
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082906.678102722
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082906.683321856
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082906.684063224
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082906.684066534,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082906.684073814,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082906.729617441
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082906.752392664
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082906.756236009,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082907.140943415,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 456.748,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082907.140958525,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082907.143108831
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082907.144188629
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082907.144194029,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082907.144211768
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082907.147746083
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082907.152804273
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082907.153312197
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082907.153315217,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082907.153321817,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082907.163441226
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082907.191946799
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082907.201029919,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082907.61888955,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 465.464,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082907.618908309,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082907.621140303
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082907.622155843
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082907.622164002,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082907.622184452
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082907.625862532
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082907.631335
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082907.631842685
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082907.631845265,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082907.631851634,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082907.652827641
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082907.698736956
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082907.702504194,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082908.087535461,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 455.579,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082908.08755141,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082908.089661727
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082908.090990548
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082908.091007677,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1082908.091039316
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1082908.094568172
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082908.099775097
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1082908.100989411
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1082908.100992421,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1082908.10099919,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1082908.105929854
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1082908.15921515
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1082908.165364347,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1082908.560664328,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 459.537,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1082908.560681078,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082908.562899822
+    },
+    {
+      "stage": "worker_start",
+      "t": 1082908.803262448
+    },
+    {
+      "stage": "series_end",
+      "t": 1082908.916951079,
+      "series": "tier4_playback"
+    }
+  ],
+  "profiles": []
+}
