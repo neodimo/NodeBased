@@ -8300,6 +8300,7 @@ class Window(QMainWindow):
         self._stop_refine_pending = False
         self._progressive_target = None
         self._progressive_generation = None
+        self._progressive_document = None
         self.playback_elapsed_frames = 0
         self.playback_dropped_frames = 0
         # Monotonic times of the frames shown during playback, newest last (achieved_fps).
@@ -13686,6 +13687,8 @@ class Window(QMainWindow):
         frame = snapshot["time"]["current"]
         if progressive and not self.playing:
             self._progressive_target = int(self.proxy.currentData())
+            # A drag preview refines the dragged picture, not the document the drag has not yet changed.
+            self._progressive_document = document_override
             tier = 8
         elif progressive_target is not None and not self.playing:
             self._progressive_target = int(progressive_target)
@@ -13693,6 +13696,7 @@ class Window(QMainWindow):
         else:
             self._progressive_target = None
             self._progressive_generation = None
+            self._progressive_document = None
             tier = self.proxy.currentData() if tier_override is None else int(tier_override)
         self.evaluator.preview_direction = -1 if self.playing and getattr(self, "play_direction", 1) < 0 else 1
         future = self.future_frames(frame) if self.playing else ()
@@ -14339,10 +14343,12 @@ class Window(QMainWindow):
             if next_tier is None or next_tier == request.tier:
                 self._progressive_target = None
                 self._progressive_generation = None
+                self._progressive_document = None
             else:
-                QTimer.singleShot(0, lambda tier=next_tier, target=target_tier:
-                                  self.request_preview(tier_override=tier,
-                                                      progressive_target=target))
+                # Queued here, before this handler returns, so the coarse frame is never the newest
+                # request: frame_generation trails generation until the selected tier is on screen.
+                self.request_preview(tier_override=next_tier, progressive_target=target_tier,
+                                     document_override=self._progressive_document)
         if request.display and frame is not None and (fresh or catching_up):
             self._adapt_playback_proxy(request, self.last_frame_ms or float("inf"))
         if self._stop_refine_pending and not self.playing and request.tier == 2:

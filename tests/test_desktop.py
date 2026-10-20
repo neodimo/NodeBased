@@ -1658,6 +1658,10 @@ class ProgressivePreviewTests(unittest.TestCase):
 
     def test_progressive_request_shows_tier8_then_tier4_then_selected_detail(self):
         w = self.window
+        # The worker is held so each queued tier can be read here; the frames are handed in by hand.
+        held = unittest.mock.patch.object(w, 'start_preview')
+        held.start()
+        self.addCleanup(held.stop)
         w.request_preview(progressive=True)
         request, cancel = w.preview_queue.take()
         self.assertEqual(request.tier, 8)
@@ -1674,6 +1678,22 @@ class ProgressivePreviewTests(unittest.TestCase):
         final = np.zeros((540, 960, 4), dtype=np.float32)
         w.preview_ready((request, cancel), final, to_qimage(final), '40 ms')
         self.assertEqual(w.viewer.last_scale, 1)
+
+    def test_a_drag_preview_refines_the_dragged_document(self):
+        w = self.window
+        held = unittest.mock.patch.object(w, 'start_preview')
+        held.start()
+        self.addCleanup(held.stop)
+        dragged = copy.deepcopy(w.dispatcher.document)
+        dragged['nodes']['grade']['params']['exposure'] = 3.5
+        w.request_preview(progressive=True, document_override=dragged)
+        request, cancel = w.preview_queue.take()
+        tier8 = np.zeros((68, 120, 4), dtype=np.float32)
+        w.preview_ready((request, cancel), tier8, to_qimage(tier8), '20 ms')
+        request, _ = w.preview_queue.take()
+        self.assertEqual(request.tier, 4)
+        self.assertEqual(request.document['nodes']['grade']['params']['exposure'], 3.5,
+                         'the refinement rendered the document the drag has not changed yet')
 
     def test_knob_edit_and_uncached_scrub_begin_at_tier8(self):
         w = self.window
