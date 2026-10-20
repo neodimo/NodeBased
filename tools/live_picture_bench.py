@@ -36,7 +36,7 @@ def main():
     parser.add_argument("--display", default=os.environ.get("DISPLAY"))
     parser.add_argument("--adapter", default=os.environ.get("QA_ADAPTER", "unknown"))
     parser.add_argument("--force-adapter", choices=("default", "integrated", "cpu"), default="default")
-    parser.add_argument("--profile-thread", choices=("qt", "worker", "none"), default="worker")
+    parser.add_argument("--profile-thread", choices=("qt", "worker", "none"), default="none")
     parser.add_argument("--seconds", type=float, default=8)
     args = parser.parse_args()
     if args.self_check:
