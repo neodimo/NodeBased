@@ -280,6 +280,20 @@ class InterruptibleTests(unittest.TestCase):
         self.assertLess(old[0], 100)                          # it did not run to the end
         self.assertLess(job.cancel_latencies[0], 0.06)        # one 10 ms chunk plus scheduling slack
 
+    def test_the_debounce_counts_from_the_edit_not_from_when_the_worker_got_free(self):
+        step = ChunkedStep(chunks=5, chunk=0.2)            # a pass that notices a cancel up to 0.2 s late
+        job = ProgressiveJob(step=step, settle=0.1)
+        self.addCleanup(job.close)
+        job.submit(request("old"))
+        self.assertTrue(step.in_pass.wait(5))
+        time.sleep(0.15)                                    # the first 0.2 s chunk is running
+        step.in_pass.clear()
+        asked = time.perf_counter()
+        job.submit(request("new"))
+        self.assertTrue(step.in_pass.wait(5))
+        # the worker is free after the rest of the chunk (about 0.05 s) and the edit has waited 0.1 s by then: no second wait
+        self.assertLess(time.perf_counter() - asked, 0.16)
+
     def test_a_cancelled_then_restarted_view_publishes_nothing_of_the_cancelled_pass(self):
         step = ChunkedStep(chunks=30, chunk=0.01)
         job = ProgressiveJob(step=step, settle=0.0)

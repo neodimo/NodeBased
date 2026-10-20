@@ -193,11 +193,15 @@ class ProgressiveJob:
                     continue
                 taken = self._pending
                 if self.settle > 0:
-                    self._cond.wait(self.settle)
-                    if self._closed:
-                        return None
-                    if self._pending is not taken:     # a newer request arrived while settling
-                        continue
+                    # the debounce counts from the request, not from when the worker got free: an edit that waited out the
+                    # pass it superseded has already waited its settle time
+                    left = self.settle - (time.perf_counter() - taken[1])
+                    if left > 0:
+                        self._cond.wait(left)
+                        if self._closed:
+                            return None
+                        if self._pending is not taken:     # a newer request arrived while settling
+                            continue
                 self._pending = None
                 self._cancel = threading.Event()
                 self._busy = True
