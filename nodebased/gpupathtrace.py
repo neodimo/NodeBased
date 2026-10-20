@@ -43,8 +43,8 @@ ADAPTIVE_MAX_GROUPS = 32768              # and work-groups, well under the 65535
 ADAPTIVE_SPARSE_PIXELS = 1 << 17         # at most this many open pixels get their pass's samples run side by side (sample-parallel tail)
 ADAPTIVE_SPARSE_THREADS = 1 << 21        # and at most this many (pixel, sample) threads: 64 MiB of per-sample sums after the image
 ADAPTIVE_HEAVY_CANCEL_PATHS = 1 << 16    # a splat or smoke dispatch of a render that can be cancelled covers this many paths at first (about 24 ms on the RTX 3080 Ti, 10% slower in all than 1 << 17; 14 ms at 1 << 15 cost 28%)
-ADAPTIVE_HEAVY_MIN_PATHS = 1 << 13       # and is never made smaller than this, however slow the card: below it the card idles between dispatches
-ADAPTIVE_HEAVY_SECONDS = 0.020           # the size is then fitted to this many seconds from the rate the last such render measured
+ADAPTIVE_MIN_DISPATCH_PATHS = 1 << 14   # a dispatch is never made smaller than this, however slow the card: below it the card idles between dispatches
+ADAPTIVE_DISPATCH_SECONDS = 0.020        # the size is then fitted to this many seconds from the rate the last such render measured
 ADAPTIVE_CHUNK_SECONDS = 0.012           # an interruptible adaptive pass (cancel given) submits dispatches in chunks the card runs in about this long, one in flight
 ADAPTIVE_PACE = 4                        # passes the host lets the card run ahead before it waits (it waits every pass when asked for progress)
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
@@ -2853,13 +2853,14 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
     threads = wg * wg
     budget = ADAPTIVE_PATHS_PER_DISPATCH // (SOFT_SLOWDOWN if heavy else 1)
     rate_key = None
-    if heavy and cancel is not None:
-        # a heavy dispatch of a render that can be cancelled is sized to take about ADAPTIVE_HEAVY_SECONDS: from the seconds a
-        # path cost the last time on this adapter, or ADAPTIVE_HEAVY_CANCEL_PATHS when none is known
-        rate_key = _adapter_key(state)
-        rate = _HEAVY_RATE.get(rate_key)
-        budget = ADAPTIVE_HEAVY_CANCEL_PATHS if rate is None else int(
-            min(budget, max(ADAPTIVE_HEAVY_MIN_PATHS, ADAPTIVE_HEAVY_SECONDS / rate)))
+    if cancel is not None:
+        # a dispatch of a render that can be cancelled is sized to take about ADAPTIVE_DISPATCH_SECONDS: from the seconds a path
+        # cost the last time on this adapter and kind of scene, or the default (ADAPTIVE_HEAVY_CANCEL_PATHS for splats and
+        # smoke) when none is known
+        rate_key = (_adapter_key(state), heavy)
+        rate = _path_rate(rate_key)
+        budget = (ADAPTIVE_HEAVY_CANCEL_PATHS if heavy else budget) if rate is None else int(
+            min(budget, max(ADAPTIVE_MIN_DISPATCH_PATHS, ADAPTIVE_DISPATCH_SECONDS / rate)))
     chunk_groups = int(max(1, min(ADAPTIVE_MAX_GROUPS, budget // threads)))
     chunks = -(-npix // (chunk_groups * threads))
     sparse_args, reduce_args = chunks * 16, chunks * 16 + 16      # byte offsets of the other two indirect arguments
@@ -2923,6 +2924,7 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
     device.queue.submit([encoder.finish()])
     sample_index, passes = 0, 0
     asked = progress is not None or bool(settings.time_limit) or cancel is not None
+    measured = False           # the first pass's first dispatch (every pixel open) has been timed for `_PATH_RATE`
     per_dispatch = None        # seconds the card took for one chunk's dispatch, as last measured (sizes the next submissions)
     while sample_index < total_samples:
         raytrace._cancel(cancel)
@@ -2941,9 +2943,9 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
                     began = time.perf_counter()
                     device.queue.submit([encoder.finish()])
                     wait()
-                    if rate_key is not None and passes == 0 and c < chunks - 1:     # the first pass has every pixel open: a full chunk
-                        seen = (time.perf_counter() - began) / (chunk_groups * threads)
-                        _HEAVY_RATE[rate_key] = seen if rate_key not in _HEAVY_RATE else 0.7 * _HEAVY_RATE[rate_key] + 0.3 * seen
+                    if rate_key is not None and passes == 0 and c == 0 and not measured:
+                        measured = True
+                        _learn_rate(rate_key, time.perf_counter() - began, min(chunk_groups * threads, npix))
             encoder = device.create_command_encoder()
             compute = encoder.begin_compute_pass()
             sparse(compute)
@@ -2988,6 +2990,9 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
                 wait()
                 took = (time.perf_counter() - began) / count
                 per_dispatch = took if per_dispatch is None else 0.5 * per_dispatch + 0.5 * took
+                if rate_key is not None and passes == 0 and first == count and not measured:      # the very first dispatch
+                    measured = True
+                    _learn_rate(rate_key, took, min(chunk_groups * threads, npix))
             pixels_open = wait() if asked or passes % ADAPTIVE_PACE == ADAPTIVE_PACE - 1 else None
             if pixels_open is None:
                 lap("encode")
@@ -3010,7 +3015,20 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
     wait()                     # the card may still owe the last passes: the final readback then times the transfer alone
 
 
-_HEAVY_RATE = {}      # adapter -> seconds one path of a splat or smoke scene took in a full dispatch, as last measured
+_PATH_RATE = {}       # (adapter, splats or smoke) -> seconds one path took in a full dispatch, the last three measurements
+
+
+def _learn_rate(key, seconds, paths):
+    """Keep the cheapest of the last three measurements for `key`: a render's first dispatch can carry a pipeline's first run,
+    which must not shrink every later dispatch."""
+    history = _PATH_RATE.setdefault(key, [])
+    history.append(seconds / max(paths, 1))
+    del history[:-3]
+
+
+def _path_rate(key):
+    history = _PATH_RATE.get(key)
+    return min(history) if history else None
 
 
 def _adapter_key(state):

@@ -402,15 +402,15 @@ class InterruptibleTracerTests(unittest.TestCase):
                                      backend="auto", stats=stats, cancel=cancel, volume=SMOKE)
             return image, stats
         whole, _ = run(None)
-        gpupathtrace._HEAVY_RATE.clear()
+        gpupathtrace._PATH_RATE.clear()
         previous = gpupathtrace.ADAPTIVE_HEAVY_CANCEL_PATHS
         gpupathtrace.ADAPTIVE_HEAVY_CANCEL_PATHS = 64              # many tiny dispatches
         self.addCleanup(setattr, gpupathtrace, "ADAPTIVE_HEAVY_CANCEL_PATHS", previous)
-        self.addCleanup(gpupathtrace._HEAVY_RATE.clear)
+        self.addCleanup(gpupathtrace._PATH_RATE.clear)
         cut, stats = run(threading.Event())
         # the dispatch size moves which pixels take the sample-parallel tail, so the float sums differ in the last place
         np.testing.assert_allclose(whole, cut, rtol=1e-4, atol=1e-5)
-        self.assertTrue(gpupathtrace._HEAVY_RATE)                   # the first pass left a measured rate behind for the next render
+        self.assertTrue(gpupathtrace._PATH_RATE)                   # the first pass left a measured rate behind for the next render
 
     def test_every_pass_of_a_view_shares_one_prepared_scene(self):
         from unittest import mock
