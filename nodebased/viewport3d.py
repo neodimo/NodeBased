@@ -1065,12 +1065,14 @@ class Viewport3D(QWidget):
         self.splat_note = self.volume_note = self.shadow_note = ""   # the progressive image already carries their look
         cached, bend = self._progressive_image, (None if lens is None else (lens.lens, lens.margin_x, lens.margin_y))
         if cached is None or cached[0] is not state or cached[1] != bend:
-            rgba = progressiverender.display_rgba8(state.image)
+            rgba = job.display(identity, state)       # converted on the worker thread; this is the fallback
+            if rgba is None:
+                rgba = progressiverender.display_rgba8(state.image)
             if lens is not None:
                 rgba = viewportlens.redistort(lens, viewportlens.fit(lens, rgba))
-            qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0],
-                            QImage.Format.Format_RGBA8888).copy()
-            self._progressive_image = cached = (state, bend, qimage)
+            rgba = np.ascontiguousarray(rgba)
+            qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0], QImage.Format.Format_RGBA8888)
+            self._progressive_image = cached = (state, bend, qimage, rgba)    # the array stays alive with the image that views it
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.drawImage(self.rect(), cached[2])
         done = phase == "settled"

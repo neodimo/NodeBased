@@ -48,16 +48,18 @@ class Request:
 
 @dataclass(frozen=True)
 class Frame:
-    """One published state with when it appeared (seconds since the request was submitted) and how many passes preceded it."""
+    """One published state with when it appeared (seconds since the request was submitted, the display conversion included)."""
     state: object
     since_submit: float
     serial: int = 0
+    rgba: object = None           # the 8-bit sRGB RGBA the viewport paints (`display_rgba8`), converted on the worker thread
 
 
 class ProgressiveJob:
-    def __init__(self, on_update=None, settle=SETTLE_SECONDS, step=None, denoise_passes=True):
+    def __init__(self, on_update=None, settle=SETTLE_SECONDS, step=None, denoise_passes=True, convert=True):
         self.on_update = on_update
         self.settle = float(settle)
+        self.convert = convert           # convert each picture for display on the worker, keeping the interface thread's paint cheap
         # the full-size doubling passes are filtered too, so a refinement never looks noisier than the preview before it
         self._step = step or functools.partial(progressiverender.step_interactive, denoise_passes=denoise_passes)
         self._cond = threading.Condition()
@@ -75,6 +77,8 @@ class ProgressiveJob:
         self._serial = 0
         self._thread = None
         self._pass_started = time.perf_counter()
+        self._cancel_asked = None       # when the running pass was told to stop
+        self.cancel_latencies = []      # seconds from a superseding request to the end of the pass it cancelled (benchmarks read it)
 
     # --- the interface thread -----------------------------------------------------------------------------------------
 
@@ -94,6 +98,8 @@ class ProgressiveJob:
             self.frames = []
             self._pass_started = time.perf_counter()
             self._pending = (request, self._pass_started)
+            if self._busy and not self._cancel.is_set():
+                self._cancel_asked = time.perf_counter()
             self._cancel.set()             # obsolete work stops at its next pass boundary
             if self._thread is None:
                 self._thread = threading.Thread(target=self._run, name="nodebased-progressive", daemon=True)
@@ -109,6 +115,12 @@ class ProgressiveJob:
                 return None, "idle"
             state = self._frame.state if self._frame is not None and self._frame_identity == identity else None
             return state, self._phase
+
+    def display(self, identity, state):
+        """The converted picture of `state` (as returned by `view` for `identity`), or None when not converted / not current."""
+        with self._cond:
+            frame = self._frame
+            return frame.rgba if frame is not None and frame.state is state and self._frame_identity == identity else None
 
     @property
     def error(self):
@@ -201,6 +213,9 @@ class ProgressiveJob:
                 self._work(request, submitted)
             finally:
                 with self._cond:
+                    if self._cancel_asked is not None:
+                        self.cancel_latencies.append(time.perf_counter() - self._cancel_asked)
+                        self._cancel_asked = None
                     self._busy = False
                     self._cond.notify_all()
 
@@ -222,11 +237,12 @@ class ProgressiveJob:
                 self._notify()
                 return
             done = progressiverender.converged(state, request.width, request.height)
+            rgba = progressiverender.display_rgba8(state.image) if self.convert and state.image is not None else None
             with self._cond:
                 if cancel.is_set() or self._identity != request.identity:
                     return          # superseded while the pass finished: its picture belongs to a view nobody shows now
                 self._serial += 1
-                frame = Frame(state, time.perf_counter() - submitted, self._serial)
+                frame = Frame(state, time.perf_counter() - submitted, self._serial, rgba)
                 self._frame, self._frame_identity = frame, request.identity
                 self.frames.append(frame)
                 self._pass_started = time.perf_counter()

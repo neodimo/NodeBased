@@ -117,6 +117,17 @@ class JobTests(unittest.TestCase):
         self.assertEqual(job.view("new")[0].samples, P.SAMPLE_CAP)
         self.assertEqual(script.started[-3:], [("new", 0), ("new", 1), ("new", 2)])    # a fresh first look, not the old pass's next
 
+    def test_the_time_to_abandon_a_pass_is_recorded(self):
+        script = Script([preview, final])
+        job = self.make(script)
+        job.submit(request("old"))
+        self.assertTrue(script.entered.wait(5))
+        job.submit(request("new"))
+        script.open()
+        self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
+        self.assertEqual(len(job.cancel_latencies), 1)
+        self.assertLess(job.cancel_latencies[0], 1.0)
+
     def test_a_late_result_of_a_superseded_view_is_never_published(self):
         """The tracer finished the old pass just as the new request came in: its picture belongs to a view nobody shows."""
         release = threading.Event()
@@ -285,6 +296,14 @@ class ViewportLabelTests(unittest.TestCase):
         self.assertEqual(widget.render_stage, "settled")
         self.assertIn("SETTLED", widget.render_note)
         self.assertEqual(widget.render_progress, 1.0)
+
+    def test_the_worker_converts_each_picture_for_display_and_the_widget_paints_that(self):
+        widget = self.widget(Script([preview, final], gated=False))
+        self.paint(widget, lambda state, phase: phase == "settled")
+        frames = widget._progressive_job.frames
+        self.assertTrue(all(frame.rgba is not None and frame.rgba.dtype == np.uint8 for frame in frames))
+        np.testing.assert_array_equal(frames[-1].rgba, P.display_rgba8(frames[-1].state.image))
+        self.assertIs(widget._progressive_image[3], frames[-1].rgba)        # no second conversion on the interface thread
 
     def test_an_edit_never_leaves_the_old_scenes_picture_on_screen(self):
         widget = self.widget(Script([final], gated=False))
