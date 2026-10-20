@@ -71,6 +71,9 @@ class ViewerToggleTests(unittest.TestCase):
             self.assertTrue(wait_until(lambda: window.viewer.sceneRect().width() > 192.0))
             self.assertTrue(wait_until(lambda: window.viewer.sceneRect().height() > 108.0))
             self.assertLess(window.viewer.sceneRect().x(), 0.0)
+            # An edit shows a 1/8 then 1/4 picture first, whose guide is rounded to proxy pixels; read the finished one.
+            self.assertTrue(wait_until(lambda: not window.busy and not len(window.preview_queue)
+                                       and window.frame_generation == window.generation))
             # the format guide stays on the plate's format inside the grown frame
             self.assertEqual(window.viewer.format_rect.getRect(), (0.0, 0.0, 192.0, 108.0))
             self.assertFalse(window.viewer.viewport().grab().isNull())          # the dashed format outline paints
