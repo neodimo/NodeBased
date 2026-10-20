@@ -222,9 +222,9 @@ class FirstLookTests(unittest.TestCase):
                     trace(scene, CAMERA, output)
                 self.assertEqual(len(calls), 1)
                 trace(scene, replace(CAMERA, transform=replace(CAMERA.transform, position=s.Vec3(1, 4, 9))))
-                self.assertEqual(len(calls), 2)            # another camera position: prepared again
+                self.assertEqual(len(calls), 1)            # ordinary geometry preparation is camera-independent
                 trace(_scene(), CAMERA)
-                self.assertEqual(len(calls), 3)            # another scene object: prepared again
+                self.assertEqual(len(calls), 1)            # equivalent scene data can share preparation safely
             before = len(calls)
             trace(scene, CAMERA)
             trace(scene, CAMERA)

@@ -6745,3 +6745,12 @@ Combined exact-HEAD gate on `1a8e646e` green (5,489 tests). Main now carries the
 ## 2026-10-19 — Lane 6 S2 finish attempt
 
 The follow-up exclusive-lock wait for the corrected 8/32/128 matrix expired at 30 minutes while the integrator's full-suite process still held a shared GPU lock. No lock was bypassed and no new GPU timings were measured. The docs record this attempt; knowledge-copy validation passed. Progressive 1920 × 1080 first-look/settle and the 64-cell Radeon preview/stop row remain unmeasured. Needs Gonzo to rerun the three benchmark commands listed in `scratch/nb-lanes/run/report-L6.md` after the shared lock clears.
+## 2026-10-20 — Lane 6 step A cache-lifetime fix (DONE on lane branch; merge pending)
+
+**Evidence.** The cancellation contract now clears prepared data, each ordinary first-look scope builds the scene once for beauty plus its three guides and drops the cache at scope exit, and volume first looks can retain equivalent prepared scenes across camera moves. `tests.test_3d_first_look`, `tests.test_fluid_firstlook`, `tests.test_3d_progressive_job` and `tests.test_3d_progressive_convergence` passed together (61 tests, 22.2 seconds) on the RTX 3080 Ti. A fresh frame-60 Hot pour run measured 1.186 seconds cold and 0.374 seconds warm; earlier 144–146 ms warm acceleration-build cost remains reduced (this rerun's timing JSON is in scratch, so individual acceleration timing was not retained here).
+
+**Changed behavior.** Reuse assertions now describe content-equivalent scenes and camera-independent geometry sharing; they no longer encode identity-only rebuilds. Beauty-plus-guide single preparation and cancellation cleanup assertions remain intact. Full suite and AMD/llvmpipe reruns were not requested by this fix brief; Windows and visual QA remain unverified.
+
+**Artifacts.** Lane branch changes: `nodebased/gpupathtrace.py`, `nodebased/progressiverender.py`, `tests/test_3d_first_look.py`. Scratch evidence: `scratch/nb-lanes/run/tests-L6-A-fix.log` and `firstlook-fix-remeasure.json`. Local-only until integrator merge.
+
+**Next owner + concrete artifact.** Gonzo: review the commit and merge-candidate test results; use the test log and `tools/benchmark_fluid_firstlook.py` with the existing Hot pour cache for any follow-up comparison.
