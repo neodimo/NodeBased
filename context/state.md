@@ -1,5 +1,30 @@
 ## 2026-10-20 — Lane 2 VP1 respawn: no change (DONE, already on main)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (5:33 AM on 2026-10-20 PDT)
+
+`main` moved `ae4d6c04` -> `5b4e2e25` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `5b4e2e25` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1020-0524.log`, started 5:24 AM): **Ran 5673 tests in 487.940 s, OK (skipped=16), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), VP1 of 2: opt-in retained-texture 2D viewer vertical slice.** Commits:
+  - `0784b396` notes: Lane 2 VP1 respawn found already landed on main, re-verified
+  Diff: 2 files changed, 13 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step H2 of 2: keep the image refining after the first look.** Commits:
+  - `3a4c9b7b` Render mode: frames keep numbers not 1080p arrays, docs for the worker-thread Render mode (in-place update of the R6 summary)
+  - `0d6e37d2` Render mode: convert pictures for display on the worker, record how long a cancelled pass takes to stop; convergence tests against Render3D (mesh room, depth of field, lens, mixed mesh and splat); progression benchmark
+  - `f508c028` Render mode on a worker thread: cancellable progressive passes, denoised refinement, scene edits restart the view, stage and sample progress in the viewport
+  Diff: 13 files changed, 1326 insertions(+), 120 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The tick re-spawned VP1 at 5:02 AM. VP1 (opt-in retained-texture direct picture, default off) and its 10/18 finish and VP2a playback work are already on main; the lane branch was fast-forwarded to `ce83279b` and nothing was added. The VP1 modules (66 tests) pass there, offscreen. Three-adapter and real-display runs were not repeated (GPU lock held). Gaps remain as listed in `docs/DIRECT_VIEWER.md`. Next: `briefs/L2-vp2b.md`.
 
 ## 2026-10-19 — Lane 2 VP2a (Opus sprint): direct picture playback and 4K pictures
