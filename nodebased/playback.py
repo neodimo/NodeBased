@@ -40,6 +40,8 @@ class FrameRequest:
     # "show the newest frame that finished" rather than "show exactly the playhead". See
     # Window.preview_ready and docs/PLAYBACK.md criterion 4.
     playing: bool = False
+    # A drag may show the last completed proxy request while newer snapshots are queued.
+    live_preview: bool = False
 
 
 class PlaybackQueue:
@@ -49,7 +51,7 @@ class PlaybackQueue:
         self.active_cancel: threading.Event | None = None
 
     def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER, viewport=None,
-                playing=False, cancel_active=True):
+                playing=False, cancel_active=True, live_preview=False):
         """Install one display request plus bounded read-ahead, replacing what was queued.
 
         ``cancel_active=False`` leaves an already-running evaluation alone. The transport uses
@@ -68,7 +70,7 @@ class PlaybackQueue:
             self.active_cancel.set()
         self._items.clear()
         self._items.append(
-            FrameRequest(generation, int(frame), True, document, tier, viewport, playing))
+            FrameRequest(generation, int(frame), True, document, tier, viewport, playing, live_preview))
         seen = {int(frame)}
         for future in future_frames:
             future = int(future)
@@ -77,7 +79,7 @@ class PlaybackQueue:
             # Read-ahead intentionally requests the full target window. It warms future frames
             # without coupling background work to a viewport the artist may pan away from.
             self._items.append(
-                FrameRequest(generation, future, False, document, tier, None, playing))
+                FrameRequest(generation, future, False, document, tier, None, playing, False))
             seen.add(future)
             if len(self._items) >= 1 + self.max_prefetch:
                 break

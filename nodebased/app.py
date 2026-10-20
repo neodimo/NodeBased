@@ -13814,7 +13814,10 @@ class Window(QMainWindow):
             rect = self.viewer.mapToScene(self.viewer.viewport().rect()).boundingRect()
             viewport = (math.floor(rect.left()), math.floor(rect.top()),
                         math.ceil(rect.right()), math.ceil(rect.bottom()))
-        cancel_active = not (playhead_only and self.playing)
+        live_preview = bool(progressive and not self.playing)
+        # Let an active tier-8 drag render finish while replacing the queued snapshot. A
+        # completed live-preview frame may be shown during the drag even when a newer move exists.
+        cancel_active = not ((playhead_only and self.playing) or live_preview)
         if cancel_active:
             # A real seek or content edit, not a plain playback tick (docs/PLAYBACK.md
             # criterion 3): drop pending decode-ahead work instead of caching frames a scrub
@@ -13824,7 +13827,8 @@ class Window(QMainWindow):
         self.preview_queue.replace(self.generation, frame, snapshot, future,
                                    tier=tier, viewport=viewport,
                                    playing=self.playing,
-                                   cancel_active=cancel_active)
+                                   cancel_active=cancel_active,
+                                   live_preview=live_preview)
         if (progressive or progressive_target is not None) and not self.playing:
             self._progressive_generation = self.generation
         # The decode-ahead pool only ever gets consulted by the tier != 1 Read path (tileexec.py's
@@ -14424,9 +14428,11 @@ class Window(QMainWindow):
         # newer than what is on screen and show it; the transport keeps following the wall clock,
         # so this drops timeline positions rather than stalling.
         fresh = request.generation == self.generation and request.frame == current
+        live_preview = (request.live_preview and self._progressive_generation is not None
+                        and request.generation <= self._progressive_generation)
         catching_up = (self.playing and request.playing
                        and request.generation > self.frame_generation)
-        if request.display and (fresh or catching_up):
+        if request.display and (fresh or catching_up or live_preview):
             if self.playing:
                 status += (f"  ·  ahead {len(self.preview_queue)}/{self.preview_queue.max_prefetch}"
                            f"  ·  dropped {self.playback_dropped_frames}")

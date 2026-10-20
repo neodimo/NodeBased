@@ -1695,6 +1695,27 @@ class ProgressivePreviewTests(unittest.TestCase):
         self.assertEqual(request.document['nodes']['grade']['params']['exposure'], 3.5,
                          'the refinement rendered the document the drag has not changed yet')
 
+    def test_a_live_drag_move_does_not_cancel_the_picture_already_rendering(self):
+        w = self.window
+        held = unittest.mock.patch.object(w, 'start_preview')
+        held.start()
+        self.addCleanup(held.stop)
+        first_doc = copy.deepcopy(w.dispatcher.document)
+        first_doc['nodes']['grade']['params']['exposure'] = 1.0
+        w.request_preview(progressive=True, document_override=first_doc)
+        first, cancel = w.preview_queue.take()
+        latest_doc = copy.deepcopy(first_doc)
+        latest_doc['nodes']['grade']['params']['exposure'] = 2.0
+        w.request_preview(progressive=True, document_override=latest_doc)
+        self.assertFalse(cancel.is_set(), 'a later mouse move cancelled the active tier-8 render')
+        picture = np.zeros((68, 120, 4), dtype=np.float32)
+        w.preview_ready((first, cancel), picture, to_qimage(picture), '20 ms')
+        self.assertEqual(w.frame_generation, first.generation,
+                         'the completed in-flight proxy picture was withheld during the drag')
+        self.assertEqual(w.viewer.last_scale, 8)
+        latest, _ = w.preview_queue.take()
+        self.assertEqual(latest.document['nodes']['grade']['params']['exposure'], 2.0)
+
     def test_knob_edit_and_uncached_scrub_begin_at_tier8(self):
         w = self.window
         w.timer.stop()
