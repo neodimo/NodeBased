@@ -45,13 +45,29 @@ class FluidFirstLook(unittest.TestCase):
         moved = replace(camera, transform=replace(camera.transform, position=s.Vec3(0.1, 0, 5)))
         scene = s.Scene((s._card(2, 2, (0.6, 0.7, 0.8, 1), s.Transform3D()),),
                         volumes=(s.Volume(np.ones((4, 4, 4), np.float32)),))
+        equivalent = replace(scene, geometries=tuple(replace(g) for g in scene.geometries),
+                             volumes=tuple(replace(v) for v in scene.volumes))
+        from nodebased import pathtrace
+        builds, packs = [], []
+        build_scene, pack = pathtrace.build_scene, gpupathtrace.pack
+
+        def count_build(*args, **kwargs):
+            builds.append(1)
+            return build_scene(*args, **kwargs)
+
+        def count_pack(*args, **kwargs):
+            packs.append(1)
+            return pack(*args, **kwargs)
+
         before = gpupathtrace.reuse_counters()
-        P.step_interactive(None, scene, camera, 32, 24, (0, 0, 0, 1), 0.1, "accel-a", backend="gpu",
-                           stages=((24, 1),))
-        first = gpupathtrace.reuse_counters()
-        P.step_interactive(None, scene, moved, 32, 24, (0, 0, 0, 1), 0.1, "accel-b", backend="gpu",
-                           stages=((24, 1),))
-        second = gpupathtrace.reuse_counters()
+        with patch.object(pathtrace, "build_scene", side_effect=count_build), patch.object(gpupathtrace, "pack", side_effect=count_pack):
+            P.step_interactive(None, scene, camera, 32, 24, (0, 0, 0, 1), 0.1, "accel-a", backend="gpu",
+                               stages=((24, 1),))
+            first = gpupathtrace.reuse_counters()
+            P.step_interactive(None, equivalent, moved, 32, 24, (0, 0, 0, 1), 0.1, "accel-b", backend="gpu",
+                               stages=((24, 1),))
+            second = gpupathtrace.reuse_counters()
+        self.assertEqual((len(builds), len(packs)), (1, 1))
         self.assertIn(first["scene_uploads"] - before["scene_uploads"], (0, 1))
         self.assertEqual(second["scene_uploads"], first["scene_uploads"])
         self.assertGreater(second["scene_reuses"], first["scene_reuses"])

@@ -28,6 +28,7 @@ Scope, named rather than assumed: textures, more than one environment and partic
 `gpu3d.Unsupported` (callers fall back to the CPU reference).
 """
 import contextlib
+from dataclasses import fields, is_dataclass
 import math
 import struct
 import threading
@@ -3044,32 +3045,61 @@ _PREPARED = threading.local()
 
 @contextlib.contextmanager
 def reusing_scene():
-    """Within this block the renders of one scene, camera position, ambient and volume share one `build_scene` and `pack`
-    (the beauty and the albedo, normals and depth guides of an interactive first look: about 70 ms of host work apiece at
-    1080p-class scenes). The caller promises not to change the scene's arrays inside the block; the entry is dropped on exit."""
+    """Share prepared scene data within a view and retain the last entry across progressive camera moves.
+
+    The one-entry, thread-local cache owns its scene and volume, keeping object identities
+    valid while bounding retained host memory. Splat normals depend on view; liquid and
+    ordinary geometry acceleration does not.
+    """
     outer = getattr(_PREPARED, "entry", False)
     if outer is False:
         _PREPARED.entry = None
-    try:
-        yield
-    finally:
-        if outer is False:
-            del _PREPARED.entry
+    yield
 
 
 def _scene_key(scene, ambient, eye, volume):
-    return (id(scene), float(ambient), tuple(float(v) for v in eye), id(volume))
+    view_key = tuple(float(v) for v in eye) if getattr(scene, "splats", ()) else None
+    return (float(ambient), view_key)
+
+
+def _same_value(a, b, field_name=None):
+    """Compare render inputs cheaply enough to reuse preparation across equivalent evaluations."""
+    if a is b:
+        return True
+    if field_name in ("stream", "persistent_texture_key"):
+        # The simulation provenance is not consumed by scene building or packing.
+        return True
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        return (isinstance(a, np.ndarray) and isinstance(b, np.ndarray) and a.shape == b.shape
+                and a.dtype == b.dtype and np.array_equal(a, b))
+    if isinstance(a, (tuple, list)) and isinstance(b, type(a)):
+        return len(a) == len(b) and all(_same_value(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same_value(a[k], b[k]) for k in a)
+    if is_dataclass(a) and type(a) is type(b):
+        return all(_same_value(getattr(a, f.name), getattr(b, f.name), f.name) for f in fields(a))
+    if type(a).__name__ == "SparseField" and type(b) is type(a):
+        return (a.name, a.shape, a.dtype) == (b.name, b.shape, b.dtype) and _same_value(a.grid, b.grid)
+    if type(a).__name__ == "SparseGrid" and type(b) is type(a):
+        return ((a.shape, a.tile, a.rest) == (b.shape, b.tile, b.rest)
+                and _same_value(a.coords, b.coords) and _same_value(a.data, b.data))
+    try:
+        result = a == b
+        return bool(result) if isinstance(result, (bool, np.bool_)) else False
+    except (TypeError, ValueError):
+        return False
 
 
 def _prepared_scene(scene, ambient, eye, volume):
     entry = getattr(_PREPARED, "entry", None)
-    if entry is not None and entry[0] == _scene_key(scene, ambient, eye, volume):
+    if (entry is not None and entry[0] == _scene_key(scene, ambient, eye, volume)
+            and _same_value(entry[1], scene) and _same_value(entry[2], volume)):
         return entry[3], entry[4]
     return None
 
 
 def _remember_scene(scene, ambient, eye, volume, ps, packed):
-    if getattr(_PREPARED, "entry", False) is not False:     # inside `reusing_scene`; the entry holds the scene so its id stays unique
+    if getattr(_PREPARED, "entry", False) is not False:
         _PREPARED.entry = (_scene_key(scene, ambient, eye, volume), scene, volume, ps, packed)
 
 
