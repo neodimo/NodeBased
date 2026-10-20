@@ -14836,6 +14836,9 @@ class Window(QMainWindow):
         if self.server:
             self.server.close()
         QApplication.instance().removeEventFilter(self)
+        # Cached Properties panels are parentless and their signal lambdas hold this window, so left in
+        # the cache they keep the closed window and its document alive for the rest of the process.
+        self._drop_panel_cache()
         self.save_workspace()
         event.accept()
 

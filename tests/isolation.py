@@ -13,6 +13,7 @@ only; importing this module gives it to every test.
 WorkspaceTests in test_desktop opt back in to real save/restore through `real_workspace`.
 """
 import tempfile
+import unittest
 import unittest.mock
 
 from PySide6.QtCore import QSettings
@@ -40,3 +41,24 @@ import os  # noqa: E402
 
 _GPU_LOCK = tempfile.NamedTemporaryFile(prefix="nodebased-test-gpu-", suffix=".lock")
 os.environ["NODEBASED_GPU_LOCK"] = _GPU_LOCK.name
+
+# Closed windows are only destroyed by the DeferredDelete events that `deleteLater()` posts, and
+# `processEvents()` never delivers those, so without an event loop every Window a test closed stayed
+# alive (timers, panels, application-wide filters) for the rest of the process. Each later Window
+# then opened slower than the one before: 11 windows in one test took 145 s on 10/19 where one takes
+# under a second. Deliver them after every test, as the app's own event loop would.
+from PySide6.QtCore import QCoreApplication, QEvent  # noqa: E402
+
+_DO_CLEANUPS = unittest.TestCase.doCleanups
+
+
+def _do_cleanups_and_deferred_deletes(self):
+    outcome = _DO_CLEANUPS(self)
+    if QCoreApplication.instance() is not None:
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    return outcome
+
+
+if not getattr(unittest.TestCase.doCleanups, "delivers_deferred_deletes", False):
+    _do_cleanups_and_deferred_deletes.delivers_deferred_deletes = True
+    unittest.TestCase.doCleanups = _do_cleanups_and_deferred_deletes

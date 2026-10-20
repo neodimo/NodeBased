@@ -6,7 +6,7 @@ import unittest
 from unittest import mock
 
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLineEdit
 
@@ -61,6 +61,8 @@ class ShortcutWiringTests(unittest.TestCase):
             window.close()
             window.deleteLater()
             APP.processEvents()
+            # Destroy it now: the subtests below open eleven windows inside one test.
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def select(self, key):
         graph = self.window.graph
