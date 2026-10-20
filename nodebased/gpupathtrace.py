@@ -3044,17 +3044,32 @@ _PREPARED = threading.local()
 
 
 @contextlib.contextmanager
-def reusing_scene():
-    """Share prepared scene data within a view and retain the last entry across progressive camera moves.
+def reusing_scene(*, retain=False):
+    """Share prepared data in a render scope, optionally retaining it for progressive camera moves.
 
     The one-entry, thread-local cache owns its scene and volume, keeping object identities
     valid while bounding retained host memory. Splat normals depend on view; liquid and
     ordinary geometry acceleration does not.
     """
-    outer = getattr(_PREPARED, "entry", False)
-    if outer is False:
+    outer = getattr(_PREPARED, "depth", 0)
+    if outer == 0 and not retain:
         _PREPARED.entry = None
-    yield
+    elif outer == 0 and getattr(_PREPARED, "entry", False) is False:
+        _PREPARED.entry = None
+    _PREPARED.depth = outer + 1
+    try:
+        yield
+    except BaseException:
+        # A cancelled/failed render must not leave partially useful preparation behind.
+        _PREPARED.entry = None
+        raise
+    finally:
+        _PREPARED.depth = outer
+        if not retain:
+            _PREPARED.entry = None
+            _PREPARED.retain = False
+        else:
+            _PREPARED.retain = True
 
 
 def _scene_key(scene, ambient, eye, volume):
@@ -3099,7 +3114,7 @@ def _prepared_scene(scene, ambient, eye, volume):
 
 
 def _remember_scene(scene, ambient, eye, volume, ps, packed):
-    if getattr(_PREPARED, "entry", False) is not False:
+    if getattr(_PREPARED, "depth", 0) > 0 or getattr(_PREPARED, "retain", False):
         _PREPARED.entry = (_scene_key(scene, ambient, eye, volume), scene, volume, ps, packed)
 
 

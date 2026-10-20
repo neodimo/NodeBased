@@ -252,7 +252,7 @@ def _record_cost(scene, seconds, pixels):
 
 
 def _preview(scene, camera, width, height, background, ambient, pixels, samples, backend, max_bounces, moments, cancel,
-             *, trace_scene=None):
+             *, trace_scene=None, retain_preparation=True):
     """One denoised preview stage: trace `pixels` pixels at `samples` samples with guides from one prepared scene, filter,
     enlarge to `width` by `height`, composite over `background`. Returns (image float32, (traced_w, traced_h), phases)."""
     tw, th = internal_size(width, height, pixels)
@@ -267,7 +267,7 @@ def _preview(scene, camera, width, height, background, ambient, pixels, samples,
     clear = (0.0, 0.0, 0.0, 0.0)
     stats = {"skip_noise_maps": True}
     trace_scene = scene if trace_scene is None else trace_scene
-    with gpupathtrace.reusing_scene():
+    with gpupathtrace.reusing_scene(retain=retain_preparation):
         if moments:
             moments = [(_drop_particles(scene_at), camera_at) for scene_at, camera_at in moments]
             trace_moments = [(trace_scene if scene_at is scene else scene_at, camera_at) for scene_at, camera_at in moments]
@@ -369,7 +369,8 @@ def step_interactive(state, scene, camera, width, height, background, ambient, k
     started = time.perf_counter()
     image, traced, phases = _preview(_drop_particles(scene), camera, width, height, background, ambient, pixels, samples,
                                      backend, min(max_bounces, PREVIEW_BOUNCES), moments, cancel,
-                                     trace_scene=trace_scene)
+                                     trace_scene=trace_scene,
+                                     retain_preparation=bool(getattr(scene, "volumes", ())))
     seconds = time.perf_counter() - started
     if state.stage == 0:
         _record_cost(scene, seconds - dict(phases)["enlarge"], traced[0] * traced[1])

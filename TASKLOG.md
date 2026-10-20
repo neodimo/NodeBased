@@ -166,3 +166,10 @@
 - **State:** PARTIAL. The matrix, progressive first-look/settle, and Radeon preview/stop remain unmeasured.
 - **Next owner + concrete artifact:** Gonzo retries `scratch/nb-lanes/run/measure-L6-S2-matrix.py`, `scratch/nb-lanes/run/progressive-L6-s2.py`, and the 64-cell Radeon playback row from `tools/benchmark_hot_pour.py` after the shared GPU lock clears.
 - **Failure mode:** An exclusive GPU benchmark can sit behind an integrator's shared suite lock; preserve the lock and report PARTIAL when the 30-minute wait expires.
+## 2026-10-20 — Lane 6 step A cache-lifetime fix (DONE on lane branch)
+
+- **What was done — evidence:** prepared scene entries now have explicit retention; ordinary first-look scopes clear on exit, volume previews retain equivalent acceleration across camera moves, and cancellation clears the entry. The retained-scene assertions now cover safe content-equivalent reuse and camera-independent preparation. Four requested test modules passed on the RTX 3080 Ti. A fresh Hot pour run measured 1.186 seconds cold and 0.374 seconds warm.
+- **Artifacts:** `nodebased/gpupathtrace.py`, `nodebased/progressiverender.py`, `tests/test_3d_first_look.py` committed locally on `openclaw/nb-fluids-spike`; test log and timing JSON are deliberate scratch under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`.
+- **State:** done for this fix; full suite, AMD/llvmpipe reruns, Windows and real-display visual review remain unverified.
+- **Next owner + concrete artifact:** Gonzo reviews the lane commit and merge-candidate results; use the test log and `tools/benchmark_fluid_firstlook.py` for follow-up.
+- **Failure mode:** thread-local prepared-scene data previously survived a scope and could satisfy later first-look renders without preparing their scene; cancellation also left the entry behind.
