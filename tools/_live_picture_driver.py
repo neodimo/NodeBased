@@ -47,8 +47,12 @@ def request(*a,**k):
 win.request_preview=request
 original_compose=win.tile_executor.compose_region
 def compose(*a,**k):
+    before={node:len(rows) for node,rows in win.evaluator.profile_log.items()}
     mark('tier_resample_and_graph_start',tier=k.get('tier')); result=original_compose(*a,**k)
-    mark('graph_evaluation_end',tier=k.get('tier'),fallback_nodes=list(result.fallback_nodes)); return result
+    for node,rows in win.evaluator.profile_log.items():
+        for row in rows[before.get(node,0):]:
+            mark('graph_node_timing',node=node,frame=row['frame'],elapsed_ms=round(row['wall_time_ms'],3),cache_hits=row['cache_hits'])
+    mark('graph_evaluation_end',tier=k.get('tier'),tiled=result.tiled,fallback_nodes=list(result.fallback_nodes)); return result
 win.tile_executor.compose_region=compose
 original_tile=win.tile_executor._render_tile
 def render_tile(document,node_id,frame,tier,region,node_digests,cancel):
