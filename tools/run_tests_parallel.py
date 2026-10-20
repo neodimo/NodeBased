@@ -41,6 +41,7 @@ def _worker(module, result_path, current_path):
     sys.path.insert(0, TESTS)                      # discover's top level: modules import as test_x
     import tests.isolation  # noqa: F401  (private Qt settings before anything opens QSettings)
 
+    faulthandler.enable()                           # a segfault prints every thread's stack (10/20: a bare -11)
     timeout = float(os.environ.get('NB_TEST_MODULE_TIMEOUT', '0') or 0)
     if timeout > 10:                                # stacks of every thread just before the parent kills us
         faulthandler.dump_traceback_later(timeout - 5, exit=False)
