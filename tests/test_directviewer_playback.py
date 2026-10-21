@@ -10,15 +10,9 @@ import uuid
 import numpy as np
 
 from nodebased import directviewer as dv
-from tests.test_directviewer import APP, FakeContext, StubPresenter, checker_image, make_presenter, needs_wgpu
+from tests.test_directviewer import (APP, FakeContext, StubPresenter, checker_image, make_presenter, needs_wgpu,
+                                     stub_surface)
 from tests.waiting import wait_until
-
-# rendercanvas needs a real window-system id for the screen surface, so the direct dock cannot open
-# without a display server (offscreen Qt on Linux, GitHub's packaging job). Real machines run these.
-needs_display = unittest.skipIf(
-    os.name != "nt" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")),
-    "no display server: the direct dock needs a real window")
-
 
 class PlainRulesTests(unittest.TestCase):
     """No card needed: row padding, the size rule and the copy into a mapped buffer."""
@@ -309,10 +303,9 @@ class WindowPlaybackTests(unittest.TestCase):
         self.assertTrue(w._direct_linear_for(request, "sRGB", wide))   # no card yet: the dock decides
 
     @needs_wgpu
-    @needs_display
     def test_closing_the_dock_releases_the_picture_and_the_inspector_says_so(self):
         w = self.window
-        with unittest.mock.patch.object(dv, "RetainedPresenter", StubWithMemory):
+        with unittest.mock.patch.object(dv, "RetainedPresenter", StubWithMemory), stub_surface():
             w.direct_action.setChecked(True)
             APP.processEvents()
             self.assertIsNotNone(w.direct_widget)
@@ -327,10 +320,9 @@ class WindowPlaybackTests(unittest.TestCase):
         self.assertIn("closed", w.cache_inspector.direct_memory.text())
 
     @needs_wgpu
-    @needs_display
     def test_a_refused_picture_is_named_in_the_status_bar(self):
         w = self.window
-        with unittest.mock.patch.object(dv, "RetainedPresenter", StubWithMemory):
+        with unittest.mock.patch.object(dv, "RetainedPresenter", StubWithMemory), stub_surface():
             w.direct_action.setChecked(True)
             APP.processEvents()
             widget = w.direct_widget

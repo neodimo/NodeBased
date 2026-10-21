@@ -1012,6 +1012,44 @@ def unsupported_platform(name=None):
     return ""
 
 
+# Qt platforms whose windows are not windows of the operating system: their window ids are Qt's own counters.
+NO_NATIVE_WINDOW = ("offscreen", "minimal", "minimalegl", "vnc", "linuxfb")
+
+
+def surface_problem(platform, window_id, physical_size, window_alive=None):
+    """(why the card must not be given this window's surface, permanent) or ("", False) when it may.
+
+    wgpu-native does not raise on an invalid surface: configure panics in its own thread and the process
+    aborts (10/21, v0.41.0 Windows package job: offscreen Qt handed D3D12 a made-up window id, "Invalid
+    surface"). So every reason is found here, before the surface is made. A permanent reason (no native
+    windows on this platform) fails the dock; the others (no id yet, a minimised or hidden window, a
+    window that went away) wait for the next picture, show or resize."""
+    name = str(platform).lower()
+    if name in NO_NATIVE_WINDOW:
+        return f"the {name} Qt platform has no native window for the card to draw into", True
+    if not window_id:
+        return "the window has no native id yet", False
+    if window_alive is not None and not window_alive(window_id):
+        return "the native window is not a live window", False
+    if physical_size[0] < 1 or physical_size[1] < 1:
+        return "the window has no area (minimised or hidden)", False
+    return "", False
+
+
+def native_window_alive(window_id):
+    """Windows: is the handle a live window with a client area. Elsewhere Qt's id is trusted."""
+    if os.name != "nt":
+        return True
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    hwnd = wintypes.HWND(window_id)
+    if not user32.IsWindow(hwnd):
+        return False
+    rect = wintypes.RECT()
+    return bool(user32.GetClientRect(hwnd, ctypes.byref(rect)))
+
+
 def make_widget(parent=None):
     """The Qt surface. Imported lazily so the module (and its tests of the pure rules) load without rendercanvas."""
     reason = unsupported_platform()
@@ -1040,6 +1078,9 @@ def make_widget(parent=None):
             self.hover = None             # (scene point or None) -> None; the owner updates its readout
             self.overlay_serial = 0       # bumped by the owner when the overlays changed
             self.overlay_draws = 0
+            self.waiting = ""             # why the surface is not made yet (no area, no native window), or ""
+            self._retry = None            # the hand-over to repeat once the window can take a surface
+            self._window_id = None        # the native window the surface was made for
             self.setMouseTracking(True)
             self.filled.connect(self._request)
             self.request_draw(self._draw)
@@ -1049,7 +1090,7 @@ def make_widget(parent=None):
             """Hand over the newest picture. No GPU work and no waiting: the draw callback does the upload."""
             if self.error is not None:
                 return False
-            if self.presenter is None and not self._start():
+            if self.presenter is None and not self._start(lambda: self.submit(qimage, rect, format_rect, generation)):
                 return False
             try:
                 fresh = self.presenter.offer(qimage, tuple(rect), tuple(format_rect or rect), generation)
@@ -1069,7 +1110,8 @@ def make_widget(parent=None):
             from . import carddisplay
             if self.error is not None:
                 return False
-            if self.presenter is None and not self._start():
+            if self.presenter is None and not self._start(
+                    lambda: self.submit_linear(frame, settings, rect, format_rect, generation)):
                 return False
             try:
                 self.presenter.linear_pipeline(settings[3])
@@ -1087,7 +1129,23 @@ def make_widget(parent=None):
                 self._request()
             return fresh
 
-        def _start(self):
+        def _surface_problem(self):
+            from PySide6.QtGui import QGuiApplication
+            return surface_problem(QGuiApplication.platformName(), int(self.winId()), self._physical(),
+                                   native_window_alive)
+
+        def _start(self, retry=None):
+            reason, permanent = self._surface_problem()
+            if reason:
+                if permanent:
+                    self._fail(f"direct viewer could not start: {reason}")
+                else:
+                    self.waiting = reason
+                    self._retry = retry
+                return False
+            self.waiting = ""
+            self._retry = None
+            self._window_id = int(self.winId())
             try:
                 self.presenter = RetainedPresenter(self.get_wgpu_context(), notify=self.filled.emit)
             except Exception as exc:
@@ -1140,6 +1198,10 @@ def make_widget(parent=None):
                 return
             size = self._physical()
             if size[0] < 1 or size[1] < 1:
+                return
+            if self._window_id is not None and not native_window_alive(self._window_id):
+                # A configure on the surface of a destroyed window panics inside wgpu: give the card up first.
+                self._fail("direct viewer stopped: its native window went away")
                 return
             if self.auto_fit and self.rect is not None:
                 self.view = fit_view(size, self.rect)
@@ -1214,11 +1276,24 @@ def make_widget(parent=None):
 
         def resizeEvent(self, event):
             super().resizeEvent(event)
+            self._retry_start()
             self._request()
+
+        def showEvent(self, event):
+            super().showEvent(event)
+            self._retry_start()
+
+        def _retry_start(self):
+            """A hand-over that waited for the window (no area, no native id yet) is repeated once it may work."""
+            if self._retry is not None and self.presenter is None and self.error is None:
+                from PySide6.QtCore import QTimer
+                retry, self._retry = self._retry, None
+                QTimer.singleShot(0, retry)
 
         def release(self):
             """Drop the device, the textures, the staging buffers and the retained CPU picture (dock closed).
             The next picture handed over starts a fresh presenter."""
+            self._retry = None
             if self.presenter is not None:
                 self.presenter.lose_device()
                 self.presenter = None
