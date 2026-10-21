@@ -18,7 +18,7 @@ from PySide6.QtGui import QImage, QPainter
 
 from nodebased import directviewer as dv
 from nodebased.app import STYLE, Window
-from tests.test_directviewer import APP, HAVE_WGPU, make_presenter, needs_wgpu
+from tests.test_directviewer import APP, HAVE_WGPU, direct_dock_skip, make_presenter, needs_wgpu
 from tests.test_viewer_compare import ViewerCompareBase
 from tests.waiting import wait_until
 
@@ -274,9 +274,9 @@ class WindowOverlayTests(ViewerCompareBase):
     and clicks on the direct surface still only navigate."""
 
     def setUp(self):
-        needs_display = os.name != "nt" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-        if needs_display:
-            self.skipTest("no display server: the direct dock needs a real window")
+        reason = direct_dock_skip()
+        if reason:
+            self.skipTest(reason)
         super().setUp()
         self.window.direct_action.setChecked(True)
         self.widget = self.window.direct_widget

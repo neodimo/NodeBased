@@ -24,6 +24,33 @@ needs_wgpu = unittest.skipUnless(HAVE_WGPU, "wgpu unavailable")
 APP = QApplication.instance() or QApplication([])
 
 
+def direct_dock_skip():
+    """Why a real direct dock (a wgpu surface on a window) cannot open here, or "".
+
+    rendercanvas needs a real window-system id: GitHub's Linux packaging job has wgpu but no display (10/19,
+    v0.39.0), and offscreen Qt has no native windows on any OS. On Windows its made-up window id reached D3D12
+    and wgpu aborted the process (10/21, v0.41.0 package job); the product now refuses it, so the dock fails."""
+    from PySide6.QtGui import QGuiApplication
+    platform = QGuiApplication.platformName().lower()
+    if platform in dv.NO_NATIVE_WINDOW:
+        return f"Qt platform {platform}: no native window for the direct surface"
+    if os.name != "nt" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return "no display server: the direct dock needs a real window"
+    return ""
+
+
+def stub_surface():
+    """For dock tests with a stub presenter: the widget asks for no window-system surface at all, so they run on
+    offscreen Qt and without a display server."""
+    import contextlib
+    from rendercanvas.qt import QRenderWidget
+    stack = contextlib.ExitStack()
+    stack.enter_context(unittest.mock.patch.object(dv, "surface_problem", return_value=("", False)))
+    stack.enter_context(unittest.mock.patch.object(dv, "native_window_alive", return_value=True))
+    stack.enter_context(unittest.mock.patch.object(QRenderWidget, "get_wgpu_context", return_value=None))
+    return stack
+
+
 def checker_image(width=64, height=48, cell=8, shift=0):
     y, x = np.indices((height, width))
     rgb = np.zeros((height, width, 3), np.uint8)
@@ -357,6 +384,69 @@ class PlatformGuardTests(unittest.TestCase):
                 dv.make_widget()
 
 
+class SurfaceGuardTests(unittest.TestCase):
+    """wgpu-native aborts the process on a surface it cannot configure, so the widget checks the window first."""
+
+    def test_platforms_without_native_windows_are_refused_for_good(self):
+        for name in ("offscreen", "minimal", "Offscreen"):
+            reason, permanent = dv.surface_problem(name, 7, (640, 360))
+            self.assertIn("no native window", reason)
+            self.assertTrue(permanent)
+
+    def test_a_window_that_is_not_ready_waits(self):
+        self.assertEqual(dv.surface_problem("windows", 0, (640, 360))[1], False)
+        self.assertIn("no native id", dv.surface_problem("xcb", 0, (640, 360))[0])
+        self.assertIn("no area", dv.surface_problem("windows", 1234, (0, 360))[0])
+        self.assertIn("no area", dv.surface_problem("cocoa", 1234, (640, 0))[0])
+        reason, permanent = dv.surface_problem("windows", 1234, (640, 360), window_alive=lambda wid: False)
+        self.assertIn("not a live window", reason)
+        self.assertFalse(permanent)
+
+    def test_a_live_window_with_area_may_have_a_surface(self):
+        self.assertEqual(dv.surface_problem("windows", 1234, (640, 360), window_alive=lambda wid: True), ("", False))
+        self.assertEqual(dv.surface_problem("xcb", 1234, (1, 1)), ("", False))
+
+    @unittest.skipUnless(os.name == "nt", "Windows window handles")
+    def test_a_made_up_window_handle_is_not_alive(self):
+        self.assertFalse(dv.native_window_alive(7))
+
+    @needs_wgpu
+    def test_offscreen_qt_fails_the_dock_before_any_surface_is_made(self):
+        widget = dv.make_widget()
+        self.addCleanup(widget.close)
+        failures = []
+        widget.failed.connect(failures.append)
+        made = unittest.mock.Mock(side_effect=AssertionError("no surface may be made"))
+        with unittest.mock.patch("PySide6.QtGui.QGuiApplication.platformName", return_value="offscreen"), \
+                unittest.mock.patch.object(widget, "get_wgpu_context", made), \
+                unittest.mock.patch.object(dv, "RetainedPresenter", made):
+            self.assertFalse(widget.submit(checker_image(), (0, 0, 64, 48)))
+        made.assert_not_called()
+        self.assertIsNone(widget.presenter)
+        self.assertTrue(failures and "offscreen" in failures[0])
+
+    @needs_wgpu
+    def test_a_window_without_area_waits_and_starts_once_it_has_one(self):
+        widget = dv.make_widget()
+        self.addCleanup(widget.close)
+        problem = ["the window has no area (minimised or hidden)", False]
+        with unittest.mock.patch.object(dv, "surface_problem", side_effect=lambda *a: tuple(problem)), \
+                unittest.mock.patch.object(dv, "native_window_alive", return_value=True), \
+                unittest.mock.patch.object(widget, "get_wgpu_context", return_value=None), \
+                unittest.mock.patch.object(dv, "RetainedPresenter", StubPresenter):
+            self.assertFalse(widget.submit(checker_image(), (0, 0, 64, 48), generation=3))
+            self.assertIsNone(widget.presenter)
+            self.assertIsNone(widget.error)
+            self.assertIn("no area", widget.waiting)
+            problem[:] = ["", False]
+            widget.resize(200, 120)
+            widget.show()
+            self.assertTrue(wait_until(lambda: widget.presenter is not None))
+        self.assertEqual(widget.presenter.offers, [3])
+        self.assertEqual(widget.waiting, "")
+        self.assertEqual(widget.rect, (0, 0, 64, 48))
+
+
 class StubPresenter:
     """Takes pictures and draws nothing: these tests are about which surface gets which input."""
 
@@ -402,10 +492,7 @@ class HitOrderTests(unittest.TestCase):
         patcher = unittest.mock.patch.object(dv, "RetainedPresenter", StubPresenter)
         patcher.start()
         self.addCleanup(patcher.stop)
-        if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")) and os.name != "nt":
-            # rendercanvas needs a real window-system id for the screen surface; GitHub's Linux packaging job has
-            # wgpu but no display, so the dock cannot open there (10/19, v0.39.0 package job). Real machines run it.
-            self.skipTest("no display server: the direct dock needs a real window")
+        self.enterContext(stub_surface())
         self.window.direct_action.setChecked(True)
         APP.processEvents()
         self.assertIsNotNone(self.window.direct_widget)
