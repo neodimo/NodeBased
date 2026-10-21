@@ -48,11 +48,12 @@ DISPLAY_LEVELS = 4.0              # mean 8-bit levels between the viewport's len
 
 
 def _software_adapter():
-    """True when the process's graphics adapter is a CPU rasteriser (llvmpipe, a CI runner without a GPU)."""
+    """True when the process's graphics adapter is a CPU rasteriser (llvmpipe), or there is no adapter at all
+    (the Linux CI runner: the path tracer falls back to numpy and the mixed-scene job ran out its 300 s wait)."""
     try:
         return gpu3d._kind_of(gpu3d._state()["info"]) == "cpu"
     except Exception:
-        return False
+        return True
 
 
 def room(camera=None, **render):
