@@ -393,6 +393,8 @@ class HitOrderTests(unittest.TestCase):
         from PySide6.QtCore import QSettings
         QSettings("NodeBased", "NodeBased").clear()
         self.window = Window(roto_document(), agent_name="nodebased-test-" + uuid.uuid4().hex)
+        # A skip below leaves setUp early and tearDown never runs; close the window then too.
+        self.addCleanup(self.close_if_skipped)
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
         self.window.graph.items_by_id["r"].setSelected(True)
@@ -414,6 +416,13 @@ class HitOrderTests(unittest.TestCase):
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
+
+    def close_if_skipped(self):
+        window = self.__dict__.get("window")
+        if window is not None and window.isVisible():
+            window.saved_document = window.dispatcher.document
+            window.close()
+            APP.processEvents()
 
     def test_roto_click_order_is_unchanged_and_the_direct_surface_never_takes_a_roto_click(self):
         from PySide6.QtCore import QPoint, QPointF, Qt

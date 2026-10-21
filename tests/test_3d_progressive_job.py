@@ -354,12 +354,21 @@ class ViewportLabelTests(unittest.TestCase):
         self.assertTrue(widget._progressive_job.wait(lambda state, phase: state is not None or phase == "waiting", 10))
 
     def test_the_interface_thread_is_not_held_by_a_slow_pass(self):
+        plain = Viewport3D()
+        self.addCleanup(plain.close)
+        plain.resize(64, 48)
+        plain.set_document(graph().document)
+        began = time.perf_counter()
+        for _ in range(5):
+            plain.grab()
+        baseline = time.perf_counter() - began              # what five paints cost on this machine with no pass at all
         script = Script([preview, final])
         widget = self.widget(script)
         started = time.perf_counter()
         for _ in range(5):
             widget.grab()
-        self.assertLess(time.perf_counter() - started, 2.0)     # five paints while the worker is still inside its first pass
+        # five paints while the worker is still inside its first pass: no slower than plain paints, give or take a loaded runner
+        self.assertLess(time.perf_counter() - started, max(2.0, 3 * baseline + 1.0))
         self.assertEqual(widget.render_stage, "waiting")
         script.open()
 

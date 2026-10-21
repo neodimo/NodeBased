@@ -42,6 +42,7 @@ from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_descr
 from . import radialcommands
 from . import graphlook
 from . import gpu3d
+from . import guigc
 from . import lensview
 from .graphcorner import GraphCorner
 from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow, hide_spin_buttons,
@@ -8268,6 +8269,7 @@ class Window(QMainWindow):
 
     def __init__(self, document=None, agent_name=None):
         super().__init__()
+        guigc.attach(self)   # reference cycles holding Qt objects are freed here, never on a render worker
         self._inspect_pending = False
         self._panel_cache = {}  # node key -> the wrapped Properties panel last built for it
         self._panel_cache_stamp_seen = None
@@ -8331,7 +8333,10 @@ class Window(QMainWindow):
         # it is built lazily on nodebased-preview (the single worker thread above) on its
         # first display request and used only from that thread afterward. See the design
         # note at the top of gpudisplay.py.
-        gpu_surface = QOffscreenSurface()
+        # Parented to the window so it goes with it, on this thread. Parentless, a closed window's
+        # surface (an invisible QWindow where offscreen surfaces are not native) waited for the garbage
+        # collector, which can run on any thread.
+        gpu_surface = QOffscreenSurface(parent=self)
         gpu_surface.setFormat(gpudisplay.context_format())
         gpu_surface.create()
         gpudisplay.configure_surface(gpu_surface, owner_thread_prefix="nodebased-preview")
@@ -14184,6 +14189,8 @@ class Window(QMainWindow):
         self.viewer_corners.set_image(round(scene_rect.width()), round(scene_rect.height()),
                                       f"{space} · float RGBA", proxy)
 
+    PROXY_ROUNDING_PX = 8   # the largest proxy tier (1/8) rounds a size up by fewer pixels than this
+
     def _show_image(self, image, scale, render_region, image_b=None, generation=None):
         if isinstance(image, carddisplay.LazyPicture):
             if self._show_direct_linear(image, scale, render_region, generation):
@@ -14246,7 +14253,10 @@ class Window(QMainWindow):
         self.viewer.draw_format_overlay(format_rect)
         if self.viewer._initial_fit_pending:
             self.viewer._fit_initial_image()
-        elif previous.width() != scene_rect.width() or previous.height() != scene_rect.height():
+        elif (abs(previous.width() - scene_rect.width()) > self.PROXY_ROUNDING_PX
+              or abs(previous.height() - scene_rect.height()) > self.PROXY_ROUNDING_PX):
+            # A different picture size (not the few pixels a 1/8 proxy rounds up to) frames it again;
+            # refining 1/8 -> 1/4 -> full must not undo the artist's zoom (540 -> 544 -> 540 did).
             self.viewer.fit()
         self.viewer._place_pixel_readout()
         self._offer_direct(shown_image, scale, render_region, scene_rect, generation)

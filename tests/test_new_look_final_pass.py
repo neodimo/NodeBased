@@ -72,10 +72,12 @@ class OneLineKnobRowTests(Base):
         colour = next(r for r in rows if any(u.objectName() == "red-field" for u in r.units))
         xyz = [r for r in rows if len(r.units) == 3 and not any(u.objectName().endswith("-field") for u in r.units)]
         # The default Properties width is 400 px whatever the platform's font; where the fields'
-        # own metrics need more than that (Windows), give the panel what the one line needs.
+        # own metrics need more than that (Windows), give the panel what the one line needs, plus the
+        # slack a row wants before it moves back to more units per line (WrappingRow.WIDEN_SLACK):
+        # 356 px against a 348 px need left a Windows colour row stuck on three columns.
         dock = w.properties_dock
         for _ in range(8):
-            short = max(_one_line_need(r) - r.width() for r in [colour, *xyz]) + 8
+            short = max(_one_line_need(r) + WrappingRow.WIDEN_SLACK - r.width() for r in [colour, *xyz])
             if short <= 0:
                 break
             w.resizeDocks([w.viewer_dock, dock], [w.viewer_dock.width() - short, dock.width() + short],
