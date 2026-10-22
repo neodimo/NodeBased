@@ -46,9 +46,11 @@ class HotPourShotTests(unittest.TestCase):
         key = nodes["key_light"]["params"]
         self.assertEqual(key["light_type"], "Point")
         self.assertEqual(key["intensity"], 3.0)
-        self.assertEqual(nodes["render"]["params"]["ambient"], 0.7)
+        self.assertEqual(nodes["render"]["params"]["ambient"], 2.0)
         self.assertEqual((nodes["steam_source"]["params"]["src_density"],
-                          nodes["steam_source"]["params"]["src_noise_amount"]), (0.6, 0.2))
+                          nodes["steam_source"]["params"]["src_noise_amount"]), (1.2, 0.35))
+        self.assertEqual((nodes["steam_lift"]["params"]["buoyancy_lift"],
+                          nodes["steam_lift"]["params"]["strength"]), (0.18, 0.03))
         self.assertEqual(cup["holdout"], "on")
         self.assertAlmostEqual(cup["tx"], 0.0)
         self.assertAlmostEqual(cup["tz"], 0.0)
