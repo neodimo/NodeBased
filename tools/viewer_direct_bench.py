@@ -44,12 +44,16 @@ p.add_argument("--size", default="1920x1080", help="WxH of the picture; the dire
 p.add_argument("--paused", action="store_true", help="the paused-edit cost gate (see the module docstring)")
 p.add_argument("--edits", type=int, default=40, help="--paused: timed edits per path")
 p.add_argument("--adapter", choices=("default", "discrete", "integrated", "cpu"), default="default",
-               help="--paused: force the app's adapter (and the dock's) as force-adapter.py does")
+               help="--paused: force the app's adapter as force-adapter.py does, and the dock's too unless "
+                    "NODEBASED_DIRECT_ADAPTER is already set")
+p.add_argument("--offscreen-card", action="store_true",
+               help="--paused: the dock's presenter draws into an offscreen texture and the surface present is skipped "
+                    "(same draw calls, uploads and overlay as the dock; leaves out the display server's present)")
 p.add_argument("--profile", default="", help="--paused: write a cProfile of the Qt thread over the 'direct' rows to this text file")
 p.add_argument("--min-saving", type=float, default=0.30, help="--paused: required fall in median Qt-thread time")
 args = p.parse_args()
 if args.paused and args.adapter != "default":
-    os.environ["NODEBASED_DIRECT_ADAPTER"] = args.adapter
+    os.environ.setdefault("NODEBASED_DIRECT_ADAPTER", args.adapter)   # the dock's own choice wins if already set
 
 import tests.isolation  # noqa: F401  (Qt settings stay out of the real user file)
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -368,6 +372,33 @@ def measure_paused():
     state = {"serial": [0]}
     dock_info = {}
 
+    class OffscreenContext:
+        """A stand-in for the dock's surface: an offscreen texture of the widget's size, read by nobody."""
+
+        def __init__(self, size):
+            self.size, self.device, self.texture = size, None, None
+
+        def get_preferred_format(self, adapter):
+            return "bgra8unorm"
+
+        def configure(self, device, format, alpha_mode):
+            import wgpu
+            self.device = device
+            self.texture = device.create_texture(
+                size=(*self.size, 1), format=format, usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
+
+        def get_current_texture(self):
+            return self.texture
+
+    if args.offscreen_card:
+        from nodebased import directviewer as dv_module
+        real_presenter = dv_module.RetainedPresenter
+
+        class OffscreenPresenter(real_presenter):
+            def __init__(self, context, **kwargs):
+                super().__init__(OffscreenContext((1280, 760)), **kwargs)
+        dv_module.RetainedPresenter = OffscreenPresenter
+
     def open_dock():
         window.direct_action.setChecked(True)
         spin(1.0)
@@ -382,8 +413,13 @@ def measure_paused():
             dock_info.update(adapter=dict(presenter.selection or {}, device=presenter.adapter_info.get("device", "")))
             spy(presenter, "draw", "dock_draw")
             spy(widget, "_paint_overlay", "dock_overlay")
+            spy(presenter, "set_paint", "dock_set_paint")
+            spy(presenter.device.queue, "write_texture", "dock_write_texture")
+            spy(presenter.device.queue, "submit", "dock_submit")
             context = widget.get_wgpu_context()
             real_present = context._rc_present
+            if args.offscreen_card:
+                real_present = lambda **kwargs: {"method": "skip"}
 
             def timed_present(**kwargs):
                 c = time.thread_time()
@@ -461,7 +497,7 @@ def measure_paused():
             "required": args.min_saving, "passed": picture >= args.min_saving}
     result = {"mode": "paused edit, Qt-thread time and process CPU per edit", "frame": [W, H],
               "platform": app.platformName(), "qt": QtCore.qVersion(), "display": os.environ.get("DISPLAY", ""),
-              "adapter_request": args.adapter, "adapter": dock_info.get("adapter", {}),
+              "adapter_request": args.adapter, "offscreen_card": args.offscreen_card, "adapter": dock_info.get("adapter", {}),
               "cpus": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
               "qt_scale_factor": os.environ.get("QT_SCALE_FACTOR", ""), "device_pixel_ratio": window.devicePixelRatioF(),
               "idle_wait_qt_thread_ms_per_edit_window": round(baseline, 3), "rows": rows, "gate": gates,

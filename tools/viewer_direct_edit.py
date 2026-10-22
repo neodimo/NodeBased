@@ -6,7 +6,9 @@ picture" on, and drags two handles with real `xdotool` input on the dock itself:
 * a Roto point (Roto node, one four-point shape);
 * the Transform centre (the node's translate handle);
 * the A/B wipe's centre handle (`--handles wipe`: B is on the card, the line is painted over it, and the card's
-  shader moves B's half with every step; the release is one undo entry, like the other handles).
+  shader moves B's half with every step). It is dragged with the plain Constant viewed, because a Transform's pivot
+  sits at the middle of the format, where the wipe starts, and the hit order gives the Transform the press first; the
+  wipe is view state, so a drag leaves no undo entry.
 
 Each drag is a press, a series of relative moves 30 ms apart and a release. Every move (and every press) is timed
 from the moment xdotool is told to send it to the end of the first `draw` of the direct picture whose overlay image
@@ -275,7 +277,7 @@ def prepare_wipe():
         raise SystemExit("the wipe is not on the card (card_wipe is off): nothing to time")
 
 
-def run(label, key, locate, prepare=None):
+def run(label, key, locate, prepare=None, expect_undo=True):
     select(key)
     if prepare is not None:
         prepare()
@@ -318,7 +320,7 @@ def run(label, key, locate, prepare=None):
     taken = {kind: sum(1 for h in HANDLED[handled_before:] if h[1] == kind) for kind in ("press", "move", "release")}
     return {"handle": label, "drags": args.drags, "moves_sent": len(steps), "moves_without_a_frame": missed,
             "taken_by_the_hit_test": taken,
-            "undo_entries_from_drags": committed,
+            "undo_entries_from_drags": committed, "expect_undo": expect_undo,
             "move_to_presented_overlay_ms": dist(latencies), "move_to_present_return_ms": dist(presented),
             "press_to_presented_overlay_ms": dist(press_latencies), "press_to_present_return_ms": dist(press_presented),
             "presses_without_a_frame": press_missed}
@@ -327,7 +329,7 @@ def run(label, key, locate, prepare=None):
 wanted = [name.strip() for name in args.handles.split(",") if name.strip()]
 runs = {"roto": lambda: run("roto point", "r", handle_roto),
         "transform": lambda: run("transform centre", "x", handle_transform),
-        "wipe": lambda: run("wipe centre", "x", handle_wipe, prepare=prepare_wipe)}
+        "wipe": lambda: run("wipe centre", "c", handle_wipe, prepare=prepare_wipe, expect_undo=False)}
 results = [runs[name]() for name in wanted]
 pointer.close()
 all_p95 = max(max(r["move_to_presented_overlay_ms"].get("p95", 1e9), r["press_to_presented_overlay_ms"].get("p95", 1e9))
@@ -335,7 +337,7 @@ all_p95 = max(max(r["move_to_presented_overlay_ms"].get("p95", 1e9), r["press_to
 failed = [r["handle"] for r in results
           if r["move_to_presented_overlay_ms"].get("p95", 1e9) >= args.limit_ms
           or r["press_to_presented_overlay_ms"].get("p95", 1e9) >= args.limit_ms
-          or r["undo_entries_from_drags"] != args.drags]
+          or r["undo_entries_from_drags"] != (args.drags if r["expect_undo"] else 0)]
 result = {"display": os.environ.get("DISPLAY", ""), "platform": app.platformName(), "size": [W, H],
           "adapter": adapter, "driver": driver, "draws": len(DRAWS), "handles": results,
           "gate": {"limit_ms": args.limit_ms, "worst_p95_ms": all_p95, "failed": failed, "passed": not failed}}

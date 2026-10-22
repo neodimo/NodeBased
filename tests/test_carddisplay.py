@@ -302,7 +302,7 @@ def fake_widget_class():
             return True
 
         def overlay_dirty(self):
-            pass
+            self.dirtied = getattr(self, "dirtied", 0) + 1
 
         def release(self):
             pass
@@ -521,6 +521,27 @@ class CompareOnTheCardTests(DirectWindowCase):
         self.choose("wipe")
         self.assertTrue(wait_until(lambda: w.viewer.wipe_pixmap is not None, timeout=30))
         self.assertFalse(w.viewer.card_wipe)
+
+    def test_dragging_the_wipe_centre_on_the_direct_picture_moves_the_cards_line(self):
+        from PySide6.QtCore import Qt
+        w = self.window
+        self.choose("wipe")
+        self.settle("wipe")
+        viewer = w.viewer
+        start = viewer.wipe_line()
+        centre = viewer._wipe_scene_geometry()[0]
+        none = Qt.KeyboardModifier.NoModifier
+        undo = len(w.dispatcher.undo_stack)
+        self.assertTrue(w._direct_edit("press", (centre.x(), centre.y()), Qt.MouseButton.LeftButton, none, 1.0))
+        self.assertTrue(w._direct_edit("move", (centre.x() + 24, centre.y() - 10), None, none, 1.0))
+        moved = viewer.wipe_line()
+        self.assertAlmostEqual(moved[0], start[0] + 24, places=3)
+        self.assertAlmostEqual(moved[1], start[1] - 10, places=3)
+        self.assertEqual(moved[2:], start[2:])
+        self.assertGreater(getattr(self.widget, "dirtied", 0), 0)          # the overlay (the line) is painted again
+        w._direct_edit("release", (centre.x() + 24, centre.y() - 10), Qt.MouseButton.LeftButton, none, 1.0)
+        self.assertEqual(len(w.dispatcher.undo_stack), undo)               # the wipe is view state: no undo step
+        self.assertEqual(len(self.widget.linear), len(self.widget.pairs))  # and no new picture was needed
 
     def test_closing_the_dock_gives_the_viewer_its_wipe_back(self):
         w = self.window
