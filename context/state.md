@@ -1,5 +1,27 @@
 ## 2026-10-22 — Lane 6 Step B finish 1: strict render gate and legible stills (PARTIAL for unavailable hardware validation)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (4:42 AM on 2026-10-22 PDT)
+
+`main` moved `386675a0` -> `7f93a326` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7f93a326` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0422.log`, started 4:22 AM): **Ran 5742 tests in 476.537 s, OK (skipped=17), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the Hot pour settles in under a minute (finish 1).** Commits:
+  - `9f269011` Record Hot pour finish QA handoff
+  - `880218da` Record settled Hot pour finish evidence
+  - `81cb9b33` Raise Hot pour still sampling for cleaner evidence
+  - `f8705d4c` Improve Hot pour liquid visibility within render budget
+  Diff: 14 files changed, 87 insertions(+), 31 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done — measured:** RTX 3080 Ti fixed-32 frame 60 at 960 × 540: 35.55 s. Render-mode 1920 × 1080, adaptive threshold 0.01: 45.464 s, all pixels converged, max noise 0.009999989, mean 11.71 samples/pixel (max observed 1,560 under the 2,048 cap). New 16–64 adaptive showcase stills took 14.95/15.33/15.68 s. Visual review: the golden stream reads as a pour into the centered cup; steam is faint and the table shadow is still hard-edged. CPU/GPU comparisons at frames 1/60/120 passed on RTX and AMD Radeon 8060S; adaptive/majorant GPU modules passed on NVIDIA and forced-integrated invocations. Hot pour tests and knowledge tests pass. Preview evidence from Step B remains the earlier 64-cell Radeon proxy because preview code was unchanged.
 - **Artifacts:** source commits `f8705d4c`, `81cb9b33`; docs, images, benchmark JSON and bundled docs commit `880218da`; all on `openclaw/nb-fluids-spike`, local and not pushed. Exact report: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L6.md`. Profiling and adapter logs are in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/profile-L6-finish1-settled2048.log` and `render-evidence-L6-finish1-64.log`, `render-integrated-compare-L6-finish1.log`, `tests-L6-finish1-{nvidia,integrated,shot,knowledge}.log`. Large task-owned cache moved to trash.
 - **State:** local 12 GB render targets, frame comparisons, still refresh, and docs are complete. PARTIAL overall because the brief's left-out A6000 and Windows validation remain unverified. The 48 GB A6000 estimate is updated and explicitly unmeasured.
