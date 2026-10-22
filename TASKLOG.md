@@ -1,3 +1,11 @@
+## 2026-10-22 — Lane 6 step B of 2: the Hot pour settles in under a minute (PARTIAL)
+
+- **What was done — evidence:** With one volume-shadow step, the RTX 3080 Ti frame-60 960 × 540 fixed-32 render took 22.735 s vs 200.38 s at 16 steps. The optimized 1080p adaptive run took 83.511 s, mean 8.379 spp, cap 64, 29 passes; 99.405% pixels passed noise threshold 0.01. Frame 60 NVIDIA CPU/GPU comparisons passed at frames 1/60/120. Integrated AMD Radeon 8060S 64-cell/120-frame preview: 29.7 s bake, 134.31 warm FPS, 13.4 ms stop-to-full-detail. Adaptive/volume targeted tests: 12/12 NVIDIA, 12/12 forced-integrated invocation, 12/12 llvmpipe; Hot pour tests 2/2; knowledge tests 7/7. The stills remain grainy and the pour stream reads weakly.
+- **Artifacts:** Code commit `a71af0cd`; profile commit `e3d1ca0f`; docs, profile summary, preview JSON, comparison stills and baseline copies are being committed on `openclaw/nb-fluids-spike` (local only, not pushed). Scratch logs under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`; large task cache removed before closure.
+- **State:** Partial against the fully-settled 1080p and legible-pour goals. 0.595% of pixels remain above the threshold at the 64-sample cap; visual quality is not accepted as final. A6000 and Windows unverified.
+- **Next owner + concrete artifact:** Gonzo to review the baseline/new frames in `docs/FLUIDS_SPIKE.md`, then improve the pour/shadow quality using `examples/hot_pour_shot/hot_pour_shot.nbcomp` and rerun `examples/hot_pour_shot/render_evidence.py`.
+- **Failure mode:** the first scratch profile attempted to serialize NumPy image arrays directly; it was corrected to persist compact numeric summaries. The first optimized 1080p result was initially estimated from GPU subphase timing; final reporting uses the measured 83.511 s wall time.
+
 ## 2026-10-22 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
 
 - **What was done:** `main` `d3bb958d` -> `80fcbd48` plus this docs commit. Evidence and per-lane commit

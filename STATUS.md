@@ -1,6 +1,6 @@
-# Lane 6 step B — active (2026-10-22)
+# Lane 6 step B — PARTIAL (2026-10-22)
 
-Worktree: `nb-fluids-spike`, branch `openclaw/nb-fluids-spike`. The frame-60 fixed 32-sample profile took 200.38 s; no-steam 7.705 s, no-liquid 195.434 s, no catcher/holdout 1.539 s. Adaptive 1920 × 1080 at the Rendering noise threshold 0.01 took 701.447 s, capped at 64 samples, with 99.405% of pixels under threshold (not fully settled). The image's long pole is volume-shadow work in the CPU shadow-catcher pass; the GPU path itself was about one second. Profile data is committed at `e3d1ca0f`. The shot/example now uses one volume-shadow sample, adaptive 8–32 samples and a two-bounce transmission cap. The shot tests and llvmpipe adaptive/majorant checks pass. Next: verify optimized timings and read the stills, run the Radeon preview and NVIDIA/AMD checks, update docs and report. Scratch is under `scratch/nb-lanes/run/big-L6/` and must be removed before reporting.
+Optimized RTX 3080 Ti frame-60 960 × 540 fixed-32 render: 22.735 s, down from 200.38 s with 16 volume-shadow steps. Optimized 1920 × 1080 adaptive render: 83.511 s, mean 8.379 spp, cap 64, 99.405% pixels under threshold 0.01. NVIDIA CPU/GPU frame comparisons 1/60/120 passed; targeted adaptive/majorant modules passed on NVIDIA, forced integrated invocation, and llvmpipe (12 each). Radeon 8060S 64-cell preview: 134.31 warm FPS; 13.4 ms stop-to-full-detail. New stills remain visibly noisy and the stream reads weakly. A6000 and Windows unverified. Evidence/docs and exact next-owner handoff are in TASKLOG.md and context/state.md. Scratch profile was removed after durable evidence was saved.
 
 # Lane 8 step A finish 1 — active (2026-10-20, 11:02 AM PDT)
 

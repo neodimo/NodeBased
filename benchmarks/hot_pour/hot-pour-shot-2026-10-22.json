@@ -1,0 +1,29 @@
+{
+  "adapter": "default",
+  "device": "NVIDIA GeForce RTX 3080 Ti / Vulkan (rgba32float)",
+  "cells": 32,
+  "frames": 120,
+  "bake_seconds": 0.86,
+  "render_seconds": {
+    "60": 22.87,
+    "90": 22.5,
+    "120": 23.39
+  },
+  "comparison": {
+    "1": {
+      "mean_absolute_error": 7.070973140343995e-09,
+      "limit": 0.01696441173553467,
+      "passed": true
+    },
+    "60": {
+      "mean_absolute_error": 0.00010128067515324801,
+      "limit": 0.016918758153915407,
+      "passed": true
+    },
+    "120": {
+      "mean_absolute_error": 5.0644190196180716e-05,
+      "limit": 0.01688478112220764,
+      "passed": true
+    }
+  }
+}

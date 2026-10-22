@@ -1,0 +1,2341 @@
+{
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "adapter_request": "integrated",
+ "liquid_cells": 64,
+ "smoke_cells": 64,
+ "frames": 120,
+ "passes": {
+  "bake": "complete",
+  "playback": "complete"
+ },
+ "bake_wall_s": 29.7,
+ "stages": {
+  "liquid": {
+   "seconds": 3.041630581021309,
+   "host_rss_peak_mb": 253.32421875,
+   "host_rss_now_mb": 253.32421875,
+   "gpu_tracked_peak_mb": 59.41905975341797
+  },
+  "surface": {
+   "seconds": 3.241528494982049,
+   "host_rss_peak_mb": 305.3828125,
+   "host_rss_now_mb": 305.38671875,
+   "gpu_tracked_peak_mb": 75.86194610595703
+  },
+  "whitewater": {
+   "seconds": 3.9559650521259755,
+   "host_rss_peak_mb": 498.26171875,
+   "host_rss_now_mb": 337.953125,
+   "gpu_tracked_peak_mb": 2892.6137733459473
+  },
+  "steam": {
+   "seconds": 19.501147466013208,
+   "host_rss_peak_mb": 1557.02734375,
+   "host_rss_now_mb": 1557.02734375,
+   "gpu_tracked_peak_mb": 2964.630054473877
+  }
+ },
+ "driver_gpu_peak_mb": 373.86328125,
+ "liquid": {
+  "mean_s": 0.025,
+  "median_s": 0.021,
+  "max_s": 0.367,
+  "total_s": 3.04
+ },
+ "surface": {
+  "mean_s": 0.027,
+  "median_s": 0.028,
+  "max_s": 0.031,
+  "total_s": 3.24
+ },
+ "whitewater": {
+  "mean_s": 0.033,
+  "median_s": 0.025,
+  "max_s": 0.086,
+  "total_s": 3.96
+ },
+ "steam": {
+  "mean_s": 0.162,
+  "median_s": 0.163,
+  "max_s": 0.277,
+  "total_s": 19.49
+ },
+ "peak_particles": 10595,
+ "peak_triangles": 11148,
+ "liquid_backend": "resident",
+ "liquid_fallback": null,
+ "steam_backend": "resident_sparse",
+ "peak_steam_tiles": 512,
+ "per_frame": {
+  "1": {
+   "liquid_s": 0.3670901770237833,
+   "particles": 130,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.007157739019021392,
+   "triangles": 0,
+   "whitewater_s": 0.008763527031987906,
+   "whitewater_particles": 0,
+   "steam_s": 0.17687416193075478,
+   "steam_shape": [
+    64,
+    48,
+    64
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "2": {
+   "liquid_s": 0.045091348933056,
+   "particles": 243,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.002314001088961959,
+   "triangles": 0,
+   "whitewater_s": 0.004218847956508398,
+   "whitewater_particles": 0,
+   "steam_s": 0.04992459109053016,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 0,
+   "steam_backend": "resident_sparse"
+  },
+  "3": {
+   "liquid_s": 0.010922857094556093,
+   "particles": 351,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.013582029147073627,
+   "triangles": 704,
+   "whitewater_s": 0.004158130148425698,
+   "whitewater_particles": 8,
+   "steam_s": 0.06480041216127574,
+   "steam_shape": [
+    40,
+    40,
+    40
+   ],
+   "steam_tiles": 112,
+   "steam_backend": "resident_sparse"
+  },
+  "4": {
+   "liquid_s": 0.09050792898051441,
+   "particles": 468,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.010061423061415553,
+   "triangles": 1332,
+   "whitewater_s": 0.0074049171525985,
+   "whitewater_particles": 19,
+   "steam_s": 0.06516379211097956,
+   "steam_shape": [
+    40,
+    48,
+    40
+   ],
+   "steam_tiles": 150,
+   "steam_backend": "resident_sparse"
+  },
+  "5": {
+   "liquid_s": 0.04901410290040076,
+   "particles": 582,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.00990383792668581,
+   "triangles": 2116,
+   "whitewater_s": 0.007659848779439926,
+   "whitewater_particles": 29,
+   "steam_s": 0.08999350713565946,
+   "steam_shape": [
+    40,
+    56,
+    40
+   ],
+   "steam_tiles": 150,
+   "steam_backend": "resident_sparse"
+  },
+  "6": {
+   "liquid_s": 0.07851273310370743,
+   "particles": 710,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.013786663068458438,
+   "triangles": 2848,
+   "whitewater_s": 0.008041318040341139,
+   "whitewater_particles": 51,
+   "steam_s": 0.13078281097114086,
+   "steam_shape": [
+    48,
+    64,
+    56
+   ],
+   "steam_tiles": 323,
+   "steam_backend": "resident_sparse"
+  },
+  "7": {
+   "liquid_s": 0.01954950299113989,
+   "particles": 786,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.01369252591393888,
+   "triangles": 4032,
+   "whitewater_s": 0.008128645829856396,
+   "whitewater_particles": 55,
+   "steam_s": 0.11624497990123928,
+   "steam_shape": [
+    64,
+    64,
+    56
+   ],
+   "steam_tiles": 336,
+   "steam_backend": "resident_sparse"
+  },
+  "8": {
+   "liquid_s": 0.06192652299068868,
+   "particles": 895,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.021528403973206878,
+   "triangles": 7444,
+   "whitewater_s": 0.008382138097658753,
+   "whitewater_particles": 62,
+   "steam_s": 0.1657505128532648,
+   "steam_shape": [
+    64,
+    64,
+    56
+   ],
+   "steam_tiles": 448,
+   "steam_backend": "resident_sparse"
+  },
+  "9": {
+   "liquid_s": 0.08354811486788094,
+   "particles": 991,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.024358290946111083,
+   "triangles": 8724,
+   "whitewater_s": 0.008849375182762742,
+   "whitewater_particles": 66,
+   "steam_s": 0.14771707309409976,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 448,
+   "steam_backend": "resident_sparse"
+  },
+  "10": {
+   "liquid_s": 0.017121753888204694,
+   "particles": 1112,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.024046909995377064,
+   "triangles": 8844,
+   "whitewater_s": 0.008549033896997571,
+   "whitewater_particles": 68,
+   "steam_s": 0.18609998701140285,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "11": {
+   "liquid_s": 0.01381382206454873,
+   "particles": 1218,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.024049109779298306,
+   "triangles": 8860,
+   "whitewater_s": 0.009294513147324324,
+   "whitewater_particles": 77,
+   "steam_s": 0.1529564920347184,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "12": {
+   "liquid_s": 0.021136465948075056,
+   "particles": 1293,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.024973752908408642,
+   "triangles": 9144,
+   "whitewater_s": 0.009045669110491872,
+   "whitewater_particles": 79,
+   "steam_s": 0.1553366540465504,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "13": {
+   "liquid_s": 0.01661441009491682,
+   "particles": 1373,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.0299259671010077,
+   "triangles": 9408,
+   "whitewater_s": 0.009224644163623452,
+   "whitewater_particles": 82,
+   "steam_s": 0.16222754516638815,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "14": {
+   "liquid_s": 0.02124835317954421,
+   "particles": 1445,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02975208219140768,
+   "triangles": 9620,
+   "whitewater_s": 0.009322111029177904,
+   "whitewater_particles": 91,
+   "steam_s": 0.1586359478533268,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "15": {
+   "liquid_s": 0.016546662198379636,
+   "particles": 1498,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027284623822197318,
+   "triangles": 9700,
+   "whitewater_s": 0.009277363074943423,
+   "whitewater_particles": 109,
+   "steam_s": 0.17794226203113794,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "16": {
+   "liquid_s": 0.020342059200629592,
+   "particles": 1546,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.026604015147313476,
+   "triangles": 10004,
+   "whitewater_s": 0.01007761899381876,
+   "whitewater_particles": 125,
+   "steam_s": 0.15753642981871963,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "17": {
+   "liquid_s": 0.017417386174201965,
+   "particles": 1573,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.026833897922188044,
+   "triangles": 10052,
+   "whitewater_s": 0.00948948715813458,
+   "whitewater_particles": 140,
+   "steam_s": 0.17635909700766206,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "18": {
+   "liquid_s": 0.027673742966726422,
+   "particles": 1582,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02828253502957523,
+   "triangles": 10304,
+   "whitewater_s": 0.010012030834332108,
+   "whitewater_particles": 154,
+   "steam_s": 0.16006085788831115,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "19": {
+   "liquid_s": 0.015371756162494421,
+   "particles": 1631,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02915957011282444,
+   "triangles": 10324,
+   "whitewater_s": 0.01025965390726924,
+   "whitewater_particles": 159,
+   "steam_s": 0.16254546493291855,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "20": {
+   "liquid_s": 0.015832962933927774,
+   "particles": 1665,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028529458912089467,
+   "triangles": 10348,
+   "whitewater_s": 0.010911226039752364,
+   "whitewater_particles": 167,
+   "steam_s": 0.1587487650103867,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "21": {
+   "liquid_s": 0.015310958959162235,
+   "particles": 1633,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027837308822199702,
+   "triangles": 10348,
+   "whitewater_s": 0.010284793097525835,
+   "whitewater_particles": 178,
+   "steam_s": 0.15556213585659862,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "22": {
+   "liquid_s": 0.013453112915158272,
+   "particles": 1648,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02808242104947567,
+   "triangles": 9916,
+   "whitewater_s": 0.010468038031831384,
+   "whitewater_particles": 183,
+   "steam_s": 0.1599452798254788,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "23": {
+   "liquid_s": 0.01567189791239798,
+   "particles": 1742,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027020941954106092,
+   "triangles": 9744,
+   "whitewater_s": 0.010611515026539564,
+   "whitewater_particles": 192,
+   "steam_s": 0.1593218189664185,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "24": {
+   "liquid_s": 0.022649992024526,
+   "particles": 1786,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028197837993502617,
+   "triangles": 10008,
+   "whitewater_s": 0.010812139138579369,
+   "whitewater_particles": 200,
+   "steam_s": 0.1755874699447304,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "25": {
+   "liquid_s": 0.02821681695058942,
+   "particles": 1822,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02820340683683753,
+   "triangles": 10076,
+   "whitewater_s": 0.011021551908925176,
+   "whitewater_particles": 208,
+   "steam_s": 0.16322027589194477,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "26": {
+   "liquid_s": 0.020592581946402788,
+   "particles": 1872,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028917147079482675,
+   "triangles": 10388,
+   "whitewater_s": 0.011077511124312878,
+   "whitewater_particles": 215,
+   "steam_s": 0.16334870201535523,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "27": {
+   "liquid_s": 0.015457133995369077,
+   "particles": 1917,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02806228189729154,
+   "triangles": 10372,
+   "whitewater_s": 0.011142458999529481,
+   "whitewater_particles": 233,
+   "steam_s": 0.16110298689454794,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "28": {
+   "liquid_s": 0.015956918941810727,
+   "particles": 1975,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.026983043178915977,
+   "triangles": 10080,
+   "whitewater_s": 0.012237258022651076,
+   "whitewater_particles": 242,
+   "steam_s": 0.16079100593924522,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "29": {
+   "liquid_s": 0.015441734110936522,
+   "particles": 2040,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028008114080876112,
+   "triangles": 9996,
+   "whitewater_s": 0.011971855070441961,
+   "whitewater_particles": 244,
+   "steam_s": 0.15908937505446374,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "30": {
+   "liquid_s": 0.012962747132405639,
+   "particles": 2122,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.0280828510876745,
+   "triangles": 9984,
+   "whitewater_s": 0.01194847491569817,
+   "whitewater_particles": 245,
+   "steam_s": 0.15803558588959277,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "31": {
+   "liquid_s": 0.013462252914905548,
+   "particles": 2183,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028107410995289683,
+   "triangles": 9808,
+   "whitewater_s": 0.012086661998182535,
+   "whitewater_particles": 247,
+   "steam_s": 0.17212171899154782,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "32": {
+   "liquid_s": 0.01525100995786488,
+   "particles": 2266,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027618784923106432,
+   "triangles": 10004,
+   "whitewater_s": 0.012212628033012152,
+   "whitewater_particles": 256,
+   "steam_s": 0.16334163211286068,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "33": {
+   "liquid_s": 0.017149013932794333,
+   "particles": 2328,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027496108086779714,
+   "triangles": 9840,
+   "whitewater_s": 0.014009065926074982,
+   "whitewater_particles": 263,
+   "steam_s": 0.15930773899890482,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "34": {
+   "liquid_s": 0.012702324893325567,
+   "particles": 2396,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027488808846101165,
+   "triangles": 9764,
+   "whitewater_s": 0.013864560052752495,
+   "whitewater_particles": 272,
+   "steam_s": 0.15894745010882616,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "35": {
+   "liquid_s": 0.017896762117743492,
+   "particles": 2444,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027903406880795956,
+   "triangles": 9680,
+   "whitewater_s": 0.014268188970163465,
+   "whitewater_particles": 283,
+   "steam_s": 0.15957908099517226,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "36": {
+   "liquid_s": 0.019405637169256806,
+   "particles": 2518,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028390922117978334,
+   "triangles": 9852,
+   "whitewater_s": 0.014350736048072577,
+   "whitewater_particles": 298,
+   "steam_s": 0.15749397105537355,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "37": {
+   "liquid_s": 0.023007021052762866,
+   "particles": 2573,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028029142878949642,
+   "triangles": 9800,
+   "whitewater_s": 0.014261589152738452,
+   "whitewater_particles": 302,
+   "steam_s": 0.15960973012261093,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "38": {
+   "liquid_s": 0.016493303002789617,
+   "particles": 2683,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028282095910981297,
+   "triangles": 9736,
+   "whitewater_s": 0.015032196883112192,
+   "whitewater_particles": 310,
+   "steam_s": 0.16671370505355299,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "39": {
+   "liquid_s": 0.015659637982025743,
+   "particles": 2774,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027524607023224235,
+   "triangles": 9776,
+   "whitewater_s": 0.015134013025090098,
+   "whitewater_particles": 317,
+   "steam_s": 0.15556761692278087,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "40": {
+   "liquid_s": 0.0170992452185601,
+   "particles": 2839,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028019623132422566,
+   "triangles": 9860,
+   "whitewater_s": 0.0162569519598037,
+   "whitewater_particles": 333,
+   "steam_s": 0.1588102530222386,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "41": {
+   "liquid_s": 0.01795763010159135,
+   "particles": 2884,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028391832020133734,
+   "triangles": 9900,
+   "whitewater_s": 0.016193144023418427,
+   "whitewater_particles": 343,
+   "steam_s": 0.15895741898566484,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "42": {
+   "liquid_s": 0.015450184000656009,
+   "particles": 2927,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028965060831978917,
+   "triangles": 9900,
+   "whitewater_s": 0.016421635868027806,
+   "whitewater_particles": 353,
+   "steam_s": 0.1600462580099702,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "43": {
+   "liquid_s": 0.014781264122575521,
+   "particles": 2964,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02755370596423745,
+   "triangles": 9968,
+   "whitewater_s": 0.016728818183764815,
+   "whitewater_particles": 363,
+   "steam_s": 0.15576927084475756,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "44": {
+   "liquid_s": 0.016034037107601762,
+   "particles": 3026,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028235655976459384,
+   "triangles": 9940,
+   "whitewater_s": 0.017790356883779168,
+   "whitewater_particles": 375,
+   "steam_s": 0.17441127402707934,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "45": {
+   "liquid_s": 0.016375905834138393,
+   "particles": 3139,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027687432011589408,
+   "triangles": 9804,
+   "whitewater_s": 0.018306782003492117,
+   "whitewater_particles": 385,
+   "steam_s": 0.15905110607855022,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "46": {
+   "liquid_s": 0.016076465137302876,
+   "particles": 3217,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02853981708176434,
+   "triangles": 9904,
+   "whitewater_s": 0.019206097116693854,
+   "whitewater_particles": 400,
+   "steam_s": 0.15511819906532764,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "47": {
+   "liquid_s": 0.01898743980564177,
+   "particles": 3314,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027576825115829706,
+   "triangles": 9840,
+   "whitewater_s": 0.020824699895456433,
+   "whitewater_particles": 425,
+   "steam_s": 0.15727545600384474,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "48": {
+   "liquid_s": 0.013054773909971118,
+   "particles": 3400,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027642952976748347,
+   "triangles": 9972,
+   "whitewater_s": 0.019913136027753353,
+   "whitewater_particles": 443,
+   "steam_s": 0.1585123820696026,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "49": {
+   "liquid_s": 0.016880182083696127,
+   "particles": 3496,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027034150902181864,
+   "triangles": 9844,
+   "whitewater_s": 0.01982378913089633,
+   "whitewater_particles": 451,
+   "steam_s": 0.15594214596785605,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "50": {
+   "liquid_s": 0.022313460940495133,
+   "particles": 3582,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029312845086678863,
+   "triangles": 9856,
+   "whitewater_s": 0.02072068303823471,
+   "whitewater_particles": 467,
+   "steam_s": 0.15787904988974333,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "51": {
+   "liquid_s": 0.016591371037065983,
+   "particles": 3648,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02745039900764823,
+   "triangles": 9812,
+   "whitewater_s": 0.020971236051991582,
+   "whitewater_particles": 479,
+   "steam_s": 0.17259319382719696,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "52": {
+   "liquid_s": 0.019901511957868934,
+   "particles": 3697,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02741904999129474,
+   "triangles": 9836,
+   "whitewater_s": 0.021509350975975394,
+   "whitewater_particles": 490,
+   "steam_s": 0.15959031996317208,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "53": {
+   "liquid_s": 0.017681048018857837,
+   "particles": 3795,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02787724696099758,
+   "triangles": 9828,
+   "whitewater_s": 0.021600327920168638,
+   "whitewater_particles": 503,
+   "steam_s": 0.1585332010872662,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "54": {
+   "liquid_s": 0.015585910063236952,
+   "particles": 3884,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028318833094090223,
+   "triangles": 9852,
+   "whitewater_s": 0.023701647063717246,
+   "whitewater_particles": 508,
+   "steam_s": 0.15789752989076078,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "55": {
+   "liquid_s": 0.017965948907658458,
+   "particles": 3987,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027431319933384657,
+   "triangles": 9696,
+   "whitewater_s": 0.022659137146547437,
+   "whitewater_particles": 499,
+   "steam_s": 0.15644318098202348,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "56": {
+   "liquid_s": 0.016371306963264942,
+   "particles": 4097,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.026627572951838374,
+   "triangles": 9584,
+   "whitewater_s": 0.023633448872715235,
+   "whitewater_particles": 506,
+   "steam_s": 0.15271856915205717,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "57": {
+   "liquid_s": 0.018162313848733902,
+   "particles": 4164,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027673811884596944,
+   "triangles": 9628,
+   "whitewater_s": 0.02300291694700718,
+   "whitewater_particles": 514,
+   "steam_s": 0.154161028098315,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "58": {
+   "liquid_s": 0.01775278616696596,
+   "particles": 4242,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027549426071345806,
+   "triangles": 9636,
+   "whitewater_s": 0.023924120934680104,
+   "whitewater_particles": 532,
+   "steam_s": 0.1699329810217023,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "59": {
+   "liquid_s": 0.018908781930804253,
+   "particles": 4326,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028480959124863148,
+   "triangles": 9744,
+   "whitewater_s": 0.024382567033171654,
+   "whitewater_particles": 549,
+   "steam_s": 0.1603133890312165,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "60": {
+   "liquid_s": 0.01868078811094165,
+   "particles": 4388,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028658503899350762,
+   "triangles": 9648,
+   "whitewater_s": 0.025556613225489855,
+   "whitewater_particles": 578,
+   "steam_s": 0.15579847991466522,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "61": {
+   "liquid_s": 0.01860265084542334,
+   "particles": 4535,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02794496389105916,
+   "triangles": 9656,
+   "whitewater_s": 0.025204064091667533,
+   "whitewater_particles": 611,
+   "steam_s": 0.1577724628150463,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "62": {
+   "liquid_s": 0.018033967120572925,
+   "particles": 4679,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028590935980901122,
+   "triangles": 9780,
+   "whitewater_s": 0.026802037842571735,
+   "whitewater_particles": 634,
+   "steam_s": 0.16017339401878417,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "63": {
+   "liquid_s": 0.01885015401057899,
+   "particles": 4787,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029203108977526426,
+   "triangles": 10028,
+   "whitewater_s": 0.027435029158368707,
+   "whitewater_particles": 658,
+   "steam_s": 0.161282000830397,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "64": {
+   "liquid_s": 0.018681017914786935,
+   "particles": 4886,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02894891588948667,
+   "triangles": 10060,
+   "whitewater_s": 0.026706439908593893,
+   "whitewater_particles": 664,
+   "steam_s": 0.15956979081965983,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "65": {
+   "liquid_s": 0.020258191972970963,
+   "particles": 4977,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02876695105805993,
+   "triangles": 9972,
+   "whitewater_s": 0.027943694964051247,
+   "whitewater_particles": 673,
+   "steam_s": 0.17459031590260565,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "66": {
+   "liquid_s": 0.022002150071784854,
+   "particles": 5059,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029386302921921015,
+   "triangles": 9988,
+   "whitewater_s": 0.02881108899600804,
+   "whitewater_particles": 683,
+   "steam_s": 0.16122853197157383,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "67": {
+   "liquid_s": 0.018051066901534796,
+   "particles": 5161,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028507718117907643,
+   "triangles": 9988,
+   "whitewater_s": 0.030321825994178653,
+   "whitewater_particles": 708,
+   "steam_s": 0.1615657340735197,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "68": {
+   "liquid_s": 0.019744377117604017,
+   "particles": 5307,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02788783609867096,
+   "triangles": 10196,
+   "whitewater_s": 0.029706244124099612,
+   "whitewater_particles": 739,
+   "steam_s": 0.16238540899939835,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "69": {
+   "liquid_s": 0.020398478023707867,
+   "particles": 5444,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028951775981113315,
+   "triangles": 10264,
+   "whitewater_s": 0.032316388096660376,
+   "whitewater_particles": 748,
+   "steam_s": 0.16354999598115683,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "70": {
+   "liquid_s": 0.020468916045501828,
+   "particles": 5579,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028895277995616198,
+   "triangles": 10136,
+   "whitewater_s": 0.03217156301252544,
+   "whitewater_particles": 767,
+   "steam_s": 0.16406090115197003,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "71": {
+   "liquid_s": 0.02064668107777834,
+   "particles": 5717,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028966435929760337,
+   "triangles": 10124,
+   "whitewater_s": 0.03310248511843383,
+   "whitewater_particles": 791,
+   "steam_s": 0.1605319231748581,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "72": {
+   "liquid_s": 0.022537984885275364,
+   "particles": 5881,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02896498586051166,
+   "triangles": 10080,
+   "whitewater_s": 0.03391038300469518,
+   "whitewater_particles": 818,
+   "steam_s": 0.17458855593577027,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "73": {
+   "liquid_s": 0.02066091005690396,
+   "particles": 6024,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029365732800215483,
+   "triangles": 10172,
+   "whitewater_s": 0.03536239103414118,
+   "whitewater_particles": 832,
+   "steam_s": 0.1698335139080882,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "74": {
+   "liquid_s": 0.023413769202306867,
+   "particles": 6092,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029090241994708776,
+   "triangles": 10072,
+   "whitewater_s": 0.03534990199841559,
+   "whitewater_particles": 850,
+   "steam_s": 0.18941162712872028,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "75": {
+   "liquid_s": 0.021111367968842387,
+   "particles": 6213,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029186628991737962,
+   "triangles": 10020,
+   "whitewater_s": 0.03622629586607218,
+   "whitewater_particles": 866,
+   "steam_s": 0.1625148260500282,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "76": {
+   "liquid_s": 0.02158099296502769,
+   "particles": 6359,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.03131570806726813,
+   "triangles": 9996,
+   "whitewater_s": 0.03802065388299525,
+   "whitewater_particles": 897,
+   "steam_s": 0.16334524098783731,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "77": {
+   "liquid_s": 0.0197541369125247,
+   "particles": 6471,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.03046897193416953,
+   "triangles": 10160,
+   "whitewater_s": 0.03910575294867158,
+   "whitewater_particles": 918,
+   "steam_s": 0.1617834868375212,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "78": {
+   "liquid_s": 0.0211712250020355,
+   "particles": 6602,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028371471911668777,
+   "triangles": 10256,
+   "whitewater_s": 0.03992788912728429,
+   "whitewater_particles": 959,
+   "steam_s": 0.18123498396016657,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "79": {
+   "liquid_s": 0.02098229108378291,
+   "particles": 6732,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02758841495960951,
+   "triangles": 10256,
+   "whitewater_s": 0.04108501598238945,
+   "whitewater_particles": 998,
+   "steam_s": 0.16422102600336075,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "80": {
+   "liquid_s": 0.020261872094124556,
+   "particles": 6869,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028486739145591855,
+   "triangles": 10344,
+   "whitewater_s": 0.04440702009014785,
+   "whitewater_particles": 1030,
+   "steam_s": 0.16625570692121983,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "81": {
+   "liquid_s": 0.023254333063960075,
+   "particles": 7008,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02739162021316588,
+   "triangles": 10392,
+   "whitewater_s": 0.04271348915062845,
+   "whitewater_particles": 1064,
+   "steam_s": 0.1668165009468794,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "82": {
+   "liquid_s": 0.021363619016483426,
+   "particles": 7148,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027610235149040818,
+   "triangles": 10528,
+   "whitewater_s": 0.044945584842935205,
+   "whitewater_particles": 1094,
+   "steam_s": 0.16710848198272288,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "83": {
+   "liquid_s": 0.0203798389993608,
+   "particles": 7254,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02760606398805976,
+   "triangles": 10560,
+   "whitewater_s": 0.04523660591803491,
+   "whitewater_particles": 1107,
+   "steam_s": 0.16724874801002443,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "84": {
+   "liquid_s": 0.020822655875235796,
+   "particles": 7379,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027433769078925252,
+   "triangles": 10536,
+   "whitewater_s": 0.0467056839261204,
+   "whitewater_particles": 1115,
+   "steam_s": 0.1653828730341047,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "85": {
+   "liquid_s": 0.021211144048720598,
+   "particles": 7355,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027724610874429345,
+   "triangles": 10532,
+   "whitewater_s": 0.04627935588359833,
+   "whitewater_particles": 1120,
+   "steam_s": 0.17948416410945356,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "86": {
+   "liquid_s": 0.020682540023699403,
+   "particles": 7403,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027724761050194502,
+   "triangles": 10600,
+   "whitewater_s": 0.04682917986065149,
+   "whitewater_particles": 1153,
+   "steam_s": 0.16621308820322156,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "87": {
+   "liquid_s": 0.020501415012404323,
+   "particles": 7485,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02808897104114294,
+   "triangles": 10620,
+   "whitewater_s": 0.048095763893797994,
+   "whitewater_particles": 1191,
+   "steam_s": 0.16677914187312126,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "88": {
+   "liquid_s": 0.022771268151700497,
+   "particles": 7572,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.026961734052747488,
+   "triangles": 10476,
+   "whitewater_s": 0.049299998907372355,
+   "whitewater_particles": 1226,
+   "steam_s": 0.1723602102138102,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "89": {
+   "liquid_s": 0.024260774021968246,
+   "particles": 7715,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02614032686688006,
+   "triangles": 10440,
+   "whitewater_s": 0.04939840594306588,
+   "whitewater_particles": 1240,
+   "steam_s": 0.16708453395403922,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "90": {
+   "liquid_s": 0.022348480997607112,
+   "particles": 7893,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.026255182921886444,
+   "triangles": 10416,
+   "whitewater_s": 0.07283834088593721,
+   "whitewater_particles": 1271,
+   "steam_s": 0.16396396304480731,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "91": {
+   "liquid_s": 0.02560271485708654,
+   "particles": 8046,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02824623603373766,
+   "triangles": 10516,
+   "whitewater_s": 0.05232463194988668,
+   "whitewater_particles": 1296,
+   "steam_s": 0.16613461007364094,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "92": {
+   "liquid_s": 0.022514224983751774,
+   "particles": 8125,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02722223591990769,
+   "triangles": 10548,
+   "whitewater_s": 0.0525683150626719,
+   "whitewater_particles": 1307,
+   "steam_s": 0.18223214405588806,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "93": {
+   "liquid_s": 0.022133046993985772,
+   "particles": 8285,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028283165069296956,
+   "triangles": 10600,
+   "whitewater_s": 0.054050283040851355,
+   "whitewater_particles": 1329,
+   "steam_s": 0.16734787495806813,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "94": {
+   "liquid_s": 0.021078108111396432,
+   "particles": 8418,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.03098382707685232,
+   "triangles": 10524,
+   "whitewater_s": 0.05547712091356516,
+   "whitewater_particles": 1363,
+   "steam_s": 0.16608439316041768,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "95": {
+   "liquid_s": 0.022171255899593234,
+   "particles": 8563,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029215307906270027,
+   "triangles": 10640,
+   "whitewater_s": 0.055911269038915634,
+   "whitewater_particles": 1400,
+   "steam_s": 0.166726544033736,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "96": {
+   "liquid_s": 0.02226461307145655,
+   "particles": 8693,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029789940919727087,
+   "triangles": 10760,
+   "whitewater_s": 0.058532933006063104,
+   "whitewater_particles": 1431,
+   "steam_s": 0.17016192409209907,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "97": {
+   "liquid_s": 0.021926793036982417,
+   "particles": 8778,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029376184102147818,
+   "triangles": 10808,
+   "whitewater_s": 0.05767107801511884,
+   "whitewater_particles": 1443,
+   "steam_s": 0.16838360601104796,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "98": {
+   "liquid_s": 0.022440308006480336,
+   "particles": 8859,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028521138010546565,
+   "triangles": 10704,
+   "whitewater_s": 0.057854623068124056,
+   "whitewater_particles": 1464,
+   "steam_s": 0.16549051902256906,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "99": {
+   "liquid_s": 0.02134754997678101,
+   "particles": 8964,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029495819937437773,
+   "triangles": 10780,
+   "whitewater_s": 0.05829183990135789,
+   "whitewater_particles": 1493,
+   "steam_s": 0.18342975107952952,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "100": {
+   "liquid_s": 0.02158112288452685,
+   "particles": 9091,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.030091502936556935,
+   "triangles": 10792,
+   "whitewater_s": 0.05800286796875298,
+   "whitewater_particles": 1511,
+   "steam_s": 0.16706383391283453,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "101": {
+   "liquid_s": 0.023196494905278087,
+   "particles": 9212,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028726391959935427,
+   "triangles": 10632,
+   "whitewater_s": 0.057715477189049125,
+   "whitewater_particles": 1529,
+   "steam_s": 0.1678427008446306,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "102": {
+   "liquid_s": 0.022935692919418216,
+   "particles": 9340,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028867937857285142,
+   "triangles": 10656,
+   "whitewater_s": 0.059303971007466316,
+   "whitewater_particles": 1540,
+   "steam_s": 0.1677838428877294,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "103": {
+   "liquid_s": 0.02303230995312333,
+   "particles": 9414,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028434660052880645,
+   "triangles": 10740,
+   "whitewater_s": 0.060480946907773614,
+   "whitewater_particles": 1566,
+   "steam_s": 0.16728792805224657,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "104": {
+   "liquid_s": 0.023904554080218077,
+   "particles": 9520,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027648382820189,
+   "triangles": 10748,
+   "whitewater_s": 0.06137488107196987,
+   "whitewater_particles": 1592,
+   "steam_s": 0.173046130919829,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "105": {
+   "liquid_s": 0.023892174940556288,
+   "particles": 9592,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02740740985609591,
+   "triangles": 10752,
+   "whitewater_s": 0.06210715998895466,
+   "whitewater_particles": 1635,
+   "steam_s": 0.16868570703081787,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "106": {
+   "liquid_s": 0.02311715786345303,
+   "particles": 9595,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027320683002471924,
+   "triangles": 10716,
+   "whitewater_s": 0.06202807207591832,
+   "whitewater_particles": 1684,
+   "steam_s": 0.18487779796123505,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "107": {
+   "liquid_s": 0.026164517970755696,
+   "particles": 9633,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02719513582997024,
+   "triangles": 10800,
+   "whitewater_s": 0.06386552890762687,
+   "whitewater_particles": 1713,
+   "steam_s": 0.16848986316472292,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "108": {
+   "liquid_s": 0.02585422690026462,
+   "particles": 9661,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028078120900318027,
+   "triangles": 10888,
+   "whitewater_s": 0.06411073193885386,
+   "whitewater_particles": 1769,
+   "steam_s": 0.16857721004635096,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "109": {
+   "liquid_s": 0.023878335021436214,
+   "particles": 9723,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028681712923571467,
+   "triangles": 10908,
+   "whitewater_s": 0.06740034813992679,
+   "whitewater_particles": 1795,
+   "steam_s": 0.17069399892352521,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "110": {
+   "liquid_s": 0.026396371191367507,
+   "particles": 9733,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02738390094600618,
+   "triangles": 10732,
+   "whitewater_s": 0.07414016406983137,
+   "whitewater_particles": 1807,
+   "steam_s": 0.16998559911735356,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "111": {
+   "liquid_s": 0.02502195117995143,
+   "particles": 9817,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02810019999742508,
+   "triangles": 10648,
+   "whitewater_s": 0.0722164090257138,
+   "whitewater_particles": 1807,
+   "steam_s": 0.1692389810923487,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "112": {
+   "liquid_s": 0.03222855902276933,
+   "particles": 9870,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.027336891973391175,
+   "triangles": 10640,
+   "whitewater_s": 0.07180543104186654,
+   "whitewater_particles": 1817,
+   "steam_s": 0.19207982998341322,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "113": {
+   "liquid_s": 0.02343454910442233,
+   "particles": 10006,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02790431585162878,
+   "triangles": 10756,
+   "whitewater_s": 0.07386863208375871,
+   "whitewater_particles": 1842,
+   "steam_s": 0.17148796608671546,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "114": {
+   "liquid_s": 0.025308772921562195,
+   "particles": 10093,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028400040930137038,
+   "triangles": 10896,
+   "whitewater_s": 0.07447361410595477,
+   "whitewater_particles": 1871,
+   "steam_s": 0.17183352587744594,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "115": {
+   "liquid_s": 0.024959793081507087,
+   "particles": 10186,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02855672687292099,
+   "triangles": 10860,
+   "whitewater_s": 0.07476003491319716,
+   "whitewater_particles": 1900,
+   "steam_s": 0.16924852994270623,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "116": {
+   "liquid_s": 0.023974011885002255,
+   "particles": 10314,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028609275817871094,
+   "triangles": 10940,
+   "whitewater_s": 0.07514526508748531,
+   "whitewater_particles": 1929,
+   "steam_s": 0.17025693180039525,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "117": {
+   "liquid_s": 0.023733059875667095,
+   "particles": 10390,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028922645840793848,
+   "triangles": 10968,
+   "whitewater_s": 0.07438183715566993,
+   "whitewater_particles": 1948,
+   "steam_s": 0.1694011059589684,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "118": {
+   "liquid_s": 0.023990912130102515,
+   "particles": 10500,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.029766832012683153,
+   "triangles": 11148,
+   "whitewater_s": 0.07691843411885202,
+   "whitewater_particles": 1962,
+   "steam_s": 0.17114378605037928,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "119": {
+   "liquid_s": 0.02372707985341549,
+   "particles": 10554,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.02923663705587387,
+   "triangles": 11108,
+   "whitewater_s": 0.08512761699967086,
+   "whitewater_particles": 1970,
+   "steam_s": 0.1853113560937345,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  },
+  "120": {
+   "liquid_s": 0.0248275778722018,
+   "particles": 10595,
+   "liquid_backend": "resident",
+   "liquid_fallback": null,
+   "surface_s": 0.028714463114738464,
+   "triangles": 11096,
+   "whitewater_s": 0.0859835718292743,
+   "whitewater_particles": 2017,
+   "steam_s": 0.2769223530776799,
+   "steam_shape": [
+    64,
+    64,
+    64
+   ],
+   "steam_tiles": 512,
+   "steam_backend": "resident_sparse"
+  }
+ },
+ "cache": {
+  "runs": {
+   "168507588f": {
+    "kind": "steam solver checkpoints",
+    "frames": 120,
+    "bytes": 987718545
+   },
+   "d710ecb1d5": {
+    "kind": "steam volume (sparse tiles)",
+    "frames": 118,
+    "bytes": 843720423
+   },
+   "a3baddd22e": {
+    "kind": "other: __matrix,density_u8,temperature_u8",
+    "frames": 120,
+    "bytes": 26612328
+   },
+   "46538df858": {
+    "kind": "liquid particles",
+    "frames": 121,
+    "bytes": 39691180
+   },
+   "14458aab5d": {
+    "kind": "whitewater",
+    "frames": 121,
+    "bytes": 1288844
+   },
+   "d21edb8b40": {
+    "kind": "liquid particles",
+    "frames": 118,
+    "bytes": 6842479
+   },
+   "4643dad3af": {
+    "kind": "whitewater",
+    "frames": 118,
+    "bytes": 1140913
+   },
+   "ab7de2aab7": {
+    "kind": "liquid surface mesh",
+    "frames": 119,
+    "bytes": 35142553
+   }
+  },
+  "total_bytes": 1942157265,
+  "steam_sparse_bytes": 843720423,
+  "steam_dense_equivalent_bytes": 846196736
+ },
+ "completed_pass": "playback",
+ "playback": {
+  "whole scene preview 1/4 cold": {
+   "fps_median": 126.89,
+   "fps_mean": 110.88,
+   "fetch_ms_median": 3.0,
+   "draw_ms_median": 4.9,
+   "fetch_plus_draw_ms_median": 7.9,
+   "fetch_plus_draw_ms_p95": 8.7
+  },
+  "whole scene preview 1/4 warm": {
+   "fps_median": 134.31,
+   "fps_mean": 134.67,
+   "fetch_ms_median": 2.7,
+   "draw_ms_median": 4.8,
+   "fetch_plus_draw_ms_median": 7.4,
+   "fetch_plus_draw_ms_p95": 7.7
+  },
+  "stops_to_full_detail": {
+   "1": {
+    "tier_2": {
+     "fetch_ms": 4.5,
+     "draw_ms": 4.5,
+     "total_ms": 9.1
+    },
+    "tier_1": {
+     "fetch_ms": 18.0,
+     "draw_ms": 4.0,
+     "total_ms": 21.9
+    }
+   },
+   "60": {
+    "tier_2": {
+     "fetch_ms": 8.6,
+     "draw_ms": 5.4,
+     "total_ms": 14.0
+    },
+    "tier_1": {
+     "fetch_ms": 4.5,
+     "draw_ms": 8.9,
+     "total_ms": 13.4
+    }
+   },
+   "120": {
+    "tier_2": {
+     "fetch_ms": 10.5,
+     "draw_ms": 5.2,
+     "total_ms": 15.7
+    },
+    "tier_1": {
+     "fetch_ms": 4.6,
+     "draw_ms": 10.2,
+     "total_ms": 14.8
+    }
+   }
+  },
+  "stop_to_full_detail": {
+   "frame": 60,
+   "fetch_ms": 4.5,
+   "draw_ms": 8.9,
+   "total_ms": 13.4
+  }
+ }
+}

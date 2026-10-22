@@ -38,5 +38,43 @@
     "noise_max": 0.3492187595794847,
     "fully_settled": false
   },
-  "method": "The wall time includes the full evaluator and shadow-catcher pass. Counterfactuals omit one scene component in turn. GPU path-call time was captured separately from total wall time. Render mode settling is per-pixel relative noise <= 0.01; the 64-sample cap returned with 99.4% of pixels under threshold."
+  "method": "The wall time includes the full evaluator and shadow-catcher pass. Counterfactuals omit one scene component in turn. GPU path-call time was captured separately from total wall time. Render mode settling is per-pixel relative noise <= 0.01; the 64-sample cap returned with 99.4% of pixels under threshold.",
+  "optimized_settings": {
+    "width": 960,
+    "height": 540,
+    "sampling": "fixed",
+    "samples": 32,
+    "max_bounces": 4,
+    "volume_shadow_steps": 1
+  },
+  "optimized_fixed_32": {
+    "wall_seconds": 22.735,
+    "gpu_path_call_seconds": 1.215,
+    "volume_shadow_trilinear_points": 3095469
+  },
+  "optimized_counterfactuals": {
+    "no_steam": {
+      "wall_seconds": 8.084,
+      "volume_shadow_trilinear_points": 0
+    },
+    "no_liquid": {
+      "wall_seconds": 20.124,
+      "volume_shadow_trilinear_points": 3095469
+    },
+    "no_holdout": {
+      "wall_seconds": 1.445,
+      "volume_shadow_trilinear_points": 0
+    }
+  },
+  "optimized_render_mode_1920x1080": {
+    "wall_seconds": 83.511,
+    "sampling": "adaptive",
+    "samples_mean": 8.378762538580247,
+    "samples_cap": 64.0,
+    "passes": 29,
+    "converged_pixel_fraction": 0.9940456211419753,
+    "noise_mean": 0.0008213469090671955,
+    "noise_max": 0.3493451872926883,
+    "volume_shadow_trilinear_points": 10982608
+  }
 }

@@ -1632,3 +1632,22 @@ preset browser.
 Fracture is out of scope. Other limits: CPU solver, discrete contacts, diagonal box/sphere inertia, no joints or
 continuous collision detection, and convex hull generation is capped at 128 unique vertices for non-convex input
 meshes; already-convex meshes can use their supplied triangles beyond that size.
+
+
+### B: the Hot pour settles in under a minute (2026-10-22)
+
+**RTX 3080 Ti, 64-cell frame-60 shot, 960 × 540, four-bounce cap:** fixed 32-sample render wall time fell from **200.38 s** (16 volume shadow steps) to **22.74 s** (one volume shadow step). The path-tracer GPU call itself was 1.17 s before and 1.22 s after; the wall-time win is in the CPU-side scene/holdout/shadow work. Removing steam reduced the optimized wall time to 8.08 s; removing holdout/catcher reduced it to 1.45 s. These are isolated ablations, not additive costs. The one-step optimized traversal counted 3,095,469 trilinear sample points (the baseline was not instrumented with this counter). This is a large speedup, with an image-quality tradeoff: the one-step shadows are coarser.
+
+The showcase preset now uses adaptive 8–32 sampling, noise threshold 0.01, and a two-bounce transmission cap. On the optimized frame-60 1080p run, 8.38 mean samples/pixel and 29 passes took **83.51 s** wall time; 99.40% of pixels met the noise threshold at the 64-sample profiling cap. The remaining pixels did not converge, so this does not establish a fully settled 1080p image under a strict all-pixels criterion. The planned showcase stills use a 32-sample cap and render in 22.5–23.4 s each.
+
+The three frame-60 CPU/GPU comparisons passed on NVIDIA at frames 1, 60, and 120 (mean absolute error 7.1e-9, 1.01e-4, and 5.1e-5). Adaptive-sampling and volume-majorant GPU test modules passed 12/12 on NVIDIA and 12/12 on the integrated AMD Radeon 8060S; llvmpipe also passed 12/12. The integrated 64-cell/120-frame preview baked in 29.7 s, played at 126.89 FPS cold and 134.31 FPS warm, and returned to full detail in 13.4 ms. The measured preview is a 64-cell proxy, not production resolution.
+
+**Visual review:** the new stills remain visibly grainy and the stream reads weakly; do not treat them as final-quality art. Baseline stills are retained alongside the new evidence for direct comparison. The 48 GB RTX A6000 capacity estimate above remains unmeasured.
+
+| Frame | Prior baseline | One-step shadow + adaptive settings |
+| ---: | --- | --- |
+| 60 | ![Baseline frame 60](images/hot_pour_shot/baseline/hot-pour-060.png) | ![Updated frame 60](images/hot_pour_shot/hot-pour-060.png) |
+| 90 | ![Baseline frame 90](images/hot_pour_shot/baseline/hot-pour-090.png) | ![Updated frame 90](images/hot_pour_shot/hot-pour-090.png) |
+| 120 | ![Baseline frame 120](images/hot_pour_shot/baseline/hot-pour-120.png) | ![Updated frame 120](images/hot_pour_shot/hot-pour-120.png) |
+
+Render profile: `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`; evidence runner output: `benchmarks/hot_pour/hot-pour-shot-2026-10-22.json`; preview: `benchmarks/hot_pour/radeon-preview-64cell-2026-10-22.json`. Windows and A6000 remain unverified.
