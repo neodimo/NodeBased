@@ -1031,7 +1031,7 @@ class RetainedPresenter:
         self.paint_size = None
         self.counters["paint_empty"] += 1
 
-    def set_paint(self, image, key):
+    def set_paint(self, image, key, nonempty=False):
         """Show `image` (a premultiplied RGBA8888 QImage the size of the surface) over the picture, or nothing
         for None. `key` records what it was painted for. One upload when it changes, none otherwise.
 
@@ -1046,7 +1046,7 @@ class RetainedPresenter:
             return
         width, height = image.width(), image.height()
         pixels = np.frombuffer(image.constBits(), np.uint32, count=width * height)
-        if not pixels.any():
+        if not nonempty and not pixels.any():      # `nonempty`: the painter recorded a drawing command, so the scan is skipped
             self.paint_size = None          # nothing to draw: the pass is skipped; the texture keeps its last content
             self.counters["paint_empty"] += 1
             return
@@ -1054,10 +1054,6 @@ class RetainedPresenter:
         bands = [(0, height)]
         if (previous is not None and (previous.width(), previous.height()) == (width, height)
                 and self.paint_texture is not None):
-            if image == previous:                       # one memory compare in Qt, where the row diff below is a pass in numpy
-                self.paint_size = (width, height)
-                self.counters["paint_unchanged"] += 1
-                return
             before = np.frombuffer(previous.constBits(), np.uint32, count=width * height)
             changed = np.flatnonzero((pixels != before).reshape(height, width).any(axis=1))
             if changed.size == 0:
@@ -1270,6 +1266,7 @@ def make_widget(parent=None):
             self.recoveries = 0
             self.refusal = ""             # why the last picture was refused (too large for the card), or ""
             self.overlay_provider = None  # (view, physical_size, ratio) -> premultiplied RGBA QImage or None
+            self.overlay_probed = False   # the provider records first and answers EMPTY/SAME_OVERLAY; an image it returns has content
             self.compare_provider = None  # () -> the wipe line (centre x, y, normal x, y) in scene units, or None
             self.hover = None             # (scene point or None) -> None; the owner updates its readout
             self.edit = None              # (kind, scene point, button, modifiers, zoom, pressure) -> handled?; None: view only
@@ -1389,7 +1386,7 @@ def make_widget(parent=None):
                 presenter.paint_key = key
                 presenter.counters["paint_unchanged"] += 1
             else:
-                presenter.set_paint(image, key)
+                presenter.set_paint(image, key, nonempty=self.overlay_probed)
             self.overlay_draws += 1
 
         def _fail(self, message):

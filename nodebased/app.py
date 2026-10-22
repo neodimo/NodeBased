@@ -1470,6 +1470,7 @@ class Viewer(PanZoomView):
         self.window = window
         self.format_rect = None
         self._overlay_view = None      # set while render_overlay paints for the direct picture
+        self._overlay_images = [None, None]
         self._hit_zoom = None          # logical pixels per scene unit while the direct picture drives the hit tests
         self.cursor_sink = None        # called with the cursor (or None) so the direct picture shows the same shape
         self.readout_geometry = None   # (scale, render region, (w, h)) of a picture only the direct dock shows
@@ -3806,7 +3807,16 @@ class Viewer(PanZoomView):
             memo_key = ((int(width), int(height)), ratio, tuple(view), bytes(recording.data()))
             if not force and memo_key == self._overlay_memo:
                 return directviewer.SAME_OVERLAY
-        image = QImage(int(width), int(height), QImage.Format.Format_RGBA8888_Premultiplied)
+        if probe:
+            # Two images taken in turn: the card's presenter keeps the last one it was given as the base of its next
+            # row diff, so the other is free to paint into, and a fresh 4 MB allocation (zeroed pages faulted in
+            # one by one) is not paid per picture.
+            index = self._overlay_flip = 1 - self._overlay_flip
+            image = self._overlay_images[index]
+            if image is None or image.size() != QSize(int(width), int(height)):
+                image = self._overlay_images[index] = QImage(int(width), int(height), QImage.Format.Format_RGBA8888_Premultiplied)
+        else:
+            image = QImage(int(width), int(height), QImage.Format.Format_RGBA8888_Premultiplied)
         image.setDevicePixelRatio(ratio)
         image.fill(0)
         painter = QPainter(image)
@@ -3824,6 +3834,7 @@ class Viewer(PanZoomView):
         return image
 
     _overlay_memo = None
+    _overlay_flip = 0
     _EMPTY_RECORDING = None
 
     @classmethod
@@ -14444,6 +14455,7 @@ class Window(QMainWindow):
                 return
             widget.failed.connect(self._direct_failed)
             widget.overlay_provider = self._direct_overlay
+            widget.overlay_probed = True
             widget.compare_provider = self.viewer.wipe_line
             widget.hover = self._direct_hover
             widget.edit = self._direct_edit if self.preferences.direct_edit() else None
