@@ -8441,7 +8441,18 @@ class Window(QMainWindow):
         # Bounded, separately-threaded read-ahead for Read-node source decode only -- see
         # decodepool.py. Decode shares no state with the single-owner Evaluator/TileCache above,
         # so it is safe to run several of these in parallel while the preview worker stays single.
-        self.decode_pool = DecodeAheadPool()
+        # Decode-ahead helps hide source ingest on a roomy workstation, but the 4-core
+        # integrated stand-in lost ~11% throughput to even one concurrent decoder. Respect the
+        # process CPU affinity (important for laptop/cgroup workers); an explicit pool override
+        # remains available for measured deployments.
+        try:
+            available_cpus = len(os.sched_getaffinity(0))
+        except (AttributeError, OSError):
+            available_cpus = os.cpu_count() or 1
+        if "NODEBASED_DECODE_AHEAD_WORKERS" in os.environ:
+            self.decode_pool = DecodeAheadPool()
+        else:
+            self.decode_pool = DecodeAheadPool(max_workers=0 if available_cpus <= 4 else None)
         self.evaluator.decode_pool = self.decode_pool
         # Preview takes the tile path when every upstream node supports it. The executor reports
         # an explicit fallback for unsupported graphs; export remains the reference evaluator.

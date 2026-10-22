@@ -503,7 +503,7 @@ class TileExecutor:
         unaffected. Both `_generator_tile` and the full-frame Evaluator can consume the warmed
         immutable Raster.
         """
-        if self.decode_pool is None or not frames:
+        if (self.decode_pool is None or self.decode_pool.max_workers == 0 or not frames):
             return
         try:
             document, target = groups.flatten_groups(document, target)

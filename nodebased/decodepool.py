@@ -30,11 +30,10 @@ import time
 
 from . import cachetier
 
-# CPU-bound decode + ingest work: more workers than physical headroom just contends for the
-# same cores the single preview worker and the OCIO thread pool (`color._cpu_pool`) also want.
-# Four is enough to keep 3-frame read-ahead (`Window.future_frames`) moving without starving
-# the render actually driving the screen.
-DEFAULT_WORKERS = min(4, os.cpu_count() or 1)
+# CPU-bound decode + ingest work: multiple workers contended with the single preview worker and
+# OCIO pool in cold Roto playback. Keep the default to one worker; callers may opt into more via
+# `NODEBASED_DECODE_AHEAD_WORKERS` after measuring on their hardware.
+DEFAULT_WORKERS = 1
 
 # A handful of full-resolution decoded frames -- enough for read-ahead depth without taking a
 # large bite out of the machine's memory alongside the evaluator's own retained-result budget
@@ -70,7 +69,7 @@ class DecodeAheadPool:
     """Thread-safe bounded LRU of decoded Read-node source rasters, filled ahead of demand."""
 
     def __init__(self, max_workers=None, budget_bytes=None):
-        self.max_workers = int(max_workers) if max_workers else default_workers()
+        self.max_workers = default_workers() if max_workers is None else max(0, int(max_workers))
         self.budget = default_budget_bytes() if budget_bytes is None else int(budget_bytes)
         self._lock = threading.Lock()
         self._tasks = queue.Queue()
@@ -116,7 +115,7 @@ class DecodeAheadPool:
         `decode_fn` takes no arguments, returns an array or immutable Raster, and runs only on this pool's own
         worker threads -- never on the caller's thread."""
         with self._lock:
-            if self._shutdown:
+            if self._shutdown or self.max_workers == 0:
                 return
             if key in self._entries or key in self._pending:
                 return

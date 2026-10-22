@@ -12,6 +12,18 @@ def _frame(value=1.0, shape=(4, 4, 4)):
 
 
 class DecodeAheadPoolTests(unittest.TestCase):
+    def test_zero_workers_disables_prefetch_without_spawning_threads(self):
+        pool = DecodeAheadPool(max_workers=0, budget_bytes=10_000_000)
+        try:
+            calls = []
+            pool.request("k", lambda: calls.append(1) or _frame())
+            self.assertIsNone(pool.get("k"))
+            self.assertEqual(pool.stats()["pending"], 0)
+            self.assertEqual(calls, [])
+            self.assertEqual(pool._threads, [])
+        finally:
+            pool.shutdown(wait=True, timeout=1)
+
     def test_request_populates_the_cache_and_get_reports_hits_and_misses(self):
         pool = DecodeAheadPool(max_workers=2, budget_bytes=10_000_000)
         try:
