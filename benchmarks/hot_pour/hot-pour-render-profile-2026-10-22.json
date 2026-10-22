@@ -76,5 +76,37 @@
     "noise_mean": 0.0008213469090671955,
     "noise_max": 0.3493451872926883,
     "volume_shadow_trilinear_points": 10982608
+  },
+  "finish1": {
+    "adapter": "NVIDIA GeForce RTX 3080 Ti / Vulkan",
+    "render_settings": {
+      "width": 960,
+      "height": 540,
+      "sampling": "fixed",
+      "samples": 32,
+      "max_bounces": 4,
+      "transmission_bounces": 4,
+      "volume_shadow_density": 0.0
+    },
+    "fixed_32_quality": {
+      "wall_seconds": 35.55,
+      "fully_under_60_seconds": true
+    },
+    "settled_1080p": {
+      "width": 1920,
+      "height": 1080,
+      "sampling": "adaptive",
+      "min_samples": 8,
+      "max_samples": 2048,
+      "adaptive_pass_size": 8,
+      "noise_threshold": 0.01,
+      "mean_samples_per_pixel": 11.710189043209876,
+      "max_observed_samples": 1560,
+      "passes": 195,
+      "wall_seconds": 45.464,
+      "converged_pixel_fraction": 1.0,
+      "max_noise": 0.009999988851140817,
+      "fully_settled": true
+    }
   }
 }

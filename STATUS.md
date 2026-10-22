@@ -1,6 +1,6 @@
-# Lane 6 finish 1 — in progress (2026-10-22, 3:20 AM PDT)
+# Lane 6 finish 1 — local gates complete; external hardware QA unavailable (2026-10-22, 4:15 AM PDT)
 
-The merged step B's left-outs are under rework. GPU evidence so far: at frame 60, 960 × 540 fixed 32, zero steam shadow density plus four transmission bounces rendered at 35.55 s for fixed-32 quality and restored the liquid to a golden/translucent appearance. The 1080p adaptive run at cap 2,048 took 45.46 s and converged every pixel under the 0.01 threshold (maximum noise 0.00999999). Targeted Hot pour tests pass (2). The 1080p convergence run is queued behind the shared GPU lock. `examples/hot_pour_shot` now uses the probe settings; final 16–64 adaptive three-frame still evidence and adapter logs pending. See `scratch/nb-lanes/run/profile-L6-finish1-settled.log` when it completes.
+RTX 3080 Ti: fixed 32-sample 960 × 540 frame 60 took 35.55 s. Adaptive 1920 × 1080 Render mode at threshold 0.01 converged every pixel in 45.46 s (adaptive cap 2,048; mean 11.71 samples/pixel). The showcase now disables steam cast shadows and uses four transmission bounces; 16–64 adaptive still renders took 14.95–15.68 s. CPU/GPU comparisons passed at frames 1/60/120 on NVIDIA and AMD Radeon 8060S; adaptive/majorant tests passed under NVIDIA and forced-integrated invocations. Visual review: golden stream reads as a pour; cup/pool still has speckle and the table shadow remains hard-edged. A6000 and Windows runs remain unverified. Evidence is in `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json` and `benchmarks/hot_pour/hot-pour-shot-2026-10-22.json`; output logs in the lane run folder.
 
 # Lane 6 step B — PARTIAL (2026-10-22)
 
