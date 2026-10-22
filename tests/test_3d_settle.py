@@ -224,6 +224,13 @@ class CardFilterTests(unittest.TestCase):
         self.assertLess(float(np.abs(got[..., :3] - expected[..., :3]).max()), 0.01)  # and it did filter: the noise is far larger
         self.assertGreater(float(np.abs(color - expected)[..., :3].mean()), 0.01)
 
+    def test_a_picture_that_is_not_a_multiple_of_the_workgroup_is_filtered_to_its_edges(self):
+        color, albedo, normals, depth = noisy_picture(width=45, height=29)
+        expected = ptdenoise.denoise(color, albedo, normals, depth, None, dtype=np.float32)
+        np.testing.assert_allclose(gpudenoise.denoise(color, albedo, normals, depth), expected, atol=2e-3, rtol=2e-3)
+        small = noisy_picture(width=9, height=3)                    # smaller than the 7 x 7 variance window and the a-trous reach
+        np.testing.assert_allclose(gpudenoise.denoise(*small), ptdenoise.denoise(*small[:4], None, dtype=np.float32), atol=2e-3, rtol=2e-3)
+
     def test_a_repeat_with_the_same_guides_gives_the_same_picture(self):
         color, albedo, normals, depth = noisy_picture()
         first = gpudenoise.denoise(color, albedo, normals, depth)
@@ -288,6 +295,42 @@ class FilterChoiceTests(unittest.TestCase):
                 mock.patch.object(gpudenoise, "denoise", side_effect=Cancelled()):
             with self.assertRaises(Cancelled):
                 P.denoise_picture(color, albedo, normals, depth, backend="auto")
+
+
+def _soft_ready():
+    from nodebased import gpupathtrace
+    try:
+        return gpu3d.available() and gpupathtrace.soft_supported(gpu3d._state())
+    except Exception:
+        return False
+
+
+class DeferredGuideTests(unittest.TestCase):
+    def test_a_scene_without_smoke_or_on_the_cpu_has_nothing_to_finish_later(self):
+        settings_ = pt.PathSettings(samples=1, max_bounces=2)
+        for backend in ("cpu", "auto"):
+            guides, finish = pt.guide_aovs_deferred(shadow_scene(), SHADOW_CAMERA, 24, 16, settings_, backend=backend, ambient=0.1)
+            self.assertIsNone(finish)
+            direct = pt.guide_aovs(shadow_scene(), SHADOW_CAMERA, 24, 16, settings_, backend=backend, ambient=0.1)
+            for name in direct:
+                np.testing.assert_array_equal(guides[name], direct[name])
+
+    @unittest.skipUnless(_soft_ready(), "no adapter cleared for splats and smoke in the path tracer")
+    def test_the_guides_of_a_smoke_scene_finish_to_exactly_the_direct_ones(self):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+        from benchmark_pathtrace import CAMERA, soft_scene
+        scene = soft_scene(4000)
+        settings_ = pt.PathSettings(samples=1, max_bounces=4)
+        direct = pt.guide_aovs(scene, CAMERA, 96, 54, settings_, backend="auto", ambient=0.05)
+        guides, finish = pt.guide_aovs_deferred(scene, CAMERA, 96, 54, settings_, backend="auto", ambient=0.05)
+        self.assertIsNotNone(finish)
+        self.assertFalse(np.array_equal(guides["depth"], direct["depth"]))         # the smoke is not in them yet
+        merged = finish()
+        for name in direct:
+            np.testing.assert_array_equal(merged[name], direct[name])
+        self.assertFalse(pt._SMOKE_HITS)                                           # the shared march is not kept
 
 
 class WorkgroupTests(unittest.TestCase):

@@ -3,20 +3,16 @@
 viewport stays interactive while the image converges toward what `Render3D` would produce, instead
 of one long blocking trace.
 
-Each step re-traces the whole image from a fresh seed at a higher sample count than the last,
-rather than resuming a running accumulation across resolution changes -- simpler and safer, at
-roughly twice the total sample cost of the final image (1+2+4+...+64 is about 2x 64). The very
+Each step re-traces the whole image at a higher sample count than the last (1+2+4+...+64 is about
+2x 64 samples in all), except the full-size adaptive steps, which continue one accumulation (see
+"Settling" below) and so cost no more than the final image. The very
 first step after a reset (a new `key`: the camera moved, or the scene changed) renders at
 ``FIRST_PASS_SCALE`` under size, cheap enough to hold interactive frame rates while the camera is
 still moving (measured on an RTX 3080 Ti through the ``auto`` backend: a two-mesh scene, quarter
 size, 1 sample, 2-4 ms once the path tracer's pipelines are warm). Every later step is full size,
 doubling the sample count up to ``SAMPLE_CAP``, where the state is ``converged``.
 
-Denoising is not wired in here. ``pathtrace.render(..., output="denoise")`` was measured at about
-1.1 seconds a call in this environment, independent of the sample count (`guide_aovs`'s normals and
-depth passes fall outside the fast GPU beauty path and fall back to the slow CPU reference) -- a
-poor fit for a per-step call in a progressive loop. The raw (noisy) accumulation is what this module
-shows; wiring the denoiser in as an occasional final-settle pass, off the paint thread, is later work.
+The picture is denoised in the interactive steps below (`step_interactive`); `step` alone shows the raw accumulation.
 
 Interactive first look (lane 4, plan "Progress", step H1): `step_interactive` replaces the noisy quarter-size reset step with a
 *denoised* preview of the full output size inside about a second. Stage one traces `PREVIEW_STAGES[0]` pixels (480 x 270 for a 1080p
@@ -25,6 +21,15 @@ and pack for all four GPU renders), filters it with `ptdenoise.denoise_strips` i
 stage two does the same at 960 x 540 and 16 samples. Both states say `preview=True` (an enlarged internal pass, not a render at the
 output size) and `denoised=True`; the doubling steps then continue at full size exactly as `step` always did (32 then 64 samples), raw.
 The one-second target is a measured one: `tools/benchmark_first_look.py` reports the time to the first displayed image.
+
+Settling (lane 4, plan "Render mode responsiveness", step C): the full-size steps no longer re-trace the picture at twice the samples.
+They continue one accumulation (`step(accumulate=True)`): the path tracer keeps its running sums, moments, counts and done flags
+(`stats["keep_accumulation"]`, taken back through `stats["resume"]`), so each step gives the pixels still above the noise threshold their
+next samples and leaves the cleared ones as they were; the result is the image a single render at that sample cap gives. The picture is
+settled when every pixel is under `NOISE_THRESHOLD` or `SAMPLE_CAP` is reached, and `converged_fraction` and `converged_mask` say how much of
+it is. The filter runs on the graphics card (`gpudenoise`, `denoise_picture`), so a 1080p picture is filtered in tens of milliseconds
+instead of 1.4 s on the processor. A second preview stage that stage one's cost per pixel says would be slow is skipped
+(`STAGE_TWO_MAX_SECONDS`). Motion blur and shadow catchers keep the earlier re-tracing steps.
 
 Depth of field comes along for free: the viewed camera's own ``fstop``/``focus_distance``/lens knobs
 (when it is a ``Camera3D`` looked through, not the orbit camera, which has none) are read by
@@ -407,27 +412,58 @@ def denoise_picture(beauty, albedo, normals, depth, backend="auto", cancel=None,
 GUIDE_SAMPLES = 1        # the guide passes need far less than the preview's samples: normals and depth are un-jittered, and one albedo sample moved the error on the silhouettes by 1 percent
 
 
+_GUIDE_POOL = None
+
+
+def _guide_pool():
+    global _GUIDE_POOL
+    if _GUIDE_POOL is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _GUIDE_POOL = ThreadPoolExecutor(1, thread_name_prefix="nodebased-guides")
+    return _GUIDE_POOL
+
+
 def _denoised_step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments, cancel):
     """`step` with its picture filtered: the same render (adaptive sampling, `converged_fraction`, `finished`) traced over a clear
     background, filtered with the albedo, normals and depth guides, then composited over `background`. The guides are traced once
-    for the view (they do not depend on the sample count) and carried in the returned state for the next pass."""
+    for the view (they do not depend on the sample count) and carried in the returned state for the next pass. On a scene with smoke the
+    card's part of the guides comes first and the processor's part (the smoke's raymarch) runs on a second thread while the card
+    traces the pass, so the card is not left idle for it."""
     scene = _drop_particles(scene)
     clear = (0.0, 0.0, 0.0, 0.0)
+    if state is None or state.key != key:
+        state = ProgressiveState(key=key)
+    reset = state.samples == 0
+    shape = (max(1, height // FIRST_PASS_SCALE), max(1, width // FIRST_PASS_SCALE)) if reset else (height, width)
     with gpupathtrace.reusing_scene():
-        raw = step(state, scene, camera, width, height, clear, ambient, key, backend, max_bounces, moments, cancel, accumulate=True)
-        started = time.perf_counter()
-        guides = state.guides
-        if guides is None or guides[0].shape[:2] != (raw.height, raw.width):
+        guides, traced, finish, future, card_part = state.guides, None, None, None, 0.0
+        if guides is None or guides[0].shape[:2] != shape:
+            guides = None
             settings = pathtrace.PathSettings(samples=GUIDE_SAMPLES, max_bounces=max_bounces)
-            traced = pathtrace.guide_aovs(scene, camera, raw.width, raw.height, settings, cancel=cancel, backend=backend,
-                                          ambient=ambient)
+            asked = time.perf_counter()
+            traced, finish = pathtrace.guide_aovs_deferred(scene, camera, shape[1], shape[0], settings, cancel=cancel,
+                                                           backend=backend, ambient=ambient)
+            card_part = time.perf_counter() - asked
+            if finish is not None:
+                future = _guide_pool().submit(finish)
+        try:
+            raw = step(state, scene, camera, width, height, clear, ambient, key, backend, max_bounces, moments, cancel, accumulate=True)
+        except BaseException:
+            if future is not None:
+                from concurrent.futures import wait
+                wait([future])          # the pass stopped (a cancel set the event the march looks at): let the march end before returning
+            raise
+        started = time.perf_counter()
+        if future is not None:
+            traced = future.result()
+        if guides is None:
             guides = (traced["albedo"], traced["normals"][..., :3], traced["depth"][..., 0])
     guided = time.perf_counter()
     filtered = denoise_picture(raw.image, guides[0], guides[1], guides[2], backend, cancel)
     image = pathtrace.over_background(filtered, background).astype(np.float32)
     done = time.perf_counter()
-    return replace(raw, image=image, denoised=True, guides=guides, seconds=raw.seconds + done - started,
-                   phases=(("render", raw.seconds), ("guides", guided - started), ("denoise", done - guided)))
+    return replace(raw, image=image, denoised=True, guides=guides, seconds=raw.seconds + card_part + done - started,
+                   phases=(("render", raw.seconds), ("guides", card_part + guided - started), ("denoise", done - guided)))
 
 
 def _ladder_over(state, width, height, stages):

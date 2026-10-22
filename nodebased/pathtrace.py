@@ -2124,6 +2124,39 @@ def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend
     return out
 
 
+def guide_aovs_deferred(scene, camera, width, height, settings=None, cancel=None, backend="cpu", volume=None, ambient=0.0):
+    """`guide_aovs` with the smoke's share left for later: returns ``(guides, finish)``. ``guides`` has the albedo, normals and depth as
+    the card gave them (the normals and the depth without the smoke merged in) and ``finish()`` merges the smoke in (the processor's
+    raymarch, a second or so on a 1080p smoke scene, shared by the two passes) and returns the same dict `guide_aovs` would have.
+    ``finish`` is None when there is nothing to merge (no smoke, or a path that merges inline: the processor tracer, a shadow catcher
+    scene, particles), and ``guides`` is then final. The caller runs ``finish`` on another thread while the card traces."""
+    settings = (settings or PathSettings()).clamped()
+    if backend not in ("auto", "gpu") or s.has_shadow_catchers(scene) or scene.particles or not getattr(scene, "volumes", ()):
+        return guide_aovs(scene, camera, width, height, settings, cancel, backend, volume, None, ambient), None
+    few = replace(settings, samples=min(settings.samples, 8), time_limit=0.0, noise_threshold=0.0, sampling="fixed")
+    out = {"albedo": render(scene, camera, width, height, (0, 0, 0, 0), ambient, "albedo", few, cancel=cancel, backend=backend,
+                            volume=volume)}
+    pending = []
+    for name in ("normals", "depth"):
+        stats = {"defer_volume_merge": True}
+        out[name] = render(scene, camera, width, height, (0, 0, 0, 0), ambient, name, settings, cancel=cancel, backend=backend,
+                           volume=volume, stats=stats)
+        if "volume_merge" in stats:
+            pending.append((name, stats["volume_merge"]))
+    if not pending:
+        return out, None
+
+    def finish():
+        try:
+            for name, merge in pending:
+                out[name] = merge()
+        finally:
+            with _SMOKE_HITS_LOCK:
+                _SMOKE_HITS.clear()
+        return out
+    return out, finish
+
+
 def _render_denoised(scene, camera, width, height, background, ambient, settings, cancel, progress, stats, backend,
                      pass_hook, volume, denoise_settings=None, history_key=None):
     """The beauty filtered by `ptdenoise` with its own guides and Render3D's denoiser knobs; the background goes

@@ -3135,6 +3135,30 @@ def _remember_scene(scene, ambient, eye, volume, ps, packed):
         _PREPARED.entry = (_scene_key(scene, ambient, eye, volume), scene, volume, ps, packed)
 
 
+TRANSFER_CHUNK_BYTES = 8 << 20     # the accumulator crosses the bus in pieces this big, looking at a cancel between them
+
+
+def _upload_in_pieces(device, buffer, array, cancel):
+    """Write `array` (a contiguous numpy array) into `buffer` from byte 0 in pieces of `TRANSFER_CHUNK_BYTES`, looking at `cancel`
+    before each, so a 66 MB accumulator does not hold up an abandoned pass for its whole transfer."""
+    flat = memoryview(array).cast("B")
+    for start in range(0, len(flat), TRANSFER_CHUNK_BYTES):
+        raytrace._cancel(cancel)
+        device.queue.write_buffer(buffer, start, flat[start:start + TRANSFER_CHUNK_BYTES])
+
+
+def _download_in_pieces(device, buffer, shape, cancel):
+    """The first `prod(shape) * 4` bytes of `buffer` as a float32 array, read in pieces of `TRANSFER_CHUNK_BYTES` with a look at
+    `cancel` between them (and no second copy of the whole)."""
+    out = np.empty(shape, "f4")
+    flat = out.reshape(-1).view("u1")
+    for start in range(0, len(flat), TRANSFER_CHUNK_BYTES):
+        raytrace._cancel(cancel)
+        size = min(TRANSFER_CHUNK_BYTES, len(flat) - start)
+        flat[start:start + size] = np.frombuffer(device.queue.read_buffer(buffer, start, size), "u1")
+    return out
+
+
 def _resumable(stats, kind, pixels):
     """The accumulation an earlier call kept (`stats["resume"]`) when it was made by this kind of tracer for an image of
     `pixels` pixels, else None (the render then starts from nothing)."""
@@ -3254,7 +3278,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             # a continued render (`stats["resume"]`, the accumulator an earlier call kept): the sums, moments, counts and done
             # flags go back where the shader left them, so the passes that follow are the ones an uninterrupted render would
             # have taken next. Every open pixel has the same count (a pixel only stops at a pass boundary).
-            device.queue.write_buffer(accum, 0, resumed["accum"])
+            _upload_in_pieces(device, accum, resumed["accum"], cancel)
             flags = resumed["accum"][:, 1, :]
             first_sample = int(flags[flags[:, 3] < 0.5, 2].max(initial=0))
         links = bool(ps.linked_bits) or ps.hidden is not None or ps.holdout is not None
@@ -3386,10 +3410,6 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                               tiles_active=int((~tile_done).sum()),
                               converged=float(tile_done[tile_of].mean()) if tile_done.any() else 0.0))
         raytrace._cancel(cancel)
-        if adaptive and lean and stats is not None and stats.get("keep_accumulation"):
-            # the accumulator, for the next call to continue from (`stats["resume"]`): 32 bytes a pixel over the bus
-            kept = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(npix, 2, 4).copy()
-            readbacks["accumulator"] = 1
         if lean:
             background_premult = np.zeros(4, np.float64)
             if output == "rgba":
@@ -3398,6 +3418,11 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                 background_premult[:3] *= background_premult[3]
             lean_image, lean_meta = _resolved_image(state, device, wgpu, frame, accum, width, npix, tiles_x, tile_count,
                                                     data_pass, background_premult, adaptive)
+            if adaptive and stats is not None and stats.get("keep_accumulation"):
+                # the accumulator, for the next call to continue from (`stats["resume"]`): 32 bytes a pixel over the bus, after the
+                # picture, in pieces that look at a cancel (a pass abandoned now has no use for it)
+                kept = _download_in_pieces(device, accum, (npix, 2, 4), cancel)
+                readbacks["accumulator"] = 1
         else:
             raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(npix, 2, 4)
         readbacks["image"] += 1
@@ -3482,7 +3507,14 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         else:
             surface = result if output == "depth" else render(scene, camera, width, height, background, ambient, "depth",
                                                                settings, cancel=cancel, volume=volume, merge_volumes=False)
-        result = pt.merge_volume_data(scene, camera, width, height, result, output, ps.volumes.settings, surface, cancel)
+        if stats is not None and stats.get("defer_volume_merge"):
+            # the caller (`pathtrace.guide_aovs_deferred`) wants the card's pass now and the processor's smoke march later, to run
+            # it while the card traces something else: the unmerged pass is returned and `stats["volume_merge"]()` finishes it
+            unmerged, settings_of_smoke = result, ps.volumes.settings
+            stats["volume_merge"] = lambda: pt.merge_volume_data(scene, camera, width, height, unmerged, output, settings_of_smoke,
+                                                                 surface, cancel)
+        else:
+            result = pt.merge_volume_data(scene, camera, width, height, result, output, ps.volumes.settings, surface, cancel)
     result.flags.writeable = False
     lap("postprocess")
     return result
