@@ -12,8 +12,8 @@ Per scene it reports, on the adapter in use (the scene, the camera, the seed and
   ``first_image_seconds`` (request to the first denoised picture converted for display, the debounce included) and
   ``settled_seconds`` (request to the converged picture). Cold is the first view in this process (pipelines compiled, scene
   uploaded); warm moves the camera a little for every repeat (a new view, the same device objects) and reports the median.
-* ``interaction``: a real `Viewport3D` at 1920 x 1080 is orbited by camera nudges every 33 ms for a second while the worker is
-  busy, painting after each one. It reports the paint handler's own time (median and worst: the interface thread), how long the
+* ``interaction``: a real `Viewport3D` at 1920 x 1080 is orbited by camera nudges (a held mouse button, about 47 ms apart: 33 ms
+  of waiting after each paint) for a second while the worker is busy, painting after each one. It reports the paint handler's own time (median and worst: the interface thread), how long the
   worker took to abandon the pass it was in (``cancel_latency``), the number of first looks it actually started for the burst
   (the debounce collapses the rest) and the seconds from the last nudge to the first denoised picture on screen.
 * ``responsive_during_refinement``: the worst paint time while a long full-size pass is in flight.
@@ -64,6 +64,7 @@ def moved(i):
 
 
 SETTLE = True     # False (the field kit's --quick): a progression ends at the first full-size pass and reports no settle time
+FIRST_ONLY = False   # True (--first-look-only): a progression ends at its first picture
 
 
 def progression(job, scene, camera, identity):
@@ -71,7 +72,8 @@ def progression(job, scene, camera, identity):
     submitted = time.perf_counter()
     job.submit(Request(identity, scene, camera, WIDTH, HEIGHT, BACKGROUND, AMBIENT))
     reached = (lambda state, phase: phase in ("settled", "failed")) if SETTLE else \
-        (lambda state, phase: phase in ("settled", "failed") or (state is not None and state.samples >= 16 and phase == "tracing"))
+        (lambda state, phase: phase in ("settled", "failed") or (state is not None and (FIRST_ONLY or state.samples >= 16)
+                                                                 and phase == "tracing"))
     if not job.wait(reached, SETTLE_TIMEOUT):
         raise RuntimeError("the view did not settle in time")
     if job.error is not None:
@@ -128,6 +130,7 @@ def interaction(scene, camera):
     paint_ms.clear()
     nudges = 30
     last = None
+    widget._drag = (1, None)       # the orbit is a held mouse button: the viewport marks its requests as part of a drag
     for i in range(nudges):
         widget._scene_cache = ((1, None), (scene, moved(100 + i)))
         last = time.perf_counter()
@@ -136,6 +139,7 @@ def interaction(scene, camera):
         while time.perf_counter() < end:
             app.processEvents()
             time.sleep(0.002)
+    widget._drag = None            # released
     burst = list(paint_ms)
     started_first = len(job.frames)
     waited = time.perf_counter()
@@ -338,6 +342,7 @@ def main():
     parser.add_argument("--edits", type=int, default=10, help="edit-latency trials per kind (camera, material)")
     parser.add_argument("--no-edits", action="store_true")
     parser.add_argument("--no-settle", action="store_true", help="end each progression at its first full-size pass (no settle times)")
+    parser.add_argument("--first-look-only", action="store_true", help="end each progression at its first picture (implies --no-settle)")
     parser.add_argument("--field", default=None, metavar="PATH", help="write the small field-kit JSON here and nothing else")
     parser.add_argument("--quick", action="store_true", help="with --field: the furnished room only, fewer trials")
     parser.add_argument("--json", default=None)
@@ -345,8 +350,9 @@ def main():
     if args.adapter:
         gpu3d._states.setdefault("default", gpu3d._state(args.adapter))
     print(gpu3d.adapter_report())
-    global SETTLE
-    SETTLE = not args.no_settle
+    global SETTLE, FIRST_ONLY
+    FIRST_ONLY = args.first_look_only
+    SETTLE = not (args.no_settle or args.first_look_only)
     if args.field:
         SETTLE = not args.quick
         args.warm, args.no_interaction, args.no_edits = 1, True, False

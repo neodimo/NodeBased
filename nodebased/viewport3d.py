@@ -1047,7 +1047,8 @@ class Viewport3D(QWidget):
         identity = (key, width, height)
         job = self._job()
         job.submit(progressivejob.Request(identity, scene, lens.camera(camera) if lens else camera, width, height, BACKGROUND,
-                                          0.15, moments))
+                                          0.15, moments,
+                                          interacting=self._drag is not None or self._gizmo_drag is not None))
         state, phase = job.view(identity)
         self._progressive_phase = phase
         if phase == "failed":    # a scene the path tracer refuses (e.g. particles slipped through)

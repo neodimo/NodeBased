@@ -304,6 +304,21 @@ class BudgetTests(unittest.TestCase):
         predicted = pixels * (1.2 / stage) + P.ENLARGE_ALLOWANCE
         self.assertAlmostEqual(predicted, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
 
+    def test_a_cached_preparation_sizes_for_the_warm_target_and_an_uncached_one_pays_for_its_build(self):
+        stage = 480 * 270
+        P._record_cost(self.surface, 2.0, stage, built=0.4)            # 0.4 of the 2 s was the scene build
+        self.assertAlmostEqual(P._COST[self.key], 1.6 / stage)
+        self.assertAlmostEqual(P._BUILD[self.key], 0.4)
+        warm = P.first_stage_pixels(self.surface, stage, prepared=True)
+        rebuilt = P.first_stage_pixels(self.surface, stage, prepared=False)
+        unknown = P.first_stage_pixels(self.surface, stage)
+        cost = 1.6 / stage
+        self.assertAlmostEqual(warm * cost + P.ENLARGE_ALLOWANCE, P.WARM_FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
+        self.assertAlmostEqual(rebuilt * cost + P.ENLARGE_ALLOWANCE + 0.4, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
+        self.assertAlmostEqual(unknown * cost + P.ENLARGE_ALLOWANCE, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
+        self.assertLess(rebuilt, warm)          # a build of 0.4 s costs more pixels than the warm target holds back
+        self.assertLess(warm, unknown)
+
     def test_a_cheap_scene_never_grows_past_the_stage_and_a_dear_one_never_below_the_floor(self):
         stage = 480 * 270
         P._record_cost(self.surface, 0.01, stage)

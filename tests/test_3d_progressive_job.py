@@ -166,6 +166,41 @@ class JobTests(unittest.TestCase):
         self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
         self.assertEqual(sorted(script.calls), [("drag", 11)])       # the camera was still moving for the others
 
+    def test_requests_slower_than_the_debounce_but_in_one_drag_start_no_first_look_until_the_drag_stops(self):
+        # 60 ms apart is slower than the 40 ms debounce but is one burst: after the first, each waits for the next
+        script = Script([final], gated=False)
+        job = self.make(script, settle=0.04)
+        for i in range(6):
+            job.submit(request(("drag", i)))
+            time.sleep(0.06)
+        self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
+        started = [key for key, _ in script.started]
+        self.assertEqual(started[-1], ("drag", 5))
+        self.assertLessEqual(len(started), 2)                  # at most the first (it started before the burst was known) and the last
+
+    def test_every_request_of_an_interactive_drag_is_part_of_the_burst(self):
+        script = Script([final], gated=False)
+        job = self.make(script, settle=0.04)
+        for i in range(6):
+            job.submit(replace(request(("drag", i)), interacting=True))
+            time.sleep(0.06)
+        self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
+        self.assertEqual(sorted(script.calls), [("drag", 5)])  # nothing traced while the mouse was down and moving
+
+    def test_a_lone_request_waits_only_the_debounce(self):
+        script = Script([final], gated=False)
+        job = self.make(script, settle=0.04)
+        job.submit(request("alone"))
+        asked = time.perf_counter()
+        self.assertTrue(script.entered.wait(5))
+        self.assertLess(time.perf_counter() - asked, 0.1)
+        time.sleep(0.2)
+        started = time.perf_counter()
+        job.submit(request("later"))                           # long after the last one: not a burst
+        script.entered.clear()
+        self.assertTrue(script.entered.wait(5))
+        self.assertLess(time.perf_counter() - started, 0.1)
+
     def test_the_first_look_phase_is_waiting_until_a_picture_exists(self):
         script = Script([preview, final])
         job = self.make(script)

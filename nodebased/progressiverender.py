@@ -144,16 +144,23 @@ def converged(state, width, height):
 # (pixels traced, samples) per preview stage. Measured on the RTX 3080 Ti with the furnished benchmark room
 # (tools/benchmark_first_look.py): stage one warm in well under a second at 1080p, stage two about twice that.
 PREVIEW_STAGES = ((480 * 270, 4), (960 * 540, 16))
+# Stage one may trace more than its 480 x 270 when the output is large and the adapter fast (step B of the Progress plan): up to this
+# many pixels, never above a quarter of the output's (an enlargement of at least 2 x on each side), and only as far as the cost
+# model below says the look still fits its target. A view smaller than that keeps the stage's own size, so the preview ladder is
+# skipped exactly where it always was.
+FIRST_STAGE_MAX_PIXELS = 640 * 360
 PREVIEW_BOUNCES = 3
 PREVIEW_WORKERS = 8
 FIRST_LOOK_SECONDS = 1.0         # the target the benchmark compares with; a goal, reported, never assumed
+WARM_FIRST_LOOK_SECONDS = 0.65   # the first stage's own target when the scene's preparation is cached (a camera move, a material edit):
+                                 # the picture then reaches the screen under 0.8 s once the debounce and the display conversion are added
 # The first stage sizes itself to the target from what the last one cost on this adapter (`_COST`): seconds per traced pixel,
 # for surface scenes and for scenes with splats or smoke apart (those take a slower GPU variant, 10 to 20 times the cost per
 # pixel). A scene never seen on this adapter starts at the stage's own pixel count, or at `HEAVY_FIRST_PIXELS` when it has
 # splats or smoke; the next first look is sized to fit `FIRST_LOOK_SECONDS * FIT_FRACTION` less the enlargement's allowance.
 FIT_FRACTION = 0.85
 CATCHER_FIT_FRACTION = 0.3  # leave room for fixed scene/guide overhead on Hot pour-style catcher previews
-ENLARGE_ALLOWANCE = 0.06
+ENLARGE_ALLOWANCE = 0.03
 HEAVY_FIRST_PIXELS = 240 * 135
 MIN_FIRST_PIXELS = 120 * 68
 CATCHER_MIN_FIRST_PIXELS = 64 * 36  # keep a useful thumbnail while leaving room for fixed setup cost
@@ -166,6 +173,30 @@ def internal_size(width, height, pixels):
     """The (width, height) of about `pixels` pixels with the aspect ratio of `width` by `height`, never above it."""
     scale = min(1.0, (pixels / float(width * height)) ** 0.5)
     return max(1, int(round(width * scale))), max(1, int(round(height * scale)))
+
+
+_BAND_POOL = None
+BAND_WORKERS = max(2, min(8, os.cpu_count() or 2))
+ENLARGE_MIN_ROWS = 96          # output rows per band at the least; a smaller picture is done in one go
+
+
+def _band_pool():
+    global _BAND_POOL
+    if _BAND_POOL is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _BAND_POOL = ThreadPoolExecutor(BAND_WORKERS, thread_name_prefix="nodebased-bands")
+    return _BAND_POOL
+
+
+def _in_bands(rows, minimum, work):
+    """`work(y0, y1)` over `rows` split into bands on a small thread pool (the array arithmetic inside releases the GIL); the
+    bands are disjoint, so the result is the one a single call over all the rows gives."""
+    count = max(1, min(BAND_WORKERS, rows // max(minimum, 1)))
+    if count < 2:
+        return work(0, rows)
+    edges = np.linspace(0, rows, count + 1).astype(int)
+    futures = [_band_pool().submit(work, int(edges[i]), int(edges[i + 1])) for i in range(count)]
+    return [f.result() for f in futures]
 
 
 def enlarge(image, width, height):
@@ -181,8 +212,13 @@ def enlarge(image, width, height):
     y0, y1, wy = axis(h, height)
     x0, x1, wx = axis(w, width)
     image = np.asarray(image, np.float32)
-    rows = image[y0] * (1 - wy)[:, None, None] + image[y1] * wy[:, None, None]
-    return rows[:, x0] * (1 - wx)[None, :, None] + rows[:, x1] * wx[None, :, None]
+    out = np.empty((height, width, image.shape[2]), np.float32)
+
+    def band(lo, hi):
+        rows = image[y0[lo:hi]] * (1 - wy[lo:hi])[:, None, None] + image[y1[lo:hi]] * wy[lo:hi][:, None, None]
+        out[lo:hi] = rows[:, x0] * (1 - wx)[None, :, None] + rows[:, x1] * wx[None, :, None]
+    _in_bands(height, ENLARGE_MIN_ROWS, band)
+    return out
 
 
 def _thumbnail_guides(image):
@@ -204,8 +240,8 @@ DISPLAY_BAND_ROWS = 64
 def display_rgba8(image, cancel=None):
     """The viewport's 8-bit sRGB RGBA for a premultiplied linear `image` (h, w, 4): the colour un-premultiplied, clipped to
     [0, 1] and passed through a table (within one level of the exact curve), alpha opaque. A float32 table lookup instead of
-    a float64 power on every channel: about a tenth of the time at 1080p. With `cancel` (an event) the conversion runs in
-    bands of `DISPLAY_BAND_ROWS` rows and raises `Cancelled` between them; the pixels are the same."""
+    a float64 power on every channel: about a tenth of the time at 1080p. The rows are converted in bands on a small thread pool;
+    with `cancel` (an event) each band looks at it first and raises `Cancelled`, the pixels are the same."""
     global _SRGB_LUT
     if _SRGB_LUT is None:
         x = np.linspace(0.0, 1.0, _SRGB_LUT_SIZE + 1)
@@ -213,13 +249,14 @@ def display_rgba8(image, cancel=None):
         _SRGB_LUT = np.round(y * 255.0).astype(np.uint8)
     out = np.empty(image.shape[:2] + (4,), np.uint8)
     out[..., 3] = 255
-    rows = image.shape[0] if cancel is None else DISPLAY_BAND_ROWS
-    for y in range(0, image.shape[0], rows):
+
+    def band(y0, y1):
         if cancel is not None and cancel.is_set():
             raise Cancelled()
-        band = image[y:y + rows]
-        rgb = np.clip(band[..., :3] / np.maximum(band[..., 3:4], 1e-6), 0.0, 1.0)
-        out[y:y + rows, :, :3] = _SRGB_LUT[(rgb * _SRGB_LUT_SIZE + 0.5).astype(np.int32)]
+        part = image[y0:y1]
+        rgb = np.clip(part[..., :3] / np.maximum(part[..., 3:4], 1e-6), 0.0, 1.0)
+        out[y0:y1, :, :3] = _SRGB_LUT[(rgb * _SRGB_LUT_SIZE + 0.5).astype(np.int32)]
+    _in_bands(image.shape[0], DISPLAY_BAND_ROWS, band)
     return out
 
 
@@ -233,28 +270,31 @@ def _cost_key(scene):
     return adapter, heavy, bool(scene3d.has_shadow_catchers(scene))
 
 
-def first_stage_pixels(scene, stage_pixels, prepared=True):
+def first_stage_pixels(scene, stage_pixels, prepared=None):
     """How many pixels stage one traces for `scene`: `stage_pixels`, or fewer when the last first look of this kind of scene on this
-    adapter cost too much per pixel to finish inside `FIRST_LOOK_SECONDS`; more than `stage_pixels` never. `prepared` False says the
-    scene's preparation (`scenecache`) will be built again, and the last such build's time is taken off the budget first: a camera
-    move or a material edit reuses the preparation and traces more pixels, a geometry or splat edit pays for the build."""
+    adapter cost too much per pixel to finish inside its target; more than `stage_pixels` never. `prepared` True says the scene's
+    preparation (`scenecache`) is cached, so a camera move or a material edit traces for `WARM_FIRST_LOOK_SECONDS`; False says it
+    will be built again (a geometry or splat edit), and the last such build's time is taken off `FIRST_LOOK_SECONDS` first; None
+    (no information) sizes for `FIRST_LOOK_SECONDS` alone."""
     key = _cost_key(scene)
     cost = _COST.get(key)
     if cost is None:
         return min(stage_pixels, HEAVY_FIRST_PIXELS) if key[1] else stage_pixels
     fraction = CATCHER_FIT_FRACTION if key[2] else FIT_FRACTION
-    budget = FIRST_LOOK_SECONDS * fraction - ENLARGE_ALLOWANCE - (0.0 if prepared else _BUILD.get(key, 0.0))
+    target = WARM_FIRST_LOOK_SECONDS if prepared else FIRST_LOOK_SECONDS
+    budget = target * fraction - ENLARGE_ALLOWANCE - (_BUILD.get(key, 0.0) if prepared is False else 0.0)
     fit = budget / cost
     floor = CATCHER_MIN_FIRST_PIXELS if key[2] else MIN_FIRST_PIXELS
     return int(min(stage_pixels, max(floor, fit)))
 
 
 def _prepared(scene, camera, ambient, backend):
-    """True when the path tracer's preparation of `scene` for `camera` is cached (or there is nothing to prepare on the GPU)."""
+    """True when the path tracer's preparation of `scene` for `camera` is cached, False when the first look will build it, None when
+    that cannot be told."""
     try:
         return scenecache.is_prepared(_drop_particles(scene), ambient, scene3d._view_basis(camera)[0])
     except Exception:
-        return True
+        return None
 
 
 def _record_cost(scene, seconds, pixels, built=0.0):
@@ -299,8 +339,8 @@ def _preview(scene, camera, width, height, background, ambient, pixels, samples,
     filtered = ptdenoise.denoise_strips(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0],
                                         None, workers=PREVIEW_WORKERS, dtype=np.float32, cancel=cancel)
     lap("denoise")
-    big = enlarge(filtered, width, height)
-    image = pathtrace.over_background(big, background).astype(np.float32)
+    # the bilinear weights sum to one, so the background goes under the small picture and the enlargement carries it along
+    image = enlarge(pathtrace.over_background(filtered, background).astype(np.float32), width, height)
     lap("enlarge")
     return image, (tw, th), tuple(phases)
 
@@ -381,6 +421,7 @@ def step_interactive(state, scene, camera, width, height, background, ambient, k
         from . import shadowcatch
         trace_scene = shadowcatch.hold_scene(_drop_particles(scene))
     if state.stage == 0:
+        pixels = max(pixels, min(FIRST_STAGE_MAX_PIXELS, width * height // 4))
         pixels = first_stage_pixels(scene, pixels, _prepared(scene if trace_scene is None else trace_scene, camera, ambient, backend))
     started, built_before = time.perf_counter(), scenecache.BUILD_SECONDS
     image, traced, phases = _preview(_drop_particles(scene), camera, width, height, background, ambient, pixels, samples,

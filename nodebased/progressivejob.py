@@ -8,7 +8,9 @@ could not be abandoned when the artist moved the camera. `ProgressiveJob` runs t
   or already settled is ignored; a different identity supersedes the running one at once: its cancel event is set, the trace
   stops at the next GPU pass boundary (`cancellation.Cancelled`), and the worker takes the newest request. Requests that arrive
   within ``settle`` seconds of each other (an orbit or a slider drag sends one per mouse move) collapse into the last, so only the
-  view the artist stopped on gets a first look.
+  view the artist stopped on gets a first look. A request that follows the one before within ``BURST_GAP_SECONDS`` is part of such a
+  burst (so is every request made while the artist drags: ``Request.interacting``) and waits ``BURST_SETTLE_SECONDS`` instead, so a drag that is slower than the debounce does not start a first look for every
+  mouse move and take the card and the processor from the interactive picture it is painting.
 * The worker publishes every finished state (the denoised first look, the second preview stage, then the doubling steps) and calls
   ``on_update``; the interface thread asks ``view(identity)`` for the newest state of the view it is showing. A state of another
   identity is never returned, so a superseded picture of an old camera or scene cannot be painted.
@@ -29,6 +31,10 @@ from . import gpupathtrace, progressiverender
 from .cancellation import Cancelled
 
 SETTLE_SECONDS = 0.04      # requests this close together collapse into the last one
+BURST_GAP_SECONDS = 0.15   # a request this soon after the one before it belongs to a burst (an orbit, a slider drag) ...
+BURST_SETTLE_SECONDS = 0.12   # ... and waits this long for the next one, so the worker leaves the card and the processor to the
+                              # interactive picture until the camera has stopped (a first look under way made every other paint of
+                              # an orbit twice as slow: 13 ms, then 26 ms)
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,7 @@ class Request:
     moments: object = None
     backend: str = "auto"
     max_bounces: int = progressiverender.MAX_BOUNCES
+    interacting: bool = False     # the artist is dragging the camera or a handle: the request is part of a burst from its first move
 
 
 @dataclass(frozen=True)
@@ -64,7 +71,8 @@ class ProgressiveJob:
         # the full-size doubling passes are filtered too, so a refinement never looks noisier than the preview before it
         self._step = step or functools.partial(progressiverender.step_interactive, denoise_passes=denoise_passes)
         self._cond = threading.Condition()
-        self._pending = None            # (request, submitted_at) not yet taken by the worker
+        self._pending = None            # (request, submitted_at, settle) not yet taken by the worker
+        self._last_submit = None        # when the last request arrived (a request soon after it belongs to a burst)
         self._current = None            # the request being traced
         self._cancel = threading.Event()
         self._frame = None              # newest Frame, of `_frame_identity`
@@ -98,7 +106,10 @@ class ProgressiveJob:
             self._frame_identity = None
             self.frames = []
             self._pass_started = time.perf_counter()
-            self._pending = (request, self._pass_started)
+            burst = request.interacting or (self._last_submit is not None
+                                            and self._pass_started - self._last_submit < BURST_GAP_SECONDS)
+            self._last_submit = self._pass_started
+            self._pending = (request, self._pass_started, max(self.settle, BURST_SETTLE_SECONDS) if burst and self.settle > 0 else self.settle)
             if self._busy and not self._cancel.is_set():
                 self._cancel_asked = time.perf_counter()
             self._cancel.set()             # obsolete work stops at its next pass boundary
@@ -142,6 +153,7 @@ class ProgressiveJob:
         """Stop the work in hand and forget the identity: the next `submit` of any view starts again."""
         with self._cond:
             self._pending = None
+            self._last_submit = None
             self._identity = None
             self._phase = "idle"
             self._frame = None
@@ -192,10 +204,10 @@ class ProgressiveJob:
                     self._cond.wait(0.25)
                     continue
                 taken = self._pending
-                if self.settle > 0:
+                if taken[2] > 0:
                     # the debounce counts from the request, not from when the worker got free: an edit that waited out the
                     # pass it superseded has already waited its settle time
-                    left = self.settle - (time.perf_counter() - taken[1])
+                    left = taken[2] - (time.perf_counter() - taken[1])
                     if left > 0:
                         self._cond.wait(left)
                         if self._closed:
@@ -213,7 +225,7 @@ class ProgressiveJob:
             taken = self._take()
             if taken is None:
                 return
-            request, submitted = taken
+            request, submitted = taken[0], taken[1]
             try:
                 self._work(request, submitted)
             finally:
