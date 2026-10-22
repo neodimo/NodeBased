@@ -38,11 +38,23 @@ class HotPourShotTests(unittest.TestCase):
         source = nodes["spout"]["params"]
         self.assertEqual(nodes["liquid"]["params"]["max_size"], 64)
         self.assertEqual(nodes["render"]["params"]["transmission_bounces"], 4)
+        self.assertEqual(nodes["render"]["params"]["max_bounces"], 4)
+        self.assertEqual(nodes["render"]["params"]["specular_bounces"], 2)
+        self.assertEqual(nodes["render"]["params"]["diffuse_bounces"], 1)
+        self.assertEqual(nodes["render"]["params"]["denoise_iterations"], 8)
         self.assertEqual(nodes["render"]["params"]["volume_shadow_density"], 0.0)
-        self.assertEqual(nodes["render"]["params"]["pt_samples"], 64)
+        self.assertEqual(nodes["render"]["params"]["pt_samples"], 128)
         self.assertEqual(nodes["render"]["params"]["min_samples"], 32)
         self.assertEqual(nodes["render"]["params"]["max_samples"], 128)
+        self.assertEqual(nodes["render"]["params"]["adaptive_pass_size"], 64)
         self.assertEqual(nodes["render"]["params"]["volume_density_scale"], 1.5)
+        self.assertEqual(nodes["render"]["params"]["volumes"], "off")
+        self.assertEqual(nodes["steam_scene"]["inputs"]["object0"], "steam_cache")
+        self.assertEqual(nodes["steam_render"]["params"]["render_mode"], "raster")
+        self.assertEqual(nodes["steam_render"]["params"]["volumes"], "on")
+        self.assertEqual((nodes["steam_render"]["params"]["volume_density_scale"],
+                          nodes["steam_render"]["params"]["volume_step_size"]), (1.0, 0.015))
+        self.assertEqual(nodes["comp"]["inputs"]["A"], "steam_render")
         key = nodes["key_light"]["params"]
         self.assertEqual(key["light_type"], "Rect")
         self.assertEqual(key["intensity"], 3.0)
@@ -60,6 +72,7 @@ class HotPourShotTests(unittest.TestCase):
                           nodes["steam_source"]["params"]["src_noise_amount"]), (1.0, 0.0))
         self.assertEqual((nodes["steam_lift"]["params"]["buoyancy_lift"],
                           nodes["steam_lift"]["params"]["strength"]), (0.12, 0.0))
+        self.assertEqual(nodes["steam"]["params"]["vorticity"], 0.12)
         self.assertEqual(cup["holdout"], "on")
         self.assertAlmostEqual(cup["tx"], 0.0)
         self.assertAlmostEqual(cup["tz"], 0.0)
@@ -71,6 +84,7 @@ class HotPourShotTests(unittest.TestCase):
         self.assertTrue(all(abs(x - cup["tx"]) < cup["cyl_radius"] for x in source_x))
         doc["nodes"]["render"]["params"].update(width=48, height=27, render_backend="cpu", pt_samples=2)
         doc["nodes"]["plate_fit"]["params"].update(width=48, height=27)
+        doc["nodes"]["steam_render"]["params"].update(width=48, height=27, render_backend="cpu")
         # the example pins both solvers to the card ("resident"); this check runs where there is none (CI, 10/15 red)
         doc["nodes"]["liquid"]["params"]["pressure"] = "auto"
         doc["nodes"]["steam"]["params"]["pressure"] = "auto"

@@ -41,10 +41,12 @@ def main():
     doc = load_document(ROOT / "hot_pour_shot.nbcomp")
     doc["nodes"]["render"]["params"].update(render_backend="gpu", render_mode="pathtrace", pt_samples=2,
                                                max_bounces=2, diffuse_bounces=1, specular_bounces=1,
-                                               transmission_bounces=4, volume_shadow_steps=1, volume_shadow_density=0.0,
+                                               transmission_bounces=2, volume_shadow_steps=1, volume_shadow_density=0.0,
                                                sampling="fixed", noise_threshold=0.0)
     doc["nodes"]["render"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
     doc["nodes"]["plate_fit"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
+    doc["nodes"]["steam_render"]["params"].update(
+        render_backend="gpu", width=args.small_width, height=round(args.small_width * 9 / 16))
     fluid3d._SOLVERS.clear()
     evaluator = Evaluator(sim=simcache.SimCache(root=run_dir, memory_budget=1 << 30, disk_budget=8 << 30))
     started = time.perf_counter()
@@ -67,6 +69,7 @@ def main():
         raise
     cpu_small = {}
     doc["nodes"]["render"]["params"]["render_backend"] = "cpu"
+    doc["nodes"]["steam_render"]["params"]["render_backend"] = "cpu"
     for frame in COMPARE_FRAMES:
         cpu_small[frame] = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels.copy()
         write_png(run_dir / f"cpu-small-{frame:03d}.png", cpu_small[frame])
@@ -86,10 +89,11 @@ def main():
             raise SystemExit("CPU/GPU path-tracer comparison failed")
         return
     doc["nodes"]["render"]["params"].update(
-        render_backend="gpu", width=960, height=540, pt_samples=64,
-        max_bounces=4, diffuse_bounces=2, specular_bounces=2, transmission_bounces=4,
+        render_backend="gpu", width=960, height=540, pt_samples=128,
+        max_bounces=4, diffuse_bounces=1, specular_bounces=2, transmission_bounces=4,
         volume_shadow_steps=1, volume_shadow_density=0.0, sampling="adaptive", min_samples=32, max_samples=128,
-        adaptive_pass_size=8, noise_threshold=0.01)
+        adaptive_pass_size=64, noise_threshold=0.01)
+    doc["nodes"]["steam_render"]["params"].update(render_backend="gpu", width=960, height=540)
     doc["nodes"]["render"]["params"]["denoise"] = "final"
     doc["nodes"]["plate_fit"]["params"].update(width=960, height=540)
     output_dir = Path(__file__).resolve().parents[2] / "docs" / "images" / "hot_pour_shot"
@@ -104,7 +108,9 @@ def main():
     result = {"adapter": args.adapter, "device": str(adapter_name),
               "liquid_cells": int(doc["nodes"]["liquid"]["params"]["max_size"]),
               "steam_cells": int(doc["nodes"]["steam"]["params"]["max_size"]), "frames": 120,
-              "visual_settings": {"volume_density_scale": doc["nodes"]["render"]["params"]["volume_density_scale"],
+              "visual_settings": {"volume_layer": "deterministic raster over adaptive path-traced liquid/catcher",
+                                  "volume_density_scale": doc["nodes"]["steam_render"]["params"]["volume_density_scale"],
+                                  "volume_step_size": doc["nodes"]["steam_render"]["params"]["volume_step_size"],
                                   "key_light": doc["nodes"]["key_light"]["params"]["light_type"],
                                   "ambient": 3.0,
                                   "key_area": [doc["nodes"]["key_light"]["params"]["area_width"],
@@ -116,8 +122,11 @@ def main():
                                   "steam_source_noise": doc["nodes"]["steam_source"]["params"]["src_noise_amount"],
                                   "steam_buoyancy_lift": doc["nodes"]["steam_lift"]["params"]["buoyancy_lift"],
                                   "steam_force_strength": doc["nodes"]["steam_lift"]["params"]["strength"],
+                                  "steam_vorticity": doc["nodes"]["steam"]["params"]["vorticity"],
+                                  "diffuse_bounces": doc["nodes"]["render"]["params"]["diffuse_bounces"],
                                   "continuity_bridge": {"radius": 0.012, "height": 0.34, "camera_z": 0.03},
                                   "showcase_denoise": "final",
+                                  "denoise_iterations": doc["nodes"]["render"]["params"]["denoise_iterations"],
                                   "catcher_shadow_samples": doc["nodes"]["render"]["params"]["pt_samples"]},
               "bake_seconds": round(bake_seconds, 2),
               "render_seconds": render_seconds, "comparison": comparisons}

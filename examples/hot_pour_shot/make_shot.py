@@ -36,16 +36,19 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
             op["params"].update(src_density=1.0, src_noise_amount=0.0, src_noise_scale=0.5)
         if op.get("op") == "create" and op.get("id") == "$new:steam_lift":
             op["params"].update(buoyancy_lift=0.12, strength=0.0)
+        if op.get("op") == "create" and op.get("id") == "$new:steam":
+            op["params"].update(vorticity=0.12)
         if op.get("op") == "create" and op.get("id") == "$new:camera":
             op["params"].update(ty=1.15, tz=2.8, target_y=0.0, focal=45.0)
         if op.get("op") == "create" and op.get("id") == "$new:render":
             op["params"].update(render_backend=render_backend, render_mode="pathtrace", samples=2,
-                                pt_samples=64, max_bounces=4, diffuse_bounces=2, specular_bounces=2,
+                                pt_samples=128, max_bounces=4, diffuse_bounces=1, specular_bounces=2,
                                 transmission_bounces=4, volume_density_scale=1.5,
                                 volume_shadow_steps=1, volume_shadow_density=0.0,
+                                volumes="off",
                                 ambient=3.0,
                                 sampling="adaptive", min_samples=32, max_samples=128,
-                                adaptive_pass_size=8, noise_threshold=0.01)
+                                adaptive_pass_size=64, noise_threshold=0.01, denoise_iterations=8)
         if op.get("op") == "connect" and op.get("id") == "$new:scene" and op.get("input") == "object6":
             continue  # the secondary rim light yields this slot to the foreground holdout
         for field in ("id", "source"):
@@ -67,17 +70,30 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
     ))
     d = Dispatcher()
     d.execute({"op": "batch", "commands": commands})
-    # Plate and shot share the same camera and set. The plate is the solid-only render;
-    # Merge overlays the transparent catcher/holdout/liquid render onto it.
+    # Plate and shot share the same camera and set. The path tracer renders the liquid and catcher;
+    # a deterministic raster volume layer supplies the soft steam separately.
     d.execute({"op": "create", "id": "plate", "type": "Read", "params": {
         "path": "plate.png", "colorspace": "Auto", "alpha_mode": "Auto", "missing": "error"}})
     d.execute({"op": "create", "id": "plate_fit", "type": "Reformat", "params": {
         "reformat_type": "to_box", "width": int(render_size[0]), "height": int(render_size[1]),
         "resize_type": "fit", "filter": "bilinear"}})
     d.execute({"op": "connect", "id": "plate_fit", "input": "image", "source": "plate"})
+    d.execute({"op": "create", "id": "base_comp", "type": "Merge", "params": {"operation": "over"}})
+    d.execute({"op": "connect", "id": "base_comp", "input": "A", "source": "render"})
+    d.execute({"op": "connect", "id": "base_comp", "input": "B", "source": "plate_fit"})
+    d.execute({"op": "create", "id": "steam_scene", "type": "Scene3D"})
+    d.execute({"op": "connect", "id": "steam_scene", "input": "object0", "source": "steam_cache"})
+    d.execute({"op": "connect", "id": "steam_scene", "input": "object1", "source": "key_light"})
+    d.execute({"op": "create", "id": "steam_render", "type": "Render3D", "params": {
+        "width": int(render_size[0]), "height": int(render_size[1]), "render_backend": render_backend,
+        "render_mode": "raster", "alpha": 0.0, "ambient": 1.5, "volumes": "on",
+        "volume_step_size": 0.015, "volume_density_scale": 1.0, "volume_shadow_density": 0.0,
+        "volume_shadow_steps": 1, "volume_scattering": 1.0, "volume_absorption": 0.05}})
+    d.execute({"op": "connect", "id": "steam_render", "input": "scene", "source": "steam_scene"})
+    d.execute({"op": "connect", "id": "steam_render", "input": "camera", "source": "camera"})
     d.execute({"op": "create", "id": "comp", "type": "Merge", "params": {"operation": "over"}})
-    d.execute({"op": "connect", "id": "comp", "input": "A", "source": "render"})
-    d.execute({"op": "connect", "id": "comp", "input": "B", "source": "plate_fit"})
+    d.execute({"op": "connect", "id": "comp", "input": "A", "source": "steam_render"})
+    d.execute({"op": "connect", "id": "comp", "input": "B", "source": "base_comp"})
     d.document["view"] = "comp"
     # Dispatcher creation normalizes Read paths against the process cwd; keep this portable
     # example relative to its own folder instead.

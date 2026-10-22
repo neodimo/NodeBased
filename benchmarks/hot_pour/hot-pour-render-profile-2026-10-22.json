@@ -278,5 +278,53 @@
     "max_noise": 0.52335091,
     "fully_settled": false,
     "note": "The lower cap also lowers the catcher shadow-sample budget."
+  },
+  "finish6_split_steam": {
+    "adapter": "NVIDIA GeForce RTX 3080 Ti / Vulkan",
+    "render_settings": {
+      "width": 1920,
+      "height": 1080,
+      "adaptive_min_samples": 32,
+      "adaptive_max_samples": 128,
+      "adaptive_pass_size": 64,
+      "noise_threshold": 0.01,
+      "path_traced_layer": "liquid and catcher",
+      "steam_layer": "deterministic raster volume composited over path-traced layer"
+    },
+    "fully_converged": {
+      "wall_seconds": 69.253,
+      "mean_samples_per_pixel": 9.3641049383,
+      "max_observed_samples": 7752,
+      "converged_pixel_fraction": 1.0,
+      "max_estimated_noise": 0.0099997452,
+      "under_60_seconds": false
+    },
+    "best_bounded_full_convergence": {
+      "adaptive_pass_size": 256,
+      "wall_seconds": 68.235,
+      "noise_threshold": 0.01,
+      "converged_pixel_fraction": 1.0,
+      "max_estimated_noise": 0.009998698,
+      "under_60_seconds": false
+    },
+    "fresh_stills_960x540": {
+      "frame_60_seconds": 43.31,
+      "frame_90_seconds": 45.74,
+      "visual_review": "soft coherent steam, continuous pour, smooth pool, broad soft catcher shadow"
+    },
+    "rtx_cpu_gpu_comparison": {
+      "frames": [
+        1,
+        60,
+        120
+      ],
+      "passed": true,
+      "mean_absolute_errors": [
+        2.894887884963282e-09,
+        2.091577400165079e-08,
+        2.5475575426980868e-08
+      ]
+    },
+    "note": "Path-traced layer did not meet the strict under-60-second settled target. Raster steam is composited after this measurement."
   }
 }

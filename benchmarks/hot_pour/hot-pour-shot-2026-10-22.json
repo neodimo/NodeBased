@@ -5,7 +5,9 @@
   "steam_cells": 64,
   "frames": 120,
   "visual_settings": {
-    "volume_density_scale": 1.5,
+    "volume_layer": "deterministic raster over adaptive path-traced liquid/catcher",
+    "volume_density_scale": 1.0,
+    "volume_step_size": 0.015,
     "key_light": "Rect",
     "ambient": 3.0,
     "key_area": [
@@ -20,33 +22,36 @@
     "steam_source_noise": 0.0,
     "steam_buoyancy_lift": 0.12,
     "steam_force_strength": 0.0,
+    "steam_vorticity": 0.12,
+    "diffuse_bounces": 1,
     "continuity_bridge": {
       "radius": 0.012,
       "height": 0.34,
       "camera_z": 0.03
     },
     "showcase_denoise": "final",
-    "catcher_shadow_samples": 64
+    "denoise_iterations": 8,
+    "catcher_shadow_samples": 128
   },
-  "bake_seconds": 38.0,
+  "bake_seconds": 0.71,
   "render_seconds": {
-    "60": 36.66,
-    "90": 37.61
+    "60": 43.31,
+    "90": 45.74
   },
   "comparison": {
     "1": {
-      "mean_absolute_error": 0.00021701655350625515,
-      "limit": 0.017125191688537596,
+      "mean_absolute_error": 2.894887884963282e-09,
+      "limit": 0.01712768793106079,
       "passed": true
     },
     "60": {
-      "mean_absolute_error": 0.005425351206213236,
-      "limit": 0.0171812641620636,
+      "mean_absolute_error": 2.091577400165079e-08,
+      "limit": 0.01716999173164368,
       "passed": true
     },
     "120": {
-      "mean_absolute_error": 0.00704137422144413,
-      "limit": 0.01717349052429199,
+      "mean_absolute_error": 2.5475575426980868e-08,
+      "limit": 0.017156388759613037,
       "passed": true
     }
   }
