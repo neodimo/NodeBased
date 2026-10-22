@@ -3796,15 +3796,16 @@ class Viewer(PanZoomView):
             self._overlay_view = {"zoom": logical, "transform": transform, "width": width / ratio}
             try:
                 self.paint_overlays(painter, scene_rect)
-                if readout is not None:
-                    self._paint_readout(painter, area, readout)
             finally:
                 self._overlay_view = None
                 painter.end()
-            if recording.size() <= self._empty_recording_size():
+            if recording.size() <= self._empty_recording_size() and readout is None:
                 self._overlay_memo = None
                 return directviewer.EMPTY_OVERLAY
-            memo_key = ((int(width), int(height)), ratio, tuple(view), bytes(recording.data()))
+            # The readout is painted straight into the image below (its box is sized by font metrics, which a
+            # recording measures on its own device), so it is part of the key and not of the recording.
+            memo_key = ((int(width), int(height)), ratio, tuple(view), bytes(recording.data()),
+                        None if readout is None else (readout["text"], readout["buffer"], tuple(readout["rgba"])))
             if not force and memo_key == self._overlay_memo:
                 return directviewer.SAME_OVERLAY
         if probe:
@@ -3821,15 +3822,18 @@ class Viewer(PanZoomView):
         image.fill(0)
         painter = QPainter(image)
         painter.setRenderHints(self.renderHints())      # the hints the Viewer paints its own foreground with
-        painter.setTransform(transform)
-        self._overlay_view = {"zoom": logical, "transform": transform, "width": width / ratio}
-        try:
-            self.paint_overlays(painter, scene_rect)
-            if readout is not None:
-                self._paint_readout(painter, area, readout)
-        finally:
-            self._overlay_view = None
-            painter.end()
+        if probe:
+            painter.drawPicture(0, 0, recording)        # the commands just recorded, played into the image: one pass of the overlay code
+        else:
+            painter.setTransform(transform)
+            self._overlay_view = {"zoom": logical, "transform": transform, "width": width / ratio}
+            try:
+                self.paint_overlays(painter, scene_rect)
+            finally:
+                self._overlay_view = None
+        if readout is not None:
+            self._paint_readout(painter, area, readout)
+        painter.end()
         self._overlay_memo = memo_key
         return image
 

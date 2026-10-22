@@ -177,6 +177,30 @@ class RegionAndMaskParityTests(OverlayParityBase):
         # without `probe` the image is always made, as before
         self.assertIsInstance(self.viewer.render_overlay(view, physical, exact), QImage)
 
+    def test_the_replayed_recording_matches_a_direct_paint_to_antialiasing_noise(self):
+        info = {"text": "x 1 y 2", "buffer": "", "rgba": (0.5, 0.5, 0.5, 1.0)}
+        scenes = {
+            "wipe": lambda: self.compare(2, "wipe"),
+            "turned wipe": lambda: self.viewer.wipe.update(x=0.3, y=0.6, angle=35.0),
+            "roi": lambda: (self.compare(2, "A only"), self.window.set_viewer_roi(on=True, rect=[0.2, 0.25, 0.7, 0.8])),
+            "mask lines": lambda: self.window.command({"op": "viewer_mask", "mask": "2.35", "mode": "lines"}),
+            "mask half": lambda: self.window.command({"op": "viewer_mask", "mask": "2.35", "mode": "half"}),
+        }
+        for name, setup in scenes.items():
+            setup()
+            self.settle()
+            for ratio in (1.0, 1.75):
+                for readout in (None, info):
+                    with self.subTest(scene=name, ratio=ratio, readout=readout is not None):
+                        view, physical, exact = self.pin_view(ratio)
+                        direct = as_array(self.viewer.render_overlay(view, physical, exact, readout=readout))
+                        played = self.viewer.render_overlay(view, physical, exact, readout=readout, probe=True, force=True)
+                        self.assertIsInstance(played, QImage)
+                        difference = np.abs(as_array(played).astype(int) - direct.astype(int))
+                        # a recording keeps its coordinates in single precision: antialiased edges move by a few levels
+                        self.assertLessEqual(int(difference.max()), 6)
+                        self.assertLess(float((difference > 0).mean()), 0.02)
+
     def test_the_probe_sees_the_readout_and_a_changed_readout_is_a_new_image(self):
         self.window.command({"op": "viewer_mask", "mask": "format", "mode": "none"})
         self.window.set_viewer_roi(on=False)
