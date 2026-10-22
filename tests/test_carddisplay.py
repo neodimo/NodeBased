@@ -543,6 +543,20 @@ class CompareOnTheCardTests(DirectWindowCase):
         self.assertEqual(len(w.dispatcher.undo_stack), undo)               # the wipe is view state: no undo step
         self.assertEqual(len(self.widget.linear), len(self.widget.pairs))  # and no new picture was needed
 
+    def test_edits_keep_the_wipe_on_every_picture_the_card_is_handed(self):
+        # A cached stand-in without B used to drop the wipe line for a frame on each edit.
+        from tests.waiting import wait_until
+        w = self.window
+        self.choose("wipe")
+        self.settle("wipe")
+        first = len(self.widget.pairs)
+        for i in range(3):
+            w.command({"op": "set", "id": "a", "param": "red", "value": 0.2 + 0.1 * i})
+            wait_until(lambda: not w.busy and not len(w.preview_queue) and w.frame_generation == w.generation, timeout=30)
+            QApplication.instance().processEvents()
+        self.assertGreater(len(self.widget.pairs), first)
+        self.assertEqual({compare for _, compare in self.widget.pairs[first - 1:]}, {"wipe"})
+
     def test_closing_the_dock_gives_the_viewer_its_wipe_back(self):
         w = self.window
         self.choose("wipe")

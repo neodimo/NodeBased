@@ -14184,6 +14184,8 @@ class Window(QMainWindow):
                 continue
             height, width = cached.shape[:2]
             if request.display and self._direct_linear_for(request, view, cached):
+                if compare_model.active_b(request.document)[1] is not None:
+                    return      # a stand-in without B would drop the card's wipe for a frame; the real picture follows
                 image = carddisplay.LazyPicture(cached, exposure, channel, background, view, look)
             else:
                 image = to_qimage(cached, exposure, channel, background=background, view=view, look=look)

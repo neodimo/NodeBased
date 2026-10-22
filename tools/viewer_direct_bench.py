@@ -297,11 +297,12 @@ def measure_paused():
         real = getattr(owner, name)
 
         def wrapper(*a, **k):
-            c = time.thread_time()
+            c, w = time.thread_time(), time.perf_counter()
             try:
                 return real(*a, **k)
             finally:
                 timings[key] = timings.get(key, 0.0) + (time.thread_time() - c) * 1000
+                timings[key + "_wall"] = timings.get(key + "_wall", 0.0) + (time.perf_counter() - w) * 1000
                 timings[key + "_calls"] = timings.get(key + "_calls", 0) + 1
         setattr(owner, name, wrapper)
     spy(app_module.Window, "_show_image", "show_image")
@@ -415,6 +416,7 @@ def measure_paused():
             spy(widget, "_paint_overlay", "dock_overlay")
             spy(presenter, "set_paint", "dock_set_paint")
             spy(presenter.device.queue, "write_texture", "dock_write_texture")
+            spy(presenter.device, "create_buffer_with_data", "dock_create_buffer")
             spy(presenter.device.queue, "submit", "dock_submit")
             context = widget.get_wgpu_context()
             real_present = context._rc_present

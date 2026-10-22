@@ -405,7 +405,7 @@ class CardPaintTests(unittest.TestCase):
         self.presenter.draw(self.view, self.context.size)
         self.assertEqual(self.presenter.counters["paint_uploads"], 0)
         self.assertEqual(self.presenter.counters["paint_empty"], 1)
-        self.assertIsNone(self.presenter.paint_size)
+        self.assertIsNone(self.presenter.paint_size)       # no pass; the texture is kept for when it is needed again
         np.testing.assert_array_equal(self.context.read(), before)
 
     def test_only_the_changed_rows_go_up_and_the_picture_is_right(self):
@@ -421,9 +421,17 @@ class CardPaintTests(unittest.TestCase):
         again = self.context.read()
         self.assertEqual(tuple(again[40, 31, :3]), tuple(plain[40, 31, :3]))        # the old top row is clear
         self.assertEqual(tuple(again[43, 31, :3]), (255, 0, 0))
+        rows = self.presenter.counters["paint_upload_rows"]
         self.presenter.set_paint(self.paint(lambda i: None), "c")
-        self.presenter.set_paint(self.paint(self.mark(30, 40)), "d")        # empty, then back: a full upload
         self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(tuple(self.context.read()[43, 31, :3]), tuple(plain[43, 31, :3]))   # empty: nothing drawn
+        self.presenter.set_paint(self.paint(self.mark(30, 41)), "d")        # back, as it was: the card still holds it
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(self.presenter.counters["paint_upload_rows"], rows)
+        self.assertEqual(tuple(self.context.read()[43, 31, :3]), (255, 0, 0))
+        self.presenter.set_paint(self.paint(self.mark(30, 40)), "e")        # and a different one: only its rows
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(self.presenter.counters["paint_upload_rows"] - rows, 4)
         self.assertEqual(tuple(self.context.read()[41, 31, :3]), (255, 0, 0))
 
     def test_recovery_forgets_the_paint_so_it_is_painted_again(self):
