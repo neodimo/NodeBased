@@ -198,11 +198,18 @@ def splat_layer(scene, eye, build):
 
 # --- the whole prepared scene -------------------------------------------------------------------------------------------------
 
+def _build_switches():
+    """Module switches that change what a build makes (the smoke's empty-space majorant grid). 10/22: a render with the grid
+    and one without shared a cache entry, and the card counted the collisions of the wrong build."""
+    from . import gpupathtrace, ptvolume
+    return bool(ptvolume.ENABLE_SKIP), bool(getattr(gpupathtrace, "ENABLE_VOLUME_SKIP", True))
+
+
 def _scene_key(scene, ambient, eye, volume):
     pins = []
     smoothing = any(int(getattr(item, "normal_smoothing", 0) or 0) > 0 for item in getattr(scene, "splats", ()))
     key = (fingerprint(scene, pins), float(ambient), tuple(float(v) for v in eye) if smoothing and eye is not None else None,
-           fingerprint(volume, pins))
+           fingerprint(volume, pins), _build_switches())
     pins.append(scene)
     return key, pins
 
