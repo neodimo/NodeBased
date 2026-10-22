@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from nodebased import gpupathtrace, pathtrace, progressiverender as P, ptdenoise, scene3d as s
+from nodebased import gpupathtrace, pathtrace, progressiverender as P, ptdenoise, scenecache, scene3d as s
 from nodebased.cancellation import Cancelled
 from tests.test_3d_pathtrace import CORNELL_CAMERA, cornell, gpu_ready
 from tests.progressive_widget import first_picture, paint_until
@@ -185,6 +185,8 @@ class FirstLookTests(unittest.TestCase):
 
     @unittest.skipUnless(gpu_ready(), "the GPU path tracer is not available")
     def test_a_first_look_prepares_the_scene_once_for_the_beauty_and_all_three_guides(self):
+        scenecache.clear()
+        self.addCleanup(scenecache.clear)
         calls = []
         real = pathtrace.build_scene
         def counting(*args, **kwargs):
@@ -206,7 +208,11 @@ class FirstLookTests(unittest.TestCase):
         np.testing.assert_array_equal(plain, after)
 
     @unittest.skipUnless(gpu_ready(), "the GPU path tracer is not available")
-    def test_scene_reuse_builds_once_per_scene_and_camera_and_not_outside_the_block(self):
+    def test_scene_reuse_builds_once_per_scene_content_and_not_again_for_a_camera_move(self):
+        # the preparation is kept by content (`scenecache`): one build serves the four renders of a view, a camera move, an equal
+        # scene made again, and the renders outside the block (the thread-local reuse inside it is only the first, cheaper lookup)
+        scenecache.clear()
+        self.addCleanup(scenecache.clear)
         scene = _scene()
         settings = pathtrace.PathSettings(samples=1, max_bounces=2)
         calls = []
@@ -222,13 +228,15 @@ class FirstLookTests(unittest.TestCase):
                     trace(scene, CAMERA, output)
                 self.assertEqual(len(calls), 1)
                 trace(scene, replace(CAMERA, transform=replace(CAMERA.transform, position=s.Vec3(1, 4, 9))))
-                self.assertEqual(len(calls), 1)            # ordinary geometry preparation is camera-independent
+                self.assertEqual(len(calls), 1)            # another camera position: the same preparation
                 trace(_scene(), CAMERA)
-                self.assertEqual(len(calls), 1)            # equivalent scene data can share preparation safely
-            before = len(calls)
+                self.assertEqual(len(calls), 1)            # another scene object of equal content: the same preparation
             trace(scene, CAMERA)
             trace(scene, CAMERA)
-            self.assertEqual(len(calls) - before, 2)       # outside the block every render prepares its own
+            self.assertEqual(len(calls), 1)                # outside the block the content cache serves every render
+            scenecache.clear()
+            trace(scene, CAMERA)
+            self.assertEqual(len(calls), 2)                # dropped: prepared again
 
 
 @unittest.skipIf(_SKIP, f"no working path tracer backend: {_SKIP}")

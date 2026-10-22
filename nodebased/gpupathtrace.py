@@ -36,7 +36,7 @@ import time
 
 import numpy as np
 
-from . import gpu3d, gpurt, gpuvolume, lens, pathtrace as pt, raytrace, scene3d as s
+from . import gpu3d, gpurt, gpuvolume, lens, pathtrace as pt, raytrace, scenecache, scene3d as s
 from .cancellation import Cancelled
 
 GPU_PATHS_PER_SUBMISSION = 1 << 19
@@ -2631,7 +2631,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 def _same_bytes(x, y):
     """True when two arrays hold the same bytes (a NaN that pads a record equals itself here)."""
-    return (x.shape == y.shape and x.dtype == y.dtype
+    return x is y or (x.shape == y.shape and x.dtype == y.dtype
             and np.array_equal(np.ascontiguousarray(x).reshape(-1).view(np.uint8), np.ascontiguousarray(y).reshape(-1).view(np.uint8)))
 
 
@@ -2749,7 +2749,9 @@ def _frame(state):
 
 
 def release_frame_cache(state=None):
-    """Free what the renderer keeps on the device between frames (a scene's buffers, the accumulator, the readback buffers)."""
+    """Free what the renderer keeps on the device between frames (a scene's buffers, the accumulator, the readback buffers) and the
+    host copies of the prepared scenes (`scenecache`)."""
+    scenecache.clear()
     state = state or gpu3d._state()
     frame = state.get("_gpupt_frame")
     if frame is not None:
@@ -3149,10 +3151,20 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     raytrace._cancel(cancel)
     eye = s._view_basis(camera)[0]
     reused = _prepared_scene(scene, ambient, eye, volume)
+    remembered = None
+    if reused is None:
+        # not shared with an earlier render of this view: a camera move or a material edit still meets the preparation of the
+        # same content from before (`scenecache`); an edit to the geometry or the splats builds what changed
+        key, pins, reused = scenecache.prepared_scene(scene, ambient, eye, volume)
+        remembered = (key, pins)
+        if reused is not None and (reused[0].splats is not None or reused[0].volumes is not None) and not soft_supported(state):
+            reused = None
     if reused is not None:
         ps, packed = reused
         lap("scene build")
+        _remember_scene(scene, ambient, eye, volume, ps, packed)
     else:
+        prepare_started = time.perf_counter()
         ps = pt.build_scene(scene, ambient, eye=eye, volume=volume, cancel=cancel)
         lap("scene build")
         if (ps.splats is not None or ps.volumes is not None) and not soft_supported(state):
@@ -3164,6 +3176,8 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                 raise gpu3d.Unsupported(str(exc)) from exc
             raise
         _remember_scene(scene, ambient, eye, volume, ps, packed)
+        scenecache.remember_scene(*remembered, ps, packed)
+        scenecache.add_build_seconds(time.perf_counter() - prepare_started)
     lap("pack")
     width, height = int(width), int(height)
     tiles_x, tiles_y = -(-width // pt.TILE), -(-height // pt.TILE)

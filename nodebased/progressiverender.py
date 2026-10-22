@@ -44,7 +44,7 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-from . import gpupathtrace, pathtrace, ptdenoise, scene3d
+from . import gpupathtrace, pathtrace, ptdenoise, scenecache, scene3d
 from .cancellation import Cancelled
 
 FIRST_PASS_SCALE = 4     # the reset step renders at 1/this size on each side, for interactive framing
@@ -159,6 +159,7 @@ MIN_FIRST_PIXELS = 120 * 68
 CATCHER_MIN_FIRST_PIXELS = 64 * 36  # keep a useful thumbnail while leaving room for fixed setup cost
 STAGE_TWO_MAX_FIRST_SECONDS = 0.75      # a first stage slower than this (a heavy scene) goes straight to the doubling steps
 _COST = {}
+_BUILD = {}       # the same keys: seconds the last scene preparation took (the build and the pack), when one was made
 
 
 def internal_size(width, height, pixels):
@@ -232,23 +233,38 @@ def _cost_key(scene):
     return adapter, heavy, bool(scene3d.has_shadow_catchers(scene))
 
 
-def first_stage_pixels(scene, stage_pixels):
+def first_stage_pixels(scene, stage_pixels, prepared=True):
     """How many pixels stage one traces for `scene`: `stage_pixels`, or fewer when the last first look of this kind of scene on this
-    adapter cost too much per pixel to finish inside `FIRST_LOOK_SECONDS`; more than `stage_pixels` never."""
+    adapter cost too much per pixel to finish inside `FIRST_LOOK_SECONDS`; more than `stage_pixels` never. `prepared` False says the
+    scene's preparation (`scenecache`) will be built again, and the last such build's time is taken off the budget first: a camera
+    move or a material edit reuses the preparation and traces more pixels, a geometry or splat edit pays for the build."""
     key = _cost_key(scene)
     cost = _COST.get(key)
     if cost is None:
         return min(stage_pixels, HEAVY_FIRST_PIXELS) if key[1] else stage_pixels
     fraction = CATCHER_FIT_FRACTION if key[2] else FIT_FRACTION
-    fit = (FIRST_LOOK_SECONDS * fraction - ENLARGE_ALLOWANCE) / cost
+    budget = FIRST_LOOK_SECONDS * fraction - ENLARGE_ALLOWANCE - (0.0 if prepared else _BUILD.get(key, 0.0))
+    fit = budget / cost
     floor = CATCHER_MIN_FIRST_PIXELS if key[2] else MIN_FIRST_PIXELS
     return int(min(stage_pixels, max(floor, fit)))
 
 
-def _record_cost(scene, seconds, pixels):
+def _prepared(scene, camera, ambient, backend):
+    """True when the path tracer's preparation of `scene` for `camera` is cached (or there is nothing to prepare on the GPU)."""
+    try:
+        return scenecache.is_prepared(_drop_particles(scene), ambient, scene3d._view_basis(camera)[0])
+    except Exception:
+        return True
+
+
+def _record_cost(scene, seconds, pixels, built=0.0):
+    """Remember what a stage-one trace of `pixels` cost per pixel for this kind of scene; `built` is the part of `seconds` that
+    was spent preparing the scene, which is kept apart (`_BUILD`) so a trace that reused the preparation is not charged for it."""
     key = _cost_key(scene)
-    cost = seconds / max(pixels, 1)
+    cost = max(seconds - built, 0.0) / max(pixels, 1)
     _COST[key] = cost if key not in _COST else 0.5 * _COST[key] + 0.5 * cost
+    if built > 0.0:
+        _BUILD[key] = built if key not in _BUILD else 0.5 * _BUILD[key] + 0.5 * built
 
 
 def _preview(scene, camera, width, height, background, ambient, pixels, samples, backend, max_bounces, moments, cancel,
@@ -356,8 +372,6 @@ def step_interactive(state, scene, camera, width, height, background, ambient, k
         return replace(step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments, cancel),
                        stage=len(stages))
     pixels, samples = stages[state.stage]
-    if state.stage == 0:
-        pixels = first_stage_pixels(scene, pixels)
     trace_scene = None
     if state.stage == 0 and not moments and scene3d.has_shadow_catchers(scene):
         # The initial picture is a framing aid; shadowcatch.render otherwise launches extra full
@@ -366,14 +380,16 @@ def step_interactive(state, scene, camera, width, height, background, ambient, k
         # refinement passes render the real shadow layer.
         from . import shadowcatch
         trace_scene = shadowcatch.hold_scene(_drop_particles(scene))
-    started = time.perf_counter()
+    if state.stage == 0:
+        pixels = first_stage_pixels(scene, pixels, _prepared(scene if trace_scene is None else trace_scene, camera, ambient, backend))
+    started, built_before = time.perf_counter(), scenecache.BUILD_SECONDS
     image, traced, phases = _preview(_drop_particles(scene), camera, width, height, background, ambient, pixels, samples,
                                      backend, min(max_bounces, PREVIEW_BOUNCES), moments, cancel,
                                      trace_scene=trace_scene,
                                      retain_preparation=bool(getattr(scene, "volumes", ())))
     seconds = time.perf_counter() - started
     if state.stage == 0:
-        _record_cost(scene, seconds - dict(phases)["enlarge"], traced[0] * traced[1])
+        _record_cost(scene, seconds - dict(phases)["enlarge"], traced[0] * traced[1], scenecache.BUILD_SECONDS - built_before)
     return ProgressiveState(key=key, samples=samples, width=width, height=height, image=image,
                             seconds=seconds, low_res=True, passes=state.passes + 1,
                             preview=True, denoised=True, stage=state.stage + 1,

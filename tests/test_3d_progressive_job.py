@@ -436,6 +436,9 @@ class InterruptibleTracerTests(unittest.TestCase):
         from nodebased import gpu3d, pathtrace
         if not gpu3d.available():
             self.skipTest("the passes build their scene on the processor without a GPU adapter")
+        from nodebased import scenecache
+        scenecache.clear()
+        self.addCleanup(scenecache.clear)
         calls = []
         real = pathtrace.build_scene
 

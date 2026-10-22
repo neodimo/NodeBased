@@ -54,7 +54,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from . import envlight, lens, ptdenoise, ptsplats, ptvolume, raytrace, scene3d as s
+from . import envlight, lens, ptdenoise, ptsplats, ptvolume, raytrace, scenecache, scene3d as s
 from .liquid_render import fresnel, sigma_of
 
 PI = math.pi
@@ -219,6 +219,11 @@ class _Blas:
 
 
 def _blas_of(geometry, cancel=None):
+    """The bottom-level tree of `geometry`'s mesh, reused from `scenecache` for equal vertices, triangles, normals and uvs."""
+    return scenecache.blas(geometry, lambda g: _build_blas(g, cancel))
+
+
+def _build_blas(geometry, cancel=None):
     v = geometry.vertices.astype(np.float64)
     tri = geometry.triangles
     v0, v1, v2 = (v[tri[:, i]] for i in range(3)) if len(tri) else (np.zeros((0, 3)),) * 3
@@ -550,7 +555,8 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None, cancel=None):
         return link_masks[link]
 
     excl = np.array([mask_of(entry[3]) for entry in entries], np.int64)
-    layer = ptsplats.build(scene, eye, cancel) if getattr(scene, "splats", ()) else None
+    layer = (scenecache.splat_layer(scene, eye, lambda: ptsplats.build(scene, eye, cancel))
+             if getattr(scene, "splats", ()) else None)
     raytrace._cancel(cancel)
     smoke = ptvolume.build(scene, volume) if getattr(scene, "volumes", ()) else None
     if smoke is not None:
