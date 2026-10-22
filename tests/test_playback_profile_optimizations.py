@@ -139,5 +139,27 @@ class CheckerGenerationTests(unittest.TestCase):
         np.testing.assert_array_equal(Evaluator._kernel("Checker", params, []), expected)
 
 
+class PlaybackDiskSpillTests(unittest.TestCase):
+    class DiskSpy:
+        def __init__(self):
+            self.puts = []
+
+        def put_raster(self, digest, raster):
+            self.puts.append((digest, raster))
+
+    def test_playback_policy_drops_evicted_frames_without_disk_io(self):
+        from nodebased.raster import Raster
+        disk = self.DiskSpy()
+        frame = Raster(np.ones((2, 2, 4), np.float32))
+        evaluator = Evaluator(cache_bytes=frame.nbytes, disk=disk)
+        evaluator._store("one", frame)
+        evaluator.disk_spills_enabled = False
+        evaluator._store("two", frame)
+        self.assertEqual(disk.puts, [])
+        evaluator.disk_spills_enabled = True
+        evaluator._store("three", frame)
+        self.assertEqual([item[0] for item in disk.puts], ["two"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -549,6 +549,11 @@ class Evaluator:
         if shared_budget is not None:
             shared_budget.register(shared_name, self)
         self.disk = cachetier.DiskCache(enabled=False) if disk is None else disk
+        # Persistent writes are skipped during live playback by the Window. Evicted frames are
+        # transient and usually won't be revisited during the forward run; synchronous disk-tier
+        # writes belong to paused evaluation and explicit cache reuse, where the artist can afford
+        # their I/O cost.
+        self.disk_spills_enabled = True
         # Optional bounded source decode-ahead cache installed by the desktop app. The evaluator
         # remains single-owner; only the immutable decoded Raster is shared across threads.
         self.decode_pool = None
@@ -722,7 +727,8 @@ class Evaluator:
         while self.cache and self.bytes + raster.nbytes > self.budget:
             old_digest, old = self.cache.popitem(last=False)
             self.bytes -= old.nbytes
-            if old.layers is None:   # the disk tier stores one array per raster; layers would be lost
+            if old.layers is None and self.disk_spills_enabled:
+                # The disk tier stores one array per raster; layers would be lost.
                 self.disk.put_raster(old_digest, old)
         self.cache[digest] = raster
         self.bytes += raster.nbytes

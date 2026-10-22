@@ -9518,7 +9518,14 @@ class Window(QMainWindow):
                                         or self.playback_auto_proxy_index is not None)
         self.playing = start
         if start:
+            self._playback_saved_disk_spills = self.evaluator.disk_spills_enabled
+            self.evaluator.disk_spills_enabled = False
             self.play_direction = -1 if direction < 0 else 1
+        else:
+            saved_spills = getattr(self, "_playback_saved_disk_spills", None)
+            if saved_spills is not None:
+                self.evaluator.disk_spills_enabled = saved_spills
+            self._playback_saved_disk_spills = None
         if hasattr(self, "state_word"):
             self.refresh_state_word()
         forward = start and self.play_direction > 0

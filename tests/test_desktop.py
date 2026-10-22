@@ -1618,6 +1618,14 @@ class PlaybackProxyToggleTests(unittest.TestCase):
     def test_defaults_to_on(self):
         self.assertTrue(self.window.playback_proxy.isChecked())
 
+    def test_playback_suppresses_transient_disk_spills_and_restores_policy(self):
+        w = self.window
+        self.assertTrue(w.evaluator.disk_spills_enabled)
+        w.toggle_playback(True)
+        self.assertFalse(w.evaluator.disk_spills_enabled)
+        w.toggle_playback(False)
+        self.assertTrue(w.evaluator.disk_spills_enabled)
+
     def test_checked_auto_switches_for_the_duration_of_playback_and_restores_after(self):
         # The negative control for the test below: same graph, toggle on, tier really does move.
         w = self.window
