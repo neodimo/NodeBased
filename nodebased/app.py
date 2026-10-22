@@ -125,6 +125,30 @@ FPS_PRESETS = (("24", 24.0), ("23.976", 24000.0 / 1001.0), ("25", 25.0), ("29.97
 VIEW_EDGE_COLOR = "#5f5f6b"
 
 
+# The Viewer's zoom and navigation keys, by what they do. The Viewer's key handler reads this map, the direct
+# picture hands its keys to the same handler, and tests/test_directviewer_keys.py walks it: a key added here fails
+# there until the direct picture can act on it too (`Window.direct_view_action`).
+VIEW_ZOOM_STEP = 1.15
+VIEW_KEY_ACTIONS = {
+    "fit": ((Qt.Key.Key_F, Qt.KeyboardModifier.NoModifier), (Qt.Key.Key_H, Qt.KeyboardModifier.NoModifier)),
+    "one_to_one": ((Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier),),
+    "zoom_in": ((Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier),
+                (Qt.Key.Key_Plus, Qt.KeyboardModifier.ControlModifier)),
+    "zoom_out": ((Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier),),
+}
+# What the "?" list on the Viewer and the direct picture says for each of them.
+VIEW_ACTION_KEYS = {"fit": ("F / H", "fit the picture"), "one_to_one": ("Ctrl+1", "1:1 zoom"),
+                    "zoom_in": ("Ctrl+= / Ctrl++", "zoom in"), "zoom_out": ("Ctrl+-", "zoom out")}
+
+
+def view_key_action(key, modifiers):
+    """The `VIEW_KEY_ACTIONS` name a key press stands for, or None."""
+    for action, keys in VIEW_KEY_ACTIONS.items():
+        if any(key == code and modifiers == mods for code, mods in keys):
+            return action
+    return None
+
+
 # The on-screen reference for every artist-facing keyboard shortcut. Menu shortcuts below use the
 # File/Edit/Time rows directly; graph and viewer bindings remain owned by their key handlers.
 SHORTCUT_SECTIONS = (
@@ -158,6 +182,7 @@ SHORTCUT_SECTIONS = (
     ("Viewer", (("Tab (pointer over the viewer)", "switch between the 2D viewer and the 3D viewport"),
                 ("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
+                ("?", "list the viewer's zoom and navigation keys (works on the direct picture too)"),
                 ("J", "play backwards (while playing forwards: stop and step back)"), ("K", "stop"),
                 ("L", "play forwards"),
                 ("1-9", "show viewer input 1-9 (the A buffer; empty inputs are ignored)"),
@@ -177,6 +202,17 @@ SHORTCUT_SECTIONS = (
                      ("Q", "toggle pivot mode (the gizmo moves the pivot, not the object)"),
                      ("Escape", "cancel a gizmo drag"))),
 )
+
+
+def viewer_shortcut_rows():
+    """(keys, what) rows of the Viewer's "?" list: one per `VIEW_KEY_ACTIONS` entry, then the Viewer section of
+    SHORTCUT_SECTIONS without the lines that repeat them."""
+    rows = [VIEW_ACTION_KEYS[action] for action in VIEW_KEY_ACTIONS]
+    listed = {keys for keys, _ in rows}
+    rows += [row for row in dict(SHORTCUT_SECTIONS)["Viewer"]
+             if row[0] not in listed and not row[0].startswith(("F/H", "Ctrl+=", "Ctrl+1"))]
+    rows.append(("?", "show or hide this list"))
+    return rows
 
 
 def _choose_paint_color(viewer):
@@ -1484,6 +1520,7 @@ class Viewer(PanZoomView):
         self._overlay_view = None      # set while render_overlay paints for the direct picture
         self._overlay_images = [None, None]
         self._hit_zoom = None          # logical pixels per scene unit while the direct picture drives the hit tests
+        self._keys_from_direct = False  # true while a key the direct picture received is being handled
         self.cursor_sink = None        # called with the cursor (or None) so the direct picture shows the same shape
         self.readout_geometry = None   # (scale, render region, (w, h)) of a picture only the direct dock shows
         # Roto editing is a viewer overlay, not a scene item.  Keeping it out of the scene is
@@ -3378,9 +3415,27 @@ class Viewer(PanZoomView):
         """Render the current PlanarTracker corner drag without creating an undo edit."""
         return self._preview_document_drag("planar_drag", self._commit_planar_drag)
 
+    def run_view_action(self, action):
+        """A zoom or navigation key (`VIEW_KEY_ACTIONS`). A key the direct picture received acts on the direct
+        picture (a fit fits both, as it always has); a key pressed on the Viewer acts on the Viewer."""
+        if action == "fit":
+            self.fit()
+        elif self._keys_from_direct:
+            self.window.direct_view_action(action)
+        elif action == "one_to_one":
+            self.resetTransform()
+        else:
+            factor = VIEW_ZOOM_STEP if action == "zoom_in" else 1 / VIEW_ZOOM_STEP
+            if 0.05 < self.transform().m11() * factor < 20:
+                self.scale(factor, factor)
+
+    def _has_key_focus(self):
+        """The Viewer has the keyboard, or the direct picture does and handed the key over (`Window._direct_key`)."""
+        return self._keys_from_direct or self.hasFocus()
+
     def keyPressEvent(self, event):
         if (event.key() == Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier
-                and self.hasFocus() and self._roto_context() is not None):
+                and self._has_key_focus() and self._roto_context() is not None):
             context = self._roto_context()
             shape_index = self.roto_selected_shape_index
             if context is not None and 0 <= shape_index < len(context[2].get("shapes", [])):
@@ -3420,10 +3475,10 @@ class Viewer(PanZoomView):
             self.finish_roto_draw()
             event.accept()
             return
-        if self.hasFocus() and event.key() == Qt.Key.Key_Z and self._roto_context() is not None and self.roto_selected_points:
+        if self._has_key_focus() and event.key() == Qt.Key.Key_Z and self._roto_context() is not None and self.roto_selected_points:
             self._set_roto_tangent_mode(bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
             event.accept(); return
-        if self.hasFocus() and event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+        if self._has_key_focus() and event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             if self._delete_roto_points(): event.accept(); return
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.warp_drawing:
             self.finish_warp_draw()
@@ -3449,14 +3504,13 @@ class Viewer(PanZoomView):
             self.viewport().update()
             event.accept()
             return
-        if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() in (
-                Qt.Key.Key_Equal, Qt.Key.Key_Plus, Qt.Key.Key_Minus, Qt.Key.Key_1):
-            if event.key() == Qt.Key.Key_1:
-                self.resetTransform()
-            else:
-                factor = 1.15 if event.key() in (Qt.Key.Key_Equal, Qt.Key.Key_Plus) else 1 / 1.15
-                if 0.05 < self.transform().m11() * factor < 20:
-                    self.scale(factor, factor)
+        if event.key() == Qt.Key.Key_Question or event.text() == "?":
+            self.window.toggle_viewer_shortcuts(self)
+            event.accept()
+            return
+        action = view_key_action(event.key(), event.modifiers())
+        if action is not None and action != "fit":
+            self.run_view_action(action)
             event.accept()
             return
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_P:
@@ -3505,10 +3559,10 @@ class Viewer(PanZoomView):
             else:
                 self.window.play(-1)
             event.accept()
-        elif event.key() in (Qt.Key.Key_F, Qt.Key.Key_H) and not event.modifiers():
+        elif view_key_action(event.key(), event.modifiers()) == "fit":
             # F is the direct fit command. H is the familiar home/frame alias: with a
             # single 2D image there is no separate selected-object extent to frame.
-            self.fit()
+            self.run_view_action("fit")
             event.accept()
         else:
             super().keyPressEvent(event)
@@ -14841,6 +14895,18 @@ class Window(QMainWindow):
         else:
             overlay.show_above(self.graph.corner.minimap)
 
+    def toggle_viewer_shortcuts(self, surface):
+        """The "?" list on the Viewer and the direct picture: their zoom and navigation keys, then the rest of the
+        Viewer's section of the shortcut reference."""
+        overlay = getattr(self, "viewer_shortcut_overlay", None)
+        if overlay is None:
+            overlay = self.viewer_shortcut_overlay = ShortcutOverlay(
+                self, "Viewer shortcuts", viewer_shortcut_rows(), columns=1)
+        if overlay.isVisible():
+            overlay.close()
+        else:
+            overlay.show_in(surface)
+
     def update_corner_readout(self, scene_rect=None, scale=None):
         """Resolution, colour space and proxy state in the viewer's bottom-left corner."""
         if scene_rect is None:
@@ -15046,7 +15112,17 @@ class Window(QMainWindow):
     def _direct_key(self, event):
         """A key pressed on the direct picture goes to the Viewer's own key handler (F fits, the Roto and paint
         keys, the nudge keys): the direct picture has no key handling of its own."""
-        self.viewer.keyPressEvent(event)
+        viewer = self.viewer
+        viewer._keys_from_direct = True
+        try:
+            viewer.keyPressEvent(event)
+        finally:
+            viewer._keys_from_direct = False
+
+    def direct_view_action(self, action):
+        """A zoom key (`VIEW_KEY_ACTIONS`) pressed on the direct picture. False when the picture cannot do it."""
+        act = getattr(getattr(self, "direct_widget", None), "view_action", None)
+        return bool(callable(act) and act(action, VIEW_ZOOM_STEP))
 
     def direct_fit(self):
         """The Viewer fitted its picture: the direct picture fits its own too."""

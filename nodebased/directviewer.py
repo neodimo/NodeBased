@@ -1926,6 +1926,41 @@ def make_widget(parent=None):
             self.auto_fit = True
             self._request()
 
+        def zoom_step(self, factor):
+            """Zoom by `factor` about the pointer (the middle of the picture when it is elsewhere), as the wheel does."""
+            if self.rect is None:
+                return False
+            ratio = self.get_pixel_ratio()
+            size = self._physical()
+            new = zoom_about(self.view, self._pointer or (size[0] / 2.0, size[1] / 2.0), size, factor)
+            if not ZOOM_RANGE[0] < new[2] / ratio < ZOOM_RANGE[1]:
+                return False
+            self.view = new
+            self.auto_fit = False
+            self._request()
+            return True
+
+        def one_to_one(self):
+            """One picture pixel per logical pixel (100 percent), the middle of the view kept."""
+            if self.rect is None:
+                return False
+            cx, cy, _ = self.view
+            self.view = (cx, cy, float(self.get_pixel_ratio()))
+            self.auto_fit = False
+            self._request()
+            return True
+
+        def view_action(self, action, step=1.15):
+            """A zoom or navigation key by name (`app.VIEW_KEY_ACTIONS`). False for a name this picture cannot do."""
+            if action == "fit":
+                self.fit()
+                return True
+            if action == "one_to_one":
+                return self.one_to_one()
+            if action in ("zoom_in", "zoom_out"):
+                return self.zoom_step(step if action == "zoom_in" else 1 / step)
+            return False
+
         def wheelEvent(self, event):
             delta = event.angleDelta()
             steps = (delta.y() or delta.x()) / 120

@@ -50,7 +50,8 @@ class ShortcutOverlay(QFrame):
     """A frosted panel with every graph shortcut, in two columns: the keys as a keycap, then what
     they do. A popup window, so Escape and a click elsewhere close it without any bookkeeping."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, title_text="Node graph shortcuts", shortcuts=None, columns=COLUMNS):
+        shortcuts = GRAPH_SHORTCUTS if shortcuts is None else tuple(shortcuts)
         super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setObjectName("shortcut-overlay")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -58,7 +59,7 @@ class ShortcutOverlay(QFrame):
         outer.setContentsMargins(16, 14, 16, 14)
         outer.setSpacing(10)
         head = QHBoxLayout()
-        title = QLabel("Node graph shortcuts")
+        title = QLabel(title_text)
         title.setObjectName("shortcut-title")
         close = QLabel("? or Esc to close")
         close.setObjectName("shortcut-hint")
@@ -69,9 +70,9 @@ class ShortcutOverlay(QFrame):
         grid = QGridLayout()
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(7)
-        rows = -(-len(GRAPH_SHORTCUTS) // COLUMNS)
+        rows = -(-len(shortcuts) // columns)
         self.rows = []
-        for index, (keys, what) in enumerate(GRAPH_SHORTCUTS):
+        for index, (keys, what) in enumerate(shortcuts):
             column, row = divmod(index, rows)
             keycap = QLabel(keys)
             keycap.setObjectName("shortcut-keys")
@@ -80,7 +81,7 @@ class ShortcutOverlay(QFrame):
             keycap.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
             grid.addWidget(keycap, row, column * 3, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             grid.addWidget(action, row, column * 3 + 1)
-            if column + 1 < COLUMNS:
+            if column + 1 < columns:
                 grid.setColumnMinimumWidth(column * 3 + 2, 18)
             self.rows.append((keycap, action))
         outer.addLayout(grid)
@@ -102,6 +103,15 @@ class ShortcutOverlay(QFrame):
         self.adjustSize()
         anchor = widget.mapToGlobal(QPoint(widget.width(), 0))
         self.move(anchor.x() - self.width(), anchor.y() - self.height() - 8)
+        self.show()
+        self.raise_()
+        self.setFocus()
+
+    def show_in(self, widget):
+        """Open over the middle of `widget` (the Viewer or the direct picture)."""
+        self.adjustSize()
+        centre = widget.mapToGlobal(QPoint(widget.width() // 2, widget.height() // 2))
+        self.move(centre.x() - self.width() // 2, centre.y() - self.height() // 2)
         self.show()
         self.raise_()
         self.setFocus()
