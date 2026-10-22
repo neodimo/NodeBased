@@ -235,6 +235,13 @@ median, with no disk-tier writes. The current capture cannot separate buffer-cop
 waiting on decoded reads or Python scheduling/GIL contention; those remain unverified contributors.
 The reconciled artifact is `benchmarks/2d-playback/finish1-critical-path-1022.json`.
 
+For an exact integer-pixel translation, Transform now copies the overlapping source window
+instead of running the cubic sampler. At 1080p on CPU NumPy, the isolated translation path fell
+from 78.06 ms to 1.91 ms (nine-run medians) with pixel agreement within 1e-7 across nearest,
+bilinear and cubic filters; see `benchmarks/2d-playback/transform-integer-offset-1022.json`.
+The realistic comp animates by fractional pixels, so this optimization does not change its
+4.5 fps result.
+
 ### Still slow
 
 - In the default Viewer, `to_qimage` is about 41 ms per 1080p frame and 170 ms at 4K (ten
