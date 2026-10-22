@@ -14094,12 +14094,10 @@ class Window(QMainWindow):
                                    live_preview=live_preview)
         if (progressive or progressive_target is not None) and not self.playing:
             self._progressive_generation = self.generation
-        # The decode-ahead pool only ever gets consulted by the tier != 1 Read path (tileexec.py's
-        # `_generator_tile`); a tier-1 request takes the bounded-region-read fast path instead and
-        # never looks at it. Prefetching at tier 1 would just spend the decode pool's own worker
-        # threads (and the GIL) decoding full frames nobody will ever read back -- measured as a
-        # net loss for full-resolution playback (docs/BENCHMARKS-v0.17-playback.md).
-        if target and decode_ahead and tier != 1:
+        # Full-frame evaluation and tiled playback can both consume immutable warmed Read
+        # rasters. Benchmark the normal tier too: the earlier tier-1 restriction left the
+        # largest measured decode cost on the serial preview worker.
+        if target and decode_ahead:
             self.tile_executor.prefetch_reads(snapshot, target, decode_ahead)
         # The normal 35 ms coalescing window is useful for paused property edits. A live drag
         # already has its own gesture cadence and needs the first coarse picture promptly.

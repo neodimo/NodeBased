@@ -1923,6 +1923,8 @@ class DecodeAheadPlaybackTests(unittest.TestCase):
 
     def test_playback_warms_the_decode_pool_within_its_memory_bound(self):
         w = self.window
+        # Exercise the full-resolution path too; this is the common 1080p playback tier.
+        w.proxy.setCurrentIndex(w.proxy.findData(1))
         w.toggle_playback(True)
         self.assertTrue(wait_until(lambda: w.decode_pool.stats()['entries'] > 0))
         stats = w.decode_pool.stats()

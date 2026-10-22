@@ -5,7 +5,7 @@ Generated EXR inputs and run JSON belong in the caller-supplied scratch/output d
 only the small .nbcomp graph and this reproducible generator are tracked.
 """
 from __future__ import annotations
-import argparse, cProfile, json, os, pathlib, statistics, subprocess, sys, threading, time, traceback
+import argparse, json, os, pathlib, statistics, subprocess, sys, threading, time, traceback
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'tests/fixtures/playback_comp.nbcomp'
 
@@ -59,12 +59,15 @@ def run_window(args):
     from nodebased.core import load_document
     from nodebased import media, imaging
     from nodebased.playback import DisplayCache
-    from nodebased.tileexec import TileRegion
+    from nodebased.tileexec import TileRegion, SUPPORTED_TILED_KINDS, _all_ancestors
+    from nodebased import groups
 
-    events=[]; shown=[]; statuses=[]; worker_profiles=[]; sample_counts={'qt':{},'worker':{}}; node_costs={}
+    events=[]; shown=[]; statuses=[]; worker_profiles=[]; sample_counts={'qt':{},'worker':{}}; node_samples={}; node_costs={}; sample_period_ms=2.0
     lock=threading.Lock(); start=time.perf_counter(); run_end=[None]
     def mark(stage, **kw):
-        with lock: events.append({'stage':stage,'t_ms':round((time.perf_counter()-start)*1000,3),**kw})
+        row={'stage':stage,'t_ms':round((time.perf_counter()-start)*1000,3),**kw}
+        with lock: events.append(row)
+        if os.environ.get('NB_PLAYBACK_TRACE') and stage in {'playback_start','frame_tick','frame_request','worker_start','compose_start','compose_end','display_conversion','ui_handoff','playback_stop','worker_end'}: print(json.dumps(row),file=sys.stderr,flush=True)
     def sample_stacks():
         while run_end[0] is None:
             with lock: frames=sys._current_frames()
@@ -72,9 +75,19 @@ def run_window(args):
                 if thread.ident not in frames: continue
                 lane='qt' if thread is threading.main_thread() else ('worker' if thread.name.startswith('nodebased-preview') else None)
                 if lane is None: continue
-                frame=frames[thread.ident]
-                key=f'{pathlib.Path(frame.f_code.co_filename).name}:{frame.f_code.co_name}'
-                sample_counts[lane][key]=sample_counts[lane].get(key,0)+1
+                current=frames[thread.ident]
+                while current is not None:
+                    code=current.f_code
+                    key=f'{pathlib.Path(code.co_filename).name}:{code.co_name}'
+                    sample_counts[lane][key]=sample_counts[lane].get(key,0)+1
+                    if lane=='worker' and code.co_name in ('evaluate_raster','_render_tile'):
+                        loc=current.f_locals
+                        node_id=loc.get('key') if code.co_name=='evaluate_raster' else loc.get('node_id')
+                        frame_no=loc.get('frame',0); kind=loc.get('kind')
+                        if node_id in doc.get('nodes',{}):
+                            kind=kind or doc['nodes'][node_id]['type']; slot=(int(frame_no or 0),node_id,kind,code.co_name)
+                            node_samples[slot]=node_samples.get(slot,0)+1
+                    current=current.f_back
             time.sleep(.002)
     doc=load_document(args.comp)
     doc['nodes']['plate']['params']['path']=str(pathlib.Path(args.plate_pattern).resolve())
@@ -92,17 +105,44 @@ def run_window(args):
                 else: point[field]=scalar*scale
     app=QApplication.instance() or QApplication([]); app.setQuitOnLastWindowClosed(False); app.setApplicationName('NodeBased'); app.setStyle('Fusion'); app.setStyleSheet(STYLE)
     win=Window(doc); win.show(); app.processEvents()
+    # This benchmark isolates frame evaluation through the Viewer handoff. The independent
+    # timeline label painter can segfault under Mesa/Xvfb while painting frame ticks; it does not
+    # participate in that path, so keep that strip out of this headless measurement window.
+    win.frame_slider.hide()
+    # Xvfb's backing-store paint path is also unstable with sustained full-resolution updates.
+    # Evaluation, display conversion and the UI-thread handoff remain active; only rasterizing
+    # the already-handed-off widgets is disabled, which is outside this lane's measured boundary.
+    win.setUpdatesEnabled(False)
     win.proxy.setCurrentIndex(win.proxy.findData(1))
+    win.playback_proxy.setChecked(False)  # measure full-resolution evaluation; automatic proxying changes the gate
     win.show_thumbnails=False
     # Keep the cached run's scene-linear frames warm before the measured playback interval.
     if args.cache_mode=='cached':
-        target=doc['view']; ident=DisplayCache.identity(doc,target,1)
-        for frame in range(1,49):
-            region=win.tile_executor.canvas_region(doc,target,frame=frame,tier=1)
-            result=win.tile_executor.compose_region(doc,target,region,frame=frame,tier=1)
-            key=DisplayCache.key(doc,target,frame,1)
-            win.display_cache.put(key,result.pixels,(region.x,region.y,region.width,region.height),lazy=True)
-        mark('cache_prewarm_complete',frames=48,display_cache_bytes=win.display_cache.bytes)
+        # The normal display-cache budget can retain the complete 48-frame HD sequence but only
+        # a 16-frame UHD window. Loop that resident UHD window instead of benchmarking a cache
+        # miss immediately after frame 48 wraps to frame 1.
+        if args.size=='4k':
+            win.dispatcher.document['time'].update(first=33,current=33,last=48)
+        warm_doc=win.dispatcher.document; target=warm_doc['view']
+        tiled=win.tile_executor.supports_tiled(warm_doc,target)
+        warm_frames=range(33,49) if args.size=='4k' else range(1,49)
+        for frame in warm_frames:
+            key=DisplayCache.key(warm_doc,target,frame,1)
+            if tiled:
+                region=win.tile_executor.canvas_region(warm_doc,target,frame=frame,tier=1)
+                result=win.tile_executor.compose_region(warm_doc,target,region,frame=frame,tier=1)
+                pixels=result.pixels; region_key=(region.x,region.y,region.width,region.height)
+            else:
+                pixels=win.evaluator.evaluate(warm_doc,target,frame=frame,tier=1); region_key=None
+            win.display_cache.put(key,pixels,region_key,lazy=True)
+        # A UHD float frame is large enough that the ordinary bounded display cache may evict
+        # frame 1 while the full 48-frame sequence is being warmed. Verify a recent resident;
+        # begin UHD playback there so the measured cached run starts with an actual hit.
+        check_frame=33 if args.size=='4k' else 1
+        check_key=DisplayCache.key(warm_doc,target,check_frame,1)
+        cache_verified=win.display_cache.get(check_key,None,copy=False) is not None
+        mark('cache_prewarm_complete',frames=len(warm_frames),verified=cache_verified,display_cache_bytes=win.display_cache.bytes)
+        if not cache_verified: raise RuntimeError('display cache did not retain the last prewarmed frame')
     # Stage boundaries; evaluation node timings are appended from Evaluator.profile_log.
     original_tick=win.playback_tick
     def playback_tick(*a,**kw): mark('frame_tick',frame=int(win.dispatcher.document['time']['current'])); return original_tick(*a,**kw)
@@ -132,6 +172,21 @@ def run_window(args):
              nodes=[{'node':r['node'],'path':r['path'],'tile_evaluations':r['tile_evaluations'],'elapsed_ms':round(r['elapsed_ms'],3)} for r in node_costs.values() if r['frame']==int(kw.get('frame') or 0)])
         return result
     win.tile_executor.compose_region=compose
+    original_evaluate=win.evaluator.evaluate
+    def evaluate(document,target=None,*a,**kw):
+        frame=int(kw.get('frame',document.get('time',{}).get('current',1)))
+        before={k:len(v) for k,v in win.evaluator.profile_log.items()}
+        t=time.perf_counter(); out=original_evaluate(document,target,*a,**kw)
+        flat,flat_target=groups.flatten_groups(document,target or document.get('view'))
+        chain=_all_ancestors(flat,flat_target); blocker=next((key for key in chain if flat['nodes'][key]['type'] not in SUPPORTED_TILED_KINDS),None)
+        reason=(f"{flat['nodes'][blocker]['type']} has no tile kernel; its coordinate-dependent/full-frame path sets the upstream evaluation path" if blocker else 'full-frame evaluator selected by the caller')
+        mark('full_frame_evaluation',frame=frame,target=target,elapsed_ms=round((time.perf_counter()-t)*1000,3),reason=reason)
+        for node,rows in win.evaluator.profile_log.items():
+            for row in rows[before.get(node,0):]:
+                mark('node_evaluation',frame=row['frame'],node=node,kind=flat['nodes'].get(node,{}).get('type','unknown'),
+                     path='full-frame fallback',reason=reason,elapsed_ms=round(row['wall_time_ms'],3),cache_hits=row['cache_hits'])
+        return out
+    win.evaluator.evaluate=evaluate
     original_put=win.display_cache.put
     def put(*a,**kw):
         t=time.perf_counter(); result=original_put(*a,**kw); mark('cache_put',elapsed_ms=round((time.perf_counter()-t)*1000,3),bytes=win.display_cache.bytes); return result
@@ -140,32 +195,24 @@ def run_window(args):
     def qimage(*a,**kw):
         t=time.perf_counter(); image=original_qimage(*a,**kw); mark('display_conversion',elapsed_ms=round((time.perf_counter()-t)*1000,3)); return image
     app_module.to_qimage=qimage
-    original_read=imaging.read_image
-    def read(*a,**kw):
-        t=time.perf_counter(); out=original_read(*a,**kw); mark('plate_read_decode',elapsed_ms=round((time.perf_counter()-t)*1000,3),path=str(a[0] if a else kw.get('path',''))); return out
-    imaging.read_image=read
     original_media_read=media.read_media_raster
     def read_media(*a,**kw):
         t=time.perf_counter(); out=original_media_read(*a,**kw); mark('plate_read_decode',elapsed_ms=round((time.perf_counter()-t)*1000,3),path=str(a[0] if a else '')); return out
     media.read_media_raster=read_media
-    original_ready=Window.preview_ready
-    def ready(self,payload,frame,image,status,render_region=None):
+    def finished(payload,frame,image,status,render_region=None):
         req,cancel=payload
         mark('ui_handoff',frame=req.frame,status=status.split('  ·  ')[0],has_frame=frame is not None)
         if frame is not None:
             shown.append((time.perf_counter(),req.frame)); statuses.append(status.split('  ·  ')[0])
-        original_ready(self,payload,frame,image,status,render_region)
-    Window.preview_ready=ready
+    win.signals.finished.connect(finished)
     original_submit=win.executor.submit
     job_counter=[0]
     def submit(fn,*a,**kw):
         job_counter[0]+=1; job_id=job_counter[0]; job_name=getattr(fn,'__name__','worker')
         def wrapped(*wa,**wk):
-            mark('worker_start',job_id=job_id,job=job_name,thread=threading.current_thread().name); prof=cProfile.Profile(); prof.enable()
+            mark('worker_start',job_id=job_id,job=job_name,thread=threading.current_thread().name)
             try: return fn(*wa,**wk)
-            finally:
-                prof.disable(); stream=__import__('io').StringIO(); __import__('pstats').Stats(prof,stream=stream).sort_stats('cumtime').print_stats(50)
-                worker_profiles.append(stream.getvalue()); mark('worker_end',job_id=job_id,job=job_name,thread=threading.current_thread().name)
+            finally: mark('worker_end',job_id=job_id,job=job_name,thread=threading.current_thread().name)
         return original_submit(wrapped,*a,**kw)
     win.executor.submit=submit
     sampler=threading.Thread(target=sample_stacks,name='playback-sampler',daemon=True); sampler.start()
@@ -185,7 +232,7 @@ def run_window(args):
         QTimer.singleShot(100,quit_when_idle)
     QTimer.singleShot(300,begin)
     app.exec()
-    sampler.join(timeout=.2)
+    sampler.join()
     intervals=[(shown[i][0]-shown[i-1][0])*1000 for i in range(1,len(shown))]
     frame_times=[]
     last=None
@@ -193,13 +240,24 @@ def run_window(args):
         if event['stage']=='worker_start': last=event['t_ms']
         elif event['stage']=='ui_handoff' and last is not None and event['has_frame']:
             frame_times.append(event['t_ms']-last); last=None
+    flat_doc,flat_target=groups.flatten_groups(doc,doc.get('view')); ancestors=_all_ancestors(flat_doc,flat_target)
+    blocker=next((key for key in ancestors if flat_doc['nodes'][key]['type'] not in SUPPORTED_TILED_KINDS),None)
+    fallback_reason=(f"{flat_doc['nodes'][blocker]['type']} has no tile kernel; coordinate-dependent evaluation selects the full-frame path" if blocker else None)
+    profiled_nodes=[]
+    for (frame_no,node_id,kind,code_name),samples in sorted(node_samples.items()):
+        path='tile' if code_name=='_render_tile' else 'full-frame fallback'
+        profiled_nodes.append({'frame':frame_no,'node':node_id,'kind':kind,'path':path,
+                              'fallback_reason':fallback_reason if path=='full-frame fallback' else None,
+                              'samples':samples,'estimated_ms':round(samples*sample_period_ms,3)})
+        mark('node_profile',frame=frame_no,node=node_id,kind=kind,path=path,samples=samples,
+             estimated_ms=round(samples*sample_period_ms,3),fallback_reason=fallback_reason if path=='full-frame fallback' else None)
     result={'case':args.case,'resolution':f'{args.width}x{args.height}','duration_s':args.seconds,
         'cache_mode':args.cache_mode,'adapter':args.adapter,'force_adapter':args.force_adapter,
         'frames_displayed':len(shown),'achieved_fps':round(len(shown)/args.seconds,3),
         'frame_interval_ms':{'p50':percentile(intervals,50),'p95':percentile(intervals,95),'p99':percentile(intervals,99)},
         'worker_to_handoff_ms':{'p50':percentile(frame_times,50),'p95':percentile(frame_times,95),'p99':percentile(frame_times,99)},
         'status_line':statuses[-1] if statuses else win.statusBar().currentMessage(),
-        'per_node':sorted(node_costs.values(),key=lambda row:row['elapsed_ms'],reverse=True),'timeline':events,
+        'per_node':sorted(profiled_nodes,key=lambda row:row['estimated_ms'],reverse=True),'timeline':events,
         'sampling_profile':sample_counts,'worker_call_profiles':worker_profiles}
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')

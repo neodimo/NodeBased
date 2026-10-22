@@ -4326,6 +4326,20 @@ class Evaluator:
         if r <= 0:
             return frame
         n = frame.shape[axis]
+        # Small radii are faster as a direct shifted sum: cumsum allocates two full-size
+        # float64 temporaries, while this path needs only one float32 accumulator. Keep the
+        # cumulative path for wider filters, where its O(n) work wins over 2r+1 array passes.
+        if r <= 4:
+            pad = [(0, 0)] * frame.ndim
+            pad[axis] = (r, r)
+            padded = np.pad(frame, pad, mode="edge")
+            result = np.zeros_like(frame)
+            for offset in range(2 * r + 1):
+                window = [slice(None)] * frame.ndim
+                window[axis] = slice(offset, offset + n)
+                result += padded[tuple(window)]
+            result *= np.float32(1.0 / (2 * r + 1))
+            return result
         pad = [(0, 0)] * frame.ndim
         pad[axis] = (r, r)
         padded = np.pad(frame, pad, mode="edge").astype(np.float64)
@@ -7291,12 +7305,57 @@ class Evaluator:
         sx_frac = sx - 0.5 - src_box.x
         sy_frac = sy - 0.5 - src_box.y
         clamp = bool(p.get("clamp", 0))
-        result = Evaluator._resample(src, sx_frac, sy_frac, filter, clamp=clamp).astype(np.float32)
+        # Translation-only cubic transforms have separable sample coordinates. Reuse four
+        # horizontal and four vertical taps instead of constructing sixteen full-frame gathers.
+        # Keep the general path for rotations, scale, skew and perspective-like transforms.
+        if (filter == "cubic" and rotate % 360.0 == 0 and scale == 1.0
+                and p.get("scale_mode", "uniform") == "uniform"
+                and p.get("skew_x", 0.0) == 0.0 and p.get("skew_y", 0.0) == 0.0
+                and not p.get("invert", 0)):
+            result = Evaluator._resample_cubic_separable(
+                src, sx_frac[0, :], sy_frac[:, 0], clamp=clamp
+            ).astype(np.float32)
+        else:
+            result = Evaluator._resample(src, sx_frac, sy_frac, filter, clamp=clamp).astype(np.float32)
         if p.get("black_outside", 0):
             outside = ((sx_frac < -0.5) | (sx_frac > src.shape[1] - 0.5) |
                        (sy_frac < -0.5) | (sy_frac > src.shape[0] - 0.5))
             result[outside] = (0.0, 0.0, 0.0, 1.0)
         return result
+
+    @staticmethod
+    def _resample_cubic_separable(src, sx, sy, clamp=False):
+        """Separable Catmull-Rom sampling for axis-aligned translation-only transforms."""
+        def weight(distance):
+            a = -0.5
+            absolute = np.abs(distance)
+            square, cube = absolute * absolute, absolute * absolute * absolute
+            return np.where(absolute <= 1,
+                            (a + 2) * cube - (a + 3) * square + 1,
+                            a * cube - 5 * a * square + 8 * a * absolute - 4 * a).astype(np.float32)
+
+        def axis_sample(image, coordinates, axis):
+            length = image.shape[axis]
+            if clamp:
+                coordinates = np.clip(coordinates, 0.0, max(0.0, length - 1.0))
+            base = np.floor(coordinates).astype(np.int32)
+            result_shape = (image.shape[0], len(coordinates), image.shape[2]) if axis == 1 else \
+                           (len(coordinates), image.shape[1], image.shape[2])
+            result = np.zeros(result_shape, dtype=np.float32)
+            for offset in (-1, 0, 1, 2):
+                indices = base + offset
+                valid = (indices >= 0) & (indices < length)
+                clipped = np.clip(indices, 0, length - 1)
+                samples = image[:, clipped, :] if axis == 1 else image[clipped, :, :]
+                if not clamp:
+                    samples = np.where(valid[None, :, None] if axis == 1 else valid[:, None, None],
+                                       samples, np.float32(0.0))
+                factors = weight(coordinates - indices).reshape((1, -1, 1) if axis == 1 else (-1, 1, 1))
+                result += samples * factors
+            return result
+
+        horizontal = axis_sample(src, sx, axis=1)
+        return axis_sample(horizontal, sy, axis=0)
 
     @staticmethod
     def _resample(src, sx_frac, sy_frac, filter, clamp=False):
