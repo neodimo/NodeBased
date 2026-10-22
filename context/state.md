@@ -1,5 +1,29 @@
 ## 2026-10-22 — Lane 8 step A finish: integrated drag proven; 24 fps playback remains open (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (8:12 AM on 2026-10-22 PDT)
+
+`main` moved `3bc0b4c3` -> `4b39823a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `4b39823a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0802.log`, started 8:02 AM): **Ran 5802 tests in 483.726 s, OK (skipped=19), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the Hot pour settles in under a minute (finish 1).** Commits:
+  - `baae8a39` Record partial Hot pour finish handoff
+  - `1e09b529` Improve Hot pour stream and pool readability
+  - `c71bfe1a` Raise Hot pour steam and soften table contrast
+  - `e94c0654` Lift Hot pour steam and shadow readability
+  - `2ee0ed4a` Balance Hot pour key light for a soft shadow
+  - `3213189e` Improve Hot pour steam and shadow readability
+  Diff: 15 files changed, 267 insertions(+), 66 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (7:52 AM on 2026-10-22 PDT)
 
 `main` moved `5d612c6f` -> `644f3778` (lane commits cherry-picked onto main in lane order) and then to this
