@@ -75,16 +75,35 @@ def case_checker(seconds):
         app.processEvents()
         time.sleep(0.01)
     drawn.clear()
-    start = time.perf_counter()
     window.toggle_playback(True)
     loop = QEventLoop()
-    QTimer.singleShot(int(seconds * 1000), loop.quit)
+    sample = {}
+
+    def finish_sample():
+        sample.setdefault("start", time.perf_counter())
+        sample["end"] = time.perf_counter()
+        loop.quit()
+
+    def begin_sample():
+        if drawn:
+            sample["start"] = time.perf_counter()
+            QTimer.singleShot(int(seconds * 1000), finish_sample)
+        else:
+            QTimer.singleShot(5, begin_sample)
+
+    # Let the first live picture arrive before opening the measurement window. This excludes
+    # playback-start latency and any in-flight frame that completes after the sample timer fires.
+    QTimer.singleShot(0, begin_sample)
+    QTimer.singleShot(int((seconds + 30) * 1000), finish_sample)
     loop.exec()
+    elapsed = sample.get("end", time.perf_counter()) - sample.get("start", time.perf_counter())
+    measured = [stamp for stamp in drawn if sample.get("start", float("inf")) <= stamp
+                <= sample.get("end", 0.0)]
     window.toggle_playback(False)
-    elapsed = time.perf_counter() - start
     window.confirm_discard = lambda *a, **k: True
     window.close()
-    return dict(frames=len(drawn), fps=round(len(drawn) / elapsed, 2), median_ms=None)
+    fps = len(measured) / elapsed if measured and elapsed > 0 else 0.0
+    return dict(frames=len(measured), fps=round(fps, 2), median_ms=None)
 
 
 def run_case(case, adapter, seconds):
