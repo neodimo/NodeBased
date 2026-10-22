@@ -1,5 +1,27 @@
 ## 2026-10-20 — Lane 6 step A of 2: the Hot pour's first look in under a second (DONE on lane branch; merge pending)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (2:52 AM on 2026-10-22 PDT)
+
+`main` moved `d3bb958d` -> `80fcbd48` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `80fcbd48` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0222.log`, started 2:22 AM): **Ran 5740 tests in 475.161 s, OK (skipped=17), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1).** Commits:
+  - `eb7a2451` Update Lane 8 performance handoff status
+  - `0c64e1ef` Record final Lane 8 adapter measurements
+  - `26be366d` Record Lane 8 finish2 live-picture measurements
+  - `7f17311b` Cache unchanged Roto contours during edits
+  Diff: 12 files changed, 35035 insertions(+), 43 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (2:12 AM on 2026-10-22 PDT)
 
 `main` moved `e10c77a6` -> `63be6ad5` (lane commits cherry-picked onto main in lane order) and then to this
