@@ -172,6 +172,9 @@ def run_parallel(mods, args, env):
 
 
 def main():
+    # Batch output is decoded with "replace", so it can hold U+FFFD; the Windows console's cp1252 cannot
+    # print that and the runner died mid-run (CI 39812995259, after 37 green batches).
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch", type=int, default=12, help="test modules per interpreter")
     parser.add_argument("--jobs", type=int, default=(os.cpu_count() or 1) if os.environ.get("CI") else 1,
