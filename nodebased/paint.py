@@ -47,10 +47,49 @@ def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0
     return coverage
 
 
+def _stroke_region(width, height, points, size, origin=(0, 0)):
+    """Return the clipped pixel bounds that can receive nonzero coverage from a stroke."""
+    if not points or width <= 0 or height <= 0:
+        return None
+    ox, oy = map(int, origin)
+    pressure = max(0.0, *(float(point.get("pressure", 1.0)) for point in points))
+    radius = max(0.25, float(size) * pressure * 0.5) + 0.5
+    left = max(0, math.floor(min(float(p["x"]) for p in points) - radius - 1.0 - ox))
+    top = max(0, math.floor(min(float(p["y"]) for p in points) - radius - 1.0 - oy))
+    right = min(width, math.ceil(max(float(p["x"]) for p in points) + radius + 1.0 - ox))
+    bottom = min(height, math.ceil(max(float(p["y"]) for p in points) + radius + 1.0 - oy))
+    return (left, top, right, bottom) if right > left and bottom > top else None
+
+
 def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
                  source_origin=(0, 0), source_bounds=None):
     if not active(stroke, frame) or not stroke["visible"]:
         return image
+    tool, blend = stroke["tool"], stroke["blend"]
+    if tool == "paint" and blend == "over":
+        # Most brush marks touch a small part of a tile. Rasterise and composite only that
+        # footprint; scanning the whole tile for every dab made a new stroke invalidate hundreds
+        # of thousands of pixels it could never affect.
+        brush = stroke["brush"]
+        bounds = _stroke_region(image.shape[1], image.shape[0], stroke["points"],
+                                brush["size"], origin)
+        if bounds is None:
+            return image
+        x0, y0, x1, y1 = bounds
+        local_origin = (int(origin[0]) + x0, int(origin[1]) + y0)
+        coverage = _distance_grid(x1 - x0, y1 - y0, stroke["points"],
+                                  brush["size"], brush["spacing"],
+                                  brush["hardness"], local_origin)
+        alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
+        rgba = np.asarray(stroke["color"], np.float32)
+        inverse = np.float32(1.0) - alpha
+        source_patch = image[y0:y1, x0:x1]
+        painted = source_patch * inverse
+        painted[..., :3] += (rgba[:3] * rgba[3]) * alpha
+        painted[..., 3:4] += rgba[3] * alpha
+        out = image.copy()
+        out[y0:y1, x0:x1] = painted
+        return np.asarray(out, np.float32)
     # The source is read-only here. Every tool below either builds a fresh output or explicitly
     # copies before its in-place blend, so copying the complete frame up front is unnecessary.
     base = image
@@ -60,7 +99,6 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
                               brush["size"], brush["spacing"], brush["hardness"], origin)
     alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
     tool = stroke["tool"]
-    blend = stroke["blend"]
     if tool == "paint":
         rgba = np.asarray(stroke["color"], np.float32)
         if blend == "over":

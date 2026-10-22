@@ -1,3 +1,7 @@
+# Lane 8 step B finish 1 — active (2026-10-22, 1:05 PM PDT)
+
+Merged baseline: `219263f7`. This pass is limited to the three open drag gates: reduce the RotoPaint full-tier settle from 4.665 s, obtain a real Properties-slider preview, and record the maximum picture interval during movement. Next: optimize paint raster work to its stroke bounds; fix the benchmark slider gesture and add per-drag picture cadence fields; rerun targeted tests and the locked RTX measurements. No off-site hardware measurements are claimed.
+
 # Lane 6 finish 2 — PARTIAL (2026-10-22, 6:20 AM PDT)
 
 Fresh frame 60/90/120 on the RTX 3080 Ti now show a continuous golden stream from spout to pool and a smoother denoised liquid surface. CPU/GPU comparisons pass. The 960 × 540 fixed-32 profile took 10.689 s. The fully converged 1920 × 1080 profile took 60.857 s (0.857 s over the strict limit). Steam remains grainy and the catcher shadow too crisp. The next candidate (smoke96, turbulence off, broader/fewer shadow samples) passed CPU tests but could not be rendered: the integration suite and Lane 2 GPU gates held the exclusive lock ahead of this work. Lane 6's queued render was canceled at the task time limit; no peer process was interrupted. Evidence in `benchmarks/hot_pour/`, fresh stills in `docs/images/hot_pour_shot/`, and detailed handoff in `TASKLOG.md`.

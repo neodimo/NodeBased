@@ -72,6 +72,35 @@ class RotoPaintRenderTests(unittest.TestCase):
         self.assertEqual(actual.tobytes(), expected.tobytes())
         self.assertEqual(source.tobytes(), original.tobytes())
 
+    def test_solid_over_stroke_rasterises_only_its_clipped_bounds(self):
+        from unittest import mock
+        source = np.random.default_rng(13).random((220, 320, 4), dtype=np.float32)
+        original = source.copy()
+        item = stroke(points=[{"x": 210.5, "y": 130.4, "pressure": 0.65},
+                              {"x": 230.5, "y": 134.4, "pressure": 1.0}],
+                      color=[0.2, 0.7, 0.4, 0.8], opacity=0.73,
+                      brush={"size": 12.0, "hardness": 0.65, "opacity": 0.84,
+                             "spacing": 0.17, "strength": 0.2})
+        origin = (100, 40)
+        coverage = paint._distance_grid(source.shape[1], source.shape[0], item["points"],
+                                        item["brush"]["size"], item["brush"]["spacing"],
+                                        item["brush"]["hardness"], origin)
+        alpha = coverage[..., None] * np.float32(item["brush"]["opacity"] * item["opacity"])
+        rgba = np.asarray(item["color"], np.float32)
+        expected = original * (np.float32(1.0) - alpha)
+        expected[..., :3] += (rgba[:3] * rgba[3]) * alpha
+        expected[..., 3:4] += rgba[3] * alpha
+
+        with mock.patch.object(paint, "_distance_grid", wraps=paint._distance_grid) as raster:
+            actual = paint.apply_stroke(source, item, 1, origin=origin)
+
+        self.assertEqual(actual.tobytes(), expected.tobytes())
+        raster.assert_called_once()
+        self.assertLess(raster.call_args.args[0] * raster.call_args.args[1],
+                        source.shape[0] * source.shape[1] // 8,
+                        "a local brush stroke rasterised the full tile")
+        self.assertEqual(source.tobytes(), original.tobytes())
+
     def test_paint_stroke_rasterises_coverage_along_its_path(self):
         item = stroke(points=[{"x": 4.5, "y": 8.5, "pressure": 1.0},
                               {"x": 12.5, "y": 8.5, "pressure": 1.0}])
