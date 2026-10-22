@@ -283,3 +283,61 @@ At 175 percent (`QT_SCALE_FACTOR=1.75`, 1400x780 window): 205 nodes drag at 41 r
 **OpenGL graph.** With a `QOpenGLWidget` as the graph's viewport, the only OpenGL this private display offers is the software renderer (llvmpipe), and there it is slower everywhere: 205 nodes drag at 52 repaints a second (raster 119), pan paint 9.8 ms (2.7), wheel zoom 11 ms (5.7), idle CPU 4.7 percent (0.3). Three graph tests also fail with it on: two because a repaint request on the OpenGL surface does not paint at once, and one about a drag release whose cause is not yet known. The NVIDIA and Radeon cards could not be measured: their OpenGL needs the workstation's real display. Turning it on also changed how wgpu starts: wgpu's OpenGL adapter probe aborts (EGL BadAccess) once a Qt OpenGL context exists on the same thread, so the graph lists the wgpu adapters before it creates its surface and releases its context after every paint. The setting stays off until it has been measured on the cards and the laptop.
 
 Still slow: a pan with most of a 500-node graph in view (27 ms a paint: mostly Qt drawing a few hundred items and sockets, plus about 3 ms for the minimap, which redraws every node on each scroll), and wheel zoom, where every zoom step redraws the cached pictures at the new scale.
+
+## Lane 4 step notes
+
+### 3D playback profile and fixes (10/22)
+
+Measured with `tools/benchmark_3d_playback.py` (the real window on a private Xvfb display, 1920 x 1080, 24 fps comp, 10 s
+of playback, camera animated) and `tools/profile_3d_playback.py` (stage timeline plus sampling profile of the Qt thread
+and the worker). Results are under `benchmarks/3d-playback/` (`before/<adapter>/`, `after/<adapter>/`, `repeat/`,
+`profile-1022-<scene>.{json,txt}` and `-after`). The full suite ran on the card during some runs; the benchmark flags
+that in `gpu_wait_ms.shared_card_suspected`.
+
+Where the time went, RTX 3080 Ti, per frame (median, milliseconds):
+
+| Scene | Top five costs before | Bound by |
+|---|---|---|
+| Cube (frame 514) | resolve at 3840 x 2160 then down to 1080p 328; convert and emit 46; GPU render and wait 42; render encode 41; readback copy 38 | Samples: playback drew, read back and averaged the node's 2 samples at 3840 x 2160 for a 1080p comp |
+| Furnished room (frame 1163) | GPU render and wait 415; resolve 320; scene prepare 209; render encode 78; convert and emit 49 | The card, then Python scene rebuild (shadow data and vertex packing every frame) |
+| Cube after (frame 89) | convert and emit 27; display cache put 17; GPU render and wait 12; node bookkeeping 9; scene evaluation 3 | Display conversion on the worker |
+| Furnished room after (frame 237) | GPU render and wait 122; convert and emit 47; render encode 19; node bookkeeping 15; scene upload 11 | The card |
+
+The CPU rasteriser was chosen when a Render3D node's backend was set to CPU, even with a card present. The empty scene
+(only the camera animating) re-rendered every frame although it draws nothing.
+
+Fixes, each with a test in `tests/test_3d_playback_cost.py` that fails without it:
+
+- Playing requests draw at one sample; stopping re-renders at the node's own samples (resolve 328 to 0.4 ms).
+- A Render3D set to the CPU backend plays on the GPU when a card exists.
+- An empty scene in front of a Render3D makes the picture static whatever the camera does.
+- The readback staging buffer is kept between renders and copied once; no disk spill for frames evicted while playing.
+- The packed shadow triangles and their BVH are reused while only the camera moves; vertex packing runs in NumPy
+  (137 to 4 ms); same-material triangles are one draw.
+- The display conversion touches only the covered rectangle.
+- A landed played frame asks for the next one at once instead of waiting for the next tick.
+
+Frames per second, before and after (the last column is the comp's rate):
+
+| Case | RTX 3080 Ti | Radeon 8060S | llvmpipe | Laptop stand-in | Gate |
+|---|---:|---:|---:|---:|---|
+| Empty scene, animated camera | 9.1 to 24.0 | 10.4 to 24.0 | 9.6 to 23.9 | 9.3 to 24.0 | 24 |
+| Cube, animated camera | 2.0 to 12.4 | 4.7 to 15.5 | 3.9 to 14.4 | 4.2 to 13.4 | 12 on the RTX |
+| Furnished room, animated camera | 1.0 to 4.6 | 1.4 to 4.9 | not run | 1.4 to 4.5 | none |
+| Render3D of the cube into a Grade | 1.9 to 9.3 | 4.0 to 11.5 | not run | not run | none |
+| Mixed mesh and splat scene | 0.4 to 1.0 | not run | not run | not run | none |
+| One Render3D frame of the cube (default 2 samples) | 411 to 88 ms | | | | under 150 ms |
+
+The laptop stand-in is `run/force-adapter.py integrated` with `taskset -c 0-3` and `QT_SCALE_FACTOR=2` on this
+workstation's Radeon; it is not the Windows laptop. The cube result of 12.4 fps sits 0.4 above the gate and measured
+10.7 to 12.4 fps over three runs, 14.3 in a 2 s run, with the suite sharing the card.
+
+What the A6000 run should show: run `python tools/benchmark_3d_playback.py --scene empty,cube,furnished,mixed,grade`
+on the machine and read `adapter`, `fps`, `interval_ms` (p50, p95), `stage_p50_ms` and `gpu_wait_ms` from each JSON, plus a separate
+`--once` run for `render_once_ms`. If the card is the limit the furnished room's `GPU render and wait` falls; if it stays
+near the figures above, the Python stages (convert and emit, node bookkeeping) are the bound. No number is claimed here.
+
+Costs not reached, ranked: (1) convert and emit, 27 to 47 ms a frame (float to display picture on the worker);
+(2) display cache put, 17 ms on the cube; (3) the furnished room's 122 ms GPU render and 19 ms render encode; (4) node
+bookkeeping after the render, 9 to 15 ms; (5) the mixed mesh and splat scene at 1.0 fps, not profiled; (6) readback
+overlapping the next render (double-buffered staging), which the 2 ms readback no longer justifies.
