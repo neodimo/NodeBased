@@ -8,7 +8,7 @@ import numpy as np
 
 from nodebased.core import Dispatcher, SCHEMA_VERSION, empty_document, upgrade_document
 from nodebased.imaging import Evaluator, write_png
-from nodebased import tiles, shapes
+from nodebased import paint, tiles, shapes
 
 
 def stroke(tool="paint", *, points=None, **kw):
@@ -47,6 +47,30 @@ class RotoPaintRenderTests(unittest.TestCase):
 
     def render(self, document, frame=1):
         return Evaluator().evaluate_raster(document, "paint", frame=frame)
+
+    def test_solid_over_stroke_fast_path_is_pixel_exact_and_keeps_source_immutable(self):
+        source = np.random.default_rng(4).random((24, 32, 4), dtype=np.float32)
+        original = source.copy()
+        source.flags.writeable = False
+        item = stroke(points=[{"x": 4.25, "y": 10.5, "pressure": 0.6},
+                              {"x": 25.0, "y": 13.5, "pressure": 1.0}],
+                      color=[0.2, 0.7, 0.4, 0.8], opacity=0.73,
+                      brush={"size": 6.0, "hardness": 0.65, "opacity": 0.84,
+                             "spacing": 0.17, "strength": 0.2})
+        coverage = paint._distance_grid(source.shape[1], source.shape[0], item["points"],
+                                        item["brush"]["size"], item["brush"]["spacing"],
+                                        item["brush"]["hardness"])
+        alpha = coverage[..., None] * np.float32(item["brush"]["opacity"] * item["opacity"])
+        rgba = np.asarray(item["color"], np.float32)
+        target = np.empty_like(source)
+        target[..., :3] = rgba[:3] * rgba[3]
+        target[..., 3] = rgba[3]
+        expected = target * alpha + original * (1.0 - alpha)
+
+        actual = paint.apply_stroke(source, item, 1)
+
+        self.assertEqual(actual.tobytes(), expected.tobytes())
+        self.assertEqual(source.tobytes(), original.tobytes())
 
     def test_paint_stroke_rasterises_coverage_along_its_path(self):
         item = stroke(points=[{"x": 4.5, "y": 8.5, "pressure": 1.0},

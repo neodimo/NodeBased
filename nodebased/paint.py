@@ -51,15 +51,28 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
                  source_origin=(0, 0), source_bounds=None):
     if not active(stroke, frame) or not stroke["visible"]:
         return image
-    base = image.copy()
+    # The source is read-only here. Every tool below either builds a fresh output or explicitly
+    # copies before its in-place blend, so copying the complete frame up front is unnecessary.
+    base = image
     ox, oy = map(int, origin)
     brush = stroke["brush"]
     coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"],
                               brush["size"], brush["spacing"], brush["hardness"], origin)
     alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
     tool = stroke["tool"]
+    blend = stroke["blend"]
     if tool == "paint":
         rgba = np.asarray(stroke["color"], np.float32)
+        if blend == "over":
+            # The common paint/over case has a constant source colour. Broadcast that colour
+            # directly rather than materialising a full-frame `target` and two full-frame
+            # multiplication temporaries. Keep the same float32 operation order as the general
+            # blend path so the optimization is pixel-identical.
+            inverse = np.float32(1.0) - alpha
+            out = base * inverse
+            out[..., :3] += (rgba[:3] * rgba[3]) * alpha
+            out[..., 3:4] += rgba[3] * alpha
+            return np.asarray(out, np.float32)
         target = np.empty_like(base); target[..., :3] = rgba[:3] * rgba[3]; target[..., 3] = rgba[3]
     elif tool == "eraser":
         target = np.zeros_like(base) if source is None else source
@@ -123,7 +136,6 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
         target = base + (1-base)*brush["strength"]
     else:
         target = base*(1.0-brush["strength"])
-    blend = stroke["blend"]
     if blend == "over" or tool == "eraser":
         out = target * alpha + base * (1-alpha)
     elif blend == "add":

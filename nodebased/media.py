@@ -271,7 +271,7 @@ def _layer_rgba(channels, pixels):
     return out
 
 
-def read_exr_layers(source, spec, subimage, data, display):
+def read_exr_layers(source, spec, subimage, data, display, pixels=None):
     """The named channel groups of an open EXR (everything written as `layer.channel`) as
     `{layer: Raster}`, or None when the file has none. Values are read as authored: layers are
     data (normals, depth, per-light response) and take no colour transform."""
@@ -280,9 +280,10 @@ def read_exr_layers(source, spec, subimage, data, display):
     if not groups or spec.width * spec.height * spec.nchannels > 128 * 1024 * 1024:
         return None
     import OpenImageIO as oiio
-    pixels = source.read_image(subimage, 0, 0, spec.nchannels, oiio.FLOAT)
     if pixels is None:
-        raise ValueError('Layer decode failed: ' + source.geterror())
+        pixels = source.read_image(subimage, 0, 0, spec.nchannels, oiio.FLOAT)
+        if pixels is None:
+            raise ValueError('Layer decode failed: ' + source.geterror())
     return {name: Raster(_layer_rgba(channels, pixels), data, display)
             for name, channels in groups.items()}
 
@@ -320,6 +321,16 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         if any(v <= 0 or v > 8192 for v in (w, h, spec.width, spec.height)):
             raise ValueError('Full-frame reader dimensions must be between 1 and 8192')
         names = list(spec.channelnames)
+        # A multichannel EXR's beauty and named layers share one compressed source. Decode all
+        # channels once when the existing layer path can retain them, then slice the beauty and
+        # build layer rasters from that same buffer. The old path decoded beauty and layers in two
+        # separate ImageInput.read_image calls on every sequence frame.
+        layer_groups = _channel_groups(names) if ext == '.exr' and not layer else {}
+        shared_channels = None
+        if layer_groups and spec.width * spec.height * spec.nchannels <= 128 * 1024 * 1024:
+            shared_channels = source.read_image(subimage, 0, 0, spec.nchannels, oiio.FLOAT)
+            if shared_channels is None:
+                raise ValueError('Layer decode failed: ' + source.geterror())
         prefix = layer + '.' if layer else ''
         rgb = [names.index(prefix + c) if prefix + c in names else None for c in 'RGB']
         if layer and all(index is None for index in rgb):
@@ -349,7 +360,8 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             first, last = min(selected), max(selected) + 1
             if spec.width * spec.height * (last - first) > 128 * 1024 * 1024:
                 raise ValueError('Selected channel span exceeds the 512 MiB decode limit')
-            pixels = source.read_image(subimage, 0, first, last, oiio.FLOAT)
+            pixels = (shared_channels[..., first:last] if shared_channels is not None else
+                      source.read_image(subimage, 0, first, last, oiio.FLOAT))
             if pixels is None:
                 raise ValueError('Image decode failed: ' + source.geterror())
             rgba = np.ones((spec.height, spec.width, 4), dtype=np.float32)
@@ -378,7 +390,8 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
                 transforms.get(orientation, lambda a: a)(Raster(rgba, data, display).fit(display)))
             square = Region(0, 0, oriented.shape[1], oriented.shape[0])
             return Raster(oriented, square, square)
-        layers = read_exr_layers(source, spec, subimage, data, display) if ext == '.exr' and not layer else None
+        layers = (read_exr_layers(source, spec, subimage, data, display, pixels=shared_channels)
+                  if ext == '.exr' and not layer else None)
         meta = None
         if ext == '.exr':
             from .metadata import header_entry

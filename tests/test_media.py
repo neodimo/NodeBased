@@ -1,13 +1,16 @@
 """EXR/OCIO ingest and output. Every check runs real OpenImageIO and OpenColorIO."""
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import numpy as np
 import OpenImageIO as oiio
 from nodebased.color import display_rgb, to_working
 from nodebased.core import SCHEMA_VERSION, Dispatcher, upgrade_document, validate
 from nodebased.imaging import Evaluator, srgb_to_linear
-from nodebased.media import HALF_MAX, group_directory, read_media, sequence_path, write_exr
+from nodebased.media import (HALF_MAX, group_directory, read_media, read_media_raster,
+                             sequence_path, write_exr)
+from nodebased import media
 
 
 def write_exr_raw(path, pixels, channelnames, x=0, y=0, full=None, attributes=()):
@@ -204,6 +207,23 @@ class MediaTests(unittest.TestCase):
             [0, 0.5, 0, 0.5], atol=1e-6)
         with self.assertRaisesRegex(ValueError, 'diffuse.R'):
             read_media(str(path), layer='specular')
+
+    def test_multichannel_beauty_and_layers_share_one_channel_decode(self):
+        beauty = np.random.default_rng(8).random((8, 10, 4), dtype=np.float32)
+        layers = {"normals": np.ones((8, 10, 3), np.float32),
+                  "depth": np.full((8, 10, 1), 12.0, np.float32)}
+        path = self.dir / "shared-decode.exr"
+        write_exr(path, beauty, bits="float", layers=layers)
+
+        with patch.object(media, "read_exr_layers", wraps=media.read_exr_layers) as read_layers:
+            raster = read_media_raster(str(path), colorspace="Raw")
+
+        shared = read_layers.call_args.kwargs["pixels"]
+        self.assertEqual(shared.shape, (8, 10, 8))
+        self.assertEqual(sorted(raster.layers), ["depth", "normals"])
+        np.testing.assert_allclose(raster.pixels, beauty, atol=1e-7, rtol=0)
+        np.testing.assert_array_equal(raster.layers["normals"].pixels[..., :3], layers["normals"])
+        np.testing.assert_array_equal(raster.layers["depth"].pixels[..., 0], layers["depth"][..., 0])
 
     def test_single_channel_depth_is_readable_as_luminance(self):
         path = self.dir / 'depth.exr'
