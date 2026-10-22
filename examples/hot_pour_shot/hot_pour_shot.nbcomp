@@ -1,5 +1,5 @@
 {
-  "version": 24,
+  "version": 25,
   "nodes": {
     "glass_wall": {
       "type": "Cylinder3D",
@@ -936,7 +936,7 @@
       "type": "Light3D",
       "name": "Light3D",
       "params": {
-        "light_type": "Point",
+        "light_type": "Rect",
         "tx": 0.9,
         "ty": 1.4,
         "tz": 1.2,
@@ -957,10 +957,10 @@
         "shadow_samples": 1,
         "env_rotation": 0.0,
         "env_blur": 0.0,
-        "area_width": 1.0,
-        "area_height": 1.0,
+        "area_width": 0.55,
+        "area_height": 0.55,
         "area_radius": 0.5,
-        "area_normalize": "off",
+        "area_normalize": "on",
         "two_sided": "off",
         "light_samples": 4,
         "exposure": 0.0,
@@ -1079,7 +1079,7 @@
         "cryptomatte_levels": 6,
         "volumes": "on",
         "volume_step_size": 0.05,
-        "volume_density_scale": 1.0,
+        "volume_density_scale": 3.0,
         "volume_shadow_density": 0.0,
         "volume_shadow_steps": 1,
         "volume_scattering": 1.0,
@@ -1124,7 +1124,8 @@
         "denoise_iterations": 4,
         "denoise_temporal": 0,
         "denoise": "off",
-        "beauty_raw": 0
+        "beauty_raw": 0,
+        "through_lens": 0
       },
       "inputs": {
         "scene": "scene",

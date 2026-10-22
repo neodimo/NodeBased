@@ -1,3 +1,7 @@
+# Lane 6 finish 2 — visual polish active (2026-10-22, 4:53 AM PDT)
+
+Scope: strengthen the steam plume and soften the table shadow in fresh stills while preserving the measured under-60-second 1920 × 1080 converged Render-mode target. Waiting on the shared GPU lock held by Lane 4/Lane 2; no process was interrupted.
+
 # Lane 6 finish 1 — local gates complete; external hardware QA unavailable (2026-10-22, 4:15 AM PDT)
 
 RTX 3080 Ti: fixed 32-sample 960 × 540 frame 60 took 35.55 s. Adaptive 1920 × 1080 Render mode at threshold 0.01 converged every pixel in 45.46 s (adaptive cap 2,048; mean 11.71 samples/pixel). The showcase now disables steam cast shadows and uses four transmission bounces; 16–64 adaptive still renders took 14.95–15.68 s. CPU/GPU comparisons passed at frames 1/60/120 on NVIDIA and AMD Radeon 8060S; adaptive/majorant tests passed under NVIDIA and forced-integrated invocations. Visual review: golden stream reads as a pour; cup/pool still has speckle and the table shadow remains hard-edged. A6000 and Windows runs remain unverified. Evidence is in `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json` and `benchmarks/hot_pour/hot-pour-shot-2026-10-22.json`; output logs in the lane run folder.

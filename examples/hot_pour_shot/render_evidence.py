@@ -101,6 +101,8 @@ def main():
         render_seconds[str(frame)] = round(time.perf_counter() - before, 2)
         print(json.dumps({"rendered": frame, "elapsed_seconds": render_seconds[str(frame)]}), flush=True)
     result = {"adapter": args.adapter, "device": str(adapter_name), "cells": 32, "frames": 120,
+              "visual_settings": {"volume_density_scale": 3.0, "key_light": "Rect",
+                                  "key_light_size": [0.55, 0.55], "key_light_normalized": True},
               "bake_seconds": round(bake_seconds, 2),
               "render_seconds": render_seconds, "comparison": comparisons}
     (run_dir / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
