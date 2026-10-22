@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step B of 3: the mixed mesh and splat scene's first look under one second, and a sharper first look (finish 1) (integrator tick)
+
+- **What was done:** `main` `9ce12b9a` -> `7f6acd4e` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `7f6acd4e`: Ran 5802 tests in 475.065 s, OK (skipped=19), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the Hot pour settles in under a minute (finish 1) (integrator tick)
 
 - **What was done:** `main` `3bc0b4c3` -> `4b39823a` plus this docs commit. Evidence and per-lane commit

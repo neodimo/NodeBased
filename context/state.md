@@ -1,5 +1,24 @@
 ## 2026-10-22 — Lane 8 step A finish: integrated drag proven; 24 fps playback remains open (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (8:32 AM on 2026-10-22 PDT)
+
+`main` moved `9ce12b9a` -> `7f6acd4e` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7f6acd4e` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0822.log`, started 8:22 AM): **Ran 5802 tests in 475.065 s, OK (skipped=19), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step B of 3: the mixed mesh and splat scene's first look under one second, and a sharper first look (finish 1).** Commits:
+  - `e9723be9` Step B finish: first-look numbers on the Radeon, the laptop stand-in and llvmpipe for the mixed scene, profile table, orbit reading and write-up in the 3D foundation notes
+  Diff: 10 files changed, 1467 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (8:12 AM on 2026-10-22 PDT)
 
 `main` moved `3bc0b4c3` -> `4b39823a` (lane commits cherry-picked onto main in lane order) and then to this
