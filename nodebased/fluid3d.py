@@ -1798,11 +1798,14 @@ def build_stream(doc, key, node, chain):
     return stream
 
 
-def solve_frame(stream, frame, cache, cancel=None):
-    """The solved `simcache.State` at `frame`, from `cache` where possible."""
+def solve_frame(stream, frame, cache, cancel=None, on_frame=None):
+    """The solved `simcache.State` at `frame`, from `cache` where possible.
+
+    `on_frame(frame, state)` publishes complete, banked checkpoints from this forward solve.
+    """
     solver = stream.solver(cancel)
     return simcache.solve_to_frame(cache, stream.run, int(frame), stream.start_frame, stream.substeps,
-                                   stream.seed, solver.initial_state, solver.step, cancel)
+                                   stream.seed, solver.initial_state, solver.step, cancel, on_frame)
 
 
 def volume_from_state(state, stream, frame, name=""):

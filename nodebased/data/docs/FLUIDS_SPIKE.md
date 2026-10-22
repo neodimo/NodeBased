@@ -1223,11 +1223,15 @@ These are visual findings only; solver and lighting changes are outside this ste
 
 ### A: checkpoint callbacks for progressive solves (partial)
 
-`simcache.solve_to_frame` now offers an optional callback after each complete frame has been stored under its run key.
+`simcache.solve_to_frame`, `fluid3d.solve_frame` and `flip3d.solve_frame` now offer an optional callback after each
+complete frame has been stored under its run key.
 The callback receives the frame number and checkpoint; cancellation or an exception during a frame leaves that frame
 uncached and unpublished. The callback stream is bit-identical to the corresponding full bake in the deterministic
-cache tests. This is the solver-side seam only: no timeline, stale-picture badge, edit-cancellation UI, stage profile,
-or adapter bake measurements have landed yet.
+cache tests. `tools/benchmark_fluid_edits.py` builds the 64-cell Hot pour and measures a faster pour velocity, a moved
+cup collider, and changed steam vorticity, including frame-1 time and per-output-stage bake time. It reports solver
+outputs before display presentation; substep internals (transfers, pressure, sparse occupancy, synchronization and
+readback) still need direct instrumentation. No timeline, stale-picture badge, edit-cancellation UI, or 64-cell
+adapter measurements have landed yet.
 
 ### S1: the Hot pour in a rendered shot (finish 1)
 
