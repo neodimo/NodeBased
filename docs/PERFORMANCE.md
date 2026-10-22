@@ -186,12 +186,12 @@ costs are estimates; the paired JSON profiles preserve the timeline and sampling
 
 | Comp | Before: top five nodes (ms/frame) | After: top five nodes (ms/frame) |
 |---|---|---|
-| 1080p / RTX 3080 Ti | Transform 183.6; Blur 91.2; ColorCorrect 76.4; Read plate 31.5; Read background 29.8 | Transform 126.3; ColorCorrect 64.0; Grade 27.1; Blur 24.6; Merge 19.4 |
+| 1080p / RTX 3080 Ti | Transform 183.6; Blur 91.2; ColorCorrect 76.4; Read plate 31.5; Read background 29.8 | Transform 46.5; Grade 18.8; Blur 13.4; Merge 13.2; Roto 12.2 |
 | 4K / llvmpipe | Transform 667.2; ColorCorrect 324.0; Blur 311.0; Read background 118.8; Read plate 117.2 | Transform 499.3; ColorCorrect 286.7; Merge 131.7; Blur 122.3; Grade 119.7 |
 
 | Uncached run | Before → after |
 |---|---:|
-| 1080p / RTX 3080 Ti | 1.5 → 2.4 fps |
+| 1080p / RTX 3080 Ti | 1.5 → 4.5 fps (finish 1; earlier after run 2.4) |
 | 1080p / llvmpipe | 1.6 → 2.4 fps |
 | 1080p / integrated laptop stand-in (four CPUs, 2× Qt scale) | — → 2.3 fps |
 | 4K / llvmpipe | 0.4 → 0.5 fps |
@@ -199,14 +199,19 @@ costs are estimates; the paired JSON profiles preserve the timeline and sampling
 Cached playback stayed near its prior cadence: 1080p llvmpipe was 12.3 fps before and 11.7–11.8
 fps after, with about 84 ms median frame intervals in both runs. 4K llvmpipe reached 4.7 fps on a
 cached 16-frame loop (frames 33–48), the window retained by the default cache budget at UHD.
-The separate animated-size Checker Viewer check reached 23.84 fps on the RTX 3080 Ti, narrowly
-below its 24 fps gate; its run summary is `benchmarks/2d-playback/checker-1022-animated-rtx.json`.
+The animated-size Checker Viewer check reached 23.79 fps on the RTX 3080 Ti, just below its 24 fps
+gate. The finish-1 tool measures delivered pictures in a fixed window after the first live picture;
+its result is `benchmarks/2d-playback/finish1-checker-1022-animated-rtx.json`.
 
 The measured full-resolution changes cut small-radius Blur with shifted-window accumulation,
 use separable cubic sampling for translation-only Transform, and bound Read-ahead to one upcoming
 full-resolution frame. Read-ahead is skipped when the future display frame is already cached.
-Animated Transform remains a full-frame fallback because its canvas-global coordinates do not
-yet have a tile kernel. The 16 fps uncached comp gate remains open. Profile files under
+Playback also skips synchronous disk spills for evicted transient evaluation frames and restores
+the normal disk-cache policy when stopped. This finish-1 run showed steady 288 ms median frame
+intervals, with no disk-tier write samples, and 4.5 fps over ten seconds. Animated Transform remains
+a full-frame fallback because its canvas-global coordinates do not yet have a tile kernel. The 16 fps
+uncached comp gate and the 24 fps Checker gate remain open. Finish-1 profiles are
+`benchmarks/2d-playback/finish1-after-1022-1080p-rtx3080ti.{json,txt}`; the earlier profile files under
 `benchmarks/2d-playback/` contain the per-stage timeline and Qt/worker sampling evidence; read
 decode events include future frames warmed by the reader pool.
 

@@ -1,0 +1,9 @@
+Finish 1, realistic 1080p comp playback — RTX 3080 Ti
+
+Uncached, full-resolution playback measured 4.5 fps over 10 seconds (45 pictures).
+Frame interval p50 288.432 ms, p95 302.875 ms. The 16 fps acceptance target remains unmet.
+
+Top five worker-stack sample estimates (ms/frame): Transform 46.5; Grade 18.8; Blur 13.4; Merge 13.2; Roto 12.2.
+The profile recorded no disk-tier write samples after playback spill suppression.
+
+Animated-size Checker steady-state cadence measured 23.79 fps over a fixed 30-second window beginning after the first live picture. Its 24 fps target remains unmet.
