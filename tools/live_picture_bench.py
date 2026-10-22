@@ -58,6 +58,10 @@ def main():
     parser.add_argument("--seconds", type=float, default=8)
     parser.add_argument("--warm-playback-range", action="store_true",
                         help="render every frame at the selected tier before measuring cache-only playback")
+    parser.add_argument("--automatic-playback", action="store_true",
+                        help="measure Proxy while playing from the artist's Full choice")
+    parser.add_argument("--cache-tier", type=int, choices=(1, 2, 4, 8), default=4,
+                        help="selected tier for the cached-range playback measurement")
     args = parser.parse_args()
     if args.self_check:
         self_check()
@@ -74,7 +78,8 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run([sys.executable, str(driver), str(fixture), str(output),
                              str(args.seconds), args.adapter, args.force_adapter, args.profile_thread,
-                             str(int(args.warm_playback_range))], cwd=ROOT,
+                             str(int(args.warm_playback_range)), str(int(args.automatic_playback)),
+                             str(args.cache_tier)], cwd=ROOT,
                             env={**os.environ, "DISPLAY": args.display, "QT_QPA_PLATFORM": "xcb"},
                             check=False)
     raise SystemExit(result.returncode)

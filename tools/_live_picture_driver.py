@@ -24,6 +24,8 @@ def mark(stage, **fields):
     with lock: timeline.append({"stage":stage,"t":time.perf_counter(),**fields})
 profile_mode=sys.argv[6]
 warm_playback_range = bool(int(sys.argv[7])) if len(sys.argv) > 7 else False
+automatic_playback = bool(int(sys.argv[8])) if len(sys.argv) > 8 else False
+cache_tier = int(sys.argv[9]) if len(sys.argv) > 9 else 4
 main_profile=cProfile.Profile()
 if profile_mode=='qt': main_profile.enable()
 app=QApplication(sys.argv[:1]); app.setApplicationName("NodeBased"); app.setStyle("Fusion"); app.setStyleSheet(STYLE)
@@ -37,6 +39,12 @@ win=Window(doc)
 original_handed=win._direct_handed_over
 def handed_over(*a,**k): mark('card_upload_and_handoff',accepted=bool(a[0]) if a else None); return original_handed(*a,**k)
 win._direct_handed_over=handed_over
+original_show_image=win._show_image
+def show_image(image, tier, *a, **k):
+    mark('picture_shown', tier=int(tier), generation=k.get('generation'),
+         frame=int(win.dispatcher.document['time']['current']))
+    return original_show_image(image, tier, *a, **k)
+win._show_image=show_image
 class Trace(QObject):
     def eventFilter(self, obj, event):
         if event.type() in (QEvent.Type.MouseButtonPress,QEvent.Type.MouseMove,QEvent.Type.MouseButtonRelease):
@@ -161,8 +169,12 @@ def on_main(fn):
     box={}; ev=threading.Event()
     def run():
         try: box['v']=fn()
+        except BaseException as exc: box['error']=exc
         finally: ev.set()
-    bridge.call.emit(run); ev.wait(10); return box.get('v')
+    bridge.call.emit(run)
+    if not ev.wait(10): raise TimeoutError('main Qt thread did not answer a benchmark operation')
+    if 'error' in box: raise box['error']
+    return box.get('v')
 def xd(*args): subprocess.run(['xdotool',*map(str,args)],env={**os.environ,'DISPLAY':os.environ['DISPLAY']},check=True)
 def busy(): return bool(win.busy) or len(win.preview_queue)>0
 def settle(timeout=90, stable_for=.35):
@@ -214,37 +226,149 @@ def scenario():
           "first_move_received_s":None if first_move is None else round(first_move-start,4),
           "picture_during_drag":first is not None and first<drag_end,"frames_during_drag":frames,
           "settle_s":round(time.monotonic()-drag_end,4),"status":win.viewer_info.text()}
+    drag_results=[drag]
+    def choose_view(key):
+      def apply():
+        win.graph.scene().clearSelection()
+        win.graph.items_by_id[key].setSelected(True)
+        win.inspect(key)
+        win.command({'op':'view','id':key})
+      on_main(apply); settle()
+    def point_for(key):
+      doc_now=win.dispatcher.document; payload=doc_now.get('node_data',{}).get(key,{})
+      if key == 'roto':
+        point=payload.get('shapes',[{}])[0].get('points',[{}])[0]
+        return float(point.get('x',300)), float(point.get('y',300))
+      if key == 'trk':
+        track=payload.get('tracks',[{}])[0]
+        return float(track.get('x',300)), float(track.get('y',300))
+      if key == 'plane':
+        from nodebased.planar import resolve_corners
+        x,y=resolve_corners(payload, int(doc_now['time']['current']))[0]
+        return float(x),float(y)
+      return 400.0,300.0
+    def global_xy(key):
+      sx,sy=point_for(key)
+      return on_main(lambda:(lambda p:(p.x(),p.y()))(
+          win.viewer.viewport().mapToGlobal(win.viewer.mapFromScene(QPointF(sx,sy)))))
+    def perform_drag(name, key, knob=False):
+      if key:
+        choose_view(key)
+      if knob:
+        def slider_xy():
+          from PySide6.QtWidgets import QSlider
+          sliders=[s for s in win.properties_dock.findChildren(QSlider,'knob-slider') if s.isEnabled()]
+          if not sliders: return None
+          s=sliders[0]; p=s.mapToGlobal(s.rect().center()); return p.x(),p.y()
+        pos=on_main(slider_xy)
+        if pos is None: return {'series':'drag','subject':name,'status':'no enabled properties slider'}
+        logical_x,logical_y=pos; x,y=qt_global_to_x11(pos,ratio)
+      else:
+        logical_x,logical_y=global_xy(key); x,y=qt_global_to_x11((logical_x,logical_y),ratio)
+      g0=win.frame_generation; began=time.monotonic(); first=None; first_move=None
+      xd('mousemove',x,y); time.sleep(.12); xd('mousedown',1); time.sleep(.05)
+      for n in range(1,7):
+        if first_move is None: first_move=time.monotonic()
+        xd('mousemove',x+round(10*ratio)*n,y+round(6*ratio)*n)
+        if first is None: first=wait_new(g0,.05)
+        time.sleep(.14)
+      drag_end=time.monotonic(); during=win.frame_generation-g0; xd('mouseup',1)
+      if first is None: first=wait_new(g0,45)
+      settle()
+      return {'series':'drag','subject':name,'first_picture_s':None if first is None else round(first-began,4),
+              'first_move_to_picture_s':None if first is None or first_move is None else round(first-first_move,4),
+              'picture_during_drag':first is not None and first<drag_end,'frames_during_drag':during,
+              'settle_s':round(time.monotonic()-drag_end,4),'status':win.viewer_info.text()}
+    for name,key in (('RotoPaint','paint'),('Tracker','trk'),('PlanarTracker','plane')):
+      drag_results.append(perform_drag(name,key))
+    drag_results.append(perform_drag('Properties knob','paint',knob=True))
     mark('series_end',series='roto_drag'); mark('series_start',series='uncached_scrub')
-    g=win.frame_generation; xd('key','Right'); scrub_start=time.monotonic(); scrub_first=wait_new(g,60); settle()
-    scrub={"series":"uncached_scrub","adapter":adapter,"first_picture_s":None if scrub_first is None else round(scrub_first-scrub_start,4),"settle_s":round(time.monotonic()-scrub_start,4),"status":win.viewer_info.text()}
+    on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(8)),win.playback_proxy.setChecked(False))); settle()
+    def timeline_point(frame):
+      from PySide6.QtCore import QPoint
+      slider=win.frame_slider
+      return on_main(lambda:(lambda p:(p.x(),p.y()))(
+          slider.mapToGlobal(QPoint(round(slider.frame_x(frame)+slider.frame_width()/2),slider.height()/2))))
+    first=int(win.dispatcher.document['time']['first']); last=int(win.dispatcher.document['time']['last'])
+    target_frame=last
+    sx,sy=timeline_point(first); ex,ey=timeline_point(target_frame)
+    x0,y0=qt_global_to_x11((sx,sy),ratio); x1,y1=qt_global_to_x11((ex,ey),ratio)
+    scrub_start=time.monotonic(); scrub_generation=win.frame_generation
+    xd('mousemove',x0,y0); time.sleep(.1); xd('mousedown',1)
+    first_move=time.monotonic()
+    for n in range(1,7):
+      xd('mousemove',x0+round((x1-x0)*n/6),y0+round((y1-y0)*n/6)); time.sleep(.11)
+    xd('mouseup',1); scrub_drag_end=time.monotonic(); settle()
+    tier8_events=[e for e in timeline if e.get('stage')=='picture_shown' and e.get('t',0)>=first_move and e.get('tier')==8]
+    tier8_first=(tier8_events[0]['t']-first_move) if tier8_events else None
+    scrub_final_frame=int(win.dispatcher.document['time']['current'])
+    newest8=max((int(e.get('frame',-1)) for e in tier8_events),default=None)
+    on_main(lambda:win.proxy.setCurrentIndex(win.proxy.findData(4))); settle()
+    next_frame=first if scrub_final_frame>=last else scrub_final_frame+1
+    tier4_start=time.monotonic(); tier4_generation=win.frame_generation
+    on_main(lambda f=next_frame:win.set_time(transient=True,current=f))
+    tier4_until=time.monotonic()+60
+    while time.monotonic()<tier4_until and not any(
+        e.get('stage')=='picture_shown' and int(e.get('generation') or -1)>tier4_generation and e.get('tier')==4
+        for e in timeline): time.sleep(.005)
+    settle()
+    tier4_events=[e for e in timeline if e.get('stage')=='picture_shown' and e.get('t',0)>=tier4_start
+                  and int(e.get('generation') or -1)>tier4_generation and e.get('tier')==4]
+    tier4_first=(tier4_events[0]['t']-tier4_start) if tier4_events else None
+    scrub={"series":"uncached_scrub","adapter":adapter,"tier8_first_picture_s":None if tier8_first is None else round(tier8_first,4),
+           "tier4_first_picture_s":None if tier4_first is None else round(tier4_first,4),
+           "first_picture_s":None if tier8_first is None else round(tier8_first,4),
+           "scrubbed_frames":last-first+1,"newest_frame":scrub_final_frame,"newest_tier8_frame":newest8,
+           "newest_frame_had_tier8":newest8==scrub_final_frame,
+           "tier8_picture_during_drag":bool(tier8_events and tier8_events[0]['t']<scrub_drag_end),
+           "settle_s":round(time.monotonic()-scrub_start,4),"status":win.viewer_info.text()}
     mark('series_end',series='uncached_scrub')
-    on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(4)),win.playback_proxy.setChecked(False))); settle()
+    if automatic_playback:
+      on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(1)), win.playback_proxy.setChecked(True)))
+      on_main(lambda:win.toggle_playback(True)); playback_tier = int(on_main(lambda:win.proxy.currentData()))
+      on_main(lambda:win.toggle_playback(False)); settle()
+    else:
+      playback_tier = cache_tier
+      on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(playback_tier)),
+                      win.playback_proxy.setChecked(False)))
+      settle()
+    win.loop_mode = "loop"
     warmed_frames = 0; cache_warm_s = None
     if warm_playback_range:
-      mark('series_start',series='tier4_cache_warm')
+      on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(playback_tier)),
+                      win.playback_proxy.setChecked(False)))
+      settle()
+      mark('series_start',series='playback_cache_warm')
       warm_start = time.monotonic()
       time_range = dict(win.dispatcher.document['time'])
-      for frame_number in range(int(time_range['first']), int(time_range['last']) + 1):
-        generation = win.frame_generation
-        on_main(lambda f=frame_number: win.set_time(transient=True, current=f))
-        if wait_new(generation, 90) is None: break
-        settle(timeout=90, stable_for=.02)
-      on_main(lambda f=int(time_range['first']): win.set_time(transient=True, current=f))
+      range_frames = int(time_range['last']) - int(time_range['first']) + 1
+      on_main(lambda:win.toggle_playback(True))
+      until = time.monotonic() + 90
+      while time.monotonic() < until and win.playing and win.playback_frames_rendered < range_frames:
+        time.sleep(.01)
+      warm_pass_frames = int(win.playback_frames_rendered)
+      on_main(lambda:win.toggle_playback(False))
       settle(timeout=90, stable_for=.02)
       current_doc = win.dispatcher.document
       target = current_doc.get('view')
       warm_frames = range(int(time_range['first']), int(time_range['last']) + 1)
-      identity = win.display_cache.identity(current_doc, target, 4)
+      identity = win.display_cache.identity(current_doc, target, playback_tier)
       # DisplayCache entries are region-keyed. Playback can use the same selected-tier
       # frame from a viewport region, so get(key, region=None) would incorrectly report
       # every such entry missing. resident_frames checks the exact content identity and
       # frame while intentionally ignoring the presentation region.
       warmed_frames = len(win.display_cache.resident_frames(identity, warm_frames))
       cache_warm_s = round(time.monotonic() - warm_start, 3)
-      mark('playback_range_warmed', requested_frames=int(time_range['last'])-int(time_range['first'])+1,
-           cached_frames=warmed_frames, elapsed_s=cache_warm_s)
-      mark('series_end',series='tier4_cache_warm')
-    mark('series_start',series='tier4_playback')
+      mark('playback_range_warmed', requested_frames=range_frames, cached_frames=warmed_frames,
+           elapsed_s=cache_warm_s, first_pass_frames=warm_pass_frames)
+      mark('series_end',series='playback_cache_warm')
+    if automatic_playback:
+      on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(1)), win.playback_proxy.setChecked(True)))
+    else:
+      on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(playback_tier)),
+                      win.playback_proxy.setChecked(False)))
+    settle()
+    mark('series_start',series='automatic_playback' if automatic_playback else 'cached_tier_playback')
     playback_timeline_start = time.perf_counter()
     t=time.monotonic(); on_main(lambda:win.toggle_playback(True)); observations=[]
     while time.monotonic()-t<duration:
@@ -252,7 +376,7 @@ def scenario():
         time.sleep(.01)
     on_main(lambda:win.toggle_playback(False)); elapsed=time.monotonic()-t
     playback_timeline_end = time.perf_counter()
-    mark('series_end',series='tier4_playback')
+    mark('series_end',series='automatic_playback' if automatic_playback else 'cached_tier_playback')
     playback_events = [event for event in timeline
                        if playback_timeline_start <= event.get('t', 0) <= playback_timeline_end]
     playback_cache_lookups = [event for event in playback_events
@@ -265,7 +389,28 @@ def scenario():
         if generation>last_generation:
             if frame!=last_frame: frame_count+=1; last_frame=frame
             last_generation=generation
-    playback={"series":"tier4_playback","adapter":adapter,"fps":round(frame_count/max(elapsed,.001),3),"rendered_frame_changes":frame_count,"elapsed_s":round(elapsed,3),"fps_target":win.dispatcher.document['time']['fps'],"playback_range_warmed":warm_playback_range,"cached_range_frames":warmed_frames,"cache_warm_s":cache_warm_s,"display_cache_lookups":len(playback_cache_lookups),"display_cache_hits":sum(event.get('hit') is True for event in playback_cache_lookups),"graph_evaluations":playback_graph_evaluations,"status":win.viewer_info.text()}
+    sequence=[]
+    prior_generation=observations[0][2] if observations else -1
+    prior_frame=None
+    for _stamp, frame, generation in observations[1:]:
+        if generation > prior_generation and frame != prior_frame:
+            sequence.append(frame)
+            prior_frame=frame
+            prior_generation=generation
+    first_frame=int(win.dispatcher.document['time']['first']); last_frame=int(win.dispatcher.document['time']['last'])
+    in_order=all(current == (previous + 1 if previous < last_frame else first_frame)
+                 for previous,current in zip(sequence,sequence[1:]))
+    playback={"series":"automatic_playback" if automatic_playback else "cached_tier_playback",
+              "adapter":adapter,"tier":playback_tier,"automatic":automatic_playback,
+              "fps":round(frame_count/max(elapsed,.001),3),"rendered_frame_changes":frame_count,
+              "elapsed_s":round(elapsed,3),"fps_target":win.dispatcher.document['time']['fps'],
+              "playback_range_warmed":warm_playback_range,"cached_range_frames":warmed_frames,
+              "cache_warm_s":cache_warm_s,"first_pass_frames":warm_pass_frames if warm_playback_range else 0,
+              "display_cache_lookups":len(playback_cache_lookups),
+              "display_cache_hits":sum(event.get('hit') is True for event in playback_cache_lookups),
+              "graph_evaluations":playback_graph_evaluations,"frames_in_order":in_order,
+              "sequence_sample":sequence[:32],"dropped_frames":win.playback_dropped_frames,
+              "status":win.viewer_info.text()}
     settle(60)
     if profile_mode=='qt': main_profile.disable()
     profile_rows=[]
@@ -281,8 +426,13 @@ def scenario():
     except Exception as exc:
       adapter_info = {'name': adapter, 'type': 'unknown', 'backend': 'unknown',
                       'driver': f'{type(exc).__name__}: {exc}'}
-    payload={'adapter':adapter,'adapter_info':adapter_info,'backend':adapter_info.get('backend'),
-             'force_adapter':force,'results':[drag,scrub,playback],'timeline':timeline,'profiles':profile_rows}
+    for result in (drag, scrub, playback, *drag_results):
+      result['adapter'] = adapter_info.get('name', adapter)
+      result['backend'] = adapter_info.get('backend', 'unknown')
+    payload={'adapter':adapter_info.get('name', adapter),'adapter_label':adapter,
+             'adapter_info':adapter_info,'backend':adapter_info.get('backend'),
+             'force_adapter':force,'results':[drag,scrub,playback],
+             'drag_results':drag_results,'timeline':timeline,'profiles':profile_rows}
     with open(output,'w') as f: json.dump(payload,f,indent=2)
     print(json.dumps(payload,ensure_ascii=False),flush=True)
   except BaseException:

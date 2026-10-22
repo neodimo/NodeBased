@@ -508,7 +508,8 @@ def step_live_picture(ctx, step):
     """Field-machine interaction timings; these are reported as observations, with no RTX target claim."""
     json_path = ctx.work / "live-picture.json"
     result = run_command([PY, "tools/live_picture_bench.py", "--field", json_path,
-                          "--adapter", ctx.label], ctx.log("bench-live-picture"), 1800)
+                          "--automatic-playback", "--warm-playback-range"],
+                         ctx.log("bench-live-picture"), 1800)
     finish_command(step, ctx, result, "bench-live-picture")
     if json_path.exists():
         data = read_json(json_path)
@@ -516,13 +517,22 @@ def step_live_picture(ctx, step):
         machine = data.get("adapter_info") or {}
         step.number("livepicture.adapter", f"live-picture adapter ({machine.get('backend', 'unknown')} backend)",
                     machine.get("name", ctx.label), "adapter")
-        for row in data.get("results", []):
+        for row in [*data.get("results", []), *data.get("drag_results", [])]:
             series = row.get("series", "interaction")
+            if row.get("subject"):
+                series += f".{row['subject']}"
             for key, label, unit in (("first_picture_s", "first picture", "s"),
-                                     ("settle_s", "settle", "s"), ("fps", "playback", "fps")):
+                                     ("first_move_to_picture_s", "move to picture", "s"),
+                                     ("settle_s", "settle", "s"), ("fps", "playback", "fps"),
+                                     ("frames_during_drag", "pictures during drag", "frames")):
                 value = row.get(key)
                 if value is not None:
                     step.number(f"livepicture.{series}.{key}", f"Live picture {series}: {label}", value, unit)
+            if row.get("tier") is not None:
+                step.number(f"livepicture.{series}.tier", f"Live picture {series}: selected tier", row["tier"], "tier")
+            if row.get("frames_in_order") is not None:
+                step.number(f"livepicture.{series}.frames_in_order", f"Live picture {series}: frames in order",
+                            row["frames_in_order"], "boolean")
     elif step.status == "ok":
         step.status, step.reason = "failed", "the benchmark wrote no JSON"
 

@@ -160,7 +160,8 @@ class FieldReportSurvivesFailures(unittest.TestCase):
         self.assertEqual(step.status, "ok")
         self.assertIn("live_picture_bench.py", seen[0][1])
         self.assertIn("--field", seen[0])
-        self.assertIn("--adapter", seen[0])
+        self.assertIn("--automatic-playback", seen[0])
+        self.assertIn("--warm-playback-range", seen[0])
         keys = {h["key"]: h["value"] for h in step.headlines}
         self.assertEqual(keys["livepicture.adapter"], "Example GPU")
         self.assertEqual(keys["livepicture.roto_drag.first_picture_s"], 0.21)
