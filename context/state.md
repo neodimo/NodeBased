@@ -1,5 +1,24 @@
 ## 2026-10-22 — Lane 6 step B finish 2 (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (9:22 AM on 2026-10-22 PDT)
+
+`main` moved `1e10ca44` -> `8d5fefe9` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `8d5fefe9` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0912.log`, started 9:12 AM): **Ran 5805 tests in 490.616 s, OK (skipped=19), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the Hot pour settles in under a minute (finish 1).** Commits:
+  - `68ba2283` L6: soften Hot pour catcher shadow
+  Diff: 13 files changed, 148 insertions(+), 71 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Evidence on the RTX 3080 Ti: frames 60 and 90 (960 × 540) render in 36.66 s and 37.61 s; CPU/GPU comparisons pass for 1/60/120. The Rect key gives the table catcher a visibly softer penumbra. Steam remains granular. Full-cap 1080p adaptive rendering settles all pixels at noise 0.01 in 79.72 s; a 64-sample cap is faster (40.68 s) but leaves 3.78% unconverged. The strict under-60s settled gate remains open.
 
 Artifacts are in this worktree commit: the updated shot graph/generator/evidence runner and tests, paired frames 60/90 against their baselines, identical docs copies, and the dated profile JSON. A6000 and Windows remain DiMo's responsibility. Next owner: Gonzo; investigate the rendering-side catcher cost using `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`, coordinating any `nodebased/shadowcatch.py` change with L4.

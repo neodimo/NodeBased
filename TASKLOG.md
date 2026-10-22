@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the Hot pour settles in under a minute (finish 1) (integrator tick)
+
+- **What was done:** `main` `1e10ca44` -> `8d5fefe9` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `8d5fefe9`: Ran 5805 tests in 490.616 s, OK (skipped=19), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 6 step B finish 2: softer catcher, steam and strict 1080p gate still open (PARTIAL)
 
 - **What was done — evidence:** Replaced the path-traced Point key with a 0.7 × 0.7 Rect key; fresh frames 60 and 90 show a visibly broader catcher shadow. Removed source noise and extra turbulence, then tuned volume density. The steam remains granular in both final stills. The full-cap 1080p render converged every pixel at noise 0.01 in 79.72 seconds. Lowering the nominal sample budget to 64 finished in 40.68 seconds but left 3.78% of pixels unconverged (max noise 0.52335). CPU/GPU comparisons passed at frames 1, 60 and 120 on the RTX 3080 Ti.
