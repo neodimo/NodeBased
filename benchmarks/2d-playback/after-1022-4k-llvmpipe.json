@@ -1,0 +1,2683 @@
+{
+  "case": "final-llvmpipe-read-ahead-1",
+  "resolution": "3840x2160",
+  "duration_s": 10.0,
+  "cache_mode": "uncached",
+  "adapter": "llvmpipe",
+  "force_adapter": "cpu",
+  "frames_displayed": 5,
+  "achieved_fps": 0.5,
+  "frame_interval_ms": {
+    "p50": 1784.98,
+    "p95": 2003.445,
+    "p99": 2033.874
+  },
+  "worker_to_handoff_ms": {
+    "p50": 1763.04,
+    "p95": 1984.5,
+    "p99": 2027.178
+  },
+  "status_line": "3840 \u00d7 2160",
+  "per_node": [
+    {
+      "frame": 6,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 306,
+      "estimated_ms": 612.0
+    },
+    {
+      "frame": 5,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 303,
+      "estimated_ms": 606.0
+    },
+    {
+      "frame": 4,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 302,
+      "estimated_ms": 604.0
+    },
+    {
+      "frame": 2,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 293,
+      "estimated_ms": 586.0
+    },
+    {
+      "frame": 3,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 291,
+      "estimated_ms": 582.0
+    },
+    {
+      "frame": 1,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 209,
+      "estimated_ms": 418.0
+    },
+    {
+      "frame": 6,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 205,
+      "estimated_ms": 410.0
+    },
+    {
+      "frame": 5,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 160,
+      "estimated_ms": 320.0
+    },
+    {
+      "frame": 2,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 158,
+      "estimated_ms": 316.0
+    },
+    {
+      "frame": 3,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 155,
+      "estimated_ms": 310.0
+    },
+    {
+      "frame": 4,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 155,
+      "estimated_ms": 310.0
+    },
+    {
+      "frame": 5,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 88,
+      "estimated_ms": 176.0
+    },
+    {
+      "frame": 6,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 84,
+      "estimated_ms": 168.0
+    },
+    {
+      "frame": 6,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 71,
+      "estimated_ms": 142.0
+    },
+    {
+      "frame": 4,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 66,
+      "estimated_ms": 132.0
+    },
+    {
+      "frame": 5,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 66,
+      "estimated_ms": 132.0
+    },
+    {
+      "frame": 2,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 65,
+      "estimated_ms": 130.0
+    },
+    {
+      "frame": 3,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 65,
+      "estimated_ms": 130.0
+    },
+    {
+      "frame": 5,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 63,
+      "estimated_ms": 126.0
+    },
+    {
+      "frame": 3,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 56,
+      "estimated_ms": 112.0
+    },
+    {
+      "frame": 2,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 55,
+      "estimated_ms": 110.0
+    },
+    {
+      "frame": 4,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 55,
+      "estimated_ms": 110.0
+    },
+    {
+      "frame": 1,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 54,
+      "estimated_ms": 108.0
+    },
+    {
+      "frame": 6,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 49,
+      "estimated_ms": 98.0
+    },
+    {
+      "frame": 3,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 46,
+      "estimated_ms": 92.0
+    },
+    {
+      "frame": 4,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 46,
+      "estimated_ms": 92.0
+    },
+    {
+      "frame": 5,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 45,
+      "estimated_ms": 90.0
+    },
+    {
+      "frame": 2,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 41,
+      "estimated_ms": 82.0
+    },
+    {
+      "frame": 1,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 37,
+      "estimated_ms": 74.0
+    },
+    {
+      "frame": 3,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 37,
+      "estimated_ms": 74.0
+    },
+    {
+      "frame": 2,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 36,
+      "estimated_ms": 72.0
+    },
+    {
+      "frame": 4,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 35,
+      "estimated_ms": 70.0
+    },
+    {
+      "frame": 5,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 31,
+      "estimated_ms": 62.0
+    },
+    {
+      "frame": 6,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 23,
+      "estimated_ms": 46.0
+    },
+    {
+      "frame": 5,
+      "node": "plate",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 22,
+      "estimated_ms": 44.0
+    },
+    {
+      "frame": 6,
+      "node": "plate",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 18,
+      "estimated_ms": 36.0
+    },
+    {
+      "frame": 6,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 16,
+      "estimated_ms": 32.0
+    },
+    {
+      "frame": 1,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 4,
+      "estimated_ms": 8.0
+    },
+    {
+      "frame": 1,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 4,
+      "estimated_ms": 8.0
+    },
+    {
+      "frame": 1,
+      "node": "plate",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 3,
+      "estimated_ms": 6.0
+    },
+    {
+      "frame": 1,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 3,
+      "estimated_ms": 6.0
+    },
+    {
+      "frame": 1,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 2,
+      "estimated_ms": 4.0
+    },
+    {
+      "frame": 2,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 1,
+      "estimated_ms": 2.0
+    },
+    {
+      "frame": 4,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 1,
+      "estimated_ms": 2.0
+    }
+  ],
+  "timeline": [
+    {
+      "stage": "playback_start",
+      "t_ms": 0.005,
+      "mode": "uncached",
+      "adapter": "llvmpipe"
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 1.222,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 43.669,
+      "frame": 1
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 56.971,
+      "job_id": 1,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 57.427,
+      "frame": 1,
+      "status": "Cancelled",
+      "has_frame": false
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 85.676,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 127.403,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 169.577,
+      "frame": 1
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 184.788,
+      "elapsed_ms": 181.747,
+      "path": "<generated-4k>/background.0002.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 212.002,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 254.212,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 295.371,
+      "frame": 1
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 337.224,
+      "elapsed_ms": 152.253,
+      "path": "<generated-4k>/plate.0002.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 342.849,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 380.159,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 421.716,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 463.671,
+      "frame": 1
+    },
+    {
+      "stage": "full_frame_evaluation",
+      "t_ms": 489.168,
+      "frame": 1,
+      "target": null,
+      "elapsed_ms": 432.005,
+      "reason": "Transform has no tile kernel; its coordinate-dependent/full-frame path sets the upstream evaluation path"
+    },
+    {
+      "stage": "cache_put",
+      "t_ms": 489.211,
+      "elapsed_ms": 0.016,
+      "bytes": 132710400
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 505.974,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 548.173,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 628.355,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 705.264,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 705.856,
+      "frame": 1
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 716.267,
+      "frame": 1
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 756.972,
+      "elapsed_ms": 267.7
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 757.186,
+      "job_id": 1,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 1085.909,
+      "frame": 1,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1119.863,
+      "frame": 1
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 1121.13,
+      "frame": 2
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 1129.256,
+      "job_id": 2,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1196.884,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1213.431,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1246.042,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1288.26,
+      "frame": 2
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 1296.208,
+      "elapsed_ms": 174.168,
+      "path": "<generated-4k>/background.0003.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1330.631,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1372.84,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1414.378,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1456.569,
+      "frame": 2
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 1459.97,
+      "elapsed_ms": 158.309,
+      "path": "<generated-4k>/plate.0003.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1498.745,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1540.23,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1582.435,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1624.649,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1666.246,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1708.636,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1750.901,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1792.342,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1834.549,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1876.179,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1918.26,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1960.567,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2002.824,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2044.243,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2086.63,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2128.866,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2171.477,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2212.801,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2254.101,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2296.698,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2339.482,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2380.748,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2422.404,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2464.623,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2506.04,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2548.41,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2590.701,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2632.964,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2674.62,
+      "frame": 2
+    },
+    {
+      "stage": "full_frame_evaluation",
+      "t_ms": 2693.31,
+      "frame": 2,
+      "target": null,
+      "elapsed_ms": 1563.846,
+      "reason": "Transform has no tile kernel; its coordinate-dependent/full-frame path sets the upstream evaluation path"
+    },
+    {
+      "stage": "cache_put",
+      "t_ms": 2693.357,
+      "elapsed_ms": 0.018,
+      "bytes": 265420800
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2716.899,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2758.13,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2807.893,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2842.527,
+      "frame": 2
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2884.096,
+      "frame": 2
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 2889.585,
+      "elapsed_ms": 196.172
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 2889.679,
+      "job_id": 2,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 2900.369,
+      "frame": 2,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2926.269,
+      "frame": 2
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 2927.58,
+      "frame": 3
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 2929.076,
+      "job_id": 3,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2973.712,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3010.921,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3052.329,
+      "frame": 3
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 3080.225,
+      "elapsed_ms": 152.022,
+      "path": "<generated-4k>/background.0004.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3094.808,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3136.093,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3178.19,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3220.561,
+      "frame": 3
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 3233.509,
+      "elapsed_ms": 153.106,
+      "path": "<generated-4k>/plate.0004.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3262.787,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3304.069,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3346.277,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3388.447,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3430.166,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3472.406,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3514.77,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3556.157,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3598.52,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3640.82,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3682.15,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3724.378,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3766.574,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3808.154,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3850.349,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3892.759,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3934.361,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3976.693,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4019.012,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4060.478,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4102.939,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4144.253,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4186.806,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4228.097,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4270.306,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4312.98,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4354.255,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4396.476,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4438.963,
+      "frame": 3
+    },
+    {
+      "stage": "full_frame_evaluation",
+      "t_ms": 4466.082,
+      "frame": 3,
+      "target": null,
+      "elapsed_ms": 1536.849,
+      "reason": "Transform has no tile kernel; its coordinate-dependent/full-frame path sets the upstream evaluation path"
+    },
+    {
+      "stage": "cache_put",
+      "t_ms": 4466.125,
+      "elapsed_ms": 0.013,
+      "bytes": 398131200
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4480.312,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4522.53,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4573.35,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4610.809,
+      "frame": 3
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4648.108,
+      "frame": 3
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 4659.412,
+      "elapsed_ms": 193.236
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 4659.559,
+      "job_id": 3,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 4668.926,
+      "frame": 3,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4690.097,
+      "frame": 3
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 4691.548,
+      "frame": 4
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 4693.784,
+      "job_id": 4,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4737.427,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4774.842,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4816.17,
+      "frame": 4
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 4842.808,
+      "elapsed_ms": 150.542,
+      "path": "<generated-4k>/background.0005.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4858.359,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4901.117,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4942.814,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4984.079,
+      "frame": 4
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 4988.086,
+      "elapsed_ms": 145.072,
+      "path": "<generated-4k>/plate.0005.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5026.519,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5068.714,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5110.16,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5152.443,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5194.664,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5236.899,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5278.717,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5320.933,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5362.18,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5404.476,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5446.102,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5488.47,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5530.735,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5572.987,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5614.256,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5656.532,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5698.479,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5740.779,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5782.162,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5824.374,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5866.763,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5908.214,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5950.855,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5992.085,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6034.537,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6076.108,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6118.421,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6160.74,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6202.525,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6244.956,
+      "frame": 4
+    },
+    {
+      "stage": "full_frame_evaluation",
+      "t_ms": 6254.453,
+      "frame": 4,
+      "target": null,
+      "elapsed_ms": 1560.302,
+      "reason": "Transform has no tile kernel; its coordinate-dependent/full-frame path sets the upstream evaluation path"
+    },
+    {
+      "stage": "cache_put",
+      "t_ms": 6254.487,
+      "elapsed_ms": 0.013,
+      "bytes": 530841600
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6286.977,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6328.26,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6399.616,
+      "frame": 4
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6412.36,
+      "frame": 4
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 6447.986,
+      "elapsed_ms": 193.436
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 6448.105,
+      "job_id": 4,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 6456.824,
+      "frame": 4,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6457.664,
+      "frame": 4
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 6458.502,
+      "frame": 5
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 6460.459,
+      "job_id": 5,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6504.819,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6538.598,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6580.795,
+      "frame": 5
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 6611.558,
+      "elapsed_ms": 152.436,
+      "path": "<generated-4k>/background.0006.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6622.34,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6665.361,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6706.233,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6748.422,
+      "frame": 5
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 6757.123,
+      "elapsed_ms": 137.813,
+      "path": "<generated-4k>/plate.0006.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6790.254,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6832.563,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6873.874,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6916.184,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6958.575,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7000.859,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7042.444,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7085.053,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7126.332,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7168.597,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7210.125,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7252.4,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7294.799,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7336.058,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7378.299,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7420.472,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7462.971,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7504.371,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7546.744,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7588.99,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7630.256,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7672.477,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7714.758,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7756.995,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7798.082,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7840.5,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7883.077,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7924.338,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7966.497,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8008.738,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8050.278,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8092.901,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8134.185,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8176.442,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8218.587,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8261.039,
+      "frame": 5
+    },
+    {
+      "stage": "full_frame_evaluation",
+      "t_ms": 8301.756,
+      "frame": 5,
+      "target": null,
+      "elapsed_ms": 1841.165,
+      "reason": "Transform has no tile kernel; its coordinate-dependent/full-frame path sets the upstream evaluation path"
+    },
+    {
+      "stage": "cache_put",
+      "t_ms": 8301.792,
+      "elapsed_ms": 0.015,
+      "bytes": 663552000
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8302.269,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8344.476,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8406.974,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8443.774,
+      "frame": 5
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8470.062,
+      "frame": 5
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 8490.801,
+      "elapsed_ms": 188.959
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 8490.929,
+      "job_id": 5,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 8498.306,
+      "frame": 5,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8512.273,
+      "frame": 5
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 8513.559,
+      "frame": 6
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 8514.889,
+      "job_id": 6,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8559.764,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8599.77,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8639.055,
+      "frame": 6
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 8665.106,
+      "elapsed_ms": 150.852,
+      "path": "<generated-4k>/background.0007.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8680.739,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8722.955,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8764.625,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8807.12,
+      "frame": 6
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 8817.8,
+      "elapsed_ms": 152.511,
+      "path": "<generated-4k>/plate.0007.exr"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8848.45,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8890.924,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8932.201,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8974.411,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9016.53,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9058.93,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9100.252,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9142.495,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9184.768,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9226.996,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9268.849,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9310.637,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9352.887,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9394.09,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9436.283,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9478.625,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9520.025,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9562.504,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9604.796,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9646.038,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9688.338,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9730.465,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9772.92,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9814.074,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9856.306,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9898.581,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9940.731,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9982.84,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10024.734,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10066.911,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10108.178,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10150.352,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10192.515,
+      "frame": 6
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10234.678,
+      "frame": 6
+    },
+    {
+      "stage": "playback_stop",
+      "t_ms": 10274.684,
+      "frames": 5
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 10298.926,
+      "job_id": 6,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 10300.3,
+      "job_id": 7,
+      "job": "run",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 10300.373,
+      "frame": 6,
+      "status": "Cancelled",
+      "has_frame": false
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 10626.726,
+      "job_id": 7,
+      "job": "run",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 10626.776,
+      "job_id": 8,
+      "job": "shutdown",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 10640.259,
+      "job_id": 8,
+      "job": "shutdown",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.956,
+      "frame": 1,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 4,
+      "estimated_ms": 8.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.971,
+      "frame": 1,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "samples": 54,
+      "estimated_ms": 108.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.975,
+      "frame": 1,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "samples": 209,
+      "estimated_ms": 418.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.978,
+      "frame": 1,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "samples": 4,
+      "estimated_ms": 8.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.98,
+      "frame": 1,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "samples": 37,
+      "estimated_ms": 74.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.983,
+      "frame": 1,
+      "node": "plate",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 3,
+      "estimated_ms": 6.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.985,
+      "frame": 1,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "samples": 2,
+      "estimated_ms": 4.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.987,
+      "frame": 1,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "samples": 3,
+      "estimated_ms": 6.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.99,
+      "frame": 2,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 1,
+      "estimated_ms": 2.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.993,
+      "frame": 2,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "samples": 55,
+      "estimated_ms": 110.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.995,
+      "frame": 2,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "samples": 158,
+      "estimated_ms": 316.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11870.998,
+      "frame": 2,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "samples": 65,
+      "estimated_ms": 130.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.0,
+      "frame": 2,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "samples": 36,
+      "estimated_ms": 72.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.002,
+      "frame": 2,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "samples": 41,
+      "estimated_ms": 82.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.005,
+      "frame": 2,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "samples": 293,
+      "estimated_ms": 586.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.007,
+      "frame": 3,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "samples": 56,
+      "estimated_ms": 112.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.01,
+      "frame": 3,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "samples": 155,
+      "estimated_ms": 310.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.013,
+      "frame": 3,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "samples": 65,
+      "estimated_ms": 130.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.016,
+      "frame": 3,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "samples": 37,
+      "estimated_ms": 74.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.018,
+      "frame": 3,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "samples": 46,
+      "estimated_ms": 92.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.021,
+      "frame": 3,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "samples": 291,
+      "estimated_ms": 582.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.023,
+      "frame": 4,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 1,
+      "estimated_ms": 2.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.025,
+      "frame": 4,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "samples": 55,
+      "estimated_ms": 110.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.027,
+      "frame": 4,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "samples": 155,
+      "estimated_ms": 310.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.029,
+      "frame": 4,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "samples": 66,
+      "estimated_ms": 132.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.031,
+      "frame": 4,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "samples": 35,
+      "estimated_ms": 70.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.033,
+      "frame": 4,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "samples": 46,
+      "estimated_ms": 92.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.036,
+      "frame": 4,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "samples": 302,
+      "estimated_ms": 604.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.038,
+      "frame": 5,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 31,
+      "estimated_ms": 62.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.041,
+      "frame": 5,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "samples": 63,
+      "estimated_ms": 126.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.043,
+      "frame": 5,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "samples": 160,
+      "estimated_ms": 320.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.045,
+      "frame": 5,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "samples": 88,
+      "estimated_ms": 176.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.047,
+      "frame": 5,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "samples": 45,
+      "estimated_ms": 90.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.049,
+      "frame": 5,
+      "node": "plate",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 22,
+      "estimated_ms": 44.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.051,
+      "frame": 5,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "samples": 66,
+      "estimated_ms": 132.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.054,
+      "frame": 5,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "samples": 303,
+      "estimated_ms": 606.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.056,
+      "frame": 6,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 16,
+      "estimated_ms": 32.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.058,
+      "frame": 6,
+      "node": "blur",
+      "kind": "Blur",
+      "path": "full-frame fallback",
+      "samples": 84,
+      "estimated_ms": 168.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.06,
+      "frame": 6,
+      "node": "colorcorrect",
+      "kind": "ColorCorrect",
+      "path": "full-frame fallback",
+      "samples": 23,
+      "estimated_ms": 46.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.063,
+      "frame": 6,
+      "node": "grade",
+      "kind": "Grade",
+      "path": "full-frame fallback",
+      "samples": 71,
+      "estimated_ms": 142.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.066,
+      "frame": 6,
+      "node": "merge",
+      "kind": "Merge",
+      "path": "full-frame fallback",
+      "samples": 205,
+      "estimated_ms": 410.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.068,
+      "frame": 6,
+      "node": "plate",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 18,
+      "estimated_ms": 36.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.071,
+      "frame": 6,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "samples": 49,
+      "estimated_ms": 98.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11871.073,
+      "frame": 6,
+      "node": "transform",
+      "kind": "Transform",
+      "path": "full-frame fallback",
+      "samples": 306,
+      "estimated_ms": 612.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    }
+  ],
+  "sampling_profile": {
+    "qt": {
+      "threading.py:wait": 2,
+      "threading.py:start": 1,
+      "benchmark_2d_playback.py:run_window": 4345,
+      "benchmark_2d_playback.py:main": 4345,
+      "benchmark_2d_playback.py:<module>": 4345,
+      "pathlib.py:stat": 4,
+      "pathlib.py:is_file": 4,
+      "media.py:resolve_source_path": 4,
+      "tileexec.py:_read_source_fingerprint": 4,
+      "tileexec.py:_read_decode_key": 4,
+      "tileexec.py:prefetch_reads": 4,
+      "app.py:request_preview": 4,
+      "benchmark_2d_playback.py:request": 4,
+      "app.py:toggle_playback": 1,
+      "benchmark_2d_playback.py:begin": 1,
+      "playback.py:identity": 5,
+      "app.py:refresh_timeline_marks": 5,
+      "app.py:preview_ready": 118,
+      "jobs.py:_db": 6,
+      "contextlib.py:__enter__": 6,
+      "jobs.py:snapshot": 8,
+      "queuepanel.py:refresh": 8,
+      "linecache.py:updatecache": 3,
+      "linecache.py:getlines": 3,
+      "inspect.py:findsource": 5,
+      "inspect.py:getsourcelines": 5,
+      "inspect.py:getsource": 5,
+      "feature.py:_mod_uses_pyside": 5,
+      "feature.py:feature_imported": 5,
+      "loader.py:feature_imported": 5,
+      "__init__.py:<module>": 20,
+      "<frozen importlib._bootstrap>:_call_with_frames_removed": 79,
+      "<frozen importlib._bootstrap_external>:exec_module": 64,
+      "<frozen importlib._bootstrap>:_load_unlocked": 64,
+      "<frozen importlib._bootstrap>:_find_and_load_unlocked": 65,
+      "<frozen importlib._bootstrap>:_find_and_load": 65,
+      "gpu3d.py:enumerate_adapters": 106,
+      "gpu3d.py:chosen_adapter_name": 106,
+      "<frozen importlib._bootstrap_external>:get_data": 1,
+      "<frozen importlib._bootstrap_external>:get_code": 2,
+      "<string>:<module>": 1,
+      "dataclasses.py:_create_fn": 1,
+      "dataclasses.py:_cmp_fn": 1,
+      "dataclasses.py:_process_class": 1,
+      "dataclasses.py:wrap": 1,
+      "structs.py:<module>": 1,
+      "<frozen genericpath>:exists": 2,
+      "inspect.py:getsourcefile": 2,
+      "<frozen importlib._bootstrap_external>:_path_stat": 2,
+      "<frozen importlib._bootstrap_external>:find_spec": 2,
+      "<frozen importlib._bootstrap_external>:_get_spec": 1,
+      "<frozen importlib._bootstrap>:_find_spec": 1,
+      "_ffi.py:<module>": 11,
+      "_api.py:<module>": 13,
+      "<frozen importlib._bootstrap>:_handle_fromlist": 17,
+      "auto.py:_load_backend": 14,
+      "auto.py:_auto_load_backend": 14,
+      "auto.py:<module>": 14,
+      "_classes.py:enumerate_adapters_async": 102,
+      "_classes.py:enumerate_adapters_sync": 102,
+      "<frozen importlib._bootstrap_external>:path_stats": 1,
+      "cparser.py:<module>": 2,
+      "api.py:__init__": 2,
+      "tokenize.py:open": 2,
+      "c_parser.py:<module>": 1,
+      "cparser.py:_common_type_names": 1,
+      "cparser.py:_parse": 12,
+      "cparser.py:_internal_parse": 7,
+      "cparser.py:parse": 7,
+      "api.py:_cdef": 7,
+      "api.py:cdef": 7,
+      "c_lexer.py:_make_token": 2,
+      "c_lexer.py:_match_token": 5,
+      "c_lexer.py:token": 5,
+      "c_parser.py:_fill": 6,
+      "c_parser.py:peek": 6,
+      "c_parser.py:_peek": 6,
+      "c_parser.py:_accept": 1,
+      "c_parser.py:_parse_enumerator": 1,
+      "c_parser.py:_parse_enumerator_list": 1,
+      "c_parser.py:_parse_enum_specifier": 1,
+      "c_parser.py:_parse_declaration_specifiers": 4,
+      "c_parser.py:_parse_external_declaration": 11,
+      "c_parser.py:_parse_translation_unit": 11,
+      "c_parser.py:_parse_translation_unit_or_empty": 11,
+      "c_parser.py:parse": 11,
+      "c_parser.py:_peek_type": 2,
+      "c_parser.py:_parse_decl_suffixes": 3,
+      "c_parser.py:_parse_direct_declarator": 4,
+      "c_parser.py:_parse_declarator_kind": 4,
+      "c_parser.py:_parse_id_declarator": 4,
+      "<string>:__init__": 1,
+      "c_parser.py:_scan_declarator_name_info": 2,
+      "c_parser.py:_peek_declarator_name_info": 2,
+      "c_parser.py:_parse_any_declarator": 1,
+      "c_parser.py:_parse_parameter_declaration": 1,
+      "c_parser.py:_parse_parameter_list": 1,
+      "c_parser.py:_parse_parameter_type_list": 1,
+      "c_parser.py:_parse_function_decl": 1,
+      "c_parser.py:_build_declarations": 2,
+      "cparser.py:parse_type_and_quals": 6,
+      "cparser.py:parse_type": 6,
+      "api.py:_typeof_locked": 6,
+      "api.py:_typeof": 6,
+      "api.py:callback": 1,
+      "cparser.py:_get_type_and_quals": 1,
+      "api.py:new": 5,
+      "_api.py:_new_struct_p": 3,
+      "_api.py:new_struct": 3,
+      "_helpers.py:get_wgpu_instance": 47,
+      "_api.py:_enumerate_adapters": 88,
+      "_api.py:enumerate_adapters_async": 88,
+      "_helpers.py:proxy_func": 38,
+      "_api.py:new_array": 1,
+      "_api.py:_get_limits": 2,
+      "_api.py:_create_adapter": 3,
+      "_api.py:<lambda>": 1,
+      "_api.py:_get_features": 1,
+      "viewerstrip.py:place": 1,
+      "viewerstrip.py:set_image": 1,
+      "app.py:update_corner_readout": 1,
+      "app.py:_frame_viewer_to": 1,
+      "app.py:_show_image": 7,
+      "app.py:set_time": 5,
+      "app.py:playback_tick": 5,
+      "benchmark_2d_playback.py:playback_tick": 5,
+      "queuepanel.py:refresh_loop_history": 3,
+      "app.py:sync_timeline": 2,
+      "nodeshelf.py:_unit": 2,
+      "nodeshelf.py:_separator": 2,
+      "nodeshelf.py:minimumSizeHint": 2,
+      "topbar.py:set_icon_only": 1,
+      "topbar.py:_fit": 2,
+      "topbar.py:floor_width": 1,
+      "topbar.py:_announce_floor": 1,
+      "topbar.py:set_gpu": 2,
+      "benchmark_2d_playback.py:finish": 1
+    },
+    "worker": {
+      "_format_impl.py:read_array": 16,
+      "_npyio_impl.py:load": 16,
+      "cachetier.py:get": 16,
+      "cachetier.py:get_raster": 16,
+      "imaging.py:evaluate_raster": 3825,
+      "imaging.py:evaluate": 3842,
+      "app.py:render": 4157,
+      "app.py:work": 4157,
+      "thread.py:run": 4191,
+      "thread.py:_worker": 4345,
+      "threading.py:run": 4345,
+      "threading.py:_bootstrap_inner": 4345,
+      "threading.py:_bootstrap": 4345,
+      "_arraypad_impl.py:_pad_simple": 37,
+      "_arraypad_impl.py:pad": 38,
+      "imaging.py:_box_blur_axis": 287,
+      "imaging.py:_blur": 264,
+      "imaging.py:_filtered_pixels": 2638,
+      "imaging.py:_windowed_kernel": 3425,
+      "numeric.py:zeros_like": 38,
+      "imaging.py:_apply_mask_mix": 254,
+      "raster.py:fit": 182,
+      "imaging.py:_merge_gated": 164,
+      "imaging.py:_kernel": 164,
+      "imaging.py:_run_row_chunked": 1176,
+      "imaging.py:_color_correct": 729,
+      "imaging.py:luminance": 23,
+      "_methods.py:_clip": 37,
+      "fromnumeric.py:_wrapfunc": 64,
+      "fromnumeric.py:clip": 37,
+      "imaging.py:weight": 299,
+      "_function_base_impl.py:interp": 66,
+      "colorcurves.py:evaluate_array": 284,
+      "benchmark_2d_playback.py:evaluate": 3707,
+      "benchmark_2d_playback.py:wrapped": 4056,
+      "raster.py:to_display": 17,
+      "imaging.py:to_qimage": 315,
+      "benchmark_2d_playback.py:qimage": 315,
+      "gpudisplay.py:__init__": 1,
+      "gpudisplay.py:get_display": 1,
+      "color.py:display_rgb": 26,
+      "gpudisplay.py:_build_ocio_program": 1,
+      "gpudisplay.py:_build_program": 1,
+      "gpudisplay.py:render": 25,
+      "gpudisplay.py:_ensure_input_texture": 1,
+      "gpudisplay.py:_ensure_fbo": 1,
+      "<frozen importlib._bootstrap_external>:_path_stat": 1,
+      "<frozen importlib._bootstrap_external>:_path_is_mode_type": 1,
+      "<frozen importlib._bootstrap_external>:_path_isfile": 1,
+      "<frozen importlib._bootstrap_external>:find_spec": 2,
+      "<frozen importlib._bootstrap_external>:_get_spec": 1,
+      "<frozen importlib._bootstrap>:_find_spec": 1,
+      "<frozen importlib._bootstrap>:_find_and_load_unlocked": 1,
+      "<frozen importlib._bootstrap>:_find_and_load": 1,
+      "<frozen importlib._bootstrap>:_call_with_frames_removed": 1,
+      "<frozen importlib._bootstrap>:_handle_fromlist": 1,
+      "imaging.py:_roto_matte": 222,
+      "imaging.py:render_matte": 222,
+      "roto.py:rasterise": 221,
+      "roto.py:_add_span": 51,
+      "roto.py:coverage": 69,
+      "roto.py:render_cover": 92,
+      "imaging.py:_roto_shape_matte": 92,
+      "fromnumeric.py:argsort": 14,
+      "fromnumeric.py:cumsum": 13,
+      "roto.py:feather": 23,
+      "pathlib.py:stat": 2,
+      "pathlib.py:is_file": 2,
+      "media.py:resolve_source_path": 2,
+      "imaging.py:_grade": 201,
+      "_function_base_impl.py:<genexpr>": 7,
+      "_function_base_impl.py:meshgrid": 7,
+      "imaging.py:_transform": 1394,
+      "imaging.py:axis_sample": 1280,
+      "imaging.py:_resample_cubic_separable": 1280,
+      "_format_impl.py:write_array": 271,
+      "_npyio_impl.py:save": 271,
+      "cachetier.py:put": 378,
+      "cachetier.py:put_raster": 382,
+      "imaging.py:_store": 382,
+      "tempfile.py:_mkstemp_inner": 6,
+      "tempfile.py:mkstemp": 6,
+      "pathlib.py:unlink": 3,
+      "cachetier.py:_unlink": 3,
+      "cachetier.py:_evict_locked": 3,
+      "_arraypad_impl.py:_set_pad_area": 1,
+      "media.py:half_safe": 12,
+      "playback.py:_compact_one": 34,
+      "playback.py:compact": 34,
+      "app.py:run": 34
+    }
+  },
+  "worker_call_profiles": []
+}

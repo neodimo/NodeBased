@@ -1,0 +1,16 @@
+1080p realistic comp — before/after profiling summary
+
+Node costs are 2 ms worker-stack sample estimates averaged over sampled frames.
+
+Uncached playback rate over ten seconds:
+  RTX 3080 Ti: 1.5 -> 2.4 fps
+  llvmpipe: 1.6 -> 2.4 fps
+  integrated laptop stand-in, four CPUs and 2x Qt scale: 2.3 fps after (no matching before run)
+
+RTX 3080 Ti top five node costs (estimated ms/frame):
+  Before: Transform 183.6; Blur 91.2; ColorCorrect 76.4; Read plate 31.5; Read background 29.8
+  After:  Transform 126.3; ColorCorrect 64.0; Grade 27.1; Blur 24.6; Merge 19.4
+
+Cached llvmpipe: 12.3 fps before; final runs 11.7-11.8 fps with nearly unchanged median frame intervals (about 84 ms before and after). Read-ahead is skipped for cached frames.
+
+The paired JSON files contain per-stage timelines and Qt/worker sampling. Read-decode events include source frames decoded ahead of display.

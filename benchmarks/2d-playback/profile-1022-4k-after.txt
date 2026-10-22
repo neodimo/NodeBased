@@ -1,0 +1,11 @@
+4K realistic comp — before/after profiling summary
+
+Node costs are 2 ms worker-stack sample estimates averaged over sampled frames.
+
+Uncached llvmpipe playback rate over ten seconds: 0.4 -> 0.5 fps.
+
+Top five node costs (estimated ms/frame):
+  Before: Transform 667.2; ColorCorrect 324.0; Blur 311.0; Read background 118.8; Read plate 117.2
+  After:  Transform 499.3; ColorCorrect 286.7; Merge 131.7; Blur 122.3; Grade 119.7
+
+Cached llvmpipe playback reached 4.7 fps over a 16-frame resident UHD loop (frames 33-48); the normal display cache retains only that window at 4K. The paired JSON files contain the timeline and stack samples. Read-decode events include prefetched future frames.

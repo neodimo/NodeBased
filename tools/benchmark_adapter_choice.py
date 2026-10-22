@@ -63,7 +63,9 @@ def case_checker(seconds):
     window.show()
     window.agent_command({"op": "batch", "commands": [
         {"op": "create", "type": "Checker", "id": "qa_checker", "params": {"width": 1920, "height": 1080}},
-        {"op": "view", "id": "qa_checker"}]})
+        {"op": "view", "id": "qa_checker"},
+        {"op": "set_key", "id": "qa_checker", "param": "size", "frame": 1, "value": 16},
+        {"op": "set_key", "id": "qa_checker", "param": "size", "frame": 100, "value": 240}]})
     window.set_time(first=1, last=100, current=1, fps=24.0)
     drawn = []
     window.signals.finished.connect(lambda payload, frame, image, status, region=None:
@@ -100,7 +102,10 @@ def main():
     parser.add_argument("--json")
     args = parser.parse_args()
     if args.case:
-        print("@@JSON@@" + json.dumps(run_case(args.case, os.environ.get("NODEBASED_ADAPTER", ""), args.seconds)))
+        result = run_case(args.case, os.environ.get("NODEBASED_ADAPTER", ""), args.seconds)
+        print("@@JSON@@" + json.dumps(result))
+        if args.json:
+            Path(args.json).write_text(json.dumps(result, indent=2) + "\n")
         return
     rows = []
     for adapter in args.adapters.split(","):

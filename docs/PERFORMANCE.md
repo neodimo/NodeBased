@@ -184,16 +184,31 @@ The uncached fixture in `tests/fixtures/playback_comp.nbcomp` measures evaluatio
 finished float frame handed to the display. Timings below use 2 ms worker-stack samples, so node
 costs are estimates; the paired JSON profiles preserve the timeline and sampling evidence.
 
-| Comp / adapter | Before: fps | Top five node costs (estimated ms/frame) | Read decode (ms/displayed frame) | Display conversion (ms/displayed frame) |
-|---|---:|---|---:|---:|
-| 1080p / RTX 3080 Ti | 1.5 | Transform 183.6; Blur 91.2; ColorCorrect 76.4; Read plate 31.5; Read background 29.8 | 72.5 | 49.1 |
-| 4K / llvmpipe | 0.4 | Transform 667.2; ColorCorrect 324.0; Blur 311.0; Read background 118.8; Read plate 117.2 | 348.5 | 216.1 |
+| Comp | Before: top five nodes (ms/frame) | After: top five nodes (ms/frame) |
+|---|---|---|
+| 1080p / RTX 3080 Ti | Transform 183.6; Blur 91.2; ColorCorrect 76.4; Read plate 31.5; Read background 29.8 | Transform 126.3; ColorCorrect 64.0; Grade 27.1; Blur 24.6; Merge 19.4 |
+| 4K / llvmpipe | Transform 667.2; ColorCorrect 324.0; Blur 311.0; Read background 118.8; Read plate 117.2 | Transform 499.3; ColorCorrect 286.7; Merge 131.7; Blur 122.3; Grade 119.7 |
 
-Both graphs fall back to full-frame evaluation because animated Transform has no tile kernel and
-depends on canvas-global coordinates. The 1080p run also measured 1.6 fps on llvmpipe. See
-`benchmarks/2d-playback/profile-1022-1080p.txt` and `profile-1022-4k.txt` for the complete ranked
-costs; the JSON files carry the per-stage timeline and Qt/worker sampling profiles. Before/after
-measurements for the fixes are recorded in the same table as they land.
+| Uncached run | Before → after |
+|---|---:|
+| 1080p / RTX 3080 Ti | 1.5 → 2.4 fps |
+| 1080p / llvmpipe | 1.6 → 2.4 fps |
+| 1080p / integrated laptop stand-in (four CPUs, 2× Qt scale) | — → 2.3 fps |
+| 4K / llvmpipe | 0.4 → 0.5 fps |
+
+Cached playback stayed near its prior cadence: 1080p llvmpipe was 12.3 fps before and 11.7–11.8
+fps after, with about 84 ms median frame intervals in both runs. 4K llvmpipe reached 4.7 fps on a
+cached 16-frame loop (frames 33–48), the window retained by the default cache budget at UHD.
+The separate animated-size Checker Viewer check reached 23.84 fps on the RTX 3080 Ti, narrowly
+below its 24 fps gate; its run summary is `benchmarks/2d-playback/checker-1022-animated-rtx.json`.
+
+The measured full-resolution changes cut small-radius Blur with shifted-window accumulation,
+use separable cubic sampling for translation-only Transform, and bound Read-ahead to one upcoming
+full-resolution frame. Read-ahead is skipped when the future display frame is already cached.
+Animated Transform remains a full-frame fallback because its canvas-global coordinates do not
+yet have a tile kernel. The 16 fps uncached comp gate remains open. Profile files under
+`benchmarks/2d-playback/` contain the per-stage timeline and Qt/worker sampling evidence; read
+decode events include future frames warmed by the reader pool.
 
 ### Still slow
 
@@ -201,7 +216,9 @@ measurements for the fixes are recorded in the same table as they land.
   full-frame float32 temporaries and a float readback from the integrated GPU). The Direct picture
   does it on the card during playback (above); the Viewer itself, stills and compare pictures
   still pay it.
-- Each displayed frame is still two worker jobs with a signal to the UI thread between them.
+- The real-window profile showed one `work` worker job for each displayed frame; startup and
+  shutdown jobs are separate. The earlier claim of two worker jobs per frame does not match the
+  observed playback path.
 - The CPU rasteriser takes 620 ms for a cube; the GPU path waits on the card.
 
 ## Graph input latency

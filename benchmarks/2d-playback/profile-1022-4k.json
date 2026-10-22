@@ -376,7 +376,7 @@
       "stage": "plate_read_decode",
       "t_ms": 30.805,
       "elapsed_ms": 163.121,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/background.0001.exr"
+      "path": "<generated-4k>/background.0001.exr"
     },
     {
       "stage": "worker_end",
@@ -423,7 +423,7 @@
       "stage": "plate_read_decode",
       "t_ms": 181.918,
       "elapsed_ms": 139.23,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/plate.0001.exr"
+      "path": "<generated-4k>/plate.0001.exr"
     },
     {
       "stage": "frame_tick",
@@ -739,7 +739,7 @@
       "stage": "plate_read_decode",
       "t_ms": 2821.707,
       "elapsed_ms": 136.756,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/background.0002.exr"
+      "path": "<generated-4k>/background.0002.exr"
     },
     {
       "stage": "frame_tick",
@@ -765,7 +765,7 @@
       "stage": "plate_read_decode",
       "t_ms": 2966.69,
       "elapsed_ms": 136.254,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/plate.0002.exr"
+      "path": "<generated-4k>/plate.0002.exr"
     },
     {
       "stage": "frame_tick",
@@ -1066,7 +1066,7 @@
       "stage": "plate_read_decode",
       "t_ms": 5154.715,
       "elapsed_ms": 140.721,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/background.0003.exr"
+      "path": "<generated-4k>/background.0003.exr"
     },
     {
       "stage": "frame_tick",
@@ -1092,7 +1092,7 @@
       "stage": "plate_read_decode",
       "t_ms": 5294.376,
       "elapsed_ms": 139.243,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/plate.0003.exr"
+      "path": "<generated-4k>/plate.0003.exr"
     },
     {
       "stage": "frame_tick",
@@ -1403,7 +1403,7 @@
       "stage": "plate_read_decode",
       "t_ms": 7502.359,
       "elapsed_ms": 134.685,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/background.0004.exr"
+      "path": "<generated-4k>/background.0004.exr"
     },
     {
       "stage": "frame_tick",
@@ -1424,7 +1424,7 @@
       "stage": "plate_read_decode",
       "t_ms": 7638.172,
       "elapsed_ms": 135.372,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/plate.0004.exr"
+      "path": "<generated-4k>/plate.0004.exr"
     },
     {
       "stage": "frame_tick",
@@ -1740,7 +1740,7 @@
       "stage": "plate_read_decode",
       "t_ms": 9868.14,
       "elapsed_ms": 135.222,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/background.0005.exr"
+      "path": "<generated-4k>/background.0005.exr"
     },
     {
       "stage": "frame_tick",
@@ -1761,7 +1761,7 @@
       "stage": "plate_read_decode",
       "t_ms": 10019.904,
       "elapsed_ms": 133.399,
-      "path": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/inputs-4k/plate.0005.exr"
+      "path": "<generated-4k>/plate.0005.exr"
     },
     {
       "stage": "frame_tick",

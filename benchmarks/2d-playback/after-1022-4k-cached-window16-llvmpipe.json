@@ -1,0 +1,2993 @@
+{
+  "case": "final-llvmpipe-cached-window16-gated",
+  "resolution": "3840x2160",
+  "duration_s": 10.0,
+  "cache_mode": "cached",
+  "adapter": "llvmpipe",
+  "force_adapter": "cpu",
+  "frames_displayed": 47,
+  "achieved_fps": 4.7,
+  "frame_interval_ms": {
+    "p50": 210.115,
+    "p95": 224.425,
+    "p99": 234.355
+  },
+  "worker_to_handoff_ms": {
+    "p50": 202.47,
+    "p95": 216.354,
+    "p99": 442.381
+  },
+  "status_line": "3840 \u00d7 2160",
+  "per_node": [
+    {
+      "frame": 1,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 70,
+      "estimated_ms": 140.0
+    },
+    {
+      "frame": 1,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path",
+      "samples": 41,
+      "estimated_ms": 82.0
+    }
+  ],
+  "timeline": [
+    {
+      "stage": "cache_prewarm_complete",
+      "t_ms": 50006.971,
+      "frames": 16,
+      "verified": true,
+      "display_cache_bytes": 2123366400
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 50010.24,
+      "job_id": 1,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "playback_start",
+      "t_ms": 0.004,
+      "mode": "cached",
+      "adapter": "llvmpipe"
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 1.102,
+      "frame": 33
+    },
+    {
+      "stage": "plate_read_decode",
+      "t_ms": 15.372,
+      "elapsed_ms": 150.782,
+      "path": "<generated-4k>/background.0001.exr"
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 30.517,
+      "job_id": 1,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 31.173,
+      "job_id": 2,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 31.417,
+      "frame": 1,
+      "status": "Cancelled",
+      "has_frame": false
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 43.553,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 85.805,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 138.898,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 182.81,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 230.703,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 268.648,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 295.88,
+      "frame": 33
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 317.436,
+      "elapsed_ms": 286.093
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 317.56,
+      "job_id": 2,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 660.964,
+      "frame": 33,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 681.034,
+      "frame": 33
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 682.319,
+      "frame": 34
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 686.023,
+      "job_id": 3,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 723.188,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 766.0,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 832.477,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 849.729,
+      "frame": 34
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 883.71,
+      "elapsed_ms": 197.577
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 885.217,
+      "job_id": 3,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 896.27,
+      "frame": 34,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 897.109,
+      "frame": 34
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 897.989,
+      "frame": 35
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 898.627,
+      "job_id": 4,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 933.985,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 975.976,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1051.294,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1059.798,
+      "frame": 35
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 1097.881,
+      "elapsed_ms": 198.916
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 1099.25,
+      "job_id": 4,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 1103.867,
+      "frame": 35,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1104.667,
+      "frame": 35
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 1105.473,
+      "frame": 36
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 1106.187,
+      "job_id": 5,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1143.238,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1185.666,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1255.203,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1270.134,
+      "frame": 36
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 1306.538,
+      "elapsed_ms": 200.02
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 1306.642,
+      "job_id": 5,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 1316.49,
+      "frame": 36,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1317.573,
+      "frame": 36
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 1318.526,
+      "frame": 37
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 1319.318,
+      "job_id": 6,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1353.623,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1396.091,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1467.71,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1479.768,
+      "frame": 37
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 1514.437,
+      "elapsed_ms": 194.775
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 1515.747,
+      "job_id": 6,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 1525.068,
+      "frame": 37,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1525.963,
+      "frame": 37
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 1526.754,
+      "frame": 38
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 1527.39,
+      "job_id": 7,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1563.817,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1605.512,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1682.262,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1689.419,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1731.872,
+      "frame": 38
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 1739.36,
+      "elapsed_ms": 211.841
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 1740.915,
+      "job_id": 7,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 1749.767,
+      "frame": 38,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1773.892,
+      "frame": 38
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 1775.751,
+      "frame": 39
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 1776.364,
+      "job_id": 8,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1815.853,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1858.714,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1926.053,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1941.567,
+      "frame": 39
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 1973.012,
+      "elapsed_ms": 196.299
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 1974.411,
+      "job_id": 8,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 1978.853,
+      "frame": 39,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 1983.835,
+      "frame": 39
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 1985.636,
+      "frame": 40
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 1986.08,
+      "job_id": 9,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2025.313,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2067.824,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2138.661,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2151.287,
+      "frame": 40
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 2189.368,
+      "elapsed_ms": 203.152
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 2189.48,
+      "job_id": 9,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 2195.349,
+      "frame": 40,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2196.305,
+      "frame": 40
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 2197.12,
+      "frame": 41
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 2197.923,
+      "job_id": 10,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2235.943,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2277.94,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2356.73,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2361.217,
+      "frame": 41
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 2404.98,
+      "elapsed_ms": 206.919
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 2407.677,
+      "job_id": 10,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2407.925,
+      "frame": 41
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 2414.973,
+      "frame": 41,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2446.195,
+      "frame": 41
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 2447.753,
+      "frame": 42
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 2448.548,
+      "job_id": 11,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2487.931,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2530.548,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2595.404,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2615.094,
+      "frame": 42
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 2647.292,
+      "elapsed_ms": 198.344
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 2648.73,
+      "job_id": 11,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 2653.649,
+      "frame": 42,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2655.717,
+      "frame": 42
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 2656.989,
+      "frame": 43
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 2657.595,
+      "job_id": 12,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2697.697,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2739.381,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2802.013,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2824.024,
+      "frame": 43
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 2847.842,
+      "elapsed_ms": 189.855
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 2847.954,
+      "job_id": 12,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 2854.703,
+      "frame": 43,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2865.552,
+      "frame": 43
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 2866.324,
+      "frame": 44
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 2866.759,
+      "job_id": 13,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2907.218,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 2949.556,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3012.922,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3033.895,
+      "frame": 44
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 3064.481,
+      "elapsed_ms": 197.178
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 3065.835,
+      "job_id": 13,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 3069.571,
+      "frame": 44,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3075.722,
+      "frame": 44
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 3076.888,
+      "frame": 45
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 3077.347,
+      "job_id": 14,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3118.105,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3159.476,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3223.237,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3243.777,
+      "frame": 45
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 3270.926,
+      "elapsed_ms": 193.219
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 3271.059,
+      "job_id": 14,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 3279.817,
+      "frame": 45,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3285.93,
+      "frame": 45
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 3287.097,
+      "frame": 46
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 3287.592,
+      "job_id": 15,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3327.89,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3369.197,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3431.558,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3454.021,
+      "frame": 46
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 3480.212,
+      "elapsed_ms": 192.157
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 3481.199,
+      "job_id": 15,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 3485.474,
+      "frame": 46,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3495.464,
+      "frame": 46
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 3496.73,
+      "frame": 47
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 3497.149,
+      "job_id": 16,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3537.271,
+      "frame": 47
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3610.441,
+      "frame": 47
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3640.666,
+      "frame": 47
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3663.712,
+      "frame": 47
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 3686.859,
+      "elapsed_ms": 189.571
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 3687.96,
+      "job_id": 16,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 3692.486,
+      "frame": 47,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3705.608,
+      "frame": 47
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 3706.382,
+      "frame": 48
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 3706.807,
+      "job_id": 17,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3747.895,
+      "frame": 48
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3789.15,
+      "frame": 48
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3849.905,
+      "frame": 48
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3873.537,
+      "frame": 48
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 3898.272,
+      "elapsed_ms": 191.344
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 3898.385,
+      "job_id": 17,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 3903.397,
+      "frame": 48,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3915.416,
+      "frame": 48
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 3916.997,
+      "frame": 33
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 3917.42,
+      "job_id": 18,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3957.457,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 3999.882,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4060.883,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4083.797,
+      "frame": 33
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 4107.356,
+      "elapsed_ms": 189.799
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 4107.472,
+      "job_id": 18,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 4113.375,
+      "frame": 33,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4125.441,
+      "frame": 33
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 4126.738,
+      "frame": 34
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 4127.184,
+      "job_id": 19,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4167.376,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4209.919,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4271.447,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4293.687,
+      "frame": 34
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 4319.854,
+      "elapsed_ms": 192.537
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 4320.945,
+      "job_id": 19,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 4324.536,
+      "frame": 34,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4335.324,
+      "frame": 34
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 4336.254,
+      "frame": 35
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 4336.76,
+      "job_id": 20,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4377.946,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4419.314,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4483.269,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4503.641,
+      "frame": 35
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 4531.279,
+      "elapsed_ms": 194.197
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 4531.39,
+      "job_id": 20,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 4536.65,
+      "frame": 35,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4545.975,
+      "frame": 35
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 4547.344,
+      "frame": 36
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 4548.065,
+      "job_id": 21,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4587.67,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4629.48,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4698.233,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4713.456,
+      "frame": 36
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 4748.427,
+      "elapsed_ms": 200.158
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 4749.67,
+      "job_id": 21,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 4754.244,
+      "frame": 36,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4755.198,
+      "frame": 36
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 4756.308,
+      "frame": 37
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 4757.033,
+      "job_id": 22,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4798.203,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4839.554,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4904.177,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4923.548,
+      "frame": 37
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 4950.117,
+      "elapsed_ms": 192.931
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 4950.234,
+      "job_id": 22,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 4958.03,
+      "frame": 37,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 4966.074,
+      "frame": 37
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 4966.823,
+      "frame": 38
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 4967.312,
+      "job_id": 23,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5007.479,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5049.792,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5110.969,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5133.488,
+      "frame": 38
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 5159.693,
+      "elapsed_ms": 192.065
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 5161.377,
+      "job_id": 23,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 5165.398,
+      "frame": 38,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5175.348,
+      "frame": 38
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 5176.586,
+      "frame": 39
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 5177.032,
+      "job_id": 24,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5217.223,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5282.857,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5322.218,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5343.472,
+      "frame": 39
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 5368.562,
+      "elapsed_ms": 191.208
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 5370.067,
+      "job_id": 24,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 5374.471,
+      "frame": 39,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5385.505,
+      "frame": 39
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 5387.087,
+      "frame": 40
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 5387.609,
+      "job_id": 25,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5428.215,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5469.642,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5535.436,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5553.865,
+      "frame": 40
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 5584.514,
+      "elapsed_ms": 196.58
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 5586.62,
+      "job_id": 25,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 5590.94,
+      "frame": 40,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5595.944,
+      "frame": 40
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 5597.487,
+      "frame": 41
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 5597.972,
+      "job_id": 26,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5637.227,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5680.156,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5746.88,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5764.157,
+      "frame": 41
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 5793.877,
+      "elapsed_ms": 195.558
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 5793.997,
+      "job_id": 26,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 5800.319,
+      "frame": 41,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5805.623,
+      "frame": 41
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 5807.312,
+      "frame": 42
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 5807.772,
+      "job_id": 27,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5848.017,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5889.39,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5955.38,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 5973.547,
+      "frame": 42
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 6010.834,
+      "elapsed_ms": 202.751
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 6011.003,
+      "job_id": 27,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 6017.236,
+      "frame": 42,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6018.035,
+      "frame": 42
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 6018.809,
+      "frame": 43
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 6019.469,
+      "job_id": 28,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6057.906,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6099.326,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6166.67,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6183.493,
+      "frame": 43
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 6220.658,
+      "elapsed_ms": 200.855
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 6220.781,
+      "job_id": 28,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 6228.469,
+      "frame": 43,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6229.296,
+      "frame": 43
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 6230.153,
+      "frame": 44
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 6230.786,
+      "job_id": 29,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6267.354,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6309.406,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6378.598,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6394.057,
+      "frame": 44
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 6427.854,
+      "elapsed_ms": 196.738
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 6429.555,
+      "job_id": 29,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 6434.018,
+      "frame": 44,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6436.007,
+      "frame": 44
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 6437.719,
+      "frame": 45
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 6438.2,
+      "job_id": 30,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6477.497,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6519.936,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6584.189,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6603.476,
+      "frame": 45
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 6634.701,
+      "elapsed_ms": 196.174
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 6634.812,
+      "job_id": 30,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 6642.847,
+      "frame": 45,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6645.826,
+      "frame": 45
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 6646.66,
+      "frame": 46
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 6647.115,
+      "job_id": 31,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6687.202,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6730.096,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6794.891,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6813.299,
+      "frame": 46
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 6846.083,
+      "elapsed_ms": 198.819
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 6847.394,
+      "job_id": 31,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 6851.942,
+      "frame": 46,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6856.018,
+      "frame": 46
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 6857.537,
+      "frame": 47
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 6858.007,
+      "job_id": 32,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6897.227,
+      "frame": 47
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 6939.684,
+      "frame": 47
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7007.287,
+      "frame": 47
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7023.304,
+      "frame": 47
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 7054.761,
+      "elapsed_ms": 196.623
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 7054.871,
+      "job_id": 32,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 7062.525,
+      "frame": 47,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7065.586,
+      "frame": 47
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 7066.894,
+      "frame": 48
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 7067.339,
+      "job_id": 33,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7107.462,
+      "frame": 48
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7149.801,
+      "frame": 48
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7213.912,
+      "frame": 48
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7233.456,
+      "frame": 48
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 7264.622,
+      "elapsed_ms": 197.15
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 7265.815,
+      "job_id": 33,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 7269.913,
+      "frame": 48,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7275.212,
+      "frame": 48
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 7276.639,
+      "frame": 33
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 7277.084,
+      "job_id": 34,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7317.421,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7359.852,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7422.839,
+      "frame": 33
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7443.465,
+      "frame": 33
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 7469.355,
+      "elapsed_ms": 191.949
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 7470.903,
+      "job_id": 34,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 7475.285,
+      "frame": 33,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7485.139,
+      "frame": 33
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 7486.785,
+      "frame": 34
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 7487.273,
+      "job_id": 35,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7527.729,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7569.35,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7631.216,
+      "frame": 34
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7653.237,
+      "frame": 34
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 7683.36,
+      "elapsed_ms": 195.745
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 7684.915,
+      "job_id": 35,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 7689.112,
+      "frame": 34,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7696.032,
+      "frame": 34
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 7697.521,
+      "frame": 35
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 7697.985,
+      "job_id": 36,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7737.448,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7779.424,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7849.711,
+      "frame": 35
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7863.588,
+      "frame": 35
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 7905.508,
+      "elapsed_ms": 207.185
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 7906.791,
+      "job_id": 36,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7910.888,
+      "frame": 35
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 7912.216,
+      "frame": 36
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 7912.715,
+      "frame": 35,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 7913.578,
+      "job_id": 37,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7947.891,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 7989.248,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8058.888,
+      "frame": 36
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8073.298,
+      "frame": 36
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 8108.074,
+      "elapsed_ms": 194.133
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 8109.259,
+      "job_id": 37,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 8113.754,
+      "frame": 36,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8115.696,
+      "frame": 36
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 8116.47,
+      "frame": 37
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 8116.884,
+      "job_id": 38,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8158.063,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8199.512,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8263.909,
+      "frame": 37
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8283.486,
+      "frame": 37
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 8310.385,
+      "elapsed_ms": 193.371
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 8310.509,
+      "job_id": 38,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 8316.875,
+      "frame": 37,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8325.722,
+      "frame": 37
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 8326.497,
+      "frame": 38
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 8326.952,
+      "job_id": 39,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8368.009,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8409.237,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8469.878,
+      "frame": 38
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8494.301,
+      "frame": 38
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 8520.358,
+      "elapsed_ms": 193.257
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 8521.563,
+      "job_id": 39,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 8525.918,
+      "frame": 38,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8535.893,
+      "frame": 38
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 8537.127,
+      "frame": 39
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 8537.622,
+      "job_id": 40,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8577.804,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8620.095,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8682.554,
+      "frame": 39
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8703.648,
+      "frame": 39
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 8729.859,
+      "elapsed_ms": 192.099
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 8729.971,
+      "job_id": 40,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 8734.423,
+      "frame": 39,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8745.66,
+      "frame": 39
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 8746.512,
+      "frame": 40
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 8746.958,
+      "job_id": 41,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8788.075,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8829.956,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8889.981,
+      "frame": 40
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8913.719,
+      "frame": 40
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 8939.595,
+      "elapsed_ms": 192.495
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 8940.366,
+      "job_id": 41,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 8944.673,
+      "frame": 40,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8955.661,
+      "frame": 40
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 8956.464,
+      "frame": 41
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 8956.904,
+      "job_id": 42,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 8998.005,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9039.399,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9101.523,
+      "frame": 41
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9123.622,
+      "frame": 41
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 9149.118,
+      "elapsed_ms": 192.073
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 9149.244,
+      "job_id": 42,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 9157.186,
+      "frame": 41,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9165.226,
+      "frame": 41
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 9166.608,
+      "frame": 42
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 9167.066,
+      "job_id": 43,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9207.455,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9249.892,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9314.772,
+      "frame": 42
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9334.161,
+      "frame": 42
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 9366.217,
+      "elapsed_ms": 198.816
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 9367.275,
+      "job_id": 43,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 9372.082,
+      "frame": 42,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9376.084,
+      "frame": 42
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 9377.715,
+      "frame": 43
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 9378.206,
+      "job_id": 44,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9417.236,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9459.529,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9521.812,
+      "frame": 43
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9544.017,
+      "frame": 43
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 9567.928,
+      "elapsed_ms": 189.554
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 9569.683,
+      "job_id": 44,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 9575.585,
+      "frame": 43,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9585.588,
+      "frame": 43
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 9587.005,
+      "frame": 44
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 9587.618,
+      "job_id": 45,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9627.904,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9669.296,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9736.619,
+      "frame": 44
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9753.845,
+      "frame": 44
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 9786.386,
+      "elapsed_ms": 198.44
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 9787.658,
+      "job_id": 45,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 9791.789,
+      "frame": 44,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9795.733,
+      "frame": 44
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 9796.505,
+      "frame": 45
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 9796.96,
+      "job_id": 46,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9837.937,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9879.908,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9944.226,
+      "frame": 45
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 9963.434,
+      "frame": 45
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 9990.962,
+      "elapsed_ms": 193.669
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 9991.085,
+      "job_id": 46,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 9998.724,
+      "frame": 45,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10005.59,
+      "frame": 45
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 10006.345,
+      "frame": 46
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 10006.76,
+      "job_id": 47,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10048.043,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10111.845,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10151.654,
+      "frame": 46
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10173.701,
+      "frame": 46
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 10200.148,
+      "elapsed_ms": 193.242
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 10200.274,
+      "job_id": 47,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 10206.634,
+      "frame": 46,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10215.639,
+      "frame": 46
+    },
+    {
+      "stage": "frame_request",
+      "t_ms": 10216.869,
+      "frame": 47
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 10217.319,
+      "job_id": 48,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10257.612,
+      "frame": 47
+    },
+    {
+      "stage": "frame_tick",
+      "t_ms": 10300.009,
+      "frame": 47
+    },
+    {
+      "stage": "playback_stop",
+      "t_ms": 10326.522,
+      "frames": 46
+    },
+    {
+      "stage": "display_conversion",
+      "t_ms": 10416.702,
+      "elapsed_ms": 199.148
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 10419.346,
+      "job_id": 48,
+      "job": "work",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 10423.922,
+      "job_id": 49,
+      "job": "run",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "ui_handoff",
+      "t_ms": 10424.025,
+      "frame": 47,
+      "status": "3840 \u00d7 2160",
+      "has_frame": true
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 11480.065,
+      "job_id": 49,
+      "job": "run",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "worker_start",
+      "t_ms": 11480.114,
+      "job_id": 50,
+      "job": "shutdown",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "worker_end",
+      "t_ms": 11500.824,
+      "job_id": 50,
+      "job": "shutdown",
+      "thread": "nodebased-preview_0"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11530.544,
+      "frame": 1,
+      "node": "background",
+      "kind": "Read",
+      "path": "full-frame fallback",
+      "samples": 70,
+      "estimated_ms": 140.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    },
+    {
+      "stage": "node_profile",
+      "t_ms": 11530.557,
+      "frame": 1,
+      "node": "roto",
+      "kind": "Roto",
+      "path": "full-frame fallback",
+      "samples": 41,
+      "estimated_ms": 82.0,
+      "fallback_reason": "Transform has no tile kernel; coordinate-dependent evaluation selects the full-frame path"
+    }
+  ],
+  "sampling_profile": {
+    "qt": {
+      "threading.py:wait": 2,
+      "threading.py:start": 1,
+      "benchmark_2d_playback.py:run_window": 3440,
+      "benchmark_2d_playback.py:main": 3440,
+      "benchmark_2d_playback.py:<module>": 3440,
+      "jobs.py:_db": 7,
+      "contextlib.py:__enter__": 6,
+      "jobs.py:snapshot": 15,
+      "queuepanel.py:refresh": 15,
+      "queuepanel.py:refresh_loop_history": 2,
+      "<frozen genericpath>:exists": 3,
+      "inspect.py:getsourcefile": 3,
+      "inspect.py:findsource": 4,
+      "inspect.py:getsourcelines": 4,
+      "inspect.py:getsource": 4,
+      "feature.py:_mod_uses_pyside": 4,
+      "feature.py:feature_imported": 4,
+      "loader.py:feature_imported": 4,
+      "__init__.py:<module>": 21,
+      "<frozen importlib._bootstrap>:_call_with_frames_removed": 89,
+      "<frozen importlib._bootstrap_external>:exec_module": 70,
+      "<frozen importlib._bootstrap>:_load_unlocked": 70,
+      "<frozen importlib._bootstrap>:_find_and_load_unlocked": 73,
+      "<frozen importlib._bootstrap>:_find_and_load": 73,
+      "gpu3d.py:enumerate_adapters": 107,
+      "gpu3d.py:chosen_adapter_name": 108,
+      "app.py:preview_ready": 182,
+      "<frozen importlib._bootstrap_external>:_path_stat": 3,
+      "<frozen importlib._bootstrap_external>:find_spec": 6,
+      "<frozen importlib._bootstrap_external>:_get_spec": 3,
+      "<frozen importlib._bootstrap>:_find_spec": 3,
+      "_classes.py:<module>": 1,
+      "<frozen importlib._bootstrap>:_handle_fromlist": 20,
+      "structs.py:<module>": 2,
+      "<string>:<module>": 1,
+      "dataclasses.py:_create_fn": 1,
+      "dataclasses.py:_init_fn": 1,
+      "dataclasses.py:_process_class": 1,
+      "dataclasses.py:wrap": 1,
+      "<frozen importlib._bootstrap_external>:get_data": 1,
+      "<frozen importlib._bootstrap_external>:get_code": 1,
+      "api.py:<module>": 1,
+      "_ffi.py:<module>": 12,
+      "_api.py:<module>": 14,
+      "auto.py:_load_backend": 15,
+      "auto.py:_auto_load_backend": 15,
+      "auto.py:<module>": 15,
+      "_classes.py:enumerate_adapters_async": 103,
+      "_classes.py:enumerate_adapters_sync": 103,
+      "cparser.py:<module>": 2,
+      "api.py:__init__": 2,
+      "c_parser.py:<module>": 1,
+      "cparser.py:_put_back_line_directives": 1,
+      "cparser.py:_preprocess": 1,
+      "cparser.py:_parse": 13,
+      "cparser.py:_internal_parse": 8,
+      "cparser.py:parse": 8,
+      "api.py:_cdef": 8,
+      "api.py:cdef": 8,
+      "c_lexer.py:_match_token": 5,
+      "c_lexer.py:token": 5,
+      "c_parser.py:_fill": 5,
+      "c_parser.py:peek": 5,
+      "c_parser.py:_peek": 6,
+      "c_parser.py:_peek_type": 2,
+      "c_parser.py:_parse_enumerator_list": 1,
+      "c_parser.py:_parse_enum_specifier": 1,
+      "c_parser.py:_parse_declaration_specifiers": 4,
+      "c_parser.py:_parse_external_declaration": 9,
+      "c_parser.py:_parse_translation_unit": 12,
+      "c_parser.py:_parse_translation_unit_or_empty": 12,
+      "c_parser.py:parse": 12,
+      "c_parser.py:_accept": 1,
+      "c_parser.py:_parse_struct_declarator_list": 1,
+      "c_parser.py:_parse_struct_declaration": 1,
+      "c_parser.py:_parse_struct_declaration_list": 1,
+      "c_parser.py:_parse_struct_or_union_specifier": 1,
+      "c_parser.py:_parse_parameter_declaration": 3,
+      "c_parser.py:_parse_parameter_list": 3,
+      "c_parser.py:_parse_parameter_type_list": 3,
+      "c_parser.py:_parse_function_decl": 3,
+      "c_parser.py:_parse_decl_suffixes": 4,
+      "c_parser.py:_parse_direct_declarator": 6,
+      "c_parser.py:_parse_declarator_kind": 6,
+      "c_parser.py:_parse_id_declarator": 6,
+      "c_parser.py:_scan_declarator_name_info": 1,
+      "c_parser.py:_peek_declarator_name_info": 1,
+      "c_parser.py:_parse_any_declarator": 1,
+      "cparser.py:_parse_function_type": 1,
+      "cparser.py:_get_type_and_quals": 1,
+      "cparser.py:_parse_decl": 1,
+      "c_parser.py:_advance": 1,
+      "c_parser.py:_expect": 3,
+      "cparser.py:parse_type_and_quals": 6,
+      "cparser.py:parse_type": 6,
+      "api.py:_typeof_locked": 8,
+      "api.py:_typeof": 8,
+      "api.py:callback": 1,
+      "api.py:_get_cached_btype": 2,
+      "api.py:new": 7,
+      "_api.py:_new_struct_p": 5,
+      "_api.py:new_struct": 3,
+      "linecache.py:updatecache": 1,
+      "linecache.py:getlines": 1,
+      "_helpers.py:get_wgpu_instance": 50,
+      "_api.py:_enumerate_adapters": 88,
+      "_api.py:enumerate_adapters_async": 88,
+      "_helpers.py:proxy_func": 33,
+      "_api.py:new_array": 1,
+      "_api.py:new_struct_p": 2,
+      "_api.py:_create_adapter": 4,
+      "_api.py:_get_limits": 3,
+      "nodeshelf.py:_unit": 4,
+      "nodeshelf.py:_metrics": 4,
+      "nodeshelf.py:minimumSizeHint": 4,
+      "nodeshelf.py:sizeHint": 4,
+      "topbar.py:set_icon_only": 4,
+      "topbar.py:_fit": 11,
+      "topbar.py:floor_width": 10,
+      "topbar.py:_announce_floor": 10,
+      "topbar.py:set_gpu": 11,
+      "playback.py:identity": 31,
+      "app.py:refresh_timeline_marks": 28,
+      "app.py:sync_timeline": 20,
+      "app.py:set_time": 23,
+      "app.py:playback_tick": 23,
+      "benchmark_2d_playback.py:playback_tick": 23,
+      "topbar.py:minimumSizeHint": 2,
+      "topbar.py:_refresh": 6,
+      "topbar.py:set_compact": 6,
+      "app.py:_show_image": 50,
+      "playback.py:key": 3,
+      "app.py:_selected_tier_is_cached": 3,
+      "app.py:request_preview": 3,
+      "benchmark_2d_playback.py:request": 3,
+      "timeline.py:setValue": 5,
+      "viewerstrip.py:free_span": 1,
+      "app.py:_place_pixel_readout": 2,
+      "nodeshelf.py:column_width": 1,
+      "gpu3d.py:adapter_preference": 1,
+      "viewerstrip.py:place": 2,
+      "viewerstrip.py:set_image": 2,
+      "app.py:update_corner_readout": 2,
+      "app.py:_frame_viewer_to": 2,
+      "contextlib.py:__exit__": 1,
+      "app.py:toggle_playback": 1,
+      "benchmark_2d_playback.py:finish": 1
+    },
+    "worker": {
+      "roto.py:_add_span": 5,
+      "roto.py:coverage": 8,
+      "roto.py:render_cover": 13,
+      "imaging.py:_roto_shape_matte": 13,
+      "roto.py:rasterise": 37,
+      "imaging.py:_roto_matte": 37,
+      "imaging.py:render_matte": 37,
+      "imaging.py:_windowed_kernel": 105,
+      "imaging.py:evaluate_raster": 111,
+      "imaging.py:evaluate": 111,
+      "benchmark_2d_playback.py:evaluate": 111,
+      "app.py:render": 3075,
+      "app.py:work": 3075,
+      "benchmark_2d_playback.py:wrapped": 3078,
+      "thread.py:run": 3078,
+      "thread.py:_worker": 3439,
+      "threading.py:run": 3439,
+      "threading.py:_bootstrap_inner": 3439,
+      "threading.py:_bootstrap": 3439,
+      "fromnumeric.py:_wrapfunc": 251,
+      "fromnumeric.py:argsort": 2,
+      "fromnumeric.py:cumsum": 3,
+      "imaging.py:_box_blur_axis": 5,
+      "roto.py:feather": 5,
+      "_format_impl.py:write_array": 5,
+      "_npyio_impl.py:save": 5,
+      "cachetier.py:put": 5,
+      "cachetier.py:put_raster": 5,
+      "imaging.py:_store": 5,
+      "<frozen posixpath>:_joinrealpath": 1,
+      "<frozen posixpath>:realpath": 1,
+      "pathlib.py:resolve": 1,
+      "tileexec.py:_read_source_fingerprint": 1,
+      "tileexec.py:_read_decode_key": 1,
+      "media.py:read_media_raster": 68,
+      "benchmark_2d_playback.py:read_media": 68,
+      "imaging.py:read_image_raster": 68,
+      "numeric.py:ones": 3,
+      "color.py:to_working": 28,
+      "imaging.py:to_qimage": 2934,
+      "benchmark_2d_playback.py:qimage": 2934,
+      "_methods.py:_clip": 246,
+      "fromnumeric.py:clip": 246,
+      "numeric.py:zeros_like": 86,
+      "gpudisplay.py:__init__": 1,
+      "gpudisplay.py:get_display": 1,
+      "color.py:display_rgb": 263,
+      "gpudisplay.py:_build_ocio_program": 2,
+      "gpudisplay.py:_build_program": 2,
+      "gpudisplay.py:render": 262,
+      "gpudisplay.py:_make_lut_texture": 1,
+      "gpudisplay.py:_ensure_input_texture": 1,
+      "gpudisplay.py:_ensure_fbo": 1,
+      "playback.py:identity": 2,
+      "playback.py:key": 2,
+      "media.py:half_safe": 3,
+      "playback.py:_compact_one": 3,
+      "playback.py:compact": 3,
+      "app.py:run": 3
+    }
+  },
+  "worker_call_profiles": []
+}
