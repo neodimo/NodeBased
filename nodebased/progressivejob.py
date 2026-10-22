@@ -278,7 +278,7 @@ class ProgressiveJob:
                 self._frame, self._frame_identity = frame, request.identity
                 if self.frames and not self.keep_images:
                     last = self.frames[-1]
-                    self.frames[-1] = replace(last, state=replace(last.state, image=None, guides=None), rgba=None)
+                    self.frames[-1] = replace(last, state=replace(last.state, image=None, guides=None, accumulation=None), rgba=None)
                 self.frames.append(frame)
                 self._pass_started = time.perf_counter()
                 self._phase = "settled" if done else "tracing"

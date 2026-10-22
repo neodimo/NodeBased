@@ -29,6 +29,10 @@ Per scene it reports, on the adapter in use (the scene, the camera, the seed and
   beside ``idle_first_look_ms``, the same first look asked of an idle worker. Gates, applied on the RTX 3080 Ti only (no target
   on other adapters, whose rows are recorded): 95th-percentile abandon under 50 ms, and the 95th-percentile edit-to-first-look
   no worse than the idle first look plus 60 ms, on both scenes. ``--no-edits`` leaves the series out.
+* ``settle`` (step C of "Render mode responsiveness"): per scene, the request-to-settled seconds (cold, warm median and worst), the time-stamped
+  steps of the warm run with the converged share at each, the share of the picture still above the noise threshold when the sample cap
+  ended it (``refining_share_at_settle``), the noise threshold and cap in force, whether the one-minute rule holds and, on the RTX 3080 Ti
+  only, the gate: furnished room settled under 4 s and the mixed mesh and splat scene under 30 s (cold and warm worst).
 * ``--field PATH`` writes one small JSON (adapter name, backend, first look, abandon and settle times) and nothing else, for
   ``tools/field_report.py``; ``--quick`` with it runs the furnished room only with fewer trials and stops each view at its first
   full-size pass instead of waiting for it to settle (no settle time then).
@@ -58,6 +62,10 @@ WIDTH, HEIGHT = 1920, 1080
 BACKGROUND = (0.02, 0.02, 0.03, 1.0)
 AMBIENT = 0.05
 SETTLE_TIMEOUT = 600.0
+# Step C of "Render mode responsiveness": the settled picture, from the request, at 1920 x 1080, gated on the RTX 3080 Ti only (the other
+# adapters' rows are recorded; the one-minute rule is DiMo's, 10/15: nothing makes the artist wait over a minute).
+SETTLE_GATE_SECONDS = {"furnished": 4.0, "mixed": 30.0}
+ONE_MINUTE = 60.0
 
 
 def moved(i):
@@ -284,6 +292,27 @@ def edit_gate(pooled):
             "met": bool(abandon_ok and first_ok)}
 
 
+def settle_summary(name, result):
+    """The settle rows of one scene: request to settled picture (cold and warm median), the share of the picture still above the noise
+    threshold when the cap ended it, the time-stamped steps of the warm run, the RTX gate and the one-minute rule."""
+    warm = result["warm"]
+    steps = [{"seconds": f["seconds"], "samples": f["samples"], "converged_fraction": f["converged_fraction"],
+              "preview": f["preview"]} for f in warm["last_run_frames"]]
+    last = steps[-1]["converged_fraction"]
+    seconds = warm["settled_seconds"]["median"]
+    gate = SETTLE_GATE_SECONDS[name]
+    summary = {"cold_seconds": result["cold"]["settled_seconds"], "warm_median_seconds": seconds, "warm_worst_seconds": warm["settled_seconds"]["worst"],
+               "steps": steps, "refining_share_at_settle": None if last is None else round(1.0 - last, 4),
+               "noise_threshold": P.NOISE_THRESHOLD, "sample_cap": P.SAMPLE_CAP,
+               "under_a_minute": bool(seconds is not None and seconds < ONE_MINUTE)}
+    if on_rtx_3080_ti():
+        summary["gate"] = {"applies": True, "settled_under_seconds": gate,
+                           "met": bool(result["cold"]["settled_seconds"] < gate and warm["settled_seconds"]["worst"] < gate)}
+    else:
+        summary["gate"] = {"applies": False, "note": "no target on this adapter; the row is recorded against the one-minute rule"}
+    return summary
+
+
 def measure(name, scene, warm, frames_dir, with_interaction, edits=0):
     out = {"scene": name, "output": [WIDTH, HEIGHT], "seed": "default", "ambient": AMBIENT}
     job = ProgressiveJob(keep_images=bool(frames_dir))
@@ -311,6 +340,8 @@ def measure(name, scene, warm, frames_dir, with_interaction, edits=0):
             out["edit_latency"] = edit_latency(job, scene, edits)      # the job is warm: pipelines compiled, scene uploaded
     finally:
         job.close()
+    if SETTLE:
+        out["settle"] = settle_summary(name, out)
     out["target_seconds"] = P.FIRST_LOOK_SECONDS
     out["first_look_target_met_warm"] = out["warm"]["first_image_seconds"]["worst"] <= P.FIRST_LOOK_SECONDS
     out["first_look_target_met_cold"] = out["cold"]["first_image_seconds"] <= P.FIRST_LOOK_SECONDS
@@ -342,6 +373,10 @@ def field_record(results):
             "idle_first_look_ms": edit.get("idle_first_look_ms"), "edit_trials": edit.get("trials"),
             "gate": edit.get("gate"),
             # step B of the Progress plan: how sharp the warm first look was, how the orbit painted, what the scene cache did
+            # step C of "Render mode responsiveness": the settle in detail (null for a --quick run, which stops at the first full-size pass)
+            "settle": ({k: result["settle"][k] for k in ("cold_seconds", "warm_median_seconds", "steps", "refining_share_at_settle",
+                                                         "noise_threshold", "sample_cap", "under_a_minute")}
+                       if result.get("settle") else None),
             "first_look_traced": result["warm"]["last_run_frames"][0]["traced"],
             "first_look_phases_seconds": result["warm"]["last_run_frames"][0]["phases"],
             "orbit_paint_ms": (result.get("interaction") or {}).get("paint_ms_during_orbit")}
@@ -386,6 +421,8 @@ def main():
         print(json.dumps({k: v for k, v in result.items() if k not in ("cold", "warm", "edit_latency")}, indent=1))
         print("cold:", [(f["seconds"], f["samples"], "preview" if f["preview"] else "pass") for f in result["cold"]["frames"]])
         print("warm median first image:", result["warm"]["first_image_seconds"], "settled:", result["warm"]["settled_seconds"])
+        if result.get("settle"):
+            print("settle:", json.dumps({k: v for k, v in result["settle"].items() if k != "steps"}))
         edit = result.get("edit_latency")
         if edit:
             print("edit latency:", json.dumps({k: edit[k] for k in ("abandon_ms", "edit_to_first_look_ms", "idle_first_look_ms",

@@ -45,7 +45,7 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-from . import gpupathtrace, pathtrace, ptdenoise, scenecache, scene3d
+from . import gpu3d, gpudenoise, gpupathtrace, pathtrace, ptdenoise, scenecache, scene3d
 from .cancellation import Cancelled
 
 FIRST_PASS_SCALE = 4     # the reset step renders at 1/this size on each side, for interactive framing
@@ -56,7 +56,7 @@ MAX_BOUNCES = 4           # a lighter bounce budget than Render3D's own default,
 # own noise estimate (`pathtrace.pixel_noise`) instead of giving every pixel every sample, and the view finishes early when
 # every pixel has. The first steps (1, 2, 4 samples) are too few to estimate noise from, so they stay fixed.
 ADAPTIVE_FROM = 8
-NOISE_THRESHOLD = 0.01
+NOISE_THRESHOLD = 0.0125   # relative variance of a pixel's mean luminance (a standard error of about 11 percent) under which it stops
 
 
 @dataclass(frozen=True)
@@ -79,7 +79,10 @@ class ProgressiveState:
     traced_width: int = 0
     traced_height: int = 0
     phases: tuple = ()                         # ((name, seconds), ...) of the last first-look stage: render, guides, denoise, enlarge
+    cost_per_pixel: float = 0.0                # seconds per traced pixel of stage one, the scene's preparation taken off (0: not measured)
     guides: object = field(default=None, compare=False, repr=False)   # (albedo, normals, depth) at the output size, kept for the next pass
+    accumulation: object = field(default=None, compare=False, repr=False)   # the path tracer's running sums, for `step(accumulate=True)` to continue
+    converged_mask: object = field(default=None, compare=False, repr=False)  # (height, width) bool: the pixels under the noise threshold; None: not measured
 
 
 def _drop_particles(scene):
@@ -90,7 +93,7 @@ drop_particles = _drop_particles      # the job drops them once per view, so eve
 
 
 def step(state, scene, camera, width, height, background, ambient, key, backend="auto",
-        max_bounces=MAX_BOUNCES, moments=None, cancel=None):
+        max_bounces=MAX_BOUNCES, moments=None, cancel=None, accumulate=False):
     """One progressive step: `state` (or a fresh one when `key` differs from its own) advanced by a
     single, higher-sample-count re-trace. Particles are dropped first (the path tracer does not draw
     them, `pathtrace.check_scene`); everything else the viewport shows -- meshes, splats, volumes,
@@ -114,6 +117,13 @@ def step(state, scene, camera, width, height, background, ambient, key, backend=
         **(dict(sampling="adaptive", noise_threshold=NOISE_THRESHOLD, min_samples=ADAPTIVE_FROM, max_samples=target,
                 adaptive_pass_size=ADAPTIVE_FROM) if measured else {}))
     stats = {"skip_noise_maps": True}      # only `converged` is read below: the GPU path tracer builds no variance or noise maps
+    accumulating = accumulate and not moments and measured and not scene3d.has_shadow_catchers(scene)
+    if accumulating:
+        # Continue the render the last pass left (`stats["resume"]`): the pixels still above the noise threshold take their next
+        # samples and the ones under it are left as they were, instead of tracing the whole picture again at twice the samples. The
+        # result is the one a single render at this cap gives (the passes are the same ones, in the same order).
+        stats["keep_accumulation"] = True
+        stats["resume"] = state.accumulation
     started = time.perf_counter()
     if moments:
         moments = [(_drop_particles(scene_at), camera_at) for scene_at, camera_at in moments]
@@ -129,7 +139,9 @@ def step(state, scene, camera, width, height, background, ambient, key, backend=
     fraction = float(stats["converged"].mean()) if measured and "converged" in stats else None
     return ProgressiveState(key=key, samples=target, width=render_width, height=render_height,
                             image=image, seconds=elapsed, low_res=reset, passes=state.passes + 1,
-                            converged_fraction=fraction, finished=fraction is not None and fraction >= 1.0)
+                            converged_fraction=fraction, finished=fraction is not None and fraction >= 1.0,
+                            accumulation=stats.get("accumulation") if accumulating else None,
+                            converged_mask=stats["converged"] if measured and "converged" in stats else None)
 
 
 def converged(state, width, height):
@@ -166,6 +178,7 @@ HEAVY_FIRST_PIXELS = 240 * 135
 MIN_FIRST_PIXELS = 120 * 68
 CATCHER_MIN_FIRST_PIXELS = 64 * 36  # keep a useful thumbnail while leaving room for fixed setup cost
 STAGE_TWO_MAX_FIRST_SECONDS = 0.75      # a first stage slower than this (a heavy scene) goes straight to the doubling steps
+STAGE_TWO_MAX_SECONDS = 1.2             # so does one whose second stage the first stage's cost per pixel says would take longer than this
 _COST = {}
 _BUILD = {}       # the same keys: seconds the last scene preparation took (the build and the pack), when one was made
 
@@ -261,6 +274,18 @@ def display_rgba8(image, cancel=None):
     return out
 
 
+def tint_refining(rgba, mask, amount=0.45, colour=(255, 120, 40)):
+    """A copy of the 8-bit picture `rgba` with the pixels the noise estimate has not yet cleared (`mask` False, as in
+    `ProgressiveState.converged_mask`) blended `amount` of the way toward `colour`: the viewport's debug view of where sampling goes on."""
+    out = np.array(rgba, copy=True)
+    if mask is None or mask.shape != out.shape[:2]:
+        return out
+    open_pixels = ~np.asarray(mask, bool)
+    tint = np.asarray(colour, np.float32)
+    out[open_pixels, :3] = (out[open_pixels, :3] * (1.0 - amount) + tint * amount + 0.5).astype(np.uint8)
+    return out
+
+
 def _cost_key(scene):
     from . import gpu3d
     heavy = bool(getattr(scene, "splats", ()) or getattr(scene, "volumes", ()))
@@ -350,8 +375,8 @@ def _preview(scene, camera, width, height, background, ambient, pixels, samples,
         guides = (_thumbnail_guides(beauty) if trace_scene is not scene else
                   pathtrace.guide_aovs(scene, camera, tw, th, settings, cancel=cancel, backend=backend, ambient=ambient))
         lap("guides")
-    filtered = ptdenoise.denoise_strips(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0],
-                                        None, workers=PREVIEW_WORKERS, dtype=np.float32, cancel=cancel)
+    filtered = denoise_picture(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0], backend, cancel,
+                               PREVIEW_WORKERS)
     lap("denoise")
     # the bilinear weights sum to one, so the background goes under the small picture and the enlargement carries it along
     image = enlarge(pathtrace.over_background(filtered, background).astype(np.float32), width, height)
@@ -360,7 +385,26 @@ def _preview(scene, camera, width, height, background, ambient, pixels, samples,
 
 
 DENOISE_WORKERS = max(2, min(12, os.cpu_count() or 2))
-GUIDE_SAMPLES = 4        # the guide passes need no more than the preview's samples (normals and depth are un-jittered)
+_CARD_FILTER = {"broken": False}
+
+
+def denoise_picture(beauty, albedo, normals, depth, backend="auto", cancel=None, workers=None):
+    """The viewport's edge-aware filter (`ptdenoise`) over `beauty` with its guides, float32: on the graphics card when the path
+    tracer runs there (`gpudenoise`, the same filter in about a fiftieth of the time at 1080p), else on the processor in strips. A card
+    that refuses the picture (too large for one storage binding) or fails leaves this one on the processor; a failure other than a
+    refusal turns the card filter off for the session."""
+    if backend in ("auto", "gpu") and not _CARD_FILTER["broken"] and gpudenoise.available():
+        try:
+            return gpudenoise.denoise(beauty, albedo, normals, depth, cancel=cancel)
+        except Cancelled:
+            raise
+        except gpu3d.Unsupported:
+            pass
+        except Exception:
+            _CARD_FILTER["broken"] = True
+    return ptdenoise.denoise_strips(beauty, albedo, normals, depth, None, workers=workers or DENOISE_WORKERS, dtype=np.float32,
+                                    cancel=cancel)
+GUIDE_SAMPLES = 1        # the guide passes need far less than the preview's samples: normals and depth are un-jittered, and one albedo sample moved the error on the silhouettes by 1 percent
 
 
 def _denoised_step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments, cancel):
@@ -370,7 +414,7 @@ def _denoised_step(state, scene, camera, width, height, background, ambient, key
     scene = _drop_particles(scene)
     clear = (0.0, 0.0, 0.0, 0.0)
     with gpupathtrace.reusing_scene():
-        raw = step(state, scene, camera, width, height, clear, ambient, key, backend, max_bounces, moments, cancel)
+        raw = step(state, scene, camera, width, height, clear, ambient, key, backend, max_bounces, moments, cancel, accumulate=True)
         started = time.perf_counter()
         guides = state.guides
         if guides is None or guides[0].shape[:2] != (raw.height, raw.width):
@@ -379,8 +423,7 @@ def _denoised_step(state, scene, camera, width, height, background, ambient, key
                                           ambient=ambient)
             guides = (traced["albedo"], traced["normals"][..., :3], traced["depth"][..., 0])
     guided = time.perf_counter()
-    filtered = ptdenoise.denoise_strips(raw.image, guides[0], guides[1], guides[2], None, workers=DENOISE_WORKERS,
-                                        dtype=np.float32, cancel=cancel)
+    filtered = denoise_picture(raw.image, guides[0], guides[1], guides[2], backend, cancel)
     image = pathtrace.over_background(filtered, background).astype(np.float32)
     done = time.perf_counter()
     return replace(raw, image=image, denoised=True, guides=guides, seconds=raw.seconds + done - started,
@@ -391,7 +434,8 @@ def _ladder_over(state, width, height, stages):
     """True when the preview stages are done for `state` (all taken, the next no smaller than the output, the cap reached, or a
     first stage too slow to follow with a dearer one): the doubling steps take over."""
     return (state.stage >= len(stages) or stages[state.stage][0] >= width * height or state.samples >= SAMPLE_CAP
-            or (state.stage == 1 and state.seconds > STAGE_TWO_MAX_FIRST_SECONDS))
+            or (state.stage == 1 and (state.seconds > STAGE_TWO_MAX_FIRST_SECONDS
+                                      or state.cost_per_pixel * stages[1][0] * stages[1][1] / max(stages[0][1], 1) > STAGE_TWO_MAX_SECONDS)))
 
 
 def next_samples(state, width, height, stages=None):
@@ -423,8 +467,8 @@ def step_interactive(state, scene, camera, width, height, background, ambient, k
         if denoise_passes:
             return replace(_denoised_step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces,
                                           moments, cancel), stage=len(stages))
-        return replace(step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments, cancel),
-                       stage=len(stages))
+        return replace(step(state, scene, camera, width, height, background, ambient, key, backend, max_bounces, moments, cancel,
+                            accumulate=True), stage=len(stages))
     pixels, samples = stages[state.stage]
     trace_scene = None
     if state.stage == 0 and not moments and scene3d.has_shadow_catchers(scene):
@@ -443,9 +487,12 @@ def step_interactive(state, scene, camera, width, height, background, ambient, k
                                      trace_scene=trace_scene,
                                      retain_preparation=bool(getattr(scene, "volumes", ())))
     seconds = time.perf_counter() - started
+    cost = state.cost_per_pixel
     if state.stage == 0:
-        _record_cost(scene, seconds - dict(phases)["enlarge"], traced[0] * traced[1], scenecache.BUILD_SECONDS - built_before)
+        built = scenecache.BUILD_SECONDS - built_before
+        _record_cost(scene, seconds - dict(phases)["enlarge"], traced[0] * traced[1], built)
+        cost = max(seconds - dict(phases)["enlarge"] - built, 0.0) / max(traced[0] * traced[1], 1)
     return ProgressiveState(key=key, samples=samples, width=width, height=height, image=image,
                             seconds=seconds, low_res=True, passes=state.passes + 1,
                             preview=True, denoised=True, stage=state.stage + 1,
-                            traced_width=traced[0], traced_height=traced[1], phases=phases)
+                            traced_width=traced[0], traced_height=traced[1], phases=phases, cost_per_pixel=cost)

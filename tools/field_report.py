@@ -493,6 +493,11 @@ def step_render_mode(ctx, step):
             settled = (scene.get("settled_seconds") or {}).get("warm_median")
             if settled is not None:
                 step.number(f"rendermode.{name}.settled", f"Render mode settle time, {name} scene", settled, "s")
+            share = (scene.get("settle") or {}).get("refining_share_at_settle")
+            if share is not None:
+                step.number(f"rendermode.{name}.refining_at_settle",
+                            f"Render mode, {name} scene: share of the picture still above the noise threshold when it settled",
+                            round(100 * share, 1), "%")
             traced = scene.get("first_look_traced")
             if traced:
                 step.number(f"rendermode.{name}.first_look_pixels", f"Render mode first look, {name} scene: pixels traced before the enlargement",

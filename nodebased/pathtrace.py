@@ -49,7 +49,9 @@ BSDF sampling only (they are not sampled as lights); area lights are visible in 
 the camera ray itself; liquid roughness and thin sheets are not modelled.
 """
 import math
+import threading
 import time
+import zlib
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -1904,11 +1906,18 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     total_samples = settings.max_samples if adaptive else settings.samples
     per_pass = settings.pass_samples or int(np.clip(_CHUNK // npix, 1, 8))
     sample_index, passes = 0, 0
+    resume = None if stats is None else stats.get("resume")
+    if adaptive and resume and resume.get("kind") == "cpu" and resume.get("pixels") == npix and not timed:
+        # a continued render (`stats["resume"]`, what an earlier call kept in `stats["accumulation"]`): the sums, the moments, the
+        # counts and the done flags go back as they were, and the passes that follow are the ones an uninterrupted render takes
+        total, alpha_sum, lum_sum, lum_sq, albedo_sum, count, pixel_done = (
+            resume[name].copy() for name in ("total", "alpha_sum", "lum_sum", "lum_sq", "albedo_sum", "count", "pixel_done"))
+        sample_index = int(resume["sample_index"])
     while sample_index < total_samples:
         raytrace._cancel(cancel)
         if adaptive:
             # the first pass reaches `min_samples` at once (no stop is allowed before it), the rest take `adaptive_pass_size`
-            take = min((settings.min_samples if sample_index == 0 else settings.adaptive_pass_size),
+            take = min((settings.min_samples if sample_index < settings.min_samples else settings.adaptive_pass_size),
                        total_samples - sample_index)
             active = np.flatnonzero(~pixel_done)
         else:
@@ -1979,6 +1988,11 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         n_ = np.maximum(count, 1).astype(np.float64)
         mean_lum = lum_sum / n_
         variance = np.maximum(lum_sq / n_ - mean_lum * mean_lum, 0.0) * n_ / np.maximum(n_ - 1, 1) / n_
+        if adaptive and stats.get("keep_accumulation") and timed is None:
+            # everything a later call needs to continue this render at a higher sample cap (`stats["resume"]`)
+            stats["accumulation"] = {"kind": "cpu", "pixels": npix, "sample_index": sample_index, "total": total.copy(),
+                                     "alpha_sum": alpha_sum.copy(), "lum_sum": lum_sum.copy(), "lum_sq": lum_sq.copy(),
+                                     "albedo_sum": albedo_sum.copy(), "count": count.copy(), "pixel_done": pixel_done.copy()}
         stats.update(sampling=settings.sampling, converged=(pixel_done if adaptive else tile_done[tile_of]).reshape(height, width).copy(),
                      noise=pixel_noise(lum_sum, lum_sq, count).reshape(height, width),
                      samples=count.reshape(height, width).copy(), passes=passes,
@@ -2042,6 +2056,26 @@ def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0
     return _read_only((total / count).astype(np.float32))
 
 
+_SMOKE_HITS = {}
+_SMOKE_HITS_LOCK = threading.Lock()
+
+
+def _smoke_hits(scene, camera, width, height, nearest, settings, cancel):
+    """`volumerender.first_hit_data`, remembered for the last call: the normals and the depth guide of one view march the same rays
+    cut at the same surface depth (about a second each on a 1080p smoke scene), so the second pass reuses the first's samples.
+    Returns a copy of the dict, which the caller may change."""
+    from . import volumerender
+    key = (int(width), int(height), zlib.crc32(np.ascontiguousarray(nearest).view(np.uint8)))
+    with _SMOKE_HITS_LOCK:
+        kept = _SMOKE_HITS.pop("last", None)         # used once: the samples are large (about 150 MB at 1080p)
+        if kept and kept["scene"] is scene and kept["camera"] is camera and kept["key"] == key and kept["settings"] == settings:
+            return dict(kept["hits"])
+    hits = volumerender.first_hit_data(scene, camera, width, height, nearest, settings, cancel)
+    with _SMOKE_HITS_LOCK:
+        _SMOKE_HITS["last"] = {"scene": scene, "camera": camera, "key": key, "settings": settings, "hits": hits}
+    return dict(hits)
+
+
 def merge_volume_data(scene, camera, width, height, data, output, settings, surface, cancel=None):
     """The data pass `output` (`data`, from `render_data` or the card) with the smoke put in where its first sample at
     `settings.depth_threshold` is nearer than the surface (`surface`, the surfaces' depth pass, alpha 1 where covered):
@@ -2051,7 +2085,7 @@ def merge_volume_data(scene, camera, width, height, data, output, settings, surf
     from . import volumerender
     covered = surface[..., 3] > 0
     nearest = np.where(covered, surface[..., 0], np.inf)
-    hits = volumerender.first_hit_data(scene, camera, width, height, nearest, replace(settings, motion_blur=0.0), cancel)
+    hits = _smoke_hits(scene, camera, width, height, nearest, replace(settings, motion_blur=0.0), cancel)
     hits["hit"] = hits["hit"] & (hits["depth"] < nearest)
     merged = np.array(data)
     volumerender.write_data_pass(merged, hits, output, s.volume_id_base(scene))
@@ -2080,9 +2114,13 @@ def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend
         few = replace(settings, samples=min(settings.samples, 8), time_limit=0.0, noise_threshold=0.0, sampling="fixed")
         out["albedo"] = render(scene, camera, width, height, (0, 0, 0, 0), ambient, "albedo", few, cancel=cancel,
                                backend=backend, volume=volume)
-    for name in ("normals", "depth"):
-        out[name] = render(scene, camera, width, height, (0, 0, 0, 0), ambient, name, settings, cancel=cancel,
-                           backend=backend, volume=volume)
+    try:
+        for name in ("normals", "depth"):
+            out[name] = render(scene, camera, width, height, (0, 0, 0, 0), ambient, name, settings, cancel=cancel,
+                               backend=backend, volume=volume)
+    finally:
+        with _SMOKE_HITS_LOCK:
+            _SMOKE_HITS.clear()          # the smoke samples the two passes share are not kept past the second
     return out
 
 

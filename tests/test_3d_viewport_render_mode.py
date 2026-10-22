@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QApplication
 
 from nodebased.core import Dispatcher
 from nodebased.viewport3d import Viewport3D
-from nodebased import pathtrace, scene3d as s
+from nodebased import pathtrace, progressiverender, scene3d as s
 from tests.progressive_widget import first_picture, paint_until, settled
 
 APP = QApplication.instance() or QApplication([])
@@ -76,7 +76,7 @@ class RenderMode(unittest.TestCase):
         self.assertIn("RENDER", widget.render_note)
         self.assertIn("sample", widget.render_note)
 
-    def test_the_note_shows_the_pass_and_then_the_converged_share(self):
+    def test_the_note_shows_the_pass_and_then_the_share_still_refining(self):
         widget = self._widget()
         widget.render_mode = True
         self.assertTrue(paint_until(widget, first_picture))
@@ -85,7 +85,24 @@ class RenderMode(unittest.TestCase):
         self.assertIsNone(first.converged_fraction)         # the low-res reset step measures nothing
         self.assertTrue(paint_until(widget, lambda state, phase: phase == "settled" or state.passes >= 5))
         self.assertRegex(widget.render_note, r"pass \d+")
-        self.assertRegex(widget.render_note, r"\d+% converged")
+        self.assertRegex(widget.render_note, r"\d+% of the picture (still refining|above the noise threshold)|every pixel under the noise threshold")
+
+    def test_the_refining_tint_is_painted_for_a_measured_state_and_off_by_default(self):
+        widget = self._widget()
+        widget.render_mode = True
+        self.assertFalse(widget.show_refining)
+        self.assertTrue(paint_until(widget, lambda state, phase: state is not None and state.converged_mask is not None))
+        self.assertIs(widget._progressive_image[1][1], False)
+        widget.show_refining = True              # the setter writes the user's settings; the test sets the flag
+        widget._progressive_image = None
+        widget.grab()
+        self.assertIs(widget._progressive_image[1][1], True)
+        painted = widget._progressive_image
+        mask = painted[0].converged_mask
+        plain = progressiverender.display_rgba8(painted[0].image)
+        if mask.shape == plain.shape[:2] and not mask.all():
+            self.assertFalse(np.array_equal(painted[3], plain))        # some pixel is still open, and it is tinted
+        np.testing.assert_array_equal(painted[3][mask], plain[mask])   # the cleared ones are as they were
 
     def test_repeated_paints_advance_the_sample_count_while_the_camera_is_still(self):
         widget = self._widget()

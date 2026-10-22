@@ -97,7 +97,7 @@ def main():
     force_adapter(args.adapter)
     if args.wg:
         from nodebased import gpupathtrace
-        gpupathtrace._wg_size = lambda splats, volumes, links=False: args.wg
+        gpupathtrace._wg_size = lambda splats, volumes, links=False, wide=False: args.wg
     size = tuple(int(v) for v in args.size.split("x"))
     image = None
     for name in args.variants.split(","):

@@ -114,6 +114,8 @@ class FieldReportSurvivesFailures(unittest.TestCase):
             "settled_seconds": {"cold": 9.0, "warm_median": 8.1},
             "abandon_ms": {"n": 6, "median": 12.0, "p95": 31.5, "worst": 31.5},
             "edit_to_first_look_ms": {"n": 6, "median": 580.0, "p95": 620.0, "worst": 620.0},
+            "settle": {"cold_seconds": 9.0, "warm_median_seconds": 8.1, "refining_share_at_settle": 0.073, "noise_threshold": 0.015,
+                       "sample_cap": 64, "under_a_minute": True, "steps": [{"seconds": 0.5, "samples": 4, "converged_fraction": None, "preview": True}]},
             "first_look_traced": [640, 360], "orbit_paint_ms": {"median": 12.3, "worst": 13.6}}}}
         seen = []
 
@@ -135,6 +137,7 @@ class FieldReportSurvivesFailures(unittest.TestCase):
         self.assertEqual(keys["rendermode.furnished.abandon_p95"], 31.5)
         self.assertEqual(keys["rendermode.furnished.edit_first_look_p95"], 620.0)
         self.assertEqual(keys["rendermode.furnished.settled"], 8.1)
+        self.assertEqual(keys["rendermode.furnished.refining_at_settle"], 7.3)
         self.assertEqual(keys["rendermode.furnished.first_look_pixels"], 640 * 360)
         self.assertEqual(keys["rendermode.furnished.orbit_paint_worst"], 13.6)
         self.assertEqual(step.data["adapter"], "wgpu adapter: test card")

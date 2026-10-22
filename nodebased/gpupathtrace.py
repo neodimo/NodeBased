@@ -82,9 +82,19 @@ SHAPE_VECS = 13
 TRI_VECS = 8
 
 
-def _wg_size(splats, volumes, links=False):
-    # light linking on a scene with splats is the second variant AMD's driver miscompiled at 8x8 (wrong colour channels)
-    return WG_SIZE_SPLATS_AND_VOLUMES if (splats and (volumes or links)) else WG_SIZE
+def _wg_size(splats, volumes, links=False, wide=False):
+    # light linking on a scene with splats is the second variant AMD's driver miscompiled at 8x8 (wrong colour channels).
+    # `wide` (an NVIDIA adapter, `wide_workgroups`) keeps the 8x8 workgroup for both: a 4x4 one fills half a warp, and the
+    # splats-and-smoke variant ran 22 to 28 percent slower for it (RTX 3080 Ti, same picture).
+    return WG_SIZE_SPLATS_AND_VOLUMES if (splats and (volumes or links) and not wide) else WG_SIZE
+
+
+def wide_workgroups(state):
+    """Whether this adapter takes the splats-and-smoke variant at the full 8x8 workgroup: NVIDIA's driver compiles it correctly
+    (the 0.31.0 miscompile was AMD's RADV/ACO), and a 4x4 workgroup leaves half of each warp idle there."""
+    info = state.get("info", {})
+    text = " ".join(str(info.get(key, "")) for key in ("vendor", "device", "description")).lower()
+    return "nvidia" in text or str(info.get("vendor_id", "")).lower() in ("4318", "0x10de")
 
 
 def soft_supported(state):
@@ -2143,20 +2153,21 @@ def _preprocess(code, flags):
     return "\n".join(out)
 
 
-def shader_source(splats=False, volumes=False, links=False, sparse=False, count=False):
+def shader_source(splats=False, volumes=False, links=False, sparse=False, count=False, wide=False):
     """The WGSL for a scene kind: the splat and smoke code costs registers whether it runs or not, so a mesh-only scene
     is compiled without any of it. The splats-and-volumes variant also compiles with a smaller workgroup
-    (`_wg_size`): the same code at 8x8 miscompiles on AMD."""
+    (`_wg_size`) except on NVIDIA (`wide`): the same code at 8x8 miscompiles on AMD."""
     code = _preprocess(_SHADER, {"SPLATS": bool(splats), "VOLUMES": bool(volumes), "SOFT": bool(splats or volumes),
                                  "LINKS": bool(links), "SPARSE": bool(sparse and volumes),
                                  "COUNT": bool(count and volumes)})
     code = code.replace("SPLAT_ID", "splat_id" if splats else "-1")
-    return code.replace("WG_SIZE", str(_wg_size(splats, volumes, links)))
+    return code.replace("WG_SIZE", str(_wg_size(splats, volumes, links, wide)))
 
 
 def _pipeline(state, splats=False, volumes=False, links=False, sparse=False):
     cache = state.setdefault("_gpupt_pipelines", {})
-    key = (bool(splats), bool(volumes), bool(links), bool(sparse and volumes), bool(COUNT_COLLISIONS and volumes))
+    key = (bool(splats), bool(volumes), bool(links), bool(sparse and volumes), bool(COUNT_COLLISIONS and volumes),
+           bool(wide_workgroups(state)))
     if key not in cache:
         device = state["device"]
         COUNTERS["pipelines"] += 1
@@ -2752,6 +2763,8 @@ def release_frame_cache(state=None):
     """Free what the renderer keeps on the device between frames (a scene's buffers, the accumulator, the readback buffers) and the
     host copies of the prepared scenes (`scenecache`)."""
     scenecache.clear()
+    from . import gpudenoise
+    gpudenoise.release()
     state = state or gpu3d._state()
     frame = state.get("_gpupt_frame")
     if frame is not None:
@@ -2845,7 +2858,8 @@ def _resolved_image(state, device, wgpu, frame, accum, width, npix, tiles_x, til
 # --- rendering ------------------------------------------------------------------------------------------
 
 def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height, wg,
-                     heavy, settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap, sparse_threads):
+                     heavy, settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap, sparse_threads,
+                     first_sample=0):
     """Adaptive sampling on the device. Every sample is one indirect dispatch over the pixels the last `scan` listed as open;
     after each pass `scan` and `finish` (`_COMPACT_SHADER`) rebuild that list from the shader's per-pixel done flags. The
     running moments and the done flags stay in `accum`, so nothing is read back while the render runs: the host only waits for
@@ -2926,13 +2940,14 @@ def _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, reso
     compaction(compute)                    # every pixel is open before the first pass
     compute.end()
     device.queue.submit([encoder.finish()])
-    sample_index, passes = 0, 0
+    sample_index, passes = first_sample, 0       # a resumed render starts at the count its open pixels already have
     asked = progress is not None or bool(settings.time_limit) or cancel is not None
     measured = False           # the first pass's first dispatch (every pixel open) has been timed for `_PATH_RATE`
     per_dispatch = None        # seconds the card took for one chunk's dispatch, as last measured (sizes the next submissions)
     while sample_index < total_samples:
         raytrace._cancel(cancel)
-        take = min(settings.min_samples if sample_index == 0 else settings.adaptive_pass_size, total_samples - sample_index)
+        take = min(settings.min_samples if sample_index < settings.min_samples else settings.adaptive_pass_size,
+                   total_samples - sample_index)
         if heavy:
             # a heavy sample takes long enough that each chunk is its own short submission
             for _ in range(take):
@@ -3120,6 +3135,15 @@ def _remember_scene(scene, ambient, eye, volume, ps, packed):
         _PREPARED.entry = (_scene_key(scene, ambient, eye, volume), scene, volume, ps, packed)
 
 
+def _resumable(stats, kind, pixels):
+    """The accumulation an earlier call kept (`stats["resume"]`) when it was made by this kind of tracer for an image of
+    `pixels` pixels, else None (the render then starts from nothing)."""
+    resume = None if stats is None else stats.get("resume")
+    if not resume or resume.get("kind") != kind or resume.get("pixels") != pixels:
+        return None
+    return resume
+
+
 def render(scene, camera, width, height, background, ambient, output, settings, cancel=None, progress=None,
            stats=None, volume=None, merge_volumes=True):
     """Path trace on the GPU; raises `gpu3d.Unsupported` for what it cannot take (the caller falls back).
@@ -3210,7 +3234,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     # the image on the card (the divide, the background) and reads back 16 bytes a pixel (20 with adaptive sampling's counts
     # and done flags) instead of the 32 of sums and moments, converting nothing on the host.
     lean = stats is None or bool(stats.get("skip_noise_maps"))
-    raw = lean_image = lean_meta = None
+    raw = lean_image = lean_meta = kept = None
     tile_of = None
     done = cancelled = False
     accum = None
@@ -3224,9 +3248,18 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             lanes = min(max(settings.min_samples, settings.adaptive_pass_size), 1024)
             sparse_threads = int(max(0, min(ADAPTIVE_SPARSE_THREADS, npix * lanes, (cap - accum_bytes) // 32)))
         accum = frame.accumulator(device, wgpu, npix * 32 + sparse_threads * 32)       # zeroed
+        first_sample = 0
+        resumed = _resumable(stats, "gpu", npix) if adaptive and lean else None
+        if resumed is not None:
+            # a continued render (`stats["resume"]`, the accumulator an earlier call kept): the sums, moments, counts and done
+            # flags go back where the shader left them, so the passes that follow are the ones an uninterrupted render would
+            # have taken next. Every open pixel has the same count (a pixel only stops at a pass boundary).
+            device.queue.write_buffer(accum, 0, resumed["accum"])
+            flags = resumed["accum"][:, 1, :]
+            first_sample = int(flags[flags[:, 3] < 0.5, 2].max(initial=0))
         links = bool(ps.linked_bits) or ps.hidden is not None or ps.holdout is not None
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
-        wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
+        wg = _wg_size(ps.splats is not None, ps.volumes is not None, links, wide_workgroups(state))
         lap("upload")
         if data_pass or adaptive:
             per_pass = 1
@@ -3245,7 +3278,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         if adaptive:
             _adaptive_passes(state, device, wgpu, pipeline, buffers, accum, upload, resources, packed, ps, camera, width, height,
                              wg, heavy, settings, code, tiles_x, total_samples, cancel, progress, started, readbacks, lap,
-                             sparse_threads)
+                             sparse_threads, first_sample)
         else:
             legacy_mask = settings.noise_threshold > 0 and not data_pass
             # A submission carries dispatches (one pass over some rows each) until their paths reach `sub_paths`. A smoke or
@@ -3353,6 +3386,10 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                               tiles_active=int((~tile_done).sum()),
                               converged=float(tile_done[tile_of].mean()) if tile_done.any() else 0.0))
         raytrace._cancel(cancel)
+        if adaptive and lean and stats is not None and stats.get("keep_accumulation"):
+            # the accumulator, for the next call to continue from (`stats["resume"]`): 32 bytes a pixel over the bus
+            kept = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(npix, 2, 4).copy()
+            readbacks["accumulator"] = 1
         if lean:
             background_premult = np.zeros(4, np.float64)
             if output == "rgba":
@@ -3422,6 +3459,8 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                                                                                    else _tile_index(width, height, tiles_x)])
         else:
             converged = pixel_done if adaptive else tile_done[tile_of]
+        if kept is not None:
+            stats["accumulation"] = {"kind": "gpu", "pixels": npix, "accum": kept}
         stats.update(backend="gpu", sampling=settings.sampling, samples=pixel_samples.reshape(height, width),
                      passes=passes, seconds=time.perf_counter() - started, adapter=gpu3d.describe(), phases=phases,
                      readbacks=readbacks, converged=converged.reshape(height, width))

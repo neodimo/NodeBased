@@ -103,6 +103,8 @@ class Viewport3D(QWidget):
         self.selected_key = None
         self.show_sim_stats = str(QSettings("NodeBased", "NodeBased").value(
             "viewport3d/show_sim_stats", False)).lower() in ("true", "1")
+        self.show_refining = str(QSettings("NodeBased", "NodeBased").value(
+            "viewport3d/show_refining", False)).lower() in ("true", "1")      # Render mode: tint the pixels still being sampled
         self._sim_stats_identity = None
         self._sim_stats_text = ""
         self.sim_stats_draw_ms = 0.0
@@ -711,12 +713,23 @@ class Viewport3D(QWidget):
         self._sim_stats_label.adjustSize()
         self._sim_stats_label.show()
 
+    def set_show_refining(self, enabled):
+        """Render mode's debug view: tint the pixels whose noise estimate is still above the threshold (the ones being sampled)."""
+        self.show_refining = bool(enabled)
+        QSettings("NodeBased", "NodeBased").setValue("viewport3d/show_refining", self.show_refining)
+        self._progressive_image = None
+        self.update()
+
     def contextMenuEvent(self, event):
         menu = QMenu(self)
         action = menu.addAction("Show simulation stats")
         action.setCheckable(True)
         action.setChecked(self.show_sim_stats)
         action.toggled.connect(self.set_show_sim_stats)
+        tint = menu.addAction("Tint the pixels Render mode is still refining")
+        tint.setCheckable(True)
+        tint.setChecked(self.show_refining)
+        tint.toggled.connect(self.set_show_refining)
         menu.exec(event.globalPos())
 
     def _selected_fluid_key(self):
@@ -1064,11 +1077,14 @@ class Viewport3D(QWidget):
             return False
         self._progressive_state = state
         self.splat_note = self.volume_note = self.shadow_note = ""   # the progressive image already carries their look
-        cached, bend = self._progressive_image, (None if lens is None else (lens.lens, lens.margin_x, lens.margin_y))
+        cached = self._progressive_image
+        bend = (None if lens is None else (lens.lens, lens.margin_x, lens.margin_y), self.show_refining)
         if cached is None or cached[0] is not state or cached[1] != bend:
             rgba = job.display(identity, state)       # converted on the worker thread; this is the fallback
             if rgba is None:
                 rgba = progressiverender.display_rgba8(state.image)
+            if self.show_refining and state.converged_mask is not None:
+                rgba = progressiverender.tint_refining(rgba, state.converged_mask)
             if lens is not None:
                 rgba = viewportlens.redistort(lens, viewportlens.fit(lens, rgba))
             rgba = np.ascontiguousarray(rgba)
@@ -1078,9 +1094,13 @@ class Viewport3D(QWidget):
         painter.drawImage(self.rect(), cached[2])
         done = phase == "settled"
         self.render_progress = min(1.0, state.samples / progressiverender.SAMPLE_CAP)
+        # the share of the picture still above the noise threshold (the pixels sampling goes on for); None before it is measured
+        refining = None if state.converged_fraction is None else 1.0 - state.converged_fraction
         if done:
             self.render_stage = "settled"
             note = f"RENDER · SETTLED · {state.samples} samples · pass {state.passes}"
+            if state.finished:
+                note += " · every pixel under the noise threshold"
             self._progressive_timer.stop()
         else:
             ahead = progressiverender.next_samples(state, width, height)
@@ -1091,8 +1111,10 @@ class Viewport3D(QWidget):
             note = (f"RENDER · {head} · {state.samples} sample{'s' if state.samples != 1 else ''} · pass {state.passes}"
                     f" · tracing {ahead} samples ({elapsed:.1f} s)")
             self._progressive_timer.start(RENDER_MODE_TICK_MS)
-        if state.converged_fraction is not None:
-            note += f" · {int(100 * state.converged_fraction)}% converged"
+        if refining is not None and not (done and state.finished):
+            share = round(100 * refining)
+            note += (f" · {share}% of the picture still refining" if not done
+                     else f" · sample limit reached with {share}% of the picture above the noise threshold")
         self.render_note = note
         return True
 
