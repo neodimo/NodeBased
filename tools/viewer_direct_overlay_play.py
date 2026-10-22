@@ -43,11 +43,18 @@ p.add_argument("--feed", action="store_true",
                help="hand the dock one captured picture at exactly 24 per second while the playhead advances, instead of "
                     "rendering (the Window's render needs 80 ms a 1080p frame here and cannot make 24 fps); the card, the "
                     "overlay and the playhead are the real ones")
+p.add_argument("--spin", type=int, default=0,
+               help="run this many busy-loop processes for the length of the run: with the powersave governor a bursty "
+                    "Qt thread runs at about half clock and every Qt-thread time triples (10/22: 102 against 192 pictures "
+                    "shown from one run to the next); this holds the clocks up, the way a loaded session does")
 p.add_argument("--warm", type=int, default=0, help="render and cache this many frames first and play them in a loop "
                "(the Roto picture alone cannot make 24 fps at 4K; the cache can, and the overlay is still live)")
 args = p.parse_args()
 
-import tests.isolation  # noqa: F401
+try:
+    import tests.isolation  # noqa: F401  (keeps QSettings out of the real user file when run from a checkout)
+except ImportError:
+    pass
 from PySide6.QtWidgets import QApplication
 
 app = QApplication.instance() or QApplication([])
@@ -55,6 +62,10 @@ from nodebased import app as appmod, directviewer  # noqa: E402
 from nodebased.app import Window  # noqa: E402
 
 W, H = (int(v) for v in args.size.lower().split("x"))
+SPINNERS = []
+if args.spin:
+    import subprocess
+    SPINNERS = [subprocess.Popen([sys.executable, "-I", "-c", "while True: pass"]) for _ in range(args.spin)]
 MAIN = threading.get_ident()
 WALL = collections.defaultdict(list)
 CPU = collections.defaultdict(list)
@@ -135,8 +146,7 @@ if args.picture == "checker":
     appmod.Viewer._roto_context = roto_over_checker
 w.set_time(first=1, last=240, current=1, fps=24.0)
 w.playback_proxy.setChecked(False)
-if os.environ.get("OVP_NOSELECT") != "1":
-    w.graph.items_by_id["r"].setSelected(True)
+w.graph.items_by_id["r"].setSelected(True)
 t0 = time.perf_counter()
 while (w.busy or len(w.preview_queue)) and time.perf_counter() - t0 < 120:
     spin(0.05)
@@ -298,6 +308,9 @@ result = {
     "gate_met": (dist(paired).get("p95") or 1e9) < args.gate_ms,
     "dock_dropped_ready": delta.get("dropped_ready", 0),
 }
+for spinner in SPINNERS:         # only the processes this run started
+    spinner.terminate()
+result["spin"] = args.spin
 os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
 with open(args.out, "w") as fh:
     json.dump(result, fh, indent=1)

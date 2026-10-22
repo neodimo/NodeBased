@@ -13,6 +13,7 @@ measures nothing about a GPU. Basis and limits: docs/WINDOWS_HYBRID_PRESENTATION
     python tools\\laptop_present_check.py --edit --preference low-power --out laptop-edit-igpu
     python tools\\laptop_present_check.py --paused --out laptop-paused              (paused edits and the wipe on the card)
     python tools\\laptop_present_check.py --paused --preference low-power --out laptop-paused-igpu
+    python tools\\laptop_present_check.py --playback --out laptop-playback        (playback with the overlay following)
 
 What it records, per run (`result.json` next to `metadata.json` and `frames.json`):
   * the adapter actually used (name, type, driver, backend), next to the one asked for (a mismatch is flagged);
@@ -31,6 +32,15 @@ process CPU per edit for the Viewer, the dock with the old hand-off and the dire
 wipe) and the wipe drag on the card (`tools/viewer_direct_edit.py --handles wipe`: press and moves timed to the first
 presented frame that shows them), and writes both under "paused" in `result.json`. Same rules as `--edit`: nothing is
 claimed for the laptop or the A6000 machine until its own `result.json` exists.
+`--playback` (Lane 2, 10/22) runs `tools/viewer_direct_overlay_play.py` in the real NodeBased window: a picture handed to
+the direct picture at 24 a second with an animated Roto shape selected, once with the handles left frozen (as before
+10/22) and once following every frame, at 1080p and 4K. It records the Qt thread's time for the overlay per frame (95th
+percentile against the 4 ms gate), the pictures the card showed with and without the overlay, and the adapter, under
+"playback" in `result.json`. Same rules as `--edit`.
+`--matrix` runs the four present-cadence cases and then these two as well (playback with the overlay, and the paused
+edit), so one ten-minute run on a machine answers "can the direct picture be the default here": the cadence on its own
+panel, the overlay following playback, and an edit while paused. Nothing is claimed for a machine until its own
+`result.json` exists.
 Present return is when the call returns, not when light leaves the panel; no photon measurement is claimed.
 """
 from __future__ import annotations
@@ -74,6 +84,9 @@ def parse_args(argv=None):
     p.add_argument("--paused-edits", type=int, default=25, help="timed edits per path and round for --paused")
     p.add_argument("--paused-rounds", type=int, default=3,
                    help="rounds of Viewer-then-direct for --paused (the gate reads the pooled edits)")
+    p.add_argument("--playback", action="store_true",
+                   help="time playback with the overlay following every frame, against the overlay left frozen")
+    p.add_argument("--playback-seconds", type=int, default=15, help="seconds per playback run for --playback and --matrix")
     p.add_argument("--read", metavar="DIR", help="print the summary of a finished run or matrix folder and exit")
     a = p.parse_args(argv)
     if a.seconds < 10 or a.seconds > 120:
@@ -85,6 +98,7 @@ MATRIX = [("Dx12", "high-performance"), ("Vulkan", "high-performance"),
           ("auto", "high-performance"), ("Dx12", "low-power")]
 EDIT_KEYS = ("status", "platform", "driver", "adapter", "size", "gate_limit_ms", "worst_p95_ms", "failed", "handles",
              "measured_on_windows")
+PLAYBACK_KEYS = ("status", "platform", "adapter", "gate_limit_ms", "worst_overlay_p95_ms", "sizes", "measured_on_windows")
 PAUSED_KEYS = ("status", "platform", "driver", "adapter", "size", "wipe", "cost", "measured_on_windows")
 RESULT_KEYS = ("status", "platform", "requested_backend", "requested_preference", "selected_adapter",
                "selected_backend", "selection_matches_requested_class", "cadence")
@@ -177,6 +191,81 @@ def build_paused_result(cost_raw, wipe_raw, preference="high-performance"):
                     "present return, not photons"}
 
 
+def build_playback_result(runs, preference="high-performance", limit_ms=4.0, keep=0.9):
+    """The compact record for playback with the overlay: `runs` maps a size ("1920x1080") to the JSON of
+    `tools/viewer_direct_overlay_play.py` with the overlay "off" and "on". Built from the tools' output, never invented.
+    A size passes when the overlay's 95th percentile (Qt thread, per drawn frame) is under `limit_ms` and the card showed at
+    least `keep` of the pictures it showed with the overlay left frozen."""
+    sizes, worst, platform_name, adapter, missing = {}, 0.0, "", None, False
+    for size, pair in (runs or {}).items():
+        off, on = (pair or {}).get("off"), (pair or {}).get("on")
+        if not off or not on:
+            sizes[size] = {"status": "incomplete"}
+            missing = True
+            continue
+        p95 = on.get("overlay_p95_wall_ms")
+        shown_off, shown_on = off.get("frames_shown_by_dock", 0), on.get("frames_shown_by_dock", 0)
+        ok = p95 is not None and p95 < limit_ms and shown_on >= keep * shown_off
+        worst = max(worst, p95 or 0.0)
+        platform_name = platform_name or str(on.get("platform") or "")
+        adapter = adapter or (on.get("selection") or {}).get("adapter")
+        sizes[size] = {"status": "passed" if ok else "failed", "overlay_p95_wall_ms": p95,
+                       "overlay_p95_cpu_ms": on.get("overlay_p95_cpu_ms"),
+                       "overlay_p50_wall_ms": (on.get("overlay_per_draw_wall_ms") or {}).get("p50"),
+                       "pictures_produced": on.get("frames_produced"), "shown_with_overlay": shown_on,
+                       "shown_without_overlay": shown_off, "draws_with_overlay": on.get("draws"),
+                       "overlay_uploads": on.get("overlay_uploads")}
+    failed = [size for size, row in sizes.items() if row.get("status") == "failed"]
+    ran = bool(sizes) and not missing
+    return {"status": ("passed" if not failed else "failed") if ran else "incomplete", "requested_preference": preference,
+            "platform": platform_name, "adapter": adapter, "gate_limit_ms": limit_ms, "keep_fraction": keep,
+            "worst_overlay_p95_ms": worst, "failed": failed, "sizes": sizes,
+            "measured_on_windows": platform_name.lower() == "windows",
+            "note": "Qt-thread time for the overlay at each drawn frame (recording on the Qt thread, replay and compare on a "
+                    "worker, copy record in the draw); pictures shown are what the card drew from 24 a second handed over; "
+                    "present return, not photons"}
+
+
+def describe_playback(playback):
+    lines = [f"  playback with the overlay following: {playback.get('status')} (adapter {playback.get('adapter')}, "
+             f"overlay limit {playback.get('gate_limit_ms')} ms at the 95th percentile)"]
+    for size, row in (playback.get("sizes") or {}).items():
+        lines.append(f"    {size}: overlay p50 {row.get('overlay_p50_wall_ms')} ms, p95 {row.get('overlay_p95_wall_ms')} ms "
+                     f"(CPU {row.get('overlay_p95_cpu_ms')} ms); pictures shown {row.get('shown_with_overlay')} with, "
+                     f"{row.get('shown_without_overlay')} without ({row.get('status')})")
+    return lines
+
+
+def run_playback(a, out):
+    """Run the playback check in child processes (a native abort cannot take the check down); writes result.json."""
+    out.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    env["NODEBASED_DIRECT_ADAPTER"] = "discrete" if a.preference == "high-performance" else "integrated"
+    tool = Path(__file__).resolve().with_name("viewer_direct_overlay_play.py")
+    runs, codes = {}, {}
+    for size in ("1920x1080", "3840x2160"):
+        runs[size] = {}
+        for overlay in ("off", "on"):
+            raw_file = out / f"playback-{size}-{overlay}.json"
+            cmd = [sys.executable, str(tool), str(raw_file), "--feed", "--size", size, "--overlay", overlay,
+                   "--seconds", str(a.playback_seconds)]
+            print("Starting playback", size, "overlay", overlay, ":", " ".join(cmd), flush=True)
+            with (out / f"playback-{size}-{overlay}.log").open("w", encoding="utf-8") as log:
+                try:
+                    codes[f"{size} {overlay}"] = subprocess.run(
+                        cmd, stdout=log, stderr=subprocess.STDOUT, env=env, cwd=str(tool.parent.parent),
+                        timeout=a.playback_seconds + 300).returncode
+                except subprocess.TimeoutExpired:
+                    codes[f"{size} {overlay}"] = "timeout; child stopped"
+            if raw_file.exists():
+                runs[size][overlay] = json.loads(raw_file.read_text(encoding="utf-8"))
+    playback = build_playback_result(runs, a.preference)
+    playback["returncodes"] = codes
+    save(out / "result.json", {"playback": playback})
+    print("\n".join(describe_playback(playback)), "\ndetails in", str(out), flush=True)
+    return 0 if playback.get("status") == "passed" else 1
+
+
 def describe_paused(paused):
     wipe, cost = paused.get("wipe") or {}, paused.get("cost") or {}
     lines = [f"  paused picture: {paused.get('status')} (adapter {paused.get('adapter')}, input {paused.get('driver')})",
@@ -259,6 +348,8 @@ def run_edit(a, out):
 
 
 def describe(result):
+    if "playback" in result and "selected_adapter" not in result:
+        return describe_playback(result["playback"])
     if "paused" in result and "selected_adapter" not in result:
         return describe_paused(result["paused"])
     if "edit" in result and "selected_adapter" not in result:
@@ -357,6 +448,27 @@ def self_check():
     wipe_raw["gate"] = {"limit_ms": 50.0, "worst_p95_ms": 61.0, "failed": ["wipe centre"], "passed": False}
     assert build_paused_result(cost_raw, wipe_raw)["status"] == "failed"
     assert describe_paused(paused)[0].startswith("  paused picture")
+    assert parse_args(["--playback"]).playback is True and parse_args([]).playback is False
+    assert parse_args(["--matrix"]).playback_seconds == 15
+    def play(shown, p95):
+        return {"platform": "windows", "frames_produced": 240, "frames_shown_by_dock": shown, "draws": 300,
+                "overlay_uploads": 200, "overlay_p95_wall_ms": p95, "overlay_p95_cpu_ms": p95 * 0.8,
+                "overlay_per_draw_wall_ms": {"p50": p95 / 4}, "selection": {"adapter": "Synthetic GPU"}}
+    playback = build_playback_result({"1920x1080": {"off": play(230, 0.03), "on": play(228, 1.2)},
+                                      "3840x2160": {"off": play(170, 0.05), "on": play(160, 2.6)}})
+    assert all(key in playback for key in PLAYBACK_KEYS), sorted(set(PLAYBACK_KEYS) - set(playback))
+    assert playback["status"] == "passed" and playback["measured_on_windows"] is True and playback["failed"] == []
+    assert playback["worst_overlay_p95_ms"] == 2.6 and playback["sizes"]["3840x2160"]["shown_without_overlay"] == 170
+    slow = build_playback_result({"1920x1080": {"off": play(230, 0.03), "on": play(228, 4.5)}})
+    assert slow["status"] == "failed" and slow["failed"] == ["1920x1080"]
+    dropped = build_playback_result({"1920x1080": {"off": play(230, 0.03), "on": play(150, 1.0)}})
+    assert dropped["status"] == "failed"
+    assert build_playback_result({"1920x1080": {"off": play(230, 0.03)}})["status"] == "incomplete"
+    assert build_playback_result({})["status"] == "incomplete"
+    assert describe_playback(playback)[0].startswith("  playback with the overlay")
+    with tempfile.TemporaryDirectory() as folder:
+        save(Path(folder) / "result.json", {"playback": playback})
+        assert read_back(folder) == 0
     with tempfile.TemporaryDirectory() as folder:
         save(Path(folder) / "result.json", {"paused": paused})
         assert read_back(folder) == 0
@@ -389,6 +501,8 @@ def main():
         return run_edit(a, Path(a.out))
     if a.paused and not a.matrix:
         return run_paused(a, Path(a.out))
+    if a.playback and not a.matrix:
+        return run_playback(a, Path(a.out))
     if sys.platform != "win32":
         raise SystemExit("Windows measurement only; --self-check is safe on other systems")
     if a.matrix:
@@ -422,6 +536,15 @@ def main():
                               "requested_preference": preference, "selected_adapter": {}, "cadence": {}})
             save(root / "result.json", {"cases": cases, "returncodes": records})
             print(case, code, "details in", str(root / (case + ".log")), flush=True)
+        # The cases that answer "can it be the default here": playback with the overlay following, and an edit while paused.
+        for name, run, key in (("playback-overlay", run_playback, "playback"), ("paused-edit", run_paused, "paused")):
+            code = run(a, root / name)
+            extra = root / name / "result.json"
+            cases.append(json.loads(extra.read_text(encoding="utf-8")) if extra.exists()
+                         else {key: {"status": "no result", "sizes": {}, "wipe": {}, "cost": {}, "handles": {}}})
+            records.append({"case": name, "returncode": code})
+            save(root / "matrix.json", records)
+            save(root / "result.json", {"cases": cases, "returncodes": records})
         return int(any(r["returncode"] != 0 for r in records))
 
     out = Path(a.out)

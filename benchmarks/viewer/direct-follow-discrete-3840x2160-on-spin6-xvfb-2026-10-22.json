@@ -1,0 +1,187 @@
+{
+ "display": ":93",
+ "platform": "xcb",
+ "size": [
+  3840,
+  2160
+ ],
+ "overlay": "on",
+ "picture": "checker",
+ "feed": true,
+ "seconds": 10.03,
+ "selection": {
+  "requested_kind": "discrete",
+  "requested_backends": [
+   "auto"
+  ],
+  "selected_device": "NVIDIA GeForce RTX 3080 Ti",
+  "selected_backend": "Vulkan",
+  "attempts": [
+   {
+    "request": "power_preference=high-performance, backend=auto",
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "backend": "Vulkan"
+   }
+  ],
+  "note": "",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti"
+ },
+ "frames_produced": 241,
+ "frames_shown_by_dock": 143,
+ "draws": 231,
+ "overlay_uploads": 169,
+ "overlay_unchanged": 0,
+ "overlay_images_painted": 169,
+ "distinct_playheads_seen": 240,
+ "distinct_overlay_frames": 168,
+ "qt_thread_wall_ms": {
+  "frame step (readout and overlay request)": {
+   "n": 482,
+   "p50": 0.02,
+   "p95": 0.04,
+   "max": 0.56,
+   "mean": 0.03
+  },
+  "hand-over to the dock": {
+   "n": 241,
+   "p50": 0.06,
+   "p95": 0.36,
+   "max": 1.43,
+   "mean": 0.12
+  },
+  "overlay provider (recording and image)": {
+   "n": 169,
+   "p50": 0.24,
+   "p95": 1.11,
+   "max": 2.06,
+   "mean": 0.37
+  },
+  "  overlay ring pump (slot map, job start)": {
+   "n": 402,
+   "p50": 0.0,
+   "p95": 0.06,
+   "max": 0.28,
+   "mean": 0.02
+  },
+  "  overlay hand-over to the worker": {
+   "n": 169,
+   "p50": 0.03,
+   "p95": 0.13,
+   "max": 0.37,
+   "mean": 0.04
+  },
+  "overlay paint (recording, image, upload)": {
+   "n": 233,
+   "p50": 0.26,
+   "p95": 1.08,
+   "max": 2.57,
+   "mean": 0.32
+  },
+  "  overlay ring take (unmap)": {
+   "n": 233,
+   "p50": 0.01,
+   "p95": 0.04,
+   "max": 0.8,
+   "mean": 0.03
+  },
+  "overlay copy record (inside the draw)": {
+   "n": 233,
+   "p50": 0.06,
+   "p95": 0.18,
+   "max": 0.86,
+   "mean": 0.07
+  },
+  "dock draw": {
+   "n": 233,
+   "p50": 1.41,
+   "p95": 9.75,
+   "max": 27.76,
+   "mean": 2.45
+  }
+ },
+ "qt_thread_cpu_ms": {
+  "frame step (readout and overlay request)": {
+   "n": 482,
+   "p50": 0.02,
+   "p95": 0.04,
+   "max": 0.53,
+   "mean": 0.03
+  },
+  "hand-over to the dock": {
+   "n": 241,
+   "p50": 0.06,
+   "p95": 0.22,
+   "max": 1.42,
+   "mean": 0.1
+  },
+  "overlay provider (recording and image)": {
+   "n": 169,
+   "p50": 0.24,
+   "p95": 1.1,
+   "max": 2.06,
+   "mean": 0.37
+  },
+  "  overlay ring pump (slot map, job start)": {
+   "n": 402,
+   "p50": 0.0,
+   "p95": 0.06,
+   "max": 0.28,
+   "mean": 0.02
+  },
+  "  overlay hand-over to the worker": {
+   "n": 169,
+   "p50": 0.03,
+   "p95": 0.13,
+   "max": 0.37,
+   "mean": 0.04
+  },
+  "overlay paint (recording, image, upload)": {
+   "n": 233,
+   "p50": 0.26,
+   "p95": 1.07,
+   "max": 2.55,
+   "mean": 0.31
+  },
+  "  overlay ring take (unmap)": {
+   "n": 233,
+   "p50": 0.01,
+   "p95": 0.03,
+   "max": 0.08,
+   "mean": 0.01
+  },
+  "overlay copy record (inside the draw)": {
+   "n": 233,
+   "p50": 0.06,
+   "p95": 0.14,
+   "max": 0.22,
+   "mean": 0.06
+  },
+  "dock draw": {
+   "n": 233,
+   "p50": 0.65,
+   "p95": 2.0,
+   "max": 11.86,
+   "mean": 0.89
+  }
+ },
+ "gate_ms": 4.0,
+ "overlay_per_draw_wall_ms": {
+  "n": 233,
+  "p50": 0.31,
+  "p95": 1.12,
+  "max": 2.65,
+  "mean": 0.39
+ },
+ "overlay_per_draw_cpu_ms": {
+  "n": 233,
+  "p50": 0.3,
+  "p95": 1.1,
+  "max": 2.64,
+  "mean": 0.37
+ },
+ "overlay_p95_wall_ms": 1.12,
+ "overlay_p95_cpu_ms": 1.1,
+ "gate_met": true,
+ "dock_dropped_ready": 0,
+ "spin": 6
+}

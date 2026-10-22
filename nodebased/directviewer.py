@@ -58,7 +58,7 @@ EMPTY_OVERLAY = object()
 SAME_OVERLAY = object()
 BADGE_CACHE = 32              # corner labels (tier badge, picture size and zoom) kept on the card
 PAINT_BAND_GAP = 48           # changed overlay rows closer together than this go up as one band
-OVERLAY_SLOTS = 3             # staging buffers of the overlay ring: one being painted, one waiting for a draw, one the card copies from
+OVERLAY_SLOTS = 5             # staging buffers of the overlay ring: one being painted, one waiting for a draw, one the card copies from
 OVERLAY_BANDS = 64            # room kept in an overlay staging buffer for the alignment gaps of this many bands
 
 
@@ -723,29 +723,31 @@ class OverlayRing:
             slot = min(free, key=lambda s: s["used"])
             slot["state"] = "filling"
             self.pending, self.running = None, job
-        view = None
-        if not job["empty"]:
-            width, height = job["size"]
-            need = padded_row(width, 4) * height + OVERLAY_BANDS * ROW_ALIGN
-            buffer = slot["buffer"]
-            if buffer is None or slot["capacity"] < need:
-                if buffer is not None:
-                    if buffer.map_state == "mapped":
-                        buffer.unmap()
-                    buffer.destroy()
-                buffer = self.device.create_buffer(size=need, usage=self.wgpu.BufferUsage.MAP_WRITE | self.wgpu.BufferUsage.COPY_SRC,
-                                                   mapped_at_creation=True)
-                slot["buffer"], slot["capacity"] = buffer, need
-                self.counters["overlay_buffer_creates"] += 1
-            elif buffer.map_state != "mapped":
-                buffer.map_sync("WRITE")
-            view = buffer._experimental_get_mapped_range(0, slot["capacity"])
         job["slot"] = slot
         if self.pool is None:
-            self._run(job, slot, view)
+            self._run(job, slot)
         else:
             self.jobs = [item for item in self.jobs if not item.done()]
-            self.jobs.append(self.pool.submit(self._run, job, slot, view))
+            self.jobs.append(self.pool.submit(self._run, job, slot))
+
+    def _map(self, slot, job):
+        """The slot's staging memory, mapped for writing and big enough for the job. On the worker: mapping waits for
+        the card to finish with the buffer (the copy of the overlay before last), which must not hold the Qt thread."""
+        width, height = job["size"]
+        need = padded_row(width, 4) * height + OVERLAY_BANDS * ROW_ALIGN
+        buffer = slot["buffer"]
+        if buffer is None or slot["capacity"] < need:
+            if buffer is not None:
+                if buffer.map_state == "mapped":
+                    buffer.unmap()
+                buffer.destroy()
+            buffer = self.device.create_buffer(size=need, usage=self.wgpu.BufferUsage.MAP_WRITE | self.wgpu.BufferUsage.COPY_SRC,
+                                               mapped_at_creation=True)
+            slot["buffer"], slot["capacity"] = buffer, need
+            self.counters["overlay_buffer_creates"] += 1
+        elif buffer.map_state != "mapped":
+            buffer.map_sync("WRITE")
+        return buffer._experimental_get_mapped_range(0, slot["capacity"])
 
     def take(self):
         """The finished slots, oldest first, unmapped and ready to copy from. Failed ones and ones from an older
@@ -811,9 +813,10 @@ class OverlayRing:
         self.pending = self.running = None
 
     # -- worker thread -------------------------------------------------------------------------
-    def _run(self, job, slot, view):
+    def _run(self, job, slot):
         started = time.perf_counter()
         try:
+            view = None if job["empty"] else self._map(slot, job)
             result = self._paint(job, slot, view)
             state = "ready"
         except Exception:
