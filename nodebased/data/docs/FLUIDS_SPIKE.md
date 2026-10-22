@@ -1221,6 +1221,14 @@ These are visual findings only; solver and lighting changes are outside this ste
 
 ## Lane 6 step notes
 
+### A: checkpoint callbacks for progressive solves (partial)
+
+`simcache.solve_to_frame` now offers an optional callback after each complete frame has been stored under its run key.
+The callback receives the frame number and checkpoint; cancellation or an exception during a frame leaves that frame
+uncached and unpublished. The callback stream is bit-identical to the corresponding full bake in the deterministic
+cache tests. This is the solver-side seam only: no timeline, stale-picture badge, edit-cancellation UI, stage profile,
+or adapter bake measurements have landed yet.
+
 ### S1: the Hot pour in a rendered shot (finish 1)
 
 Completed the pending proof: the 120-frame 32-cell bake took 26.17 seconds on the RTX 3080 Ti; full-size path-traced stills

@@ -53,6 +53,37 @@ class SimCacheTests(unittest.TestCase):
             simcache.solve_to_frame(cache_b, "run", 50, 1, 2, 3, initial, step)
             self.assertEqual(calls_b[0], 60)
 
+    def test_progressive_frames_match_a_full_bake_bit_for_bit(self):
+        full = simcache.solve_to_frame(simcache.SimCache(), "full", 12, 1, 2, 9, *self.solver())
+        cache = simcache.SimCache()
+        published = []
+        progressive = simcache.solve_to_frame(cache, "progressive", 12, 1, 2, 9,
+                                              *self.solver(), on_frame=lambda frame, state:
+                                              published.append((frame, simcache.State(state.arrays, state.meta))))
+
+        self.assertEqual(progressive, full)
+        self.assertEqual([frame for frame, _ in published], list(range(1, 13)))
+        self.assertEqual(published[-1][1], full)
+        self.assertEqual(cache.frames("progressive"), list(range(1, 13)))
+
+    def test_cancelled_frame_is_never_published_or_cached(self):
+        cache = simcache.SimCache()
+        published = []
+        initial, step = self.solver()
+
+        def cancel_during_second_frame(state, frame, substep, seed):
+            if frame == 2:
+                raise Cancelled()
+            return step(state, frame, substep, seed)
+
+        with self.assertRaises(Cancelled):
+            simcache.solve_to_frame(cache, "edit-new", 4, 1, 1, 3, initial, cancel_during_second_frame,
+                                    on_frame=lambda frame, state: published.append(frame))
+
+        self.assertEqual(published, [1])
+        self.assertEqual(cache.frames("edit-new"), [1])
+        self.assertIsNone(cache.get("edit-new", 2))
+
     def test_invalidation_on_upstream_or_parameter_change(self):
         run_a = simcache.run_key("upstream-a", {"rate": 1})
         run_b = simcache.run_key("upstream-b", {"rate": 1})

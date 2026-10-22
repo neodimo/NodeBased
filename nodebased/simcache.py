@@ -561,7 +561,7 @@ class SimCache:
 
 
 def solve_to_frame(cache: SimCache, run: str, target_frame: int, start_frame: int,
-                   substeps: int, seed: int, initial_state, step, cancel=None) -> "State":
+                   substeps: int, seed: int, initial_state, step, cancel=None, on_frame=None) -> "State":
     if target_frame < start_frame:
         return initial_state(seed)
     cached = cache.get(run, target_frame)
@@ -580,4 +580,9 @@ def solve_to_frame(cache: SimCache, run: str, target_frame: int, start_frame: in
             state = step(state, frame, substep, seed)
         cache.timing[(run, frame)] = (time.perf_counter() - started) * 1000.0
         cache.put(run, frame, state)
+        # Publish only after the complete frame has been checkpointed. Consumers can safely
+        # display/play these frames while later frames are solving; cancellation never exposes
+        # a half-step or a frame that has not been banked under this run key.
+        if on_frame is not None:
+            on_frame(frame, state)
     return state
