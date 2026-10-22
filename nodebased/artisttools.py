@@ -233,13 +233,17 @@ class CacheInspectorPanel(QWidget):
         # left `None` in tests that only check invalidation and listing.
         self.resolve_callback = None
 
-    def set_direct_memory(self, retained_bytes, staging_bytes, open_=True):
-        """Show the Direct picture's retained picture (CPU copy kept for recovery) and its upload buffers."""
+    def set_direct_memory(self, retained_bytes, staging_bytes, open_=True, b_texture_bytes=0):
+        """Show the Direct picture's retained picture (CPU copy kept for recovery), its upload buffers and, when
+        an A/B compare is on the card, the B texture."""
         if not open_:
             self.direct_memory.setText("Direct picture: closed, holds no memory")
         else:
-            self.direct_memory.setText(f"Direct picture: retained picture {retained_bytes / 1048576:.1f} MB, "
-                                       f"upload buffers {staging_bytes / 1048576:.1f} MB")
+            text = (f"Direct picture: retained picture {retained_bytes / 1048576:.1f} MB, "
+                    f"upload buffers {staging_bytes / 1048576:.1f} MB")
+            if b_texture_bytes:
+                text += f", B texture {b_texture_bytes / 1048576:.1f} MB"
+            self.direct_memory.setText(text)
         self.direct_memory.show()
 
     def set_cache(self, cache, run: str, start_frame: int, end_frame: int):

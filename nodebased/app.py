@@ -1531,6 +1531,7 @@ class Viewer(PanZoomView):
         self.wipe = dict(compare_model.WIPE_DEFAULT)
         self.wipe_drag = None
         self.wipe_pixmap = None
+        self.card_wipe = False   # the direct picture's card draws B's half of the wipe; only the line is painted here
         self.wipe_pos = QPointF(0, 0)
         # Region of interest: `roi_drag` is the drag in progress (the document only changes on
         # release); `backdrop` is the last full-canvas picture, kept so the outside of the ROI can
@@ -1860,8 +1861,15 @@ class Viewer(PanZoomView):
                          if render_region is not None else QPointF(0, 0))
 
     def _wipe_active(self):
-        return (self.compare_mode() == "wipe" and self.wipe_pixmap is not None
+        return (self.compare_mode() == "wipe" and (self.wipe_pixmap is not None or self.card_wipe)
                 and self.format_rect is not None)
+
+    def wipe_line(self):
+        """The wipe line for the card's shader: centre x, y and the unit normal towards B, in scene units."""
+        if self.format_rect is None:
+            return None
+        centre, _, (nx, ny), _ = self._wipe_scene_geometry()
+        return (centre.x(), centre.y(), nx, ny)
 
     def _wipe_scene_geometry(self):
         """Centre, unit line direction, unit B-side normal and rotation-handle point, in scene units."""
@@ -1908,6 +1916,8 @@ class Viewer(PanZoomView):
 
     def _draw_wipe_b(self, painter):
         """B's half of the picture: the already-evaluated B pixmap clipped to the far side of the line."""
+        if self.wipe_pixmap is None:
+            return      # the card draws B's half
         centre, (dx, dy), (nx, ny), _ = self._wipe_scene_geometry()
         big = 1e6
         a = QPointF(centre.x() - dx * big, centre.y() - dy * big)
@@ -14068,12 +14078,10 @@ class Window(QMainWindow):
 
     def _direct_linear_for(self, request, view, frame=None):
         """Runs on the worker. True when this frame goes to the direct viewer as floats and skips
-        `to_qimage`: the direct picture is up, the card can run `view`, no B buffer is in play (compare
-        pictures are still built on the processor) and the frame fits the card (a larger one is converted
-        here, on the worker, and the Viewer shows it). Playing or paused alike: one path for both."""
+        `to_qimage`: the direct picture is up, the card can run `view` and the frame fits the card (a larger
+        one is converted here, on the worker, and the Viewer shows it). Playing or paused alike: one path for
+        both. A B buffer is added to the picture afterwards (`_compare_outputs`) when the pair fits too."""
         if not getattr(self, "_direct_linear_on", False):
-            return False
-        if compare_model.active_b(request.document)[1] is not None:
             return False
         limits = getattr(self, "_direct_limits", None)
         if frame is not None and limits and directviewer.too_large(
@@ -14125,6 +14133,17 @@ class Window(QMainWindow):
             # B failing must not take A down with it: A stays on screen and the status says why.
             return image, f"  ·  B unavailable: {error}"
         extras = {"frame_b": frame_b, "mode": mode, "image_b": None}
+        if request.display and isinstance(image, carddisplay.LazyPicture):
+            reason = self._direct_pair_refusal(frame, frame_b)
+            if not reason:
+                # The card does the compare: B goes up beside A as floats and nothing is built on the processor.
+                image.with_b(frame_b, mode)
+                self.compare_results[(request.generation, request.frame)] = extras
+                return image, f"  ·  compare {mode}"
+            image = image.image()       # the pair does not fit the card: the Viewer shows it, built here
+            note = f"  ·  compare on the Viewer: {reason.removeprefix('Direct picture: ')}"
+        else:
+            note = f"  ·  compare {mode}"
         if request.display:
             def show(pixels):
                 return to_qimage(pixels, exposure, channel, background=background, view=view, look=look)
@@ -14135,7 +14154,18 @@ class Window(QMainWindow):
             elif mode in compare_model.COMBINED_MODES:
                 image = show(compare_model.combine(mode, np.asarray(frame, dtype=np.float32), frame_b))
             self.compare_results[(request.generation, request.frame)] = extras
-        return image, f"  ·  compare {mode}"
+        return image, note
+
+    def _direct_pair_refusal(self, frame, frame_b):
+        """Runs on the worker. Why the A and B frames together do not fit the card (named for the status line),
+        or "" when they do or the card's limits are not known yet (the presenter decides then)."""
+        limits = getattr(self, "_direct_limits", None)
+        if not limits:
+            return ""
+        width, height = int(frame.shape[1]), int(frame.shape[0])
+        texel = directviewer.picture_layout("linear", frame)[3]
+        texel_b = directviewer.picture_layout("linear", frame_b)[3]
+        return directviewer.pair_too_large(limits, width, height, texel, texel_b, limits.get("device", ""))
 
     def _offer_cached_proxy(self, request, cancel, target, view, exposure, channel, background,
                             look=None):
@@ -14228,9 +14258,13 @@ class Window(QMainWindow):
         if isinstance(image, carddisplay.LazyPicture):
             if self._show_direct_linear(image, scale, render_region, generation):
                 return
-            image = image.image()   # the card refused it: build the picture on the processor after all
+            lazy = image
+            image = lazy.image()    # the card refused it: build the picture on the processor after all
+            if image_b is None:
+                image_b = lazy.image_b()
         previous = self.viewer.sceneRect().size()
         self._viewer_parked = False
+        self.viewer.card_wipe = False
         shown_image = image   # the proxy-sized picture, before the display upscale below
         self.viewer.set_compare_image(image_b, scale, render_region)
         # The pixmap is displayed in full-resolution scene coordinates, but the live frame stays
@@ -14367,6 +14401,7 @@ class Window(QMainWindow):
                 return
             widget.failed.connect(self._direct_failed)
             widget.overlay_provider = self._direct_overlay
+            widget.compare_provider = self.viewer.wipe_line
             widget.hover = self._direct_hover
             widget.edit = self._direct_edit if self.preferences.direct_edit() else None
             self.viewer.cursor_sink = getattr(widget, "mirror_cursor", None)
@@ -14435,7 +14470,8 @@ class Window(QMainWindow):
         if widget is None or dock is None or not dock.isVisible() or presenter is None:
             inspector.set_direct_memory(0, 0, open_=False)
             return
-        inspector.set_direct_memory(presenter.retained_bytes(), presenter.staging_bytes())
+        inspector.set_direct_memory(presenter.retained_bytes(), presenter.staging_bytes(),
+                                    b_texture_bytes=presenter.b_texture_bytes())
 
     def _direct_handed_over(self, accepted):
         """After a hand-over: name a refusal (too large for the card) once, keep the card limits for the
@@ -14466,7 +14502,8 @@ class Window(QMainWindow):
                            render_region.full_width * scale, render_region.full_height * scale)
         else:
             rect = format_rect = (0.0, 0.0, width * scale, height * scale)
-        accepted = self.direct_widget.submit_linear(picture.frame, picture.settings, rect, format_rect, generation)
+        accepted = self.direct_widget.submit_linear(picture.frame, picture.settings, rect, format_rect, generation,
+                                                    picture.frame_b, picture.compare)
         if self.direct_widget is not None:
             self._direct_handed_over(accepted)
         if not accepted:
@@ -14475,6 +14512,9 @@ class Window(QMainWindow):
             self._direct_linear_on = False
             return False
         self.viewer.readout_geometry = (scale, render_region, (width, height))
+        # B's half of a wipe is the card's now: the Viewer paints the line and the handles over it, no pixmap.
+        self.viewer.set_compare_image(None, scale, render_region)
+        self.viewer.card_wipe = picture.compare == "wipe"
         self.direct_lazy = picture
         self.direct_shown = (picture, scale, render_region)
         self.direct_linear_shown = getattr(self, "direct_linear_shown", 0) + 1
@@ -14513,7 +14553,7 @@ class Window(QMainWindow):
         shown = getattr(self, "direct_shown", None)
         if shown is not None:
             picture, scale, render_region = shown
-            self._show_image(picture.image(), scale, render_region)
+            self._show_image(picture.image(), scale, render_region, picture.image_b())
 
     def display_image(self):
         """The 8-bit picture the Viewer would show now (built from the float frame when only the card has it)."""

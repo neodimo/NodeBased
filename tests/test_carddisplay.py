@@ -286,16 +286,19 @@ def fake_widget_class():
         def __init__(self, parent=None):
             super().__init__(parent)
             self.error = None
-            self.linear, self.images = [], []
+            self.linear, self.images, self.pairs = [], [], []
+            self.compare_provider = None
 
         def submit(self, image, rect, format_rect=None, generation=None):
             self.images.append(image)
             return True
 
-        def submit_linear(self, frame, settings, rect, format_rect=None, generation=None):
+        def submit_linear(self, frame, settings, rect, format_rect=None, generation=None, frame_b=None,
+                          compare="A only"):
             if not self.accept_linear:
                 return False
             self.linear.append((frame, settings, tuple(rect)))
+            self.pairs.append((frame_b, compare))
             return True
 
         def overlay_dirty(self):
@@ -310,13 +313,15 @@ def fake_widget_class():
 class DirectWindowCase(unittest.TestCase):
     """A real Window with the direct dock open on a fake widget that records what the window hands it."""
 
+    document = staticmethod(lambda: None)
+
     def setUp(self):
         import uuid
         import unittest.mock
         from nodebased.app import Window
         from tests.waiting import wait_until
         QApplication.instance() or QApplication([])
-        self.window = Window(agent_name="nodebased-test-" + uuid.uuid4().hex)
+        self.window = Window(self.document(), agent_name="nodebased-test-" + uuid.uuid4().hex)
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
         with unittest.mock.patch.object(dv, "make_widget", fake_widget_class()):
@@ -340,10 +345,13 @@ class DirectWindowCase(unittest.TestCase):
 class PlaybackRoutingTests(DirectWindowCase):
     """With the direct picture up, playback and paused frames go to the card as floats and skip `to_qimage`."""
 
-    def test_worker_routes_playing_and_paused_frames_but_not_a_b_buffer(self):
+    def test_worker_routes_playing_and_paused_frames_with_or_without_a_b_buffer(self):
         w = self.window
         self.assertTrue(w._direct_linear_for(self.request(), "ACES 2.0"))
         self.assertTrue(w._direct_linear_for(self.request(playing=False), "ACES 2.0"))
+        w.command({"op": "viewer_input", "slot": 2, "id": next(iter(w.dispatcher.document["nodes"])), "activate": False})
+        w.command({"op": "viewer_compare", "b": 2, "mode": "wipe"})
+        self.assertTrue(w._direct_linear_for(self.request(playing=False), "ACES 2.0"))   # B rides along on the card
         self.assertFalse(w._direct_linear_for(self.request(), "No such view"))
         w.direct_action.setChecked(False)
         self.assertFalse(w._direct_linear_for(self.request(), "ACES 2.0"))
@@ -433,6 +441,95 @@ class PausedPictureTests(DirectWindowCase):
             self.assertTrue(wait_until(lambda: len(self.widget.linear) > before, timeout=20))
         self.assertEqual(calls, [])
         self.assertFalse(w.direct_lazy.built())
+
+
+class CompareOnTheCardTests(DirectWindowCase):
+    """With a B buffer chosen, the window hands the card A and B as floats and builds neither as 8 bits."""
+
+    document = staticmethod(lambda: __import__("tests.test_viewer_compare", fromlist=["x"]).constant_document())
+
+    def settle(self, mode):
+        """Until the card has been handed a picture with this compare mode (earlier renders may still land first)."""
+        from tests.waiting import wait_until
+        self.assertTrue(wait_until(lambda: bool(self.widget.pairs) and self.widget.pairs[-1][1] == mode, timeout=30))
+        QApplication.instance().processEvents()
+
+    def choose(self, mode):
+        w = self.window
+        w.command({"op": "viewer_input", "slot": 2, "id": "b", "activate": False})
+        w.command({"op": "viewer_compare", "b": 2, "mode": mode})
+
+    def count_conversions(self, action):
+        import unittest.mock
+        import nodebased.app as app_module
+        calls, real = [], app_module.to_qimage
+
+        def counting(*args, **kwargs):
+            calls.append(1)
+            return real(*args, **kwargs)
+        with unittest.mock.patch.object(app_module, "to_qimage", counting):
+            action()
+        return len(calls)
+
+    def test_every_compare_mode_reaches_the_card_with_b_and_builds_nothing(self):
+        w = self.window
+        for mode in ("wipe", "B only", "over", "under", "minus", "difference"):
+            self.choose(mode)
+            conversions = self.count_conversions(lambda: self.settle(mode))
+            frame_b, compare = self.widget.pairs[-1]
+            with self.subTest(mode=mode):
+                self.assertEqual(compare, mode)
+                self.assertIsNotNone(frame_b)
+                self.assertEqual(frame_b.shape, self.widget.linear[-1][0].shape)
+                self.assertEqual(conversions, 0)
+                self.assertFalse(w.direct_lazy.built())
+                self.assertIsNotNone(w.frame_b)                  # the readout still reads B from the float frame
+        self.assertEqual(self.window.viewer.card_wipe, False)       # the last mode was not a wipe
+
+    def test_the_wipe_line_and_handles_stay_on_the_viewer_and_the_card_draws_b(self):
+        w = self.window
+        self.choose("wipe")
+        self.settle("wipe")
+        viewer = w.viewer
+        self.assertTrue(viewer.card_wipe)
+        self.assertIsNone(viewer.wipe_pixmap)
+        self.assertTrue(viewer._wipe_active())
+        cx, cy, nx, ny = viewer.wipe_line()
+        rect = viewer.format_rect
+        self.assertAlmostEqual(cx, rect.left() + rect.width() / 2)
+        self.assertAlmostEqual(cy, rect.top() + rect.height() / 2)
+        self.assertEqual((round(nx, 6), round(ny, 6)), (1.0, 0.0))
+        viewer.wipe["angle"] = 90.0
+        self.assertEqual(tuple(round(v, 6) for v in viewer.wipe_line()[2:]), (0.0, 1.0))
+
+    def test_a_pair_too_big_for_the_card_is_named_and_the_viewer_shows_it(self):
+        from tests.waiting import wait_until
+        w = self.window
+        w._direct_limits = {"max-texture-dimension-2d": 8192, "max-buffer-size": 160 * 80 * 16, "device": "Stub card"}
+        self.choose("wipe")
+        self.assertTrue(wait_until(lambda: "compare on the Viewer" in w.viewer_info.text(), timeout=30))
+        text = w.viewer_info.text()
+        self.assertIn("A and B", text)
+        self.assertIn("Stub card", text)
+        self.assertIsNotNone(w.viewer.wipe_pixmap)         # the Viewer's own wipe, built on the processor
+        self.assertFalse(w.viewer.card_wipe)
+
+    def test_a_card_that_refuses_the_pair_falls_back_to_the_viewer_wipe(self):
+        from tests.waiting import wait_until
+        w = self.window
+        self.widget.accept_linear = False
+        self.choose("wipe")
+        self.assertTrue(wait_until(lambda: w.viewer.wipe_pixmap is not None, timeout=30))
+        self.assertFalse(w.viewer.card_wipe)
+
+    def test_closing_the_dock_gives_the_viewer_its_wipe_back(self):
+        w = self.window
+        self.choose("wipe")
+        self.settle("wipe")
+        self.assertIsNone(w.viewer.wipe_pixmap)
+        w.direct_action.setChecked(False)          # synchronous: a render still in flight may land afterwards
+        self.assertIsNotNone(w.viewer.wipe_pixmap)
+        self.assertFalse(w.viewer.card_wipe)
 
 
 if __name__ == "__main__":

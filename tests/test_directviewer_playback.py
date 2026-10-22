@@ -272,6 +272,9 @@ class StubWithMemory(StubPresenter):
     def staging_bytes(self):
         return 6 * 1048576
 
+    def b_texture_bytes(self):
+        return 2 * 1048576
+
     def lose_device(self, wait=True):
         self.released += 1
 
@@ -313,6 +316,7 @@ class WindowPlaybackTests(unittest.TestCase):
             w._refresh_direct_memory()
             self.assertIn("retained picture 3.0 MB", w.cache_inspector.direct_memory.text())
             self.assertIn("upload buffers 6.0 MB", w.cache_inspector.direct_memory.text())
+            self.assertIn("B texture 2.0 MB", w.cache_inspector.direct_memory.text())
             w.direct_action.setChecked(False)
             APP.processEvents()
         self.assertEqual(presenter.released, 1)
