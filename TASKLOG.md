@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
+
+- **What was done:** `main` `e0963ac8` -> `89870cb0` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `89870cb0`: Ran 5766 tests in 543.776 s, OK (skipped=17), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 8 step A finish: corrected drag proof; playback cadence remains just under target (PARTIAL)
 
 - **What was done — evidence:** The integrated stand-in's absent drag picture was a benchmark coordinate/window-size bug. Qt supplied logical pointer coordinates at 2× scaling, `xdotool` addressed physical X11 pixels, and the old 1920 × 1080 logical window exceeded the 1920 × 1080 Xvfb surface. The corrected harness scales pointer coordinates and sizes to the screen geometry. Fresh 8-second unprofiled runs delivered held-drag frames on RTX, llvmpipe and integrated stand-in; first picture from the first Qt-received move was 0.198 s, 0.193 s and 0.177 s. Cold tier-4 playback was 21.330, 20.979 and 15.463 fps. On separate warm-range timelines, playback was 23.842, 23.845 and 23.841 fps with respectively 192/192, 192/192 and 193/193 display-cache hits and zero graph evaluations. Thus the render graph is out of the playback interval, but the strict 24 fps target still misses every adapter.

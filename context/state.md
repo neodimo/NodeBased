@@ -1,5 +1,25 @@
 ## 2026-10-22 — Lane 8 step A finish: integrated drag proven; 24 fps playback remains open (PARTIAL)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (6:22 AM on 2026-10-22 PDT)
+
+`main` moved `e0963ac8` -> `89870cb0` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `89870cb0` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0602.log`, started 6:02 AM): **Ran 5766 tests in 543.776 s, OK (skipped=17), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1).** Commits:
+  - `06e38d01` docs: clarify Lane 8 cache verification limit
+  - `08b96fa4` bench: fix Lane 8 high-DPI live-picture measurements
+  Diff: 14 files changed, 59585 insertions(+), 15 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The corrected benchmark root cause was pointer coordinate mismatch at 2× scaling plus a window sized in logical pixels beyond the physical Xvfb screen. The driver now maps Qt logical points to X11 physical pixels, fits the logical screen geometry, paces held drag moves, reports first-move-to-picture separately, verifies warm frames by cache identity/residency, and records playback cache hits/graph work inside the measured interval.
 
 Fresh unprofiled 8-second runs: first picture after Qt receives the first held-drag move: RTX 3080 Ti 0.198 s (11 frames while held), llvmpipe 0.193 s (11), integrated Radeon stand-in 0.177 s (10). Cold tier-4 playback: 21.330 / 20.979 / 15.463 fps. Range-warmed playback: 23.842 / 23.845 / 23.841 fps; its interval had 192/192, 192/192 and 193/193 display-cache hits and zero graph evaluations. Cache-only conversion median/p95 was about 3.6–4.7 ms per QImage. The strict 24 fps gate remains unfulfilled on all adapters; no further application optimization is claimed. The corrected cache-residency verifier was not rerun end-to-end: other lanes held the exclusive GPU queue. The reported warm-cache hit counts are derived from the completed archived timelines (all playback lookups hit; zero graph evaluations), while the newly corrected direct residency field remains unverified live.
