@@ -44,9 +44,11 @@ class HotPourShotTests(unittest.TestCase):
         self.assertEqual(nodes["render"]["params"]["max_samples"], 64)
         self.assertEqual(nodes["render"]["params"]["volume_density_scale"], 1.0)
         key = nodes["key_light"]["params"]
-        self.assertEqual(key["light_type"], "Rect")
-        self.assertEqual((key["area_width"], key["area_height"], key["area_normalize"]), (0.55, 0.55, "on"))
-        self.assertEqual(key["intensity"], 12.0)
+        self.assertEqual(key["light_type"], "Point")
+        self.assertEqual(key["intensity"], 3.0)
+        self.assertEqual(nodes["render"]["params"]["ambient"], 0.7)
+        self.assertEqual((nodes["steam_source"]["params"]["src_density"],
+                          nodes["steam_source"]["params"]["src_noise_amount"]), (0.6, 0.2))
         self.assertEqual(cup["holdout"], "on")
         self.assertAlmostEqual(cup["tx"], 0.0)
         self.assertAlmostEqual(cup["tz"], 0.0)

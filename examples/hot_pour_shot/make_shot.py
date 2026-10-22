@@ -24,8 +24,9 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
         if op.get("op") == "create" and op.get("id") == "$new:table_top":
             op["params"].update(shadow_catcher="on", sx=1.7, sz=2.2, red=0.28, green=0.17, blue=0.10)
         if op.get("op") == "create" and op.get("id") == "$new:key_light":
-            op["params"].update(light_type="Rect", shadows="on", tx=0.9, ty=1.4, tz=1.2, intensity=12.0,
-                                area_width=0.55, area_height=0.55, area_normalize="on", light_samples=4)
+            op["params"].update(light_type="Point", shadows="on", tx=0.9, ty=1.4, tz=1.2, intensity=3.0)
+        if op.get("op") == "create" and op.get("id") == "$new:steam_source":
+            op["params"].update(src_density=0.6, src_noise_amount=0.2, src_noise_scale=0.5)
         if op.get("op") == "create" and op.get("id") == "$new:camera":
             op["params"].update(ty=1.15, tz=2.8, target_y=0.0, focal=45.0)
         if op.get("op") == "create" and op.get("id") == "$new:render":
@@ -33,6 +34,7 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
                                 pt_samples=64, max_bounces=4, diffuse_bounces=2, specular_bounces=2,
                                 transmission_bounces=4, volume_density_scale=1.0,
                                 volume_shadow_steps=1, volume_shadow_density=0.0,
+                                ambient=0.7,
                                 sampling="adaptive", min_samples=16, max_samples=64,
                                 adaptive_pass_size=8, noise_threshold=0.01)
         if op.get("op") == "connect" and op.get("id") == "$new:scene" and op.get("input") == "object6":
