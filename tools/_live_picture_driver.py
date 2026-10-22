@@ -220,11 +220,25 @@ def scenario():
     if first is None: first=wait_new(g0,45)
     settle()
     first_move = first_drag_move[0]
+    move_start = first_move if first_move is not None else start
+    with lock:
+      picture_events=[dict(event) for event in timeline
+                      if event.get('stage')=='picture_shown'
+                      and event.get('t',0)>=move_start
+                      and event.get('t',0)<=drag_end
+                      and int(event.get('generation') or -1)>g0]
+    picture_events.sort(key=lambda event:event['t'])
+    interval_ends=[event['t'] for event in picture_events]+[drag_end]
+    interval_starts=[move_start]+[event['t'] for event in picture_events]
+    picture_intervals=[max(0.0,end-start) for start,end in zip(interval_starts,interval_ends)]
     drag={"series":"roto_drag","adapter":adapter,
           "first_picture_s":None if first is None else round(first-start,4),
           "first_move_to_picture_s":None if first is None or first_move is None else round(first-first_move,4),
           "first_move_received_s":None if first_move is None else round(first_move-start,4),
           "picture_during_drag":first is not None and first<drag_end,"frames_during_drag":frames,
+          "pictures_during_drag":len(picture_events),
+          "max_picture_interval_s":round(max(picture_intervals,default=drag_end-move_start),4),
+          "picture_intervals_s":[round(value,4) for value in picture_intervals],
           "settle_s":round(time.monotonic()-drag_end,4),"status":win.viewer_info.text()}
     drag_results=[drag]
     def choose_view(key):

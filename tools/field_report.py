@@ -529,7 +529,9 @@ def step_live_picture(ctx, step):
             for key, label, unit in (("first_picture_s", "first picture", "s"),
                                      ("first_move_to_picture_s", "move to picture", "s"),
                                      ("settle_s", "settle", "s"), ("fps", "playback", "fps"),
-                                     ("frames_during_drag", "pictures during drag", "frames")):
+                                     ("frames_during_drag", "frames generated during drag", "frames"),
+                                     ("pictures_during_drag", "pictures during drag", "pictures"),
+                                     ("max_picture_interval_s", "maximum picture interval", "s")):
                 value = row.get(key)
                 if value is not None:
                     step.number(f"livepicture.{series}.{key}", f"Live picture {series}: {label}", value, unit)

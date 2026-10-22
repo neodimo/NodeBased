@@ -147,7 +147,9 @@ class FieldReportSurvivesFailures(unittest.TestCase):
         record = {"adapter_info": {"name": "Example GPU", "backend": "Vulkan"},
                   "results": [{"series": "roto_drag", "first_picture_s": 0.21,
                                "settle_s": 1.2},
-                              {"series": "tier4_playback", "fps": 22.5}]}
+                              {"series": "tier4_playback", "fps": 22.5}],
+                  "drag_results": [{"series": "drag", "subject": "Properties knob",
+                                    "pictures_during_drag": 8, "max_picture_interval_s": 0.19}]}
         seen = []
 
         def fake_run(argv, log, timeout, **more):
@@ -169,6 +171,8 @@ class FieldReportSurvivesFailures(unittest.TestCase):
         self.assertEqual(keys["livepicture.adapter"], "Example GPU")
         self.assertEqual(keys["livepicture.roto_drag.first_picture_s"], 0.21)
         self.assertEqual(keys["livepicture.tier4_playback.fps"], 22.5)
+        self.assertEqual(keys["livepicture.drag.Properties knob.pictures_during_drag"], 8)
+        self.assertEqual(keys["livepicture.drag.Properties knob.max_picture_interval_s"], 0.19)
         self.assertIn("bench_live_picture", [name for name, _, _ in field_report.STEPS])
 
     def test_every_headline_baseline_names_a_source(self):
