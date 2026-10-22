@@ -355,3 +355,101 @@ class FollowWindowTests(OverlayFollowsFrameTests):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DirectMainWindowTests(ViewerCompareBase):
+    """The real Window and the real card with the switch on: the picture in the Viewer's place with the strip and the
+    timeline around it, the corner readout on the picture, and the hand-back to the Viewer."""
+
+    def setUp(self):
+        reason = direct_dock_skip()
+        if reason:
+            self.skipTest(reason)
+        from PySide6.QtCore import QSettings
+        from nodebased.app import Preferences
+        QSettings("NodeBased", "NodeBased").remove(Preferences.DIRECT_MAIN)
+        self.addCleanup(lambda: QSettings("NodeBased", "NodeBased").remove(Preferences.DIRECT_MAIN))
+        super().setUp()
+        self.addCleanup(lambda: self.window.direct_main_action.setChecked(False))
+
+    def switch_on(self):
+        self.window.direct_main_action.setChecked(True)
+        self.assertTrue(wait_until(lambda: self.window.direct_widget is not None
+                                   and self.window.direct_widget.presenter is not None
+                                   and self.window.direct_widget.presenter.has_picture()))
+        self.widget = self.window.direct_widget
+        self.assertTrue(wait_until(lambda: self.window._dock_front["direct"] and not self.window._dock_front["viewer"]))
+        APP.processEvents()
+
+    def test_the_switch_puts_the_card_in_the_viewers_place_with_the_controls_around_it(self):
+        self.switch_on()
+        window = self.window
+        self.assertTrue(wait_until(lambda: window.viewer_strip.docked))
+        self.assertTrue(window.direct_panel.isAncestorOf(window.timeline_panel))
+        self.assertTrue(window.direct_panel.isAncestorOf(window.viewer_strip))
+        self.assertTrue(window.direct_panel.isAncestorOf(self.widget))
+        window.direct_main_action.setChecked(False)
+        self.assertTrue(wait_until(lambda: not window.viewer_strip.docked and window.viewer_panel.isAncestorOf(window.timeline_panel)))
+        self.assertTrue(wait_until(lambda: window._dock_front["viewer"] and not window._dock_front["direct"]))
+
+    def test_the_picture_size_and_the_zoom_are_drawn_on_the_card(self):
+        self.switch_on()
+        presenter = self.widget.presenter
+        self.assertTrue(wait_until(lambda: presenter.hud_shown is not None))
+        first = presenter.hud_shown
+        self.assertIn("%", first[1])
+        self.assertIn("×", first[1])
+        before = presenter.counters["badge_uploads"]
+        draws = presenter.counters["draws"]
+        cx, cy, zoom = self.widget.view
+        self.widget.view = (cx, cy, zoom * 1.5)
+        self.widget.auto_fit = False
+        self.widget._request()
+        self.assertTrue(wait_until(lambda: presenter.counters["draws"] > draws and presenter.hud_shown != first))
+        self.assertGreater(presenter.counters["badge_uploads"], before)       # a new zoom is a new label
+        self.widget.view = (cx, cy, zoom)
+        draws = presenter.counters["draws"]
+        self.widget._request()
+        self.assertTrue(wait_until(lambda: presenter.counters["draws"] > draws and presenter.hud_shown == first))
+
+    def test_a_card_that_cannot_start_hands_back_to_the_viewer_with_a_message(self):
+        import unittest.mock
+        with unittest.mock.patch.object(dv, "make_widget", side_effect=RuntimeError("no surface here")):
+            self.window.direct_main_action.setChecked(True)
+            self.assertTrue(wait_until(lambda: "unavailable" in self.window.statusBar().currentMessage()))
+        self.assertIsNone(self.window.direct_widget)
+        self.assertTrue(wait_until(lambda: self.window._dock_front["viewer"]))
+        self.assertFalse(self.window.viewer_strip.docked)
+        self.assertTrue(self.window.viewer_panel.isAncestorOf(self.window.timeline_panel))
+
+    def test_a_picture_the_card_refuses_brings_the_viewer_forward(self):
+        self.switch_on()
+        window = self.window
+        refusal = "Direct picture: this picture is larger than the card can hold; the Viewer shows it."
+        original = self.widget.submit_linear
+
+        def refuse(*args, **kwargs):
+            self.widget.refusal = refusal
+            return False
+        self.widget.submit_linear = refuse
+        self.addCleanup(lambda: setattr(self.widget, "submit_linear", original))
+        messages = []
+        window.statusBar().messageChanged.connect(messages.append)
+        window.command({"op": "set", "id": "a", "param": "red", "value": 0.7})
+        self.settle()
+        self.assertTrue(wait_until(lambda: window._dock_front["viewer"] and not window._dock_front["direct"]))
+        self.assertTrue(any("Showing the Viewer" in message for message in messages), messages)
+        self.assertTrue(window.viewer_panel.isAncestorOf(window.timeline_panel))
+
+    def test_fitting_the_viewer_fits_the_card_and_keys_go_to_the_viewer(self):
+        import unittest.mock
+        from PySide6.QtCore import QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        self.switch_on()
+        self.widget.auto_fit = False
+        self.window.viewer.fit()
+        self.assertTrue(self.widget.auto_fit)
+        self.widget.auto_fit = False
+        with unittest.mock.patch.object(type(self.window.viewer), "keyPressEvent") as handler:
+            self.widget.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F, Qt.KeyboardModifier.NoModifier, "f"))
+        handler.assert_called_once()

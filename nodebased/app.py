@@ -24,7 +24,7 @@ from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, Q
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
                            QConicalGradient, QRadialGradient, QTransform, QPixmapCache, QPicture, QFontMetricsF, QGuiApplication)
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+from PySide6.QtWidgets import (QApplication, QTabBar, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
@@ -697,6 +697,7 @@ class Preferences:
     GRAPH_OPENGL = "interface/graph_opengl"
     LOCK_PANELS = "interface/lock_panels"
     DIRECT_EDIT = "interface/direct_picture_edit"
+    DIRECT_MAIN = "interface/direct_picture_main"
     GRAPHICS_ADAPTER = gpu3d.ADAPTER_SETTING
     WORKSPACE = "workspace"
 
@@ -791,6 +792,16 @@ class Preferences:
 
     def set_direct_edit(self, enabled):
         self._store.setValue(self.DIRECT_EDIT, bool(enabled))
+        self._store.sync()
+
+    def direct_main(self):
+        """Whether the direct picture takes the Viewer's place in the window (the Viewer stays alive behind it as the
+        fallback, the export source and the colour-picking source). Off by default."""
+        value = self._store.value(self.DIRECT_MAIN, False)
+        return value in (True, "true", "1", 1)
+
+    def set_direct_main(self, enabled):
+        self._store.setValue(self.DIRECT_MAIN, bool(enabled))
         self._store.sync()
 
     def lock_panels(self):
@@ -1665,6 +1676,9 @@ class Viewer(PanZoomView):
     def fit(self):
         """Fit the picture into the part of the viewer the strip and the corner readouts leave
         free (`insets`: pixels kept clear at the top and the bottom)."""
+        hook = getattr(self.window, "direct_fit", None)
+        if hook is not None:
+            hook()
         top, bottom = self.insets
         rect = self.scene().itemsBoundingRect()
         if rect.isEmpty() or not (top or bottom):
@@ -3818,6 +3832,28 @@ class Viewer(PanZoomView):
         painter.end()
         x = int(round(physical_size[0] - 100 * ratio)) - pad
         y = int(round(18 * ratio - metrics.ascent() * ratio)) - pad
+        return image, x, y
+
+    def render_hud(self, text, physical_size, ratio):
+        """The corner readout (picture size and zoom) as a premultiplied RGBA image and the physical pixel of its top
+        left corner: right aligned in the bottom right corner of a surface of `physical_size`, where the Viewer keeps
+        its zoom."""
+        font = QGuiApplication.font()
+        metrics = QFontMetricsF(font)
+        pad = 2
+        width = int(math.ceil(metrics.horizontalAdvance(text) * ratio)) + 2 * pad
+        height = int(math.ceil((metrics.ascent() + metrics.descent()) * ratio)) + 2 * pad
+        image = QImage(width, height, QImage.Format.Format_RGBA8888_Premultiplied)
+        image.setDevicePixelRatio(ratio)
+        image.fill(0)
+        painter = QPainter(image)
+        painter.setRenderHints(self.renderHints())
+        painter.setFont(font)
+        painter.setPen(QColor("#d4d6de"))
+        painter.drawText(QPointF(pad / ratio, (pad / ratio) + metrics.ascent()), text)
+        painter.end()
+        x = int(round(physical_size[0] - 12 * ratio)) - width
+        y = int(round(physical_size[1] - 12 * ratio)) - height
         return image, x, y
 
     def draw_format_overlay(self, scene_rect):
@@ -8140,6 +8176,63 @@ def creation_slot(kind, produced="image"):
     return next((name for name in slots if produced in INPUT_TYPES.get(name, ("image",))), None)
 
 
+class DirectPanel(QWidget):
+    """What the direct picture's dock holds: a row for the viewer strip, the picture, and a row for the timeline.
+
+    Both rows are empty until the direct picture covers the Viewer's place; then they hold the Viewer's strip and
+    timeline (a Qt widget cannot sit over the card's window, so the controls are laid out around the picture, not
+    over it), and `Window._sync_direct_controls` gives them back when the Viewer is in front again."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("direct-panel")
+        self.box = QVBoxLayout(self)
+        self.box.setContentsMargins(0, 0, 0, 0)
+        self.box.setSpacing(2)
+        self.strip_row = QWidget(self)
+        self.strip_layout = QHBoxLayout(self.strip_row)
+        self.strip_layout.setContentsMargins(0, 4, 0, 4)
+        self.strip_layout.addStretch(1)
+        self.strip_layout.addStretch(1)
+        self.strip_row.hide()
+        self.picture_host = QWidget(self)
+        self.picture_layout = QVBoxLayout(self.picture_host)
+        self.picture_layout.setContentsMargins(0, 0, 0, 0)
+        self.picture_host.setMinimumSize(160, 90)
+        self.timeline_host = QWidget(self)
+        self.timeline_layout = QVBoxLayout(self.timeline_host)
+        self.timeline_layout.setContentsMargins(0, 0, 0, 0)
+        self.timeline_host.hide()
+        self.box.addWidget(self.strip_row)
+        self.box.addWidget(self.picture_host, 1)
+        self.box.addWidget(self.timeline_host)
+        self.setMinimumSize(0, 0)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+
+    def set_picture(self, widget):
+        """The card's widget, or None when it is gone."""
+        while self.picture_layout.count():
+            item = self.picture_layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().setParent(None)
+        if widget is not None:
+            self.picture_layout.addWidget(widget)
+
+    def adopt(self, strip, timeline):
+        """Take the Viewer's strip and timeline."""
+        self.strip_layout.insertWidget(1, strip)
+        self.strip_row.show()
+        self.timeline_layout.addWidget(timeline)
+        self.timeline_host.show()
+
+    def release(self, strip, timeline):
+        """Let go of them (the caller gives them back to the Viewer's panel)."""
+        self.strip_layout.removeWidget(strip)
+        self.timeline_layout.removeWidget(timeline)
+        self.strip_row.hide()
+        self.timeline_host.hide()
+
+
 class Window(QMainWindow):
     VIEWER_MODES = ("2d", "3d")
     # One Write render's progress: (position 1..total, total, frame number, seconds elapsed).
@@ -8156,9 +8249,7 @@ class Window(QMainWindow):
         hidden). Also brings the VIEWER dock forward when it was closed or tabbed away."""
         if mode not in self.VIEWER_MODES:
             raise ValueError(f"viewer mode must be one of {self.VIEWER_MODES}")
-        if not self.viewer_dock.isVisible():
-            self.viewer_dock.show()
-        self.viewer_dock.raise_()
+        self._bring_forward(self.viewer_dock)
         index = self.VIEWER_MODES.index(mode)
         changed = self.view_stack.currentIndex() != index
         self.view_stack.setCurrentIndex(index)
@@ -8171,6 +8262,8 @@ class Window(QMainWindow):
         if changed:
             self.statusBar().showMessage(f"Viewer: {mode.upper()} (Tab over the viewer switches)", 2500)
         self._follow_viewer_mode_in_tabs(mode)
+        if mode == "2d" and getattr(self, "direct_dock", None) is not None and self.isVisible():
+            self._open_direct_main()        # the switch is on: the direct picture goes back in front of the Viewer
         if focus:
             target = self.viewport if mode == "3d" else self.viewer
             target.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -8249,7 +8342,7 @@ class Window(QMainWindow):
         graph and NODES docks (Composite brings them back)."""
         properties_width = self.properties_dock.width()
         for dock in (self.graph_dock, self.nodes_dock, self.cache_inspector_dock, self.slice_dock,
-                     self.queue_dock, self.output_preview_dock):
+                     self.queue_dock, self.output_preview_dock, self.direct_dock):
             if dock is not first and dock is not second:
                 dock.hide()
         for dock in (first, second):
@@ -8888,7 +8981,8 @@ class Window(QMainWindow):
         self.viewer_strip.place()
         self.viewer_corners.place()
         self.viewer.insets = (self.viewer_strip.band_height(), self.viewer_corners.band_height())
-        vl.addWidget(self._timeline())
+        self.timeline_panel = self._timeline()
+        vl.addWidget(self.timeline_panel)
         self.viewer_panel = viewer_panel
         viewer_panel.setMinimumSize(0, 0)
         viewer_panel.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
@@ -9035,10 +9129,25 @@ class Window(QMainWindow):
         # The category bar replaces the permanently open NODES dock.  Keep the full browser
         # reachable for Ctrl+F, presets and drag-to-place workflows.
         self.nodes_dock.hide()
+        # The direct picture's dock exists from the start (hidden) so a saved layout finds it and puts it back: a
+        # tab in the Viewer's place by default, or wherever the artist docked or floated it. Its picture widget
+        # is made when it first opens.
+        self.direct_panel = DirectPanel()
+        self.direct_dock = QDockWidget(self.direct_title(), self)
+        self.direct_dock.setObjectName("direct-viewer-dock")
+        self.direct_dock.setMinimumWidth(0)
+        self.direct_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                                     QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                                     QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        self.direct_dock.setWidget(self.direct_panel)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.direct_dock)
+        self.direct_dock.hide()
+        self._direct_placed = False        # becomes true once the dock has been put in the Viewer's place (or restored)
+        self.direct_widget = None
         self.workspace_docks = [self.viewer_dock, self.graph_dock, self.properties_dock,
                                 self.nodes_dock, self.slice_dock,
                                 self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock,
-                                self.queue_dock, self.output_preview_dock]
+                                self.queue_dock, self.output_preview_dock, self.direct_dock]
         # QMainWindow otherwise divides a new, three-dock left column almost evenly, leaving
         # the viewer's actual canvas shorter than its controls and timeline.  Give the shared
         # 2D/3D viewer the largest share of the default workspace; artists can resize afterwards.
@@ -9726,21 +9835,42 @@ class Window(QMainWindow):
         window_menu.addAction(toolbar_action)
         window_menu.addSeparator()
         for dock in self.workspace_docks:
+            if dock is self.direct_dock:
+                continue        # it has its own entry below, which also starts the card
             action = QAction(dock.windowTitle(), self, checkable=True)
             action.setChecked(not dock.isHidden())
             action.toggled.connect(dock.setVisible)
-            dock.visibilityChanged.connect(action.setChecked)
+            if dock is self.viewer_dock:
+                # Behind the direct picture's tab the Viewer reports "hidden". Every other dock behind a tab is closed by
+                # that (the entry unticks, which hides it), but the Viewer's tab has to stay so the artist can click back.
+                def mirror_viewer(visible, a=action):
+                    behind_direct = (not visible and self.direct_dock.isVisible() and not self.direct_dock.isFloating()
+                                     and not self.viewer_dock.isFloating())
+                    a.blockSignals(behind_direct)
+                    a.setChecked(visible if not behind_direct else False)
+                    a.blockSignals(False)
+                dock.visibilityChanged.connect(mirror_viewer)
+            else:
+                dock.visibilityChanged.connect(action.setChecked)
             window_menu.addAction(action)
-        self.direct_dock = None
-        self.direct_widget = None
         self.direct_action = QAction("Direct picture (experimental GPU)", self, checkable=True)
         self.direct_action.setObjectName("direct-picture")
-        self.direct_action.setToolTip("A floating picture with GPU pan and zoom. Experimental: overlays and "
-                                      "the pixel readout are shown, but clicks only pan and zoom; edit in the Viewer.")
+        self.direct_action.setToolTip("A docked picture with GPU pan and zoom. Experimental: it takes a tab beside the "
+                                      "Viewer, or the Viewer's place with Preferences, \"Use the direct picture as the "
+                                      "main viewer\"; drag it anywhere or float it, and the layout is saved with the "
+                                      "workspace.")
         self.direct_action.toggled.connect(self.set_direct_viewer)
         window_menu.addAction(self.direct_action)
+        # Which of the two docks is in front in the Viewer's place. `isVisible()` stays true for a dock behind another
+        # tab; the signal is what says it is not showing. A dock that moves between tabs reports "hidden" and "shown"
+        # in passing, so the answer is read once the events have settled.
+        self._dock_front = {"viewer": True, "direct": False}
+        self.direct_dock.visibilityChanged.connect(lambda visible: self._dock_front_changed("direct", visible))
+        self.viewer_dock.visibilityChanged.connect(lambda visible: self._dock_front_changed("viewer", visible))
         if directviewer.enabled():
             QTimer.singleShot(0, lambda: self.direct_action.setChecked(True))
+        elif self.preferences.direct_main():
+            QTimer.singleShot(0, self._open_direct_main)
         window_menu.addSeparator()
         workspaces_menu = window_menu.addMenu("Workspaces")
         workspaces_menu.addAction("Save as…", self.save_workspace_as)
@@ -9775,6 +9905,15 @@ class Window(QMainWindow):
         reduce_motion_action.toggled.connect(self.preferences.set_reduce_motion)
         reduce_motion_action.toggled.connect(lambda reduced: self.motion.set_enabled(not reduced))
         self.reduce_motion_action = reduce_motion_action
+        direct_main_action = preferences_menu.addAction("Use the direct picture as the main viewer")
+        direct_main_action.setObjectName("direct-main")
+        direct_main_action.setCheckable(True)
+        direct_main_action.setChecked(self.preferences.direct_main())
+        direct_main_action.setToolTip("Experimental. The direct picture (GPU pan and zoom) takes the Viewer's place in "
+                                      "the window, with its controls and timeline; the Viewer stays alive behind it "
+                                      "and takes over when the card can't show a picture. Off by default.")
+        direct_main_action.toggled.connect(self.set_direct_main)
+        self.direct_main_action = direct_main_action
         preferences_menu.addSeparator()
         radial_commands_action = preferences_menu.addAction("Radial commands…")
         radial_commands_action.triggered.connect(lambda checked=False: self.open_radial_commands_editor())
@@ -14620,21 +14759,21 @@ class Window(QMainWindow):
         return handled
 
     def set_direct_viewer(self, on):
-        dock = getattr(self, "direct_dock", None)
+        dock = self.direct_dock
         if not on:
             self._direct_linear_on = False
-            if dock is not None:
+            # Closing the dock gives back its device, textures, upload buffers and retained picture. A dock that is
+            # only tabbed away (the Viewer's tab was clicked) stays a tab: clicking it opens the card again.
+            if not self._direct_release_only:
                 dock.hide()
-                # Closing the dock gives back its device, textures, upload buffers and retained picture.
-                if getattr(self, "direct_widget", None) is not None:
-                    self.direct_widget.release()
-                self._direct_limits = None
+            if self.direct_widget is not None:
+                self.direct_widget.release()
+            self._direct_limits = None
             self.unpark_viewer()
             self._refresh_direct_memory()
+            self._sync_direct_controls()
             return
-        if dock is None:
-            dock = QDockWidget(self.direct_title(), self)
-            dock.setObjectName("direct-viewer-dock")
+        if self.direct_widget is None:
             try:
                 widget = directviewer.make_widget()
             except Exception as exc:   # no rendercanvas / no screen surface: the default viewer carries on
@@ -14646,24 +14785,163 @@ class Window(QMainWindow):
             widget.overlay_async = bool(self.playing)
             widget.badge_text = self.viewer.badge_label
             widget.badge_maker = self.viewer.render_badge
+            widget.hud_text = self._direct_hud_text
+            widget.hud_maker = self.viewer.render_hud
             widget.compare_provider = self.viewer.wipe_line
             widget.wipe_handle_provider = self.viewer.wipe_handle
             widget.hover = self._direct_hover
             widget.edit = self._direct_edit if self.preferences.direct_edit() else None
+            widget.key_sink = self._direct_key
             self.viewer.cursor_sink = getattr(widget, "mirror_cursor", None)
-            dock.visibilityChanged.connect(lambda visible: self.direct_action.setChecked(visible))
             widget.setMinimumSize(160, 90)
-            dock.setWidget(widget)
-            dock.setFloating(True)
-            dock.resize(960, 540)
-            self.direct_dock = dock
+            self.direct_panel.set_picture(widget)
             self.direct_widget = widget
-        dock.show()
+            if not dock.isFloating() and dock.geometry().isEmpty():
+                dock.resize(960, 540)
+        if dock.isHidden() and not dock.isFloating() and not self._direct_placed:
+            self._place_direct_in_viewer_place()        # first time: a tab beside the Viewer's
+        self._direct_placed = True                      # a restored layout, or the artist's own, from now on
+        self._bring_forward(dock)
         self._direct_linear_on = True
+        self._sync_direct_controls()
         image = self.display_image()
         if image is not None:
             self._offer_direct(image, self.viewer.last_scale, self.viewer.last_render_region,
                                self.viewer.sceneRect(), None)
+
+    def _direct_hud_text(self):
+        """The corner readout the Viewer keeps bottom right, drawn on the direct picture: its size and the zoom."""
+        widget = self.direct_widget
+        rect = self.viewer.format_rect
+        if widget is None or rect is None:
+            return ""
+        zoom = widget.view[2] / max(float(widget.get_pixel_ratio()), 1e-6)
+        return f"{round(rect.width())} × {round(rect.height())}   {round(zoom * 100)}%"
+
+    def _direct_key(self, event):
+        """A key pressed on the direct picture goes to the Viewer's own key handler (F fits, the Roto and paint
+        keys, the nudge keys): the direct picture has no key handling of its own."""
+        self.viewer.keyPressEvent(event)
+
+    def direct_fit(self):
+        """The Viewer fitted its picture: the direct picture fits its own too."""
+        widget = getattr(self, "direct_widget", None)
+        if widget is not None:
+            widget.fit()
+
+    def _dock_front_changed(self, name, visible):
+        self._dock_front[name] = bool(visible)
+        QTimer.singleShot(0, self._direct_visibility_settled)
+
+    def _direct_shown(self):
+        """The direct picture is on screen: its dock is in front (not hidden, not behind the Viewer's tab) and the card
+        is up."""
+        dock = getattr(self, "direct_dock", None)
+        return bool(dock is not None and self.direct_widget is not None and self._dock_front["direct"]
+                    and dock.isVisible())
+
+    def _direct_visibility_settled(self):
+        """The direct picture's dock was shown, hidden or tabbed away: the menu entry (and with it the card) follows
+        where the dock ended up, and the strip and timeline go to whichever of the two docks is in front."""
+        try:
+            if not self.isVisible():
+                return
+            front = self._dock_front["direct"] and self.direct_dock.isVisible()
+            if self.direct_action.isChecked() != front:
+                # Tabbed away (or closed): the card is released, but a tab stays a tab.
+                self._direct_release_only = True
+                try:
+                    self.direct_action.setChecked(front)
+                finally:
+                    self._direct_release_only = False
+        except RuntimeError:        # the window is going away
+            return
+        self._sync_direct_controls()
+
+    _direct_release_only = False
+
+    def _select_dock_tab(self, dock):
+        """Bring `dock` to the front of its tab group. False when it is in none (floating, or alone)."""
+        title = dock.windowTitle()
+        for bar in self.findChildren(QTabBar):
+            if not bar.isVisible() or not self.rect().contains(bar.geometry().center()):
+                continue                    # Qt keeps the bars of groups that no longer exist, parked out of sight
+            for index in range(bar.count()):
+                if bar.tabText(index) == title:
+                    bar.setCurrentIndex(index)
+                    return True
+        return False
+
+    def _bring_forward(self, dock):
+        """Show `dock` and put it in front of the tab group it is in."""
+        if not dock.isVisible():
+            dock.show()
+        dock.raise_()
+        self._select_dock_tab(dock)
+
+    def _sync_direct_controls(self):
+        """While the direct picture is in front of the Viewer's dock place, the Viewer's strip and timeline are laid
+        out around it (a Qt widget cannot sit over the card's window); when the Viewer is in front again they go back."""
+        dock = getattr(self, "direct_dock", None)
+        try:
+            if dock is None or not self.isVisible():
+                return
+        except RuntimeError:        # the window is going away
+            return
+        covers = bool(self.direct_widget is not None and self._dock_front["direct"] and dock.isVisible()
+                      and not (self._dock_front["viewer"] and self.viewer_dock.isVisible()))
+        if covers == getattr(self, "_direct_holds_controls", False):
+            return
+        self._direct_holds_controls = covers
+        viewer_layout = self.viewer_panel.layout()
+        if covers:
+            viewer_layout.removeWidget(self.timeline_panel)
+            self.direct_panel.adopt(self.viewer_strip, self.timeline_panel)
+            self.viewer_strip.dock(self.direct_panel.strip_row)
+        else:
+            self.direct_panel.release(self.viewer_strip, self.timeline_panel)
+            self.viewer_strip.undock(self.view_stack)
+            viewer_layout.addWidget(self.timeline_panel)
+            self.timeline_panel.show()
+
+    def _place_direct_in_viewer_place(self):
+        """A tab in the Viewer's dock place (nothing to do while the Viewer is a floating window of its own)."""
+        if not self.viewer_dock.isFloating():
+            self.tabifyDockWidget(self.viewer_dock, self.direct_dock)
+        self._direct_placed = True
+
+    def _raise_direct(self):
+        """Put the direct picture in the Viewer's place, a tab in front of it."""
+        dock = self.direct_dock
+        if dock.isFloating():
+            dock.setFloating(False)
+        self._place_direct_in_viewer_place()
+        self._bring_forward(dock)
+
+    def _open_direct_main(self):
+        """The switch is on: open the direct picture in the Viewer's place."""
+        if not self.preferences.direct_main() or self.viewer_mode() != "2d":
+            return
+        self.direct_action.setChecked(True)
+        if self.direct_widget is not None:
+            self._raise_direct()
+
+    def set_direct_main(self, enabled):
+        """Preferences, "Use the direct picture as the main viewer". On: the direct picture takes the Viewer's place and
+        the Viewer stays alive behind it. Off: the Viewer is in front again and the direct picture closes."""
+        enabled = bool(enabled)
+        self.preferences.set_direct_main(enabled)
+        action = getattr(self, "direct_main_action", None)
+        if action is not None and action.isChecked() != enabled:
+            action.blockSignals(True)
+            action.setChecked(enabled)
+            action.blockSignals(False)
+        if enabled:
+            self._open_direct_main()
+        else:
+            self._bring_forward(self.viewer_dock)
+            self.direct_action.setChecked(False)
+            self.direct_dock.hide()
 
     def overlay_repainted(self):
         """The Viewer just painted its overlays: whatever changed them changes the direct picture's too."""
@@ -14697,7 +14975,7 @@ class Window(QMainWindow):
         pixel readout are read again for it (they were frozen until the pointer moved or playback stopped)."""
         widget = getattr(self, "direct_widget", None)
         dock = getattr(self, "direct_dock", None)
-        if widget is None or dock is None or not dock.isVisible() or not getattr(self, "_direct_linear_on", False):
+        if widget is None or dock is None or not self._direct_shown() or not getattr(self, "_direct_linear_on", False):
             return
         if self._direct_pointer is not None:
             self._direct_hover(self._direct_pointer)
@@ -14713,13 +14991,16 @@ class Window(QMainWindow):
             action.blockSignals(True)
             action.setChecked(False)
             action.blockSignals(False)
-        dock = getattr(self, "direct_dock", None)
-        if dock is not None:
-            dock.hide()
-            dock.deleteLater()
-            self.direct_dock = None
-            self.direct_widget = None
+        widget, self.direct_widget = self.direct_widget, None
+        dock = self.direct_dock
+        if widget is not None:
+            self.direct_panel.set_picture(None)
+            widget.deleteLater()
+        dock.hide()
+        # Whatever the direct picture was in front of is the Viewer again, with its own controls.
+        self._bring_forward(self.viewer_dock)
         self.unpark_viewer()
+        self._sync_direct_controls()
 
     def _refresh_direct_memory(self):
         """The Direct picture's memory in the cache inspector: its retained picture and upload buffers."""
@@ -14729,7 +15010,7 @@ class Window(QMainWindow):
         widget = getattr(self, "direct_widget", None)
         dock = getattr(self, "direct_dock", None)
         presenter = getattr(widget, "presenter", None)
-        if widget is None or dock is None or not dock.isVisible() or presenter is None:
+        if widget is None or dock is None or not self._direct_shown() or presenter is None:
             inspector.set_direct_memory(0, 0, open_=False)
             return
         inspector.set_direct_memory(presenter.retained_bytes(), presenter.staging_bytes(),
@@ -14746,6 +15027,12 @@ class Window(QMainWindow):
         if not accepted and refusal and refusal != getattr(self, "_direct_refusal_shown", ""):
             self.statusBar().showMessage(refusal, 8000)
         self._direct_refusal_shown = refusal
+        if not accepted and refusal and self.preferences.direct_main() and self._dock_front["direct"] \
+                and not self.viewer_dock.isFloating() and self.direct_dock in self.tabifiedDockWidgets(self.viewer_dock):
+            # The direct picture is the main viewer and the card cannot hold this picture: the Viewer, which has it,
+            # comes to the front. (Clicking the direct picture's tab or the switch brings the card back.)
+            self.statusBar().showMessage(f"{refusal} Showing the Viewer.", 8000)
+            self._bring_forward(self.viewer_dock)
         if self.cache_inspector_dock.isVisible():
             self._refresh_direct_memory()
 
@@ -14754,7 +15041,7 @@ class Window(QMainWindow):
         Viewer keeps its last picture until playback stops (the stop's refresh repaints it). The
         8-bit picture is built only if something asks for it (`self.direct_lazy.image()`)."""
         dock = getattr(self, "direct_dock", None)
-        if dock is None or not dock.isVisible() or self.direct_widget is None:
+        if dock is None or not self._direct_shown():
             self._direct_linear_on = False
             return False
         width, height = picture.width(), picture.height()
@@ -14837,8 +15124,7 @@ class Window(QMainWindow):
         return getattr(self.viewer, "last_display_image", None)
 
     def _offer_direct(self, image, scale, render_region, scene_rect, generation):
-        dock = getattr(self, "direct_dock", None)
-        if dock is None or not dock.isVisible():
+        if not self._direct_shown():
             return
         if render_region is not None:
             rect = (render_region.x * scale, render_region.y * scale, image.width() * scale, image.height() * scale)

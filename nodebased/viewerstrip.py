@@ -207,6 +207,7 @@ class ViewerStrip(QFrame):
         self.row.setContentsMargins(UNIT_GAP // 2, UNIT_GAP // 2, UNIT_GAP // 2, UNIT_GAP // 2)
         self.row.setSpacing(UNIT_GAP // 2)
         self.compact = False
+        self.docked = False         # laid out in a row beside the picture, not floating over the viewer stack
 
         for mode in ("2d", "3d"):
             self.row.addWidget(window.viewer_mode_buttons[mode])
@@ -394,10 +395,33 @@ class ViewerStrip(QFrame):
         self._show_lens_button()
         self.layout().invalidate()
 
+    def dock(self, host):
+        """Lay the strip out in `host`'s row (the direct picture covers the viewer and a Qt widget cannot sit over its
+        window): the host's layout sizes it, and it still goes icon-only before it would be clipped."""
+        self.docked = True
+        host.installEventFilter(self)
+        self.show()
+        self.place()
+
+    def undock(self, stack):
+        """Back over the viewer stack, centred at its top."""
+        self.docked = False
+        self.setParent(stack)
+        self.show()
+        self.place()
+
     def place(self):
         """Centre the strip at the top of its parent; go icon-only before it would be clipped."""
         parent = self.parentWidget()
         if parent is None:
+            return
+        if self.docked:
+            room = max(parent.width() - 2 * STRIP_SIDE, 0)
+            self.set_compact(False)
+            self.layout().activate()
+            if room and self.sizeHint().width() > room:
+                self.set_compact(True)
+                self.layout().activate()
             return
         room = max(parent.width() - 2 * STRIP_SIDE, 0)
         self.set_compact(False)

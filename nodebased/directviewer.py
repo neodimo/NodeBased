@@ -56,7 +56,7 @@ FILL_BANDS = 8                # a large picture is copied into the staging buffe
 # What an overlay provider returns instead of an image: nothing is painted / the same image as last time.
 EMPTY_OVERLAY = object()
 SAME_OVERLAY = object()
-BADGE_CACHE = 12              # tier badge labels kept on the card
+BADGE_CACHE = 32              # corner labels (tier badge, picture size and zoom) kept on the card
 PAINT_BAND_GAP = 48           # changed overlay rows closer together than this go up as one band
 OVERLAY_SLOTS = 3             # staging buffers of the overlay ring: one being painted, one waiting for a draw, one the card copies from
 OVERLAY_BANDS = 64            # room kept in an overlay staging buffer for the alignment gaps of this many bands
@@ -935,6 +935,7 @@ class RetainedPresenter:
         self.paint_copies = []       # (buffer, bytes per row, first row, rows, width, texture, first column): overlay bands the next draw copies in
         self.badges = collections.OrderedDict()
         self.badge_shown = None
+        self.hud_shown = None
         self.overlay_ring = None     # the overlay painted off the Qt thread (OverlayRing), made with the device
         self.linear_error = ""
         self.uploaded_sequence = 0
@@ -986,6 +987,7 @@ class RetainedPresenter:
                 "alpha": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"}}}]})
         self.badges = collections.OrderedDict()   # key -> (texture, uniform buffer, bind group): labels already on the card
         self.badge_shown = None                    # the badges key drawn at each draw, or None for no badge
+        self.hud_shown = None                      # the same for the corner readout (picture size and zoom)
         self.vertex_module = module
         self.linear_layout = self.device.create_bind_group_layout(entries=[
             {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT,
@@ -1052,7 +1054,7 @@ class RetainedPresenter:
         for resource in (self.texture, *floats, *floats_b, self.uniform, self.paint_texture, self.paint_flags, *tables,
                          *self._badge_resources()):
             self._destroy(resource)
-        self.badges, self.badge_shown = collections.OrderedDict(), None
+        self.badges, self.badge_shown, self.hud_shown = collections.OrderedDict(), None, None
         self.paint_texture = self.paint_group = self.paint_size = self.paint_key = self.paint_image = None
         self.paint_copies = []
         self.linear_by_format = {}
@@ -1101,7 +1103,7 @@ class RetainedPresenter:
                          *[entry[0] for entry in self.linear_b_by_format.values()], self.uniform,
                          self.paint_texture, self.paint_flags, *self._badge_resources()):
             self._destroy(resource)
-        self.badges, self.badge_shown = collections.OrderedDict(), None
+        self.badges, self.badge_shown, self.hud_shown = collections.OrderedDict(), None, None
         self.paint_texture = self.paint_group = self.paint_size = self.paint_key = self.paint_image = None
         self.paint_copies = []
         self.linear_by_format = {}
@@ -1481,9 +1483,16 @@ class RetainedPresenter:
         RGBA8888 QImage of the label and its top left corner in physical surface pixels. The texture, its
         uniform and its bind group are kept (the last BADGE_CACHE labels), so a tier change that goes back to a
         label already drawn costs no upload, and the label never goes through the overlay image."""
-        self.badge_shown = None
+        self.badge_shown = self._label(key, make)
+
+    def set_hud(self, key, make):
+        """The corner readout (picture size and zoom), the same way as the tier badge: a texture per text."""
+        self.hud_shown = self._label(("hud", *key) if key is not None else None, make)
+
+    def _label(self, key, make):
+        """The key of a label texture ready to draw (made when new, kept in the cache), or None."""
         if key is None:
-            return
+            return None
         entry = self.badges.get(key)
         if entry is None:
             image, x, y = make()
@@ -1513,7 +1522,7 @@ class RetainedPresenter:
         else:
             self.badges.move_to_end(key)
             self.counters["badge_cached"] += 1
-        self.badge_shown = key
+        return key
 
     def has_picture(self):
         return self.texture is not None or self.linear_texture is not None
@@ -1592,10 +1601,11 @@ class RetainedPresenter:
                 rp.set_pipeline(self.paint_pipeline)
                 rp.set_bind_group(0, self.paint_group)
                 rp.draw(3)
-            if self.badge_shown is not None and self.badge_shown[-1] == tuple(physical_size) and self.badge_shown in self.badges:
-                rp.set_pipeline(self.badge_pipeline)
-                rp.set_bind_group(0, self.badges[self.badge_shown][2])
-                rp.draw(6)
+            for shown in (self.badge_shown, self.hud_shown):
+                if shown is not None and shown[-1] == tuple(physical_size) and shown in self.badges:
+                    rp.set_pipeline(self.badge_pipeline)
+                    rp.set_bind_group(0, self.badges[shown][2])
+                    rp.draw(6)
             rp.end()
             self.device.queue.submit([encoder.finish()])
         if slot is not None:
@@ -1697,6 +1707,9 @@ def make_widget(parent=None):
             self.overlay_provider = None  # (view, physical_size, ratio) -> premultiplied RGBA QImage or None
             self.badge_text = None        # () -> the tier badge's label ("" for none), when the owner draws it from the card
             self.badge_maker = None       # (text, physical_size, ratio) -> (QImage, x, y): the label's pixels, asked once per label
+            self.hud_text = None          # () -> the corner readout's text (picture size and zoom) drawn bottom right, or "" for none
+            self.hud_maker = None         # (text, physical_size, ratio) -> (QImage, x, y), like badge_maker
+            self.key_sink = None          # (QKeyEvent) -> None: where a key pressed on the picture goes
             self.overlay_probed = False   # the provider records first and answers EMPTY/SAME_OVERLAY; an image it returns has content
             self.compare_provider = None  # () -> the wipe line (centre x, y, normal x, y) in scene units, or None
             self.wipe_handle_provider = None   # (logical zoom) -> the turn handle's scene point (x, y) when the card draws the line and handles, or None
@@ -1712,6 +1725,7 @@ def make_widget(parent=None):
             self._retry = None            # the hand-over to repeat once the window can take a surface
             self._window_id = None        # the native window the surface was made for
             self.setMouseTracking(True)
+            self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
             self.filled.connect(self._request)
             self.request_draw(self._draw)
 
@@ -1845,6 +1859,17 @@ def make_widget(parent=None):
             size = tuple(size)
             presenter.set_badge((text, ratio, size), lambda: self.badge_maker(text, size, ratio))
 
+        def _paint_hud(self, size):
+            """The corner readout (picture size and zoom) is a texture per text, like the tier badge."""
+            presenter = self.presenter
+            text = self.hud_text() if self.hud_text is not None and self.hud_maker is not None else ""
+            if not text:
+                presenter.set_hud(None, None)
+                return
+            ratio = float(self.get_pixel_ratio())
+            size = tuple(size)
+            presenter.set_hud((text, ratio, size), lambda: self.hud_maker(text, size, ratio))
+
         def _fail(self, message):
             self.error = message
             if self.presenter is not None:
@@ -1878,6 +1903,7 @@ def make_widget(parent=None):
                 try:
                     self._paint_overlay(size)
                     self._paint_badge(size)
+                    self._paint_hud(size)
                     self.presenter.draw(self.view, size, wipe)
                 except Exception as exc:
                     # A lost or failing device is replaced once; the same draw is then repeated on the new one.
@@ -1987,6 +2013,12 @@ def make_widget(parent=None):
         def mouseDoubleClickEvent(self, event):
             self.fit()
             event.accept()
+
+        def keyPressEvent(self, event):
+            if self.key_sink is not None:
+                self.key_sink(event)
+            else:
+                super().keyPressEvent(event)
 
         def resizeEvent(self, event):
             super().resizeEvent(event)
