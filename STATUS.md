@@ -1,6 +1,6 @@
-# Lane 8 step B finish 1 — active (2026-10-22, 1:05 PM PDT)
+# Lane 8 step B finish 1 — DONE (2026-10-22, 1:30 PM PDT)
 
-Merged baseline: `219263f7`. This pass is limited to the three open drag gates: reduce the RotoPaint full-tier settle from 4.665 s, obtain a real Properties-slider preview, and record the maximum picture interval during movement. Next: optimize paint raster work to its stroke bounds; fix the benchmark slider gesture and add per-drag picture cadence fields; rerun targeted tests and the locked RTX measurements. No off-site hardware measurements are claimed.
+The three left-out drag gates are closed. Solid-over RotoPaint now limits raster/composite work to clipped stroke bounds and matches full-tile output byte-for-byte. The field driver moves the Properties slider horizontally on a visible control and reports each drag's picture count and maximum interval. On the RTX 3080 Ti, RotoPaint settles in 0.849 s; Properties produces 8 pictures and settles in 0.702 s. Maximum in-drag picture gaps are 0.182 s (Roto), 0.202 s (RotoPaint), 0.278 s (Tracker), 0.082 s (PlanarTracker), and 0.195 s (Properties). The scrub and playback thresholds documented below also pass. Focused CPU/UI/docs, playback-counter, and GPU lens-view tests pass. Raw field runs and test logs are retained under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`. No off-site hardware result is claimed. Needs Gonzo: review/integrate and perform real-display/Windows visual QA.
 
 # Lane 6 finish 2 — PARTIAL (2026-10-22, 6:20 AM PDT)
 

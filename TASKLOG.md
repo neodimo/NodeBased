@@ -1,3 +1,11 @@
+## 2026-10-22 — Lane 8 step B finish 1 (DONE)
+
+- **What was done — evidence:** Clipped solid-over paint work is byte-identical to full-tile rendering. A valid 1920 × 1800 virtual desktop exposed the Properties slider for an actual pointer drag. RTX 3080 Ti measurements pass all first-picture, maximum in-drag gap, full-tier settle, scrub, and playback gates. The completed table is in `docs/ROTO_TRACKING.md`; its bundled copy is byte-identical.
+- **Artifacts:** Commits `9b150c7c`, `031f7e2b`, and `1c3f9bc5` are in this worktree. Test logs and field JSON are retained as local scratch in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/` (`L8-finish1-tests.log`, `L8-finish1-playback-tests.log`, `L8-finish1-lens-gpu.log`, and `live-picture-L8-finish1-rtx-tall.json`).
+- **State:** DONE for the left-out finish scope. No off-site GPU/laptop run or real-display visual review is claimed.
+- **Next owner + concrete artifact:** Gonzo reviews/integrates and performs real-display/Windows visual QA using `docs/ROTO_TRACKING.md` and the local RTX measurement JSON.
+- **Failure mode:** A 1920 × 1080 virtual desktop placed the Properties control at y=1293, outside the screen, and produced no preview. Re-run with a virtual screen tall enough to contain the panel; the corrected 1920 × 1800 run measured the slider successfully.
+
 ## 2026-10-22 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step B of 3: the Direct picture shows the true float picture at rest, and the A/B compare runs on the card (finish 1) (integrator tick)
 
 - **What was done:** `main` `219263f7` -> `873cc57b` plus this docs commit. Evidence and per-lane commit
