@@ -263,6 +263,21 @@ def zebra_masks(rgb, height, width):
     return (rgb > ZEBRA_HIGH).any(axis=2) & stripe, (rgb < ZEBRA_LOW).any(axis=2) & stripe
 
 
+def _unpremultiply(rgb, weight):
+    """``rgb / weight`` where ``weight`` > 1e-8, zero elsewhere. Only the bounding box of the covered pixels is
+    divided: a 3D render of an object on a transparent background covers a fraction of the frame, and the masked
+    divide over all of a 1080p frame took 17 ms of to_qimage's 45. Same float operations on the same values."""
+    covered = weight[..., 0] > 1e-8
+    rows = np.flatnonzero(covered.any(axis=1))
+    straight = np.zeros_like(rgb)
+    if not rows.size:
+        return straight
+    cols = np.flatnonzero(covered.any(axis=0))
+    box = (slice(rows[0], rows[-1] + 1), slice(cols[0], cols[-1] + 1))
+    np.divide(rgb[box], weight[box], out=straight[box], where=covered[box][..., None])
+    return straight
+
+
 def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None):
     """Compose a display image over `background` ("black" or "checker").
 
@@ -280,7 +295,7 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
     if channel == "A":
         rgb = np.repeat(alpha, 3, axis=2)
     else:
-        rgb = frame[..., :3] * (2.0 ** exposure)
+        rgb = frame[..., :3] * (2.0 ** exposure) if exposure else frame[..., :3]
         if channel in ("R", "G", "B"):
             rgb = np.repeat(rgb[..., "RGB".index(channel):"RGB".index(channel) + 1], 3, axis=2)
         from .color import display_rgb
@@ -289,7 +304,7 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         # has always unpremultiplied first, so the viewer and the exporter used to disagree
         # on exactly those pixels. Same order here: divide out alpha, transform, re-associate.
         weight = np.clip(alpha, 0, 1)
-        straight = np.divide(rgb, weight, out=np.zeros_like(rgb), where=weight > 1e-8)
+        straight = _unpremultiply(rgb, weight)
         gamma = float((look or {}).get("gamma", 1.0))
         if gamma != 1.0:
             straight = np.sign(straight) * np.abs(straight) ** np.float32(1.0 / gamma)
@@ -302,7 +317,10 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
             levels = display_rgb(np.array([[[0.055] * 3, [0.095] * 3]], np.float32), view)[0, :, 0]
             bg = np.where((xx // 16 + yy // 16) % 2 == 0, levels[0], levels[1]).astype(np.float32)
             rgb = rgb + bg[..., None] * (1 - weight)
-    rgb8 = (np.clip(rgb, 0, 1) * 255 + 0.5).astype(np.uint8)
+    scaled = np.clip(rgb, 0, 1)         # in place from here: each full-frame temporary is about 25 MB at 1080p
+    scaled *= 255
+    scaled += 0.5
+    rgb8 = scaled.astype(np.uint8)
     if channel != "A" and (look or {}).get("zebra"):
         over, under = zebra
         rgb8[over] = (255, 0, 0)

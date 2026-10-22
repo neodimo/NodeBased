@@ -190,7 +190,13 @@ def main():
         adapter = gpu3d.chosen_adapter_name() if gpu3d.available() else "none (CPU rasteriser)"
     except Exception as exc:
         adapter = f"error: {exc}"
+    start_marks = [i for i, e in enumerate(events) if e[2] == "worker_start"]
+    one_frame = []
+    if len(start_marks) > 6:           # the raw marks of one steady-state frame, relative to its worker_start
+        first, last = start_marks[5], start_marks[6]
+        one_frame = [[round((e[0] - events[first][0]) * 1000, 2), e[1], e[2]] for e in events[first:last]]
     result = {
+        "one_frame_marks": one_frame,
         "scene": args.scene, "size": [width, height], "backend": args.backend, "adapter": adapter,
         "seconds": round(elapsed, 2), "first_frame_s": first_frame_s, "frames_shown": len(shown),
         "fps": round(len(shown) / elapsed, 2), "worker_jobs": frames,
@@ -218,6 +224,8 @@ def main():
             buffer.write(f"  {row['samples']:6d}  {row['where']}\n")
     buffer.write("\ncProfile of the worker, by cumulative time\n")
     pstats.Stats(worker_profile, stream=buffer).strip_dirs().sort_stats("cumulative").print_stats(30)
+    buffer.write("\ncProfile of the worker, by time inside each function\n")
+    pstats.Stats(worker_profile, stream=buffer).strip_dirs().sort_stats("tottime").print_stats(22)
     out.with_suffix(".txt").write_text(buffer.getvalue())
     print(buffer.getvalue()[:3500], flush=True)
     os._exit(0)

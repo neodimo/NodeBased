@@ -77,13 +77,27 @@ class TimeDependenceTests(unittest.TestCase):
     def test_animated_camera_makes_the_render_time_dependent(self):
         document = build(
             {"op": "create", "type": "Camera3D", "id": "cam", "params": {}},
+            {"op": "create", "type": "Cube3D", "id": "cube", "params": {}},
             {"op": "create", "type": "Scene3D", "id": "scene", "params": {}},
+            {"op": "connect", "id": "scene", "input": "object0", "source": "cube"},
             {"op": "create", "type": "Render3D", "id": "r", "params": {}},
             {"op": "connect", "id": "r", "input": "scene", "source": "scene"},
             {"op": "connect", "id": "r", "input": "camera", "source": "cam"},
             {"op": "set_key", "id": "cam", "param": "tx", "frame": 1, "value": 0.0},
             {"op": "set_key", "id": "cam", "param": "tx", "frame": 24, "value": 2.0}).document
         self.assertTrue(is_time_dependent(document, "r"))
+
+    def test_animated_camera_in_front_of_an_empty_scene_does_not(self):
+        # Nothing in the scene, so the camera cannot change a pixel (docs/PERFORMANCE.md, Lane 4 playback profile).
+        document = build(
+            {"op": "create", "type": "Camera3D", "id": "cam", "params": {}},
+            {"op": "create", "type": "Scene3D", "id": "scene", "params": {}},
+            {"op": "create", "type": "Render3D", "id": "r", "params": {}},
+            {"op": "connect", "id": "r", "input": "scene", "source": "scene"},
+            {"op": "connect", "id": "r", "input": "camera", "source": "cam"},
+            {"op": "set_key", "id": "cam", "param": "tx", "frame": 1, "value": 0.0},
+            {"op": "set_key", "id": "cam", "param": "tx", "frame": 24, "value": 2.0}).document
+        self.assertFalse(is_time_dependent(document, "r"))
 
     def test_missing_target_is_time_dependent(self):
         document = build(*checker_grade()).document

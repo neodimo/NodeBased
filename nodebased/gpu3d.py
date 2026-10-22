@@ -1693,6 +1693,50 @@ def _environment_resources(state, keep, environments):
     return env_buffer, atlas_texture.create_view(), sampler
 
 
+def _copy_band(staging, result, y0, y1, dtype, stride, width):
+    """Copy rows y0..y1 of a mapped staging buffer into ``result`` with one NumPy copy straight from the mapping.
+    ``read_mapped()`` copies by default, into a Python bytearray with the GIL held (33 ms of the Qt thread's
+    time at 1080p in a playing window, on top of the copy NumPy makes next); the view is dropped before returning
+    so the caller can unmap."""
+    rows = y1 - y0
+    view = staging.read_mapped(copy=False)
+    raw = np.frombuffer(view, dtype, count=rows*stride//dtype.itemsize)
+    result[y0:y1] = raw.reshape(rows, stride//dtype.itemsize)[:, :width*4].reshape(rows, width, 4)
+    del raw, view
+
+
+def release_staging(state=None):
+    """Destroy the readback buffer a state is holding (the next render makes a new one)."""
+    state = _state() if state is None else state
+    held = state.pop('staging', None)
+    if held is not None:
+        held.destroy()
+
+
+STAGING_KEEP_BYTES = 256 * 1024 * 1024      # the readback buffer a state holds on to between renders
+
+
+def _staging_buffer(state, size, keep):
+    """The MAP_READ buffer a render reads its pixels back through. Creating and destroying one per render cost
+    209 ms for the 133 MB of a 1080p picture drawn at 2 samples (docs/PERFORMANCE.md, Lane 4 playback profile), so a
+    state keeps the last one and hands it out again while it is big enough. Held buffers are bounded by
+    STAGING_KEEP_BYTES; a bigger one lives for its render only. Call with the GPU lock held."""
+    wgpu, device = state['wgpu'], state['device']
+    held = state.get('staging')
+    if held is not None and held.size >= size:
+        state['staging_reuses'] = state.get('staging_reuses', 0) + 1
+        return held
+    if held is not None:
+        held.destroy()
+        state['staging'] = None
+    buffer = device.create_buffer(size=size, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ)
+    state['staging_creates'] = state.get('staging_creates', 0) + 1
+    if size <= STAGING_KEEP_BYTES:
+        state['staging'] = buffer
+        return buffer
+    return keep(buffer)
+
+
 def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None, volume=None):
     wgpu, device = state['wgpu'], state['device']
     data = output in scene3d.DATA_OUTPUTS
@@ -1844,8 +1888,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         _mark('upload_done')
         dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
         stride = ((width*4*dtype.itemsize+255)//256)*256
-        staging = keep(device.create_buffer(size=stride*max(y1-y0 for y0, y1 in bands),
-            usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
+        staging = _staging_buffer(state, stride*max(y1-y0 for y0, y1 in bands), keep)
         result = np.empty((height, width, 4), 'f4')
         # Replaying the draw list multiplies host recording cost, acceptable only
         # for heavy-shadow scenes. Ordinary renders retain one submission.
@@ -1910,13 +1953,14 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             staging.map_sync(wgpu.MapMode.READ)
             _mark('gpu_done')
             try:
-                raw = np.frombuffer(staging.read_mapped(), dtype, count=rows*stride//dtype.itemsize)
-                result[y0:y1] = raw.reshape(rows, stride//dtype.itemsize)[:, :width*4].reshape(rows, width, 4)
+                _copy_band(staging, result, y0, y1, dtype, stride, width)
             finally:
                 staging.unmap()
             _mark('readback_done')
             _cancel(cancel)
-        if not data:
+        if not data and bg.any():
+            # A transparent black background (the default) adds exactly zero; the three full-frame temporaries
+            # of this line cost about 15 ms at 1080p.
             result += bg*(1-result[..., 3:4])
         return result
     finally:

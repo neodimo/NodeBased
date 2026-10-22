@@ -58,7 +58,7 @@ from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
 from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
-from .playback import PlaybackQueue, DisplayCache, STATIC_FRAME
+from .playback import PlaybackQueue, DisplayCache, STATIC_FRAME, playing_document
 from .queuepanel import QueuePanel, create_default_queue
 from . import pipeline
 from .motion import MotionAnimator
@@ -9499,6 +9499,8 @@ class Window(QMainWindow):
         document = self.dispatcher.document
         time_range = document["time"]
         frames = range(time_range["first"], time_range["last"] + 1)
+        if self.playing:
+            document = playing_document(document)      # the frames playback caches carry its own sample cap
         try:
             # A frame counts as cached at any proxy tier. Playback with "Proxy while playing"
             # fills a proxy tier; judging the band by the tier selected after stopping made it
@@ -14194,6 +14196,8 @@ class Window(QMainWindow):
         self.rendered_identity = self.render_identity()
         snapshot = copy.deepcopy(self.dispatcher.document if document_override is None
                                  else document_override)
+        if self.playing:
+            snapshot = playing_document(snapshot)
         frame = snapshot["time"]["current"]
         selected_tier = int(self.proxy.currentData())
         if progressive and not self.playing and self._selected_tier_is_cached(

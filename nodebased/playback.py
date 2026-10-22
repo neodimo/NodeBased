@@ -106,6 +106,33 @@ class PlaybackQueue:
 
 PRESENTATION_FIELDS = ("pos", "name", "label", "thumbnail")
 
+# Playback draws a 3D comp at the viewport's own size and one sample per pixel. A Render3D at 2 samples
+# renders, reads back and averages four times the pixels (3840 x 2160 for a 1080p comp: a 133 MB staging
+# buffer and about 300 ms of the 485 ms a cube frame cost on the RTX 3080 Ti, docs/PERFORMANCE.md "Lane 4
+# playback profile"). The cap lives in the document the playing requests carry, so the display cache keeps
+# playback frames apart from the full-quality ones: stopping re-renders the frame at the node's own samples.
+PLAYBACK_SAMPLES = 1
+_SAMPLED_MODES = ("raster", "raytrace")
+
+
+def playing_document(document):
+    """The document a *playing* request evaluates: every raster or ray-traced Render3D capped at
+    ``PLAYBACK_SAMPLES`` samples. Returns ``document`` itself when nothing needs capping, otherwise a copy
+    that shares everything except the capped nodes. Path-traced Render3D nodes are left alone: they take
+    their sample count from ``pt_samples``, not from ``samples``."""
+    nodes = document.get("nodes", {})
+    capped = {}
+    for key, node in nodes.items():
+        if node.get("type") != "Render3D":
+            continue
+        params = node.get("params", {})
+        if (params.get("render_mode", "raster") in _SAMPLED_MODES
+                and int(params.get("samples", 1)) > PLAYBACK_SAMPLES):
+            capped[key] = {**node, "params": {**params, "samples": PLAYBACK_SAMPLES}}
+    if not capped:
+        return document
+    return {**document, "nodes": {**nodes, **capped}}
+
 # Node kinds whose output is a pure function of their parameters and inputs: no file sequence, no
 # simulation, no per-frame state. This is an allow-list on purpose. A kind that is missing from it
 # is treated as time-dependent, which only costs speed; a kind wrongly listed here would freeze
@@ -150,8 +177,19 @@ def is_time_dependent(document, target):
             return True
         if expressions.get(key):
             return True
-        pending.extend(source for source in (node.get("inputs") or {}).values() if source)
+        inputs = node.get("inputs") or {}
+        sources = [source for source in inputs.values() if source]
+        if node.get("type") == "Render3D" and _is_empty_scene(nodes, inputs.get("scene")):
+            sources = [inputs["scene"]]       # a camera cannot change a picture with nothing in front of it
+        pending.extend(sources)
     return False
+
+
+def _is_empty_scene(nodes, key):
+    """True for a Scene3D with nothing wired into any slot: Render3D draws only its flat background."""
+    node = nodes.get(key) if key else None
+    return (node is not None and node.get("type") == "Scene3D"
+            and not any((node.get("inputs") or {}).values()))
 
 
 class DisplayCache:

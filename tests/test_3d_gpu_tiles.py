@@ -51,6 +51,7 @@ class BandPlanning(unittest.TestCase):
 def observed_device(event=None, fail_read=False):
     """Delegate to the real device; track ownership without wrapping GPU handles."""
     state = dict(gpu3d._state())
+    state.pop('staging', None)       # a render here makes its own readback buffer through the observed device ...
     original = state['device']
     device = Mock(wraps=original, limits=original.limits)
     queue = Mock(wraps=original.queue)
@@ -73,6 +74,8 @@ def observed_device(event=None, fail_read=False):
         queue.submit.side_effect = submit
         state['device'] = device
         stack.enter_context(patch.object(gpu3d, '_state', return_value=state))
+        # ... and does not hold on to it (gpu3d keeps one between renders), so every resource a render creates is destroyed
+        stack.enter_context(patch.object(gpu3d, 'STAGING_KEEP_BYTES', 0))
         yield device, resources
 
 

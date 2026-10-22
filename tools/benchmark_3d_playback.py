@@ -61,6 +61,7 @@ def parse_args(argv=None):
     p.add_argument("--stages", action="store_true", help="record the per-stage timeline")
     p.add_argument("--self-check", action="store_true")
     p.add_argument("--splats", type=int, default=20000)
+    p.add_argument("--view", default="", help="display view to play through (default: the window's own, ACES 2.0)")
     return p.parse_args(argv)
 
 
@@ -194,6 +195,8 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     last = 240
     window.set_time(first=1, last=last, current=1, fps=args.fps)
     window.playback_proxy.setChecked(False)     # play at the size the artist set
+    if args.view:
+        window.display_view.setCurrentText(args.view)
     window.agent_command({"op": "view", "id": view})
     t0 = time.perf_counter()
     while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < 120:
@@ -220,7 +223,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     except Exception as exc:       # an adapter error should not lose the run
         adapter = f"error: {exc}"
     result = {
-        "scene": scene, "size": [width, height], "backend": args.backend, "seconds": round(elapsed, 2),
+        "scene": scene, "size": [width, height], "backend": args.backend, "view": window.display_view.currentText(), "seconds": round(elapsed, 2),
         "adapter": adapter, "platform": os.environ.get("QT_QPA_PLATFORM", ""), "display": os.environ.get("DISPLAY", ""),
         "comp_fps": args.fps, "shown": len(times), "fps": round(len(times) / elapsed, 2) if elapsed else 0.0,
         "interval_ms": distribution(intervals), "render_ms_status": distribution(render_ms),
@@ -268,7 +271,7 @@ def main(argv=None):
                 name = handle.name
             cmd = [sys.executable, __file__, "--scene", scene, "--size", args.size, "--seconds", str(args.seconds),
                    "--fps", str(args.fps), "--backend", args.backend, "--adapter", args.adapter,
-                   "--splats", str(args.splats), "--out", name]
+                   "--splats", str(args.splats), "--view", args.view, "--out", name]
             subprocess.run(cmd, check=False, env=dict(os.environ, PYTHONPATH=str(ROOT)))
             try:
                 results.append(json.loads(Path(name).read_text()))
