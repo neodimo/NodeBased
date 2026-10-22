@@ -155,6 +155,15 @@ def run_parallel(mods, args, env):
             finish(f.result())
     for n, b in enumerate(serial_batches, len(pool_batches) + 1):
         finish(run_captured(n, total, b, cmd_for(b), env))
+    # A wall-clock assertion can miss its budget only because three other batches share the cores (CI run
+    # 39792276070: test_roto's 0.25 s feather render). Each failed pool batch gets one more try alone
+    # once the pool has drained; a failure that survives it fails the run, and both outputs are printed.
+    retry = [n for n, *_ in sorted(failed) if n <= len(pool_batches)]
+    for n in retry:
+        print(f"=== batch {n} failed in the pool; running it once more alone", flush=True)
+        result = run_captured(n, total, batches[n - 1], cmd_for(batches[n - 1]), env)
+        failed[:] = [f for f in failed if f[0] != n]
+        finish(result)
     failed.sort()
     print(f"=== {total} batches, {len(mods)} modules, {ran} tests, {time.monotonic() - started:.1f} s total", flush=True)
     for n, first, last, code in failed:
