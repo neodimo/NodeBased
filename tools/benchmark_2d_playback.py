@@ -47,7 +47,7 @@ def percentile(values, q):
 def run_window(args):
     os.environ['QT_QPA_PLATFORM'] = 'xcb'
     sys.path.insert(0, str(ROOT))
-    from PySide6.QtCore import QTimer
+    from PySide6.QtCore import QTimer, Qt
     from PySide6.QtWidgets import QApplication
     import numpy as np
     import nodebased.gpu3d as gpu3d
@@ -63,13 +63,17 @@ def run_window(args):
     from nodebased import groups
 
     events=[]; shown=[]; statuses=[]; worker_profiles=[]; sample_counts={'qt':{},'worker':{}}; node_samples={}; node_costs={}; sample_period_ms=2.0
-    lock=threading.Lock(); start=time.perf_counter(); run_end=[None]
+    lock=threading.Lock(); start=time.perf_counter(); run_end=[None]; sample_stop=[None]
     def mark(stage, **kw):
         row={'stage':stage,'t_ms':round((time.perf_counter()-start)*1000,3),**kw}
         with lock: events.append(row)
         if os.environ.get('NB_PLAYBACK_TRACE') and stage in {'playback_start','frame_tick','frame_request','worker_start','compose_start','compose_end','display_conversion','ui_handoff','playback_stop','worker_end'}: print(json.dumps(row),file=sys.stderr,flush=True)
     def sample_stacks():
         while run_end[0] is None:
+            sample_time=time.perf_counter()
+            if sample_stop[0] is None or sample_time < start or sample_time >= sample_stop[0]:
+                time.sleep(.002)
+                continue
             with lock: frames=sys._current_frames()
             for thread in threading.enumerate():
                 if thread.ident not in frames: continue
@@ -218,9 +222,14 @@ def run_window(args):
     sampler=threading.Thread(target=sample_stacks,name='playback-sampler',daemon=True); sampler.start()
     def begin():
         nonlocal start
-        start=time.perf_counter(); mark('playback_start',mode=args.cache_mode,adapter=args.adapter)
+        start=time.perf_counter(); sample_stop[0]=start+args.seconds
+        mark('playback_start',mode=args.cache_mode,adapter=args.adapter)
         win.toggle_playback(True)
-        QTimer.singleShot(round(args.seconds*1000),finish)
+        sample_timer = QTimer(win)
+        sample_timer.setSingleShot(True)
+        sample_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        sample_timer.timeout.connect(finish)
+        sample_timer.start(round(args.seconds*1000))
     def finish():
         win.toggle_playback(False); win.timer.stop(); win.preview_queue.cancel()
         mark('playback_stop',frames=len(shown))
@@ -233,10 +242,17 @@ def run_window(args):
     QTimer.singleShot(300,begin)
     app.exec()
     sampler.join()
-    intervals=[(shown[i][0]-shown[i-1][0])*1000 for i in range(1,len(shown))]
+    # Stop time is the acceptance-window boundary. The worker may finish in-flight frames while
+    # draining below, but those tail pictures are outside the measured playback interval.
+    measured_shown=[row for row in shown if start <= row[0] <= sample_stop[0]]
+    intervals=[(measured_shown[i][0]-measured_shown[i-1][0])*1000 for i in range(1,len(measured_shown))]
     frame_times=[]
     last=None
+    sample_stop_ms=((sample_stop[0]-start)*1000) if sample_stop[0] is not None else None
     for event in events:
+        if (event['t_ms'] < 0 or sample_stop_ms is not None
+                and event['t_ms'] > sample_stop_ms):
+            continue
         if event['stage']=='worker_start': last=event['t_ms']
         elif event['stage']=='ui_handoff' and last is not None and event['has_frame']:
             frame_times.append(event['t_ms']-last); last=None
@@ -253,7 +269,7 @@ def run_window(args):
              estimated_ms=round(samples*sample_period_ms,3),fallback_reason=fallback_reason if path=='full-frame fallback' else None)
     result={'case':args.case,'resolution':f'{args.width}x{args.height}','duration_s':args.seconds,
         'cache_mode':args.cache_mode,'adapter':args.adapter,'force_adapter':args.force_adapter,
-        'frames_displayed':len(shown),'achieved_fps':round(len(shown)/args.seconds,3),
+        'frames_displayed':len(measured_shown),'achieved_fps':round(len(measured_shown)/args.seconds,3),
         'frame_interval_ms':{'p50':percentile(intervals,50),'p95':percentile(intervals,95),'p99':percentile(intervals,99)},
         'worker_to_handoff_ms':{'p50':percentile(frame_times,50),'p95':percentile(frame_times,95),'p99':percentile(frame_times,99)},
         'status_line':statuses[-1] if statuses else win.statusBar().currentMessage(),
