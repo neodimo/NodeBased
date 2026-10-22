@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step B of 3: the Direct picture shows the true float picture at rest, and the A/B compare runs on the card (finish 1), Lane 4 (Rendering, Claude Sonnet 5.5) step B of 3: the mixed mesh and splat scene's first look under one second, and a sharper first look (integrator tick)
+
+- **What was done:** `main` `5d612c6f` -> `644f3778` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `644f3778`: Ran 5802 tests in 472.720 s, OK (skipped=19), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
 
 - **What was done:** `main` `e0963ac8` -> `89870cb0` plus this docs commit. Evidence and per-lane commit

@@ -1,5 +1,39 @@
 ## 2026-10-22 — Lane 8 step A finish: integrated drag proven; 24 fps playback remains open (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (7:52 AM on 2026-10-22 PDT)
+
+`main` moved `5d612c6f` -> `644f3778` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `644f3778` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0742.log`, started 7:42 AM): **Ran 5802 tests in 472.720 s, OK (skipped=19), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step B of 3: the Direct picture shows the true float picture at rest, and the A/B compare runs on the card (finish 1).** Commits:
+  - `3e5afc9b` Docs: the overlay recording, the cost-gate runs on the final code (met without B in one of two runs, not with a wipe), the laptop stand-in and the wipe drag
+  - `405b3006` Revert "Direct picture: a recorded overlay with content is played into the image instead of being painted a second time"
+  - `e8d92bfd` Direct picture: a recorded overlay with content is played into the image instead of being painted a second time
+  - `abc7cfa7` Direct picture: an overlay band uploads only the columns that changed; the field-kit paused check runs three rounds
+  - `bf89873f` Direct picture: the overlay image is built in two reused buffers and a recorded overlay with content skips the empty scan and the whole-image compare
+  - `d2973a09` Direct picture: the overlay is recorded first and no surface-sized image is made when nothing is painted or nothing changed; bench rounds alternate Viewer and direct and gate on the pooled edits; the view-only click test sets the preference it depends on
+  Diff: 7 files changed, 293 insertions(+), 79 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step B of 3: the mixed mesh and splat scene's first look under one second, and a sharper first look.** Commits:
+  - `304eaf11` Scene cache: the key records the smoke's build switches (empty-space grid on or off), so a render with the grid never reuses a build without it
+  - `5e2626cb` Benchmarks: mixed-scene first-look profile before and after step B (RTX 3080 Ti, 1080p: cold 0.95 s to 0.61 s, warm 0.79 s to 0.51 s)
+  - `ffe4dfef` Bvh.build splits a level at a time: the same tree in a tenth of the time (splat layer build 0.33 s to 0.10 s)
+  - `92314f31` First look: sizes move in steps, a rebuild aims for the warm target less its build; drag-aware debounce; orbit benchmark reads the card at working and idle clocks
+  - `29ae85a9` Field kit records the warm first look's size, the orbit paint time and the scene cache; banded conversion tests
+  - `3c58e09a` Sharper, faster first look: threaded enlarge and display conversion, warm target in the cost model, burst-aware debounce, first-look-only benchmark
+  - `8228a169` Keep the path tracer's scene preparation by content: a camera move or material edit no longer rebuilds the splat layer, mesh trees or pack
+  Diff: 17 files changed, 3206 insertions(+), 85 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (6:22 AM on 2026-10-22 PDT)
 
 `main` moved `e0963ac8` -> `89870cb0` (lane commits cherry-picked onto main in lane order) and then to this
