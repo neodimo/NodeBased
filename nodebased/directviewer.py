@@ -45,7 +45,7 @@ import numpy as np
 ENV = "NODEBASED_DIRECT_VIEWER"
 ADAPTER_ENV = "NODEBASED_DIRECT_ADAPTER"
 BACKEND_ENV = "NODEBASED_DIRECT_BACKEND"
-UNIFORM_BYTES = 112           # the 80-byte view block, then carddisplay's two display vec4s
+UNIFORM_BYTES = 144           # the 80-byte view block, then carddisplay's display vec4s and its two compare vec4s
 ZOOM_RANGE = (0.05, 20.0)     # logical zoom, the same bounds PanZoomView.wheelEvent applies
 SURROUND = (0.0, 0.0, 0.0)    # VIEWER_SURROUND is pure black in every theme
 RECOVERY_LIMIT = (3, 30.0)    # at most this many device recoveries in this many seconds, then the dock gives up
@@ -74,6 +74,25 @@ def too_large(limits, width, height, texel, device=""):
     if size > limits.get("max-buffer-size", 1 << 28):
         return (f"Direct picture: the picture is {width} x {height} pixels ({size / 1048576:.0f} MB to upload) and "
                 f"{card} takes at most {limits['max-buffer-size'] / 1048576:.0f} MB at once; the Viewer shows it")
+    return ""
+
+
+def pair_too_large(limits, width, height, texel, texel_b, device=""):
+    """Why the A and B pictures (the same width x height, texel and texel_b bytes per pixel) do not fit this card
+    together, or "" when they do. Both go up through one staging buffer, so the buffer limit is what A and B
+    share; each is also a texture of its own and must fit the texture side limit."""
+    if not limits:
+        return ""
+    card = device or "this card"
+    side = limits.get("max-texture-dimension-2d", 8192)
+    if width > side or height > side:
+        return (f"Direct picture: the A and B pictures are {width} x {height} pixels and {card} takes at most "
+                f"{side} pixels on a side; the Viewer shows them")
+    size = padded_row(width, texel) * height + padded_row(width, texel_b) * height + ROW_ALIGN
+    if size > limits.get("max-buffer-size", 1 << 28):
+        return (f"Direct picture: the A and B pictures are {width} x {height} pixels each ({size / 1048576:.0f} MB to "
+                f"upload together) and {card} takes at most {limits['max-buffer-size'] / 1048576:.0f} MB at once; "
+                f"the Viewer shows them")
     return ""
 
 
@@ -346,6 +365,14 @@ def picture_layout(kind, source):
     return int(source.width()), int(source.height()), "rgba8unorm", 4
 
 
+def payload_layouts(payload):
+    """(layout of A, layout of B or None) for a ledger payload; only a linear payload can carry a B frame."""
+    layout = picture_layout(payload[0], payload[1])
+    if payload[0] == "linear" and len(payload) > 5 and payload[5] is not None:
+        return layout, picture_layout("linear", payload[5])
+    return layout, None
+
+
 _band_pool = None
 
 
@@ -428,11 +455,21 @@ class StagingRing:
             slot["state"] = "filling"
             return slot
 
-    def stage(self, sequence, payload, layout):
-        """Start filling a slot with `payload` (a ledger payload). False when every slot is busy."""
+    def stage(self, sequence, payload, layout, layout_b=None):
+        """Start filling a slot with `payload` (a ledger payload). False when every slot is busy.
+
+        With `layout_b` the B frame goes into the same buffer after A (its offset a multiple of 256), so A and B
+        always arrive together and the pair counts once against the buffer limit."""
         width, height, fmt, texel = layout
         row = padded_row(width, texel)
         size = row * height
+        b = None
+        if layout_b is not None:
+            b_width, b_height, b_fmt, b_texel = layout_b
+            b_row = padded_row(b_width, b_texel)
+            offset = (size + ROW_ALIGN - 1) // ROW_ALIGN * ROW_ALIGN
+            b = {"offset": offset, "width": b_width, "height": b_height, "fmt": b_fmt, "texel": b_texel, "row": b_row}
+            size = offset + b_row * b_height
         slot = self.idle_slot()
         if slot is None:
             return False
@@ -452,7 +489,7 @@ class StagingRing:
             buffer.map_sync("WRITE")
         self.counters["map_ms_total"] += (time.perf_counter() - started) * 1000.0
         view = buffer._experimental_get_mapped_range(0, size)
-        slot["meta"] = (payload, width, height, fmt, texel, row)
+        slot["meta"] = (payload, width, height, fmt, texel, row, b)
         slot["sequence"] = sequence
         if self.pool is None:
             self._fill(slot, view)
@@ -462,10 +499,14 @@ class StagingRing:
         return True
 
     def _fill(self, slot, view):
-        payload, width, height, fmt, texel, row = slot["meta"]
+        payload, width, height, fmt, texel, row, b = slot["meta"]
         started = time.perf_counter()
         try:
             converted = fill_rows(view, payload[0], payload[1], width, height, row, fmt)
+            if b is not None:
+                end = b["offset"] + b["row"] * b["height"]
+                converted = fill_rows(view[b["offset"]:end], "linear", payload[5], b["width"], b["height"], b["row"],
+                                      b["fmt"]) or converted
             state = "ready"
         except Exception:
             converted, state = False, "failed"
@@ -587,6 +628,10 @@ class RetainedPresenter:
         self.linear_capacity = (0, 0)
         self.linear_bind_group = None
         self.linear_by_format = {}   # texture format -> (texture, capacity, bind group)
+        self.linear_b_by_format = {}  # texture format -> (texture, capacity): the B buffer of an A/B compare
+        self.linear_b_texture = None
+        self.compare = "A only"      # the compare mode of the retained picture ("A only" when it has no B)
+        self.group_key = None        # (A texture, B texture) the current linear bind group was made for
         self.limits = {}
         self.refusal = ""            # why the last picture was refused (too large for this card), or ""
         self.linear_pipelines = {}   # view -> pipeline running carddisplay's fragment shader
@@ -644,7 +689,9 @@ class RetainedPresenter:
             {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT,
              "texture": {"sample_type": "unfilterable-float", "view_dimension": "2d"}},
             {"binding": 1, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": "uniform"}},
-            {"binding": 2, "visibility": wgpu.ShaderStage.FRAGMENT, "sampler": {"type": "non-filtering"}}])
+            {"binding": 2, "visibility": wgpu.ShaderStage.FRAGMENT, "sampler": {"type": "non-filtering"}},
+            {"binding": 3, "visibility": wgpu.ShaderStage.FRAGMENT,
+             "texture": {"sample_type": "unfilterable-float", "view_dimension": "2d"}}])
         self.tables_layout = self.device.create_bind_group_layout(entries=[
             {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": "read-only-storage"}}])
         self.linear_sampler = self.device.create_sampler()
@@ -696,10 +743,14 @@ class RetainedPresenter:
             self._destroy(resource)
         tables = [entry[2] for entry in self.linear_pipelines.values() if entry is not None]
         floats = [entry[0] for entry in self.linear_by_format.values()]
-        for resource in (self.texture, *floats, self.uniform, self.paint_texture, self.paint_flags, *tables):
+        floats_b = [entry[0] for entry in self.linear_b_by_format.values()]
+        for resource in (self.texture, *floats, *floats_b, self.uniform, self.paint_texture, self.paint_flags, *tables):
             self._destroy(resource)
         self.paint_texture = self.paint_group = self.paint_size = self.paint_key = None
         self.linear_by_format = {}
+        self.linear_b_by_format = {}
+        self.linear_b_texture = self.group_key = None
+        self.compare = "A only"
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
         self.texture_capacity = self.linear_capacity = (0, 0)
@@ -735,11 +786,15 @@ class RetainedPresenter:
             self.ring = None
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
-        for resource in (self.texture, *[entry[0] for entry in self.linear_by_format.values()], self.uniform,
+        for resource in (self.texture, *[entry[0] for entry in self.linear_by_format.values()],
+                         *[entry[0] for entry in self.linear_b_by_format.values()], self.uniform,
                          self.paint_texture, self.paint_flags):
             self._destroy(resource)
         self.paint_texture = self.paint_group = self.paint_size = self.paint_key = None
         self.linear_by_format = {}
+        self.linear_b_by_format = {}
+        self.linear_b_texture = self.group_key = None
+        self.compare = "A only"
         self.texture = self.bind_group = self.overlay_bind_group = None
         self.texture_size = None
         self.texture_capacity = self.linear_capacity = (0, 0)
@@ -788,10 +843,22 @@ class RetainedPresenter:
         if reason:
             raise TooLarge(reason)
 
+    def check_pair(self, width, height, texel, layout_b):
+        """Raise TooLarge when A and B together do not fit this card, or B is not the size of A."""
+        b_width, b_height, _, b_texel = layout_b
+        if (b_width, b_height) != (width, height):
+            raise TooLarge(f"Direct picture: the B picture is {b_width} x {b_height} pixels and A is "
+                           f"{width} x {height}; the Viewer shows them")
+        reason = pair_too_large(self.limits, width, height, texel, b_texel, self.adapter_info.get("device", ""))
+        if reason:
+            raise TooLarge(reason)
+
     def _queue(self, payload, generation):
-        width, height, _, texel = picture_layout(payload[0], payload[1])
+        (width, height, _, texel), layout_b = payload_layouts(payload)
         try:
             self.check_size(width, height, texel)
+            if layout_b is not None:
+                self.check_pair(width, height, texel, layout_b)
         except TooLarge as exc:
             self.refusal = str(exc)
             self.counters["refused_too_large"] += 1
@@ -808,10 +875,15 @@ class RetainedPresenter:
         Raises TooLarge for a picture the card cannot hold."""
         return self._queue(("qimage", qimage, tuple(rect), tuple(format_rect)), generation)
 
-    def offer_linear(self, frame, settings, rect, format_rect, generation=None):
+    def offer_linear(self, frame, settings, rect, format_rect, generation=None, frame_b=None, compare="A only"):
         """Queue a premultiplied scene-linear float frame (H x W x 4) and its display settings
-        (`carddisplay.settings_from`). The card does the display transform; nothing converts it here."""
-        return self._queue(("linear", frame, settings, tuple(rect), tuple(format_rect)), generation)
+        (`carddisplay.settings_from`). The card does the display transform; nothing converts it here.
+
+        `frame_b` (the same shape, aligned to A) and `compare` (one of `carddisplay.COMPARE_IDS`) put an A/B
+        compare on the card: B goes up beside A and the shader does the wipe, B alone or the composite."""
+        if frame_b is None:
+            compare = "A only"
+        return self._queue(("linear", frame, settings, tuple(rect), tuple(format_rect), frame_b, compare), generation)
 
     def stage_pending(self):
         """Hand the newest pending picture to a free staging slot (Qt thread). While another picture is still
@@ -820,7 +892,8 @@ class RetainedPresenter:
         if self.ring is None or self.ledger.pending is None or self.ring.waiting():
             return False
         sequence, payload = self.ledger.pending
-        if not self.ring.stage(sequence, payload, picture_layout(payload[0], payload[1])):
+        layout, layout_b = payload_layouts(payload)
+        if not self.ring.stage(sequence, payload, layout, layout_b):
             return False
         self.ledger.take()
         return True
@@ -831,7 +904,17 @@ class RetainedPresenter:
         if frame is None:
             return 0
         source = frame[1]
-        return int(source.nbytes) if frame[0] == "linear" else int(source.sizeInBytes())
+        if frame[0] != "linear":
+            return int(source.sizeInBytes())
+        extra = frame[5] if len(frame) > 5 else None
+        return int(source.nbytes) + (int(extra.nbytes) if extra is not None else 0)
+
+    def b_texture_bytes(self):
+        """Card memory of the B textures (one per texture format, grown but never shrunk)."""
+        total = 0
+        for texture, capacity in self.linear_b_by_format.values():
+            total += capacity[0] * capacity[1] * (16 if texture.format == "rgba32float" else 8)
+        return total
 
     def staging_bytes(self):
         return self.ring.bytes() if self.ring is not None else 0
@@ -859,11 +942,8 @@ class RetainedPresenter:
                                              usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
         if linear:
             self.linear_texture, self.linear_capacity = texture, capacity
-            self.linear_bind_group = self.device.create_bind_group(layout=self.linear_layout, entries=[
-                {"binding": 0, "resource": texture.create_view()},
-                {"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": UNIFORM_BYTES}},
-                {"binding": 2, "resource": self.linear_sampler}])
-            self.linear_by_format[fmt] = (texture, capacity, self.linear_bind_group)
+            self.linear_bind_group = None      # `pair_group` makes it for the draw, from A and B together
+            self.linear_by_format[fmt] = (texture, capacity, None)
         else:
             self.texture, self.texture_capacity = texture, capacity
             self.bind_group = self.device.create_bind_group(
@@ -877,14 +957,53 @@ class RetainedPresenter:
         self.counters["texture_creates"] += 1
         return texture
 
+    def _b_texture_for(self, width, height, fmt):
+        """The texture for the B buffer of an A/B compare: one per format, grown (never shrunk) like A's."""
+        texture, capacity = self.linear_b_by_format.get(fmt, (None, (0, 0)))
+        if texture is not None and capacity[0] >= width and capacity[1] >= height:
+            return texture
+        if texture is not None:
+            self.ledger.retire(texture)
+        capacity = (max(capacity[0], width), max(capacity[1], height))
+        texture = self.device.create_texture(size=(*capacity, 1), format=fmt,
+                                             usage=self.wgpu.TextureUsage.TEXTURE_BINDING | self.wgpu.TextureUsage.COPY_DST)
+        self.linear_b_by_format[fmt] = (texture, capacity)
+        self.counters["b_texture_creates"] += 1
+        return texture
+
+    def pair_group(self, with_b):
+        """The linear bind group for the retained A texture and (when the picture has one) its B texture. A
+        picture without B binds A in B's place; the shader never reads it. Made again only when a texture was
+        replaced (the group holds the texture objects it was made for)."""
+        a = self.linear_texture
+        b = self.linear_b_texture if with_b and self.linear_b_texture is not None else a
+        key = self.group_key
+        if self.linear_bind_group is None or key is None or key[0] is not a or key[1] is not b:
+            self.linear_bind_group = self.device.create_bind_group(layout=self.linear_layout, entries=[
+                {"binding": 0, "resource": a.create_view()},
+                {"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": UNIFORM_BYTES}},
+                {"binding": 2, "resource": self.linear_sampler},
+                {"binding": 3, "resource": b.create_view()}])
+            self.group_key = (a, b)
+            self.counters["pair_groups"] += 1
+        return self.linear_bind_group
+
     def _copy_slot(self, encoder, slot):
         """Record the copy from a filled staging slot into the retained texture; returns the payload."""
-        payload, width, height, fmt, texel, row = slot["meta"]
+        payload, width, height, fmt, texel, row, b = slot["meta"]
         kind = payload[0]
         texture = self._texture_for(kind, width, height, fmt)
         encoder.copy_buffer_to_texture(
             {"buffer": slot["buffer"], "offset": 0, "bytes_per_row": row, "rows_per_image": height},
             {"texture": texture, "mip_level": 0, "origin": (0, 0, 0)}, (width, height, 1))
+        if b is not None:
+            texture_b = self._b_texture_for(b["width"], b["height"], b["fmt"])
+            encoder.copy_buffer_to_texture(
+                {"buffer": slot["buffer"], "offset": b["offset"], "bytes_per_row": b["row"], "rows_per_image": b["height"]},
+                {"texture": texture_b, "mip_level": 0, "origin": (0, 0, 0)}, (b["width"], b["height"], 1))
+            self.linear_b_texture = texture_b
+            self.counters["b_uploads"] += 1
+            self.counters["upload_bytes"] += b["row"] * b["height"]
         if kind == "linear":
             self.linear_size = (width, height)
             self.counters["linear_uploads"] += 1
@@ -920,11 +1039,13 @@ class RetainedPresenter:
         return self.texture is not None or self.linear_texture is not None
 
     # -- drawing --------------------------------------------------------------------------------
-    def draw(self, view, physical_size):
+    def draw(self, view, physical_size, wipe=None):
         """One draw: upload the newest ready picture if any, then render picture + overlay into the surface.
 
-        `view` is (centre_x, centre_y, zoom) in scene units and physical px per scene px. The surface
-        texture and its view are locals here and are gone when this returns."""
+        `view` is (centre_x, centre_y, zoom) in scene units and physical px per scene px. `wipe` is the wipe line
+        as (centre_x, centre_y, normal_x, normal_y) in scene units, read by the caller at draw time so a drag
+        needs no new upload; without one the line runs through the middle of the format. The surface texture and
+        its view are locals here and are gone when this returns."""
         if self.device_lost():
             self.recover(self.loss_watch.message)
         self.stage_pending()
@@ -939,11 +1060,13 @@ class RetainedPresenter:
             self.uploaded_sequence = slot["sequence"]
             self.last_frame = payload
             if payload[0] == "linear":
-                _, frame, settings, rect, format_rect = payload
+                _, frame, settings, rect, format_rect = payload[:5]
                 self.linear = settings
+                self.compare = payload[6] if len(payload) > 6 and payload[5] is not None else "A only"
             else:
                 _, qimage, rect, format_rect = payload
                 self.linear = None
+                self.compare = "A only"
             self.picture = (rect, format_rect)
             self.counters["copy_record_ms_total"] += (time.perf_counter() - started) * 1000.0
         elif slot is not None:
@@ -960,10 +1083,13 @@ class RetainedPresenter:
             if self.linear is not None:
                 from . import carddisplay
                 pipeline, tables, _ = self.linear_pipeline(self.linear[3])
-                bind_group, size = self.linear_bind_group, self.linear_size
-                display = carddisplay.uniform_values(self.linear)
+                bind_group, size = self.pair_group(self.compare != "A only"), self.linear_size
+                if wipe is None:
+                    wipe = (format_rect[0] + format_rect[2] / 2.0, format_rect[1] + format_rect[3] / 2.0, 1.0, 0.0)
+                display = carddisplay.uniform_values(self.linear) + carddisplay.compare_values(self.compare, wipe)
             else:
-                pipeline, bind_group, size, display, tables = self.pipeline, self.bind_group, self.texture_size, [0.0] * 8, None
+                pipeline, bind_group, size, tables = self.pipeline, self.bind_group, self.texture_size, None
+                display = [0.0] * 16
             data = np.array([*physical_size, cx, cy, *rect, *format_rect, *size, zoom,
                              1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0, *display], np.float32)
             self.device.queue.write_buffer(self.uniform, 0, data)
@@ -1075,6 +1201,7 @@ def make_widget(parent=None):
             self.recoveries = 0
             self.refusal = ""             # why the last picture was refused (too large for the card), or ""
             self.overlay_provider = None  # (view, physical_size, ratio) -> premultiplied RGBA QImage or None
+            self.compare_provider = None  # () -> the wipe line (centre x, y, normal x, y) in scene units, or None
             self.hover = None             # (scene point or None) -> None; the owner updates its readout
             self.edit = None              # (kind, scene point, button, modifiers, zoom, pressure) -> handled?; None: view only
             self._editing = False         # a left press was taken by a handle and its release is owed
@@ -1106,21 +1233,24 @@ def make_widget(parent=None):
                 self._request()
             return fresh
 
-        def submit_linear(self, frame, settings, rect, format_rect=None, generation=None):
-            """Hand over a scene-linear float frame; the card runs the display transform.
+        def submit_linear(self, frame, settings, rect, format_rect=None, generation=None, frame_b=None,
+                          compare="A only"):
+            """Hand over a scene-linear float frame; the card runs the display transform. `frame_b` and
+            `compare` add an A/B compare (a second float texture, the wipe, B alone or a composite).
             False when the direct viewer is down or the card cannot build this view's shader."""
             from . import carddisplay
             if self.error is not None:
                 return False
             if self.presenter is None and not self._start(
-                    lambda: self.submit_linear(frame, settings, rect, format_rect, generation)):
+                    lambda: self.submit_linear(frame, settings, rect, format_rect, generation, frame_b, compare)):
                 return False
             try:
                 self.presenter.linear_pipeline(settings[3])
             except carddisplay.Unsupported:
                 return False
             try:
-                fresh = self.presenter.offer_linear(frame, settings, tuple(rect), tuple(format_rect or rect), generation)
+                fresh = self.presenter.offer_linear(frame, settings, tuple(rect), tuple(format_rect or rect), generation,
+                                                    frame_b, compare)
             except TooLarge as exc:
                 self.refusal = str(exc)
                 return False
@@ -1208,14 +1338,15 @@ def make_widget(parent=None):
             if self.auto_fit and self.rect is not None:
                 self.view = fit_view(size, self.rect)
             try:
+                wipe = self.compare_provider() if self.compare_provider is not None else None
                 try:
                     self._paint_overlay(size)
-                    self.presenter.draw(self.view, size)
+                    self.presenter.draw(self.view, size, wipe)
                 except Exception as exc:
                     # A lost or failing device is replaced once; the same draw is then repeated on the new one.
                     self.presenter.recover(str(exc).splitlines()[0] if str(exc) else type(exc).__name__)
                     self.recoveries += 1
-                    self.presenter.draw(self.view, size)
+                    self.presenter.draw(self.view, size, wipe)
             except Exception as exc:
                 self._fail(f"direct viewer draw failed: {exc}")
 

@@ -16,6 +16,11 @@ per view, bound as group 1. A view that needs a 2D or 3D lookup texture, or a fi
 
 `settings_from` reads the same arguments `to_qimage` takes; `uniform_values` packs them for the
 shader. tests/test_carddisplay.py holds the card to `to_qimage` within 1/255 per channel.
+
+A/B compare runs here too. A second float texture holds the B buffer and the shader picks per pixel what the
+Viewer builds on the processor: B alone, A or B on either side of the wipe line, or the composite of over,
+under, minus and difference (`compare.combine`'s formulas, on the premultiplied floats, before the display
+transform). `compare_values` packs the mode and the wipe line for the shader.
 """
 from __future__ import annotations
 
@@ -25,6 +30,8 @@ from functools import lru_cache
 import numpy as np
 
 CHANNELS = ("RGB", "R", "G", "B", "A")
+# The shader's compare mode numbers; 0 is no B. The names are core.COMPARE_MODES'.
+COMPARE_IDS = {"A only": 0, "B only": 1, "wipe": 2, "over": 3, "under": 4, "minus": 5, "difference": 6}
 IDENTITY_VIEWS = ("Linear", "Raw")
 FUNCTION = "OCIODisplay"
 
@@ -120,6 +127,7 @@ def view_tables(view):
 
 FRAGMENT = """#version 450
 layout(set = 0, binding = 0) uniform texture2D img;
+layout(set = 0, binding = 3) uniform texture2D imgB;
 layout(set = 0, binding = 1) uniform View {
     vec2 viewport; vec2 centre;
     vec4 image;            // scene rectangle the picture covers: x, y, w, h
@@ -128,6 +136,8 @@ layout(set = 0, binding = 1) uniform View {
     vec4 surround;
     vec4 disp0;            // gain (2^exposure), channel (0 RGB, 1 R, 2 G, 3 B, 4 A), gamma, zebra
     vec4 disp1;            // checker, checker level 0, checker level 1, unused
+    vec4 cmp0;             // compare mode (0 none, 1 B only, 2 wipe, 3 over, 4 under, 5 minus, 6 difference), wipe centre x, y, unused
+    vec4 cmp1;             // wipe normal x, y (towards B), unused, unused
 } v;
 layout(set = 0, binding = 2) uniform sampler smp;
 layout(set = 1, binding = 0, std430) readonly buffer OcioTables { vec4 data[]; } ocio_tables;
@@ -143,8 +153,22 @@ vec3 encode(vec3 c) {
     return mix(hi, lo, vec3(lessThanEqual(c, vec3(0.04045))));
 }
 
-vec3 display(ivec2 t) {
-    vec4 p = texelFetch(sampler2D(img, smp), t, 0);
+vec4 compared(ivec2 t, vec2 s) {
+    vec4 a = texelFetch(sampler2D(img, smp), t, 0);
+    int mode = int(v.cmp0.x + 0.5);
+    if (mode == 0) { return a; }
+    vec4 b = texelFetch(sampler2D(imgB, smp), t, 0);
+    if (mode == 1) { return b; }
+    if (mode == 2) { return dot(s - v.cmp0.yz, v.cmp1.xy) > 0.0 ? b : a; }
+    if (mode == 3) { return a + b * (1.0 - a.a); }
+    if (mode == 4) { return b + a * (1.0 - b.a); }
+    vec3 d = a.rgb - b.rgb;
+    if (mode == 6) { d = abs(d); }
+    return vec4(d, max(a.a, b.a));
+}
+
+vec3 display(ivec2 t, vec2 s) {
+    vec4 p = compared(t, s);
     float channel = v.disp0.y;
     if (channel > 3.5) { return clamp(vec3(p.a), 0.0, 1.0); }
     vec3 rgb = p.rgb * v.disp0.x;
@@ -181,7 +205,7 @@ void main() {
         return;
     }
     ivec2 t = ivec2(min(rel * v.tex, v.tex - vec2(1.0)));
-    fragColor = vec4(encode(display(t)), 1.0);
+    fragColor = vec4(encode(display(t, s)), 1.0);
 }
 """
 
@@ -208,6 +232,15 @@ def uniform_values(settings):
             1.0 if zebra and channel != "A" else 0.0, 1.0 if checker else 0.0, levels[0], levels[1], 0.0]
 
 
+def compare_values(mode="A only", wipe=None):
+    """The 8 floats after the display block: compare mode, wipe centre (scene units) and wipe normal.
+
+    `wipe` is (centre_x, centre_y, normal_x, normal_y) in scene units, the Viewer's wipe line
+    (`compare.wipe_normal` points from A's side into B's)."""
+    cx, cy, nx, ny = wipe or (0.0, 0.0, 1.0, 0.0)
+    return [float(COMPARE_IDS[mode]), float(cx), float(cy), 0.0, float(nx), float(ny), 0.0, 0.0]
+
+
 @lru_cache(maxsize=16)
 def supported(view):
     """True when `view` builds as a card shader (the GPU itself may still refuse; the presenter says so)."""
@@ -221,15 +254,31 @@ def supported(view):
 class LazyPicture:
     """A frame the direct viewer shows on the card; the 8-bit QImage is built only if something asks.
 
-    Playback with the direct viewer on hands one of these to the window instead of `to_qimage`'s
-    result. `image()` runs `to_qimage` once, on first request (sampling, export, a fallback when the
-    card refuses the view), and keeps the result."""
+    The window hands one of these to the direct picture instead of `to_qimage`'s result, playing or paused.
+    `image()` runs `to_qimage` once, on first request (sampling, export, the output preview, a fallback
+    when the card refuses the view), and keeps the result. With a B buffer (`with_b`) the card also gets
+    B as a second float texture and the compare mode; `image()` and `image_b()` then build what the Viewer
+    would show for that mode: B alone, the composite of over, under, minus and difference, or A with the
+    wipe's B picture beside it."""
 
     def __init__(self, frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None):
         self.frame = frame
         self.args = (exposure, channel, background, view, look)
         self.settings = settings_from(exposure, channel, background, view, look)
+        self.frame_b = None
+        self.compare = "A only"
         self._image = None
+        self._image_b = None
+
+    def with_b(self, frame_b, mode):
+        """Add the B buffer (same shape as the frame, already aligned to it) and the compare mode."""
+        if mode not in COMPARE_IDS or mode == "A only":
+            raise ValueError(f"{mode!r} is not a compare mode with a B buffer")
+        self.frame_b, self.compare = frame_b, mode
+        return self
+
+    def has_b(self):
+        return self.frame_b is not None
 
     def width(self):
         return int(self.frame.shape[1])
@@ -240,9 +289,26 @@ class LazyPicture:
     def built(self):
         return self._image is not None
 
+    def _show(self, pixels):
+        from .imaging import to_qimage
+        exposure, channel, background, view, look = self.args
+        return to_qimage(pixels, exposure, channel, background=background, view=view, look=look)
+
     def image(self):
         if self._image is None:
-            from .imaging import to_qimage
-            exposure, channel, background, view, look = self.args
-            self._image = to_qimage(self.frame, exposure, channel, background=background, view=view, look=look)
+            if self.frame_b is not None and self.compare == "B only":
+                self._image = self._show(self.frame_b)
+            elif self.frame_b is not None and self.compare in ("over", "under", "minus", "difference"):
+                from .compare import combine
+                self._image = self._show(combine(self.compare, np.asarray(self.frame, np.float32), self.frame_b))
+            else:
+                self._image = self._show(self.frame)
         return self._image
+
+    def image_b(self):
+        """The wipe's B picture (None for every other mode)."""
+        if self.frame_b is None or self.compare != "wipe":
+            return None
+        if self._image_b is None:
+            self._image_b = self._show(self.frame_b)
+        return self._image_b

@@ -111,6 +111,147 @@ class CardDisplayAgreementTests(unittest.TestCase):
         self.assertEqual(self.presenter.counters["conversions"], before.get("conversions", 0))
 
 
+def compare_reference(a, b, mode, settings, wipe, size):
+    """What the Viewer builds on the processor for a compare mode: B alone, A or B on either side of the wipe
+    line (decided at each pixel's centre), or the composite of over, under, minus and difference."""
+    from nodebased import compare
+    a, b = a.astype(np.float32), b.astype(np.float32)   # the card computes in float32; so does the Viewer for B
+    if mode == "B only":
+        return reference(b, settings)
+    if mode == "wipe":
+        cx, cy, nx, ny = wipe
+        ys, xs = np.mgrid[0:size[1], 0:size[0]]
+        on_b = ((xs + 0.5 - cx) * nx + (ys + 0.5 - cy) * ny) > 0
+        return np.where(on_b[..., None], reference(b, settings), reference(a, settings))
+    return reference(compare.combine(mode, a.astype(np.float32), b.astype(np.float32)), settings)
+
+
+def wipe_line(cx, cy, angle):
+    from nodebased import compare
+    return (cx, cy, *compare.wipe_normal(angle))
+
+
+COMPARE_MODES = ("B only", "wipe", "over", "under", "minus", "difference")
+
+
+def pair_frames():
+    """(A, B) pairs: different content, different alpha, one pair with a half-float B as a cache frame comes."""
+    frames = test_frames()
+    return {"ramps/noise": (frames["ramps"], frames["noise"]),
+            "edges/hdr": (frames["alpha edges"], frames["hdr"]),
+            "noise/edges half": (frames["noise"], frames["alpha edges"].astype(np.float16))}
+
+
+@needs_wgpu
+class CardCompareAgreementTests(unittest.TestCase):
+    """A/B compare on the card agrees with the processor path within 1/255 for every compare mode."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+        adapter = card_adapter()
+        if adapter is None:
+            raise unittest.SkipTest("no wgpu adapter")
+        cls.pairs = pair_frames()
+        cls.size = (96, 64)
+        cls.context = FakeContext(cls.size)
+        cls.presenter = dv.RetainedPresenter(cls.context, adapter=adapter, overlay=False, fill_thread=False)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.presenter.lose_device()
+
+    def card(self, a, b, mode, settings, wipe):
+        width, height = self.size
+        rect = (0, 0, width, height)
+        self.assertTrue(self.presenter.offer_linear(a, settings, rect, rect, None, b, mode))
+        self.presenter.draw((width / 2.0, height / 2.0, 1.0), self.size, wipe)
+        return self.context.read()[..., :3]
+
+    def check(self, modes, views, channels, backgrounds, looks, exposures=(0.0,), wipes=((40.3, 27.1, 0.0),)):
+        for name, (a, b) in self.pairs.items():
+            for mode in modes:
+                for view in views:
+                    for channel in channels:
+                        for background in backgrounds:
+                            for gamma, zebra in looks:
+                                for exposure in exposures:
+                                    for cx, cy, angle in (wipes if mode == "wipe" else wipes[:1]):
+                                        wipe = wipe_line(cx, cy, angle)
+                                        settings = carddisplay.settings_from(
+                                            exposure, channel, background, view, {"gamma": gamma, "zebra": zebra})
+                                        with self.subTest(pair=name, mode=mode, settings=settings, wipe=wipe):
+                                            got = self.card(a, b, mode, settings, wipe).astype(int)
+                                            want = compare_reference(a, b, mode, settings, wipe, self.size).astype(int)
+                                            self.assertLessEqual(int(np.abs(got - want).max()), 1)
+
+    def test_every_compare_mode_through_each_view(self):
+        self.check(COMPARE_MODES, ("sRGB", "ACES 2.0", "Linear"), ("RGB",), ("black",), ((1.0, False),))
+
+    def test_the_wipe_at_several_positions_and_angles(self):
+        # 0 degrees is a vertical line (A left, B right); 90 a horizontal split; the others are slanted.
+        wipes = ((40.3, 27.1, 0.0), (10.7, 50.2, 33.0), (70.4, 20.6, 90.0), (48.2, 32.9, 200.0), (48.2, 32.9, 315.0))
+        self.check(("wipe",), ("sRGB", "ACES 2.0"), ("RGB",), ("black",), ((1.0, False),), wipes=wipes)
+
+    def test_checker_exposure_gamma_clipping_warning_and_channels(self):
+        self.check(COMPARE_MODES, ("ACES 2.0", "sRGB"), ("RGB", "A", "G"), ("checker", "black"),
+                   ((1.0, False), (2.2, True)), exposures=(-1.0, 1.5))
+
+    def test_a_wipe_drag_changes_the_uniform_and_uploads_nothing(self):
+        a, b = self.pairs["ramps/noise"]
+        settings = carddisplay.settings_from(0.0, "RGB", "black", "sRGB")
+        self.card(a, b, "wipe", settings, wipe_line(40.3, 27.1, 0.0))
+        before = dict(self.presenter.counters)
+        for cx in (20.3, 60.7, 80.1):
+            wipe = wipe_line(cx, 27.1, 0.0)
+            self.presenter.draw((48.0, 32.0, 1.0), self.size, wipe)
+            diff = np.abs(self.context.read()[..., :3].astype(int)
+                          - compare_reference(a, b, "wipe", settings, wipe, self.size).astype(int))
+            self.assertLessEqual(int(diff.max()), 1)
+        for key in ("linear_uploads", "b_uploads", "upload_bytes", "conversions"):
+            self.assertEqual(self.presenter.counters[key], before.get(key, 0), key)
+
+    def test_a_picture_without_b_after_one_with_b_shows_a_alone(self):
+        a, b = self.pairs["ramps/noise"]
+        settings = carddisplay.settings_from(0.0, "RGB", "black", "sRGB")
+        self.card(a, b, "difference", settings, None)
+        alone = self.card(a, None, "A only", settings, None).astype(int)
+        self.assertLessEqual(int(np.abs(alone - reference(a, settings).astype(int)).max()), 1)
+        self.assertEqual(self.presenter.compare, "A only")
+
+    def test_the_b_texture_is_counted_and_reused(self):
+        a, b = self.pairs["ramps/noise"]
+        settings = carddisplay.settings_from(0.0, "RGB", "black", "sRGB")
+        self.card(a, b, "over", settings, None)
+        made = self.presenter.counters["b_texture_creates"]
+        self.assertGreater(self.presenter.b_texture_bytes(), 0)
+        self.card(a, b, "under", settings, None)
+        self.assertEqual(self.presenter.counters["b_texture_creates"], made)
+        width, height = self.size
+        self.assertGreaterEqual(self.presenter.b_texture_bytes(), width * height * 16)
+
+    def test_a_pair_that_does_not_fit_the_card_is_refused_by_name(self):
+        a, b = self.pairs["ramps/noise"]
+        settings = carddisplay.settings_from(0.0, "RGB", "black", "sRGB")
+        rect = (0, 0, 96, 64)
+        saved = dict(self.presenter.limits)
+        try:
+            one = dv.padded_row(96, 16) * 64
+            self.presenter.limits["max-buffer-size"] = one + one // 2     # A fits alone, A and B together do not
+            self.assertTrue(self.presenter.offer_linear(a, settings, rect, rect))
+            self.presenter.draw((48.0, 32.0, 1.0), self.size)
+            with self.assertRaises(dv.TooLarge) as caught:
+                self.presenter.offer_linear(a, settings, rect, rect, None, b, "wipe")
+            self.assertIn("A and B", str(caught.exception))
+            self.assertIn("MB", str(caught.exception))
+            self.presenter.limits["max-buffer-size"] = saved["max-buffer-size"]
+            with self.assertRaises(dv.TooLarge) as caught:
+                self.presenter.offer_linear(a, settings, rect, rect, None, b[:32], "wipe")
+            self.assertIn("B picture", str(caught.exception))
+        finally:
+            self.presenter.limits.update(saved)
+
+
 class ShaderSourceTests(unittest.TestCase):
     def test_aces_tables_move_to_the_storage_buffer(self):
         # Constant arrays in the shader cost 17 ms a draw (naga copies them per dynamic index).
