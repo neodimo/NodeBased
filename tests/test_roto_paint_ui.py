@@ -65,6 +65,22 @@ class RotoPaintViewerTests(unittest.TestCase):
         self.window.command({"op": "undo"})
         self.assertNotIn("paint", self.window.dispatcher.document["node_data"])
 
+    def test_live_stroke_move_queues_a_progressive_picture_without_committing(self):
+        from unittest import mock
+        viewer = self.window.viewer
+        self.window.timer.stop()
+        held = mock.patch.object(self.window, "start_preview")
+        held.start()
+        self.addCleanup(held.stop)
+        start, end = self.position(20, 20), self.position(30, 20)
+        QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(viewer.viewport(), end, 20)
+        request, _cancel = self.window.preview_queue.take()
+        self.assertEqual(request.tier, 8)
+        self.assertEqual(len(request.document["node_data"]["paint"]["items"]), 1)
+        self.assertNotIn("paint", self.window.dispatcher.document["node_data"])
+        QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=end)
+
     def test_b_e_and_c_pick_the_brush_eraser_and_clone_tools_and_the_drag_uses_them(self):
         viewer = self.window.viewer
         viewer.setFocus()

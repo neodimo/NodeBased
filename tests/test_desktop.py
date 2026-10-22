@@ -1634,6 +1634,13 @@ class PlaybackProxyToggleTests(unittest.TestCase):
         w.toggle_playback(False)
         self.assertEqual(w.proxy.currentData(), 1, 'the artist\'s tier was not restored on stop')
         self.assertIsNone(w.playback_auto_proxy_index)
+
+    def test_playback_timer_wakes_once_per_target_frame(self):
+        w = self.window
+        w.dispatcher.document["time"]["fps"] = 24.0
+        w.toggle_playback(True)
+        self.assertEqual(w.playback_timer.interval(), 42)
+        w.toggle_playback(False)
         queued = w.preview_queue._items[0] if w.preview_queue._items else None
         self.assertIsNotNone(queued, 'stopping did not request a refinement frame')
         request = queued
@@ -1797,6 +1804,26 @@ class ProgressivePreviewTests(unittest.TestCase):
         w.timer.stop()
         request, _ = w.preview_queue.take()
         self.assertEqual(request.tier, 8)
+
+    def test_properties_slider_move_queues_a_tier8_snapshot_without_committing(self):
+        from PySide6.QtWidgets import QSlider
+        w = self.window
+        w.timer.stop()
+        w.graph.items_by_id['grade'].setSelected(True)
+        w.inspect('grade')
+        slider = w.properties.widget().findChild(QSlider, 'knob-slider')
+        self.assertIsNotNone(slider)
+        held = unittest.mock.patch.object(w, 'start_preview')
+        held.start()
+        self.addCleanup(held.stop)
+        before = w.dispatcher.document['nodes']['grade']['params']['exposure']
+        slider.setSliderDown(True)
+        slider.setValue(min(slider.maximum(), slider.value() + 1200))
+        request, _cancel = w.preview_queue.take()
+        self.assertEqual(request.tier, 8)
+        self.assertNotEqual(request.document['nodes']['grade']['params']['exposure'], before)
+        self.assertEqual(w.dispatcher.document['nodes']['grade']['params']['exposure'], before)
+        slider.setSliderDown(False)
 
     def test_fluid_stop_requests_half_surface_then_full_detail(self):
         w = self.window

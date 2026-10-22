@@ -1520,6 +1520,7 @@ class Viewer(PanZoomView):
         self.planar_pick_points = []
         self.track3d_picking = None
         self.tracker_drag = None
+        self.planar_drag = None
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
         self.survey_picking = None   # the CameraSolve3D node whose Survey a click adds a pick to
         self.zdefocus_picking = None
@@ -2316,6 +2317,14 @@ class Viewer(PanZoomView):
         self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
 
+    def _preview_paint_drag(self):
+        """Show an in-progress paint stroke through the same progressive tier path as other edits."""
+        dustbust = self.dustbust_preset
+        try:
+            return self._preview_document_drag("paint_drag", self._finish_paint)
+        finally:
+            self.dustbust_preset = dustbust
+
     def _transform_context(self):
         """The selected Transform node when it is safe to draw its handle: it is selected in the
         properties panel (the graph selection) and the viewer is showing it or something
@@ -2619,6 +2628,22 @@ class Viewer(PanZoomView):
                 best, distance = {"kind": "point", "index": index}, d
         return best
 
+    def _planar_corner_hit(self, context, scene_pos):
+        _key, _node, payload = context
+        if len(payload.get("tracks", [])) < 4:
+            return None
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        try:
+            corners = planar_model.resolve_corners(payload, frame)
+        except ValueError:
+            return None
+        radius = 10.0 / max(abs(self.view_zoom()), .05)
+        for index, (x, y) in enumerate(corners):
+            point = self._roto_scene_point({"x": float(x), "y": float(y)}, 1)
+            if math.hypot(point.x() - scene_pos.x(), point.y() - scene_pos.y()) <= radius:
+                return {"index": index, "start": scene_pos, "scene": scene_pos, "moved": False}
+        return None
+
     def _draw_planar_overlay(self, painter):
         context = self.window._planar_context()
         if context is None or self.format_rect is None:
@@ -2811,6 +2836,24 @@ class Viewer(PanZoomView):
             elif param == "search_radius" and radius < int(params.get("pattern_radius", 8)):
                 edits.append({"op": "set", "id": key, "param": "pattern_radius", "value": radius})
             self.window.command({"op": "batch", "commands": edits})
+        return True
+
+    def _commit_planar_drag(self):
+        drag = self.planar_drag
+        context = self.window._planar_context()
+        self.planar_drag = None
+        if drag is None or context is None or not drag.get("moved"):
+            return False
+        key, _node, payload = context
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        point = self._tracker_data_point(drag["scene"])
+        tracks = copy.deepcopy(payload.get("tracks", []))
+        if drag["index"] >= len(tracks):
+            return False
+        track = tracks[drag["index"]]
+        for field, value in (("x", point[0]), ("y", point[1])):
+            track[field] = self._roto_scalar_at_frame(track[field], frame, value)
+        self.window.command({"op": "set_tracks", "id": key, "tracks": tracks})
         return True
 
     def _roto_hit_point(self, scene_pos, resolved, tier):
@@ -3305,6 +3348,10 @@ class Viewer(PanZoomView):
         """Render the current Tracker drag without creating an undo edit."""
         return self._preview_document_drag("tracker_drag", self._commit_tracker_drag)
 
+    def _preview_planar_drag(self):
+        """Render the current PlanarTracker corner drag without creating an undo edit."""
+        return self._preview_document_drag("planar_drag", self._commit_planar_drag)
+
     def keyPressEvent(self, event):
         if (event.key() == Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier
                 and self.hasFocus() and self._roto_context() is not None):
@@ -3518,6 +3565,13 @@ class Viewer(PanZoomView):
             self.tracker_drag["scene"] = scene_pos
             self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
             self._commit_tracker_drag()
+            self.unsetCursor()
+            self.viewport().update()
+            return True
+        if button == Qt.MouseButton.LeftButton and self.planar_drag is not None:
+            self.planar_drag["scene"] = scene_pos
+            self.planar_drag["moved"] = (scene_pos - self.planar_drag["start"]).manhattanLength() > 2
+            self._commit_planar_drag()
             self.unsetCursor()
             self.viewport().update()
             return True
@@ -4203,6 +4257,14 @@ class Viewer(PanZoomView):
                 self.tracker_drag = hit
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 return True
+        planar_context = self.window._planar_context()
+        if button == Qt.MouseButton.LeftButton and planar_context is not None:
+            hit = self._planar_corner_hit(planar_context, scene_pos)
+            if hit is not None:
+                hit["frame"] = int(self.window.dispatcher.document["time"]["current"])
+                self.planar_drag = hit
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                return True
         # ROI handles take priority over shape creation and point editing. Shift explicitly
         # starts a fresh ROI; an ordinary press on a handle always resizes or moves it.
         if button == Qt.MouseButton.LeftButton and self._roi_active():
@@ -4462,6 +4524,13 @@ class Viewer(PanZoomView):
             if self.tracker_drag["moved"]:
                 self._preview_tracker_drag()
             return True
+        if self.planar_drag is not None:
+            self.planar_drag["scene"] = scene_pos
+            self.planar_drag["moved"] = (scene_pos - self.planar_drag["start"]).manhattanLength() > 2
+            self.viewport().update()
+            if self.planar_drag["moved"]:
+                self._preview_planar_drag()
+            return True
         if self.flare_drag is not None:
             self.flare_drag["scene"] = scene_pos
             self.flare_drag["moved"] = (scene_pos - self.flare_drag["start"]).manhattanLength() > 2
@@ -4483,6 +4552,7 @@ class Viewer(PanZoomView):
             return True
         if self.paint_drag is not None:
             self._paint_sample(scene_pos, pressure)
+            self._preview_paint_drag()
             return True
         return False
 
@@ -4513,6 +4583,7 @@ class Viewer(PanZoomView):
             self._paint_sample(pos, event, start=True)
         elif kind == QEvent.Type.TabletMove and self.paint_drag is not None:
             self._paint_sample(pos, event)
+            self._preview_paint_drag()
         elif kind == QEvent.Type.TabletRelease and self.paint_drag is not None:
             self._paint_sample(pos, event)
             self._finish_paint()
@@ -9455,7 +9526,11 @@ class Window(QMainWindow):
                                     break
                 except Exception:
                     pass
-            self.playback_timer.start(max(5, round(500 / time_range["fps"])))
+            # One precise wakeup per target frame is enough: playback_tick follows the monotonic
+            # clock and bounds the playhead to completed renders. Waking twice per frame (500/fps)
+            # adds UI/event-loop work without improving picture cadence, and the overhead costs
+            # measurable throughput on cache-hot HD ranges.
+            self.playback_timer.start(max(1, round(1000 / time_range["fps"])))
             self.request_preview()
         else:
             self.playback_timer.stop()
@@ -11326,6 +11401,9 @@ class Window(QMainWindow):
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
                     control.slider.sliderReleased.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    control.slider.valueChanged.connect(
+                        lambda _value, k=key, p=param, w=control:
+                            self.preview_param_drag(k, p, w.value()) if w.slider.isSliderDown() else None)
                     self.install_expression_shortcut(control.spin, key, param, control)
                     control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     control.customContextMenuRequested.connect(
@@ -13283,6 +13361,19 @@ class Window(QMainWindow):
         frame = self.dispatcher.document["time"]["current"]
         self.defer_command({"op": "set_key", "id": key, "param": param,
                             "frame": int(frame), "value": float(value)})
+
+    def preview_param_drag(self, key, param, value):
+        """Queue a coarse picture for a properties slider drag without committing its knob value."""
+        from .core import Dispatcher
+        document = copy.deepcopy(self.dispatcher.document)
+        preview = Dispatcher(document)
+        if self.node_curve(key, param) is None:
+            command = {"op": "set", "id": key, "param": param, "value": value}
+        else:
+            command = {"op": "set_key", "id": key, "param": param,
+                       "frame": int(document["time"]["current"]), "value": float(value)}
+        preview.execute(self.scoped_command(command))
+        self.request_preview(progressive=True, document_override=preview.document)
 
     def animatable_row(self, key, param, control, expression=None):
         """Pack a numeric control next to its keyframe button."""
