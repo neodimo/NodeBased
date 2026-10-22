@@ -1,5 +1,46 @@
 ## 2026-10-20 — Lane 6 step A of 2: the Hot pour's first look in under a second (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (1:52 AM on 2026-10-22 PDT)
+
+`main` moved `8e58480a` -> `3db8ecaf` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `3db8ecaf` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0142.log`, started 1:42 AM): **Ran 5739 tests in 472.117 s, OK (skipped=17), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step A of 3: edit on the Direct picture: clicks reach the same handles the Viewer would pick.** Commits:
+  - `ebd12ef9` Docs and numbers for editing on the direct picture
+  - `e206b2bd` Feel gate for editing on the direct picture, and --edit in the laptop check
+  - `884969c3` Edit on the direct picture: one hit-test for both surfaces, routed behind a setting, with a proof test for every handle kind
+  Diff: 12 files changed, 1399 insertions(+), 184 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 3: an edit in Render mode is picked up at once: passes stop midway instead of finishing first.** Commits:
+  - `05058096` Docs and benchmark records: edits picked up at once in Render mode (step A of 3)
+  - `83849c30` Benchmark: edits spread over the pass in flight, and the ones that land just after a publish reported apart
+  - `52e809ce` A cancelled GPU render leaves nothing queued on the card
+  - `f68d12f5` A cancelled GPU render keeps the cached scene and bind groups, so the next first look does not re-upload
+  - `7f9ef16b` Benchmark: first-look phases in each edit trial, --no-settle
+  - `f632093f` Dispatch size of a cancellable render is fitted to about 20 ms from the measured rate, for surfaces as well as splats and smoke
+  - `9b5ba7b4` Progressive job: the debounce counts from the edit, not from when the worker got free
+  - `b35d52e9` Splat and smoke dispatches of a cancellable render are sized to about 20 ms from the measured rate (65536 paths to start)
+  - `ba48ec87` Render mode: the passes of a view share one prepared scene, and the scene build stops when cancelled
+  - `5b7f35a4` Adaptive passes split into chunks only when the render can be cancelled (progress and time limits keep one submission per pass)
+  - `c72ba169` Benchmark: edit-latency series and --field record, and a Render mode step in the field kit
+  - `148b7522` Render mode: an edit stops the pass in flight within one chunk (denoiser, display conversion and adaptive GPU passes check the cancel flag between short submissions)
+  Diff: 18 files changed, 4511 insertions(+), 62 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1).** Commits:
+  - `c19c8c46` Reuse static roto mattes across frames
+  - `4919011a` Speed up live roto and cached playback
+  Diff: 6 files changed, 202 insertions(+), 29 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (11:02 AM on 2026-10-20 PDT)
 
 `main` moved `5d3a10db` -> `a40e37c8` (lane commits cherry-picked onto main in lane order) and then to this
