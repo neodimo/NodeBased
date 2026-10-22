@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step A of 2: the Hot pour's first look in under a second (fix the red suite) (integrator tick)
+
+- **What was done:** `main` `e10c77a6` -> `63be6ad5` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `63be6ad5`: Ran 5739 tests in 495.779 s, OK (skipped=17), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step A of 3: edit on the Direct picture: clicks reach the same handles the Viewer would pick, Lane 4 (Rendering, Claude Sonnet 5.5) step A of 3: an edit in Render mode is picked up at once: passes stop midway instead of finishing first, Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
 
 - **What was done:** `main` `8e58480a` -> `3db8ecaf` plus this docs commit. Evidence and per-lane commit

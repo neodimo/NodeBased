@@ -1,5 +1,26 @@
 ## 2026-10-20 — Lane 6 step A of 2: the Hot pour's first look in under a second (DONE on lane branch; merge pending)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (2:12 AM on 2026-10-22 PDT)
+
+`main` moved `e10c77a6` -> `63be6ad5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `63be6ad5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0202.log`, started 2:02 AM): **Ran 5739 tests in 495.779 s, OK (skipped=17), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step A of 2: the Hot pour's first look in under a second (fix the red suite).** Commits:
+  - `18ee7270` Scene preparation cache: only the outermost reusing_scene scope clears or retains, so a progressive view's passes share one prepared scene again (merge of Fluids' retained preparation with Rendering's per-view sharing)
+  - `882b6060` Fix progressive scene cache lifetime
+  - `d835d97a` Reuse fluid first-look preparation across camera moves
+  Diff: 12 files changed, 313 insertions(+), 232 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (1:52 AM on 2026-10-22 PDT)
 
 `main` moved `8e58480a` -> `3db8ecaf` (lane commits cherry-picked onto main in lane order) and then to this
