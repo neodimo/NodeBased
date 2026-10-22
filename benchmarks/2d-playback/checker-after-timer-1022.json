@@ -1,0 +1,15 @@
+{
+  "case": "checker-animated-fixed-window",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "window_seconds": 30.0,
+  "anchor": "first live playback picture; that boundary picture is included",
+  "frames": 720,
+  "achieved_fps": 24.0,
+  "timer_ticks": 720,
+  "timer_interval_ms_p50": 41.659,
+  "display_interval_ms_p50": 41.715,
+  "display_cadence_fps": 23.98,
+  "gate_fps": 24.0,
+  "gate": "pass",
+  "benchmark": "tools/benchmark_adapter_choice.py"
+}

@@ -8716,6 +8716,7 @@ class Window(QMainWindow):
         self._progressive_generation = None
         self._progressive_document = None
         self.playback_elapsed_frames = 0
+        self._playback_next_deadline = None
         self.playback_dropped_frames = 0
         # Monotonic times of the frames shown during playback, newest last (achieved_fps).
         self.playback_shown_times = deque(maxlen=240)
@@ -8735,6 +8736,7 @@ class Window(QMainWindow):
         self.panel_frame = None
         self.playback_timer = QTimer(self)
         self.playback_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.playback_timer.setSingleShot(True)
         self.playback_timer.timeout.connect(self.playback_tick)
         self.setWindowTitle("NodeBased · Untitled")
         self.setMinimumSize(MIN_WINDOW_SIZE[0], MIN_WINDOW_SIZE[1])
@@ -9562,7 +9564,8 @@ class Window(QMainWindow):
             self.playback_origin_frame = current["current"]
             self.playback_origin_time = time.monotonic()
             self.playback_elapsed_frames = 0
-            self.playback_timer.start(max(5, round(500 / float(changes["fps"]))))
+            self._playback_next_deadline = None
+            self._schedule_playback_tick(float(changes["fps"]))
         # A range edit that would strand the playhead clamps it rather than failing validation.
         if "first" in changes and changes["first"] > current["last"]:
             changes.setdefault("last", changes["first"])
@@ -9681,6 +9684,7 @@ class Window(QMainWindow):
             self.playback_origin_frame = time_range["current"]
             self.playback_origin_time = time.monotonic()
             self.playback_elapsed_frames = 0
+            self._playback_next_deadline = None
             self.playback_dropped_frames = 0
             self.playback_frames_rendered = 0
             self.playback_shown_times.clear()
@@ -9709,7 +9713,7 @@ class Window(QMainWindow):
             # clock and bounds the playhead to completed renders. Waking twice per frame (500/fps)
             # adds UI/event-loop work without improving picture cadence, and the overhead costs
             # measurable throughput on cache-hot HD ranges.
-            self.playback_timer.start(max(1, round(1000 / time_range["fps"])))
+            self._schedule_playback_tick(float(time_range["fps"]))
             self.request_preview()
         else:
             self.playback_timer.stop()
@@ -9763,6 +9767,21 @@ class Window(QMainWindow):
             self.set_time(transient=True, playhead_only=True, current=target)
         if finished:
             self.toggle_playback(False)
+        elif self.playing:
+            self._schedule_playback_tick(float(time_range["fps"]))
+
+    def _next_playback_interval_ms(self, fps):
+        """Keep precise one-shot timer wakeups on the frame-rate's fractional phase."""
+        now = time.monotonic()
+        period = 1.0 / max(1.0, float(fps))
+        if self._playback_next_deadline is None:
+            self._playback_next_deadline = now + period
+        else:
+            self._playback_next_deadline += period
+        return max(1, math.ceil((self._playback_next_deadline - now) * 1000.0))
+
+    def _schedule_playback_tick(self, fps):
+        self.playback_timer.start(self._next_playback_interval_ms(fps))
 
     def _adapt_playback_proxy(self, request, elapsed_ms):
         """Lower an automatic playback tier when the measured render misses the chosen fps."""

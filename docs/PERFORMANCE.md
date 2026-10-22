@@ -199,9 +199,15 @@ costs are estimates; the paired JSON profiles preserve the timeline and sampling
 Cached playback stayed near its prior cadence: 1080p llvmpipe was 12.3 fps before and 11.7–11.8
 fps after, with about 84 ms median frame intervals in both runs. 4K llvmpipe reached 4.7 fps on a
 cached 16-frame loop (frames 33–48), the window retained by the default cache budget at UHD.
-The animated-size Checker Viewer check reached 23.79 fps on the RTX 3080 Ti, just below its 24 fps
-gate. The finish-1 tool measures delivered pictures in a fixed window after the first live picture;
-its result is `benchmarks/2d-playback/finish1-checker-1022-animated-rtx.json`.
+The earlier animated-size Checker Viewer check reached 23.79 fps on the RTX 3080 Ti, below its
+24 fps gate. The 24 fps transport was rounding each repeating timer interval to 42 ms (23.81 Hz).
+Playback now uses phase-locked precise one-shot intervals. The corrected fixed-window check counted
+720 displayed pictures in 30 seconds from the first live picture (24.00 fps); timer and display
+interval medians were 41.659 ms and 41.715 ms. Its evidence is
+`benchmarks/2d-playback/checker-after-timer-1022.json`. The earlier baseline is
+`benchmarks/2d-playback/finish1-checker-1022-animated-rtx.json`. The measurement uses a precise
+30-second cutoff anchored at the first live picture; the prior coarse sample timer could stop
+early and the boundary picture was excluded.
 
 The measured full-resolution changes cut small-radius Blur with shifted-window accumulation,
 use separable cubic sampling for translation-only Transform, and bound Read-ahead to one upcoming
@@ -210,7 +216,7 @@ Playback also skips synchronous disk spills for evicted transient evaluation fra
 the normal disk-cache policy when stopped. This finish-1 run showed steady 288 ms median frame
 intervals, with no disk-tier write samples, and 4.5 fps over ten seconds. Animated Transform remains
 a full-frame fallback because its canvas-global coordinates do not yet have a tile kernel. The 16 fps
-uncached comp gate and the 24 fps Checker gate remain open. Finish-1 profiles are
+uncached comp gate remains open; the animated Checker gate now passes on the RTX. Finish-1 profiles are
 `benchmarks/2d-playback/finish1-after-1022-1080p-rtx3080ti.{json,txt}`; the earlier profile files under
 `benchmarks/2d-playback/` contain the per-stage timeline and Qt/worker sampling evidence; read
 decode events include future frames warmed by the reader pool.

@@ -1648,6 +1648,14 @@ class PlaybackProxyToggleTests(unittest.TestCase):
         w.dispatcher.document["time"]["fps"] = 24.0
         w.toggle_playback(True)
         self.assertEqual(w.playback_timer.interval(), 42)
+        self.assertTrue(w.playback_timer.isSingleShot())
+        from unittest.mock import patch
+        w._playback_next_deadline = None
+        with patch.object(nodebased_app_module.time, "monotonic", side_effect=(0.0, 0.042, 0.084)):
+            intervals = [w._next_playback_interval_ms(24.0) for _ in range(3)]
+        self.assertEqual(intervals, [42, 42, 41])
+        self.assertEqual(sum(intervals), 125,
+                         "24 Hz scheduling should distribute fractional milliseconds")
         w.toggle_playback(False)
         queued = w.preview_queue._items[0] if w.preview_queue._items else None
         self.assertIsNotNone(queued, 'stopping did not request a refinement frame')

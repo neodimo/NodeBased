@@ -54,7 +54,7 @@ def case_cards3d(seconds):
 
 
 def case_checker(seconds):
-    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtCore import QEventLoop, QTimer, Qt
     from PySide6.QtWidgets import QApplication
     from nodebased.app import Window
     app = QApplication.instance() or QApplication([])
@@ -68,6 +68,7 @@ def case_checker(seconds):
         {"op": "set_key", "id": "qa_checker", "param": "size", "frame": 100, "value": 240}]})
     window.set_time(first=1, last=100, current=1, fps=24.0)
     drawn = []
+    timer_ticks = []
     window.signals.finished.connect(lambda payload, frame, image, status, region=None:
                                     drawn.append(time.perf_counter()) if image is not None and frame is not None else None)
     end = time.perf_counter() + 30
@@ -75,6 +76,9 @@ def case_checker(seconds):
         app.processEvents()
         time.sleep(0.01)
     drawn.clear()
+    original_tick = window.playback_tick
+    window.playback_timer.timeout.disconnect(window.playback_tick)
+    window.playback_timer.timeout.connect(lambda: (timer_ticks.append(time.perf_counter()), original_tick()))
     window.toggle_playback(True)
     loop = QEventLoop()
     sample = {}
@@ -86,8 +90,16 @@ def case_checker(seconds):
 
     def begin_sample():
         if drawn:
-            sample["start"] = time.perf_counter()
-            QTimer.singleShot(int(seconds * 1000), finish_sample)
+            # The steady-state window is anchored at the first live picture, which is itself a
+            # displayed frame at t=0. Starting the clock just after its signal drops that frame.
+            sample["start"] = drawn[-1]
+            sample["cutoff"] = sample["start"] + seconds
+            sample_timer = QTimer(window)
+            sample_timer.setSingleShot(True)
+            sample_timer.setTimerType(Qt.TimerType.PreciseTimer)
+            sample_timer.timeout.connect(finish_sample)
+            sample["timer"] = sample_timer
+            sample_timer.start(int(seconds * 1000))
         else:
             QTimer.singleShot(5, begin_sample)
 
@@ -96,14 +108,24 @@ def case_checker(seconds):
     QTimer.singleShot(0, begin_sample)
     QTimer.singleShot(int((seconds + 30) * 1000), finish_sample)
     loop.exec()
-    elapsed = sample.get("end", time.perf_counter()) - sample.get("start", time.perf_counter())
+    elapsed = float(seconds)
     measured = [stamp for stamp in drawn if sample.get("start", float("inf")) <= stamp
-                <= sample.get("end", 0.0)]
+                < sample.get("cutoff", 0.0)]
+    measured_ticks = [stamp for stamp in timer_ticks if sample.get("start", float("inf")) <= stamp
+                      < sample.get("cutoff", 0.0)]
+    display_intervals = [(b - a) * 1000.0 for a, b in zip(measured, measured[1:])]
+    timer_intervals = [(b - a) * 1000.0 for a, b in zip(measured_ticks, measured_ticks[1:])]
     window.toggle_playback(False)
     window.confirm_discard = lambda *a, **k: True
     window.close()
     fps = len(measured) / elapsed if measured and elapsed > 0 else 0.0
-    return dict(frames=len(measured), fps=round(fps, 2), median_ms=None)
+    return dict(frames=len(measured), fps=round(fps, 2), elapsed_s=round(elapsed, 3),
+                display_cadence_fps=round((len(measured) - 1) /
+                                          (measured[-1] - measured[0]), 2) if len(measured) > 1 else 0.0,
+                display_interval_ms_p50=round(statistics.median(display_intervals), 3) if display_intervals else None,
+                timer_ticks=len(measured_ticks), timer_interval_ms_p50=round(statistics.median(timer_intervals), 3)
+                if timer_intervals else None,
+                median_ms=None)
 
 
 def run_case(case, adapter, seconds):
