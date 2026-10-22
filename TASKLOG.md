@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
+
+- **What was done:** `main` `a5caf406` -> `4e23575d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `4e23575d`: Ran 5864 tests in 475.996 s, OK (skipped=20), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (integrator tick)
 
 - **What was done:** `main` `907d56d7` -> `74523025` plus this docs commit. Evidence and per-lane commit
