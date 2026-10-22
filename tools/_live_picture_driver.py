@@ -2,6 +2,7 @@ import cProfile, io, json, os, pstats, subprocess, sys, threading, time
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+from live_picture_bench import qt_global_to_x11
 import tests.isolation
 from PySide6.QtCore import QObject, QTimer, Signal, Qt, QPointF, QEvent
 from PySide6.QtWidgets import QApplication
@@ -17,10 +18,11 @@ from nodebased.tileexec import SUPPORTED_TILED_KINDS, _all_ancestors
 from nodebased import groups
 
 comp, output, duration, adapter = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4]
-timeline=[]; profiles={}; lock=threading.Lock()
+timeline=[]; profiles={}; lock=threading.Lock(); first_drag_move=[None]
 def mark(stage, **fields):
     with lock: timeline.append({"stage":stage,"t":time.perf_counter(),**fields})
 profile_mode=sys.argv[6]
+warm_playback_range = bool(int(sys.argv[7])) if len(sys.argv) > 7 else False
 main_profile=cProfile.Profile()
 if profile_mode=='qt': main_profile.enable()
 app=QApplication(sys.argv[:1]); app.setApplicationName("NodeBased"); app.setStyle("Fusion"); app.setStyleSheet(STYLE)
@@ -36,7 +38,15 @@ def handed_over(*a,**k): mark('card_upload_and_handoff',accepted=bool(a[0]) if a
 win._direct_handed_over=handed_over
 class Trace(QObject):
     def eventFilter(self, obj, event):
-        if event.type() in (QEvent.Type.MouseButtonPress,QEvent.Type.MouseMove,QEvent.Type.MouseButtonRelease): mark('mouse_event_received',type=int(event.type()))
+        if event.type() in (QEvent.Type.MouseButtonPress,QEvent.Type.MouseMove,QEvent.Type.MouseButtonRelease):
+            point = event.globalPosition().toPoint() if hasattr(event, 'globalPosition') else None
+            mark('mouse_event_received', type=int(event.type()),
+                 global_pos=None if point is None else [point.x(), point.y()])
+            if (event.type() == QEvent.Type.MouseMove
+                    and event.buttons() & Qt.MouseButton.LeftButton
+                    and first_drag_move[0] is None):
+                first_drag_move[0] = time.monotonic()
+                mark('first_drag_move_received')
         if event.type()==QEvent.Type.Paint: mark('paint')
         return False
 trace=Trace(); win.viewer.viewport().installEventFilter(trace)
@@ -127,14 +137,14 @@ def on_main(fn):
     bridge.call.emit(run); ev.wait(10); return box.get('v')
 def xd(*args): subprocess.run(['xdotool',*map(str,args)],env={**os.environ,'DISPLAY':os.environ['DISPLAY']},check=True)
 def busy(): return bool(win.busy) or len(win.preview_queue)>0
-def settle(timeout=90):
+def settle(timeout=90, stable_for=.35):
     until=time.monotonic()+timeout; stable=None
     while time.monotonic()<until:
         ready=(not busy() and win.frame is not None and on_main(lambda:win.viewer.last_scale)==int(on_main(lambda:win.proxy.currentData())))
         now=time.monotonic()
         if ready:
             if stable is None: stable=now
-            elif now-stable>=.35: return
+            elif now-stable>=stable_for: return
         else: stable=None
         time.sleep(.01)
 def wait_new(generation, timeout=30):
@@ -151,35 +161,84 @@ def scenario():
     def xy():
       p=win.viewer.viewport().mapToGlobal(win.viewer.mapFromScene(QPointF(shape['x'],shape['y'])))
       return p.x(),p.y()
-    x,y=on_main(xy); xd('mousemove',x,y); time.sleep(.25)
+    logical_x,logical_y=on_main(xy)
+    ratio=float(win.devicePixelRatioF())
+    x,y=qt_global_to_x11((logical_x,logical_y),ratio)
+    mark('drag_coordinates', logical=[logical_x,logical_y], x11=[x,y],
+         device_pixel_ratio=ratio, viewport=[win.viewer.viewport().width(),win.viewer.viewport().height()])
+    xd('mousemove',x,y); time.sleep(.25)
     g0=win.frame_generation; start=time.monotonic(); first=None
-    xd('mousedown',1); time.sleep(.04)
+    xd('mousedown',1); time.sleep(.08)
     for n in range(1,7):
-      xd('mousemove',x+12*n,y+8*n)
+      # Keep each move distinct and give Qt time to consume it while the button is
+      # still held. A burst of xdotool moves can be coalesced into one event at
+      # release, which tests the input queue rather than live preview delivery.
+      xd('mousemove',x+round(12*ratio)*n,y+round(8*ratio)*n)
       if first is None: first=wait_new(g0,.045)
-      time.sleep(.035)
+      time.sleep(.16)
     drag_end=time.monotonic(); frames=win.frame_generation-g0; xd('mouseup',1)
     if first is None: first=wait_new(g0,45)
     settle()
-    drag={"series":"roto_drag","adapter":adapter,"first_picture_s":None if first is None else round(first-start,4),"picture_during_drag":first is not None and first<drag_end,"frames_during_drag":frames,"settle_s":round(time.monotonic()-drag_end,4),"status":win.viewer_info.text()}
+    first_move = first_drag_move[0]
+    drag={"series":"roto_drag","adapter":adapter,
+          "first_picture_s":None if first is None else round(first-start,4),
+          "first_move_to_picture_s":None if first is None or first_move is None else round(first-first_move,4),
+          "first_move_received_s":None if first_move is None else round(first_move-start,4),
+          "picture_during_drag":first is not None and first<drag_end,"frames_during_drag":frames,
+          "settle_s":round(time.monotonic()-drag_end,4),"status":win.viewer_info.text()}
     mark('series_end',series='roto_drag'); mark('series_start',series='uncached_scrub')
     g=win.frame_generation; xd('key','Right'); scrub_start=time.monotonic(); scrub_first=wait_new(g,60); settle()
     scrub={"series":"uncached_scrub","adapter":adapter,"first_picture_s":None if scrub_first is None else round(scrub_first-scrub_start,4),"settle_s":round(time.monotonic()-scrub_start,4),"status":win.viewer_info.text()}
-    mark('series_end',series='uncached_scrub'); mark('series_start',series='tier4_playback')
+    mark('series_end',series='uncached_scrub')
     on_main(lambda:(win.proxy.setCurrentIndex(win.proxy.findData(4)),win.playback_proxy.setChecked(False))); settle()
+    warmed_frames = 0; cache_warm_s = None
+    if warm_playback_range:
+      mark('series_start',series='tier4_cache_warm')
+      warm_start = time.monotonic()
+      time_range = dict(win.dispatcher.document['time'])
+      for frame_number in range(int(time_range['first']), int(time_range['last']) + 1):
+        generation = win.frame_generation
+        on_main(lambda f=frame_number: win.set_time(transient=True, current=f))
+        if wait_new(generation, 90) is None: break
+        settle(timeout=90, stable_for=.02)
+      on_main(lambda f=int(time_range['first']): win.set_time(transient=True, current=f))
+      settle(timeout=90, stable_for=.02)
+      current_doc = win.dispatcher.document
+      target = current_doc.get('view')
+      warm_frames = range(int(time_range['first']), int(time_range['last']) + 1)
+      identity = win.display_cache.identity(current_doc, target, 4)
+      # DisplayCache entries are region-keyed. Playback can use the same selected-tier
+      # frame from a viewport region, so get(key, region=None) would incorrectly report
+      # every such entry missing. resident_frames checks the exact content identity and
+      # frame while intentionally ignoring the presentation region.
+      warmed_frames = len(win.display_cache.resident_frames(identity, warm_frames))
+      cache_warm_s = round(time.monotonic() - warm_start, 3)
+      mark('playback_range_warmed', requested_frames=int(time_range['last'])-int(time_range['first'])+1,
+           cached_frames=warmed_frames, elapsed_s=cache_warm_s)
+      mark('series_end',series='tier4_cache_warm')
+    mark('series_start',series='tier4_playback')
+    playback_timeline_start = time.perf_counter()
     t=time.monotonic(); on_main(lambda:win.toggle_playback(True)); observations=[]
     while time.monotonic()-t<duration:
         observations.append((time.monotonic()-t,win.dispatcher.document['time']['current'],win.frame_generation))
         time.sleep(.01)
     on_main(lambda:win.toggle_playback(False)); elapsed=time.monotonic()-t
+    playback_timeline_end = time.perf_counter()
+    mark('series_end',series='tier4_playback')
+    playback_events = [event for event in timeline
+                       if playback_timeline_start <= event.get('t', 0) <= playback_timeline_end]
+    playback_cache_lookups = [event for event in playback_events
+                               if event.get('stage') == 'display_cache_lookup_end']
+    playback_graph_evaluations = sum(event.get('stage') == 'graph_evaluation_end'
+                                     for event in playback_events)
     frame_count=0; last_generation=observations[0][2] if observations else -1
     last_frame=observations[0][1] if observations else None
     for _stamp,frame,generation in observations[1:]:
         if generation>last_generation:
             if frame!=last_frame: frame_count+=1; last_frame=frame
             last_generation=generation
-    playback={"series":"tier4_playback","adapter":adapter,"fps":round(frame_count/max(elapsed,.001),3),"rendered_frame_changes":frame_count,"elapsed_s":round(elapsed,3),"fps_target":win.dispatcher.document['time']['fps'],"status":win.viewer_info.text()}
-    settle(60); mark('series_end',series='tier4_playback')
+    playback={"series":"tier4_playback","adapter":adapter,"fps":round(frame_count/max(elapsed,.001),3),"rendered_frame_changes":frame_count,"elapsed_s":round(elapsed,3),"fps_target":win.dispatcher.document['time']['fps'],"playback_range_warmed":warm_playback_range,"cached_range_frames":warmed_frames,"cache_warm_s":cache_warm_s,"display_cache_lookups":len(playback_cache_lookups),"display_cache_hits":sum(event.get('hit') is True for event in playback_cache_lookups),"graph_evaluations":playback_graph_evaluations,"status":win.viewer_info.text()}
+    settle(60)
     if profile_mode=='qt': main_profile.disable()
     profile_rows=[]
     selected=([(threading.get_ident(),[main_profile])] if profile_mode=='qt' else list(profiles.items()))
@@ -194,4 +253,9 @@ def scenario():
   except BaseException:
     import traceback; traceback.print_exc()
   finally: os._exit(0)
-win.setGeometry(0,0,1920,1080); win.show(); win.raise_(); win.activateWindow(); QTimer.singleShot(1000,lambda:threading.Thread(target=scenario,daemon=True).start()); app.exec()
+screen = app.primaryScreen()
+# Window geometry is in Qt logical pixels. Filling a fixed 1920x1080 logical rect
+# made the window 3840x2160 physical pixels at QT_SCALE_FACTOR=2, leaving the
+# benchmark's target handle outside the visible Xvfb screen.
+win.setGeometry(screen.geometry() if screen is not None else win.geometry())
+win.show(); win.raise_(); win.activateWindow(); QTimer.singleShot(1000,lambda:threading.Thread(target=scenario,daemon=True).start()); app.exec()

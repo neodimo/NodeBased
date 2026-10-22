@@ -1,0 +1,6027 @@
+{
+  "adapter": "AMD Radeon Graphics (4-core, 2x DPI)",
+  "results": [
+    {
+      "series": "roto_drag",
+      "adapter": "AMD Radeon Graphics (4-core, 2x DPI)",
+      "first_picture_s": 0.5441,
+      "first_move_to_picture_s": 0.2029,
+      "first_move_received_s": 0.3411,
+      "picture_during_drag": true,
+      "frames_during_drag": 8,
+      "settle_s": 0.8873,
+      "status": "1920 \u00d7 1080  \u00b7  1 ms  \u00b7  display cache hit  \u00b7  display GPU"
+    },
+    {
+      "series": "uncached_scrub",
+      "adapter": "AMD Radeon Graphics (4-core, 2x DPI)",
+      "first_picture_s": 0.5125,
+      "settle_s": 2.6219,
+      "status": "1920 \u00d7 1080  \u00b7  1495 ms  \u00b7  tile fallback  \u00b7  cache 855.5 / 4096 MiB  \u00b7  display GPU"
+    },
+    {
+      "series": "tier4_playback",
+      "adapter": "AMD Radeon Graphics (4-core, 2x DPI)",
+      "fps": 14.484,
+      "rendered_frame_changes": 116,
+      "elapsed_s": 8.009,
+      "fps_target": 24.0,
+      "status": "1920 \u00d7 1080  \u00b7  proxy 1/4  \u00b7  5 ms  \u00b7  display cache hit  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 0"
+    }
+  ],
+  "timeline": [
+    {
+      "stage": "worker_start",
+      "t": 1234723.274447512
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234723.275425543
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234723.275432553,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234723.275911669
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234723.275914819,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234723.276485023
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234723.276487152,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234723.27690392
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234723.27690579,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234723.27691316,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1234723.289411958
+    },
+    {
+      "stage": "paint",
+      "t": 1234723.329180016
+    },
+    {
+      "stage": "paint",
+      "t": 1234723.335859433
+    },
+    {
+      "stage": "paint",
+      "t": 1234723.34804305
+    },
+    {
+      "stage": "scenario_start",
+      "t": 1234724.31036642
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234725.664882432,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 2387.875,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234725.66494077,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234725.66495008,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234725.665044477
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234725.759510331
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234726.052166336
+    },
+    {
+      "stage": "paint",
+      "t": 1234726.056922358
+    },
+    {
+      "stage": "paint",
+      "t": 1234726.065387243
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234726.291945402
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234726.450065292,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 157.951,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234726.450082752
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234726.451579298
+    },
+    {
+      "stage": "series_start",
+      "t": 1234727.079215741,
+      "series": "roto_drag"
+    },
+    {
+      "stage": "drag_coordinates",
+      "t": 1234727.079450595,
+      "logical": [
+        422,
+        123
+      ],
+      "x11": [
+        844,
+        246
+      ],
+      "device_pixel_ratio": 2.0,
+      "viewport": [
+        555,
+        204
+      ]
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1234727.084014602,
+      "type": 5,
+      "global_pos": [
+        422,
+        123
+      ]
+    },
+    {
+      "stage": "paint",
+      "t": 1234727.087584299
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1234727.337669216,
+      "type": 2,
+      "global_pos": [
+        422,
+        123
+      ]
+    },
+    {
+      "stage": "paint",
+      "t": 1234727.662521018
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1234727.674502811,
+      "type": 5,
+      "global_pos": [
+        446,
+        139
+      ]
+    },
+    {
+      "stage": "first_drag_move_received",
+      "t": 1234727.674516471
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234727.679630293,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234727.681053522
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234727.681057041,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234727.68110287
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234727.68110413,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234727.682312205
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234727.68938244
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234727.690357562
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234727.690363002,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234727.690374132,
+      "tier": 8
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234727.801153473,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 110.668,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234727.801195652,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234727.801201062,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234727.801250751
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234727.803030109
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234727.808372964,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234727.811226432
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234727.811755146
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234727.811760936,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234727.811770226,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1234727.85547639
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1234727.884192369,
+      "type": 5,
+      "global_pos": [
+        458,
+        147
+      ]
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234727.909993681,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234727.914466422
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234727.914471932,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234727.91452437
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234727.91452686,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234727.916092275
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1234728.041349737,
+      "type": 5,
+      "global_pos": [
+        470,
+        155
+      ]
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234728.066851908,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.071189813
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.071195753,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.071247001
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.071249281,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234728.072040608
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1234728.208594353,
+      "type": 5,
+      "global_pos": [
+        482,
+        163
+      ]
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234728.235364788,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.240563178
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.240567967,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.240619946
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.240622056,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234728.259944016
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234728.300951939,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 489.09,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234728.300981418,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234728.300985378,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234728.301020767
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234728.304859376
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234728.308470481
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.309908479
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.309913739,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234728.309922199,
+      "tier": 8
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234728.325983554,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 15.941,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234728.326007133,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234728.326013903,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234728.326039122
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234728.327465861
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234728.330853523,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234728.333566814
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.334082819
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.334087439,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234728.334094549,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1234728.355049242
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234728.368398335,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 34.226,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234728.368431744,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234728.368438514,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234728.368466823
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1234728.372999672,
+      "type": 5,
+      "global_pos": [
+        494,
+        171
+      ]
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234728.397294619,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234728.401597884
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.401662392
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.401667112,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.401711101
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.40171329,
+      "hit": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234728.405437773
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.406060555
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.406069324,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234728.406084174,
+      "tier": 8
+    },
+    {
+      "stage": "paint",
+      "t": 1234728.420601784
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234728.433344184,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 27.063,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234728.433365244,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234728.433368914,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234728.433394553
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234728.435164122
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234728.439980772,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234728.442679724
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.443975927
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.443982506,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234728.443990076,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1234728.467238693
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234728.479789769,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 35.716,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234728.479812199,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234728.479815919,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234728.479841818
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234728.483864151
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234728.487599613,
+      "tier": 1,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234728.490508729
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.49185027
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.49185578,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.492250208
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.492252328,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.492618738
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.492769913,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234728.492774073
+    },
+    {
+      "stage": "paint",
+      "t": 1234728.493808733
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234728.501208369
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234728.501499871,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1234728.577027533
+    },
+    {
+      "stage": "mouse_event_received",
+      "t": 1234728.592236573,
+      "type": 3,
+      "global_pos": [
+        494,
+        171
+      ]
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234728.595330653
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234728.65104718,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 149.389,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234728.651089028,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234728.651093008,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234728.651132227
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234728.717611072
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234728.996215843,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.997636782
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.997641052,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234728.99769304
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234728.99770376,
+      "hit": true
+    },
+    {
+      "stage": "paint",
+      "t": 1234728.998926285
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234729.035110167
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234729.035831256
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234729.035849245,
+      "hit": true
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234729.063893103
+    },
+    {
+      "stage": "paint",
+      "t": 1234729.066735171
+    },
+    {
+      "stage": "paint",
+      "t": 1234729.087351504
+    },
+    {
+      "stage": "series_end",
+      "t": 1234729.456723757,
+      "series": "roto_drag"
+    },
+    {
+      "stage": "series_start",
+      "t": 1234729.456727267,
+      "series": "uncached_scrub"
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234729.460764179
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234729.779049701,
+      "tier": null,
+      "progressive": true
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234729.780647875
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234729.780652255,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234729.780701774
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234729.780703124,
+      "hit": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234729.799507389
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234729.808629505
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234729.809268776
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234729.809274826,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234729.809285776,
+      "tier": 8
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234729.977437196,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 8,
+      "elapsed_ms": 168.064,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234729.977467255,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234729.977471645,
+      "tier": 8,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234729.977526343
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234729.979828337
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234729.985294678,
+      "tier": 4,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234729.988232103
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234729.989158846
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234729.989164156,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234729.989173866,
+      "tier": 4
+    },
+    {
+      "stage": "paint",
+      "t": 1234729.997485315
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234730.205907189,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 216.614,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234730.205938258,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234730.205942728,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234730.205984157
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234730.210176476
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234730.215621678,
+      "tier": 1,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234730.218601092
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234730.22003991
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234730.22004884,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234730.220505926
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234730.220508576,
+      "hit": false
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234730.220894015
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234730.220992472,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234730.220996282
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234730.224740524
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234730.224791222,
+      "tier": 1
+    },
+    {
+      "stage": "paint",
+      "t": 1234730.226625039
+    },
+    {
+      "stage": "paint",
+      "t": 1234730.288821868
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234731.647333854,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 1,
+      "elapsed_ms": 1422.389,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234731.647371523,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234731.647377683,
+      "tier": 1,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234731.647442821
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234731.71378437
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234731.718743726
+    },
+    {
+      "stage": "paint",
+      "t": 1234731.721911784
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234731.983579626
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234731.984583037,
+      "node": "plate",
+      "kind": "Read",
+      "tier": 8,
+      "elapsed_ms": 0.767,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234731.984603696
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234731.986076224
+    },
+    {
+      "stage": "series_end",
+      "t": 1234732.094435476,
+      "series": "uncached_scrub"
+    },
+    {
+      "stage": "series_start",
+      "t": 1234732.094439425,
+      "series": "tier4_playback"
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234732.094592221,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234732.097200725
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234732.13123015
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234732.132459344
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234732.133057187,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234732.133090786
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234732.137190227
+    },
+    {
+      "stage": "paint",
+      "t": 1234732.145928294
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234732.505456302,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234732.50793807
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234732.509227453
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234732.509798876,
+      "hit": true
+    },
+    {
+      "stage": "paint",
+      "t": 1234732.518865744
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234732.549072818
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234732.553679175,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234732.555910351
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234732.557069887
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234732.557076067,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234732.557084727,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234732.765493641,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 208.288,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234732.76552748,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234732.76553167,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234732.765572639
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234732.769419877
+    },
+    {
+      "stage": "paint",
+      "t": 1234732.779700599
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234732.787133054
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234732.790307492,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234732.792668094
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234732.793400493
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234732.793406953,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234732.793415982,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234733.00480914,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.29,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234733.004850559,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234733.004855699,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234733.004898668
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234733.008905161
+    },
+    {
+      "stage": "paint",
+      "t": 1234733.01861142
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234733.026440524
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234733.029567773,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234733.031621584
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234733.032338293
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234733.032343903,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234733.032354122,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234733.24892351,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 216.449,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234733.248956109,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234733.248959769,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234733.248996878
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234733.253236355
+    },
+    {
+      "stage": "paint",
+      "t": 1234733.263015202
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234733.270655791
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234733.273858558,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234733.27587132
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234733.277048576
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234733.277055166,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234733.277063355,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234733.493623743,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 216.448,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234733.493655403,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234733.493659332,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234733.493697031
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234733.498183051
+    },
+    {
+      "stage": "paint",
+      "t": 1234733.508037696
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234733.516753064
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234733.519882023,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234733.521982572
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234733.52310645
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234733.523112119,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234733.523120609,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234733.734466588,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.233,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234733.734500217,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234733.734504937,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234733.734551096
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234733.738531641
+    },
+    {
+      "stage": "paint",
+      "t": 1234733.748423914
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234733.756262327
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234733.759406376,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234733.762061869
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234733.762633713
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234733.762639613,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234733.762648552,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234733.974624173,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.859,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234733.974656152,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234733.974660402,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234733.97472003
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234733.979149072
+    },
+    {
+      "stage": "paint",
+      "t": 1234733.988131942
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234733.997158971
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234734.000377587,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234734.003082489
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234734.004642994
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234734.004654354,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234734.004674493,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234734.215562065,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 210.777,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234734.215594944,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234734.215601264,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234734.215641973
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234734.220052985
+    },
+    {
+      "stage": "paint",
+      "t": 1234734.228797582
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234734.23611373
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234734.239263429,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234734.241366438
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234734.242228623
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234734.242234643,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234734.242244153,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234734.452524383,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 210.169,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234734.452556692,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234734.452560882,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234734.45260965
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234734.4571066
+    },
+    {
+      "stage": "paint",
+      "t": 1234734.466245785
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234734.47368008
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234734.476911657,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234734.479017225
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234734.479624228
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234734.479630308,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234734.479639897,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234734.691038685,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.283,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234734.691071514,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234734.691075474,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234734.691113243
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234734.695330251
+    },
+    {
+      "stage": "paint",
+      "t": 1234734.70503318
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234734.712939801
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234734.71609133,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234734.718943257
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234734.720133273
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234734.720138672,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234734.720147442,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234734.931857251,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.592,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234734.93188923,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234734.93189346,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234734.931938838
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234734.936615113
+    },
+    {
+      "stage": "paint",
+      "t": 1234734.945587193
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234734.953685689
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234734.956880496,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234734.958996405
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234734.959570928
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234734.959577968,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234734.959593908,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234735.170421362,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 210.708,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234735.170454521,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234735.170458381,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234735.170518989
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234735.17463375
+    },
+    {
+      "stage": "paint",
+      "t": 1234735.184588492
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234735.194254341
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234735.197910396,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234735.199679994
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234735.201042645
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234735.201048305,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234735.201056775,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234735.414987809,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 213.808,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234735.415023448,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234735.415027878,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234735.415072166
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234735.419210717
+    },
+    {
+      "stage": "paint",
+      "t": 1234735.429479019
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234735.437294453
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234735.440405873,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234735.443382317
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234735.444313189
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234735.444319809,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234735.444330019,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234735.662084623,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 217.638,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234735.662116102,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234735.662120102,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234735.66215748
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234735.667656481
+    },
+    {
+      "stage": "paint",
+      "t": 1234735.676538564
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234735.683958819
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234735.687141697,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234735.689232587
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234735.690212228
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234735.690218538,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234735.690229678,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234735.903745064,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 213.386,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234735.903778173,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234735.903782103,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234735.903838551
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234735.908648092
+    },
+    {
+      "stage": "paint",
+      "t": 1234735.917119317
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234735.929218236
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234735.932356795,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234735.934111244
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234735.935152204
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234735.935159314,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234735.935168744,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234736.14628854,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.0,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234736.146321739,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234736.146326239,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234736.146361468
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234736.15041869
+    },
+    {
+      "stage": "paint",
+      "t": 1234736.159868456
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234736.16769006
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234736.170810379,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234736.173274178
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234736.173879791
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234736.17388702,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234736.17389656,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234736.388174034,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 214.164,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234736.388207883,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234736.388212143,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234736.388261982
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234736.392509299
+    },
+    {
+      "stage": "paint",
+      "t": 1234736.400944474
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234736.412122421
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234736.415313998,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234736.417134936
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234736.418242153
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234736.418248183,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234736.418257453,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234736.634917398,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 216.544,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234736.634949747,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234736.634953827,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234736.634996786
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234736.639258753
+    },
+    {
+      "stage": "paint",
+      "t": 1234736.647936771
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234736.655289368
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234736.658473486,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234736.660527937
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234736.661518738
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234736.661525618,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234736.661535707,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234736.871856436,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 210.187,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234736.871891395,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234736.871895625,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234736.871953584
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234736.876538121
+    },
+    {
+      "stage": "paint",
+      "t": 1234736.884952457
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234736.895398885
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234736.898817755,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234736.900571595
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234736.901952105
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234736.901958185,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234736.901966734,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234737.113692113,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.605,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234737.113723542,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234737.113728691,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.11377083
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.118149883
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.127643238
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.135618208
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.138763986,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.141300633
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.142275045
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.142280985,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234737.142289694,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234737.354009413,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.61,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234737.354045542,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234737.354050102,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.35410623
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.358378706
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.367751765
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.377788984
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.380997461,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.38276418
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.383431701
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.38343755,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234737.3834474,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234737.594720232,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 211.148,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234737.594751221,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234737.594754931,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.594798649
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.599753216
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.610199233
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.618165712
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.621272312,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.624069912
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.625184279
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.625189939,
+      "hit": false
+    },
+    {
+      "stage": "tier_resample_and_graph_start",
+      "t": 1234737.625198819,
+      "tier": 4
+    },
+    {
+      "stage": "graph_node_evaluated",
+      "t": 1234737.831800026,
+      "node": "roto",
+      "kind": "Roto",
+      "tier": 4,
+      "elapsed_ms": 206.481,
+      "fallback": false,
+      "reason": null
+    },
+    {
+      "stage": "tile_fallback_reason",
+      "t": 1234737.831831655,
+      "node": "Roto",
+      "reason": "requested region covers at least 80% of the canvas; broad Roto requests use the full-frame evaluator"
+    },
+    {
+      "stage": "graph_evaluation_end",
+      "t": 1234737.831835954,
+      "tier": 4,
+      "tiled": false,
+      "fallback_nodes": []
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.831882353
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.836409262
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.845296155
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.853466368
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.856605057,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.859223121
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.86029193
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.860880203,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.860898973
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.865289066
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.8727169
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.881797427
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.885575628,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.887315688
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.888234281
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.888993639,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.889026108
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.892679812
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.900400289
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.907700467
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.910991682,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.914094302
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.914684685
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.914700905,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.914720684
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.918731378
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.925960058
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.933106651
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.936334948,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.938420808
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.938974042
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.938990351,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.939008291
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.942859759
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.949997382
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.957168705
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.960365032,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.963114582
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.963691876
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.963707375,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.963724235
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234737.967411568
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.974336597
+    },
+    {
+      "stage": "paint",
+      "t": 1234737.983166832
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234737.98945675
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234737.992655277,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234737.994758036
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234737.995554553
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234737.995569092,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234737.995586262
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.000051453
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.008894407
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.016843466
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.020058903,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.022174882
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.023215182
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.023230181,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.023246541
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.027047921
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.034831215
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.041884321
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.045131147,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.048040773
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.048619346
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.048635286,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.048650415
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.052922622
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.060502082
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.071495814
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.074630603,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.076391532
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.077248017
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.077263176,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.077279086
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.08162069
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.089025206
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.096762842
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.09994305,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.10236115
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.103236144
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.103250474,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.103267653
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.107019115
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.11408782
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.121221064
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.124399371,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.126494991
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.127390965
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.127405824,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.127425744
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.131416928
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.138472694
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.145668545
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.148803245,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.150905394
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.152149428
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.152162507,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.152178747
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.156116153
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.164433202
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.175880761
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.178956321,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.181268384
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.182269945
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.182282455,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.182298555
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.186121884
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.194596338
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.202271536
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.205412365,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.208265823
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.209269223
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.209282493,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.209300103
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.213419733
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.220743421
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.228582044
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.231700554,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.23424232
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.235255691
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.23526938,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.23528699
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.239063281
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.246555654
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.25566428
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.261644947
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.264809585,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.267258364
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.267877336
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.267890896,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.267907535
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.272547641
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.279935207
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.287797249
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.290953198,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.293371878
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.29432344
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.2943361,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.294353869
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.297953525
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.305899515
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.313122936
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.316364412,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.318647416
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.320077774
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.320092674,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.320110593
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.324653622
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.331998279
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.344467478
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.347576588,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.349296228
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.350242101
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.35025633,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.35027468
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.354635764
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.362913754
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.370468085
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.374216186,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.377111313
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.37824034
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.3782543,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.378270259
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.382124278
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.389799745
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.396814322
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.39998567,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.402098799
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.403239316
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.403253906,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.403270385
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.407187982
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.414538209
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.428933682
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.432664884,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.434503351
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.436119594
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.436134843,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.436158943
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.441152018
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.449066149
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.45626862
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.459445998,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.461542767
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.462511369
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.462529899,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.462545258
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.466900172
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.47491313
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.482647916
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.485816444,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.487876545
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.489183797
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.489197037,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.489213806
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.492950158
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.50012993
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.511972897
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.515108196,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.516850346
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.518171827
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.51875396,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.51877037
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.522312077
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.530891969
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.537932585
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.541239769,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.545236343
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.546217225
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.546843537,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.546860377
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.551107064
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.559018094
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.566032571
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.569214239,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.571324348
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.572340819
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.572354768,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.572371028
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.577341024
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.584862006
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.596339154
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.599437934,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.60131147
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.602221453
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.602236393,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.602252032
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.605921106
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.614014342
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.621555053
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.625375203,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.628155002
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.629191942
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.629206932,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.629237311
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.632878975
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.641124667
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.648174152
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.651388479,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.653501668
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.654956466
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.654970836,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.654990355
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.660294401
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.668766546
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.679979381
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.683169199,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.684990676
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.686219211
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.68623357,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.68625042
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.690541385
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.697921462
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.704982427
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.708237733,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.710326572
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.710880426
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.710894046,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.710910786
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.715450294
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.723433393
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.730662083
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.73387798,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.736440036
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.737093987
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.737121276,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.737162035
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.742293217
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.750169019
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.757258613
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.760455121,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.762563669
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.763405265
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.763425044,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.763440624
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.767242464
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.774488614
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.784946311
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.788062561,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.789788001
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.791057904
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.791072734,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.791091453
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.794958851
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.80260574
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.809695085
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.812933091,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.814995461
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.815658532
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.815676741,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.815693241
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.820131362
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.82782403
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.834949883
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.838147231,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.840199361
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.841369367
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.841387817,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.841407236
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.845670153
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.853787628
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.862273502
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.868390095
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.871600702,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.873661822
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.87443182
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.874446869,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.874462239
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.879003807
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.886777892
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.895321115
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.901444527
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.904644775,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.906695525
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.90756534
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.90758353,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.907599449
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.911872975
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.918663259
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.927169002
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.933550968
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.936777904,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.938879823
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.939613222
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.939631552,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.939646291
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.943363263
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.950557845
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.958457936
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.961600505,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.964227989
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.964799492
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.964812932,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.964830002
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234738.969981322
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.977148555
+    },
+    {
+      "stage": "paint",
+      "t": 1234738.985719687
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234738.991799301
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234738.995007508,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234738.997081588
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234738.997671651
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234738.99768439,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234738.99770209
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.001797161
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.01080098
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.018570095
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.021760483,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.025517184
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.032962888
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.034190023
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.034203332,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.034220822
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.038192177
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.045766538
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.055649981
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.061648848
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.065551835,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.068418702
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.069459452
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.069472741,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.069490221
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.073128275
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.081531872
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.088557578
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.091735326,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.093839776
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.09542548
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.095453689,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.095492688
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.100347707
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.108598318
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.120674148
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.123822937,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.125621145
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.127113282
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.127129441,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.127147571
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.131163505
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.138692256
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.145718553
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.149484914,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.152282363
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.153235415
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.153250205,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.153266304
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.157158232
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.164570387
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.172294873
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.175468831,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.178210572
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.179250662
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.179265182,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.179283201
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.182860787
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.189274632
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.197740826
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.204667356
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.207797715,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.210334742
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.210903615
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.211498078,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.211514698
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.215985598
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.223551539
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.230737481
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.233955958,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.236041407
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.237269042
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.237866784,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.237887624
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.241665534
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.249185397
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.256336119
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.259560076,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.261699054
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.263109753
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.263123473,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.263139672
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.267513686
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.27288902
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.276039679,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.279377602
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.28706238
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.288244265
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.288257805,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.288274334
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.292258429
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.299634355
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.309605337
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.312778985,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.314554363
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.316092299
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.316106498,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.316123048
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.320470592
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.327719172
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.334727309
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.337856108,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.339908399
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.340530171
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.340545451,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.34055909
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.344758579
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.352009499
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.361649129
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.367663355
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.370817684,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.372857695
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.374189636
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.374203606,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.374221165
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.379180632
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.387219109
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.394279804
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.397451203,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.399514723
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.400450696
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.400470075,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.400486205
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.404301894
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.411544254
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.420856235
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.42688062
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.430061308,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.432122998
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.433355433
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.433376282,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.433393232
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.437430715
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.445647087
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.456823783
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.459950382,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.46176362
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.463124521
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.46313888,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.46315416
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.466861202
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.474253258
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.481323724
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.484531241,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.486650529
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.487457796
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.487473835,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.487491575
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.491704923
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.498943753
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.507766698
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.51426698
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.517592713,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.520607686
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.521541639
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.521558778,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.521576958
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.526199614
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.532579699
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.54186383
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.547935884
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.551117772,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.553144863
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.554361998
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.554381088,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.554397137
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.558249466
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.565205324
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.574378729
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.581204791
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.584283152,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.586961704
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.587599506
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.587613695,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.587631045
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.591215801
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.598268827
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.606141009
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.609261628,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.612088476
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.61266538
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.612678609,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.612696929
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.616964625
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.624601234
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.63164151
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.635495428,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.638266818
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.63925689
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.639270839,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.639286349
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.642879605
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.650737987
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.657869061
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.661104017,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.664083491
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.664682353
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.664698383,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.664715802
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.668884282
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.676464792
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.687611959
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.690743599,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.692481578
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.694025063
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.694039163,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.694055043
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.697664548
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.70589822
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.713065802
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.716181382,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.719161505
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.719736499
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.719750668,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.719767858
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.724303736
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.731817809
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.738911814
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.742722063,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.745281649
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.74628279
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.74629541,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.746311879
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.749901125
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.756488604
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.765003768
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.77113277
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.774367767,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.776464716
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.777379589
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.777396439,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.777411948
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.781902858
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.789127439
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.79875745
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.804777206
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.807932815,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.811267518
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.812217581
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.81223116,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.81225041
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.816682901
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.824372648
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.834973991
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.838096461,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.839839241
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.841089614
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.841104354,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.841121783
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.845572664
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.853126556
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.860204901
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.863373209,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.86542379
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.865989643
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.866003923,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.866028122
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.869849791
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.877928447
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.884977773
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.888172521,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.890297199
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.891345259
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.891972711,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.89198901
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.895736572
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.903247884
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.911065568
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.914220386,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.916332305
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.917216789
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.917821252,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.917837422
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.921870405
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.929007908
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.93999936
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.943169218,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.944910018
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.946391555
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.946431674,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.946471162
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.951010861
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.958886683
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.966312348
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.969508455,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.972295155
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.972883277
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.972901937,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.972918776
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234739.976977239
+    },
+    {
+      "stage": "paint",
+      "t": 1234739.984124922
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234739.991903977
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234739.995082784,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234739.997164244
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234739.998287532
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234739.998300311,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234739.998318741
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.002224468
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.007599462
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.010739941,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.013990997
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.021621356
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.022228448
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.022244398,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.022260717
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.026131695
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.034230521
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.045206093
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.048391411,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.05015165
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.051242828
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.051257028,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.051273987
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.055018699
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.062317297
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.0694595
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.072673767,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.074771397
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.075492066
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.075508895,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.075525185
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.079615666
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.08742968
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.095298712
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.09847538,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.100482982
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.101111004
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.101124203,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.101145413
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.10469657
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.111804904
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.118981956
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.122198843,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.12505255
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.125636644
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.125650533,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.125668683
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.12991248
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.136716923
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.145190357
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.152126076
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.155250416,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.157297907
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.1582247
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.158237869,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.158253359
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.162764278
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.171416018
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.178615179
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.181806587,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.183875457
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.184608746
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.184624055,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.184640065
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.188406656
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.195048763
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.203742001
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.209935582
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.213156509,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.215408464
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.216300668
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.216319757,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.216335517
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.220074568
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.227780935
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.235099143
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.238303801,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.240454618
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.241464259
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.241479399,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.241495828
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.245345157
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.252049132
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.261691473
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.26765213
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.271427431,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.274013266
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.274600519
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.274616599,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.274633038
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.279001102
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.285945761
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.296777317
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.299911146,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.301659276
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.303122553
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.303137853,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.303155832
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.306803637
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.314235191
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.321663446
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.324846234,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.326953433
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.327653913
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.327668513,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.327684192
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.332159772
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.339815451
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.347659573
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.350823892,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.353212883
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.353794016
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.353807685,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.353824705
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.358445931
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.365954204
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.374613653
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.380716886
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.383969712,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.386071331
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.387315215
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.387337504,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.387362064
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.391162284
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.398380675
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.406965016
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.413087099
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.416324095,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.418426874
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.419345307
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.419359557,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.419379016
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.423336032
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.429888102
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.438531102
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.444669314
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.44790931,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.449973581
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.450643831
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.450657291,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.45067414
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.455107192
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.463082111
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.470302192
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.473492839,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.475564899
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.476419715
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.476434824,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.476450494
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.480089178
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.488175704
+    },
+    {
+      "stage": "document_edit_applied",
+      "t": 1234740.495523581
+    },
+    {
+      "stage": "preview_requested",
+      "t": 1234740.498729698,
+      "tier": null,
+      "progressive": false
+    },
+    {
+      "stage": "worker_start",
+      "t": 1234740.500894356
+    },
+    {
+      "stage": "display_cache_lookup_start",
+      "t": 1234740.501610995
+    },
+    {
+      "stage": "display_cache_lookup_end",
+      "t": 1234740.501624544,
+      "hit": true
+    },
+    {
+      "stage": "to_qimage_start",
+      "t": 1234740.501639534
+    },
+    {
+      "stage": "to_qimage_end",
+      "t": 1234740.506174093
+    },
+    {
+      "stage": "paint",
+      "t": 1234740.514885611
+    },
+    {
+      "stage": "series_end",
+      "t": 1234740.879904349,
+      "series": "tier4_playback"
+    }
+  ],
+  "profiles": [
+    {
+      "thread_id": 140446814684864,
+      "top": "         4880408 function calls (4719197 primitive calls) in 14.496 seconds\n\n   Ordered by: cumulative time\n   List reduced from 1487 to 50 due to restriction <50>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n  794/792    5.260    0.007    9.692    0.012 {built-in method time.sleep}\n       32    0.013    0.000    7.756    0.242 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:836(evaluate_raster)\n  114/108    0.008    0.000    6.442    0.060 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:2707(_windowed_kernel)\n       30    0.003    0.000    5.859    0.195 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:826(evaluate)\n       27    0.156    0.006    3.665    0.136 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:191(read_image_raster)\n       27    3.506    0.130    3.506    0.130 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/media.py:291(read_media_raster)\n      9/8    0.000    0.000    2.696    0.337 /var/home/omid/.openclaw/workspace/projects/nodebased/tools/_live_picture_driver.py:58(compose)\n      9/8    0.001    0.000    2.688    0.336 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/tileexec.py:541(compose_region)\n       28    0.000    0.000    2.570    0.092 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/paint.py:153(rasterise)\n    11/10    0.799    0.073    2.495    0.249 /var/home/omid/.openclaw/workspace/projects/nodebased/tools/_live_picture_driver.py:84(evaluate)\n       33    0.000    0.000    1.160    0.035 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:2863(render_matte)\n       33    0.006    0.000    1.152    0.035 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:727(_roto_matte)\n       28    0.003    0.000    1.066    0.038 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/media.py:274(read_exr_layers)\n       28    0.061    0.002    0.998    0.036 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/paint.py:50(apply_stroke)\n      320    0.057    0.000    0.956    0.003 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:750(_roto_shape_matte)\n  142/101    0.005    0.000    0.890    0.009 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/app.py:13918(work)\n      125    0.001    0.000    0.876    0.007 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/roto.py:393(render_cover)\n  104/101    0.004    0.000    0.837    0.008 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/app.py:13921(render)\n       28    0.000    0.000    0.683    0.024 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:4161(_filtered_pixels)\n  133/130    0.024    0.000    0.678    0.005 /var/home/omid/.openclaw/workspace/projects/nodebased/tools/_live_picture_driver.py:126(traced_qimage)\n       28    0.019    0.001    0.667    0.024 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:7242(_transform)\n      112    0.518    0.005    0.560    0.005 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/media.py:251(_layer_rgba)\n  132/130    0.115    0.001    0.478    0.004 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:266(to_qimage)\n        8    0.016    0.002    0.425    0.053 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/roto.py:332(rasterise)\n   242197    0.064    0.000    0.422    0.000 /var/home/omid/.openclaw/workspace/projects/nodebased/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:48(_wrapfunc)\n      132    0.002    0.000    0.362    0.003 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/color.py:125(display_rgb)\n      130    0.328    0.003    0.334    0.003 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:4276(_decimate)\n    21/20    0.049    0.002    0.328    0.016 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/app.py:1627(paintEvent)\n      125    0.144    0.001    0.298    0.002 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/roto.py:102(coverage)\n      133    0.292    0.002    0.292    0.002 {method 'glReadPixels' of 'PySide6.QtGui.QOpenGLFunctions' objects}\n      133    0.006    0.000    0.263    0.002 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/gpudisplay.py:474(render)\n       28    0.136    0.005    0.256    0.009 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/color.py:89(to_working)\n       28    0.240    0.009    0.242    0.009 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/media.py:34(auto_space)\n    25/24    0.003    0.000    0.233    0.010 {function Viewer.paintEvent at 0x7fbc7e3699e0}\n     6551    0.006    0.000    0.231    0.000 /var/home/omid/.openclaw/workspace/projects/nodebased/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:2245(clip)\n       28    0.202    0.007    0.217    0.008 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/paint.py:21(_distance_grid)\n       20    0.001    0.000    0.204    0.010 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/app.py:3807(drawForeground)\n     6551    0.004    0.000    0.192    0.000 {method 'clip' of 'numpy.ndarray' objects}\n       48    0.001    0.000    0.186    0.004 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/shapes.py:571(resolve_roto_shapes)\n       48    0.014    0.000    0.185    0.004 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/shapes.py:368(resolve_shapes)\n     6551    0.177    0.000    0.183    0.000 /var/home/omid/.openclaw/workspace/projects/nodebased/.venv/lib/python3.12/site-packages/numpy/_core/_methods.py:96(_clip)\n       20    0.017    0.001    0.175    0.009 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/app.py:3814(paint_overlays)\n    78604    0.132    0.000    0.175    0.000 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/roto.py:70(_add_span)\n        2    0.000    0.000    0.168    0.084 /var/home/omid/.openclaw/workspace/projects/nodebased/tools/_live_picture_driver.py:139(settle)\n       28    0.148    0.005    0.157    0.006 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/imaging.py:7291(_resample)\n      140    0.142    0.001    0.148    0.001 /var/home/omid/.openclaw/workspace/projects/nodebased/.venv/lib/python3.12/site-packages/numpy/_core/numeric.py:170(ones)\n    18036    0.055    0.000    0.137    0.000 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/app.py:13477(eventFilter)\n        4    0.000    0.000    0.126    0.032 /var/home/omid/.openclaw/workspace/projects/nodebased/nodebased/app.py:4417(mouseMoveEvent)\n      637    0.002    0.000    0.125    0.000 /var/home/omid/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:183(dumps)\n      637    0.001    0.000    0.123    0.000 /var/home/omid/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:183(encode)\n\n\n"
+    }
+  ]
+}

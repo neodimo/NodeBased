@@ -17,6 +17,19 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 QA = pathlib.Path(__file__).resolve().parents[2] / "scratch/nb-qa/1015-roi"
 
 
+def qt_global_to_x11(point, device_pixel_ratio=1.0):
+    """Convert Qt's device-independent global point to native X11 pointer pixels.
+
+    xdotool addresses the X server's physical pixel grid. At QT_SCALE_FACTOR=2,
+    Qt returns logical coordinates, so passing those through unchanged targets a
+    different point (usually outside the Roto handle being exercised).
+    """
+    ratio = float(device_pixel_ratio)
+    if ratio <= 0:
+        raise ValueError("device_pixel_ratio must be positive")
+    return tuple(int(round(float(value) * ratio)) for value in point)
+
+
 def self_check():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     sys.path.insert(0, str(ROOT))
@@ -26,7 +39,10 @@ def self_check():
     app = QApplication.instance() or QApplication([])
     image = to_qimage(np.zeros((8, 8, 4), dtype=np.float32))
     assert image.width() == image.height() == 8
-    print(json.dumps({"self_check": "ok", "adapter": "offscreen"}))
+    assert qt_global_to_x11((120, 80), 2.0) == (240, 160)
+    assert qt_global_to_x11((120, 80), 1.0) == (120, 80)
+    print(json.dumps({"self_check": "ok", "adapter": "offscreen",
+                      "high_dpi_pointer_mapping": "ok"}))
 
 
 def main():
@@ -38,6 +54,8 @@ def main():
     parser.add_argument("--force-adapter", choices=("default", "integrated", "cpu"), default="default")
     parser.add_argument("--profile-thread", choices=("qt", "worker", "none"), default="none")
     parser.add_argument("--seconds", type=float, default=8)
+    parser.add_argument("--warm-playback-range", action="store_true",
+                        help="render every frame at the selected tier before measuring cache-only playback")
     args = parser.parse_args()
     if args.self_check:
         self_check()
@@ -52,7 +70,8 @@ def main():
     driver = pathlib.Path(__file__).with_name("_live_picture_driver.py")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run([sys.executable, str(driver), str(fixture), str(args.output),
-                             str(args.seconds), args.adapter, args.force_adapter, args.profile_thread], cwd=ROOT,
+                             str(args.seconds), args.adapter, args.force_adapter, args.profile_thread,
+                             str(int(args.warm_playback_range))], cwd=ROOT,
                             env={**os.environ, "DISPLAY": args.display, "QT_QPA_PLATFORM": "xcb"},
                             check=False)
     raise SystemExit(result.returncode)

@@ -1,3 +1,13 @@
+## 2026-10-22 — Lane 8 step A finish: integrated drag proven; 24 fps playback remains open (PARTIAL)
+
+The corrected benchmark root cause was pointer coordinate mismatch at 2× scaling plus a window sized in logical pixels beyond the physical Xvfb screen. The driver now maps Qt logical points to X11 physical pixels, fits the logical screen geometry, paces held drag moves, reports first-move-to-picture separately, verifies warm frames by cache identity/residency, and records playback cache hits/graph work inside the measured interval.
+
+Fresh unprofiled 8-second runs: first picture after Qt receives the first held-drag move: RTX 3080 Ti 0.198 s (11 frames while held), llvmpipe 0.193 s (11), integrated Radeon stand-in 0.177 s (10). Cold tier-4 playback: 21.330 / 20.979 / 15.463 fps. Range-warmed playback: 23.842 / 23.845 / 23.841 fps; its interval had 192/192, 192/192 and 193/193 display-cache hits and zero graph evaluations. Cache-only conversion median/p95 was about 3.6–4.7 ms per QImage. The strict 24 fps gate remains unfulfilled on all adapters; no further application optimization is claimed.
+
+Artifacts: `benchmarks/live-picture/after-*-dpi-fix*.json`, `benchmarks/live-picture/after-*-warm-range.json`, `tests/test_live_picture_bench.py`, and both identical `docs/ROTO_TRACKING.md` files. `tests.test_live_picture_bench` + `tests.test_knowledge` (11 tests), benchmark self-check, `git diff --check`, and docs-copy comparison pass. See newest TASKLOG entry. Local commit only; not pushed.
+
+Next owner: Gonzo. Continue from the warm-range event timelines and `tools/live_picture_bench.py --warm-playback-range`; the remaining measured issue is playback/display cadence with all frames supplied from cache.
+
 ## 2026-10-22 — Lane 6 Step B finish 1: strict render gate and legible stills (PARTIAL for unavailable hardware validation)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:32 AM on 2026-10-22 PDT)
