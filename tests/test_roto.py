@@ -369,6 +369,21 @@ class RasteriseTests(unittest.TestCase):
         self.assertEqual(evaluator.roto_matte_misses, 2,
                          "a changed shape reused an old frame-independent matte")
 
+    def test_dragging_one_shape_reuses_other_shape_coverage_exactly(self):
+        evaluator = Evaluator()
+        params = {"width": 96, "height": 72, "invert": 0}
+        data = [square(9, 8, 52, 41, feather=5.0), square(60, 18, 86, 60, feather=3.0)]
+        first = evaluator._roto_matte(params, data)
+        changed = copy.deepcopy(data)
+        changed[0]["points"][0]["x"] += 1.0
+        cached = evaluator._roto_matte(params, changed)
+        reference = roto.rasterise(changed, 96, 72)
+        np.testing.assert_array_equal(cached, reference)
+        self.assertEqual(evaluator.roto_shape_matte_hits, 1,
+                         "editing one contour rerasterised an unchanged neighbouring contour")
+        self.assertEqual(evaluator.roto_shape_matte_misses, 3)
+        self.assertFalse(first.flags.writeable)
+
 
 class TrackerSolveTests(unittest.TestCase):
     def payload(self, *positions):

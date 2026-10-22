@@ -329,7 +329,8 @@ def _shape_bounds(shape):
     return shape["_raster_bounds"]
 
 
-def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, flattened_cache=None):
+def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, flattened_cache=None,
+              shape_cache=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
     h, w = int(height), int(width)
     if region is None:
@@ -388,33 +389,37 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
             stats["rasterised_shapes"] = stats.get("rasterised_shapes", 0) + 1
         samples = shape.get("_motion_samples", ())
         falloff = shape.get("feather_falloff", "linear")
-        if not shape.get("closed", True):
-            layers = [shape["points"], *samples]
-            covers = [stroke_coverage(points, sw, sh, shape.get("stroke_width", 1.0),
-                                      shape["feather"], falloff, origin=(sx0, sy0))
-                      for points in layers]
-            cover = sum(covers) / len(covers)
-        elif shape.get("feather_model", "box") == "edge":
-            layers = [shape["points"], *samples]
-            covers = [edge_feather(points, coverage(points, sw, sh, origin=(sx0, sy0),
-                                   flattened_cache=flattened_cache), shape["feather"], falloff,
-                                   origin=(sx0, sy0), flattened_cache=flattened_cache)
-                      for points in layers]
-            cover = sum(covers) / len(covers)
-        else:
-            cover = coverage(shape["points"], sw, sh, origin=(sx0, sy0),
-                             flattened_cache=flattened_cache)
-            if samples:
-                cover = (cover + sum(coverage(points, sw, sh, origin=(sx0, sy0),
-                                              flattened_cache=flattened_cache)
-                                     for points in samples)) / (len(samples) + 1)
-            cover = np.clip(feather(cover, shape["feather"]), 0.0, 1.0)
-            if falloff == "smooth":
-                cover = cover * cover * (3.0 - 2.0 * cover)
-            elif falloff == "gaussian":
-                cover = np.exp(-4.0 * np.square(1.0 - cover)).astype(np.float32)
-        if inverted:
-            cover = 1.0 - cover
+
+        def render_cover():
+            if not shape.get("closed", True):
+                layers = [shape["points"], *samples]
+                covers = [stroke_coverage(points, sw, sh, shape.get("stroke_width", 1.0),
+                                          shape["feather"], falloff, origin=(sx0, sy0))
+                          for points in layers]
+                result = sum(covers) / len(covers)
+            elif shape.get("feather_model", "box") == "edge":
+                layers = [shape["points"], *samples]
+                covers = [edge_feather(points, coverage(points, sw, sh, origin=(sx0, sy0),
+                                       flattened_cache=flattened_cache), shape["feather"], falloff,
+                                       origin=(sx0, sy0), flattened_cache=flattened_cache)
+                          for points in layers]
+                result = sum(covers) / len(covers)
+            else:
+                result = coverage(shape["points"], sw, sh, origin=(sx0, sy0),
+                                  flattened_cache=flattened_cache)
+                if samples:
+                    result = (result + sum(coverage(points, sw, sh, origin=(sx0, sy0),
+                                                    flattened_cache=flattened_cache)
+                                           for points in samples)) / (len(samples) + 1)
+                result = np.clip(feather(result, shape["feather"]), 0.0, 1.0)
+                if falloff == "smooth":
+                    result = result * result * (3.0 - 2.0 * result)
+                elif falloff == "gaussian":
+                    result = np.exp(-4.0 * np.square(1.0 - result)).astype(np.float32)
+            return 1.0 - result if inverted else result
+
+        cover = (render_cover() if shape_cache is None else
+                 shape_cache(shape, (sx0, sy0, sw, sh), (w, h), render_cover))
         color = np.asarray(shape.get("color", [1, 1, 1, 1]), dtype=np.float32)
         alpha = cover * np.float32(shape["opacity"]) * color[3]
         source = color[:3] * alpha[..., None]

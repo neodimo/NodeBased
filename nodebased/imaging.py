@@ -559,6 +559,13 @@ class Evaluator:
         self._roto_matte_budget = 128 << 20
         self.roto_matte_hits = 0
         self.roto_matte_misses = 0
+        # A drag usually changes one contour among many. Keep bounded per-shape coverage so the
+        # other contours survive the full-node matte key changing on every mouse move.
+        self._roto_shape_mattes = OrderedDict()
+        self._roto_shape_matte_bytes = 0
+        self._roto_shape_matte_budget = 64 << 20
+        self.roto_shape_matte_hits = 0
+        self.roto_shape_matte_misses = 0
         self.hits = 0
         self.misses = 0
         self.disk_hits = 0
@@ -681,6 +688,8 @@ class Evaluator:
         self.bytes = 0
         self._roto_mattes.clear()
         self._roto_matte_bytes = 0
+        self._roto_shape_mattes.clear()
+        self._roto_shape_matte_bytes = 0
 
     _PROFILE_LOG_LIMIT = 500
 
@@ -725,7 +734,10 @@ class Evaluator:
             self._roto_mattes[key] = cached
             return cached
         self.roto_matte_misses += 1
-        raster = self._kernel("Roto", params, [], data=data)
+        from . import roto
+        raster = roto.rasterise(
+            data or [], params["width"], params["height"], bool(params.get("invert", 0)),
+            shape_cache=self._roto_shape_matte)
         raster.flags.writeable = False
         if raster.nbytes <= self._roto_matte_budget:
             while self._roto_mattes and self._roto_matte_bytes + raster.nbytes > self._roto_matte_budget:
@@ -734,6 +746,31 @@ class Evaluator:
             self._roto_mattes[key] = raster
             self._roto_matte_bytes += raster.nbytes
         return raster
+
+    def _roto_shape_matte(self, shape, bounds, canvas, render):
+        """Reuse one resolved shape's coverage when a neighbouring shape changes."""
+        geometry = {key: shape[key] for key in (
+            "points", "_motion_samples", "closed", "stroke_width", "feather",
+            "feather_model", "feather_falloff", "invert") if key in shape}
+        payload = [canvas, bounds, geometry]
+        key = hashlib.sha256(json.dumps(payload, sort_keys=True,
+                                        separators=(",", ":")).encode()).digest()
+        cached = self._roto_shape_mattes.pop(key, None)
+        if cached is not None:
+            self.roto_shape_matte_hits += 1
+            self._roto_shape_mattes[key] = cached
+            return cached
+        self.roto_shape_matte_misses += 1
+        cover = render()
+        cover.flags.writeable = False
+        if cover.nbytes <= self._roto_shape_matte_budget:
+            while (self._roto_shape_mattes
+                   and self._roto_shape_matte_bytes + cover.nbytes > self._roto_shape_matte_budget):
+                _, old = self._roto_shape_mattes.popitem(last=False)
+                self._roto_shape_matte_bytes -= old.nbytes
+            self._roto_shape_mattes[key] = cover
+            self._roto_shape_matte_bytes += cover.nbytes
+        return cover
 
     def _motion_inputs(self, doc, node, params, frame, tier, cancel, base):
         """Render3D's scene and camera at the times motion blur and the `motion` pass need, and the cache fingerprint.
