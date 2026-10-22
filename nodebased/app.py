@@ -15490,7 +15490,11 @@ class Window(QMainWindow):
                         and request.generation <= self._progressive_generation)
         catching_up = (self.playing and request.playing
                        and request.generation > self.frame_generation)
-        if request.display and (fresh or catching_up or live_preview):
+        # A request that was cancelled before it had a frame (playback stopped, a newer edit replaced it) has nothing to
+        # show: it must not blank the picture, the format rectangle and every overlay with "Evaluation error" (10/22:
+        # stopping playback did, and the next request was not always there to put them back).
+        abandoned = frame is None and cancel.is_set()
+        if request.display and (fresh or catching_up or live_preview) and not abandoned:
             if self.playing:
                 status += (f"  ·  ahead {len(self.preview_queue)}/{self.preview_queue.max_prefetch}"
                            f"  ·  dropped {self.playback_dropped_frames}")

@@ -22,6 +22,7 @@ Never point it at the real display.
 import argparse
 import collections
 import json
+import math
 import os
 import statistics
 import sys
@@ -47,6 +48,16 @@ p.add_argument("--spin", type=int, default=0,
                help="run this many busy-loop processes for the length of the run: with the powersave governor a bursty "
                     "Qt thread runs at about half clock and every Qt-thread time triples (10/22: 102 against 192 pictures "
                     "shown from one run to the next); this holds the clocks up, the way a loaded session does")
+p.add_argument("--offscreen-card", action="store_true",
+               help="the dock's presenter draws into an offscreen texture and the present is skipped. With the real surface "
+                    "the present of each draw blocks the Qt thread (the display server copies every presented image back "
+                    "over the eGPU link: about 90 ms at 1080p here), so the number of pictures the card draws is the "
+                    "number of presents that fit in the run, and it moves with that copy (10/22). Without the present, "
+                    "every picture handed over is drawn and the count is exact")
+p.add_argument("--drawing", action="store_true",
+               help="a new Roto shape is under way while the picture plays: six points with tangents are down and the "
+                    "rubber band follows a pointer that moves every frame, so the overlay carries the in-progress marks "
+                    "on top of the animated triangle's handles")
 p.add_argument("--warm", type=int, default=0, help="render and cache this many frames first and play them in a loop "
                "(the Roto picture alone cannot make 24 fps at 4K; the cache can, and the overlay is still live)")
 args = p.parse_args()
@@ -160,6 +171,30 @@ if dock is None or widget is None or widget.error:
 dock.resize(960, 540)
 dock.move(1820, 0)
 spin(1.0)
+if args.offscreen_card:
+    # The same stand-in surface tools/viewer_direct_bench.py uses: an offscreen texture of the widget's size, read by nobody.
+    import wgpu
+    old_presenter = widget.presenter
+    old_presenter.lose_device()
+
+    class OffscreenContext:
+        def __init__(self, size):
+            self.size, self.device, self.texture = size, None, None
+
+        def get_preferred_format(self, adapter):
+            return "bgra8unorm"
+
+        def configure(self, device, format, alpha_mode):
+            self.device = device
+            self.texture = device.create_texture(
+                size=(*self.size, 1), format=format,
+                usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
+
+        def get_current_texture(self):
+            return self.texture
+
+    widget.presenter = directviewer.RetainedPresenter(OffscreenContext((960, 540)), notify=widget.filled.emit)
+    spin(0.5)
 presenter = widget.presenter
 selection = dict(presenter.selection or {}, adapter=presenter.adapter_info.get("device", ""))
 if args.overlay == "off":
@@ -171,11 +206,55 @@ else:
               w.graph.selected_id(), w.dispatcher.document.get("view"), w.viewer.format_rect, flush=True)
         sys.exit(3)
 
+if args.drawing:
+    from PySide6.QtCore import QPointF
+    viewer = w.viewer
+    if not viewer.begin_roto_draw("r"):
+        print("a Roto shape could not be started", flush=True)
+        sys.exit(5)
+    left, top = viewer.format_rect.left(), viewer.format_rect.top()
+    for i in range(6):
+        x, y = W * (0.12 + 0.1 * i), H * (0.55 + (0.18 if i % 2 else -0.1))
+        viewer.roto_draw_points.append({"x": x, "y": y, "in_x": -W * 0.03, "in_y": H * 0.04, "out_x": W * 0.03, "out_y": -H * 0.04,
+                                        "scene": QPointF(left + x, top + y)})
+
+    def move_pointer(frame):
+        """The artist's pointer drifts while the shape is open: the rubber band is redrawn and the overlay asked for again."""
+        viewer.roto_draw_cursor = QPointF(left + W * (0.75 + 0.05 * math.sin(frame / 7.0)), top + H * (0.5 + 0.1 * math.cos(frame / 5.0)))
+        widget.overlay_dirty()
+    move_pointer(0)
+else:
+    move_pointer = lambda frame: None
+
 timed(widget, "_paint_overlay", "overlay paint (recording, image, upload)")
 timed(w, "_direct_frame_moved", "frame step (readout and overlay request)")
 timed(w, "_direct_overlay", "overlay provider (recording and image)")
 timed(presenter, "set_paint", "overlay set_paint (compare and upload)")
 timed(presenter, "draw", "dock draw")
+DRAW_STARTS = []
+_draw = presenter.draw
+
+
+def noting_draw(*a, **k):
+    DRAW_STARTS.append(time.perf_counter())
+    return _draw(*a, **k)
+
+
+presenter.draw = noting_draw
+if not args.offscreen_card:
+    # What the surface's present costs the Qt thread: rendercanvas calls it after each draw returns.
+    context = widget.get_wgpu_context()
+    _present = context._rc_present
+
+    def timed_present(**kwargs):
+        t, c = time.perf_counter(), time.thread_time()
+        try:
+            return _present(**kwargs)
+        finally:
+            if threading.get_ident() == MAIN:
+                WALL["surface present (after the draw returns)"].append((time.perf_counter() - t) * 1000)
+                CPU["surface present (after the draw returns)"].append((time.thread_time() - c) * 1000)
+    context._rc_present = timed_present
 timed(presenter, "_apply_overlays", "overlay copy record (inside the draw)")
 timed(w, "_show_direct_linear", "hand-over to the dock")
 timed(presenter.overlay_ring, "pump", "  overlay ring pump (slot map, job start)")
@@ -248,6 +327,7 @@ def feed_tick():
     """One played frame: the playhead moves (the way playback_tick moves it), then the picture is handed over."""
     FEED["n"] += 1
     frame = 1 + FEED["n"] % 240
+    move_pointer(frame)
     w.dispatcher.execute({"op": "time", "transient": True, "current": frame})
     w.sync_timeline()
     produced[0] += 1
@@ -263,8 +343,14 @@ if args.feed:
         if time.perf_counter() >= next_frame:
             next_frame += 1.0 / 24.0
             feed_tick()
+FOLLOW_STATE = {"direct_shown": bool(w._direct_shown()), "linear_on": bool(getattr(w, "_direct_linear_on", False)),
+                "dock_front": dict(w._dock_front), "dock_visible": dock.isVisible(),
+                "overlay_follows_frame": bool(w.viewer.overlay_follows_frame()),
+                "selected": w.graph.selected_id(), "view": w.dispatcher.document.get("view"),
+                "format_rect": None if w.viewer.format_rect is None else tuple(w.viewer.format_rect.getRect())}
 for series in (WALL, CPU):
     series.clear()
+DRAW_STARTS.clear()
 overlay_frames.clear()
 before = dict(presenter.counters)
 draws_before = widget.draw_requests
@@ -278,6 +364,8 @@ while time.perf_counter() - start < args.seconds:
         next_frame += 1.0 / 24.0
         feed_tick()
     playheads.append(int(w.dispatcher.document["time"]["current"]))
+    if not args.feed:
+        move_pointer(playheads[-1])
 elapsed = time.perf_counter() - start
 after = dict(presenter.counters)
 if not args.feed:
@@ -291,7 +379,11 @@ overlay = "overlay paint (recording, image, upload)"
 copy = "overlay copy record (inside the draw)"
 paired = [a + b for a, b in zip(WALL[overlay], WALL[copy])]
 paired_cpu = [a + b for a, b in zip(CPU[overlay], CPU[copy])]
+intervals = [(b - a) * 1000 for a, b in zip(DRAW_STARTS, DRAW_STARTS[1:])]
 result = {
+    "offscreen_card": args.offscreen_card, "drawing": args.drawing, "follow_state": FOLLOW_STATE,
+    "draw_interval_ms": dist(intervals),
+    "counters_delta": {k: (round(v, 2) if isinstance(v, float) else v) for k, v in sorted(delta.items())},
     "display": os.environ.get("DISPLAY", ""), "platform": app.platformName(), "size": [W, H], "overlay": args.overlay, "picture": args.picture, "feed": args.feed,
     "seconds": round(elapsed, 2), "selection": selection,
     "frames_produced": produced[0], "frames_shown_by_dock": delta.get("linear_uploads", 0),

@@ -50,6 +50,7 @@ from . import imaging
 from . import shapes
 from . import tiers
 from .animation import resolve_document
+from .cancellation import Cancelled
 from .core import DRAW_KINDS, SPECS, bypass_slot
 from .imaging import Evaluator
 from .tiles import (DEFAULT_TILE_EDGE, SUPPORTED_TILED_KINDS, TileArtifact, TileCache, TileKey,
@@ -262,8 +263,10 @@ class UnsupportedTile(Exception):
     """A kind has no tile-native implementation; fall back to `Evaluator.evaluate`."""
 
 
-class CancelledTile(Exception):
-    """A tile render was cancelled mid-flight (caller replaced the queue or hit the deadline)."""
+class CancelledTile(Cancelled):
+    """A tile render was cancelled mid-flight (caller replaced the queue or hit the deadline). A `Cancelled` like any
+    other: the preview worker answers it with "Cancelled". Before 10/22 it was a bare `Exception`, so stopping playback
+    while a tile was rendering put "Internal error while evaluating (CancelledTile)" in the Viewer."""
 
 
 @dataclass
