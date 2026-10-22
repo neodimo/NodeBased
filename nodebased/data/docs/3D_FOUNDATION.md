@@ -3419,3 +3419,39 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   repacks, a mesh edited in place is not served from the old tree, eviction order), plus the progressive-job, convergence
   (the settled image is unchanged), first-look and field-report modules on the RTX 3080 Ti, the Radeon and llvmpipe.
   Not measured: the A6000 and the hybrid Iris Xe + RTX 4070 laptop (neither is reachable from here); Windows.
+- Step C of 3 (Rendering "Progress", Render mode settles in seconds): the viewport's Render mode stops sampling where the picture is
+  already clean. The full-size steps used to re-trace the whole picture at twice the samples each time (8, 16, 32, 64) and filter every
+  picture on the processor. Now the path tracer keeps its running sums between steps (a continued render equals the one never
+  stopped, on the card and in the CPU reference), each step samples again only the pixels whose noise estimate is still above
+  `Noise threshold` (0.0125 for the viewport), the filter runs on the card (`nodebased/gpudenoise.py`, a port of the processor
+  filter, 57 ms at 1080p), and the guides use one albedo sample and share the smoke march of the normal and depth passes. The
+  settle ends when every pixel is under the threshold or the sample cap (64) is reached. A cancelled job restarts its noise
+  estimate from nothing (an abandoned accumulation is never resumed for a different view), and the accumulator crosses the bus in
+  8 MB pieces with a look at the cancel between them. Render3D keeps its own fixed sample count; the settle is the viewport's.
+  Showing it: the note in the bottom-left reads `RENDER · REFINING · ... · 37% of the picture still refining` and `SETTLED` at the
+  end; the viewport's context menu has "Tint the pixels Render mode is still refining" (off by default, remembered), which marks
+  those pixels orange. A flat wall is clean after 8 samples; the scene's glass, caustic and soft-shadow pixels keep sampling.
+  Honest reading of "settled": the furnished room ends with 12.9 percent of its pixels still above the threshold at the 64-sample
+  cap and the mixed scene with 17.4 percent, so those figures are settled by the cap and the picture agrees with Render3D inside
+  the path-tracing tolerance (the convergence tests for the room, depth of field, lens distortion and the mixed scene).
+  Settle table, 1920 x 1080, request to the settled picture (`tools/benchmark_progression.py --no-edits --no-interaction`,
+  results in `benchmarks/progression/*-settle-1022.json`), seconds, cold then warm median:
+
+  | Adapter | Furnished room | Mixed mesh and splat scene |
+  |---|---|---|
+  | RTX 3080 Ti (gates: under 4 s and under 30 s) | 3.04 / 2.69 (met) | 24.2 / 23.6 (met) |
+  | Radeon 8060S | 7.09 / 7.02 | 13.1 / 13.3 |
+  | Laptop stand-in (Radeon on `taskset -c 0-3`) | 7.13 / 7.05 | 13.1 / 13.2 |
+  | llvmpipe (correctness only) | 47.5 / 49.0 | not run |
+
+  Before the step the RTX took 8.2 s and 82.5 s, the Radeon 17.5 s and 31 s (step A figures), llvmpipe 97 s. The laptop stand-in
+  is under the one-minute rule on both scenes. Not measured: the A6000, the hybrid Iris Xe + RTX 4070 laptop, Windows.
+  48 GB tier note. On the A6000 the settle should change in speed only: more samples per chunk, larger tiles and fewer round trips
+  to the processor, with the same noise threshold, cap and picture. No number is claimed. DiMo's run fills the `--field` JSON
+  (`tools/benchmark_progression.py --field PATH`): `adapter`, `backend`, the first look seconds, the abandon milliseconds and, with
+  settle on (no `--quick`), per scene `settle.cold_seconds`, `settle.warm_median_seconds`, `settle.warm_worst_seconds` and
+  `settle.refining_share_at_settle`.
+  Tests: `tests/test_3d_settle.py` (a flat scene settles in fewer samples than a noisy one, a cancelled job restarts its noise
+  estimate, a fixed seed gives the same picture on the CPU path, a continued render equals an uninterrupted one, the note and
+  the tint), plus the progressive job, convergence, first-look, viewport, lens, splat and smoke, frame-reuse and field-report modules
+  on the RTX 3080 Ti, the Radeon and llvmpipe.
