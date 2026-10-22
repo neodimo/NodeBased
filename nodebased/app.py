@@ -23,7 +23,7 @@ from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTi
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QBrush,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
-                           QConicalGradient, QRadialGradient, QTransform, QPixmapCache)
+                           QConicalGradient, QRadialGradient, QTransform, QPixmapCache, QPicture)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -3764,35 +3764,76 @@ class Viewer(PanZoomView):
         override = self._overlay_view
         return self.viewport().width() if override is None else override["width"]
 
-    def render_overlay(self, view, physical_size, ratio, readout=None):
+    def render_overlay(self, view, physical_size, ratio, readout=None, probe=False, force=False):
         """The overlays as a premultiplied RGBA image of `physical_size` for the direct picture.
 
         `view` is the direct widget's (centre_x, centre_y, zoom) with zoom in physical pixels per scene
         unit. The image carries `ratio` as its device pixel ratio, so a cosmetic pen is as many physical
-        pixels wide as it is on the Viewer at that scale. Returns None when there is no picture yet."""
+        pixels wide as it is on the Viewer at that scale. Returns None when there is no picture yet.
+
+        With `probe`, a first pass records the same painting into a QPicture (commands only, no pixels). A
+        recording with no drawing command means nothing is painted: `EMPTY_OVERLAY` comes back and the
+        surface-sized image is never made. A recording identical to the last one, for the same view, size and
+        ratio, means the image would be the same one: `SAME_OVERLAY` comes back (unless `force`). Both are
+        the common case on a paused picture, and the 4 MB fill, paint and compare of an image that did not
+        change cost 1 to 4 ms of Qt-thread time per picture (10/22)."""
         if self.format_rect is None:
             return None
         width, height = physical_size
         cx, cy, zoom = view
         logical = zoom / ratio
+        transform = QTransform(logical, 0, 0, logical,
+                               width / ratio / 2.0 - cx * logical, height / ratio / 2.0 - cy * logical)
+        scene_rect = transform.inverted()[0].mapRect(QRectF(0, 0, width / ratio, height / ratio))
+        area = QRectF(0, 0, width / ratio, height / ratio)
+        memo_key = None
+        if probe:
+            recording = QPicture()
+            painter = QPainter(recording)
+            painter.setRenderHints(self.renderHints())
+            painter.setTransform(transform)
+            self._overlay_view = {"zoom": logical, "transform": transform, "width": width / ratio}
+            try:
+                self.paint_overlays(painter, scene_rect)
+                if readout is not None:
+                    self._paint_readout(painter, area, readout)
+            finally:
+                self._overlay_view = None
+                painter.end()
+            if recording.size() <= self._empty_recording_size():
+                self._overlay_memo = None
+                return directviewer.EMPTY_OVERLAY
+            memo_key = ((int(width), int(height)), ratio, tuple(view), bytes(recording.data()))
+            if not force and memo_key == self._overlay_memo:
+                return directviewer.SAME_OVERLAY
         image = QImage(int(width), int(height), QImage.Format.Format_RGBA8888_Premultiplied)
         image.setDevicePixelRatio(ratio)
         image.fill(0)
-        transform = QTransform(logical, 0, 0, logical,
-                               width / ratio / 2.0 - cx * logical, height / ratio / 2.0 - cy * logical)
         painter = QPainter(image)
         painter.setRenderHints(self.renderHints())      # the hints the Viewer paints its own foreground with
         painter.setTransform(transform)
-        scene_rect = transform.inverted()[0].mapRect(QRectF(0, 0, width / ratio, height / ratio))
         self._overlay_view = {"zoom": logical, "transform": transform, "width": width / ratio}
         try:
             self.paint_overlays(painter, scene_rect)
             if readout is not None:
-                self._paint_readout(painter, QRectF(0, 0, width / ratio, height / ratio), readout)
+                self._paint_readout(painter, area, readout)
         finally:
             self._overlay_view = None
             painter.end()
+        self._overlay_memo = memo_key
         return image
+
+    _overlay_memo = None
+    _EMPTY_RECORDING = None
+
+    @classmethod
+    def _empty_recording_size(cls):
+        """Bytes of a QPicture that recorded no drawing command (its header)."""
+        if cls._EMPTY_RECORDING is None:
+            blank = QPicture()
+            QPainter(blank).end()
+            cls._EMPTY_RECORDING = blank.size()
+        return cls._EMPTY_RECORDING
 
     @staticmethod
     def _paint_readout(painter, area, info):
@@ -14427,10 +14468,11 @@ class Window(QMainWindow):
         if widget is not None and widget.isVisible() and not getattr(self, "_direct_painting", False):
             widget.overlay_dirty()
 
-    def _direct_overlay(self, view, physical_size, ratio):
+    def _direct_overlay(self, view, physical_size, ratio, force=False):
         self._direct_painting = True
         try:
-            return self.viewer.render_overlay(view, physical_size, ratio, readout=self._direct_readout)
+            return self.viewer.render_overlay(view, physical_size, ratio, readout=self._direct_readout, probe=True,
+                                              force=force)
         finally:
             self._direct_painting = False
 

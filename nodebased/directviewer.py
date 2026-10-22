@@ -53,6 +53,9 @@ STAGING_SLOTS = 3             # reused upload buffers: one being filled, one wai
 ROW_ALIGN = 256               # WebGPU's bytes_per_row alignment for a buffer-to-texture copy
 HALF_ABOVE = 4_000_000        # float pictures with more pixels than this go to the card as half floats
 FILL_BANDS = 8                # a large picture is copied into the staging buffer in this many bands at once
+# What an overlay provider returns instead of an image: nothing is painted / the same image as last time.
+EMPTY_OVERLAY = object()
+SAME_OVERLAY = object()
 PAINT_BAND_GAP = 48           # changed overlay rows closer together than this go up as one band
 
 
@@ -1021,6 +1024,13 @@ class RetainedPresenter:
         self.counters["upload_bytes"] += row * height
         return payload
 
+    def set_paint_empty(self, key):
+        """The overlay has nothing painted in it (the Viewer found out without making the image): the same state
+        `set_paint` reaches for an all-clear image, minus the image. The texture keeps its last content."""
+        self.paint_key = key
+        self.paint_size = None
+        self.counters["paint_empty"] += 1
+
     def set_paint(self, image, key):
         """Show `image` (a premultiplied RGBA8888 QImage the size of the surface) over the picture, or nothing
         for None. `key` records what it was painted for. One upload when it changes, none otherwise.
@@ -1044,6 +1054,10 @@ class RetainedPresenter:
         bands = [(0, height)]
         if (previous is not None and (previous.width(), previous.height()) == (width, height)
                 and self.paint_texture is not None):
+            if image == previous:                       # one memory compare in Qt, where the row diff below is a pass in numpy
+                self.paint_size = (width, height)
+                self.counters["paint_unchanged"] += 1
+                return
             before = np.frombuffer(previous.constBits(), np.uint32, count=width * height)
             changed = np.flatnonzero((pixels != before).reshape(height, width).any(axis=1))
             if changed.size == 0:
@@ -1367,7 +1381,15 @@ def make_widget(parent=None):
             if presenter.paint_key == key:
                 return
             image = provider(self.view, tuple(size), ratio)
-            presenter.set_paint(image, key)
+            if image is SAME_OVERLAY and presenter.paint_size is None:
+                image = provider(self.view, tuple(size), ratio, force=True)       # the card holds nothing to keep (cleared, recovered)
+            if image is EMPTY_OVERLAY:
+                presenter.set_paint_empty(key)
+            elif image is SAME_OVERLAY:
+                presenter.paint_key = key
+                presenter.counters["paint_unchanged"] += 1
+            else:
+                presenter.set_paint(image, key)
             self.overlay_draws += 1
 
         def _fail(self, message):

@@ -150,6 +150,47 @@ class RegionAndMaskParityTests(OverlayParityBase):
         mine = as_array(self.viewer.render_overlay(view, physical, exact))
         self.assertEqual(int(mine[..., 3].max()), 0)
 
+    def test_the_probe_skips_the_image_when_nothing_is_painted_and_when_nothing_changed(self):
+        self.window.command({"op": "viewer_mask", "mask": "format", "mode": "none"})
+        self.window.set_viewer_roi(on=False)
+        self.settle()
+        view, physical, exact = self.pin_view(1.0)
+        self.assertIs(self.viewer.render_overlay(view, physical, exact, probe=True), dv.EMPTY_OVERLAY)
+        self.window.set_viewer_roi(on=True, rect=[0.2, 0.25, 0.7, 0.8])
+        self.settle()
+        view, physical, exact = self.pin_view(1.0)
+        shown = self.viewer.render_overlay(view, physical, exact, probe=True)      # the probe sees the box
+        self.assertIsNot(shown, dv.EMPTY_OVERLAY)
+        self.assertIsNot(shown, dv.SAME_OVERLAY)
+        self.assertGreater(int(as_array(shown)[..., 3].max()), 0)
+        # the same painting again: no second image; forced, or at another size, view or ratio, an image
+        self.assertIs(self.viewer.render_overlay(view, physical, exact, probe=True), dv.SAME_OVERLAY)
+        forced = self.viewer.render_overlay(view, physical, exact, probe=True, force=True)
+        np.testing.assert_array_equal(as_array(forced), as_array(shown))
+        moved = (view[0] + 40.0, view[1], view[2])
+        self.assertIsInstance(self.viewer.render_overlay(moved, physical, exact, probe=True), QImage)
+        self.assertIsInstance(self.viewer.render_overlay(view, (physical[0] + 8, physical[1]), exact, probe=True), QImage)
+        self.window.set_viewer_roi(on=False)
+        self.settle()
+        view, physical, exact = self.pin_view(1.0)
+        self.assertIs(self.viewer.render_overlay(view, physical, exact, probe=True), dv.EMPTY_OVERLAY)
+        # without `probe` the image is always made, as before
+        self.assertIsInstance(self.viewer.render_overlay(view, physical, exact), QImage)
+
+    def test_the_probe_sees_the_readout_and_a_changed_readout_is_a_new_image(self):
+        self.window.command({"op": "viewer_mask", "mask": "format", "mode": "none"})
+        self.window.set_viewer_roi(on=False)
+        self.settle()
+        view, physical, exact = self.pin_view(1.0)
+        one = {"text": "x 1 y 2", "buffer": "", "rgba": (0.5, 0.5, 0.5, 1.0)}
+        two = dict(one, text="x 3 y 2")
+        first = self.viewer.render_overlay(view, physical, exact, readout=one, probe=True)
+        self.assertIsInstance(first, QImage)
+        self.assertIs(self.viewer.render_overlay(view, physical, exact, readout=one, probe=True), dv.SAME_OVERLAY)
+        second = self.viewer.render_overlay(view, physical, exact, readout=two, probe=True)
+        self.assertIsInstance(second, QImage)
+        self.assertFalse(np.array_equal(as_array(first), as_array(second)))
+
 
 class HandleParityTests(unittest.TestCase):
     """Roto and Transform handles, painted read-only in the same place."""
@@ -292,6 +333,37 @@ class WindowOverlayTests(ViewerCompareBase):
         self.viewer.viewport().update()
         self.assertTrue(wait_until(lambda: self.widget.presenter.counters["paint_uploads"] > uploads))
 
+    def test_an_overlay_that_did_not_change_is_not_painted_again(self):
+        self.compare(2, "wipe")
+        presenter = self.widget.presenter
+        self.assertTrue(wait_until(lambda: presenter.counters["paint_uploads"] >= 1))
+        wait_until(lambda: False, timeout=0.3)
+        uploads, unchanged = presenter.counters["paint_uploads"], presenter.counters["paint_unchanged"]
+        calls = []
+        real = self.viewer.render_overlay
+        self.viewer.render_overlay = lambda *a, **k: calls.append(k.get("force", False)) or real(*a, **k)
+        self.addCleanup(lambda: setattr(self.viewer, "render_overlay", real))
+        for _ in range(3):
+            self.widget.overlay_dirty()
+            draws = presenter.counters["draws"]
+            self.assertTrue(wait_until(lambda: presenter.counters["draws"] > draws))
+        self.assertEqual(presenter.counters["paint_uploads"], uploads)
+        self.assertGreaterEqual(presenter.counters["paint_unchanged"] - unchanged, 3)
+        self.assertEqual(calls, [False] * len(calls))                   # every call asked the cheap way and got the same one
+        self.assertIsNotNone(presenter.paint_size)                      # and the card still draws the wipe
+
+    def test_after_a_recovery_the_same_overlay_is_painted_again(self):
+        self.compare(2, "wipe")
+        presenter = self.widget.presenter
+        self.assertTrue(wait_until(lambda: presenter.counters["paint_uploads"] >= 1))
+        wait_until(lambda: False, timeout=0.3)
+        presenter.recover("test")
+        draws = presenter.counters["draws"]
+        self.widget.overlay_dirty()
+        self.assertTrue(wait_until(lambda: self.widget.presenter.counters["draws"] > draws))
+        self.assertIsNotNone(self.widget.presenter.paint_size)
+        self.assertGreaterEqual(self.widget.presenter.counters["paint_uploads"], 1)
+
     def test_hovering_the_direct_picture_reads_the_float_picture(self):
         self.window.command({"op": "set", "id": "a", "param": "red", "value": 2.5})
         self.settle()
@@ -308,6 +380,8 @@ class WindowOverlayTests(ViewerCompareBase):
     def test_clicks_on_the_direct_surface_change_nothing_in_the_viewer(self):
         from PySide6.QtCore import QPoint, Qt
         from PySide6.QtTest import QTest
+        self.window.set_direct_edit(False)      # since 10/20 the default is to edit on the direct picture
+        self.addCleanup(lambda: self.window.set_direct_edit(True))
         self.compare(2, "wipe")
         wipe, roi = dict(self.viewer.wipe), self.window.dispatcher.document["settings"]["viewer"].get("roi")
         centre = QPoint(self.widget.width() // 2, self.widget.height() // 2)
@@ -406,6 +480,17 @@ class CardPaintTests(unittest.TestCase):
         self.assertEqual(self.presenter.counters["paint_uploads"], 0)
         self.assertEqual(self.presenter.counters["paint_empty"], 1)
         self.assertIsNone(self.presenter.paint_size)       # no pass; the texture is kept for when it is needed again
+        np.testing.assert_array_equal(self.context.read(), before)
+
+    def test_a_known_empty_overlay_is_the_same_as_an_empty_image(self):
+        self.presenter.draw(self.view, self.context.size)
+        before = self.context.read().copy()
+        self.presenter.set_paint_empty("k")
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(self.presenter.counters["paint_uploads"], 0)
+        self.assertEqual(self.presenter.counters["paint_empty"], 1)
+        self.assertIsNone(self.presenter.paint_size)
+        self.assertEqual(self.presenter.paint_key, "k")
         np.testing.assert_array_equal(self.context.read(), before)
 
     def test_only_the_changed_rows_go_up_and_the_picture_is_right(self):

@@ -50,6 +50,10 @@ p.add_argument("--offscreen-card", action="store_true",
                help="--paused: the dock's presenter draws into an offscreen texture and the surface present is skipped "
                     "(same draw calls, uploads and overlay as the dock; leaves out the display server's present)")
 p.add_argument("--profile", default="", help="--paused: write a cProfile of the Qt thread over the 'direct' rows to this text file")
+p.add_argument("--profile-with-b", action="store_true", help="--profile: profile the rows with the wipe instead of those without")
+p.add_argument("--rounds", type=int, default=1,
+               help="--paused: repeat the viewer and direct rows this many times, alternating, and gate on the pooled edits "
+                    "(one run of a few tens of edits moves by more than the margin from one run to the next)")
 p.add_argument("--min-saving", type=float, default=0.30, help="--paused: required fall in median Qt-thread time")
 args = p.parse_args()
 if args.paused and args.adapter != "default":
@@ -413,13 +417,16 @@ def measure_paused():
         if presenter is not None:
             dock_info.update(adapter=dict(presenter.selection or {}, device=presenter.adapter_info.get("device", "")))
             spy(presenter, "draw", "dock_draw")
-            spy(widget, "_paint_overlay", "dock_overlay")
+            if not getattr(widget, "_bench_spied", False):          # the widget outlives a closed dock; its presenter does not
+                spy(widget, "_paint_overlay", "dock_overlay")
+                widget._bench_spied = True
             spy(presenter, "set_paint", "dock_set_paint")
             spy(presenter.device.queue, "write_texture", "dock_write_texture")
             spy(presenter.device, "create_buffer_with_data", "dock_create_buffer")
             spy(presenter.device.queue, "submit", "dock_submit")
             context = widget.get_wgpu_context()
-            real_present = context._rc_present
+            real_present = getattr(context, "_bench_real_present", None) or context._rc_present
+            context._bench_real_present = real_present
             if args.offscreen_card:
                 real_present = lambda **kwargs: {"method": "skip"}
 
@@ -452,31 +459,38 @@ def measure_paused():
                 "qt_thread_breakdown_per_edit_mean": {k: round(statistics.fmean(v), 2) for k, v in breakdown.items()},
                 "preview_ready_ms_per_edit_mean": statistics.fmean(ready_ms),
                 "dock_draw_ms_per_edit_mean": statistics.fmean(draw_ms),
+                "picture_path_ms_raw": [round(v, 3) for v in picture_ms],
                 "to_qimage_runs_per_edit_mean": statistics.fmean(calls),
                 "to_qimage_ms_per_edit_mean_worker_thread": statistics.fmean(qimage_ms)}
 
     rows = []
-    for with_b in (False, True):
-        rows.append(row("viewer", with_b))
-    widget = open_dock()
-    for with_b in (False, True):
-        profiler = None
-        if args.profile and not with_b:
-            import cProfile
-            profiler = cProfile.Profile()
-            profiler.enable()
-        rows.append(row("direct", with_b))
-        if profiler is not None:
-            profiler.disable()
-            import io
-            import pstats
-            text = io.StringIO()
-            pstats.Stats(profiler, stream=text).sort_stats("tottime").print_stats(35)
-            with open(args.profile, "w") as fh:
-                fh.write(text.getvalue())
-        window._direct_linear_on = False                 # the hand-off before this step: 8 bits built, then offered
-        rows.append(row("dock-8bit", with_b))
-        window._direct_linear_on = True
+    spied_widget = []
+    widget = None
+    for round_number in range(args.rounds):
+        if widget is not None:
+            close_dock()
+        for with_b in (False, True):
+            rows.append(dict(row("viewer", with_b), round=round_number))
+        widget = open_dock()
+        for with_b in (False, True):
+            profiler = None
+            if args.profile and with_b == args.profile_with_b and round_number == 0:
+                import cProfile
+                profiler = cProfile.Profile()
+                profiler.enable()
+            rows.append(dict(row("direct", with_b), round=round_number))
+            if profiler is not None:
+                profiler.disable()
+                import io
+                import pstats
+                text = io.StringIO()
+                pstats.Stats(profiler, stream=text).sort_stats("cumtime").print_stats(r"directviewer|carddisplay|wgpu|app.py", 70)
+                with open(args.profile, "w") as fh:
+                    fh.write(text.getvalue())
+            if round_number == 0:
+                window._direct_linear_on = False             # the hand-off before this step: 8 bits built, then offered
+                rows.append(dict(row("dock-8bit", with_b), round=round_number))
+                window._direct_linear_on = True
     baseline = idle_baseline()
     gates = {}
     for with_b in (False, True):
@@ -485,12 +499,20 @@ def measure_paused():
         key = "qt_thread_ms_per_edit_without_surface_present"
         saving = 1.0 - direct[key]["p50"] / viewer[key]["p50"]
         saving_with = 1.0 - direct["qt_thread_ms_per_edit"]["p50"] / viewer["qt_thread_ms_per_edit"]["p50"]
-        picture = 1.0 - (direct["picture_path_qt_thread_ms_per_edit"]["p50"]
-                         / viewer["picture_path_qt_thread_ms_per_edit"]["p50"])
+        pooled = {path: [v for r in rows if r["path"] == path and r["ab_wipe"] == with_b and "picture_path_ms_raw" in r
+                         and r.get("round", 0) >= 0 for v in r["picture_path_ms_raw"]] for path in ("viewer", "direct")}
+        per_round = []
+        for number in range(args.rounds):
+            a = next(r for r in rows if r["path"] == "viewer" and r["ab_wipe"] == with_b and r["round"] == number)
+            b = next(r for r in rows if r["path"] == "direct" and r["ab_wipe"] == with_b and r["round"] == number)
+            per_round.append(round(1.0 - statistics.median(b["picture_path_ms_raw"]) / statistics.median(a["picture_path_ms_raw"]), 3))
+        viewer_p50, direct_p50 = statistics.median(pooled["viewer"]), statistics.median(pooled["direct"])
+        picture = 1.0 - direct_p50 / viewer_p50
         gates["with_b" if with_b else "without_b"] = {
-            "viewer_picture_path_p50_ms": viewer["picture_path_qt_thread_ms_per_edit"]["p50"],
-            "direct_picture_path_p50_ms": direct["picture_path_qt_thread_ms_per_edit"]["p50"],
-            "saving": round(picture, 3),
+            "rounds": args.rounds, "edits_pooled_per_path": len(pooled["direct"]),
+            "viewer_picture_path_p50_ms": viewer_p50,
+            "direct_picture_path_p50_ms": direct_p50,
+            "saving": round(picture, 3), "saving_per_round": per_round,
             "viewer_whole_edit_p50_ms": viewer["qt_thread_ms_per_edit"]["p50"],
             "direct_whole_edit_p50_ms": direct["qt_thread_ms_per_edit"]["p50"],
             "direct_whole_edit_p50_ms_without_surface_present": direct[key]["p50"],
