@@ -1,5 +1,25 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (12:12 PM on 2026-10-22 PDT)
+
+`main` moved `d40e3fb3` -> `4f678da1` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `4f678da1` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1152.log`, started 11:52 AM): **Ran 5806 tests in 496.606 s, OK (skipped=19), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the Hot pour settles in under a minute (finish 1).** Commits:
+  - `5a14838f` Record Radeon Hot pour comparison
+  - `1db6f9aa` Finish Hot pour steam quality follow-up
+  Diff: 12 files changed, 306 insertions(+), 36 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Fresh 60/90 frames pass visual review for coherent soft steam, continuous pour, smooth pool and soft catcher shadow; RTX 3080 Ti and Radeon 8060S CPU/GPU comparisons pass at frames 1/60/120. Full convergence at 1920 × 1080 and noise 0.01 took 69.253 seconds; the best pass-size experiment took 68.235 seconds. The under-60-second settled render remains the sole open acceptance item. Evidence: `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`; updated before/after stills are linked in `docs/FLUIDS_SPIKE.md`. Next owner: Gonzo coordinates catcher/path-render cost reduction with L4.
 
 ## 2026-10-22 — Lane 6 step B finish 2 (PARTIAL)

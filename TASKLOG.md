@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the Hot pour settles in under a minute (finish 1) (integrator tick)
+
+- **What was done:** `main` `d40e3fb3` -> `4f678da1` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `4f678da1`: Ran 5806 tests in 496.606 s, OK (skipped=19), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
 - **What was done — evidence:** Fresh frame-60 and frame-90 stills now show a soft coherent steam plume, continuous liquid reaching the cup pool, a smooth pool, and a broad soft catcher shadow. RTX 3080 Ti and Radeon 8060S CPU/GPU comparisons passed on frames 1, 60 and 120. A fully converged 1920 × 1080 render at noise threshold 0.01 took 69.253 seconds; the best pass-size experiment took 68.235 seconds. Both miss the strict under-60-second target.
