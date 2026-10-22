@@ -190,12 +190,15 @@ class GPUShadowComparison(unittest.TestCase):
 
     def test_cancel_after_preparation_and_gpu_budget(self):
         event = threading.Event()
-        original = gpu3d._prepare
-        def prepare(*args):
-            result = original(*args)
-            event.set()
-            return result
-        with patch.object(gpu3d, '_prepare', side_effect=prepare):
+        def stop_after(original):
+            def prepare(*args):
+                result = original(*args)
+                event.set()
+                return result
+            return prepare
+        # the packing a frame meets is `_prepare` (camera-dependent scenes) or `_prepare_static` (resident buffers)
+        with patch.object(gpu3d, '_prepare', side_effect=stop_after(gpu3d._prepare)), \
+                patch.object(gpu3d, '_prepare_static', side_effect=stop_after(gpu3d._prepare_static)):
             with self.assertRaises(Cancelled):
                 gpu3d.render(self.scene(), self.ref.camera, 64, 48, cancel=event)
         with patch.dict(gpu3d.SHADOW_WORK_BUDGETS, dict.fromkeys(gpu3d.SHADOW_WORK_BUDGETS, 1)):

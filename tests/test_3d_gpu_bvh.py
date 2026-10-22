@@ -163,12 +163,15 @@ class GPUBVHComparison(unittest.TestCase):
 
     def test_cancel_after_preparation(self):
         event = threading.Event()
-        original = gpu3d._prepare
-        def prepare(*args):
-            result = original(*args)
-            event.set()
-            return result
-        with patch.object(gpu3d, '_prepare', side_effect=prepare):
+        def stop_after(original):
+            def prepare(*args):
+                result = original(*args)
+                event.set()
+                return result
+            return prepare
+        # the packing a frame meets is `_prepare` (camera-dependent scenes) or `_prepare_static` (resident buffers)
+        with patch.object(gpu3d, '_prepare', side_effect=stop_after(gpu3d._prepare)), \
+                patch.object(gpu3d, '_prepare_static', side_effect=stop_after(gpu3d._prepare_static)):
             with self.assertRaises(Cancelled):
                 gpu3d.render(scene(), reference.ShadowTests.camera, 64, 48, cancel=event)
 
@@ -178,8 +181,8 @@ class PathSelection(unittest.TestCase):
         sc = scene(segments=40)
         count = sum(len(g.triangles) for g in sc.geometries)
         limits = {'max-storage-buffers-per-shader-stage': 8, 'max-storage-buffer-binding-size': 2**30}
-        for kind, adapter, table in [('discrete', 'DiscreteGPU', 20000), ('integrated', 'IntegratedGPU', 5000),
-                                     ('cpu', 'CPU', 500), ('other', 'unknown', 5000)]:
+        for kind, adapter, table in [('discrete', 'DiscreteGPU', 300), ('integrated', 'IntegratedGPU', 300),
+                                     ('cpu', 'CPU', 500), ('other', 'unknown', 1000)]:
             self.assertEqual(gpu3d.SHADOW_BVH_THRESHOLDS[kind], table)
             state = {'info': {'adapter_type': adapter}, 'device': Mock(limits=limits)}
             with patch.dict(gpu3d.SHADOW_BVH_THRESHOLDS, {kind: count - 1}), \

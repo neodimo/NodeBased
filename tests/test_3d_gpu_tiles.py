@@ -133,7 +133,9 @@ class GPUTiles(unittest.TestCase):
         triangles = sum(len(g.triangles) for g in scene.geometries)
         work = width*height*triangles if path == 'brute' else (width*height*16+16*triangles)*math.log2(triangles+2)
         table = gpu3d.SHADOW_WORK_BUDGETS if path == 'brute' else gpu3d.SHADOW_BVH_WORK_BUDGETS
-        with patch.object(gpu3d, 'SHADOW_BVH_THRESHOLD', 0 if path == 'bvh' else 10**9):
+        # The per-frame path: it allocates, and destroys, its frame-wide resources on every render. A resident scene keeps
+        # them between renders (tests/test_3d_playback_rate.py counts those).
+        with patch.object(gpu3d, 'SHADOW_BVH_THRESHOLD', 0 if path == 'bvh' else 10**9), patch.object(gpu3d, 'RESIDENT', False):
             with patch.dict(table, dict.fromkeys(table, work)):
                 expected = gpu3d.render(scene, camera, width, height, ambient=.1)
             with observed_device() as (device, resources), patch.dict(table, dict.fromkeys(table, work/count)):

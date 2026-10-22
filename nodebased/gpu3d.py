@@ -38,14 +38,16 @@ _errors = {}
 #   llvmpipe      ~0.4-0.5e9/s
 # BVH traversal in the fragment shader (units: rays x 16 x log2(triangles+2), as on the CPU):
 #   RTX 3080 Ti   ~0.4-1.4e9 units/s   Radeon 8060S ~0.45-1.6e9/s   llvmpipe ~0.01-0.2e9/s
-# The BVH is NOT faster than the brute loop on the discrete GPU up to 40k triangles (40k: 286 ms vs 99 ms
-# of shadow cost); it wins on the integrated GPU from ~10k triangles and on software adapters from ~1k.
+# Re-measured 10/22 on the furnished room (one point light, 1920 x 1080, GPU time from submit to done, RTX 3080 Ti /
+# Radeon 8060S): 264 triangles 15.1 / 4.9 ms brute, 12.2 / 3.9 ms BVH; 1,080 triangles 26.8 / 18.3 brute, 12.2 / 5.7 BVH;
+# 4,440 triangles 86 / 80 brute, 7.5 / 5.6 BVH; 19,624 triangles 214 / 184 brute, 9.3 / 15.5 BVH. The BVH wins from about
+# 300 triangles on both cards (the 9/19 calibration above found the opposite on a different shader and scene).
 # Budgets bound one submission to about a second on each adapter type (display-driver timeouts; a
 # submitted job cannot be cancelled); 'other' is a guess. Windows and other adapters are unmeasured.
 SHADOW_WORK_BUDGETS = {'discrete': 4e10, 'integrated': 1e10, 'cpu': 3e8, 'other': 2e9}
 SHADOW_BVH_WORK_BUDGETS = {'discrete': 4e8, 'integrated': 4e8, 'cpu': 1e7, 'other': 2e8}
 # Triangle count above which the BVH path is chosen (when the adapter is capable). None = per-adapter table.
-SHADOW_BVH_THRESHOLDS = {'discrete': 20000, 'integrated': 5000, 'cpu': 500, 'other': 5000}
+SHADOW_BVH_THRESHOLDS = {'discrete': 300, 'integrated': 300, 'cpu': 500, 'other': 1000}
 SHADOW_BVH_THRESHOLD = None
 SHADOW_BVH_STACK_SIZE = 64
 GPU_MAX_BANDS = 64
@@ -322,7 +324,7 @@ def adapter_report(choice=None):
 
 
 _SHADER = '''
-struct Params { projection: vec4<f32>, eye: vec4<f32>, settings: vec4<f32>, shadow: vec4<f32> };
+struct Params { projection: vec4<f32>, eye: vec4<f32>, settings: vec4<f32>, shadow: vec4<f32>, view0: vec4<f32>, view1: vec4<f32>, view2: vec4<f32> };
 struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32>, shadow: vec4<f32> };  // colour.w = falloff power; shadow = (bias scale, tan blur, samples, 0)
 var<private> near_bias: f32 = 0.0;
 // Light linking: a triangle's `e1.w` is the bit mask of the lights its mesh excludes, a fragment's `scales.z` the mask of
@@ -643,13 +645,17 @@ struct Vertex {
     @location(11) @interpolate(flat) emissive_color: vec3<f32>,
     @location(12) @interpolate(flat) scales: vec4<f32>,
 };
-@vertex fn vs(@location(0) p: vec3<f32>, @location(1) world: vec3<f32>,
+@vertex fn vs(@location(0) p_unused: vec3<f32>, @location(1) world: vec3<f32>,
              @location(2) normal: vec3<f32>, @location(3) uv: vec2<f32>,
              @location(4) colour: vec4<f32>, @location(5) lod: f32, @location(6) material: vec3<f32>,
              @location(7) object_id: f32, @location(8) pbr: vec4<f32>,
              @location(9) tangent: vec3<f32>, @location(10) maps: vec4<f32>,
              @location(11) emissive_color: vec3<f32>, @location(12) scales: vec4<f32>) -> Vertex {
     let q = params.projection;
+    // The camera-space position is worked out here, from the world position and the view rows in `params`, so the vertex
+    // buffer holds nothing that depends on the camera and a camera move needs no new upload (location 0 is no longer read).
+    let rel = world - params.eye.xyz;
+    let p = vec3<f32>(dot(params.view0.xyz, rel), dot(params.view1.xyz, rel), dot(params.view2.xyz, rel));
     var v: Vertex;
     // WebGPU depth is 0..w: crossing triangles are clipped, not rejected.
     v.position = vec4<f32>(p.x*q.x, p.y*q.y,
@@ -1025,6 +1031,15 @@ def particle_data(scene, camera, width, height, limits, cancel, output='rgba'):
     return packed, texel_data, params
 
 
+def _view_rows(camera):
+    """The camera's rotation as three padded rows (`Params.view0..2`): the vertex shader turns a world position into
+    camera space with them, so no vertex buffer holds a camera-space value."""
+    _, view = scene3d._view_basis(camera)
+    rows = np.zeros((3, 4), 'f4')
+    rows[:, :3] = view
+    return rows.reshape(-1)
+
+
 def _pipeline(state, data, phase, bvh=False, smoke=False, hold=False):
     """`hold`: the variant that draws holdout triangles in the beauty's first pass, replacing what is under them with zero."""
     key = (data, phase, bvh, smoke, hold)
@@ -1162,6 +1177,47 @@ def _pack_triangles(geometry, local, world, normals, uvs, camera, focal, width, 
     return packed, zs.mean(axis=1)
 
 
+def _geometry_terms(geometry, order):
+    """What one geometry contributes to the vertex buffer whatever the camera does: (world vertices, world normals or
+    None, uvs, mip chain, the four PBR maps, premultiplied tint, pbr row, map flags, emissive colour, scales row)."""
+    matrix = geometry.world_matrix()
+    world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
+    normals = None
+    if geometry.normals is not None:
+        normals = (np.linalg.inv(matrix[:3, :3]).T @ geometry.normals.T).T
+        normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-8)
+    uvs = geometry.uvs if geometry.uvs is not None else np.zeros((len(world), 2), 'f4')
+    texture = geometry.texture if geometry.uvs is not None else None
+    mips = scene3d._mip_chain(texture) if texture is not None else [np.ones((1, 1, 4), 'f4')]
+    # Y3 of 3, part 1: the four remaining PBR texture maps (base colour already shades through
+    # `mips` above, pbr or not) plus flat `emissive_color`, matching `scene3d._shade_fragments`'
+    # glTF-style metallic-roughness packing (G roughness, B metallic) and tangent-space normal
+    # decode. Only read for a `pbr` geometry with UVs, like the CPU reference's own checks.
+    is_pbr = geometry.material == 'pbr' and geometry.uvs is not None
+    mr_texture = geometry.metallic_roughness_texture if is_pbr else None
+    normal_texture = geometry.normal_texture if is_pbr else None
+    occlusion_texture = geometry.occlusion_texture if is_pbr else None
+    emissive_texture = geometry.emissive_texture if is_pbr else None
+    tint = np.asarray(geometry.color, 'f4').copy()
+    tint[:3] *= tint[3]
+    # Y3 of 3, part 1: (metallic, roughness, dielectric F0, is-pbr flag), matching
+    # scene3d._shade_fragments' `0.08 * clip(pbr_specular, 0, 1)` dielectric F0 derivation; zero
+    # (the is-pbr flag off) reproduces every earlier (Blinn-Phong) render exactly.
+    if geometry.material == 'pbr':
+        pbr = (float(np.clip(geometry.metallic, 0, 1)), float(np.clip(geometry.pbr_roughness, 0, 1)),
+              0.08 * float(np.clip(geometry.pbr_specular, 0, 1)), 1.0)
+    else:
+        pbr = (0.0, 0.0, 0.0, 0.0)
+    maps = (1.0 if mr_texture is not None else 0.0, 1.0 if normal_texture is not None else 0.0,
+            1.0 if occlusion_texture is not None else 0.0, 1.0 if emissive_texture is not None else 0.0)
+    emissive_color = np.asarray(geometry.emissive_color, 'f4') if geometry.material == 'pbr' else np.zeros(3, 'f4')
+    scales = (float(geometry.normal_scale) if is_pbr else 0.0, float(geometry.occlusion_strength) if is_pbr else 0.0,
+              link_mask(geometry.light_link, order),
+              (0.0 if geometry.receive_shadows else 1.0) + (2.0 if geometry.holdout else 0.0))
+    return (world, normals, uvs, mips, (mr_texture, normal_texture, occlusion_texture, emissive_texture), tint, pbr, maps,
+            emissive_color, scales)
+
+
 def _prepare(scene, camera, width, height, cancel):
     eye, view = scene3d._view_basis(camera)
     order = link_order(scene)
@@ -1172,43 +1228,11 @@ def _prepare(scene, camera, width, height, cancel):
         _cancel(cancel)
         if not geometry.visible_to_camera:
             continue        # drawn by no pass; `_shadow_data` still holds its triangles, so it casts its shadow
-        matrix = geometry.world_matrix()
-        world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
+        (world, normals, uvs, mips, (mr_texture, normal_texture, occlusion_texture, emissive_texture), tint, pbr, maps,
+         emissive_color, scales) = _geometry_terms(geometry, order)
         local = (view @ (world-eye).T).T
-        normals = None
-        if geometry.normals is not None:
-            normals = (np.linalg.inv(matrix[:3, :3]).T @ geometry.normals.T).T
-            normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-8)
-        uvs = geometry.uvs if geometry.uvs is not None else np.zeros((len(world), 2), 'f4')
-        texture = geometry.texture if geometry.uvs is not None else None
-        mips = scene3d._mip_chain(texture) if texture is not None else [np.ones((1, 1, 4), 'f4')]
-        # Y3 of 3, part 1: the four remaining PBR texture maps (base colour already shades through
-        # `mips` above, pbr or not) plus flat `emissive_color`, matching `scene3d._shade_fragments`'
-        # glTF-style metallic-roughness packing (G roughness, B metallic) and tangent-space normal
-        # decode. Only read for a `pbr` geometry with UVs, like the CPU reference's own checks.
-        is_pbr = geometry.material == 'pbr' and geometry.uvs is not None
-        mr_texture = geometry.metallic_roughness_texture if is_pbr else None
-        normal_texture = geometry.normal_texture if is_pbr else None
-        occlusion_texture = geometry.occlusion_texture if is_pbr else None
-        emissive_texture = geometry.emissive_texture if is_pbr else None
         material = len(materials)
         materials.append((mips, mr_texture, normal_texture, occlusion_texture, emissive_texture))
-        tint = np.asarray(geometry.color, 'f4').copy()
-        tint[:3] *= tint[3]
-        # Y3 of 3, part 1: (metallic, roughness, dielectric F0, is-pbr flag), matching
-        # scene3d._shade_fragments' `0.08 * clip(pbr_specular, 0, 1)` dielectric F0 derivation; zero
-        # (the is-pbr flag off) reproduces every earlier (Blinn-Phong) render exactly.
-        if geometry.material == 'pbr':
-            pbr = (float(np.clip(geometry.metallic, 0, 1)), float(np.clip(geometry.pbr_roughness, 0, 1)),
-                  0.08 * float(np.clip(geometry.pbr_specular, 0, 1)), 1.0)
-        else:
-            pbr = (0.0, 0.0, 0.0, 0.0)
-        maps = (1.0 if mr_texture is not None else 0.0, 1.0 if normal_texture is not None else 0.0,
-                1.0 if occlusion_texture is not None else 0.0, 1.0 if emissive_texture is not None else 0.0)
-        emissive_color = np.asarray(geometry.emissive_color, 'f4') if geometry.material == 'pbr' else np.zeros(3, 'f4')
-        scales = (float(geometry.normal_scale) if is_pbr else 0.0, float(geometry.occlusion_strength) if is_pbr else 0.0,
-                  link_mask(geometry.light_link, order),
-                  (0.0 if geometry.receive_shadows else 1.0) + (2.0 if geometry.holdout else 0.0))
         if VECTOR_PREPARE and len(mips) == 1:
             fast = _pack_triangles(geometry, local, world, normals, uvs, camera, focal, width, height, object_id,
                                    tint, pbr, maps, emissive_color, scales)
@@ -1840,6 +1864,352 @@ def _staging_buffer(state, size, keep):
     return keep(buffer)
 
 
+# ---- a scene whose camera moves keeps what it uploaded ---------------------------------------------------------------
+#
+# Playing a 3D comp under an animated camera redraws the same scene from a new place every frame. The vertex buffer holds
+# world-space attributes only (the vertex shader turns them into camera space with `Params.view0..2`), so a frame where
+# nothing but the camera changed needs one small uniform write and the draw commands, not a repack and an upload of every
+# triangle, texture, light table, bind group and pipeline binding (about 35 ms of a furnished-room frame, docs/PERFORMANCE.md).
+# Scenes with textures that carry mip chains, holdouts, particles or volumes keep the per-frame path: their vertex data or
+# passes depend on the camera.
+
+RESIDENT = True      # off: every frame packs and uploads its scene again (the comparison tests use it)
+OPAQUE_ALPHA = np.float32(0.999)        # the shader's PASS 0 / PASS 1 split of `source.a`
+
+
+def _resident_ok(scene, output, volume):
+    """True when the scene can be drawn from resident buffers: nothing depends on the camera but the uniform."""
+    if not RESIDENT or output in scene3d.DATA_OUTPUTS:
+        return False
+    if output in _PARTICLE_OUTPUT_MODES and getattr(scene, 'particles', ()):
+        return False
+    if volume is not None and output == 'rgba' and getattr(scene, 'volumes', ()):
+        return False
+    drawn = 0
+    for geometry in scene.geometries:
+        if geometry.holdout:
+            return False
+        if not geometry.visible_to_camera:
+            continue
+        drawn += 1
+        if geometry.texture is not None and geometry.uvs is not None and max(geometry.texture.shape[:2]) > 1:
+            return False          # a mip chain: the level depends on each triangle's size on screen
+    return drawn > 0
+
+
+def _array_id(array):
+    return 0 if array is None else id(array)
+
+
+def _mesh_key(scene, order):
+    """Everything the packed vertices, the materials and the draw lists are made of, without reading a vertex: array
+    identities (the resident entry keeps the geometries alive, so an id cannot be reused) and the scalar fields."""
+    return tuple((_array_id(g.vertices), _array_id(g.triangles), _array_id(g.normals), _array_id(g.uvs), _array_id(g.texture),
+                  _array_id(g.metallic_roughness_texture), _array_id(g.normal_texture), _array_id(g.occlusion_texture),
+                  _array_id(g.emissive_texture), g.world_matrix().tobytes(), tuple(float(v) for v in g.color),
+                  float(g.specular), float(g.shininess), float(g.emission), g.material, float(g.metallic),
+                  float(g.pbr_roughness), float(g.pbr_specular), tuple(float(v) for v in g.emissive_color),
+                  float(g.normal_scale), float(g.occlusion_strength), bool(g.receive_shadows),
+                  bool(g.visible_to_camera), link_mask(g.light_link, order)) for g in scene.geometries)
+
+
+def _environment_key(environments):
+    if not environments:
+        return None
+    e = environments[0]
+    return (e.fingerprint, float(e.intensity), float(e.rotation), tuple(float(v) for v in e.tint),
+            np.asarray(e.parent, 'f8').tobytes())
+
+
+def _pack_static(geometry, world, normals, uvs, object_id, tint, pbr, maps, emissive_color, scales):
+    """`_pack_triangles` without the camera: (packed (K,3,38) float32 for every triangle, world-space triangle centres).
+    Columns 0 to 2 (the camera-space position) stay zero; the vertex shader works it out."""
+    tris = np.asarray(geometry.triangles)
+    if not len(tris):
+        return np.empty((0, 3, 38), 'f4'), np.empty((0, 3), 'f4')
+    w0, w1, w2 = world[tris[:, 0]], world[tris[:, 1]], world[tris[:, 2]]
+    e1, e2 = w1 - w0, w2 - w0
+    if normals is None:
+        face = np.cross(e1, e2)
+        face = face / np.maximum(np.linalg.norm(face, axis=1, keepdims=True), 1e-8)
+        ns = np.repeat(face[:, None, :], 3, axis=1)
+    else:
+        ns = normals[tris]
+    uv = uvs[tris]
+    duv1, duv2 = uv[:, 1] - uv[:, 0], uv[:, 2] - uv[:, 0]
+    det = duv1[:, 0]*duv2[:, 1] - duv2[:, 0]*duv1[:, 1]
+    good = np.abs(det) > 1e-12
+    safe = np.where(good, det, 1.0)[:, None]
+    tangent = np.where(good[:, None], (e1*duv2[:, 1:2] - e2*duv1[:, 1:2]) / safe, e1)
+    count = len(tris)
+    packed = np.zeros((count, 3, 38), 'f4')
+    packed[:, :, 3:6] = world[tris]
+    packed[:, :, 6:9] = ns
+    packed[:, :, 9:11] = uv
+    packed[:, :, 11:15] = tint
+    packed[:, :, 16:19] = (geometry.specular, geometry.shininess, geometry.emission)
+    packed[:, :, 19] = object_id
+    packed[:, :, 20:24] = pbr
+    packed[:, :, 24:27] = np.repeat(tangent[:, None, :], 3, axis=1)
+    packed[:, :, 27:31] = maps
+    packed[:, :, 31:34] = emissive_color
+    packed[:, :, 34:38] = scales
+    centres = ((w0 + w1 + w2) / 3).astype('f4')
+    return packed, centres
+
+
+def _prepare_static(scene, order, cancel):
+    """The camera-free half of `_prepare`: (vertices (3K,38) float32, materials, opaque draws [(first vertex, vertex count,
+    material)], translucent triangles {start, centre, material} or None). Triangles are never dropped here (the hardware
+    clips what is behind the camera or beyond the far plane, as it did for the triangles `_prepare` kept)."""
+    chunks, materials, opaque, starts, centres, mats = [], [], [], [], [], []
+    emitted = 0
+    for object_id, geometry in enumerate(scene.geometries, 1):
+        _cancel(cancel)
+        if not geometry.visible_to_camera:
+            continue
+        (world, normals, uvs, mips, maps_textures, tint, pbr, maps, emissive_color, scales) = _geometry_terms(geometry, order)
+        packed, centre = _pack_static(geometry, world, normals, uvs, object_id, tint, pbr, maps, emissive_color, scales)
+        if not len(packed):
+            continue
+        material = len(materials)
+        materials.append((mips, *maps_textures))
+        alpha = np.float32(tint[3])
+        if geometry.texture is not None and geometry.uvs is not None:
+            alpha = np.float32(alpha * np.float32(np.float16(geometry.texture[..., 3].flat[0])))
+        if alpha >= OPAQUE_ALPHA:
+            opaque.append((emitted*3, len(packed)*3, material))
+        else:
+            starts.append(emitted*3 + 3*np.arange(len(packed)))
+            centres.append(centre)
+            mats.append(np.full(len(packed), material))
+        chunks.append(packed.reshape(-1, 38))
+        emitted += len(packed)
+    vertices = np.concatenate(chunks) if chunks else np.empty((0, 38), 'f4')
+    translucent = ({'start': np.concatenate(starts), 'centre': np.concatenate(centres), 'material': np.concatenate(mats)}
+                   if starts else None)
+    return vertices, materials, opaque, translucent
+
+
+def _translucent_runs(translucent, eye, view):
+    """The translucent triangles far to near as (first vertex, vertex count, material) draws; neighbours in the vertex
+    buffer with the same material go out as one draw."""
+    depth = -((translucent['centre'] - eye) @ view[2])
+    order = np.argsort(-depth, kind='stable')
+    starts, mats = translucent['start'][order], translucent['material'][order]
+    new = np.ones(len(order), bool)
+    new[1:] = (mats[1:] != mats[:-1]) | (starts[1:] != starts[:-1] + 3)
+    first = np.flatnonzero(new)
+    last = np.append(first[1:], len(order))
+    return [(int(starts[i]), 3*int(j - i), int(mats[i])) for i, j in zip(first, last)]
+
+
+def _light_tables(scene):
+    """(point/spot/directional lights with their world pose, their table, the area-light table, the area samples)."""
+    all_lights = [light for light in scene.lights if light.intensity > 0]
+    area = [light for light in all_lights if light.kind in scene3d._AREA]
+    lights = [(light, *light.world()) for light in all_lights if light.kind not in scene3d._AREA]
+    area_lights_data, area_samples_data = _area_light_resources(area)
+    return lights, light_table(lights), area, area_lights_data, area_samples_data
+
+
+def drop_resident(state=None, targets=True):
+    """Let go of what a state keeps for its resident scene (and, unless ``targets`` is off, its colour and depth targets).
+    The buffers and textures are released with their last reference rather than destroyed by hand: a state dict that a
+    test restores from a snapshot may still point at them."""
+    state = _state() if state is None else state
+    state.pop('resident', None)
+    if targets:
+        state.pop('targets', None)
+
+
+def _build_resident(state, scene, order, key, light_data, area_lights_data, area_samples_data, shadow_data, bvh_data,
+                    shadow_triangles, cancel):
+    wgpu, device = state['wgpu'], state['device']
+    keep = lambda resource: resource       # released with the entry, not destroyed by hand (see `drop_resident`)
+    if True:
+        vertices, materials, opaque, translucent = _prepare_static(scene, order, cancel)
+        res = {'key': key, 'refs': (list(scene.geometries), shadow_data, bvh_data),
+               'opaque': opaque, 'translucent': translucent, 'triangles': len(vertices) // 3, 'binds': {}}
+        res['uniform'] = keep(device.create_buffer(size=112, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST))
+        res['lights'] = keep(device.create_buffer_with_data(data=light_data, usage=wgpu.BufferUsage.STORAGE))
+        res['area_lights'] = keep(device.create_buffer_with_data(data=area_lights_data, usage=wgpu.BufferUsage.STORAGE))
+        res['area_samples'] = keep(device.create_buffer_with_data(data=area_samples_data, usage=wgpu.BufferUsage.STORAGE))
+        res['shadow'] = keep(device.create_buffer_with_data(data=shadow_data, usage=wgpu.BufferUsage.STORAGE))
+        res['bvh'] = []
+        if bvh_data is not None:
+            for binding, array in zip((5, 6), bvh_data):
+                buffer = keep(device.create_buffer_with_data(data=array, usage=wgpu.BufferUsage.STORAGE))
+                res['bvh'].append({'binding': binding, 'resource': {'buffer': buffer}})
+        res['vertices'] = keep(device.create_buffer_with_data(data=vertices, usage=wgpu.BufferUsage.VERTEX))
+        res['sampler'] = device.create_sampler(mag_filter='linear', min_filter='linear', mipmap_filter='linear')
+        res['env'] = _environment_resources(state, keep, getattr(scene, 'environments', ()))
+        _, res['textures'] = _upload_materials(wgpu, device, keep, materials, cancel)
+    return res
+
+
+def _resident_binds(state, res, phase):
+    """(pipeline, per-material bind groups, environment bind group) for one pass; rebuilt when the pipeline cache was reset."""
+    bvh = bool(res['bvh'])
+    pipeline = _pipeline(state, False, phase, bvh, False)
+    held = res['binds'].get(phase)
+    if held is not None and held[0] is pipeline:
+        return held
+    device = state['device']
+    groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+        {'binding': 0, 'resource': {'buffer': res['uniform']}}, {'binding': 1, 'resource': {'buffer': res['lights']}},
+        {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': res['sampler']},
+        {'binding': 4, 'resource': {'buffer': res['shadow']}},
+        {'binding': 7, 'resource': mr_tex}, {'binding': 8, 'resource': normal_tex},
+        {'binding': 9, 'resource': occlusion_tex}, {'binding': 10, 'resource': emissive_tex},
+        {'binding': 11, 'resource': {'buffer': res['area_lights']}},
+        {'binding': 12, 'resource': {'buffer': res['area_samples']}}] + res['bvh'])
+        for texture, mr_tex, normal_tex, occlusion_tex, emissive_tex in res['textures']]
+    env_buffer, env_atlas, env_sampler = res['env']
+    env_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(2), entries=[
+        {'binding': 0, 'resource': {'buffer': env_buffer}}, {'binding': 1, 'resource': env_atlas},
+        {'binding': 2, 'resource': env_sampler}])
+    res['binds'][phase] = (pipeline, groups, env_group)
+    return res['binds'][phase]
+
+
+def _frame_targets(state, width, height, fmt):
+    """The colour and depth textures of a frame size, kept between renders (a camera move does not change them)."""
+    wgpu, device = state['wgpu'], state['device']
+    held = state.get('targets')
+    if held is not None and held['key'] == (width, height, fmt):
+        return held['target'].create_view(), held['depth'].create_view(), held['target']
+    target = device.create_texture(size=(width, height, 1), format=fmt,
+        usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
+    depth = device.create_texture(size=(width, height, 1), format='depth32float',
+        usage=wgpu.TextureUsage.RENDER_ATTACHMENT)
+    state['targets'] = {'key': (width, height, fmt), 'target': target, 'depth': depth}
+    return target.create_view(), depth.create_view(), target
+
+
+def _render_resident(state, scene, camera, width, height, bg, ambient, output, cancel, shadow_triangles, shadow_data, bias,
+                     bvh_data, bands):
+    """`_render` for a scene `_resident_ok` accepts: the same passes over resident buffers."""
+    wgpu, device = state['wgpu'], state['device']
+    order = link_order(scene)
+    lights, light_data, area, area_lights_data, area_samples_data = _light_tables(scene)
+    key = (_mesh_key(scene, order), light_data.tobytes(), area_lights_data.tobytes(), area_samples_data.tobytes(),
+           _environment_key(getattr(scene, 'environments', ())), shadow_triangles,
+           id(shadow_data) if shadow_triangles else None, id(bvh_data[0]) if bvh_data is not None else None)
+    res = state.get('resident')
+    if res is None or res['key'] != key:
+        drop_resident(state, targets=False)
+        res = state['resident'] = _build_resident(state, scene, order, key, light_data, area_lights_data, area_samples_data,
+                                                  shadow_data, bvh_data, shadow_triangles, cancel)
+        state['resident_builds'] = state.get('resident_builds', 0) + 1
+    else:
+        state['resident_reuses'] = state.get('resident_reuses', 0) + 1
+    _mark('scene_ready')
+    if not res['triangles']:
+        return np.broadcast_to(bg, (height, width, 4)).copy()
+    eye, view = scene3d._view_basis(camera)
+    focal = 1 / math.tan(math.radians(camera.fov) / 2)
+    params = np.array([focal/(width/height), focal, camera.near, camera.far, *eye, 0, ambient, len(lights),
+                       scene3d.RENDER_OUTPUTS.index(output), len(area), bias, shadow_triangles, bvh_data is not None, 0,
+                       *_view_rows(camera)], 'f4')
+    device.queue.write_buffer(res['uniform'], 0, params)
+    fmt = state['format']
+    target_view, depth_view, target = _frame_targets(state, width, height, fmt)
+    runs_by_pass = [res['opaque'], _translucent_runs(res['translucent'], eye, view) if res['translucent'] else []]
+    passes = [_resident_binds(state, res, 0)] + ([_resident_binds(state, res, 1)] if runs_by_pass[1] else [])
+    _mark('upload_done')
+    dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
+    stride = ((width*4*dtype.itemsize+255)//256)*256
+    held = []
+    def keep(resource):
+        held.append(resource)
+        return resource
+    staging = _staging_buffer(state, stride*max(y1-y0 for y0, y1 in bands), keep)
+    result = np.empty((height, width, 4), 'f4')
+    try:
+        for y0, y1 in bands:
+            _cancel(cancel)
+            rows = y1-y0
+            encoder = device.create_command_encoder()
+            for pass_number, (pipeline, groups, env_group) in enumerate(passes):
+                rp = encoder.begin_render_pass(color_attachments=[{'view': target_view,
+                    'resolve_target': None, 'clear_value': (0, 0, 0, 0),
+                    'load_op': 'clear' if pass_number == 0 else 'load', 'store_op': 'store'}],
+                    depth_stencil_attachment={'view': depth_view, 'depth_clear_value': 1.0,
+                        'depth_load_op': 'clear' if pass_number == 0 else 'load', 'depth_store_op': 'store'})
+                rp.set_scissor_rect(0, y0, width, rows)
+                rp.set_pipeline(pipeline)
+                rp.set_bind_group(2, env_group)
+                rp.set_vertex_buffer(0, res['vertices'])
+                bound = None
+                for first, count, material in runs_by_pass[pass_number]:
+                    if bound != material:
+                        rp.set_bind_group(0, groups[material])
+                        bound = material
+                    rp.draw(count, 1, first, 0)
+                rp.end()
+            encoder.copy_texture_to_buffer({'texture': target, 'origin': (0, y0, 0)},
+                {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))
+            _cancel(cancel)
+            _mark('submit')
+            device.queue.submit([encoder.finish()])
+            staging.map_sync(wgpu.MapMode.READ)
+            _mark('gpu_done')
+            try:
+                _copy_band(staging, result, y0, y1, dtype, stride, width)
+            finally:
+                staging.unmap()
+            _mark('readback_done')
+            _cancel(cancel)
+    finally:
+        for resource in held:
+            resource.destroy()
+    if bg.any():
+        result += bg*(1-result[..., 3:4])
+    return result
+
+
+def _upload_materials(wgpu, device, keep, materials, cancel):
+    """(the 1x1 stand-in view, one tuple of views per material): base colour with its mip chain, then the four PBR maps
+    (the stand-in where a map is missing, so every pipeline variant binds something valid at group(0) bindings 7..10)."""
+    dummy = keep(device.create_texture(size=(1, 1, 1), format='rgba16float',
+        usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+    device.queue.write_texture({'texture': dummy, 'mip_level': 0}, np.zeros((1, 1, 4), 'f2'),
+        {'bytes_per_row': 8, 'rows_per_image': 1}, (1, 1, 1))
+    dummy_view = dummy.create_view()
+    def single_level(array):
+        if array is None:
+            return dummy_view
+        h, w = array.shape[:2]
+        t = keep(device.create_texture(size=(w, h, 1), format='rgba16float',
+            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+        device.queue.write_texture({'texture': t, 'mip_level': 0}, np.ascontiguousarray(array, 'f2'),
+            {'bytes_per_row': w*8, 'rows_per_image': h}, (w, h, 1))
+        return t.create_view()
+    textures = []
+    for mips, mr_array, normal_array, occlusion_array, emissive_array in materials:
+        _cancel(cancel)
+        h, w = mips[0].shape[:2]
+        # Complete the rectangular tail too; reference LOD is capped at its last mip.
+        mips = list(mips)
+        while max(mips[-1].shape[:2]) > 1:
+            t = mips[-1]
+            if t.shape[0] == 1:
+                t = t[:, :t.shape[1]//2*2].reshape(1, -1, 2, 4).mean(axis=2)
+            else:
+                t = t[:t.shape[0]//2*2].reshape(-1, 2, 1, 4).mean(axis=1)
+            mips.append(t)
+        texture = keep(device.create_texture(size=(w, h, 1), format='rgba16float', mip_level_count=len(mips),
+            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+        for level, mip in enumerate(mips):
+            mh, mw = mip.shape[:2]
+            device.queue.write_texture({'texture': texture, 'mip_level': level}, np.ascontiguousarray(mip, 'f2'),
+                {'bytes_per_row': mw*8, 'rows_per_image': mh}, (mw, mh, 1))
+        textures.append((texture.create_view(), single_level(mr_array), single_level(normal_array),
+                         single_level(occlusion_array), single_level(emissive_array)))
+    return dummy_view, textures
+
+
 def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None, volume=None):
     wgpu, device = state['wgpu'], state['device']
     data = output in scene3d.DATA_OUTPUTS
@@ -1859,6 +2229,9 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
     bg[:3] *= bg[3]
     if output != 'rgba':
         bg[:] = 0
+    if _resident_ok(scene, output, volume):
+        return _render_resident(state, scene, camera, width, height, bg, ambient, output, cancel, shadow_triangles,
+                                shadow_data, bias, bvh_data, bands)
     eye, focal, vertices, queue, materials = _prepare(scene, camera, width, height, cancel)
     _mark('scene_ready')
     _cancel(cancel)
@@ -1883,7 +2256,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         area_lights_data, area_samples_data = _area_light_resources(area)
         params = np.array([focal/(width/height), focal, camera.near, camera.far,
                            *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), len(area),
-                           bias, shadow_triangles, bvh_data is not None, 0], 'f4')
+                           bias, shadow_triangles, bvh_data is not None, 0, *_view_rows(camera)], 'f4')
         uniform = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
         light_buffer = keep(device.create_buffer_with_data(data=light_data, usage=wgpu.BufferUsage.STORAGE))
         area_light_buffer = keep(device.create_buffer_with_data(data=area_lights_data, usage=wgpu.BufferUsage.STORAGE))
@@ -1904,41 +2277,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         # Y3 of 3, part 1: a single harmless 1x1 texture, shared by every material missing a given PBR
         # map, so every pipeline variant binds something valid at group(0) bindings 7..10 even though
         # the fragment shader's `maps` flags (`_prepare`) keep it from ever sampling the dummy.
-        dummy = keep(device.create_texture(size=(1, 1, 1), format='rgba16float',
-            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
-        device.queue.write_texture({'texture': dummy, 'mip_level': 0}, np.zeros((1, 1, 4), 'f2'),
-            {'bytes_per_row': 8, 'rows_per_image': 1}, (1, 1, 1))
-        dummy_view = dummy.create_view()
-        def single_level(array):
-            if array is None:
-                return dummy_view
-            h, w = array.shape[:2]
-            t = keep(device.create_texture(size=(w, h, 1), format='rgba16float',
-                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
-            device.queue.write_texture({'texture': t, 'mip_level': 0}, np.ascontiguousarray(array, 'f2'),
-                {'bytes_per_row': w*8, 'rows_per_image': h}, (w, h, 1))
-            return t.create_view()
-        textures = []
-        for mips, mr_array, normal_array, occlusion_array, emissive_array in materials:
-            _cancel(cancel)
-            h, w = mips[0].shape[:2]
-            # Complete the rectangular tail too; reference LOD is capped at its last mip.
-            mips = list(mips)
-            while max(mips[-1].shape[:2]) > 1:
-                t = mips[-1]
-                if t.shape[0] == 1:
-                    t = t[:, :t.shape[1]//2*2].reshape(1, -1, 2, 4).mean(axis=2)
-                else:
-                    t = t[:t.shape[0]//2*2].reshape(-1, 2, 1, 4).mean(axis=1)
-                mips.append(t)
-            texture = keep(device.create_texture(size=(w, h, 1), format='rgba16float', mip_level_count=len(mips),
-                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
-            for level, mip in enumerate(mips):
-                mh, mw = mip.shape[:2]
-                device.queue.write_texture({'texture': texture, 'mip_level': level}, np.ascontiguousarray(mip, 'f2'),
-                    {'bytes_per_row': mw*8, 'rows_per_image': mh}, (mw, mh, 1))
-            textures.append((texture.create_view(), single_level(mr_array), single_level(normal_array),
-                             single_level(occlusion_array), single_level(emissive_array)))
+        dummy_view, textures = _upload_materials(wgpu, device, keep, materials, cancel)
         fmt = 'rgba32float' if data else state['format']
         target = keep(device.create_texture(size=(width, height, 1), format=fmt,
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
