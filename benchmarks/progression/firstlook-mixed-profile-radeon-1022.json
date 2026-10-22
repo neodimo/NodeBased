@@ -1,0 +1,417 @@
+{
+ "scene": "mixed",
+ "output": [
+  1920,
+  1080
+ ],
+ "adapter": "wgpu adapter: AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "cold": {
+  "wall_seconds": 0.4978,
+  "step_seconds": 0.4892,
+  "phases": {
+   "render": 0.2907,
+   "guides": 0.0625,
+   "denoise": 0.1195,
+   "enlarge": 0.0151
+  },
+  "traced": [
+   240,
+   135
+  ],
+  "stages": {
+   "scene build: mesh triangle tree": 0.0046,
+   "scene build: splat layer (arrays and tree)": 0.0992,
+   "scene build: smoke grid": 0.0001,
+   "scene build: instances, lights, bookkeeping": 0.005,
+   "pack for the card": 0.0173,
+   "trace (dispatch, readback, upload)": 0.2266,
+   "denoise": 0.1195,
+   "background composite": 0.0004,
+   "enlarge": 0.0147,
+   "display conversion": 0.0085,
+   "everything else (guide setup, python glue)": 0.0019
+  },
+  "calls": {
+   "scene build: mesh triangle tree": 10,
+   "scene build: splat layer (arrays and tree)": 1,
+   "scene build: smoke grid": 1,
+   "scene build: instances, lights, bookkeeping": 1,
+   "pack for the card": 1,
+   "trace (dispatch, readback, upload)": 5,
+   "denoise": 1,
+   "background composite": 1,
+   "enlarge": 1,
+   "display conversion": 1
+  }
+ },
+ "warm_runs": [
+  {
+   "wall_seconds": 0.2845,
+   "step_seconds": 0.2773,
+   "phases": {
+    "render": 0.0311,
+    "guides": 0.0864,
+    "denoise": 0.1468,
+    "enlarge": 0.0114
+   },
+   "traced": [
+    289,
+    162
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.1169,
+    "denoise": 0.1468,
+    "background composite": 0.0005,
+    "enlarge": 0.0108,
+    "display conversion": 0.0072,
+    "everything else (guide setup, python glue)": 0.0022
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.3369,
+   "step_seconds": 0.3286,
+   "phases": {
+    "render": 0.038,
+    "guides": 0.1055,
+    "denoise": 0.1729,
+    "enlarge": 0.0106
+   },
+   "traced": [
+    334,
+    188
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.143,
+    "denoise": 0.1729,
+    "background composite": 0.0012,
+    "enlarge": 0.0093,
+    "display conversion": 0.0083,
+    "everything else (guide setup, python glue)": 0.0022
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.4127,
+   "step_seconds": 0.4038,
+   "phases": {
+    "render": 0.0481,
+    "guides": 0.1326,
+    "denoise": 0.2104,
+    "enlarge": 0.0112
+   },
+   "traced": [
+    375,
+    211
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.1802,
+    "denoise": 0.2103,
+    "background composite": 0.0013,
+    "enlarge": 0.0098,
+    "display conversion": 0.0089,
+    "everything else (guide setup, python glue)": 0.0022
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.4255,
+   "step_seconds": 0.4183,
+   "phases": {
+    "render": 0.0511,
+    "guides": 0.1457,
+    "denoise": 0.2106,
+    "enlarge": 0.0093
+   },
+   "traced": [
+    398,
+    224
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.1962,
+    "denoise": 0.2105,
+    "background composite": 0.0009,
+    "enlarge": 0.0084,
+    "display conversion": 0.0072,
+    "everything else (guide setup, python glue)": 0.0023
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.4739,
+   "step_seconds": 0.4663,
+   "phases": {
+    "render": 0.0538,
+    "guides": 0.1644,
+    "denoise": 0.236,
+    "enlarge": 0.0106
+   },
+   "traced": [
+    422,
+    237
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.2177,
+    "denoise": 0.2359,
+    "background composite": 0.0011,
+    "enlarge": 0.0094,
+    "display conversion": 0.0076,
+    "everything else (guide setup, python glue)": 0.0022
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.4839,
+   "step_seconds": 0.4763,
+   "phases": {
+    "render": 0.0591,
+    "guides": 0.1761,
+    "denoise": 0.2295,
+    "enlarge": 0.01
+   },
+   "traced": [
+    434,
+    244
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.2346,
+    "denoise": 0.2294,
+    "background composite": 0.001,
+    "enlarge": 0.009,
+    "display conversion": 0.0076,
+    "everything else (guide setup, python glue)": 0.0023
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.5144,
+   "step_seconds": 0.5066,
+   "phases": {
+    "render": 0.0618,
+    "guides": 0.1824,
+    "denoise": 0.2495,
+    "enlarge": 0.0112
+   },
+   "traced": [
+    447,
+    251
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.2437,
+    "denoise": 0.2495,
+    "background composite": 0.0017,
+    "enlarge": 0.0094,
+    "display conversion": 0.0079,
+    "everything else (guide setup, python glue)": 0.0022
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.5212,
+   "step_seconds": 0.514,
+   "phases": {
+    "render": 0.0651,
+    "guides": 0.1841,
+    "denoise": 0.2525,
+    "enlarge": 0.0106
+   },
+   "traced": [
+    447,
+    251
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.2486,
+    "denoise": 0.2525,
+    "background composite": 0.0011,
+    "enlarge": 0.0094,
+    "display conversion": 0.0072,
+    "everything else (guide setup, python glue)": 0.0024
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.5127,
+   "step_seconds": 0.5049,
+   "phases": {
+    "render": 0.0596,
+    "guides": 0.1846,
+    "denoise": 0.2476,
+    "enlarge": 0.0113
+   },
+   "traced": [
+    447,
+    251
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.2436,
+    "denoise": 0.2476,
+    "background composite": 0.0011,
+    "enlarge": 0.0101,
+    "display conversion": 0.0079,
+    "everything else (guide setup, python glue)": 0.0025
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.5063,
+   "step_seconds": 0.4986,
+   "phases": {
+    "render": 0.0595,
+    "guides": 0.1824,
+    "denoise": 0.2442,
+    "enlarge": 0.011
+   },
+   "traced": [
+    447,
+    251
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.2414,
+    "denoise": 0.2442,
+    "background composite": 0.0014,
+    "enlarge": 0.0095,
+    "display conversion": 0.0076,
+    "everything else (guide setup, python glue)": 0.0021
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.5523,
+   "step_seconds": 0.5438,
+   "phases": {
+    "render": 0.0712,
+    "guides": 0.1941,
+    "denoise": 0.2657,
+    "enlarge": 0.0111
+   },
+   "traced": [
+    460,
+    259
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.2647,
+    "denoise": 0.2657,
+    "background composite": 0.0017,
+    "enlarge": 0.0093,
+    "display conversion": 0.0085,
+    "everything else (guide setup, python glue)": 0.0024
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  },
+  {
+   "wall_seconds": 0.5249,
+   "step_seconds": 0.5162,
+   "phases": {
+    "render": 0.0662,
+    "guides": 0.1846,
+    "denoise": 0.2525,
+    "enlarge": 0.0114
+   },
+   "traced": [
+    447,
+    251
+   ],
+   "stages": {
+    "trace (dispatch, readback, upload)": 0.2503,
+    "denoise": 0.2524,
+    "background composite": 0.0014,
+    "enlarge": 0.0098,
+    "display conversion": 0.0087,
+    "everything else (guide setup, python glue)": 0.0022
+   },
+   "calls": {
+    "trace (dispatch, readback, upload)": 5,
+    "denoise": 1,
+    "background composite": 1,
+    "enlarge": 1,
+    "display conversion": 1
+   }
+  }
+ ],
+ "steady_runs": 6,
+ "steady_traced": [
+  447,
+  251
+ ],
+ "warm_median_wall_seconds": 0.5178,
+ "warm_median_stage_seconds": {
+  "denoise": 0.251,
+  "trace (dispatch, readback, upload)": 0.2461,
+  "enlarge": 0.0095,
+  "display conversion": 0.0079,
+  "everything else (guide setup, python glue)": 0.0023,
+  "background composite": 0.0014
+ },
+ "warm_median_phases": {
+  "render": 0.0635,
+  "guides": 0.1844,
+  "denoise": 0.251,
+  "enlarge": 0.0112
+ }
+}

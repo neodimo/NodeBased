@@ -1,0 +1,199 @@
+{
+ "adapter": "wgpu adapter: AMD Radeon 8060S Graphics (RADV STRIX_HALO)\n  type IntegratedGPU, backend Vulkan, vendor radv, driver Mesa 26.2.2, wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 2147483644, max texture 16384",
+ "results": [
+  {
+   "scene": "furnished",
+   "output": [
+    1920,
+    1080
+   ],
+   "seed": "default",
+   "ambient": 0.05,
+   "cold": {
+    "frames": [
+     {
+      "seconds": 1.0138,
+      "display_seconds": 1.0138,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       640,
+       360
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.2162,
+       "guides": 0.0703,
+       "denoise": 0.6509,
+       "enlarge": 0.0215
+      }
+     }
+    ],
+    "first_image_seconds": 1.0138,
+    "settled_seconds": null,
+    "frame_count": 1,
+    "wall_seconds": 1.0142
+   },
+   "warm": {
+    "runs": 5,
+    "first_image_seconds": {
+     "median": 0.5668,
+     "worst": 0.5891
+    },
+    "settled_seconds": {
+     "median": null,
+     "worst": null
+    },
+    "frames_median_seconds": [
+     0.567
+    ],
+    "last_run_frames": [
+     {
+      "seconds": 0.5891,
+      "display_seconds": 0.5891,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       488,
+       274
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.0418,
+       "guides": 0.0444,
+       "denoise": 0.4373,
+       "enlarge": 0.0133
+      }
+     }
+    ]
+   },
+   "target_seconds": 1.0,
+   "first_look_target_met_warm": true,
+   "first_look_target_met_cold": false,
+   "interaction": {
+    "nudges": 30,
+    "interval_ms": 33,
+    "paint_ms_during_orbit": {
+     "median": 5.61,
+     "worst": 7.27
+    },
+    "paint_ms_during_orbit_card_at_working_clocks": {
+     "median": 5.65,
+     "worst": 6.88
+    },
+    "cancel_latency_ms": {
+     "count": 2,
+     "median": 0.88,
+     "worst": 1.05
+    },
+    "last_nudge_to_first_look_seconds": 0.6477,
+    "responsive_during_refinement": {
+     "paints": 175,
+     "median_ms": 1.7,
+     "worst_ms": 10.17
+    }
+   }
+  },
+  {
+   "scene": "mixed",
+   "output": [
+    1920,
+    1080
+   ],
+   "seed": "default",
+   "ambient": 0.05,
+   "cold": {
+    "frames": [
+     {
+      "seconds": 0.3944,
+      "display_seconds": 0.3944,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       240,
+       135
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.144,
+       "guides": 0.0627,
+       "denoise": 0.1226,
+       "enlarge": 0.0125
+      }
+     }
+    ],
+    "first_image_seconds": 0.3944,
+    "settled_seconds": null,
+    "frame_count": 1,
+    "wall_seconds": 0.3947
+   },
+   "warm": {
+    "runs": 5,
+    "first_image_seconds": {
+     "median": 0.5622,
+     "worst": 0.5869
+    },
+    "settled_seconds": {
+     "median": null,
+     "worst": null
+    },
+    "frames_median_seconds": [
+     0.562
+    ],
+    "last_run_frames": [
+     {
+      "seconds": 0.5869,
+      "display_seconds": 0.5869,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       386,
+       217
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.0497,
+       "guides": 0.1395,
+       "denoise": 0.3324,
+       "enlarge": 0.0125
+      }
+     }
+    ]
+   },
+   "target_seconds": 1.0,
+   "first_look_target_met_warm": true,
+   "first_look_target_met_cold": true,
+   "interaction": {
+    "nudges": 30,
+    "interval_ms": 33,
+    "paint_ms_during_orbit": {
+     "median": 10.6,
+     "worst": 11.86
+    },
+    "paint_ms_during_orbit_card_at_working_clocks": {
+     "median": 10.51,
+     "worst": 12.05
+    },
+    "cancel_latency_ms": {
+     "count": 2,
+     "median": 0.59,
+     "worst": 0.82
+    },
+    "last_nudge_to_first_look_seconds": 0.6523,
+    "responsive_during_refinement": {
+     "paints": 169,
+     "median_ms": 2.61,
+     "worst_ms": 8.58
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,102 @@
+{
+ "adapter": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti\n  type DiscreteGPU, backend Vulkan, vendor NVIDIA, driver 615.71.09, wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 2147483644, max texture 32768",
+ "results": [
+  {
+   "scene": "mixed",
+   "output": [
+    1920,
+    1080
+   ],
+   "seed": "default",
+   "ambient": 0.05,
+   "cold": {
+    "frames": [
+     {
+      "seconds": 0.6532,
+      "display_seconds": 0.6532,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       240,
+       135
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.3572,
+       "guides": 0.1086,
+       "denoise": 0.1191,
+       "enlarge": 0.0169
+      }
+     }
+    ],
+    "first_image_seconds": 0.6532,
+    "settled_seconds": null,
+    "frame_count": 1,
+    "wall_seconds": 0.6536
+   },
+   "warm": {
+    "runs": 5,
+    "first_image_seconds": {
+     "median": 0.4386,
+     "worst": 0.5248
+    },
+    "settled_seconds": {
+     "median": null,
+     "worst": null
+    },
+    "frames_median_seconds": [
+     0.439
+    ],
+    "last_run_frames": [
+     {
+      "seconds": 0.5248,
+      "display_seconds": 0.5248,
+      "samples": 4,
+      "pass": 1,
+      "preview": true,
+      "denoised": true,
+      "traced": [
+       344,
+       193
+      ],
+      "converged_fraction": null,
+      "phases": {
+       "render": 0.0966,
+       "guides": 0.1826,
+       "denoise": 0.1876,
+       "enlarge": 0.0093
+      }
+     }
+    ]
+   },
+   "target_seconds": 1.0,
+   "first_look_target_met_warm": true,
+   "first_look_target_met_cold": true,
+   "interaction": {
+    "nudges": 30,
+    "interval_ms": 33,
+    "paint_ms_during_orbit": {
+     "median": 25.32,
+     "worst": 27.99
+    },
+    "paint_ms_during_orbit_card_at_working_clocks": {
+     "median": 12.62,
+     "worst": 15.54
+    },
+    "cancel_latency_ms": {
+     "count": 2,
+     "median": 0.77,
+     "worst": 1.36
+    },
+    "last_nudge_to_first_look_seconds": 0.8362,
+    "responsive_during_refinement": {
+     "paints": 171,
+     "median_ms": 2.71,
+     "worst_ms": 6.19
+    }
+   }
+  }
+ ]
+}

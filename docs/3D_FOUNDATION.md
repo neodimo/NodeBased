@@ -3362,3 +3362,60 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   a restarted view converges to the same picture, chunked equals whole on the surface and the splat and smoke scenes, one scene
   build per view, a cancelled render keeps the uploaded scene, the debounce), plus the convergence, first-look, viewport, lens,
   adaptive-sampling and frame-reuse modules on the RTX 3080 Ti, the Radeon and llvmpipe.
+- Step B of 3 (Rendering "Progress", the mixed mesh and splat scene's first look under one second, and a sharper first look):
+  the mixed scene (the furnished room, a 40,000-splat shell and a smoke puff) shows its first look at 1920 x 1080 on the RTX 3080 Ti
+  in 0.61 s cold and 0.51 s warm (0.95 s and 0.79 s before the step), while tracing a bigger picture (364 x 205 against 262 x 148).
+  Profile first (`tools/profile_first_look.py --scene mixed`, records in `benchmarks/progression/firstlook-mixed-profile-1022.json`
+  and `firstlook-mixed-profile-radeon-1022.json`; each warm trial nudges the camera and a stage's own time has the stages inside it
+  taken off). Warm median, RTX 3080 Ti, milliseconds:
+
+  | Stage | Before | After |
+  |---|---|---|
+  | Splat layer (arrays and tree) | 310 | 0 (reused) |
+  | Mesh triangle trees | 33 | 0 (reused) |
+  | Pack for the card | 43 | 0 (reused) |
+  | Instances, lights, bookkeeping | 5 | 0 (reused) |
+  | Trace (dispatch, readback, upload) | 175 | 301 (the larger pass) |
+  | Denoise | 124 | 189 |
+  | Enlarge | 24 | 9 |
+  | Display conversion | 38 | 8 |
+  | Background composite | 20 | 1 |
+  | Everything else | 5 | 2 |
+  | Wall time | 790 | 512 |
+
+  The cold first look in a fresh process builds everything once: splat layer 97 ms (330 before), mesh trees 5 ms, pack 19 ms.
+  Radeon 8060S, same profile: warm 518 ms at 447 x 251 (denoise 251 ms, trace 246 ms, enlarge and display conversion 17 ms
+  together).
+  What changed. `nodebased/scenecache.py` keeps the path tracer's scene preparation by content (a read-only array is identified
+  by itself, a writeable one by a hash of its bytes): the whole prepared scene (a camera move reuses it, a material edit rebuilds
+  the per-shape arrays and the pack but not the trees), the splat layer (a camera move, material edit or light edit reuses it;
+  an edit to a splat cloud, an instance's transform or a knob the build reads rebuilds it; the camera position matters only with
+  a normal-smoothing knob on) and each mesh's triangle tree (a transform or material edit keeps it). `scenecache.COUNTERS` says
+  what was built and what was reused. The splat tree (`Bvh.build`) splits a level at a time, the same tree in a tenth of the time
+  (0.33 s to 0.10 s). The enlarge and the display conversion run in threaded bands. The first stage's size moves on a ladder
+  of steps (6 percent apart) so a small change in the measured cost does not resize it, a rebuild aims for the warm target
+  (0.65 s) less its own build time, and the debounce is drag-aware.
+  Sharper first look. The furnished room traces 640 x 360 on the RTX and 616 x 346 on the Radeon; the mixed scene traces
+  344 x 193 to 364 x 205 on the RTX and 422 x 237 to 447 x 251 on the Radeon, the largest size the cost model fits under the warm
+  target there (the mixed scene's trace, guides and denoise all grow with the traced pixels; the larger size was not measured on the mixed scene).
+  Measured on the RTX 3080 Ti at 1080p (`tools/benchmark_progression.py --first-look-only`, `rtx3080ti-mixed-firstlook-1022.json`
+  for the mixed scene alone, `rtx3080ti-1022.json` for the furnished room): mixed cold 0.65 s, warm median 0.44 s (worst 0.52 s);
+  furnished warm median 0.50 s (0.52 s before). Gates (mixed warm under 0.8 s, cold under 1.0 s, furnished no slower) hold.
+  Other adapters, first look in seconds (cold in a fresh process, warm median, worst): Radeon 8060S mixed 0.55, 0.42 (0.53),
+  furnished 0.77, 0.53; laptop stand-in (the Radeon on `taskset -c 0-3`, target: cold 1.0 s and warm 0.8 s, the same as the RTX
+  gates) mixed 0.55, 0.52 (0.54), furnished 1.01, 0.57; llvmpipe (correctness only, no target) mixed 1.05, 0.35, furnished 1.56,
+  0.58. Records: `radeon8060s-mixed-firstlook-1022.json`, `laptop-standin-radeon-4cores-mixed-firstlook-1022.json`,
+  `llvmpipe-mixed-firstlook-1022.json` and the matching `*-firstlook-1022.json` for the furnished room (their mixed rows follow
+  a furnished run in the same process, so their cold figure leaves out the pipeline compile).
+  Smooth orbit. Orbiting the mixed scene at 1080p in a real viewport, the paint handler's time with the card at its working
+  clocks is 12.6 ms median and 15.5 ms worst (under 16.7 ms); read after the card has idled long enough for its power state to
+  drop it is 25.3 ms median and 28.0 ms worst (23.6 and 25.7 ms before the step), so the 60 Hz worst-case target holds only while the
+  card is awake. The two rows differ by the card's clock state; no profile inside the paint handler was taken to say which call
+  stalls. The Radeon paints at 10.5 ms median and 11.6 ms worst, the stand-in at 9.9 and 13.5 ms.
+  Field kit: `tools/benchmark_progression.py --field PATH` records the warm first look's traced size and phases, the orbit
+  paint time and the scene cache counters per scene beside the earlier series (`tools/field_report.py` reads the size and the orbit paint time).
+  Tests: `tests/test_3d_scene_cache.py` (a camera move after the first build performs no splat or scene build, a splat edit
+  performs one splat build and the picture matches an uncached build, a material edit keeps the splat layer and the trees but
+  repacks, a mesh edited in place is not served from the old tree, eviction order), plus the progressive-job, convergence
+  (the settled image is unchanged), first-look and field-report modules on the RTX 3080 Ti, the Radeon and llvmpipe.
+  Not measured: the A6000 and the hybrid Iris Xe + RTX 4070 laptop (neither is reachable from here); Windows.
