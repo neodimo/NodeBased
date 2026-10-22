@@ -399,14 +399,14 @@ class DirectMainWindowTests(ViewerCompareBase):
         first = presenter.hud_shown
         self.assertIn("%", first[1])
         self.assertIn("×", first[1])
-        before = presenter.counters["badge_uploads"]
+        before = presenter.counters["hud_uploads"]
         draws = presenter.counters["draws"]
         cx, cy, zoom = self.widget.view
         self.widget.view = (cx, cy, zoom * 1.5)
         self.widget.auto_fit = False
         self.widget._request()
         self.assertTrue(wait_until(lambda: presenter.counters["draws"] > draws and presenter.hud_shown != first))
-        self.assertGreater(presenter.counters["badge_uploads"], before)       # a new zoom is a new label
+        self.assertGreater(presenter.counters["hud_uploads"], before)       # a new zoom is a new label
         self.widget.view = (cx, cy, zoom)
         draws = presenter.counters["draws"]
         self.widget._request()

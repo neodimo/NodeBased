@@ -667,7 +667,8 @@ class WindowSwitchTests(unittest.TestCase):
     def test_default_is_off_and_the_viewer_paints(self):
         w = self.window
         self.assertFalse(w.direct_action.isChecked())
-        self.assertIsNone(w.direct_dock)
+        self.assertFalse(w.direct_dock.isVisible())          # the dock exists from the start (so a saved layout finds it) but is closed
+        self.assertIsNone(w.direct_widget)                   # and the card is not started
         self.assertIsNotNone(w.viewer.last_display_image)
         self.assertEqual(w.viewer_mode(), "2d")
 
@@ -676,7 +677,8 @@ class WindowSwitchTests(unittest.TestCase):
         with unittest.mock.patch.object(dv, "unsupported_platform", return_value="native Wayland is not supported"):
             w.direct_action.setChecked(True)
         self.assertFalse(w.direct_action.isChecked())
-        self.assertIsNone(w.direct_dock)
+        self.assertIsNone(w.direct_widget)
+        self.assertFalse(w.direct_dock.isVisible())
         self.assertIn("Wayland", w.statusBar().currentMessage())
 
     def test_switch_failure_leaves_the_default_viewer_in_charge(self):
@@ -684,7 +686,8 @@ class WindowSwitchTests(unittest.TestCase):
         with unittest.mock.patch.object(dv, "make_widget", side_effect=RuntimeError("no surface")):
             w.direct_action.setChecked(True)
         self.assertFalse(w.direct_action.isChecked())
-        self.assertIsNone(w.direct_dock)
+        self.assertIsNone(w.direct_widget)
+        self.assertFalse(w.direct_dock.isVisible())
         self.assertIn("unavailable", w.statusBar().currentMessage())
         self.assertIsNotNone(w.viewer.last_display_image)
 

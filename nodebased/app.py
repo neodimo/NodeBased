@@ -14792,6 +14792,7 @@ class Window(QMainWindow):
             widget.hover = self._direct_hover
             widget.edit = self._direct_edit if self.preferences.direct_edit() else None
             widget.key_sink = self._direct_key
+            dock.setWindowTitle(self.direct_title())
             self.viewer.cursor_sink = getattr(widget, "mirror_cursor", None)
             widget.setMinimumSize(160, 90)
             self.direct_panel.set_picture(widget)
@@ -14825,9 +14826,9 @@ class Window(QMainWindow):
 
     def direct_fit(self):
         """The Viewer fitted its picture: the direct picture fits its own too."""
-        widget = getattr(self, "direct_widget", None)
-        if widget is not None:
-            widget.fit()
+        fit = getattr(getattr(self, "direct_widget", None), "fit", None)
+        if callable(fit):
+            fit()
 
     def _dock_front_changed(self, name, visible):
         self._dock_front[name] = bool(visible)

@@ -1487,9 +1487,9 @@ class RetainedPresenter:
 
     def set_hud(self, key, make):
         """The corner readout (picture size and zoom), the same way as the tier badge: a texture per text."""
-        self.hud_shown = self._label(("hud", *key) if key is not None else None, make)
+        self.hud_shown = self._label(("hud", *key) if key is not None else None, make, "hud")
 
-    def _label(self, key, make):
+    def _label(self, key, make, kind="badge"):
         """The key of a label texture ready to draw (made when new, kept in the cache), or None."""
         if key is None:
             return None
@@ -1514,14 +1514,14 @@ class RetainedPresenter:
                 {"binding": 0, "resource": texture.create_view()},
                 {"binding": 1, "resource": {"buffer": buffer, "offset": 0, "size": 32}}])
             entry = self.badges[key] = (texture, buffer, group)
-            self.counters["badge_uploads"] += 1
+            self.counters[f"{kind}_uploads"] += 1
             while len(self.badges) > BADGE_CACHE:
                 _, old = self.badges.popitem(last=False)
                 for resource in old[:2]:
                     self.ledger.retire(resource)
         else:
             self.badges.move_to_end(key)
-            self.counters["badge_cached"] += 1
+            self.counters[f"{kind}_cached"] += 1
         return key
 
     def has_picture(self):
