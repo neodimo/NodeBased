@@ -87,3 +87,4 @@ The corrected 64-cell bake completed on the RTX 3080 Ti in 34.94 seconds. The pl
 
 ## Lane 8 step A continuation — 10/22 1:54 AM PDT
 Fresh llvmpipe, integrated laptop-stand-in, and RTX measurements completed after the prior lock wait. RTX and llvmpipe show drag frames during motion and tier-4 playback at 19.1 and 20.4 fps; the 0.5 s and 24 fps measured gates remain open. Laptop stand-in shows no in-drag frame and 4.6 fps. Updating the existing Lane 8 comparison and re-running targeted gates now.
+Finish2 benchmark JSON is committed with the updated before/after comparison; documentation-copy tests pass. Finish3 llvmpipe is excluded as contention-affected. RTX finish3 remains queued behind an existing Lane 4 exclusive card job; current report will state whether it completes before this resumed-run window closes.
