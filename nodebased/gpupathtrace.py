@@ -3059,17 +3059,17 @@ def reusing_scene(*, retain=False):
     _PREPARED.depth = outer + 1
     try:
         yield
-    except BaseException:
-        # A cancelled/failed render must not leave partially useful preparation behind.
-        _PREPARED.entry = None
-        raise
     finally:
+        # Only the outermost scope decides: a pass's own `reusing_scene()` inside a progressive job's view must not drop the
+        # scene the job's later passes share. A cancelled render keeps its entry too (an entry is stored only once its
+        # preparation is complete), so the next first look does not prepare again.
         _PREPARED.depth = outer
-        if not retain:
-            _PREPARED.entry = None
-            _PREPARED.retain = False
-        else:
-            _PREPARED.retain = True
+        if outer == 0:
+            if retain:
+                _PREPARED.retain = True
+            else:
+                _PREPARED.entry = None
+                _PREPARED.retain = False
 
 
 def _scene_key(scene, ambient, eye, volume):
