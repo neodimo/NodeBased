@@ -1,3 +1,7 @@
+# Lane 8 step A of 2 — in progress (2026-10-22)
+
+Base is the newly merged live-picture plan. Building a generated animated 1080p/4K comp and a real-window benchmark with frame-stage profiling; initial GPU baseline is queued behind an existing RTX lock holder.
+
 # Lane 8 step B finish 1 — DONE (2026-10-22, 1:30 PM PDT)
 
 The three left-out drag gates are closed. Solid-over RotoPaint now limits raster/composite work to clipped stroke bounds and matches full-tile output byte-for-byte. The field driver moves the Properties slider horizontally on a visible control and reports each drag's picture count and maximum interval. On the RTX 3080 Ti, RotoPaint settles in 0.849 s; Properties produces 8 pictures and settles in 0.702 s. Maximum in-drag picture gaps are 0.182 s (Roto), 0.202 s (RotoPaint), 0.278 s (Tracker), 0.082 s (PlanarTracker), and 0.195 s (Properties). The scrub and playback thresholds documented below also pass. Focused CPU/UI/docs, playback-counter, and GPU lens-view tests pass. Raw field runs and test logs are retained under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`. No off-site hardware result is claimed. Needs Gonzo: review/integrate and perform real-display/Windows visual QA.
