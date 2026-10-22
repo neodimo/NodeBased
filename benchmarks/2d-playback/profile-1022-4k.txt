@@ -1,0 +1,13 @@
+llvmpipe, 4K · uncached playback · 4 displayed frames / 10 seconds
+Observed rate: 0.4 fps. Node timings are 2 ms stack-sample estimates averaged across sampled frames; they are profiling estimates, not wall-clock node timers.
+
+Top five node costs (estimated ms/frame):
+1. transform: 667.2 ms/frame
+2. colorcorrect: 324.0 ms/frame
+3. blur: 311.0 ms/frame
+4. background: 118.8 ms/frame
+5. plate: 117.2 ms/frame
+Read decode total: 348.5 ms/displayed frame across all calls
+Display conversion: 216.1 ms/displayed frame across all calls
+
+Timeline and per-thread sampling are in the paired JSON file.

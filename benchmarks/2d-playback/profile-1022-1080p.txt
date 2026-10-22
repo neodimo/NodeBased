@@ -1,0 +1,13 @@
+RTX 3080 Ti, 1080p · uncached playback · 15 displayed frames / 10 seconds
+Observed rate: 1.5 fps. Node timings are 2 ms stack-sample estimates averaged across sampled frames; they are profiling estimates, not wall-clock node timers.
+
+Top five node costs (estimated ms/frame):
+1. transform: 183.6 ms/frame
+2. blur: 91.2 ms/frame
+3. colorcorrect: 76.4 ms/frame
+4. plate: 31.5 ms/frame
+5. background: 29.8 ms/frame
+Read decode total: 72.5 ms/displayed frame across all calls
+Display conversion: 49.1 ms/displayed frame across all calls
+
+Timeline and per-thread sampling are in the paired JSON file.

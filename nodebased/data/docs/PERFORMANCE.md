@@ -178,6 +178,23 @@ under 31 ms at the 95th percentile while the dock plays, at 1080p and 4K, on the
 Xvfb display). Numbers per adapter, the frame-order check and what was not measured are in
 docs/DIRECT_VIEWER.md, "Playback (VP2a)".
 
+### Lane 8: realistic comp playback evaluation (10/22)
+
+The uncached fixture in `tests/fixtures/playback_comp.nbcomp` measures evaluation through the
+finished float frame handed to the display. Timings below use 2 ms worker-stack samples, so node
+costs are estimates; the paired JSON profiles preserve the timeline and sampling evidence.
+
+| Comp / adapter | Before: fps | Top five node costs (estimated ms/frame) | Read decode (ms/displayed frame) | Display conversion (ms/displayed frame) |
+|---|---:|---|---:|---:|
+| 1080p / RTX 3080 Ti | 1.5 | Transform 183.6; Blur 91.2; ColorCorrect 76.4; Read plate 31.5; Read background 29.8 | 72.5 | 49.1 |
+| 4K / llvmpipe | 0.4 | Transform 667.2; ColorCorrect 324.0; Blur 311.0; Read background 118.8; Read plate 117.2 | 348.5 | 216.1 |
+
+Both graphs fall back to full-frame evaluation because animated Transform has no tile kernel and
+depends on canvas-global coordinates. The 1080p run also measured 1.6 fps on llvmpipe. See
+`benchmarks/2d-playback/profile-1022-1080p.txt` and `profile-1022-4k.txt` for the complete ranked
+costs; the JSON files carry the per-stage timeline and Qt/worker sampling profiles. Before/after
+measurements for the fixes are recorded in the same table as they land.
+
 ### Still slow
 
 - In the default Viewer, `to_qimage` is about 41 ms per 1080p frame and 170 ms at 4K (ten
