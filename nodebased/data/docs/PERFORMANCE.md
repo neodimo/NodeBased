@@ -215,6 +215,26 @@ uncached comp gate and the 24 fps Checker gate remain open. Finish-1 profiles ar
 `benchmarks/2d-playback/` contain the per-stage timeline and Qt/worker sampling evidence; read
 decode events include future frames warmed by the reader pool.
 
+The 288.432 ms median frame interval reconciles approximately as follows. The node estimate is the
+mean of the 2 ms worker-stack samples; the two wall-clock values are medians from the same run, so
+the residual is explicit and the components are approximate.
+
+| Per displayed frame | Time | Basis |
+|---|---:|---|
+| Node evaluation | 109.69 ms | Sum of per-node worker-stack estimates |
+| Other worker-side work | 107.37 ms | Residual within the 260.587 ms worker-to-UI interval, after node estimate and display conversion |
+| Float-to-display conversion | 43.53 ms | Median `to_qimage` call |
+| UI/event-loop interval outside the worker | 27.85 ms | Difference between frame interval and worker-to-UI interval |
+| **Total** | **288.44 ms** | Reconciles to the measured 288.432 ms median |
+
+The worker-side residual includes input decode/waiting, format and buffer work, and evaluator
+orchestration. The profile recorded 90 plate decode calls averaging 44.96 ms each over 44 evaluated
+frames (about two reads per frame); these calls can overlap with read-ahead, so that service time is
+an attribution inside the residual rather than extra wall time. Cache insertion itself was 0.013 ms
+median, with no disk-tier writes. The current capture cannot separate buffer-copy cost from time
+waiting on decoded reads or Python scheduling/GIL contention; those remain unverified contributors.
+The reconciled artifact is `benchmarks/2d-playback/finish1-critical-path-1022.json`.
+
 ### Still slow
 
 - In the default Viewer, `to_qimage` is about 41 ms per 1080p frame and 170 ms at 4K (ten

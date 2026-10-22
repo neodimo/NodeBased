@@ -1,0 +1,34 @@
+{
+  "case": "finish1-critical-path-reconciliation",
+  "source_profile": "finish1-after-1022-1080p-rtx3080ti.json",
+  "resolution": "1920x1080",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "measured_frame_interval_ms_p50": 288.432,
+  "worker_to_ui_ms_p50": 260.587,
+  "components_ms_per_displayed_frame": {
+    "node_evaluation_estimated_mean": 109.69,
+    "other_worker_side_residual": 107.37,
+    "float_to_display_conversion_p50": 43.53,
+    "ui_event_loop_outside_worker_residual": 27.85,
+    "reconciled_total": 288.44
+  },
+  "top_node_estimates_ms_per_frame": {
+    "Transform": 46.5,
+    "Grade": 18.8,
+    "Blur": 13.4,
+    "Merge": 13.2,
+    "Roto": 12.2
+  },
+  "read_decode": {
+    "calls": 90,
+    "evaluated_frames": 44,
+    "mean_call_ms": 44.965,
+    "note": "About two input reads per frame; reader read-ahead may overlap these service times, so they are attribution within the worker residual, not additional wall time."
+  },
+  "cache_put_ms_p50": 0.013,
+  "disk_tier_writes_during_playback": 0,
+  "limitations": [
+    "The worker-side residual combines read waiting, format/buffer work, evaluator orchestration, and scheduling; the capture does not isolate each contribution.",
+    "The profile cannot directly attribute time waiting for the GIL."
+  ]
+}
