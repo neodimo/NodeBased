@@ -1,6 +1,6 @@
 # Lane 6 step B — PARTIAL (2026-10-22)
 
-Optimized RTX 3080 Ti frame-60 960 × 540 fixed-32 render: 22.735 s, down from 200.38 s with 16 volume-shadow steps. Optimized 1920 × 1080 adaptive render: 83.511 s, mean 8.379 spp, cap 64, 99.405% pixels under threshold 0.01. NVIDIA CPU/GPU frame comparisons 1/60/120 passed; targeted adaptive/majorant modules passed on NVIDIA, forced integrated invocation, and llvmpipe (12 each). Radeon 8060S 64-cell preview: 134.31 warm FPS; 13.4 ms stop-to-full-detail. New stills remain visibly noisy and the stream reads weakly. A6000 and Windows unverified. Evidence/docs and exact next-owner handoff are in TASKLOG.md and context/state.md. Scratch profile was removed after durable evidence was saved.
+Optimized RTX 3080 Ti frame-60 960 × 540 fixed-32 render: 22.735 s, down from 200.38 s with 16 volume-shadow steps. Optimized 1920 × 1080 adaptive render: 83.511 s, mean 8.379 spp, cap 64, 99.405% pixels under threshold 0.01. NVIDIA CPU/GPU frame comparisons 1/60/120 passed; targeted adaptive/majorant modules passed on NVIDIA, forced integrated invocation, and llvmpipe (12 each). Radeon 8060S 64-cell preview: 134.31 warm FPS; 13.4 ms stop-to-full-detail. New stills remain visibly noisy and the stream reads weakly. A6000 and Windows unverified. Evidence/docs landed in `1b267f28`; exact next-owner handoff is in TASKLOG.md and context/state.md. Scratch profile was removed after durable evidence was saved.
 
 # Lane 8 step A finish 1 — active (2026-10-20, 11:02 AM PDT)
 
