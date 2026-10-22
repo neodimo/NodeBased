@@ -1,3 +1,9 @@
+## 2026-10-22 — Lane 6 step B finish 2 (PARTIAL)
+
+Evidence on the RTX 3080 Ti: frames 60 and 90 (960 × 540) render in 36.66 s and 37.61 s; CPU/GPU comparisons pass for 1/60/120. The Rect key gives the table catcher a visibly softer penumbra. Steam remains granular. Full-cap 1080p adaptive rendering settles all pixels at noise 0.01 in 79.72 s; a 64-sample cap is faster (40.68 s) but leaves 3.78% unconverged. The strict under-60s settled gate remains open.
+
+Artifacts are in this worktree commit: the updated shot graph/generator/evidence runner and tests, paired frames 60/90 against their baselines, identical docs copies, and the dated profile JSON. A6000 and Windows remain DiMo's responsibility. Next owner: Gonzo; investigate the rendering-side catcher cost using `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`, coordinating any `nodebased/shadowcatch.py` change with L4.
+
 ## 2026-10-22 — Lane 8 cold first-play playback finish (PARTIAL)
 
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (9:02 AM on 2026-10-22 PDT)

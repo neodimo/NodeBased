@@ -3,7 +3,7 @@
 This example puts the Hot pour preset into a camera-matched tabletop plate. The 64-cell liquid and steam
 simulation spans 120 frames and is sized to bake in under 20 minutes on this machine (the measured time is
 recorded in `docs/FLUIDS_SPIKE.md`). The tabletop is a shadow catcher; the foreground cup is a holdout. A
-softened point key casts the fluid's shadow onto the plate. A narrow liquid continuity bridge sits just in
+0.7 × 0.7 Rect key casts a broad, soft fluid shadow onto the plate. A narrow liquid continuity bridge sits just in
 front of the holdout cup, carrying the visible pour from the spout through the cup opening to its surface.
 
 `make_shot.py` regenerates `hot_pour_shot.nbcomp`; `make_plate.py` renders the solid-only plate from the same
@@ -11,9 +11,9 @@ camera and set. Both scripts use the project's Python environment. The plate is 
 The comp graph renders the fluid scene over that plate. `hot_pour_shot.nbcomp` is the artist-facing graph.
 
 `render_evidence.py --adapter default --workdir <cache-directory>` compares CPU/GPU output on frames 1, 60
-and 120, then writes the 960 × 540 showcase stills at frames 60, 90 and 120. The showcase uses adaptive
-sampling (32 minimum, 128 maximum, 0.01 relative-noise threshold), final denoising, a four-bounce transmission
-cap, a rising steam plume and broad ambient fill. The point key light uses a sampled penumbra and retains the
-stream highlight; volume shadows remain disabled to avoid the coarse one-step estimate that darkened the
-transparent liquid. Keep the work
-directory on a volume with enough room for the simulation cache; `--small-only` skips the stills.
+and 120, then writes the 960 × 540 showcase stills at frames 60 and 90. The showcase uses adaptive
+sampling (32 minimum, effectively 64 maximum because the path sample budget is 64), a 0.01 relative-noise
+threshold and final denoising. Source noise and added turbulence are off. The steam still looks granular;
+the before/after frames and 1080p convergence timings are recorded in `docs/FLUIDS_SPIKE.md`. Volume
+shadows remain disabled to avoid the coarse one-step estimate that darkened the transparent liquid. Keep
+the work directory on a volume with enough room for the simulation cache; `--small-only` skips the stills.

@@ -24,8 +24,8 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
         if op.get("op") == "create" and op.get("id") == "$new:table_top":
             op["params"].update(shadow_catcher="on", sx=1.7, sz=2.2, red=0.28, green=0.17, blue=0.10)
         if op.get("op") == "create" and op.get("id") == "$new:key_light":
-            op["params"].update(light_type="Point", shadows="on", tx=0.9, ty=1.4, tz=1.2, intensity=3.0,
-                                shadow_blur=10.0, shadow_samples=8)
+            op["params"].update(light_type="Rect", shadows="on", tx=0.9, ty=1.4, tz=1.2, intensity=3.0,
+                                area_width=0.7, area_height=0.7, light_samples=4)
         if op.get("op") == "create" and op.get("id") == "$new:rim_light":
             op["params"].update(shadows="off")
         if op.get("op") == "create" and op.get("id") == "$new:spout":
@@ -33,15 +33,15 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
         if op.get("op") == "create" and op.get("id") == "$new:surface":
             op["params"].update(smoothing=2, roughness=0.06)
         if op.get("op") == "create" and op.get("id") == "$new:steam_source":
-            op["params"].update(src_density=0.8, src_noise_amount=0.12, src_noise_scale=0.5)
+            op["params"].update(src_density=1.0, src_noise_amount=0.0, src_noise_scale=0.5)
         if op.get("op") == "create" and op.get("id") == "$new:steam_lift":
-            op["params"].update(buoyancy_lift=0.18, strength=0.03)
+            op["params"].update(buoyancy_lift=0.12, strength=0.0)
         if op.get("op") == "create" and op.get("id") == "$new:camera":
             op["params"].update(ty=1.15, tz=2.8, target_y=0.0, focal=45.0)
         if op.get("op") == "create" and op.get("id") == "$new:render":
             op["params"].update(render_backend=render_backend, render_mode="pathtrace", samples=2,
-                                pt_samples=128, max_bounces=4, diffuse_bounces=2, specular_bounces=2,
-                                transmission_bounces=4, volume_density_scale=1.0,
+                                pt_samples=64, max_bounces=4, diffuse_bounces=2, specular_bounces=2,
+                                transmission_bounces=4, volume_density_scale=1.5,
                                 volume_shadow_steps=1, volume_shadow_density=0.0,
                                 ambient=3.0,
                                 sampling="adaptive", min_samples=32, max_samples=128,

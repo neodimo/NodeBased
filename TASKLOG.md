@@ -1,3 +1,11 @@
+## 2026-10-22 — Lane 6 step B finish 2: softer catcher, steam and strict 1080p gate still open (PARTIAL)
+
+- **What was done — evidence:** Replaced the path-traced Point key with a 0.7 × 0.7 Rect key; fresh frames 60 and 90 show a visibly broader catcher shadow. Removed source noise and extra turbulence, then tuned volume density. The steam remains granular in both final stills. The full-cap 1080p render converged every pixel at noise 0.01 in 79.72 seconds. Lowering the nominal sample budget to 64 finished in 40.68 seconds but left 3.78% of pixels unconverged (max noise 0.52335). CPU/GPU comparisons passed at frames 1, 60 and 120 on the RTX 3080 Ti.
+- **Artifacts:** `examples/hot_pour_shot/{hot_pour_shot.nbcomp,make_shot.py,render_evidence.py}`, `tests/test_hot_pour_shot.py`, both identical `docs/FLUIDS_SPIKE.md` copies, frames 60/90, and the benchmark JSONs are committed in this worktree. Generated caches under `workspace/scratch/nb-lanes/run/big-L6/finish5` through `finish10` were trashed after measurement. `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L6.md` is the handoff report.
+- **State:** PARTIAL. Shadow softness passes visual review. Steam softness and settled 1080p under 60 seconds remain unverified/failed. A6000 and Windows are assigned to DiMo and are outside this pass.
+- **Next owner + concrete artifact:** Gonzo to continue from `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`; reducing `pt_samples` caps adaptive convergence, so an under-minute fix needs the renderer-side catcher sampling cost reduced or another measured approach. L6 does not own `nodebased/shadowcatch.py`; coordinate that change with L4.
+- **Failure mode:** `shadow_blur` on a Point light does not soften this path-traced catcher; the Rect light provides the actual penumbra.
+
 ## 2026-10-22 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
 
 - **What was done:** `main` `155e3974` -> `87791fd8` plus this docs commit. Evidence and per-lane commit

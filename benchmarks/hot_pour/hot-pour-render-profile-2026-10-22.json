@@ -223,5 +223,60 @@
     "max_noise": 0.00999999939,
     "fully_settled": true,
     "under_60_seconds": false
+  },
+  "finish5_visual_settings": {
+    "key_light": "Rect",
+    "key_area": [
+      0.7,
+      0.7
+    ],
+    "key_light_samples": 4,
+    "volume_density_scale": 1.5,
+    "steam_source_density": 1.0,
+    "steam_source_noise": 0.0,
+    "steam_buoyancy_lift": 0.12,
+    "steam_force_strength": 0.0,
+    "catcher_shadow_samples": 64
+  },
+  "finish5_stills_960x540": {
+    "frames": {
+      "60": 36.66,
+      "90": 37.61
+    },
+    "cpu_gpu_comparison_frames": [
+      1,
+      60,
+      120
+    ],
+    "comparison_passed": true,
+    "steam_visually_grainy": true,
+    "table_shadow_visually_softened": true
+  },
+  "finish5_settled_1080p": {
+    "wall_seconds": 79.723,
+    "sampling": "adaptive",
+    "min_samples": 8,
+    "max_samples": 8192,
+    "adaptive_pass_size": 16,
+    "noise_threshold": 0.01,
+    "mean_samples_per_pixel": 55.4151466,
+    "max_observed_samples": 3976,
+    "converged_pixel_fraction": 1.0,
+    "max_noise": 0.00999999484,
+    "fully_settled": true,
+    "under_60_seconds": false
+  },
+  "finish5_fast_but_unsettled_1080p": {
+    "wall_seconds": 40.677,
+    "sampling": "adaptive",
+    "min_samples": 8,
+    "max_samples": 64,
+    "adaptive_pass_size": 16,
+    "noise_threshold": 0.01,
+    "mean_samples_per_pixel": 10.2427045,
+    "converged_pixel_fraction": 0.96223235,
+    "max_noise": 0.52335091,
+    "fully_settled": false,
+    "note": "The lower cap also lowers the catcher shadow-sample budget."
   }
 }

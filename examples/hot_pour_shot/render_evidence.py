@@ -16,7 +16,7 @@ from make_shot import ROOT
 
 
 COMPARE_FRAMES = (1, 60, 120)
-STILL_FRAMES = (60, 90, 120)
+STILL_FRAMES = (60, 90)
 
 
 def main():
@@ -86,7 +86,7 @@ def main():
             raise SystemExit("CPU/GPU path-tracer comparison failed")
         return
     doc["nodes"]["render"]["params"].update(
-        render_backend="gpu", width=960, height=540, pt_samples=128,
+        render_backend="gpu", width=960, height=540, pt_samples=64,
         max_bounces=4, diffuse_bounces=2, specular_bounces=2, transmission_bounces=4,
         volume_shadow_steps=1, volume_shadow_density=0.0, sampling="adaptive", min_samples=32, max_samples=128,
         adaptive_pass_size=8, noise_threshold=0.01)
@@ -104,13 +104,21 @@ def main():
     result = {"adapter": args.adapter, "device": str(adapter_name),
               "liquid_cells": int(doc["nodes"]["liquid"]["params"]["max_size"]),
               "steam_cells": int(doc["nodes"]["steam"]["params"]["max_size"]), "frames": 120,
-              "visual_settings": {"volume_density_scale": 1.0, "key_light": "Point", "ambient": 3.0,
-                                  "key_shadow_blur": 10.0, "key_shadow_samples": 8,
+              "visual_settings": {"volume_density_scale": doc["nodes"]["render"]["params"]["volume_density_scale"],
+                                  "key_light": doc["nodes"]["key_light"]["params"]["light_type"],
+                                  "ambient": 3.0,
+                                  "key_area": [doc["nodes"]["key_light"]["params"]["area_width"],
+                                               doc["nodes"]["key_light"]["params"]["area_height"]],
+                                  "key_light_samples": doc["nodes"]["key_light"]["params"]["light_samples"],
                                   "spout_radius": 0.03, "surface_smoothing": 2,
-                                  "steam_cells": 64, "steam_source_density": 0.8, "steam_source_noise": 0.12,
-                                  "steam_buoyancy_lift": 0.18, "steam_force_strength": 0.03,
+                                  "steam_cells": 64,
+                                  "steam_source_density": doc["nodes"]["steam_source"]["params"]["src_density"],
+                                  "steam_source_noise": doc["nodes"]["steam_source"]["params"]["src_noise_amount"],
+                                  "steam_buoyancy_lift": doc["nodes"]["steam_lift"]["params"]["buoyancy_lift"],
+                                  "steam_force_strength": doc["nodes"]["steam_lift"]["params"]["strength"],
                                   "continuity_bridge": {"radius": 0.012, "height": 0.34, "camera_z": 0.03},
-                                  "showcase_denoise": "final"},
+                                  "showcase_denoise": "final",
+                                  "catcher_shadow_samples": doc["nodes"]["render"]["params"]["pt_samples"]},
               "bake_seconds": round(bake_seconds, 2),
               "render_seconds": render_seconds, "comparison": comparisons}
     (run_dir / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
