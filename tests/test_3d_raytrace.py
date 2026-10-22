@@ -234,3 +234,61 @@ class NearestHitsTests(unittest.TestCase):
         with self.assertRaises(Cancelled):
             tri.nearest_hits(Bvh.build(*tri.aabbs()), np.zeros((1, 3)),
                              np.ones((1, 3)), 0, 10, 1, cancel=event)
+
+
+class LevelBuildTests(unittest.TestCase):
+    """`Bvh.build` splits a whole level at a time (step B of the Progress plan); the tree is the one a node-by-node build gives."""
+
+    @staticmethod
+    def reference(lo, hi, leaf_size=4):
+        lo, hi = np.asarray(lo, dtype=np.float64), np.asarray(hi, dtype=np.float64)
+        n = len(lo)
+        order = np.arange(n, dtype=np.int32)
+        pad = 8 * np.finfo(np.float32).eps * np.maximum(1, np.maximum(hi - lo, np.maximum(abs(lo), abs(hi))))
+        lower, upper = lo - pad, hi + pad
+        centers = lo * .5 + hi * .5
+        nodes = []
+        pending = [(0, n, -1, 0)] if n else []
+        while pending:
+            start, end, parent, side = pending.pop()
+            index = len(nodes)
+            ids = order[start:end]
+            nodes.append([lower[ids].min(0), upper[ids].max(0), -1, -1, start, end - start])
+            if parent >= 0:
+                nodes[parent][2 + side] = index
+            if end - start > leaf_size:
+                axis = np.argmax(np.ptp(centers[ids], axis=0))
+                order[start:end] = ids[np.argsort(centers[ids, axis], kind='stable')]
+                mid = (start + end) // 2
+                nodes[index][5] = 0
+                pending.extend(((mid, end, index, 1), (start, mid, index, 0)))
+        return (np.array([x[0] for x in nodes], dtype=np.float64).reshape(-1, 3),
+                np.array([x[1] for x in nodes], dtype=np.float64).reshape(-1, 3),
+                *(np.array([x[i] for x in nodes], dtype=np.int32) for i in range(2, 6)), order)
+
+    def test_the_tree_is_the_node_by_node_tree_for_every_size_leaf_size_and_layout(self):
+        rng = np.random.default_rng(3)
+        for n in (0, 1, 2, 3, 5, 8, 9, 17, 100, 1000, 3000):
+            for leaf in (1, 2, 4, 8):
+                for kind in ("random", "ties", "line", "same"):
+                    if kind == "random":
+                        centre = rng.uniform(-5, 5, (n, 3))
+                    elif kind == "ties":
+                        centre = rng.integers(0, 3, (n, 3)).astype(float)
+                    elif kind == "line":
+                        centre = np.stack((np.arange(n, dtype=float), np.zeros(n), np.zeros(n)), 1)
+                    else:
+                        centre = np.zeros((n, 3))
+                    half = rng.uniform(0, 0.3, (n, 3)) if kind != "same" else np.zeros((n, 3))
+                    got = Bvh.build(centre - half, centre + half, leaf)
+                    have = (got.node_lo, got.node_hi, got.left, got.right, got.prim_offset, got.prim_count, got.prim_order)
+                    for g, w, name in zip(have, self.reference(centre - half, centre + half, leaf),
+                                          "lo hi left right offset count order".split()):
+                        self.assertEqual((g.dtype, g.shape), (w.dtype, w.shape), (n, leaf, kind, name))
+                        self.assertTrue(np.array_equal(g, w), (n, leaf, kind, name))
+
+    def test_a_cancelled_build_stops(self):
+        stop = threading.Event()
+        stop.set()
+        with self.assertRaises(Cancelled):
+            Bvh.build(np.zeros((50, 3)), np.ones((50, 3)), cancel=stop)

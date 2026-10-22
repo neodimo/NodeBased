@@ -12,6 +12,14 @@ def _cancel(event):
         raise Cancelled()
 
 
+def _ranges(starts, ends):
+    """The integers of every half-open range [start, end), one after the other."""
+    counts = ends - starts
+    total = int(counts.sum())
+    first = np.repeat(starts - np.concatenate(([0], np.cumsum(counts)[:-1])), counts)
+    return np.arange(total) + first
+
+
 @dataclass
 class Bvh:
     """Root is node 0 (no nodes for empty input). Interior counts are zero;
@@ -27,7 +35,9 @@ class Bvh:
 
     @classmethod
     def build(cls, lo, hi, leaf_size=4, *, cancel=None):
-        """Stable median splits; iterative construction, padded float64 bounds."""
+        """Stable median splits; padded float64 bounds. The tree is built a level at a time (every range of a level is split
+        together), which gives exactly the tree a node-by-node build gives: the same splits, the same primitive order, the same
+        node numbering (depth first, the left child first), the same bounds."""
         lo, hi = np.asarray(lo, dtype=np.float64), np.asarray(hi, dtype=np.float64)
         if lo.shape != hi.shape or lo.ndim != 2 or lo.shape[1] != 3:
             raise ValueError('bounds must have matching (N, 3) shapes')
@@ -36,28 +46,89 @@ class Bvh:
         _cancel(cancel)
         n = len(lo)
         order = np.arange(n, dtype=np.int32)
+        if not n:
+            return cls(np.zeros((0, 3)), np.zeros((0, 3)), *(np.zeros(0, np.int32) for _ in range(4)), order)
         pad = 8 * np.finfo(np.float32).eps * np.maximum(1, np.maximum(hi-lo, np.maximum(abs(lo), abs(hi))))
         lower, upper = lo-pad, hi+pad
         centers = lo*.5 + hi*.5
-        nodes = []
-        pending = [(0, n, -1, 0)] if n else []
-        while pending:
+        # levels[d] = (start, end, parent slot in levels[d-1] or -1, side) of every node at depth d, in left-to-right order
+        starts, ends = np.array([0]), np.array([n])
+        levels = []
+        parents = np.array([-1])
+        sides = np.array([0])
+        while True:
             _cancel(cancel)
-            start, end, parent, side = pending.pop()
-            index = len(nodes)
-            ids = order[start:end]
-            nodes.append([lower[ids].min(0), upper[ids].max(0), -1, -1, start, end-start])
-            if parent >= 0:
-                nodes[parent][2+side] = index
-            if end-start > leaf_size:
-                axis = np.argmax(np.ptp(centers[ids], axis=0))
-                order[start:end] = ids[np.argsort(centers[ids, axis], kind='stable')]
-                mid = (start+end)//2
-                nodes[index][5] = 0
-                pending.extend(((mid, end, index, 1), (start, mid, index, 0)))
-        return cls(np.array([x[0] for x in nodes], dtype=np.float64).reshape(-1, 3),
-                   np.array([x[1] for x in nodes], dtype=np.float64).reshape(-1, 3),
-                   *(np.array([x[i] for x in nodes], dtype=np.int32) for i in range(2, 6)), order)
+            levels.append((starts, ends, parents, sides))
+            size = ends - starts
+            split = np.flatnonzero(size > leaf_size)
+            if not len(split):
+                break
+            # the ranges of this level that split: choose each one's widest axis of centres, sort it by that axis (stable)
+            s, e = starts[split], ends[split]
+            positions = _ranges(s, e)
+            counts = e - s
+            c = centers[order[positions]]
+            offsets = np.concatenate(([0], np.cumsum(counts)[:-1]))
+            extent = np.maximum.reduceat(c, offsets, axis=0) - np.minimum.reduceat(c, offsets, axis=0)
+            axis = np.argmax(extent, axis=1)
+            key = c[np.arange(len(c)), np.repeat(axis, counts)]
+            segment = np.repeat(np.arange(len(split)), counts)
+            within = np.lexsort((key, segment))          # stable: equal keys keep their order, as `argsort(kind='stable')` does
+            order[positions] = order[positions][within]
+            mid = (s + e) // 2
+            starts = np.empty(2 * len(split), dtype=starts.dtype)
+            ends = np.empty_like(starts)
+            starts[0::2], ends[0::2] = s, mid
+            starts[1::2], ends[1::2] = mid, e
+            parents = np.repeat(split, 2)
+            sides = np.tile([0, 1], len(split))
+        # depth-first (left child first) numbering: a node's subtree size, bottom-up, then its index, top-down
+        depth = len(levels)
+        subtree = [None] * depth
+        for d in range(depth - 1, -1, -1):
+            count = len(levels[d][0])
+            sizes = np.ones(count, dtype=np.int64)
+            if d + 1 < depth:
+                child_parents = levels[d + 1][2]
+                np.add.at(sizes, child_parents, subtree[d + 1])
+            subtree[d] = sizes
+        index = [None] * depth
+        index[0] = np.zeros(1, dtype=np.int64)
+        for d in range(1, depth):
+            parent_slots, side = levels[d][2], levels[d][3]
+            left_size = np.zeros(len(levels[d - 1][0]), dtype=np.int64)
+            left_nodes = np.flatnonzero(side == 0)
+            left_size[parent_slots[left_nodes]] = subtree[d][left_nodes]
+            index[d] = index[d - 1][parent_slots] + 1 + np.where(side == 1, left_size[parent_slots], 0)
+        total = int(subtree[0][0])
+        node_lo, node_hi = np.empty((total, 3)), np.empty((total, 3))
+        left, right = np.full(total, -1, np.int32), np.full(total, -1, np.int32)
+        offset, count = np.empty(total, np.int32), np.empty(total, np.int32)
+        for d in range(depth - 1, -1, -1):
+            s, e = levels[d][0], levels[d][1]
+            here = index[d]
+            offset[here] = s
+            leaf = (e - s) <= leaf_size
+            count[here] = np.where(leaf, e - s, 0)
+            leaves = np.flatnonzero(leaf)
+            if len(leaves):
+                ls, le = s[leaves], e[leaves]
+                positions = _ranges(ls, le)
+                ids = order[positions]
+                cut = np.concatenate(([0], np.cumsum(le - ls)[:-1]))
+                node_lo[here[leaves]] = np.minimum.reduceat(lower[ids], cut, axis=0)
+                node_hi[here[leaves]] = np.maximum.reduceat(upper[ids], cut, axis=0)
+            if d + 1 < depth:
+                child_parents, child_sides, child_index = levels[d + 1][2], levels[d + 1][3], index[d + 1]
+                left_children, right_children = np.flatnonzero(child_sides == 0), np.flatnonzero(child_sides == 1)
+                left[here[child_parents[left_children]]] = child_index[left_children]
+                right[here[child_parents[right_children]]] = child_index[right_children]
+                inner = np.flatnonzero(~leaf)
+                if len(inner):
+                    lc, rc = left[here[inner]], right[here[inner]]
+                    node_lo[here[inner]] = np.minimum(node_lo[lc], node_lo[rc])
+                    node_hi[here[inner]] = np.maximum(node_hi[lc], node_hi[rc])
+        return cls(node_lo, node_hi, left, right, offset, count, order)
 
     def refit(self, lo, hi):
         """A new `Bvh` with the same tree (same `left`/`right`/`prim_order`, no re-splitting) but

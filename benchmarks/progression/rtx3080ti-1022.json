@@ -12,8 +12,8 @@
    "cold": {
     "frames": [
      {
-      "seconds": 0.7291,
-      "display_seconds": 0.7291,
+      "seconds": 0.7899,
+      "display_seconds": 0.7899,
       "samples": 4,
       "pass": 1,
       "preview": true,
@@ -24,15 +24,15 @@
       ],
       "converged_fraction": null,
       "phases": {
-       "render": 0.2389,
-       "guides": 0.044,
-       "denoise": 0.3741,
-       "enlarge": 0.02
+       "render": 0.2524,
+       "guides": 0.0365,
+       "denoise": 0.4273,
+       "enlarge": 0.0211
       }
      },
      {
-      "seconds": 1.7244,
-      "display_seconds": 1.7244,
+      "seconds": 1.7979,
+      "display_seconds": 1.7979,
       "samples": 16,
       "pass": 2,
       "preview": true,
@@ -43,15 +43,15 @@
       ],
       "converged_fraction": null,
       "phases": {
-       "render": 0.1836,
-       "guides": 0.1072,
-       "denoise": 0.6798,
-       "enlarge": 0.0159
+       "render": 0.1769,
+       "guides": 0.1014,
+       "denoise": 0.6992,
+       "enlarge": 0.0209
       }
      },
      {
-      "seconds": 4.7514,
-      "display_seconds": 4.7514,
+      "seconds": 4.8016,
+      "display_seconds": 4.8016,
       "samples": 32,
       "pass": 3,
       "preview": false,
@@ -62,14 +62,14 @@
       ],
       "converged_fraction": 0.37070216049382715,
       "phases": {
-       "render": 1.2234,
-       "guides": 0.2703,
-       "denoise": 1.5242
+       "render": 1.1977,
+       "guides": 0.2604,
+       "denoise": 1.5345
       }
      },
      {
-      "seconds": 8.133,
-      "display_seconds": 8.133,
+      "seconds": 8.1784,
+      "display_seconds": 8.1784,
       "samples": 64,
       "pass": 4,
       "preview": false,
@@ -80,37 +80,37 @@
       ],
       "converged_fraction": 0.7673712384259259,
       "phases": {
-       "render": 1.8555,
+       "render": 1.8152,
        "guides": 0.0,
-       "denoise": 1.5168
+       "denoise": 1.5524
       }
      }
     ],
-    "first_image_seconds": 0.7291,
-    "settled_seconds": 8.133,
+    "first_image_seconds": 0.7899,
+    "settled_seconds": 8.1784,
     "frame_count": 4,
-    "wall_seconds": 8.134
+    "wall_seconds": 8.1796
    },
    "warm": {
     "runs": 5,
     "first_image_seconds": {
-     "median": 0.4971,
-     "worst": 0.5025
+     "median": 0.5059,
+     "worst": 0.5199
     },
     "settled_seconds": {
-     "median": 7.857,
-     "worst": 7.867
+     "median": 7.835,
+     "worst": 7.864
     },
     "frames_median_seconds": [
-     0.497,
-     1.521,
-     4.485,
-     7.857
+     0.506,
+     1.528,
+     4.474,
+     7.835
     ],
     "last_run_frames": [
      {
-      "seconds": 0.4945,
-      "display_seconds": 0.4945,
+      "seconds": 0.5059,
+      "display_seconds": 0.5059,
       "samples": 4,
       "pass": 1,
       "preview": true,
@@ -121,15 +121,15 @@
       ],
       "converged_fraction": null,
       "phases": {
-       "render": 0.0289,
-       "guides": 0.0316,
-       "denoise": 0.3714,
-       "enlarge": 0.0124
+       "render": 0.0297,
+       "guides": 0.0329,
+       "denoise": 0.3799,
+       "enlarge": 0.0127
       }
      },
      {
-      "seconds": 1.5212,
-      "display_seconds": 1.5212,
+      "seconds": 1.5103,
+      "display_seconds": 1.5103,
       "samples": 16,
       "pass": 2,
       "preview": true,
@@ -140,15 +140,15 @@
       ],
       "converged_fraction": null,
       "phases": {
-       "render": 0.2578,
-       "guides": 0.0956,
-       "denoise": 0.6497,
-       "enlarge": 0.016
+       "render": 0.2351,
+       "guides": 0.0983,
+       "denoise": 0.6463,
+       "enlarge": 0.0168
       }
      },
      {
-      "seconds": 4.4853,
-      "display_seconds": 4.4853,
+      "seconds": 4.4752,
+      "display_seconds": 4.4752,
       "samples": 32,
       "pass": 3,
       "preview": false,
@@ -159,14 +159,14 @@
       ],
       "converged_fraction": 0.3714332561728395,
       "phases": {
-       "render": 1.2366,
-       "guides": 0.2506,
-       "denoise": 1.4666
+       "render": 1.2332,
+       "guides": 0.2476,
+       "denoise": 1.4729
       }
      },
      {
-      "seconds": 7.8255,
-      "display_seconds": 7.8255,
+      "seconds": 7.8637,
+      "display_seconds": 7.8637,
       "samples": 64,
       "pass": 4,
       "preview": false,
@@ -177,9 +177,9 @@
       ],
       "converged_fraction": 0.7680237268518518,
       "phases": {
-       "render": 1.8735,
+       "render": 1.8944,
        "guides": 0.0,
-       "denoise": 1.4569
+       "denoise": 1.4849
       }
      }
     ]
@@ -189,381 +189,745 @@
      "camera": {
       "trials": [
        {
-        "delay_s": 0.106,
-        "idle_first_look_ms": 513.19,
-        "abandon_ms": 20.66,
-        "edit_to_first_look_ms": 496.42,
+        "delay_s": 0.107,
+        "idle_first_look_ms": 505.08,
+        "abandon_ms": 21.52,
+        "edit_to_first_look_ms": 515.89,
         "first_look_phases_ms": {
-         "render": 32.6,
-         "guides": 33.8,
-         "denoise": 369.1,
-         "enlarge": 12.1
-        }
+         "render": 31.6,
+         "guides": 37.9,
+         "denoise": 382.5,
+         "enlarge": 12.7
+        },
+        "idle_first_look_phases_ms": {
+         "render": 31.8,
+         "guides": 37.1,
+         "denoise": 373.7,
+         "enlarge": 13.1
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 0.282,
-        "idle_first_look_ms": 508.33,
-        "abandon_ms": 7.55,
-        "edit_to_first_look_ms": 522.45,
+        "delay_s": 0.29,
+        "idle_first_look_ms": 507.5,
+        "abandon_ms": 15.17,
+        "edit_to_first_look_ms": 512.74,
         "first_look_phases_ms": {
-         "render": 33.8,
-         "guides": 39.3,
-         "denoise": 386.9,
-         "enlarge": 12.4
-        }
+         "render": 30.7,
+         "guides": 37.7,
+         "denoise": 383.2,
+         "enlarge": 12.3
+        },
+        "idle_first_look_phases_ms": {
+         "render": 30.8,
+         "guides": 36.1,
+         "denoise": 377.7,
+         "enlarge": 13.1
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 0.474,
-        "idle_first_look_ms": 513.86,
-        "abandon_ms": 7.7,
-        "edit_to_first_look_ms": 505.32,
+        "delay_s": 0.475,
+        "idle_first_look_ms": 501.38,
+        "abandon_ms": 7.97,
+        "edit_to_first_look_ms": 504.95,
         "first_look_phases_ms": {
-         "render": 33.8,
-         "guides": 34.4,
-         "denoise": 374.0,
-         "enlarge": 12.8
-        }
+         "render": 32.5,
+         "guides": 37.6,
+         "denoise": 372.9,
+         "enlarge": 12.7
+        },
+        "idle_first_look_phases_ms": {
+         "render": 30.3,
+         "guides": 31.2,
+         "denoise": 380.1,
+         "enlarge": 10.6
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 0.663,
-        "idle_first_look_ms": 501.54,
-        "abandon_ms": 19.05,
-        "edit_to_first_look_ms": 496.21,
+        "delay_s": 0.672,
+        "idle_first_look_ms": 519.73,
+        "abandon_ms": 7.47,
+        "edit_to_first_look_ms": 507.69,
         "first_look_phases_ms": {
-         "render": 31.2,
-         "guides": 36.0,
-         "denoise": 367.7,
-         "enlarge": 12.2
-        }
+         "render": 30.4,
+         "guides": 33.5,
+         "denoise": 381.2,
+         "enlarge": 13.1
+        },
+        "idle_first_look_phases_ms": {
+         "render": 29.8,
+         "guides": 41.4,
+         "denoise": 386.4,
+         "enlarge": 12.0
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
         "delay_s": 0.852,
-        "idle_first_look_ms": 501.36,
-        "abandon_ms": 15.33,
-        "edit_to_first_look_ms": 513.23,
+        "idle_first_look_ms": 504.88,
+        "abandon_ms": 12.2,
+        "edit_to_first_look_ms": 517.64,
         "first_look_phases_ms": {
-         "render": 31.7,
-         "guides": 35.2,
-         "denoise": 384.5,
-         "enlarge": 13.1
-        }
-       },
-       {
-        "delay_s": 1.057,
-        "idle_first_look_ms": 508.89,
-        "abandon_ms": 4.69,
-        "edit_to_first_look_ms": 513.47,
-        "first_look_phases_ms": {
-         "render": 29.9,
-         "guides": 34.8,
+         "render": 30.7,
+         "guides": 37.8,
          "denoise": 385.7,
-         "enlarge": 12.5
-        }
-       },
-       {
-        "delay_s": 1.234,
-        "idle_first_look_ms": 496.43,
-        "abandon_ms": 23.79,
-        "edit_to_first_look_ms": 491.32,
-        "first_look_phases_ms": {
-         "render": 28.3,
-         "guides": 34.4,
-         "denoise": 367.1,
-         "enlarge": 12.1
-        }
-       },
-       {
-        "delay_s": 1.458,
-        "idle_first_look_ms": 520.62,
-        "abandon_ms": 80.6,
-        "edit_to_first_look_ms": 553.92,
-        "first_look_phases_ms": {
-         "render": 29.9,
-         "guides": 37.7,
-         "denoise": 385.2,
-         "enlarge": 12.3
-        }
-       },
-       {
-        "delay_s": 1.609,
-        "idle_first_look_ms": 496.29,
-        "abandon_ms": 12.49,
-        "edit_to_first_look_ms": 502.93,
-        "first_look_phases_ms": {
-         "render": 31.5,
-         "guides": 35.3,
-         "denoise": 374.5,
-         "enlarge": 12.2
-        }
-       },
-       {
-        "delay_s": 1.798,
-        "idle_first_look_ms": 508.81,
-        "abandon_ms": 15.46,
-        "edit_to_first_look_ms": 500.14,
-        "first_look_phases_ms": {
-         "render": 31.1,
-         "guides": 35.3,
-         "denoise": 371.9,
          "enlarge": 12.4
-        }
+        },
+        "idle_first_look_phases_ms": {
+         "render": 28.7,
+         "guides": 34.6,
+         "denoise": 378.7,
+         "enlarge": 12.7
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
+       },
+       {
+        "delay_s": 1.045,
+        "idle_first_look_ms": 506.68,
+        "abandon_ms": 14.77,
+        "edit_to_first_look_ms": 513.13,
+        "first_look_phases_ms": {
+         "render": 31.3,
+         "guides": 36.2,
+         "denoise": 383.1,
+         "enlarge": 12.3
+        },
+        "idle_first_look_phases_ms": {
+         "render": 28.8,
+         "guides": 37.7,
+         "denoise": 377.7,
+         "enlarge": 12.1
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
+       },
+       {
+        "delay_s": 1.235,
+        "idle_first_look_ms": 525.54,
+        "abandon_ms": 5.2,
+        "edit_to_first_look_ms": 524.99,
+        "first_look_phases_ms": {
+         "render": 29.6,
+         "guides": 38.5,
+         "denoise": 394.3,
+         "enlarge": 12.3
+        },
+        "idle_first_look_phases_ms": {
+         "render": 28.7,
+         "guides": 38.3,
+         "denoise": 396.9,
+         "enlarge": 12.7
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
+       },
+       {
+        "delay_s": 1.435,
+        "idle_first_look_ms": 511.09,
+        "abandon_ms": 3.73,
+        "edit_to_first_look_ms": 528.19,
+        "first_look_phases_ms": {
+         "render": 29.3,
+         "guides": 36.8,
+         "denoise": 399.8,
+         "enlarge": 12.2
+        },
+        "idle_first_look_phases_ms": {
+         "render": 29.5,
+         "guides": 35.9,
+         "denoise": 383.4,
+         "enlarge": 12.3
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
+       },
+       {
+        "delay_s": 1.659,
+        "idle_first_look_ms": 513.81,
+        "abandon_ms": 14.87,
+        "edit_to_first_look_ms": 508.2,
+        "first_look_phases_ms": {
+         "render": 30.6,
+         "guides": 32.8,
+         "denoise": 382.7,
+         "enlarge": 13.4
+        },
+        "idle_first_look_phases_ms": {
+         "render": 30.0,
+         "guides": 36.3,
+         "denoise": 384.3,
+         "enlarge": 11.9
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
+       },
+       {
+        "delay_s": 1.804,
+        "idle_first_look_ms": 507.53,
+        "abandon_ms": 20.39,
+        "edit_to_first_look_ms": 504.72,
+        "first_look_phases_ms": {
+         "render": 32.8,
+         "guides": 32.8,
+         "denoise": 377.4,
+         "enlarge": 12.4
+        },
+        "idle_first_look_phases_ms": {
+         "render": 27.5,
+         "guides": 32.6,
+         "denoise": 386.3,
+         "enlarge": 11.9
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        }
       ],
       "after_publish_trials": [
        {
         "delay_s": 0.0,
-        "idle_first_look_ms": 498.38,
-        "abandon_ms": 9.96,
-        "edit_to_first_look_ms": 503.81,
+        "idle_first_look_ms": 497.41,
+        "abandon_ms": 8.45,
+        "edit_to_first_look_ms": 515.67,
         "first_look_phases_ms": {
-         "render": 32.3,
-         "guides": 35.7,
-         "denoise": 372.6,
-         "enlarge": 12.3
-        }
+         "render": 30.4,
+         "guides": 32.0,
+         "denoise": 390.0,
+         "enlarge": 13.3
+        },
+        "idle_first_look_phases_ms": {
+         "render": 27.0,
+         "guides": 30.9,
+         "denoise": 377.9,
+         "enlarge": 12.0
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
         "delay_s": 0.025,
-        "idle_first_look_ms": 509.21,
-        "abandon_ms": 4.36,
-        "edit_to_first_look_ms": 517.9,
+        "idle_first_look_ms": 518.34,
+        "abandon_ms": 4.17,
+        "edit_to_first_look_ms": 508.31,
         "first_look_phases_ms": {
-         "render": 31.5,
-         "guides": 39.6,
-         "denoise": 384.2,
-         "enlarge": 12.2
-        }
+         "render": 32.1,
+         "guides": 37.1,
+         "denoise": 375.2,
+         "enlarge": 13.7
+        },
+        "idle_first_look_phases_ms": {
+         "render": 29.5,
+         "guides": 39.3,
+         "denoise": 384.5,
+         "enlarge": 13.4
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
         "delay_s": 0.05,
-        "idle_first_look_ms": 517.08,
-        "abandon_ms": 17.34,
-        "edit_to_first_look_ms": 504.49,
+        "idle_first_look_ms": 506.95,
+        "abandon_ms": 18.35,
+        "edit_to_first_look_ms": 515.87,
         "first_look_phases_ms": {
-         "render": 30.2,
-         "guides": 33.0,
-         "denoise": 378.8,
-         "enlarge": 12.4
-        }
+         "render": 31.2,
+         "guides": 36.9,
+         "denoise": 385.5,
+         "enlarge": 12.1
+        },
+        "idle_first_look_phases_ms": {
+         "render": 29.6,
+         "guides": 31.5,
+         "denoise": 382.0,
+         "enlarge": 13.5
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        }
       ],
       "abandon_ms": {
        "n": 10,
-       "median": 15.39,
-       "p95": 80.6,
-       "worst": 80.6
+       "median": 13.48,
+       "p95": 21.52,
+       "worst": 21.52
       },
       "edit_to_first_look_ms": {
        "n": 10,
-       "median": 504.12,
-       "p95": 553.92,
-       "worst": 553.92
+       "median": 512.93,
+       "p95": 528.19,
+       "worst": 528.19
       },
       "idle_first_look_ms": {
        "n": 10,
-       "median": 508.57,
-       "p95": 520.62,
-       "worst": 520.62
+       "median": 507.51,
+       "p95": 525.54,
+       "worst": 525.54
       }
      },
      "material": {
       "trials": [
        {
-        "delay_s": 0.094,
-        "idle_first_look_ms": 553.37,
-        "abandon_ms": 9.6,
-        "edit_to_first_look_ms": 559.73,
+        "delay_s": 0.1,
+        "idle_first_look_ms": 543.96,
+        "abandon_ms": 4.46,
+        "edit_to_first_look_ms": 576.87,
         "first_look_phases_ms": {
+         "render": 68.9,
+         "guides": 32.9,
+         "denoise": 414.9,
+         "enlarge": 11.4
+        },
+        "idle_first_look_phases_ms": {
          "render": 68.8,
-         "guides": 34.8,
-         "denoise": 394.5,
-         "enlarge": 12.3
-        }
+         "guides": 35.1,
+         "denoise": 378.0,
+         "enlarge": 13.3
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 0.28,
-        "idle_first_look_ms": 538.73,
-        "abandon_ms": 6.23,
-        "edit_to_first_look_ms": 545.35,
+        "delay_s": 0.283,
+        "idle_first_look_ms": 546.67,
+        "abandon_ms": 15.69,
+        "edit_to_first_look_ms": 544.91,
         "first_look_phases_ms": {
-         "render": 69.4,
-         "guides": 34.4,
-         "denoise": 381.7,
-         "enlarge": 10.7
-        }
+         "render": 69.2,
+         "guides": 35.3,
+         "denoise": 376.2,
+         "enlarge": 13.1
+        },
+        "idle_first_look_phases_ms": {
+         "render": 75.2,
+         "guides": 29.4,
+         "denoise": 380.5,
+         "enlarge": 12.4
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 0.465,
-        "idle_first_look_ms": 541.11,
-        "abandon_ms": 6.69,
-        "edit_to_first_look_ms": 552.07,
+        "delay_s": 0.475,
+        "idle_first_look_ms": 574.58,
+        "abandon_ms": 11.03,
+        "edit_to_first_look_ms": 536.74,
         "first_look_phases_ms": {
-         "render": 71.9,
-         "guides": 32.8,
-         "denoise": 385.0,
-         "enlarge": 12.5
-        }
+         "render": 69.2,
+         "guides": 31.8,
+         "denoise": 375.8,
+         "enlarge": 11.6
+        },
+        "idle_first_look_phases_ms": {
+         "render": 69.1,
+         "guides": 37.6,
+         "denoise": 394.8,
+         "enlarge": 23.5
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 0.657,
-        "idle_first_look_ms": 540.39,
-        "abandon_ms": 6.74,
-        "edit_to_first_look_ms": 531.57,
+        "delay_s": 0.647,
+        "idle_first_look_ms": 541.45,
+        "abandon_ms": 17.27,
+        "edit_to_first_look_ms": 537.5,
         "first_look_phases_ms": {
-         "render": 67.2,
-         "guides": 32.8,
-         "denoise": 371.2,
-         "enlarge": 10.8
-        }
+         "render": 68.7,
+         "guides": 33.2,
+         "denoise": 374.1,
+         "enlarge": 11.1
+        },
+        "idle_first_look_phases_ms": {
+         "render": 69.1,
+         "guides": 31.7,
+         "denoise": 383.6,
+         "enlarge": 9.5
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
         "delay_s": 0.845,
-        "idle_first_look_ms": 531.0,
-        "abandon_ms": 4.06,
-        "edit_to_first_look_ms": 538.52,
+        "idle_first_look_ms": 557.62,
+        "abandon_ms": 9.05,
+        "edit_to_first_look_ms": 545.2,
         "first_look_phases_ms": {
-         "render": 67.7,
-         "guides": 31.9,
-         "denoise": 376.6,
-         "enlarge": 13.1
-        }
+         "render": 68.7,
+         "guides": 30.1,
+         "denoise": 384.1,
+         "enlarge": 11.9
+        },
+        "idle_first_look_phases_ms": {
+         "render": 78.9,
+         "guides": 38.3,
+         "denoise": 377.7,
+         "enlarge": 12.4
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 1.042,
-        "idle_first_look_ms": 540.81,
-        "abandon_ms": 14.48,
-        "edit_to_first_look_ms": 548.59,
+        "delay_s": 1.033,
+        "idle_first_look_ms": 561.14,
+        "abandon_ms": 9.81,
+        "edit_to_first_look_ms": 541.32,
         "first_look_phases_ms": {
-         "render": 70.5,
+         "render": 69.6,
+         "guides": 36.5,
+         "denoise": 371.6,
+         "enlarge": 12.6
+        },
+        "idle_first_look_phases_ms": {
+         "render": 71.8,
+         "guides": 32.4,
+         "denoise": 393.4,
+         "enlarge": 13.4
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
+       },
+       {
+        "delay_s": 1.248,
+        "idle_first_look_ms": 540.58,
+        "abandon_ms": 14.77,
+        "edit_to_first_look_ms": 592.23,
+        "first_look_phases_ms": {
+         "render": 84.0,
+         "guides": 37.6,
+         "denoise": 408.6,
+         "enlarge": 12.2
+        },
+        "idle_first_look_phases_ms": {
+         "render": 68.2,
          "guides": 34.4,
-         "denoise": 379.4,
-         "enlarge": 14.0
-        }
+         "denoise": 375.4,
+         "enlarge": 12.6
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 1.213,
-        "idle_first_look_ms": 542.55,
-        "abandon_ms": 5.46,
-        "edit_to_first_look_ms": 558.67,
+        "delay_s": 1.42,
+        "idle_first_look_ms": 558.44,
+        "abandon_ms": 16.89,
+        "edit_to_first_look_ms": 574.09,
         "first_look_phases_ms": {
-         "render": 83.3,
-         "guides": 33.1,
-         "denoise": 379.7,
-         "enlarge": 12.8
-        }
-       },
-       {
-        "delay_s": 1.421,
-        "idle_first_look_ms": 548.01,
-        "abandon_ms": 6.36,
-        "edit_to_first_look_ms": 570.57,
-        "first_look_phases_ms": {
-         "render": 85.5,
+         "render": 85.0,
+         "guides": 32.6,
+         "denoise": 394.2,
+         "enlarge": 12.4
+        },
+        "idle_first_look_phases_ms": {
+         "render": 70.8,
          "guides": 34.4,
-         "denoise": 389.0,
-         "enlarge": 12.0
-        }
+         "denoise": 391.0,
+         "enlarge": 12.5
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 1.574,
-        "idle_first_look_ms": 542.45,
-        "abandon_ms": 12.7,
-        "edit_to_first_look_ms": 556.83,
+        "delay_s": 1.59,
+        "idle_first_look_ms": 551.13,
+        "abandon_ms": 12.83,
+        "edit_to_first_look_ms": 544.82,
         "first_look_phases_ms": {
-         "render": 80.2,
-         "guides": 33.2,
-         "denoise": 378.7,
-         "enlarge": 14.1
-        }
+         "render": 70.0,
+         "guides": 36.5,
+         "denoise": 378.8,
+         "enlarge": 11.5
+        },
+        "idle_first_look_phases_ms": {
+         "render": 68.3,
+         "guides": 33.8,
+         "denoise": 387.6,
+         "enlarge": 11.7
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
-        "delay_s": 1.784,
-        "idle_first_look_ms": 559.85,
-        "abandon_ms": 16.17,
-        "edit_to_first_look_ms": 555.08,
+        "delay_s": 1.841,
+        "idle_first_look_ms": 542.38,
+        "abandon_ms": 12.44,
+        "edit_to_first_look_ms": 540.15,
         "first_look_phases_ms": {
-         "render": 84.6,
-         "guides": 33.9,
-         "denoise": 372.7,
-         "enlarge": 13.6
-        }
+         "render": 71.6,
+         "guides": 31.6,
+         "denoise": 375.0,
+         "enlarge": 13.0
+        },
+        "idle_first_look_phases_ms": {
+         "render": 68.9,
+         "guides": 31.4,
+         "denoise": 383.6,
+         "enlarge": 10.0
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        }
       ],
       "after_publish_trials": [
        {
         "delay_s": 0.0,
-        "idle_first_look_ms": 535.31,
-        "abandon_ms": 8.48,
-        "edit_to_first_look_ms": 545.7,
+        "idle_first_look_ms": 537.07,
+        "abandon_ms": 8.56,
+        "edit_to_first_look_ms": 545.33,
         "first_look_phases_ms": {
-         "render": 69.9,
-         "guides": 32.9,
-         "denoise": 380.2,
-         "enlarge": 13.0
-        }
+         "render": 70.5,
+         "guides": 32.8,
+         "denoise": 380.6,
+         "enlarge": 11.8
+        },
+        "idle_first_look_phases_ms": {
+         "render": 69.6,
+         "guides": 35.2,
+         "denoise": 369.4,
+         "enlarge": 13.1
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
         "delay_s": 0.025,
-        "idle_first_look_ms": 556.27,
-        "abandon_ms": 20.99,
-        "edit_to_first_look_ms": 557.6,
+        "idle_first_look_ms": 564.96,
+        "abandon_ms": 20.49,
+        "edit_to_first_look_ms": 547.92,
         "first_look_phases_ms": {
-         "render": 70.4,
+         "render": 69.7,
          "guides": 35.0,
-         "denoise": 390.1,
-         "enlarge": 12.3
-        }
+         "denoise": 380.7,
+         "enlarge": 12.9
+        },
+        "idle_first_look_phases_ms": {
+         "render": 70.8,
+         "guides": 37.6,
+         "denoise": 394.8,
+         "enlarge": 12.8
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        },
        {
         "delay_s": 0.05,
-        "idle_first_look_ms": 546.83,
-        "abandon_ms": 15.09,
-        "edit_to_first_look_ms": 552.55,
+        "idle_first_look_ms": 537.96,
+        "abandon_ms": 15.78,
+        "edit_to_first_look_ms": 541.21,
         "first_look_phases_ms": {
-         "render": 68.4,
-         "guides": 34.7,
-         "denoise": 385.7,
-         "enlarge": 13.8
-        }
+         "render": 70.8,
+         "guides": 33.3,
+         "denoise": 373.5,
+         "enlarge": 13.9
+        },
+        "idle_first_look_phases_ms": {
+         "render": 68.9,
+         "guides": 31.1,
+         "denoise": 374.4,
+         "enlarge": 13.2
+        },
+        "idle_traced": [
+         640,
+         360
+        ],
+        "traced": [
+         640,
+         360
+        ]
        }
       ],
       "abandon_ms": {
        "n": 10,
-       "median": 6.71,
-       "p95": 16.17,
-       "worst": 16.17
+       "median": 12.63,
+       "p95": 17.27,
+       "worst": 17.27
       },
       "edit_to_first_look_ms": {
        "n": 10,
-       "median": 553.58,
-       "p95": 570.57,
-       "worst": 570.57
+       "median": 544.87,
+       "p95": 592.23,
+       "worst": 592.23
       },
       "idle_first_look_ms": {
        "n": 10,
-       "median": 541.78,
-       "p95": 559.85,
-       "worst": 559.85
+       "median": 548.9,
+       "p95": 574.58,
+       "worst": 574.58
       }
      }
     },
     "abandon_ms": {
      "n": 20,
-     "median": 11.04,
-     "p95": 23.79,
-     "worst": 80.6
+     "median": 12.63,
+     "p95": 20.39,
+     "worst": 21.52
     },
     "edit_to_first_look_ms": {
      "n": 20,
-     "median": 535.05,
-     "p95": 559.73,
-     "worst": 570.57
+     "median": 532.47,
+     "p95": 576.87,
+     "worst": 592.23
     },
     "idle_first_look_ms": {
      "n": 20,
-     "median": 525.81,
-     "p95": 553.37,
-     "worst": 559.85
+     "median": 533.06,
+     "p95": 561.14,
+     "worst": 574.58
     },
     "abandoned_trials": 20,
     "trials": 20,
@@ -578,21 +942,21 @@
     "after_publish": {
      "abandon_ms": {
       "n": 6,
-      "median": 12.53,
-      "p95": 20.99,
-      "worst": 20.99
+      "median": 12.17,
+      "p95": 20.49,
+      "worst": 20.49
      },
      "edit_to_first_look_ms": {
       "n": 6,
-      "median": 531.8,
-      "p95": 557.6,
-      "worst": 557.6
+      "median": 528.54,
+      "p95": 547.92,
+      "worst": 547.92
      },
      "idle_first_look_ms": {
       "n": 6,
-      "median": 526.19,
-      "p95": 556.27,
-      "worst": 556.27
+      "median": 527.71,
+      "p95": 564.96,
+      "worst": 564.96
      },
      "trials": 6
     }
@@ -604,19 +968,23 @@
     "nudges": 30,
     "interval_ms": 33,
     "paint_ms_during_orbit": {
-     "median": 12.96,
-     "worst": 17.54
+     "median": 15.26,
+     "worst": 18.29
+    },
+    "paint_ms_during_orbit_card_at_working_clocks": {
+     "median": 15.54,
+     "worst": 17.9
     },
     "cancel_latency_ms": {
-     "count": 0,
-     "median": null,
-     "worst": null
+     "count": 2,
+     "median": 5.01,
+     "worst": 9.19
     },
-    "last_nudge_to_first_look_seconds": 0.7417,
+    "last_nudge_to_first_look_seconds": 0.758,
     "responsive_during_refinement": {
      "paints": 184,
-     "median_ms": 1.43,
-     "worst_ms": 5.22
+     "median_ms": 1.36,
+     "worst_ms": 3.21
     }
    }
   },
@@ -631,8 +999,8 @@
    "cold": {
     "frames": [
      {
-      "seconds": 0.9595,
-      "display_seconds": 0.9595,
+      "seconds": 0.9945,
+      "display_seconds": 0.9945,
       "samples": 4,
       "pass": 1,
       "preview": true,
@@ -643,15 +1011,15 @@
       ],
       "converged_fraction": null,
       "phases": {
-       "render": 0.643,
-       "guides": 0.1336,
-       "denoise": 0.1238,
-       "enlarge": 0.0087
+       "render": 0.648,
+       "guides": 0.1666,
+       "denoise": 0.1172,
+       "enlarge": 0.0115
       }
      },
      {
-      "seconds": 13.8547,
-      "display_seconds": 13.8547,
+      "seconds": 13.8562,
+      "display_seconds": 13.8562,
       "samples": 8,
       "pass": 2,
       "preview": false,
@@ -662,14 +1030,14 @@
       ],
       "converged_fraction": 0.07139612268518518,
       "phases": {
-       "render": 5.8329,
-       "guides": 5.6209,
-       "denoise": 1.4302
+       "render": 5.8466,
+       "guides": 5.5703,
+       "denoise": 1.4348
       }
      },
      {
-      "seconds": 26.877,
-      "display_seconds": 26.877,
+      "seconds": 26.98,
+      "display_seconds": 26.98,
       "samples": 16,
       "pass": 3,
       "preview": false,
@@ -680,14 +1048,14 @@
       ],
       "converged_fraction": 0.12893711419753087,
       "phases": {
-       "render": 11.5212,
+       "render": 11.6485,
        "guides": 0.0,
-       "denoise": 1.4905
+       "denoise": 1.4647
       }
      },
      {
-      "seconds": 49.8738,
-      "display_seconds": 49.8738,
+      "seconds": 49.9262,
+      "display_seconds": 49.9262,
       "samples": 32,
       "pass": 4,
       "preview": false,
@@ -698,14 +1066,14 @@
       ],
       "converged_fraction": 0.3458222415123457,
       "phases": {
-       "render": 21.4528,
+       "render": 21.436,
        "guides": 0.0,
-       "denoise": 1.5322
+       "denoise": 1.5014
       }
      },
      {
-      "seconds": 85.4314,
-      "display_seconds": 85.4314,
+      "seconds": 85.564,
+      "display_seconds": 85.564,
       "samples": 64,
       "pass": 5,
       "preview": false,
@@ -716,56 +1084,56 @@
       ],
       "converged_fraction": 0.7236554783950617,
       "phases": {
-       "render": 34.0982,
+       "render": 34.1265,
        "guides": 0.0,
-       "denoise": 1.4488
+       "denoise": 1.5016
       }
      }
     ],
-    "first_image_seconds": 0.9595,
-    "settled_seconds": 85.4314,
+    "first_image_seconds": 0.9945,
+    "settled_seconds": 85.564,
     "frame_count": 5,
-    "wall_seconds": 85.4324
+    "wall_seconds": 85.5646
    },
    "warm": {
     "runs": 5,
     "first_image_seconds": {
-     "median": 0.442,
-     "worst": 0.5064
+     "median": 0.4416,
+     "worst": 0.4932
     },
     "settled_seconds": {
-     "median": 69.724,
-     "worst": 70.283
+     "median": 69.704,
+     "worst": 69.898
     },
     "frames_median_seconds": [
      0.442,
-     5.707,
-     33.758,
-     69.724
+     5.715,
+     33.836,
+     69.704
     ],
     "last_run_frames": [
      {
-      "seconds": 0.5064,
-      "display_seconds": 0.5064,
+      "seconds": 0.4932,
+      "display_seconds": 0.4932,
       "samples": 4,
       "pass": 1,
       "preview": true,
       "denoised": true,
       "traced": [
-       338,
-       190
+       324,
+       182
       ],
       "converged_fraction": null,
       "phases": {
-       "render": 0.1078,
-       "guides": 0.164,
-       "denoise": 0.1743,
-       "enlarge": 0.0099
+       "render": 0.1075,
+       "guides": 0.1599,
+       "denoise": 0.1647,
+       "enlarge": 0.0096
       }
      },
      {
-      "seconds": 5.8108,
-      "display_seconds": 5.8108,
+      "seconds": 5.7925,
+      "display_seconds": 5.7925,
       "samples": 16,
       "pass": 2,
       "preview": true,
@@ -776,15 +1144,15 @@
       ],
       "converged_fraction": null,
       "phases": {
-       "render": 2.6329,
-       "guides": 1.9886,
-       "denoise": 0.66,
-       "enlarge": 0.0158
+       "render": 2.6292,
+       "guides": 1.9986,
+       "denoise": 0.6475,
+       "enlarge": 0.0166
       }
      },
      {
-      "seconds": 34.0148,
-      "display_seconds": 34.0148,
+      "seconds": 34.0067,
+      "display_seconds": 34.0067,
       "samples": 32,
       "pass": 3,
       "preview": false,
@@ -795,14 +1163,14 @@
       ],
       "converged_fraction": 0.34616560570987653,
       "phases": {
-       "render": 21.1902,
-       "guides": 5.5205,
-       "denoise": 1.4841
+       "render": 21.1809,
+       "guides": 5.5357,
+       "denoise": 1.4873
       }
      },
      {
-      "seconds": 69.7238,
-      "display_seconds": 69.7238,
+      "seconds": 69.8981,
+      "display_seconds": 69.8981,
       "samples": 64,
       "pass": 4,
       "preview": false,
@@ -813,9 +1181,9 @@
       ],
       "converged_fraction": 0.7235773533950617,
       "phases": {
-       "render": 34.2226,
+       "render": 34.4084,
        "guides": 0.0,
-       "denoise": 1.478
+       "denoise": 1.4726
       }
      }
     ]
@@ -825,381 +1193,745 @@
      "camera": {
       "trials": [
        {
-        "delay_s": 0.527,
-        "idle_first_look_ms": 584.13,
-        "abandon_ms": 5.25,
-        "edit_to_first_look_ms": 574.57,
+        "delay_s": 0.535,
+        "idle_first_look_ms": 502.56,
+        "abandon_ms": 8.44,
+        "edit_to_first_look_ms": 547.37,
         "first_look_phases_ms": {
-         "render": 128.6,
-         "guides": 194.1,
-         "denoise": 190.2,
-         "enlarge": 9.9
-        }
-       },
-       {
-        "delay_s": 1.587,
-        "idle_first_look_ms": 551.29,
-        "abandon_ms": 10.08,
-        "edit_to_first_look_ms": 836.46,
-        "first_look_phases_ms": {
-         "render": 214.7,
-         "guides": 353.9,
-         "denoise": 205.0,
-         "enlarge": 11.6
-        }
-       },
-       {
-        "delay_s": 4.181,
-        "idle_first_look_ms": 761.57,
-        "abandon_ms": 11.92,
-        "edit_to_first_look_ms": 531.23,
-        "first_look_phases_ms": {
-         "render": 110.0,
-         "guides": 175.3,
-         "denoise": 182.0,
-         "enlarge": 11.0
-        }
-       },
-       {
-        "delay_s": 3.781,
-        "idle_first_look_ms": 521.23,
-        "abandon_ms": 74.11,
-        "edit_to_first_look_ms": 634.62,
-        "first_look_phases_ms": {
-         "render": 168.1,
-         "guides": 192.6,
-         "denoise": 180.3,
+         "render": 126.4,
+         "guides": 185.6,
+         "denoise": 172.6,
+         "enlarge": 10.7
+        },
+        "idle_first_look_phases_ms": {
+         "render": 113.2,
+         "guides": 168.9,
+         "denoise": 159.8,
          "enlarge": 9.7
-        }
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         344,
+         193
+        ]
        },
        {
-        "delay_s": 4.849,
-        "idle_first_look_ms": 474.4,
-        "abandon_ms": 18.01,
-        "edit_to_first_look_ms": 587.2,
+        "delay_s": 1.596,
+        "idle_first_look_ms": 553.77,
+        "abandon_ms": 5.28,
+        "edit_to_first_look_ms": 606.95,
         "first_look_phases_ms": {
-         "render": 113.9,
-         "guides": 195.3,
-         "denoise": 213.9,
-         "enlarge": 11.5
-        }
+         "render": 125.6,
+         "guides": 226.6,
+         "denoise": 193.7,
+         "enlarge": 10.1
+        },
+        "idle_first_look_phases_ms": {
+         "render": 108.9,
+         "guides": 194.3,
+         "denoise": 190.1,
+         "enlarge": 10.0
+        },
+        "idle_traced": [
+         354,
+         199
+        ],
+        "traced": [
+         354,
+         199
+        ]
        },
        {
-        "delay_s": 5.911,
-        "idle_first_look_ms": 517.19,
-        "abandon_ms": 34.32,
-        "edit_to_first_look_ms": 594.23,
+        "delay_s": 2.675,
+        "idle_first_look_ms": 537.01,
+        "abandon_ms": 6.04,
+        "edit_to_first_look_ms": 640.91,
         "first_look_phases_ms": {
-         "render": 113.8,
-         "guides": 200.6,
-         "denoise": 217.1,
-         "enlarge": 11.5
-        }
-       },
-       {
-        "delay_s": 7.021,
-        "idle_first_look_ms": 520.85,
-        "abandon_ms": 10.85,
-        "edit_to_first_look_ms": 639.92,
-        "first_look_phases_ms": {
-         "render": 127.6,
-         "guides": 224.0,
-         "denoise": 225.2,
-         "enlarge": 10.6
-        }
-       },
-       {
-        "delay_s": 8.05,
-        "idle_first_look_ms": 551.81,
-        "abandon_ms": 25.38,
-        "edit_to_first_look_ms": 627.59,
-        "first_look_phases_ms": {
-         "render": 126.5,
-         "guides": 224.2,
-         "denoise": 215.8,
-         "enlarge": 10.6
-        }
-       },
-       {
-        "delay_s": 8.877,
-        "idle_first_look_ms": 506.78,
-        "abandon_ms": 5.19,
-        "edit_to_first_look_ms": 649.24,
-        "first_look_phases_ms": {
-         "render": 130.7,
-         "guides": 230.3,
-         "denoise": 224.9,
+         "render": 129.7,
+         "guides": 223.4,
+         "denoise": 227.1,
          "enlarge": 10.3
-        }
+        },
+        "idle_first_look_phases_ms": {
+         "render": 105.9,
+         "guides": 185.7,
+         "denoise": 185.6,
+         "enlarge": 9.9
+        },
+        "idle_traced": [
+         344,
+         193
+        ],
+        "traced": [
+         354,
+         199
+        ]
        },
        {
-        "delay_s": 10.227,
-        "idle_first_look_ms": 558.66,
-        "abandon_ms": 3.99,
-        "edit_to_first_look_ms": 636.01,
+        "delay_s": 3.762,
+        "idle_first_look_ms": 543.67,
+        "abandon_ms": 32.56,
+        "edit_to_first_look_ms": 615.33,
         "first_look_phases_ms": {
-         "render": 128.8,
-         "guides": 222.3,
-         "denoise": 221.8,
-         "enlarge": 12.0
-        }
+         "render": 124.3,
+         "guides": 214.7,
+         "denoise": 213.7,
+         "enlarge": 11.2
+        },
+        "idle_first_look_phases_ms": {
+         "render": 103.5,
+         "guides": 200.9,
+         "denoise": 178.3,
+         "enlarge": 10.3
+        },
+        "idle_traced": [
+         344,
+         193
+        ],
+        "traced": [
+         344,
+         193
+        ]
+       },
+       {
+        "delay_s": 4.828,
+        "idle_first_look_ms": 515.03,
+        "abandon_ms": 25.18,
+        "edit_to_first_look_ms": 629.38,
+        "first_look_phases_ms": {
+         "render": 127.1,
+         "guides": 213.7,
+         "denoise": 224.6,
+         "enlarge": 10.9
+        },
+        "idle_first_look_phases_ms": {
+         "render": 96.4,
+         "guides": 195.2,
+         "denoise": 162.0,
+         "enlarge": 11.0
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         344,
+         193
+        ]
+       },
+       {
+        "delay_s": 5.871,
+        "idle_first_look_ms": 517.98,
+        "abandon_ms": 33.0,
+        "edit_to_first_look_ms": 623.47,
+        "first_look_phases_ms": {
+         "render": 127.2,
+         "guides": 218.2,
+         "denoise": 215.0,
+         "enlarge": 11.0
+        },
+        "idle_first_look_phases_ms": {
+         "render": 96.9,
+         "guides": 193.4,
+         "denoise": 167.3,
+         "enlarge": 9.7
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         344,
+         193
+        ]
+       },
+       {
+        "delay_s": 6.975,
+        "idle_first_look_ms": 516.83,
+        "abandon_ms": 5.82,
+        "edit_to_first_look_ms": 618.76,
+        "first_look_phases_ms": {
+         "render": 125.7,
+         "guides": 215.3,
+         "denoise": 214.1,
+         "enlarge": 10.8
+        },
+        "idle_first_look_phases_ms": {
+         "render": 95.3,
+         "guides": 194.0,
+         "denoise": 165.5,
+         "enlarge": 10.7
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         344,
+         193
+        ]
+       },
+       {
+        "delay_s": 7.994,
+        "idle_first_look_ms": 523.6,
+        "abandon_ms": 17.81,
+        "edit_to_first_look_ms": 617.24,
+        "first_look_phases_ms": {
+         "render": 124.3,
+         "guides": 216.2,
+         "denoise": 210.9,
+         "enlarge": 10.9
+        },
+        "idle_first_look_phases_ms": {
+         "render": 94.9,
+         "guides": 193.8,
+         "denoise": 174.3,
+         "enlarge": 10.0
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         344,
+         193
+        ]
+       },
+       {
+        "delay_s": 9.066,
+        "idle_first_look_ms": 518.86,
+        "abandon_ms": 29.32,
+        "edit_to_first_look_ms": 623.26,
+        "first_look_phases_ms": {
+         "render": 124.1,
+         "guides": 213.4,
+         "denoise": 223.2,
+         "enlarge": 9.2
+        },
+        "idle_first_look_phases_ms": {
+         "render": 93.2,
+         "guides": 196.7,
+         "denoise": 168.0,
+         "enlarge": 10.4
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         344,
+         193
+        ]
+       },
+       {
+        "delay_s": 10.207,
+        "idle_first_look_ms": 506.42,
+        "abandon_ms": 8.92,
+        "edit_to_first_look_ms": 624.98,
+        "first_look_phases_ms": {
+         "render": 125.7,
+         "guides": 219.6,
+         "denoise": 218.5,
+         "enlarge": 10.4
+        },
+        "idle_first_look_phases_ms": {
+         "render": 97.7,
+         "guides": 186.7,
+         "denoise": 161.3,
+         "enlarge": 10.7
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         344,
+         193
+        ]
        }
       ],
       "after_publish_trials": [
        {
         "delay_s": 0.0,
-        "idle_first_look_ms": 524.03,
-        "abandon_ms": 6.99,
-        "edit_to_first_look_ms": 563.43,
+        "idle_first_look_ms": 522.89,
+        "abandon_ms": 7.82,
+        "edit_to_first_look_ms": 553.66,
         "first_look_phases_ms": {
-         "render": 128.0,
-         "guides": 198.3,
-         "denoise": 174.8,
-         "enlarge": 10.4
-        }
+         "render": 124.1,
+         "guides": 189.6,
+         "denoise": 179.8,
+         "enlarge": 10.0
+        },
+        "idle_first_look_phases_ms": {
+         "render": 94.1,
+         "guides": 196.7,
+         "denoise": 169.7,
+         "enlarge": 10.5
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         344,
+         193
+        ]
        },
        {
         "delay_s": 0.025,
-        "idle_first_look_ms": 553.9,
-        "abandon_ms": 4.73,
-        "edit_to_first_look_ms": 589.15,
+        "idle_first_look_ms": 548.02,
+        "abandon_ms": 22.89,
+        "edit_to_first_look_ms": 551.02,
         "first_look_phases_ms": {
-         "render": 128.7,
-         "guides": 206.7,
-         "denoise": 193.0,
-         "enlarge": 10.4
-        }
+         "render": 125.2,
+         "guides": 193.9,
+         "denoise": 169.9,
+         "enlarge": 10.5
+        },
+        "idle_first_look_phases_ms": {
+         "render": 109.4,
+         "guides": 195.5,
+         "denoise": 182.1,
+         "enlarge": 10.3
+        },
+        "idle_traced": [
+         344,
+         193
+        ],
+        "traced": [
+         344,
+         193
+        ]
        },
        {
         "delay_s": 0.05,
-        "idle_first_look_ms": 567.25,
-        "abandon_ms": 21.44,
-        "edit_to_first_look_ms": 587.09,
+        "idle_first_look_ms": 559.61,
+        "abandon_ms": 20.32,
+        "edit_to_first_look_ms": 584.88,
         "first_look_phases_ms": {
-         "render": 129.2,
-         "guides": 204.5,
-         "denoise": 190.6,
-         "enlarge": 10.4
-        }
+         "render": 128.2,
+         "guides": 208.0,
+         "denoise": 187.4,
+         "enlarge": 10.2
+        },
+        "idle_first_look_phases_ms": {
+         "render": 109.4,
+         "guides": 203.9,
+         "denoise": 185.3,
+         "enlarge": 9.6
+        },
+        "idle_traced": [
+         354,
+         199
+        ],
+        "traced": [
+         354,
+         199
+        ]
        }
       ],
       "abandon_ms": {
        "n": 10,
-       "median": 11.38,
-       "p95": 74.11,
-       "worst": 74.11
+       "median": 13.36,
+       "p95": 33.0,
+       "worst": 33.0
       },
       "edit_to_first_look_ms": {
        "n": 10,
-       "median": 631.11,
-       "p95": 836.46,
-       "worst": 836.46
+       "median": 621.01,
+       "p95": 640.91,
+       "worst": 640.91
       },
       "idle_first_look_ms": {
        "n": 10,
-       "median": 536.26,
-       "p95": 761.57,
-       "worst": 761.57
+       "median": 518.42,
+       "p95": 553.77,
+       "worst": 553.77
       }
      },
      "material": {
       "trials": [
        {
-        "delay_s": 0.531,
-        "idle_first_look_ms": 552.03,
-        "abandon_ms": 11.53,
-        "edit_to_first_look_ms": 687.01,
+        "delay_s": 0.528,
+        "idle_first_look_ms": 329.65,
+        "abandon_ms": 10.78,
+        "edit_to_first_look_ms": 493.6,
         "first_look_phases_ms": {
-         "render": 197.8,
-         "guides": 227.2,
-         "denoise": 199.7,
+         "render": 149.3,
+         "guides": 139.6,
+         "denoise": 143.6,
+         "enlarge": 10.6
+        },
+        "idle_first_look_phases_ms": {
+         "render": 114.7,
+         "guides": 72.0,
+         "denoise": 83.7,
+         "enlarge": 9.4
+        },
+        "idle_traced": [
+         186,
+         105
+        ],
+        "traced": [
+         297,
+         167
+        ]
+       },
+       {
+        "delay_s": 1.57,
+        "idle_first_look_ms": 554.21,
+        "abandon_ms": 20.74,
+        "edit_to_first_look_ms": 539.83,
+        "first_look_phases_ms": {
+         "render": 165.2,
+         "guides": 156.2,
+         "denoise": 157.9,
+         "enlarge": 10.3
+        },
+        "idle_first_look_phases_ms": {
+         "render": 163.4,
+         "guides": 169.1,
+         "denoise": 159.4,
+         "enlarge": 10.1
+        },
+        "idle_traced": [
+         315,
+         177
+        ],
+        "traced": [
+         315,
+         177
+        ]
+       },
+       {
+        "delay_s": 2.619,
+        "idle_first_look_ms": 544.41,
+        "abandon_ms": 16.43,
+        "edit_to_first_look_ms": 611.69,
+        "first_look_phases_ms": {
+         "render": 177.9,
+         "guides": 176.8,
+         "denoise": 196.5,
+         "enlarge": 9.9
+        },
+        "idle_first_look_phases_ms": {
+         "render": 158.8,
+         "guides": 154.2,
+         "denoise": 169.1,
+         "enlarge": 11.4
+        },
+        "idle_traced": [
+         324,
+         182
+        ],
+        "traced": [
+         324,
+         182
+        ]
+       },
+       {
+        "delay_s": 3.691,
+        "idle_first_look_ms": 553.67,
+        "abandon_ms": 9.86,
+        "edit_to_first_look_ms": 619.54,
+        "first_look_phases_ms": {
+         "render": 179.0,
+         "guides": 175.5,
+         "denoise": 205.9,
+         "enlarge": 8.2
+        },
+        "idle_first_look_phases_ms": {
+         "render": 165.4,
+         "guides": 154.8,
+         "denoise": 173.6,
+         "enlarge": 10.1
+        },
+        "idle_traced": [
+         315,
+         177
+        ],
+        "traced": [
+         324,
+         182
+        ]
+       },
+       {
+        "delay_s": 4.661,
+        "idle_first_look_ms": 510.33,
+        "abandon_ms": 7.88,
+        "edit_to_first_look_ms": 610.3,
+        "first_look_phases_ms": {
+         "render": 179.6,
+         "guides": 180.0,
+         "denoise": 190.5,
+         "enlarge": 9.4
+        },
+        "idle_first_look_phases_ms": {
+         "render": 150.7,
+         "guides": 141.6,
+         "denoise": 156.9,
+         "enlarge": 10.5
+        },
+        "idle_traced": [
+         306,
+         172
+        ],
+        "traced": [
+         324,
+         182
+        ]
+       },
+       {
+        "delay_s": 5.677,
+        "idle_first_look_ms": 529.95,
+        "abandon_ms": 15.71,
+        "edit_to_first_look_ms": 617.06,
+        "first_look_phases_ms": {
+         "render": 179.1,
+         "guides": 175.8,
+         "denoise": 201.5,
+         "enlarge": 9.7
+        },
+        "idle_first_look_phases_ms": {
+         "render": 162.7,
+         "guides": 152.8,
+         "denoise": 154.1,
+         "enlarge": 10.2
+        },
+        "idle_traced": [
+         315,
+         177
+        ],
+        "traced": [
+         324,
+         182
+        ]
+       },
+       {
+        "delay_s": 6.747,
+        "idle_first_look_ms": 596.67,
+        "abandon_ms": 6.7,
+        "edit_to_first_look_ms": 624.99,
+        "first_look_phases_ms": {
+         "render": 184.0,
+         "guides": 178.7,
+         "denoise": 199.2,
+         "enlarge": 11.4
+        },
+        "idle_first_look_phases_ms": {
+         "render": 171.8,
+         "guides": 158.6,
+         "denoise": 207.5,
+         "enlarge": 10.0
+        },
+        "idle_traced": [
+         315,
+         177
+        ],
+        "traced": [
+         315,
+         177
+        ]
+       },
+       {
+        "delay_s": 7.965,
+        "idle_first_look_ms": 543.63,
+        "abandon_ms": 26.39,
+        "edit_to_first_look_ms": 590.63,
+        "first_look_phases_ms": {
+         "render": 179.0,
+         "guides": 165.7,
+         "denoise": 183.4,
          "enlarge": 10.7
-        }
-       },
-       {
-        "delay_s": 1.568,
-        "idle_first_look_ms": 758.71,
-        "abandon_ms": 18.79,
-        "edit_to_first_look_ms": 855.08,
-        "first_look_phases_ms": {
-         "render": 248.0,
-         "guides": 311.2,
-         "denoise": 233.7,
-         "enlarge": 10.8
-        }
-       },
-       {
-        "delay_s": 2.62,
-        "idle_first_look_ms": 792.7,
-        "abandon_ms": 7.24,
-        "edit_to_first_look_ms": 919.54,
-        "first_look_phases_ms": {
-         "render": 258.0,
-         "guides": 341.3,
-         "denoise": 259.5,
-         "enlarge": 10.6
-        }
-       },
-       {
-        "delay_s": 9.124,
-        "idle_first_look_ms": 847.03,
-        "abandon_ms": 12.81,
-        "edit_to_first_look_ms": 915.79,
-        "first_look_phases_ms": {
-         "render": 253.8,
-         "guides": 336.7,
-         "denoise": 265.0,
-         "enlarge": 10.4
-        }
-       },
-       {
-        "delay_s": 11.383,
-        "idle_first_look_ms": 808.98,
-        "abandon_ms": 17.06,
-        "edit_to_first_look_ms": 926.43,
-        "first_look_phases_ms": {
-         "render": 253.9,
-         "guides": 337.6,
-         "denoise": 272.7,
-         "enlarge": 11.3
-        }
-       },
-       {
-        "delay_s": 13.938,
-        "idle_first_look_ms": 854.85,
-        "abandon_ms": 7.54,
-        "edit_to_first_look_ms": 926.84,
-        "first_look_phases_ms": {
-         "render": 253.8,
-         "guides": 336.4,
-         "denoise": 275.5,
-         "enlarge": 10.6
-        }
-       },
-       {
-        "delay_s": 16.702,
-        "idle_first_look_ms": 842.07,
-        "abandon_ms": 16.89,
-        "edit_to_first_look_ms": 915.29,
-        "first_look_phases_ms": {
-         "render": 246.0,
-         "guides": 328.5,
-         "denoise": 280.2,
-         "enlarge": 10.5
-        }
-       },
-       {
-        "delay_s": 19.552,
-        "idle_first_look_ms": 839.95,
-        "abandon_ms": 33.06,
-        "edit_to_first_look_ms": 923.51,
-        "first_look_phases_ms": {
-         "render": 253.1,
-         "guides": 339.7,
-         "denoise": 269.4,
-         "enlarge": 10.4
-        }
-       },
-       {
-        "delay_s": 21.654,
-        "idle_first_look_ms": 831.6,
-        "abandon_ms": 15.77,
-        "edit_to_first_look_ms": 846.16,
-        "first_look_phases_ms": {
-         "render": 235.7,
-         "guides": 297.6,
-         "denoise": 252.1,
-         "enlarge": 10.5
-        }
-       },
-       {
-        "delay_s": 24.094,
-        "idle_first_look_ms": 842.28,
-        "abandon_ms": 28.72,
-        "edit_to_first_look_ms": 934.0,
-        "first_look_phases_ms": {
-         "render": 260.0,
-         "guides": 349.1,
-         "denoise": 266.1,
+        },
+        "idle_first_look_phases_ms": {
+         "render": 171.8,
+         "guides": 163.5,
+         "denoise": 148.3,
          "enlarge": 9.6
-        }
+        },
+        "idle_traced": [
+         306,
+         172
+        ],
+        "traced": [
+         306,
+         172
+        ]
+       },
+       {
+        "delay_s": 8.715,
+        "idle_first_look_ms": 550.84,
+        "abandon_ms": 13.66,
+        "edit_to_first_look_ms": 589.82,
+        "first_look_phases_ms": {
+         "render": 173.8,
+         "guides": 167.2,
+         "denoise": 186.0,
+         "enlarge": 10.4
+        },
+        "idle_first_look_phases_ms": {
+         "render": 171.3,
+         "guides": 164.1,
+         "denoise": 155.0,
+         "enlarge": 9.8
+        },
+        "idle_traced": [
+         306,
+         172
+        ],
+        "traced": [
+         306,
+         172
+        ]
+       },
+       {
+        "delay_s": 9.908,
+        "idle_first_look_ms": 550.55,
+        "abandon_ms": 20.8,
+        "edit_to_first_look_ms": 591.89,
+        "first_look_phases_ms": {
+         "render": 176.9,
+         "guides": 164.9,
+         "denoise": 189.9,
+         "enlarge": 9.4
+        },
+        "idle_first_look_phases_ms": {
+         "render": 174.9,
+         "guides": 167.5,
+         "denoise": 145.9,
+         "enlarge": 10.9
+        },
+        "idle_traced": [
+         306,
+         172
+        ],
+        "traced": [
+         306,
+         172
+        ]
        }
       ],
       "after_publish_trials": [
        {
         "delay_s": 0.0,
-        "idle_first_look_ms": 837.36,
-        "abandon_ms": 28.92,
-        "edit_to_first_look_ms": 849.23,
+        "idle_first_look_ms": 513.18,
+        "abandon_ms": 10.76,
+        "edit_to_first_look_ms": 538.54,
         "first_look_phases_ms": {
-         "render": 235.2,
-         "guides": 303.8,
-         "denoise": 250.6,
-         "enlarge": 8.1
-        }
+         "render": 164.3,
+         "guides": 159.9,
+         "denoise": 153.9,
+         "enlarge": 10.6
+        },
+        "idle_first_look_phases_ms": {
+         "render": 154.4,
+         "guides": 147.2,
+         "denoise": 149.8,
+         "enlarge": 10.4
+        },
+        "idle_traced": [
+         306,
+         172
+        ],
+        "traced": [
+         315,
+         177
+        ]
        },
        {
         "delay_s": 0.025,
-        "idle_first_look_ms": 884.77,
-        "abandon_ms": 23.59,
-        "edit_to_first_look_ms": 878.79,
+        "idle_first_look_ms": 542.55,
+        "abandon_ms": 7.48,
+        "edit_to_first_look_ms": 544.59,
         "first_look_phases_ms": {
-         "render": 245.2,
-         "guides": 313.5,
-         "denoise": 259.4,
-         "enlarge": 10.8
-        }
+         "render": 159.4,
+         "guides": 154.1,
+         "denoise": 170.9,
+         "enlarge": 9.9
+        },
+        "idle_first_look_phases_ms": {
+         "render": 161.2,
+         "guides": 154.8,
+         "denoise": 166.2,
+         "enlarge": 9.8
+        },
+        "idle_traced": [
+         324,
+         182
+        ],
+        "traced": [
+         324,
+         182
+        ]
        },
        {
         "delay_s": 0.05,
-        "idle_first_look_ms": 875.29,
-        "abandon_ms": 20.23,
-        "edit_to_first_look_ms": 875.37,
+        "idle_first_look_ms": 566.68,
+        "abandon_ms": 24.52,
+        "edit_to_first_look_ms": 552.69,
         "first_look_phases_ms": {
-         "render": 245.1,
-         "guides": 313.1,
-         "denoise": 255.6,
-         "enlarge": 10.6
-        }
+         "render": 163.8,
+         "guides": 166.0,
+         "denoise": 163.6,
+         "enlarge": 9.7
+        },
+        "idle_first_look_phases_ms": {
+         "render": 165.5,
+         "guides": 163.3,
+         "denoise": 176.8,
+         "enlarge": 10.0
+        },
+        "idle_traced": [
+         334,
+         188
+        ],
+        "traced": [
+         334,
+         188
+        ]
        }
       ],
       "abandon_ms": {
        "n": 10,
-       "median": 16.33,
-       "p95": 33.06,
-       "worst": 33.06
+       "median": 14.69,
+       "p95": 26.39,
+       "worst": 26.39
       },
       "edit_to_first_look_ms": {
        "n": 10,
-       "median": 917.66,
-       "p95": 934.0,
-       "worst": 934.0
+       "median": 601.1,
+       "p95": 624.99,
+       "worst": 624.99
       },
       "idle_first_look_ms": {
        "n": 10,
-       "median": 835.78,
-       "p95": 854.85,
-       "worst": 854.85
+       "median": 547.48,
+       "p95": 596.67,
+       "worst": 596.67
       }
      }
     },
     "abandon_ms": {
      "n": 20,
-     "median": 14.29,
-     "p95": 34.32,
-     "worst": 74.11
+     "median": 14.69,
+     "p95": 32.56,
+     "worst": 33.0
     },
     "edit_to_first_look_ms": {
      "n": 20,
-     "median": 761.74,
-     "p95": 926.84,
-     "worst": 934.0
+     "median": 616.19,
+     "p95": 629.38,
+     "worst": 640.91
     },
     "idle_first_look_ms": {
      "n": 20,
-     "median": 671.42,
-     "p95": 847.03,
-     "worst": 854.85
+     "median": 533.48,
+     "p95": 554.21,
+     "worst": 596.67
     },
     "abandoned_trials": 20,
     "trials": 20,
@@ -1214,21 +1946,21 @@
     "after_publish": {
      "abandon_ms": {
       "n": 6,
-      "median": 20.84,
-      "p95": 28.92,
-      "worst": 28.92
+      "median": 15.54,
+      "p95": 24.52,
+      "worst": 24.52
      },
      "edit_to_first_look_ms": {
       "n": 6,
-      "median": 719.19,
-      "p95": 878.79,
-      "worst": 878.79
+      "median": 551.86,
+      "p95": 584.88,
+      "worst": 584.88
      },
      "idle_first_look_ms": {
       "n": 6,
-      "median": 702.31,
-      "p95": 884.77,
-      "worst": 884.77
+      "median": 545.28,
+      "p95": 566.68,
+      "worst": 566.68
      },
      "trials": 6
     }
@@ -1240,19 +1972,23 @@
     "nudges": 30,
     "interval_ms": 33,
     "paint_ms_during_orbit": {
-     "median": 24.61,
-     "worst": 30.48
+     "median": 23.2,
+     "worst": 26.66
+    },
+    "paint_ms_during_orbit_card_at_working_clocks": {
+     "median": 12.77,
+     "worst": 15.83
     },
     "cancel_latency_ms": {
-     "count": 1,
-     "median": 0.36,
-     "worst": 0.36
+     "count": 2,
+     "median": 0.35,
+     "worst": 0.35
     },
-    "last_nudge_to_first_look_seconds": 0.9067,
+    "last_nudge_to_first_look_seconds": 0.824,
     "responsive_during_refinement": {
      "paints": 172,
-     "median_ms": 2.74,
-     "worst_ms": 6.05
+     "median_ms": 2.72,
+     "worst_ms": 4.85
     }
    }
   }
