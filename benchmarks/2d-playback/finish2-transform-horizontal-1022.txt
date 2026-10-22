@@ -1,0 +1,16 @@
+Real-window 1080p comp, NVIDIA GeForce RTX 3080 Ti, 10s acceptance window.
+Cache mode: uncached; displayed frames: 118 (11.800 fps including cached loop repeats).
+First pass: 48 unique frames at 7.056 fps.
+Frame interval ms p50/p95/p99: 46.602 / 267.236 / 292.098.
+Worker-to-display handoff ms p50/p95/p99: 44.087 / 98.522 / 271.325.
+full_frame_evaluation: 48 samples, median 32.293 ms, p95 217.930 ms.
+display_conversion: 119 samples, median 40.690 ms, p95 50.127 ms.
+plate_read_decode: 94 samples, median 39.310 ms, p95 65.068 ms.
+cache_put: 48 samples, median 0.012 ms, p95 0.018 ms.
+Transform (transform): 21.3 ms/frame estimated from 2 ms worker-stack samples (47 frames).
+Grade (grade): 10.9 ms/frame estimated from 2 ms worker-stack samples (47 frames).
+Merge (merge): 8.2 ms/frame estimated from 2 ms worker-stack samples (47 frames).
+Blur (blur): 7.9 ms/frame estimated from 2 ms worker-stack samples (47 frames).
+Roto (roto): 7.8 ms/frame estimated from 2 ms worker-stack samples (47 frames).
+
+The JSON file contains the full timeline and sampling profile.

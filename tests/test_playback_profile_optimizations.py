@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -107,8 +108,10 @@ class TranslationTransformTests(unittest.TestCase):
             sx = inverse[0, 0] * gx + inverse[0, 1] * gy + inverse[0, 2] - 0.5
             sy = inverse[1, 0] * gx + inverse[1, 1] * gy + inverse[1, 2] - 0.5
             expected = Evaluator._resample(source, sx, sy, "cubic")
-            actual = Evaluator._transform(source, translate_x, 0.0, 0.0, 1.0,
-                                          0.0, 0.0, "cubic", params=params)
+            with patch("nodebased.imaging.np.take", side_effect=AssertionError(
+                    "horizontal translation should use contiguous tap slices")):
+                actual = Evaluator._transform(source, translate_x, 0.0, 0.0, 1.0,
+                                              0.0, 0.0, "cubic", params=params)
             with self.subTest(frame=frame, translate_x=translate_x):
                 np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=1e-6)
 

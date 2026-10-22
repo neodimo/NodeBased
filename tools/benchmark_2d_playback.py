@@ -244,6 +244,15 @@ def run_window(args):
     # Stop time is the acceptance-window boundary. The worker may finish in-flight frames while
     # draining below, but those tail pictures are outside the measured playback interval.
     measured_shown=[row for row in shown if sample_start[0] <= row[0] <= sample_stop[0]]
+    # The comp fixture is a short loop. Report the first pass through unique frames separately
+    # from later repeats, which can legitimately hit the display cache and would overstate the
+    # uncached gate if folded into one average.
+    cold_pass=[]; seen_frames=set()
+    for row in measured_shown:
+        if row[1] in seen_frames: break
+        seen_frames.add(row[1]); cold_pass.append(row)
+    cold_pass_seconds=(cold_pass[-1][0]-sample_start[0]) if cold_pass else 0.0
+    cold_pass_fps=(len(cold_pass)/cold_pass_seconds) if cold_pass_seconds > 0 else None
     intervals=[(measured_shown[i][0]-measured_shown[i-1][0])*1000 for i in range(1,len(measured_shown))]
     frame_times=[]
     last=None
@@ -270,6 +279,7 @@ def run_window(args):
     result={'case':args.case,'resolution':f'{args.width}x{args.height}','duration_s':args.seconds,
         'cache_mode':args.cache_mode,'adapter':args.adapter,'force_adapter':args.force_adapter,
         'frames_displayed':len(measured_shown),'achieved_fps':round(len(measured_shown)/args.seconds,3),
+        'first_pass_frames':len(cold_pass),'first_pass_fps':round(cold_pass_fps,3) if cold_pass_fps else None,
         'frame_interval_ms':{'p50':percentile(intervals,50),'p95':percentile(intervals,95),'p99':percentile(intervals,99)},
         'worker_to_handoff_ms':{'p50':percentile(frame_times,50),'p95':percentile(frame_times,95),'p99':percentile(frame_times,99)},
         'status_line':statuses[-1] if statuses else win.statusBar().currentMessage(),
@@ -278,7 +288,7 @@ def run_window(args):
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
     win.close()
-    print(json.dumps({k:result[k] for k in ('case','resolution','cache_mode','adapter','achieved_fps','frames_displayed','frame_interval_ms','worker_to_handoff_ms','status_line')}))
+    print(json.dumps({k:result[k] for k in ('case','resolution','cache_mode','adapter','achieved_fps','frames_displayed','first_pass_fps','frame_interval_ms','worker_to_handoff_ms','status_line')}))
 
 
 def main():

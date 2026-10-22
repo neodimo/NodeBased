@@ -249,7 +249,19 @@ instead of running the cubic sampler. At 1080p on CPU NumPy, the isolated transl
 from 78.06 ms to 1.91 ms (nine-run medians) with pixel agreement within 1e-7 across nearest,
 bilinear and cubic filters; see `benchmarks/2d-playback/transform-integer-offset-1022.json`.
 The realistic comp animates by fractional pixels, so this optimization does not improve the
-corrected 3.7 fps result.
+corrected 3.7 fps result recorded before the fractional-translation follow-up below.
+
+The follow-up replaces four full-frame gathers for fractional horizontal Transform with
+contiguous tap slices. Its isolated 1080p CPU median fell from 51.4 ms to 20.6 ms (2.5×),
+with exact pixel agreement. On the RTX 3080 Ti, the 10-second real-window run displayed 118
+pictures (11.8 fps); the first pass through 48 unique, unevaluated display frames was 7.06 fps.
+Later repeats hit the display cache and are reported separately so they cannot hide the cold-pass
+rate. Cached playback reached 18.4 fps. The 16 fps fresh-frame gate remains open. The new profile
+estimates Transform at 21.3 ms per frame, followed by Grade 10.9 ms, Merge 8.2 ms, Blur 7.9 ms
+and Roto 7.8 ms. Display conversion remained 40.7 ms median; plate reads were 39.3 ms median per
+read and may overlap through read-ahead. See
+`benchmarks/2d-playback/finish2-transform-horizontal-1022.json` and
+`benchmarks/2d-playback/finish2-cached-transform-horizontal-1022.json`.
 
 ### Still slow
 
