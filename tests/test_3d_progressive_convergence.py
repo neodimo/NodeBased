@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 APP = QApplication.instance() or QApplication([])
 
 WIDTH, HEIGHT = 320, 220         # the widget's own minimum size
-REFERENCE_SAMPLES = 1024
+REFERENCE_SAMPLES = 1024           # 256 without a graphics card, set below `_software_adapter`
 BOUNCES = P.MAX_BOUNCES
 AMBIENT = 0.15
 # The viewport's converged picture against the reference, as a multiple of Render3D's own 64-sample error plus a floor (the
@@ -54,6 +54,13 @@ def _software_adapter():
         return gpu3d._kind_of(gpu3d._state()["info"]) == "cpu"
     except Exception:
         return True
+
+
+# DiMo 10/21 9:16 AM: on a CPU tracer (GitHub's runners have no graphics card) the 1024-sample references
+# took about two of the conformance run's three and a half hours. 256 samples there; the viewport's own
+# 64-sample target stays. The full 1024 runs wherever there is a graphics card, before every tag.
+if _software_adapter():
+    REFERENCE_SAMPLES = 256
 
 
 def room(camera=None, **render):

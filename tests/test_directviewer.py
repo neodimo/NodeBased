@@ -595,7 +595,9 @@ class AdapterChoiceTests(unittest.TestCase):
         fake, calls = self.request({(("power_preference", "low-power"),): amd,
                                     (("power_preference", "high-performance"),): nv})
         with unittest.mock.patch.object(wgpu.gpu, "request_adapter_sync", fake):
-            adapter, fmt, note = dv.pick_display_adapter(self.Context(), preference="integrated")
+            # backend "auto": on Windows the default asks D3D12 first, and the note would then name the backend
+            # (the 0.41.0 Windows package job, 10/21). This test is about the power preference only.
+            adapter, fmt, note = dv.pick_display_adapter(self.Context(), preference="integrated", backend="auto")
         self.assertIs(adapter, amd)
         self.assertEqual((fmt, note), ("bgra8unorm", ""))
         self.assertEqual(calls, [{"power_preference": "low-power"}])
