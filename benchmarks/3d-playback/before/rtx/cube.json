@@ -1,0 +1,37 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.06,
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 16,
+ "fps": 1.98,
+ "interval_ms": {
+  "n": 15,
+  "p50": 446.37,
+  "p95": 642.73,
+  "p99": 659.33,
+  "max": 659.33,
+  "mean": 502.48
+ },
+ "render_ms_status": {
+  "n": 3,
+  "p50": 503,
+  "p95": 629,
+  "p99": 629,
+  "max": 629,
+  "mean": 511.33
+ },
+ "dropped": 3,
+ "status": "Evaluating frame 17\u2026",
+ "proxy_tier_at_end": null,
+ "worker_jobs": 0,
+ "stage_p50_ms": {}
+}

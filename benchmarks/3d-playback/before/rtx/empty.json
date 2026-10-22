@@ -1,0 +1,37 @@
+{
+ "scene": "empty",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.1,
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 74,
+ "fps": 9.14,
+ "interval_ms": {
+  "n": 73,
+  "p50": 85.82,
+  "p95": 293.73,
+  "p99": 502.9,
+  "max": 588.37,
+  "mean": 110.63
+ },
+ "render_ms_status": {
+  "n": 18,
+  "p50": 66,
+  "p95": 469,
+  "p99": 566,
+  "max": 566,
+  "mean": 134.06
+ },
+ "dropped": 5,
+ "status": "1920 \u00d7 1080  \u00b7  566 ms  \u00b7  tiles 0 hit/80 miss  \u00b7  cache 1360.5 / 1361 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 5",
+ "proxy_tier_at_end": null,
+ "worker_jobs": 0,
+ "stage_p50_ms": {}
+}

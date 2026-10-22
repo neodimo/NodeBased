@@ -1,0 +1,76 @@
+[
+ {
+  "scene": "cube",
+  "size": [
+   1920,
+   1080
+  ],
+  "backend": "auto",
+  "view": "ACES 2.0",
+  "seconds": 10.03,
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "platform": "xcb",
+  "display": ":94",
+  "comp_fps": 24.0,
+  "shown": 20,
+  "fps": 1.99,
+  "interval_ms": {
+   "n": 19,
+   "p50": 526.53,
+   "p95": 659.19,
+   "p99": 666.36,
+   "max": 666.36,
+   "mean": 508.76
+  },
+  "render_ms_status": {
+   "n": 3,
+   "p50": 629,
+   "p95": 634,
+   "p99": 634,
+   "max": 634,
+   "mean": 591.0
+  },
+  "dropped": 11,
+  "status": "Evaluating frame 21\u2026",
+  "proxy_tier_at_end": null,
+  "worker_jobs": 0,
+  "stage_p50_ms": {}
+ },
+ {
+  "scene": "empty",
+  "size": [
+   1920,
+   1080
+  ],
+  "backend": "auto",
+  "view": "ACES 2.0",
+  "seconds": 10.02,
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "platform": "xcb",
+  "display": ":94",
+  "comp_fps": 24.0,
+  "shown": 90,
+  "fps": 8.98,
+  "interval_ms": {
+   "n": 89,
+   "p50": 86.9,
+   "p95": 187.73,
+   "p99": 385.71,
+   "max": 594.43,
+   "mean": 110.94
+  },
+  "render_ms_status": {
+   "n": 22,
+   "p50": 67,
+   "p95": 175,
+   "p99": 562,
+   "max": 562,
+   "mean": 103.14
+  },
+  "dropped": 2,
+  "status": "Evaluating frame 91\u2026",
+  "proxy_tier_at_end": null,
+  "worker_jobs": 0,
+  "stage_p50_ms": {}
+ }
+]

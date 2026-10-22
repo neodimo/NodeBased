@@ -1,0 +1,51 @@
+{
+ "scene": "furnished",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.06,
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 37,
+ "fps": 4.59,
+ "interval_ms": {
+  "n": 36,
+  "p50": 214.24,
+  "p95": 225.21,
+  "p99": 229.12,
+  "max": 229.12,
+  "mean": 213.02
+ },
+ "render_ms_status": {
+  "n": 0
+ },
+ "dropped": 2,
+ "status": "Evaluating frame 38\u2026",
+ "proxy_tier_at_end": null,
+ "worker_jobs": 38,
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 211.28,
+  "GPU render and wait": 121.49,
+  "convert and emit": 46.15,
+  "after the render (node bookkeeping)": 14.09,
+  "scene prepare (shadow data, vertex packing)": 6.67,
+  "scene upload (buffers, textures, pipelines, bind groups)": 6.61,
+  "render encode": 6.3,
+  "scene evaluation": 4.67,
+  "hand-over to the display": 3.21,
+  "readback copy": 1.54,
+  "resolve (supersample, background)": 0.81,
+  "display cache put": 0.02
+ },
+ "gpu_wait_ms": {
+  "min": 101.7,
+  "p50": 121.5,
+  "max": 151.3,
+  "shared_card_suspected": false
+ }
+}

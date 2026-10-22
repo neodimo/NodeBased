@@ -1,0 +1,46 @@
+{
+ "scene": "empty",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.07,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 193,
+ "fps": 23.92,
+ "interval_ms": {
+  "n": 192,
+  "p50": 41.91,
+  "p95": 46.87,
+  "p99": 75.26,
+  "max": 76.69,
+  "mean": 41.53
+ },
+ "render_ms_status": {
+  "n": 68,
+  "p50": 0,
+  "p95": 0,
+  "p99": 0,
+  "max": 0,
+  "mean": 0.0
+ },
+ "dropped": 0,
+ "status": "Evaluating frame 194\u2026",
+ "proxy_tier_at_end": null,
+ "worker_jobs": 194,
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 54.64,
+  "convert and emit": 26.47,
+  "after the render (node bookkeeping)": 15.19,
+  "scene_ready to resolve_done": 7.15,
+  "hand-over to the display": 3.96,
+  "scene evaluation": 1.65,
+  "scene prepare (shadow data, vertex packing)": 0.2,
+  "display cache put": 0.01
+ }
+}

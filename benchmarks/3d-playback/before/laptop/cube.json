@@ -1,0 +1,37 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.1,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 34,
+ "fps": 4.2,
+ "interval_ms": {
+  "n": 33,
+  "p50": 239.25,
+  "p95": 252.66,
+  "p99": 319.56,
+  "max": 319.56,
+  "mean": 238.55
+ },
+ "render_ms_status": {
+  "n": 9,
+  "p50": 209,
+  "p95": 274,
+  "p99": 274,
+  "max": 274,
+  "mean": 217.67
+ },
+ "dropped": 8,
+ "status": "Evaluating frame 35\u2026",
+ "proxy_tier_at_end": null,
+ "worker_jobs": 0,
+ "stage_p50_ms": {}
+}

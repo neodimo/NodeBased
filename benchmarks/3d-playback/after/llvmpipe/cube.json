@@ -1,0 +1,51 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.05,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 116,
+ "fps": 14.42,
+ "interval_ms": {
+  "n": 115,
+  "p50": 67.69,
+  "p95": 89.31,
+  "p99": 92.29,
+  "max": 96.47,
+  "mean": 69.02
+ },
+ "render_ms_status": {
+  "n": 0
+ },
+ "dropped": 3,
+ "status": "Evaluating frame 117\u2026",
+ "proxy_tier_at_end": null,
+ "worker_jobs": 117,
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 65.73,
+  "convert and emit": 28.88,
+  "after the render (node bookkeeping)": 7.94,
+  "GPU render and wait": 5.95,
+  "hand-over to the display": 2.9,
+  "scene evaluation": 2.29,
+  "readback copy": 2.21,
+  "scene upload (buffers, textures, pipelines, bind groups)": 1.07,
+  "scene prepare (shadow data, vertex packing)": 0.44,
+  "resolve (supersample, background)": 0.23,
+  "render encode": 0.19,
+  "display cache put": 0.02
+ },
+ "gpu_wait_ms": {
+  "min": 4.5,
+  "p50": 5.95,
+  "max": 9.3,
+  "shared_card_suspected": false
+ }
+}

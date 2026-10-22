@@ -1,0 +1,37 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.05,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 31,
+ "fps": 3.85,
+ "interval_ms": {
+  "n": 30,
+  "p50": 259.46,
+  "p95": 288.92,
+  "p99": 291.9,
+  "max": 291.9,
+  "mean": 262.72
+ },
+ "render_ms_status": {
+  "n": 3,
+  "p50": 242,
+  "p95": 247,
+  "p99": 247,
+  "max": 247,
+  "mean": 242.67
+ },
+ "dropped": 4,
+ "status": "Evaluating frame 32\u2026",
+ "proxy_tier_at_end": null,
+ "worker_jobs": 0,
+ "stage_p50_ms": {}
+}

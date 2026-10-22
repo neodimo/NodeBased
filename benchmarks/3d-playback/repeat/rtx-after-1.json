@@ -1,0 +1,99 @@
+[
+ {
+  "scene": "cube",
+  "size": [
+   1920,
+   1080
+  ],
+  "backend": "auto",
+  "view": "ACES 2.0",
+  "seconds": 10.06,
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "platform": "xcb",
+  "display": ":94",
+  "comp_fps": 24.0,
+  "shown": 117,
+  "fps": 11.63,
+  "interval_ms": {
+   "n": 116,
+   "p50": 81.52,
+   "p95": 124.04,
+   "p99": 128.73,
+   "max": 135.0,
+   "mean": 85.96
+  },
+  "render_ms_status": {
+   "n": 0
+  },
+  "dropped": 2,
+  "status": "Evaluating frame 118\u2026",
+  "proxy_tier_at_end": null,
+  "worker_jobs": 118,
+  "stage_p50_ms": {
+   "worker start to hand-over (whole frame)": 74.72,
+   "convert and emit": 28.19,
+   "GPU render and wait": 11.56,
+   "after the render (node bookkeeping)": 7.13,
+   "hand-over to the display": 2.65,
+   "scene evaluation": 2.21,
+   "readback copy": 2.19,
+   "scene upload (buffers, textures, pipelines, bind groups)": 1.44,
+   "scene prepare (shadow data, vertex packing)": 0.43,
+   "resolve (supersample, background)": 0.35,
+   "render encode": 0.31,
+   "display cache put": 0.02
+  },
+  "gpu_wait_ms": {
+   "min": 10.7,
+   "p50": 11.6,
+   "max": 41.6,
+   "shared_card_suspected": true
+  }
+ },
+ {
+  "scene": "empty",
+  "size": [
+   1920,
+   1080
+  ],
+  "backend": "auto",
+  "view": "ACES 2.0",
+  "seconds": 10.09,
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "platform": "xcb",
+  "display": ":94",
+  "comp_fps": 24.0,
+  "shown": 240,
+  "fps": 23.78,
+  "interval_ms": {
+   "n": 239,
+   "p50": 42.07,
+   "p95": 73.76,
+   "p99": 75.7,
+   "max": 76.48,
+   "mean": 41.69
+  },
+  "render_ms_status": {
+   "n": 95,
+   "p50": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0,
+   "mean": 0.0
+  },
+  "dropped": 1,
+  "status": "1920 \u00d7 1080  \u00b7  0 ms  \u00b7  display cache hit  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 1",
+  "proxy_tier_at_end": null,
+  "worker_jobs": 242,
+  "stage_p50_ms": {
+   "worker start to hand-over (whole frame)": 54.26,
+   "convert and emit": 26.55,
+   "after the render (node bookkeeping)": 14.24,
+   "scene_ready to resolve_done": 7.07,
+   "hand-over to the display": 4.09,
+   "scene evaluation": 2.1,
+   "scene prepare (shadow data, vertex packing)": 0.19,
+   "display cache put": 0.01
+  }
+ }
+]

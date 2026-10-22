@@ -1,0 +1,146 @@
+cube at 1920x1080, NVIDIA GeForce RTX 3080 Ti, 10.67 fps shown, 130 worker jobs in 12.1 s
+status: Evaluating frame 130…
+
+stage timeline (worker thread, per frame, milliseconds)
+      88.72 p50     127.95 p95  worker start to hand-over (whole frame)
+      26.74 p50      41.35 p95  convert and emit
+      17.42 p50      33.73 p95  display cache put
+      11.85 p50      41.11 p95  GPU render and wait
+       9.16 p50      12.68 p95  after the render (node bookkeeping)
+       2.67 p50       6.94 p95  scene evaluation
+       2.67 p50       3.48 p95  hand-over to the display
+       2.47 p50       3.13 p95  scene upload (buffers, textures, pipelines, bind groups)
+       2.09 p50       2.78 p95  readback copy
+       0.60 p50       1.03 p95  scene prepare (shadow data, vertex packing)
+       0.48 p50       0.93 p95  render encode
+       0.41 p50       1.40 p95  resolve (supersample, background)
+
+qt thread, sampled every 4 ms (2536 samples), most time in (inclusive, by function)
+    2534  profile_3d_playback.py:spin
+    2533  profile_3d_playback.py:main
+    2523  profile_3d_playback.py:<module>
+     107  timeline.py:event
+      97  timeline.py:paintEvent
+      71  app.py:preview_ready
+      33  topbar.py:set_gpu
+      31  topbar.py:_fit
+      30  topbar.py:floor_width
+      30  topbar.py:_announce_floor
+      26  app.py:refresh_timeline_marks
+      26  playback.py:identity
+      24  topbar.py:set_icon_only
+      23  app.py:playback_tick
+      23  app.py:set_time
+      19  nodeshelf.py:_unit
+qt thread, innermost line
+    2004  profile_3d_playback.py:spin:65
+     333  profile_3d_playback.py:spin:64
+      70  timeline.py:paintEvent:305
+      25  playback.py:identity:268
+      19  nodeshelf.py:_unit:151
+      10  timeline.py:event:229
+       8  timeline.py:paintEvent:309
+       7  timeline.py:paintEvent:308
+       6  _helpers.py:proxy_func:356
+       6  timeline.py:_text_height:268
+
+worker thread, sampled every 4 ms (1570 samples), most time in (inclusive, by function)
+    1570  app.py:render
+    1546  app.py:work
+    1487  profile_3d_playback.py:run
+    1445  thread.py:run
+    1445  thread.py:_worker
+    1444  threading.py:run
+    1413  threading.py:_bootstrap_inner
+    1304  threading.py:_bootstrap
+     638  imaging.py:to_qimage
+     477  playback.py:put
+     477  playback.py:_compact_one
+     436  tileexec.py:compose_region
+     355  tileexec.py:_render_tile
+     296  imaging.py:_unpremultiply
+     273  tileexec.py:_gather_inputs
+     273  tileexec.py:_generator_tile
+worker thread, innermost line
+     328  playback.py:_compact_one:357
+     274  imaging.py:_unpremultiply:299
+     144  media.py:half_safe:534
+     143  tileexec.py:_generator_tile:972
+     112  _methods.py:_clip:113
+      81  tileexec.py:_evaluate_tile_kernel:1219
+      77  gpudisplay.py:render:507
+      74  tileexec.py:compose_region:689
+      51  gpudisplay.py:render:511
+      46  _helpers.py:proxy_func:356
+
+cProfile of the worker, by cumulative time
+         3933763 function calls (3904202 primitive calls) in 11.584 seconds
+
+   Ordered by: cumulative time
+   List reduced from 751 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     5161    0.011    0.000    4.805    0.001 tileexec.py:821(_gather_inputs)
+     5161    0.051    0.000    4.756    0.001 tileexec.py:876(_generator_tile)
+      130    0.007    0.000    4.220    0.032 imaging.py:895(evaluate_raster)
+      130    0.004    0.000    4.103    0.032 imaging.py:1883(draw)
+      130    0.008    0.000    3.829    0.029 gpu3d.py:1345(render)
+      130    0.016    0.000    3.594    0.028 gpu3d.py:1843(_render)
+      130    0.002    0.000    3.333    0.026 _classes.py:1361(map_sync)
+      130    0.002    0.000    3.177    0.024 _async.py:305(sync_wait)
+      130    0.001    0.000    3.171    0.024 _api.py:693(_sync_wait)
+      260    0.014    0.000    2.603    0.010 _api.py:1414(poll_func)
+      129    0.015    0.000    2.016    0.016 playback.py:312(put)
+5162/2440    0.044    0.000    1.929    0.001 tileexec.py:706(_render_tile)
+      129    0.019    0.000    1.836    0.014 playback.py:352(_compact_one)
+      116    0.010    0.000    1.401    0.012 profile_3d_playback.py:61(spin)
+      129    0.009    0.000    1.153    0.009 color.py:125(display_rgb)
+  259/129    0.078    0.000    0.964    0.007 imaging.py:303(to_qimage)
+      508    0.004    0.000    0.959    0.002 timeline.py:223(event)
+      771    0.010    0.000    0.674    0.001 {function TopBar.event at 0x7fc0d740ca40}
+      129    0.554    0.004    0.554    0.004 {method 'glReadPixels' of 'PySide6.QtGui.QOpenGLFunctions' objects}
+      776    0.007    0.000    0.509    0.001 fromnumeric.py:2245(clip)
+     1810    0.003    0.000    0.501    0.000 fromnumeric.py:48(_wrapfunc)
+      646    0.008    0.000    0.477    0.001 {method 'clip' of 'numpy.ndarray' objects}
+      129    0.008    0.000    0.444    0.003 gpudisplay.py:474(render)
+      508    0.140    0.000    0.426    0.001 timeline.py:282(paintEvent)
+15866/14945    0.240    0.000    0.377    0.000 _helpers.py:352(proxy_func)
+     5807    0.304    0.000    0.363    0.000 {built-in method numpy.ascontiguousarray}
+     9696    0.214    0.000    0.339    0.000 profile_3d_playback.py:101(frames_of)
+      258    0.043    0.000    0.320    0.001 imaging.py:270(_covered_box)
+     5550    0.248    0.000    0.297    0.000 {method 'copy' of 'numpy.ndarray' objects}
+     5161    0.007    0.000    0.295    0.000 tileexec.py:1205(_evaluate_tile_kernel)
+
+
+
+cProfile of the worker, by time inside each function
+         3933763 function calls (3904202 primitive calls) in 11.584 seconds
+
+   Ordered by: internal time
+   List reduced from 751 to 22 due to restriction <22>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+  10029/1    6.072    0.001    0.000    0.000 {built-in method time.sleep}
+      129    0.554    0.004    0.554    0.004 {method 'glReadPixels' of 'PySide6.QtGui.QOpenGLFunctions' objects}
+     5807    0.304    0.000    0.363    0.000 {built-in method numpy.ascontiguousarray}
+ 7726/254    0.285    0.000    0.079    0.000 {built-in method processEvents}
+     5550    0.248    0.000    0.297    0.000 {method 'copy' of 'numpy.ndarray' objects}
+15866/14945    0.240    0.000    0.377    0.000 _helpers.py:352(proxy_func)
+     9696    0.214    0.000    0.339    0.000 profile_3d_playback.py:101(frames_of)
+     1688    0.208    0.000    0.208    0.000 {built-in method numpy.zeros}
+      776    0.187    0.000    0.199    0.000 _methods.py:96(_clip)
+      129    0.147    0.001    0.156    0.001 gpudisplay.py:429(_ensure_fbo)
+      508    0.140    0.000    0.426    0.001 timeline.py:282(paintEvent)
+      129    0.140    0.001    0.140    0.001 {method 'tobytes' of 'numpy.ndarray' objects}
+      129    0.126    0.001    0.126    0.001 {method 'allocateStorage' of 'PySide6.QtOpenGL.QOpenGLTexture' objects}
+     1688    0.085    0.000    0.085    0.000 {method 'astype' of 'numpy.ndarray' objects}
+    22725    0.080    0.000    0.080    0.000 encoder.py:205(iterencode)
+  259/129    0.078    0.000    0.964    0.007 imaging.py:303(to_qimage)
+      129    0.074    0.001    0.074    0.001 {method 'setData' of 'PySide6.QtOpenGL.QOpenGLTexture' objects}
+      134    0.065    0.000    0.076    0.001 {function Viewer.paintEvent at 0x7fc0d6f94ae0}
+      129    0.065    0.001    0.094    0.001 media.py:525(half_safe)
+      129    0.062    0.000    0.066    0.001 imaging.py:288(_unpremultiply)
+    22964    0.059    0.000    0.155    0.000 app.py:13692(eventFilter)
+   128016    0.057    0.000    0.080    0.000 timeline.py:236(frame_width)
+
+

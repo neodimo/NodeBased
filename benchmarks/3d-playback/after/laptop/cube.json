@@ -1,0 +1,51 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.06,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 108,
+ "fps": 13.4,
+ "interval_ms": {
+  "n": 107,
+  "p50": 74.56,
+  "p95": 95.4,
+  "p99": 98.81,
+  "max": 99.4,
+  "mean": 74.08
+ },
+ "render_ms_status": {
+  "n": 0
+ },
+ "dropped": 5,
+ "status": "Evaluating frame 109\u2026",
+ "proxy_tier_at_end": null,
+ "worker_jobs": 109,
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 72.76,
+  "convert and emit": 37.39,
+  "after the render (node bookkeeping)": 8.56,
+  "hand-over to the display": 2.86,
+  "GPU render and wait": 2.84,
+  "scene evaluation": 2.3,
+  "readback copy": 2.23,
+  "scene upload (buffers, textures, pipelines, bind groups)": 1.09,
+  "scene prepare (shadow data, vertex packing)": 0.43,
+  "resolve (supersample, background)": 0.21,
+  "render encode": 0.2,
+  "display cache put": 0.02
+ },
+ "gpu_wait_ms": {
+  "min": 1.0,
+  "p50": 2.8,
+  "max": 5.8,
+  "shared_card_suspected": true
+ }
+}
