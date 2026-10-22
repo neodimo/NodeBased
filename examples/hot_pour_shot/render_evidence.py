@@ -15,8 +15,8 @@ from nodebased.imaging import Evaluator, write_png
 from make_shot import ROOT
 
 
-RUN = Path("/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L6/hot-pour-shot")
-FRAMES = (1, 60, 120)
+COMPARE_FRAMES = (1, 60, 120)
+STILL_FRAMES = (60, 90, 120)
 
 
 def main():
@@ -24,6 +24,8 @@ def main():
     parser.add_argument("--small-width", type=int, default=96)
     parser.add_argument("--adapter", choices=("default", "integrated", "cpu"), default="default")
     parser.add_argument("--small-only", action="store_true", help="compare path tracers without writing 960 x 540 stills")
+    parser.add_argument("--workdir", type=Path, default=Path.home() / ".cache" / "NodeBased" / "hot-pour-shot",
+                        help="isolated simulation-cache and evidence directory")
     args = parser.parse_args()
     original_state = gpu3d._state
     if args.adapter != "default":
@@ -34,27 +36,30 @@ def main():
     state = gpu3d._state()
     adapter_name = (getattr(state, "adapter", None) and state.adapter.info.get("device")) or gpu3d.describe()
     print(json.dumps({"adapter": args.adapter, "device": str(adapter_name)}), flush=True)
-    RUN.mkdir(parents=True, exist_ok=True)
+    run_dir = args.workdir
+    run_dir.mkdir(parents=True, exist_ok=True)
     doc = load_document(ROOT / "hot_pour_shot.nbcomp")
     doc["nodes"]["render"]["params"].update(render_backend="gpu", render_mode="pathtrace", pt_samples=2,
-                                               max_bounces=2, diffuse_bounces=1, specular_bounces=1)
+                                               max_bounces=2, diffuse_bounces=1, specular_bounces=1,
+                                               transmission_bounces=2, volume_shadow_steps=1,
+                                               sampling="fixed", noise_threshold=0.0)
     doc["nodes"]["render"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
     doc["nodes"]["plate_fit"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
     fluid3d._SOLVERS.clear()
-    evaluator = Evaluator(sim=simcache.SimCache(root=RUN, memory_budget=1 << 30, disk_budget=8 << 30))
+    evaluator = Evaluator(sim=simcache.SimCache(root=run_dir, memory_budget=1 << 30, disk_budget=8 << 30))
     started = time.perf_counter()
     for frame in range(1, 121):
         evaluator.evaluate_raster(doc, "liquid_cache", frame=frame, typed=True)
         evaluator.evaluate_raster(doc, "steam_cache", frame=frame, typed=True)
-        if frame in FRAMES:
+        if frame in COMPARE_FRAMES:
             print(json.dumps({"baked_through": frame, "elapsed_seconds": round(time.perf_counter() - started, 2)}), flush=True)
     bake_seconds = time.perf_counter() - started
 
     gpu_small = {}
     try:
-        for frame in FRAMES:
+        for frame in COMPARE_FRAMES:
             gpu_small[frame] = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels.copy()
-            write_png(RUN / f"gpu-small-{frame:03d}.png", gpu_small[frame])
+            write_png(run_dir / f"gpu-small-{frame:03d}.png", gpu_small[frame])
     except Exception as exc:
         if args.adapter == "cpu":
             print(f"SKIP: llvmpipe refused GPU path tracing the liquid/smoke scene: {type(exc).__name__}: {exc}", flush=True)
@@ -62,11 +67,11 @@ def main():
         raise
     cpu_small = {}
     doc["nodes"]["render"]["params"]["render_backend"] = "cpu"
-    for frame in FRAMES:
+    for frame in COMPARE_FRAMES:
         cpu_small[frame] = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels.copy()
-        write_png(RUN / f"cpu-small-{frame:03d}.png", cpu_small[frame])
+        write_png(run_dir / f"cpu-small-{frame:03d}.png", cpu_small[frame])
     comparisons = {}
-    for frame in FRAMES:
+    for frame in COMPARE_FRAMES:
         got, want = gpu_small[frame], cpu_small[frame]
         mean_error = float(np.abs(got - want).mean())
         reference = float(np.abs(want).mean())
@@ -75,18 +80,21 @@ def main():
     if args.small_only:
         result = {"adapter": args.adapter, "device": str(adapter_name), "bake_seconds": round(bake_seconds, 2),
                   "comparison": comparisons}
-        (RUN / f"evidence-{args.adapter}.json").write_text(json.dumps(result, indent=2) + "\n")
+        (run_dir / f"evidence-{args.adapter}.json").write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result, indent=2), flush=True)
         if not all(row["passed"] for row in comparisons.values()):
             raise SystemExit("CPU/GPU path-tracer comparison failed")
         return
-    doc["nodes"]["render"]["params"].update(render_backend="gpu", width=960, height=540, pt_samples=8,
-                                               max_bounces=4, diffuse_bounces=2, specular_bounces=2)
+    doc["nodes"]["render"]["params"].update(
+        render_backend="gpu", width=960, height=540, pt_samples=32,
+        max_bounces=4, diffuse_bounces=2, specular_bounces=2, transmission_bounces=2,
+        volume_shadow_steps=1, sampling="adaptive", min_samples=8, max_samples=32,
+        adaptive_pass_size=8, noise_threshold=0.01)
     doc["nodes"]["plate_fit"]["params"].update(width=960, height=540)
     output_dir = Path(__file__).resolve().parents[2] / "docs" / "images" / "hot_pour_shot"
     output_dir.mkdir(parents=True, exist_ok=True)
     render_seconds = {}
-    for frame in FRAMES:
+    for frame in STILL_FRAMES:
         before = time.perf_counter()
         shot = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels
         write_png(output_dir / f"hot-pour-{frame:03d}.png", shot)
@@ -95,8 +103,8 @@ def main():
     result = {"adapter": args.adapter, "device": str(adapter_name), "cells": 32, "frames": 120,
               "bake_seconds": round(bake_seconds, 2),
               "render_seconds": render_seconds, "comparison": comparisons}
-    (RUN / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
-    benchmark = Path(__file__).resolve().parents[2] / "benchmarks" / "hot_pour" / "hot-pour-shot-2026-10-14.json"
+    (run_dir / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
+    benchmark = Path(__file__).resolve().parents[2] / "benchmarks" / "hot_pour" / "hot-pour-shot-2026-10-22.json"
     benchmark.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2), flush=True)
     if bake_seconds >= 1200 or not all(row["passed"] for row in comparisons.values()):

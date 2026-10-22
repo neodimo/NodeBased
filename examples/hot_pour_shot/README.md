@@ -8,3 +8,9 @@ directional key light casts the fluid's shadow onto the plate.
 `make_shot.py` regenerates `hot_pour_shot.nbcomp`; `make_plate.py` renders the solid-only plate from the same
 camera and set. Both scripts use the project's Python environment. The plate is committed as `plate.png`.
 The comp graph renders the fluid scene over that plate. `hot_pour_shot.nbcomp` is the artist-facing graph.
+
+`render_evidence.py --adapter default --workdir <cache-directory>` compares CPU/GPU output on frames 1, 60
+and 120, then writes the 960 × 540 showcase stills at frames 60, 90 and 120. The showcase uses adaptive
+sampling (8 minimum, 32 maximum, 0.01 relative-noise threshold), a two-bounce transmission cap and one
+volume-shadow sample; the path-traced steam itself keeps density-aware free-flight sampling. Keep the work
+directory on a volume with enough room for the simulation cache; `--small-only` skips the stills.
