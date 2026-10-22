@@ -91,6 +91,27 @@ class TranslationTransformTests(unittest.TestCase):
                     # than 1e-6 while retaining the same Catmull-Rom weights and edge treatment.
                     np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=1e-6)
 
+    def test_fractional_horizontal_fast_path_matches_the_full_animation(self):
+        rng = np.random.default_rng(225)
+        source = rng.random((19, 27, 4), dtype=np.float32)
+        for frame in range(1, 49, 3):
+            translate_x = -18.0 + 36.0 * (frame - 1) / 47.0
+            params = {"translate_x": translate_x, "translate_y": 0.0, "rotate": 0.0,
+                      "scale": 1.0, "center_x": 0.0, "center_y": 0.0,
+                      "scale_mode": "uniform", "skew_x": 0.0, "skew_y": 0.0,
+                      "clamp": 0, "black_outside": 0}
+            forward = Evaluator._transform_forward_matrix(params)
+            inverse = np.linalg.inv(forward)
+            gx, gy = np.meshgrid(np.arange(source.shape[1], dtype=np.float32) + 0.5,
+                                 np.arange(source.shape[0], dtype=np.float32) + 0.5)
+            sx = inverse[0, 0] * gx + inverse[0, 1] * gy + inverse[0, 2] - 0.5
+            sy = inverse[1, 0] * gx + inverse[1, 1] * gy + inverse[1, 2] - 0.5
+            expected = Evaluator._resample(source, sx, sy, "cubic")
+            actual = Evaluator._transform(source, translate_x, 0.0, 0.0, 1.0,
+                                          0.0, 0.0, "cubic", params=params)
+            with self.subTest(frame=frame, translate_x=translate_x):
+                np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=1e-6)
+
 
 class ColorCorrectIdentityTests(unittest.TestCase):
     def test_default_controls_return_the_input_without_pixel_work(self):

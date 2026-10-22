@@ -7463,11 +7463,52 @@ class Evaluator:
                     result += scratch
             return result
 
+        horizontal_only = (sy.shape == (src.shape[0],) and np.array_equal(
+            sy, np.arange(src.shape[0], dtype=np.float32)))
+        if not clamp and horizontal_only and sx.ndim == 1 and sx.size:
+            # A pure horizontal translation has unit-spaced source coordinates. The generic
+            # separable path gathers four complete float frames with np.take, then multiplies
+            # and accumulates each gathered frame. For this common case, each tap is a contiguous
+            # shifted view of the source, so accumulate directly into the output and avoid those
+            # four full-frame gather buffers.
+            base = np.floor(sx).astype(np.int32)
+            linear_base = base[0] + np.arange(sx.size, dtype=np.int32)
+            if np.array_equal(base, linear_base):
+                tap_offsets = (-1, 0, 1, 2)
+                tap_weights = [weight(sx - (base + offset)) for offset in tap_offsets]
+                changed = np.zeros(max(0, sx.size - 1), dtype=bool)
+                for factors in tap_weights:
+                    changed |= factors[1:] != factors[:-1]
+                run_edges = np.concatenate(([0], np.flatnonzero(changed) + 1, [sx.size]))
+                result = np.zeros((src.shape[0], sx.size, src.shape[2]), dtype=np.float32)
+                scratch = np.empty_like(result)
+                width = sx.size
+                initialized = False
+                for tap_index, offset in enumerate(tap_offsets):
+                    source_offset = int(base[0]) + offset
+                    for run_start, run_stop in zip(run_edges[:-1], run_edges[1:]):
+                        dest_start = max(int(run_start), 0, -source_offset)
+                        dest_stop = min(int(run_stop), width, src.shape[1] - source_offset)
+                        if dest_stop <= dest_start:
+                            continue
+                        source_start = dest_start + source_offset
+                        source_stop = dest_stop + source_offset
+                        destination = result[:, dest_start:dest_stop, :]
+                        sample = src[:, source_start:source_stop, :]
+                        factor = tap_weights[tap_index][dest_start]
+                        if not initialized:
+                            np.multiply(sample, factor, out=destination)
+                        else:
+                            weighted = scratch[:, dest_start:dest_stop, :]
+                            np.multiply(sample, factor, out=weighted)
+                            np.add(destination, weighted, out=destination)
+                    initialized = True
+                return result
+
         horizontal = axis_sample(src, sx, axis=1)
         # The common animated Transform case moves only horizontally. When y maps each
         # destination row to the same source row, the vertical cubic pass is an exact identity.
-        if sy.shape == (src.shape[0],) and np.array_equal(
-                sy, np.arange(src.shape[0], dtype=np.float32)):
+        if horizontal_only:
             return horizontal
         return axis_sample(horizontal, sy, axis=0)
 
