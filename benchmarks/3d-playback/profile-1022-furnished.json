@@ -1,0 +1,330 @@
+{
+ "scene": "furnished",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "seconds": 12.04,
+ "first_frame_s": 2.14,
+ "frames_shown": 11,
+ "fps": 0.91,
+ "worker_jobs": 12,
+ "stages": [
+  {
+   "stage": "worker start to hand-over (whole frame)",
+   "from": "total",
+   "to": "",
+   "n": 10,
+   "p50_ms": 1162.67,
+   "p95_ms": 1217.78,
+   "mean_ms": 1155.09
+  },
+  {
+   "stage": "GPU render and wait",
+   "from": "submit",
+   "to": "gpu_done",
+   "n": 10,
+   "p50_ms": 415.13,
+   "p95_ms": 436.91,
+   "mean_ms": 414.93
+  },
+  {
+   "stage": "resolve (supersample, background)",
+   "from": "readback_done",
+   "to": "resolve_done",
+   "n": 10,
+   "p50_ms": 319.99,
+   "p95_ms": 324.27,
+   "mean_ms": 320.15
+  },
+  {
+   "stage": "scene prepare (shadow data, vertex packing)",
+   "from": "render_begin",
+   "to": "scene_ready",
+   "n": 10,
+   "p50_ms": 209.41,
+   "p95_ms": 220.7,
+   "mean_ms": 210.92
+  },
+  {
+   "stage": "render encode",
+   "from": "upload_done",
+   "to": "submit",
+   "n": 10,
+   "p50_ms": 78.03,
+   "p95_ms": 123.05,
+   "mean_ms": 82.78
+  },
+  {
+   "stage": "convert and emit",
+   "from": "cache_put",
+   "to": "emit",
+   "n": 10,
+   "p50_ms": 49.44,
+   "p95_ms": 52.45,
+   "mean_ms": 49.37
+  },
+  {
+   "stage": "readback copy",
+   "from": "gpu_done",
+   "to": "readback_done",
+   "n": 10,
+   "p50_ms": 39.59,
+   "p95_ms": 47.84,
+   "mean_ms": 40.6
+  },
+  {
+   "stage": "scene upload (buffers, textures, pipelines, bind groups)",
+   "from": "scene_ready",
+   "to": "upload_done",
+   "n": 10,
+   "p50_ms": 13.81,
+   "p95_ms": 16.11,
+   "mean_ms": 14.18
+  },
+  {
+   "stage": "after the render (node bookkeeping)",
+   "from": "resolve_done",
+   "to": "put_begin",
+   "n": 10,
+   "p50_ms": 12.85,
+   "p95_ms": 13.78,
+   "mean_ms": 12.36
+  },
+  {
+   "stage": "scene evaluation",
+   "from": "worker_start",
+   "to": "render_begin",
+   "n": 10,
+   "p50_ms": 7.0,
+   "p95_ms": 8.36,
+   "mean_ms": 6.84
+  },
+  {
+   "stage": "hand-over to the display",
+   "from": "emit",
+   "to": "handover",
+   "n": 10,
+   "p50_ms": 3.05,
+   "p95_ms": 3.27,
+   "mean_ms": 2.94
+  },
+  {
+   "stage": "display cache put",
+   "from": "put_begin",
+   "to": "cache_put",
+   "n": 10,
+   "p50_ms": 0.03,
+   "p95_ms": 0.03,
+   "mean_ms": 0.03
+  }
+ ],
+ "tick_gap_ms_p50": 42.1,
+ "sampling": {
+  "qt_samples": 2619,
+  "worker_samples": 1509,
+  "qt_top_inclusive": [
+   {
+    "where": "profile_3d_playback.py:main",
+    "samples": 2619
+   },
+   {
+    "where": "profile_3d_playback.py:<module>",
+    "samples": 2618
+   },
+   {
+    "where": "profile_3d_playback.py:spin",
+    "samples": 2617
+   },
+   {
+    "where": "timeline.py:event",
+    "samples": 10
+   },
+   {
+    "where": "timeline.py:paintEvent",
+    "samples": 8
+   },
+   {
+    "where": "queuepanel.py:refresh",
+    "samples": 8
+   },
+   {
+    "where": "app.py:preview_ready",
+    "samples": 7
+   },
+   {
+    "where": "jobs.py:snapshot",
+    "samples": 7
+   },
+   {
+    "where": "queuepanel.py:refresh_loop_history",
+    "samples": 5
+   },
+   {
+    "where": "_classes.py:__del__",
+    "samples": 4
+   },
+   {
+    "where": "_helpers.py:proxy_func",
+    "samples": 4
+   },
+   {
+    "where": "guigc.py:collect",
+    "samples": 4
+   },
+   {
+    "where": "_api.py:_release",
+    "samples": 4
+   },
+   {
+    "where": "topbar.py:set_gpu",
+    "samples": 4
+   }
+  ],
+  "worker_top_inclusive": [
+   {
+    "where": "app.py:render",
+    "samples": 1509
+   },
+   {
+    "where": "tileexec.py:compose_region",
+    "samples": 1414
+   },
+   {
+    "where": "tileexec.py:_render_tile",
+    "samples": 1409
+   },
+   {
+    "where": "tileexec.py:_generator_tile",
+    "samples": 1398
+   },
+   {
+    "where": "tileexec.py:_gather_inputs",
+    "samples": 1398
+   },
+   {
+    "where": "imaging.py:evaluate_raster",
+    "samples": 1385
+   },
+   {
+    "where": "gpu3d.py:render",
+    "samples": 1375
+   },
+   {
+    "where": "imaging.py:draw",
+    "samples": 1375
+   },
+   {
+    "where": "gpu3d.py:_render",
+    "samples": 1303
+   },
+   {
+    "where": "app.py:work",
+    "samples": 972
+   },
+   {
+    "where": "profile_3d_playback.py:run",
+    "samples": 865
+   },
+   {
+    "where": "_helpers.py:proxy_func",
+    "samples": 639
+   },
+   {
+    "where": "gpumemory.py:destroy",
+    "samples": 523
+   },
+   {
+    "where": "_api.py:destroy",
+    "samples": 523
+   }
+  ],
+  "qt_top_lines": [
+   {
+    "where": "profile_3d_playback.py:spin:115",
+    "samples": 2434
+   },
+   {
+    "where": "profile_3d_playback.py:spin:114",
+    "samples": 151
+   },
+   {
+    "where": "timeline.py:paintEvent:305",
+    "samples": 5
+   },
+   {
+    "where": "_helpers.py:proxy_func:356",
+    "samples": 4
+   },
+   {
+    "where": "jobs.py:snapshot:166",
+    "samples": 3
+   },
+   {
+    "where": "app.py:_place_pixel_readout:1606",
+    "samples": 2
+   },
+   {
+    "where": "jobs.py:_db:90",
+    "samples": 2
+   },
+   {
+    "where": "nodeshelf.py:_unit:151",
+    "samples": 2
+   }
+  ],
+  "worker_top_lines": [
+   {
+    "where": "_helpers.py:proxy_func:356",
+    "samples": 639
+   },
+   {
+    "where": "gpu3d.py:_prepare:1171",
+    "samples": 450
+   },
+   {
+    "where": "gpu3d.py:_render:1920",
+    "samples": 129
+   },
+   {
+    "where": "gpu3d.py:_prepare:1162",
+    "samples": 60
+   },
+   {
+    "where": "scene3d.py:box_resolve:3636",
+    "samples": 43
+   },
+   {
+    "where": "imaging.py:to_qimage:292",
+    "samples": 30
+   },
+   {
+    "where": "imaging.py:to_qimage:283",
+    "samples": 16
+   },
+   {
+    "where": "tileexec.py:_generator_tile:972",
+    "samples": 13
+   },
+   {
+    "where": "gpu3d.py:_render:1914",
+    "samples": 12
+   },
+   {
+    "where": "tileexec.py:_evaluate_tile_kernel:1219",
+    "samples": 11
+   },
+   {
+    "where": "_api.py:read_mapped:2617",
+    "samples": 10
+   },
+   {
+    "where": "scene3d.py:box_resolve:3632",
+    "samples": 10
+   }
+  ]
+ },
+ "status": "Evaluating frame 12\u2026"
+}

@@ -1,0 +1,34 @@
+{
+ "scene": "grade",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "seconds": 10.09,
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "platform": "xcb",
+ "display": ":94",
+ "comp_fps": 24.0,
+ "shown": 19,
+ "fps": 1.88,
+ "interval_ms": {
+  "n": 18,
+  "p50": 537.43,
+  "p95": 638.49,
+  "p99": 640.01,
+  "max": 640.01,
+  "mean": 553.63
+ },
+ "render_ms_status": {
+  "n": 2,
+  "p50": 508,
+  "p95": 510,
+  "p99": 510,
+  "max": 510,
+  "mean": 509.0
+ },
+ "dropped": 9,
+ "status": "Evaluating frame 20\u2026",
+ "proxy_tier_at_end": null
+}

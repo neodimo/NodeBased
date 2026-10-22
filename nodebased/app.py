@@ -43,6 +43,7 @@ from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_descr
 from . import radialcommands
 from . import graphlook
 from . import gpu3d
+from .playback_trace import mark as _trace_mark
 from . import guigc
 from . import lensview
 from .graphcorner import GraphCorner
@@ -9743,6 +9744,7 @@ class Window(QMainWindow):
         up, playback_frames_rendered climbs at least as fast as elapsed_frames, so this is
         identical to plain wall-clock-following."""
         time_range = self.dispatcher.document["time"]
+        _trace_mark("tick")
         elapsed_frames = int((time.monotonic() - self.playback_origin_time) * time_range["fps"])
         advanced = elapsed_frames - self.playback_elapsed_frames
         if advanced > 1:
@@ -14307,6 +14309,7 @@ class Window(QMainWindow):
                 render()
         def render():
             start = time.perf_counter()
+            _trace_mark("worker_start")
             try:
                 target = request.document.get("view")
                 render_region = None
@@ -14425,9 +14428,11 @@ class Window(QMainWindow):
                 # A picture that is the same on every frame is kept at full precision, so showing
                 # it again hands out the stored array; any other frame is stored lazily, and
                 # rounded to half-float later by compact_display_cache.
+                _trace_mark("put_begin")
                 self.display_cache.put(display_key, frame, region_key,
                                        is_data=static or _is_data_target(request.document, target),
                                        lazy=True)
+                _trace_mark("cache_put")
                 direct = request.display and self._direct_linear_for(request, view, frame)
                 image = (carddisplay.LazyPicture(frame, exposure, channel, background, view, look) if direct
                          else to_qimage(frame, exposure, channel, background=background, view=view, look=look)
@@ -14439,6 +14444,7 @@ class Window(QMainWindow):
                     request, cancel, frame, image, render_region, exposure, channel, background, view, look)
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
+                _trace_mark("emit")
                 self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}{compare_note}", render_region)
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
@@ -15205,6 +15211,7 @@ class Window(QMainWindow):
                 self._show_image(image, request.tier, render_region,
                                  extras["image_b"] if extras is not None else None,
                                  generation=request.generation)
+                _trace_mark("handover")
             else:
                 self._viewer_parked = False
                 self.viewer.scene().clear()

@@ -1,0 +1,294 @@
+{
+ "scene": "empty",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "seconds": 12.02,
+ "first_frame_s": 0.37,
+ "frames_shown": 83,
+ "fps": 6.9,
+ "worker_jobs": 84,
+ "stages": [
+  {
+   "stage": "worker start to hand-over (whole frame)",
+   "from": "total",
+   "to": "",
+   "n": 82,
+   "p50_ms": 95.51,
+   "p95_ms": 290.06,
+   "mean_ms": 121.76
+  },
+  {
+   "stage": "convert and emit",
+   "from": "cache_put",
+   "to": "emit",
+   "n": 82,
+   "p50_ms": 45.01,
+   "p95_ms": 65.33,
+   "mean_ms": 47.13
+  },
+  {
+   "stage": "after the render (node bookkeeping)",
+   "from": "resolve_done",
+   "to": "put_begin",
+   "n": 82,
+   "p50_ms": 16.15,
+   "p95_ms": 234.74,
+   "mean_ms": 53.85
+  },
+  {
+   "stage": "scene_ready to resolve_done",
+   "from": "scene_ready",
+   "to": "resolve_done",
+   "n": 82,
+   "p50_ms": 6.98,
+   "p95_ms": 9.64,
+   "mean_ms": 7.29
+  },
+  {
+   "stage": "hand-over to the display",
+   "from": "emit",
+   "to": "handover",
+   "n": 82,
+   "p50_ms": 3.17,
+   "p95_ms": 3.86,
+   "mean_ms": 3.15
+  },
+  {
+   "stage": "scene evaluation",
+   "from": "worker_start",
+   "to": "render_begin",
+   "n": 82,
+   "p50_ms": 2.38,
+   "p95_ms": 7.0,
+   "mean_ms": 2.76
+  },
+  {
+   "stage": "scene prepare (shadow data, vertex packing)",
+   "from": "render_begin",
+   "to": "scene_ready",
+   "n": 82,
+   "p50_ms": 0.29,
+   "p95_ms": 0.35,
+   "mean_ms": 0.3
+  },
+  {
+   "stage": "display cache put",
+   "from": "put_begin",
+   "to": "cache_put",
+   "n": 82,
+   "p50_ms": 0.03,
+   "p95_ms": 33.02,
+   "mean_ms": 7.3
+  }
+ ],
+ "tick_gap_ms_p50": 42.1,
+ "sampling": {
+  "qt_samples": 2653,
+  "worker_samples": 2168,
+  "qt_top_inclusive": [
+   {
+    "where": "profile_3d_playback.py:spin",
+    "samples": 2651
+   },
+   {
+    "where": "profile_3d_playback.py:main",
+    "samples": 2646
+   },
+   {
+    "where": "profile_3d_playback.py:<module>",
+    "samples": 2644
+   },
+   {
+    "where": "timeline.py:event",
+    "samples": 73
+   },
+   {
+    "where": "timeline.py:paintEvent",
+    "samples": 62
+   },
+   {
+    "where": "app.py:preview_ready",
+    "samples": 48
+   },
+   {
+    "where": "topbar.py:set_gpu",
+    "samples": 26
+   },
+   {
+    "where": "topbar.py:floor_width",
+    "samples": 25
+   },
+   {
+    "where": "topbar.py:_announce_floor",
+    "samples": 25
+   },
+   {
+    "where": "topbar.py:_fit",
+    "samples": 23
+   },
+   {
+    "where": "app.py:_show_image",
+    "samples": 17
+   },
+   {
+    "where": "topbar.py:set_icon_only",
+    "samples": 13
+   },
+   {
+    "where": "nodeshelf.py:_unit",
+    "samples": 12
+   },
+   {
+    "where": "app.py:playback_tick",
+    "samples": 12
+   }
+  ],
+  "worker_top_inclusive": [
+   {
+    "where": "app.py:render",
+    "samples": 2168
+   },
+   {
+    "where": "app.py:work",
+    "samples": 2161
+   },
+   {
+    "where": "profile_3d_playback.py:run",
+    "samples": 1331
+   },
+   {
+    "where": "thread.py:run",
+    "samples": 1329
+   },
+   {
+    "where": "tileexec.py:compose_region",
+    "samples": 1261
+   },
+   {
+    "where": "tileexec.py:_render_tile",
+    "samples": 1193
+   },
+   {
+    "where": "thread.py:_worker",
+    "samples": 1158
+   },
+   {
+    "where": "threading.py:run",
+    "samples": 1153
+   },
+   {
+    "where": "threading.py:_bootstrap",
+    "samples": 1153
+   },
+   {
+    "where": "threading.py:_bootstrap_inner",
+    "samples": 1153
+   },
+   {
+    "where": "tileexec.py:_generator_tile",
+    "samples": 1126
+   },
+   {
+    "where": "tileexec.py:_gather_inputs",
+    "samples": 1126
+   },
+   {
+    "where": "imaging.py:evaluate_raster",
+    "samples": 1015
+   },
+   {
+    "where": "imaging.py:_store",
+    "samples": 846
+   }
+  ],
+  "qt_top_lines": [
+   {
+    "where": "profile_3d_playback.py:spin:115",
+    "samples": 2198
+   },
+   {
+    "where": "profile_3d_playback.py:spin:114",
+    "samples": 314
+   },
+   {
+    "where": "timeline.py:paintEvent:305",
+    "samples": 40
+   },
+   {
+    "where": "nodeshelf.py:_unit:151",
+    "samples": 12
+   },
+   {
+    "where": "playback.py:identity:217",
+    "samples": 11
+   },
+   {
+    "where": "timeline.py:paintEvent:308",
+    "samples": 11
+   },
+   {
+    "where": "timeline.py:event:229",
+    "samples": 11
+   },
+   {
+    "where": "timeline.py:_text_height:268",
+    "samples": 7
+   }
+  ],
+  "worker_top_lines": [
+   {
+    "where": "_format_impl.py:write_array:772",
+    "samples": 827
+   },
+   {
+    "where": "imaging.py:to_qimage:292",
+    "samples": 206
+   },
+   {
+    "where": "gpu3d.py:_render:1717",
+    "samples": 169
+   },
+   {
+    "where": "imaging.py:to_qimage:283",
+    "samples": 133
+   },
+   {
+    "where": "tileexec.py:_generator_tile:972",
+    "samples": 109
+   },
+   {
+    "where": "playback.py:_compact_one:306",
+    "samples": 98
+   },
+   {
+    "where": "imaging.py:to_qimage:296",
+    "samples": 95
+   },
+   {
+    "where": "imaging.py:to_qimage:305",
+    "samples": 71
+   },
+   {
+    "where": "tileexec.py:_evaluate_tile_kernel:1219",
+    "samples": 67
+   },
+   {
+    "where": "_methods.py:_clip:113",
+    "samples": 64
+   },
+   {
+    "where": "tileexec.py:compose_region:689",
+    "samples": 62
+   },
+   {
+    "where": "gpudisplay.py:render:507",
+    "samples": 58
+   }
+  ]
+ },
+ "status": "Evaluating frame 84\u2026"
+}

@@ -1,0 +1,221 @@
+{
+ "scene": "glass",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "seconds": 20.01,
+ "first_frame_s": 160.24,
+ "frames_shown": 1,
+ "fps": 0.05,
+ "worker_jobs": 2,
+ "stages": [],
+ "tick_gap_ms_p50": 41.9,
+ "sampling": {
+  "qt_samples": 4724,
+  "worker_samples": 147,
+  "qt_top_inclusive": [
+   {
+    "where": "profile_3d_playback.py:main",
+    "samples": 4724
+   },
+   {
+    "where": "profile_3d_playback.py:spin",
+    "samples": 4724
+   },
+   {
+    "where": "profile_3d_playback.py:<module>",
+    "samples": 4724
+   },
+   {
+    "where": "queuepanel.py:refresh",
+    "samples": 10
+   },
+   {
+    "where": "jobs.py:snapshot",
+    "samples": 8
+   },
+   {
+    "where": "queuepanel.py:refresh_loop_history",
+    "samples": 6
+   },
+   {
+    "where": "contextlib.py:__enter__",
+    "samples": 5
+   },
+   {
+    "where": "jobs.py:_db",
+    "samples": 5
+   },
+   {
+    "where": "loops.py:_db",
+    "samples": 2
+   },
+   {
+    "where": "loops.py:list_snapshots",
+    "samples": 2
+   },
+   {
+    "where": "contextlib.py:__exit__",
+    "samples": 2
+   },
+   {
+    "where": "topbar.py:paintEvent",
+    "samples": 1
+   },
+   {
+    "where": "nodeshelf.py:_metrics",
+    "samples": 1
+   },
+   {
+    "where": "nodeshelf.py:minimumSizeHint",
+    "samples": 1
+   }
+  ],
+  "worker_top_inclusive": [
+   {
+    "where": "app.py:render",
+    "samples": 147
+   },
+   {
+    "where": "app.py:work",
+    "samples": 147
+   },
+   {
+    "where": "tileexec.py:_gather_inputs",
+    "samples": 145
+   },
+   {
+    "where": "tileexec.py:compose_region",
+    "samples": 145
+   },
+   {
+    "where": "imaging.py:evaluate_raster",
+    "samples": 145
+   },
+   {
+    "where": "tileexec.py:_render_tile",
+    "samples": 145
+   },
+   {
+    "where": "tileexec.py:_generator_tile",
+    "samples": 145
+   },
+   {
+    "where": "imaging.py:draw",
+    "samples": 144
+   },
+   {
+    "where": "scene3d.py:render",
+    "samples": 144
+   },
+   {
+    "where": "profile_3d_playback.py:run",
+    "samples": 126
+   },
+   {
+    "where": "thread.py:run",
+    "samples": 90
+   },
+   {
+    "where": "scene3d.py:_shade_fragments",
+    "samples": 41
+   },
+   {
+    "where": "_linalg.py:norm",
+    "samples": 14
+   },
+   {
+    "where": "_methods.py:_sum",
+    "samples": 9
+   }
+  ],
+  "qt_top_lines": [
+   {
+    "where": "profile_3d_playback.py:spin:115",
+    "samples": 4651
+   },
+   {
+    "where": "profile_3d_playback.py:spin:114",
+    "samples": 61
+   },
+   {
+    "where": "jobs.py:_db:81",
+    "samples": 4
+   },
+   {
+    "where": "jobs.py:snapshot:166",
+    "samples": 2
+   },
+   {
+    "where": "topbar.py:paintEvent:50",
+    "samples": 1
+   },
+   {
+    "where": "nodeshelf.py:_unit:151",
+    "samples": 1
+   },
+   {
+    "where": "loops.py:_db:45",
+    "samples": 1
+   },
+   {
+    "where": "jobs.py:_db:90",
+    "samples": 1
+   }
+  ],
+  "worker_top_lines": [
+   {
+    "where": "scene3d.py:render:3891",
+    "samples": 25
+   },
+   {
+    "where": "_linalg.py:norm:2804",
+    "samples": 12
+   },
+   {
+    "where": "scene3d.py:render:4034",
+    "samples": 10
+   },
+   {
+    "where": "_methods.py:_sum:49",
+    "samples": 9
+   },
+   {
+    "where": "scene3d.py:render:3812",
+    "samples": 7
+   },
+   {
+    "where": "scene3d.py:render:4037",
+    "samples": 7
+   },
+   {
+    "where": "scene3d.py:render:4035",
+    "samples": 6
+   },
+   {
+    "where": "scene3d.py:render:4036",
+    "samples": 6
+   },
+   {
+    "where": "scene3d.py:render:4038",
+    "samples": 6
+   },
+   {
+    "where": "scene3d.py:_shade_fragments:3148",
+    "samples": 6
+   },
+   {
+    "where": "scene3d.py:render:4002",
+    "samples": 4
+   },
+   {
+    "where": "scene3d.py:render:4011",
+    "samples": 4
+   }
+  ]
+ },
+ "status": "Evaluating frame 2\u2026"
+}

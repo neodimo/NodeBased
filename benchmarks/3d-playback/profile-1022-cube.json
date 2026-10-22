@@ -1,0 +1,330 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "seconds": 12.05,
+ "first_frame_s": 1.1,
+ "frames_shown": 22,
+ "fps": 1.83,
+ "worker_jobs": 23,
+ "stages": [
+  {
+   "stage": "worker start to hand-over (whole frame)",
+   "from": "total",
+   "to": "",
+   "n": 21,
+   "p50_ms": 514.43,
+   "p95_ms": 640.28,
+   "mean_ms": 535.99
+  },
+  {
+   "stage": "resolve (supersample, background)",
+   "from": "readback_done",
+   "to": "resolve_done",
+   "n": 21,
+   "p50_ms": 327.92,
+   "p95_ms": 343.4,
+   "mean_ms": 330.15
+  },
+  {
+   "stage": "convert and emit",
+   "from": "cache_put",
+   "to": "emit",
+   "n": 21,
+   "p50_ms": 45.64,
+   "p95_ms": 50.65,
+   "mean_ms": 46.59
+  },
+  {
+   "stage": "GPU render and wait",
+   "from": "submit",
+   "to": "gpu_done",
+   "n": 21,
+   "p50_ms": 41.62,
+   "p95_ms": 160.69,
+   "mean_ms": 65.45
+  },
+  {
+   "stage": "render encode",
+   "from": "upload_done",
+   "to": "submit",
+   "n": 21,
+   "p50_ms": 40.88,
+   "p95_ms": 49.48,
+   "mean_ms": 29.18
+  },
+  {
+   "stage": "readback copy",
+   "from": "gpu_done",
+   "to": "readback_done",
+   "n": 21,
+   "p50_ms": 38.05,
+   "p95_ms": 40.38,
+   "mean_ms": 38.2
+  },
+  {
+   "stage": "after the render (node bookkeeping)",
+   "from": "resolve_done",
+   "to": "put_begin",
+   "n": 21,
+   "p50_ms": 12.2,
+   "p95_ms": 14.83,
+   "mean_ms": 12.27
+  },
+  {
+   "stage": "scene upload (buffers, textures, pipelines, bind groups)",
+   "from": "scene_ready",
+   "to": "upload_done",
+   "n": 21,
+   "p50_ms": 6.38,
+   "p95_ms": 8.16,
+   "mean_ms": 6.66
+  },
+  {
+   "stage": "hand-over to the display",
+   "from": "emit",
+   "to": "handover",
+   "n": 21,
+   "p50_ms": 2.86,
+   "p95_ms": 4.58,
+   "mean_ms": 3.1
+  },
+  {
+   "stage": "scene evaluation",
+   "from": "worker_start",
+   "to": "render_begin",
+   "n": 21,
+   "p50_ms": 2.24,
+   "p95_ms": 3.25,
+   "mean_ms": 2.43
+  },
+  {
+   "stage": "scene prepare (shadow data, vertex packing)",
+   "from": "render_begin",
+   "to": "scene_ready",
+   "n": 21,
+   "p50_ms": 1.7,
+   "p95_ms": 3.12,
+   "mean_ms": 1.94
+  },
+  {
+   "stage": "display cache put",
+   "from": "put_begin",
+   "to": "cache_put",
+   "n": 21,
+   "p50_ms": 0.03,
+   "p95_ms": 0.03,
+   "mean_ms": 0.03
+  }
+ ],
+ "tick_gap_ms_p50": 42.1,
+ "sampling": {
+  "qt_samples": 2627,
+  "worker_samples": 1983,
+  "qt_top_inclusive": [
+   {
+    "where": "profile_3d_playback.py:spin",
+    "samples": 2625
+   },
+   {
+    "where": "profile_3d_playback.py:<module>",
+    "samples": 2624
+   },
+   {
+    "where": "profile_3d_playback.py:main",
+    "samples": 2624
+   },
+   {
+    "where": "timeline.py:event",
+    "samples": 20
+   },
+   {
+    "where": "timeline.py:paintEvent",
+    "samples": 19
+   },
+   {
+    "where": "app.py:preview_ready",
+    "samples": 18
+   },
+   {
+    "where": "topbar.py:set_gpu",
+    "samples": 11
+   },
+   {
+    "where": "topbar.py:floor_width",
+    "samples": 11
+   },
+   {
+    "where": "topbar.py:_announce_floor",
+    "samples": 11
+   },
+   {
+    "where": "topbar.py:_fit",
+    "samples": 10
+   },
+   {
+    "where": "app.py:refresh_timeline_marks",
+    "samples": 7
+   },
+   {
+    "where": "playback.py:identity",
+    "samples": 7
+   },
+   {
+    "where": "topbar.py:set_icon_only",
+    "samples": 7
+   },
+   {
+    "where": "nodeshelf.py:_unit",
+    "samples": 6
+   }
+  ],
+  "worker_top_inclusive": [
+   {
+    "where": "app.py:render",
+    "samples": 1983
+   },
+   {
+    "where": "tileexec.py:compose_region",
+    "samples": 1790
+   },
+   {
+    "where": "tileexec.py:_render_tile",
+    "samples": 1778
+   },
+   {
+    "where": "tileexec.py:_gather_inputs",
+    "samples": 1763
+   },
+   {
+    "where": "tileexec.py:_generator_tile",
+    "samples": 1763
+   },
+   {
+    "where": "imaging.py:draw",
+    "samples": 1729
+   },
+   {
+    "where": "imaging.py:evaluate_raster",
+    "samples": 1729
+   },
+   {
+    "where": "gpu3d.py:render",
+    "samples": 1729
+   },
+   {
+    "where": "gpu3d.py:_render",
+    "samples": 1583
+   },
+   {
+    "where": "_helpers.py:proxy_func",
+    "samples": 1233
+   },
+   {
+    "where": "_api.py:destroy",
+    "samples": 1194
+   },
+   {
+    "where": "gpumemory.py:destroy",
+    "samples": 1194
+   },
+   {
+    "where": "app.py:work",
+    "samples": 760
+   },
+   {
+    "where": "profile_3d_playback.py:run",
+    "samples": 749
+   }
+  ],
+  "qt_top_lines": [
+   {
+    "where": "profile_3d_playback.py:spin:115",
+    "samples": 2460
+   },
+   {
+    "where": "profile_3d_playback.py:spin:114",
+    "samples": 114
+   },
+   {
+    "where": "timeline.py:paintEvent:305",
+    "samples": 11
+   },
+   {
+    "where": "playback.py:identity:217",
+    "samples": 7
+   },
+   {
+    "where": "nodeshelf.py:_unit:151",
+    "samples": 6
+   },
+   {
+    "where": "timeline.py:paintEvent:308",
+    "samples": 4
+   },
+   {
+    "where": "jobs.py:_db:90",
+    "samples": 3
+   },
+   {
+    "where": "timeline.py:_text_height:268",
+    "samples": 2
+   }
+  ],
+  "worker_top_lines": [
+   {
+    "where": "_helpers.py:proxy_func:356",
+    "samples": 1233
+   },
+   {
+    "where": "gpu3d.py:_render:1920",
+    "samples": 291
+   },
+   {
+    "where": "scene3d.py:box_resolve:3636",
+    "samples": 99
+   },
+   {
+    "where": "imaging.py:to_qimage:292",
+    "samples": 60
+   },
+   {
+    "where": "tileexec.py:_generator_tile:972",
+    "samples": 34
+   },
+   {
+    "where": "imaging.py:to_qimage:283",
+    "samples": 31
+   },
+   {
+    "where": "gpu3d.py:_render:1914",
+    "samples": 29
+   },
+   {
+    "where": "scene3d.py:box_resolve:3632",
+    "samples": 26
+   },
+   {
+    "where": "imaging.py:to_qimage:296",
+    "samples": 22
+   },
+   {
+    "where": "_api.py:read_mapped:2617",
+    "samples": 20
+   },
+   {
+    "where": "imaging.py:to_qimage:305",
+    "samples": 20
+   },
+   {
+    "where": "_methods.py:_clip:113",
+    "samples": 18
+   }
+  ]
+ },
+ "status": "Evaluating frame 23\u2026"
+}

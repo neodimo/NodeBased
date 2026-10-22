@@ -16,6 +16,7 @@ from dataclasses import replace
 import numpy as np
 
 from . import scene3d, raytrace
+from .playback_trace import mark as _mark
 
 log = logging.getLogger(__name__)
 
@@ -1251,6 +1252,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    _mark('render_begin')
     if samples > 1 and scene3d.is_empty_scene(scene):
         samples = 1   # nothing to antialias: the frame is the flat background
     if scene3d.has_shadow_catchers(scene):
@@ -1509,6 +1511,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if samples > 1:
         result = scene3d.box_resolve(result, samples)
     result.flags.writeable = False
+    _mark('resolve_done')
     return result
 
 
@@ -1704,6 +1707,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
     if output != 'rgba':
         bg[:] = 0
     eye, focal, vertices, queue, materials = _prepare(scene, camera, width, height, cancel)
+    _mark('scene_ready')
     _cancel(cancel)
     sprites = None
     if output in _PARTICLE_OUTPUT_MODES and getattr(scene, 'particles', ()):
@@ -1837,6 +1841,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                                             shadow_buffer=shadow_buffer, shadow_count=shadow_triangles, shadow_bias=bias,
                                             light_order=[light for light, *_ in lights])
         target_view, depth_view = target.create_view(), depth.create_view()
+        _mark('upload_done')
         dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
         stride = ((width*4*dtype.itemsize+255)//256)*256
         staging = keep(device.create_buffer(size=stride*max(y1-y0 for y0, y1 in bands),
@@ -1900,13 +1905,16 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))
             # A submitted band cannot be interrupted; cancellation bounds the next submission.
             _cancel(cancel)
+            _mark('submit')
             device.queue.submit([encoder.finish()])
             staging.map_sync(wgpu.MapMode.READ)
+            _mark('gpu_done')
             try:
                 raw = np.frombuffer(staging.read_mapped(), dtype, count=rows*stride//dtype.itemsize)
                 result[y0:y1] = raw.reshape(rows, stride//dtype.itemsize)[:, :width*4].reshape(rows, width, 4)
             finally:
                 staging.unmap()
+            _mark('readback_done')
             _cancel(cancel)
         if not data:
             result += bg*(1-result[..., 3:4])

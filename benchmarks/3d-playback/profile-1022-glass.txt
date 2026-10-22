@@ -1,0 +1,101 @@
+glass (furnished room with a liquid sphere) at 1920x1080, NVIDIA GeForce RTX 3080 Ti, 0.05 fps shown, 2 worker jobs in 20.0 s
+status: Evaluating frame 2…
+
+stage timeline (worker thread, per frame, milliseconds)
+
+qt thread, sampled every 4 ms (4724 samples), most time in (inclusive, by function)
+    4724  profile_3d_playback.py:main
+    4724  profile_3d_playback.py:spin
+    4724  profile_3d_playback.py:<module>
+      10  queuepanel.py:refresh
+       8  jobs.py:snapshot
+       6  queuepanel.py:refresh_loop_history
+       5  contextlib.py:__enter__
+       5  jobs.py:_db
+       2  loops.py:_db
+       2  loops.py:list_snapshots
+       2  contextlib.py:__exit__
+       1  topbar.py:paintEvent
+       1  nodeshelf.py:_metrics
+       1  nodeshelf.py:minimumSizeHint
+       1  nodeshelf.py:_unit
+qt thread, innermost line
+    4651  profile_3d_playback.py:spin:115
+      61  profile_3d_playback.py:spin:114
+       4  jobs.py:_db:81
+       2  jobs.py:snapshot:166
+       1  topbar.py:paintEvent:50
+       1  nodeshelf.py:_unit:151
+       1  loops.py:_db:45
+       1  jobs.py:_db:90
+       1  jobs.py:snapshot:167
+       1  loops.py:_db:53
+
+worker thread, sampled every 4 ms (147 samples), most time in (inclusive, by function)
+     147  app.py:render
+     147  app.py:work
+     145  tileexec.py:_gather_inputs
+     145  tileexec.py:compose_region
+     145  imaging.py:evaluate_raster
+     145  tileexec.py:_render_tile
+     145  tileexec.py:_generator_tile
+     144  imaging.py:draw
+     144  scene3d.py:render
+     126  profile_3d_playback.py:run
+      90  thread.py:run
+      41  scene3d.py:_shade_fragments
+      14  _linalg.py:norm
+       9  _methods.py:_sum
+       4  _index_tricks_impl.py:__getitem__
+       4  einsumfunc.py:einsum
+worker thread, innermost line
+      25  scene3d.py:render:3891
+      12  _linalg.py:norm:2804
+      10  scene3d.py:render:4034
+       9  _methods.py:_sum:49
+       7  scene3d.py:render:3812
+       7  scene3d.py:render:4037
+       6  scene3d.py:render:4035
+       6  scene3d.py:render:4036
+       6  scene3d.py:render:4038
+       6  scene3d.py:_shade_fragments:3148
+
+cProfile of the worker, by cumulative time
+         15682110 function calls (15639579 primitive calls) in 20.020 seconds
+
+   Ordered by: cumulative time
+   List reduced from 557 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000   19.965   19.965 tileexec.py:548(compose_region)
+        1    0.000    0.000   19.964   19.964 tileexec.py:706(_render_tile)
+        1    0.000    0.000   19.964   19.964 tileexec.py:821(_gather_inputs)
+        1    0.000    0.000   19.964   19.964 tileexec.py:876(_generator_tile)
+        1    0.000    0.000   19.963   19.963 imaging.py:839(evaluate_raster)
+        1    0.047    0.047   19.960   19.960 imaging.py:1827(draw)
+        1    0.000    0.000   19.338   19.338 scene3d.py:2237(visibility)
+        1    0.139    0.139   19.338   19.338 scene3d.py:2182(_shadow_visibility)
+    17964    0.009    0.000   19.107    0.001 scene3d.py:2135(_shadow_trace)
+    17964    0.017    0.000   19.096    0.001 scene3d.py:2200(trace)
+    17963    0.118    0.000   19.032    0.001 raytrace.py:410(transmittance)
+    17963    5.369    0.000   13.933    0.001 raytrace.py:165(traverse)
+   826143    5.527    0.000    5.549    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+    17963    0.069    0.000    2.697    0.000 raytrace.py:421(leaf)
+   197598    0.050    0.000    2.527    0.000 {method 'max' of 'numpy.ndarray' objects}
+   197597    0.047    0.000    2.510    0.000 {method 'min' of 'numpy.ndarray' objects}
+   197598    0.048    0.000    2.475    0.000 _methods.py:39(_amax)
+   197597    0.045    0.000    2.460    0.000 _methods.py:43(_amin)
+    17963    1.057    0.000    2.375    0.000 raytrace.py:265(_intersect)
+   197598    0.068    0.000    1.117    0.000 fromnumeric.py:2474(any)
+   197598    0.119    0.000    1.047    0.000 fromnumeric.py:86(_wrapreduction_any_all)
+    35952    0.316    0.000    0.965    0.000 numeric.py:1563(cross)
+    18860    0.455    0.000    0.645    0.000 profile_3d_playback.py:147(frames_of)
+   107856    0.151    0.000    0.556    0.000 numeric.py:1489(moveaxis)
+   395192    0.432    0.000    0.480    0.000 numeric.py:400(full_like)
+  200/198    0.007    0.000    0.474    0.002 profile_3d_playback.py:111(spin)
+   197595    0.323    0.000    0.461    0.000 _shape_base_impl.py:607(column_stack)
+    71854    0.020    0.000    0.359    0.000 einsumfunc.py:1242(einsum)
+   251530    0.068    0.000    0.342    0.000 fromnumeric.py:437(repeat)
+   215712    0.211    0.000    0.341    0.000 numeric.py:1427(normalize_axis_tuple)
+
+
