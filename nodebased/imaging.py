@@ -7363,6 +7363,27 @@ class Evaluator:
             return src.copy()
         p = dict(params or {}, translate_x=translate_x, translate_y=translate_y,
                  rotate=rotate, scale=scale, center_x=center_x, center_y=center_y)
+        integer_translation = (
+            rotate % 360.0 == 0 and scale == 1.0
+            and p.get("scale_mode", "uniform") == "uniform"
+            and p.get("skew_x", 0.0) == 0.0 and p.get("skew_y", 0.0) == 0.0
+            and not p.get("invert", 0) and not p.get("clamp", 0)
+            and not p.get("black_outside", 0)
+            and float(translate_x).is_integer() and float(translate_y).is_integer()
+        )
+        if integer_translation:
+            # Integer pixel offsets land exactly on source pixel centres for every filter.
+            # Copy the overlapping window directly and leave the uncovered area transparent.
+            offset_x = dst_box.x - src_box.x - int(translate_x)
+            offset_y = dst_box.y - src_box.y - int(translate_y)
+            result = np.zeros((dst_box.height, dst_box.width, 4), dtype=np.float32)
+            dx0, dy0 = max(0, -offset_x), max(0, -offset_y)
+            sx0, sy0 = max(0, offset_x), max(0, offset_y)
+            width = min(dst_box.width - dx0, w - sx0)
+            height = min(dst_box.height - dy0, h - sy0)
+            if width > 0 and height > 0:
+                result[dy0:dy0 + height, dx0:dx0 + width] = src[sy0:sy0 + height, sx0:sx0 + width]
+            return result
         forward = Evaluator._transform_forward_matrix(p)
         inverse = np.linalg.inv(forward)
         separable_cubic = (filter == "cubic" and rotate % 360.0 == 0 and scale == 1.0

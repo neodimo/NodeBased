@@ -47,6 +47,27 @@ class SmallRadiusBlurTests(unittest.TestCase):
 
 
 class TranslationTransformTests(unittest.TestCase):
+    def test_integer_translation_copies_pixels_without_resampling(self):
+        rng = np.random.default_rng(1207)
+        source = rng.random((13, 17, 4), dtype=np.float32)
+        for dx, dy in ((4, -3), (-5, 2), (0, 0)):
+            for filt in ("nearest", "bilinear", "cubic"):
+                params = {"translate_x": dx, "translate_y": dy, "rotate": 0.0,
+                          "scale": 1.0, "center_x": 0.0, "center_y": 0.0,
+                          "scale_mode": "uniform", "skew_x": 0.0, "skew_y": 0.0,
+                          "clamp": 0, "black_outside": 0}
+                forward = Evaluator._transform_forward_matrix(params)
+                inverse = np.linalg.inv(forward)
+                gx, gy = np.meshgrid(np.arange(source.shape[1], dtype=np.float32) + 0.5,
+                                     np.arange(source.shape[0], dtype=np.float32) + 0.5)
+                sx = inverse[0, 0] * gx + inverse[0, 1] * gy + inverse[0, 2] - 0.5
+                sy = inverse[1, 0] * gx + inverse[1, 1] * gy + inverse[1, 2] - 0.5
+                expected = Evaluator._resample(source, sx, sy, filt)
+                actual = Evaluator._transform(source, dx, dy, 0.0, 1.0, 0.0, 0.0, filt,
+                                              params=params)
+                with self.subTest(dx=dx, dy=dy, filter=filt):
+                    np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-7)
+
     def test_separable_cubic_translation_matches_general_resampler(self):
         rng = np.random.default_rng(224)
         source = rng.random((19, 27, 4), dtype=np.float32)

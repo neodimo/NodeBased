@@ -1,0 +1,21 @@
+{
+  "case": "integer-offset-transform",
+  "resolution": "1920x1080",
+  "adapter": "CPU NumPy",
+  "iterations": 9,
+  "before": {
+    "path": "translation-only separable cubic resampling",
+    "median_ms": 78.06
+  },
+  "after": {
+    "path": "integer-offset window copy",
+    "median_ms": 1.91
+  },
+  "pixel_comparison": {
+    "result": "pass",
+    "absolute_tolerance": 1e-7,
+    "filters": ["nearest", "bilinear", "cubic"],
+    "offsets": [[4, -3], [-5, 2], [0, 0]]
+  },
+  "method": "Nine timed runs per path after warmup; deterministic float32 input from NumPy RNG seed 91."
+}
