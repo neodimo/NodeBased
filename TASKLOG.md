@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step B of 3: the Direct picture shows the true float picture at rest, and the A/B compare runs on the card (integrator tick)
+
+- **What was done:** `main` `ce3b26ae` -> `7dc30c79` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `7dc30c79`: Ran 5762 tests in 481.719 s, OK (skipped=17), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the Hot pour settles in under a minute (finish 1) (integrator tick)
 
 - **What was done:** `main` `386675a0` -> `7f93a326` plus this docs commit. Evidence and per-lane commit

@@ -1,5 +1,31 @@
 ## 2026-10-22 — Lane 6 Step B finish 1: strict render gate and legible stills (PARTIAL for unavailable hardware validation)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:32 AM on 2026-10-22 PDT)
+
+`main` moved `ce3b26ae` -> `7dc30c79` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7dc30c79` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0512.log`, started 5:12 AM): **Ran 5762 tests in 481.719 s, OK (skipped=17), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step B of 3: the Direct picture shows the true float picture at rest, and the A/B compare runs on the card.** Commits:
+  - `59bd2518` Docs: paused picture and compare on the card, the cost-gate numbers (the 30 percent gate is not met), the wipe drag and the field-kit --paused check
+  - `9bf064c9` Direct picture: the overlay keeps its card texture while empty and goes up in small copies recorded into the draw, and a B-active edit no longer shows a stand-in that drops the wipe
+  - `a44dca04` Wipe drag timing on the card, offscreen-card bench mode, and a window test that drags the wipe on the direct picture
+  - `5c3bc06e` Direct picture: the overlay goes up only where it changed (empty and repeated overlays cost no upload), bind groups and the view block are reused across draws
+  - `e20c2411` Paused-picture cost gate and wipe drag tools, laptop --paused check, and the Viewer parks cheaply when the picture has not moved
+  - `e0e677e9` Direct picture: A/B compare rides to the card with the wipe line painted over it; a pair that does not fit is named and left to the Viewer; the cache inspector lists the B texture
+  - `a39005ec` Direct picture: the B buffer as a second float texture, with wipe, B only, over, under, minus and difference in the card shader
+  - `a931ddb2` Direct picture: a paused or edited frame goes to the card as floats, the Viewer takes its geometry and builds no 8-bit picture
+  Diff: 14 files changed, 1456 insertions(+), 121 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (4:42 AM on 2026-10-22 PDT)
 
 `main` moved `386675a0` -> `7f93a326` (lane commits cherry-picked onto main in lane order) and then to this
