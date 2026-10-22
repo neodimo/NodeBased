@@ -1276,7 +1276,33 @@ particle-to-grid, grid-to-particle/advection, pressure and transfer copies. Cach
 These phase timers force synchronization, so use them to rank costs rather than as gate wall times. The diagnostic
 JSON is `benchmarks/hot_pour/edit-phase-profile-rtx-2026-10-22.json`; the warmed edit JSON is
 `benchmarks/hot_pour/edit-resimulation-warm-rtx-2026-10-22.json`. Cost-reduction and the warmed Radeon gate readings
-remain open.
+were still open at that measurement.
+
+**Warmed Radeon edit gate readings (2026-10-22).** First solved volume frames took 0.252, 0.256 and 0.055 seconds.
+The pour-velocity and vorticity edits meet the under-30-second 120-frame target; moving the cup takes 32.43 seconds,
+missing it by 2.43 seconds.
+
+| Edit | Base-cache preparation | First solved volume | Edit-only 120-frame stages | Largest output stage |
+| --- | ---: | ---: | ---: | --- |
+| Pour velocity ×1.25 | 28.88 s | 0.252 s | 26.52 s | Steam cache, 16.86 s |
+| Cup moved 5 cm | 31.27 s | 0.256 s | 32.43 s | Steam cache, 22.47 s |
+| Steam vorticity +0.4 | 29.20 s | 0.055 s | 23.68 s | Steam cache, 23.30 s |
+
+The warmed Radeon phase diagnostic shows 6.87–7.60 seconds in the steam solver's host phase, 1.46–6.94 seconds in
+pressure and 2.53–3.15 seconds in cache writes across the changed runs; the cup move also spends 4.55 seconds in
+whitewater. Liquid particle-to-grid, grid-to-particle/advection and transfer copies are separate in the JSON. These
+are synchronized diagnostic timings. Full data is in `benchmarks/hot_pour/edit-resimulation-warm-integrated-2026-10-22.json`
+and `benchmarks/hot_pour/edit-phase-profile-integrated-2026-10-22.json`.
+
+**Production-size baseline for step B (historical).** The existing Radeon 8060S record for 256 liquid cells, 192 smoke
+cells and 120 frames is 1,940.5 seconds (`benchmarks/hot_pour/radeon-full-bake.json`, 2026-10-08). It is a historical
+baseline; this step did not regenerate the production cache because the record's cache data is 8.50 GB while the host
+had 5.7 GB free. A fresh production-size edit bake remains to be timed when sufficient scratch space is available.
+
+Current gate state: first solved volume frames are under one second on RTX and Radeon, although viewport presentation is
+not measured. The Radeon cup move misses its bake gate. No display timeline, stale-picture label, 50 ms edit-cancellation
+UI or cost-reducing code change is included yet. Phase evidence identifies pressure/host work, cache writes and cup-move
+whitewater as the next optimization candidates. The A6000 estimate remains unmeasured.
 
 ### S1: the Hot pour in a rendered shot (finish 1)
 

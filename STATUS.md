@@ -1,6 +1,6 @@
 # Lane 6 step A of 2 — in progress (2026-10-22)
 
-Complete-frame solver callbacks and the Hot pour edit benchmark are committed. Cold-cache edit profiles are retained as references; the corrected warmed RTX run records 0.08–0.30 s to a solved first volume frame and 30.15–50.19 s across all four 120-frame output stages. The warmed Radeon run is queued behind other GPU-lock owners. The callback is not yet wired to timeline playback, stale-picture labeling, or edit-triggered cancellation; detailed warm per-phase profiling and cost reduction remain open.
+Complete-frame solver callbacks and the Hot pour edit benchmark are committed. Cold-cache edit profiles are retained as references; warmed runs record first solved volume frames under 0.31 s on both RTX and Radeon. The Radeon cup-move edit takes 32.43 s for all 120 output stages, 2.43 s over the laptop gate; warm GPU phase profiles identify steam host/pressure work, cache writes and cup-move whitewater as candidates. The callback is not yet wired to timeline playback, stale-picture labeling or edit-triggered cancellation, and no cost-reducing solver change has landed.
 
 # Lane 8 step A of 2 — in progress (2026-10-22)
 
