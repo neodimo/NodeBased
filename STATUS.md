@@ -1,3 +1,7 @@
+# Lane 6 finish 1 — in progress (2026-10-22, 3:20 AM PDT)
+
+The merged step B's left-outs are under rework. GPU evidence so far: at frame 60, 960 × 540 fixed 32, zero steam shadow density plus four transmission bounces rendered in 35.55 s and restored the liquid to a golden/translucent appearance. Targeted Hot pour tests pass (2). The 1080p convergence run is queued behind the shared GPU lock. `examples/hot_pour_shot` now uses the probe settings; final 1080p and 3-frame still evidence pending. See `scratch/nb-lanes/run/profile-L6-finish1-settled.log` when it completes.
+
 # Lane 6 step B — PARTIAL (2026-10-22)
 
 Optimized RTX 3080 Ti frame-60 960 × 540 fixed-32 render: 22.735 s, down from 200.38 s with 16 volume-shadow steps. Optimized 1920 × 1080 adaptive render: 83.511 s, mean 8.379 spp, cap 64, 99.405% pixels under threshold 0.01. NVIDIA CPU/GPU frame comparisons 1/60/120 passed; targeted adaptive/majorant modules passed on NVIDIA, forced integrated invocation, and llvmpipe (12 each). Radeon 8060S 64-cell preview: 134.31 warm FPS; 13.4 ms stop-to-full-detail. New stills remain visibly noisy and the stream reads weakly. A6000 and Windows unverified. Evidence/docs landed in `1b267f28`; exact next-owner handoff is in TASKLOG.md and context/state.md. Scratch profile was removed after durable evidence was saved.

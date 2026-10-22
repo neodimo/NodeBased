@@ -37,6 +37,8 @@ class HotPourShotTests(unittest.TestCase):
         cup = nodes["front_cup"]["params"]
         source = nodes["spout"]["params"]
         self.assertEqual(nodes["liquid"]["params"]["max_size"], 64)
+        self.assertEqual(nodes["render"]["params"]["transmission_bounces"], 4)
+        self.assertEqual(nodes["render"]["params"]["volume_shadow_density"], 0.0)
         self.assertEqual(cup["holdout"], "on")
         self.assertAlmostEqual(cup["tx"], 0.0)
         self.assertAlmostEqual(cup["tz"], 0.0)

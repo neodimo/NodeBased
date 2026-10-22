@@ -11,6 +11,5 @@ The comp graph renders the fluid scene over that plate. `hot_pour_shot.nbcomp` i
 
 `render_evidence.py --adapter default --workdir <cache-directory>` compares CPU/GPU output on frames 1, 60
 and 120, then writes the 960 × 540 showcase stills at frames 60, 90 and 120. The showcase uses adaptive
-sampling (8 minimum, 32 maximum, 0.01 relative-noise threshold), a two-bounce transmission cap and one
-volume-shadow sample; the path-traced steam itself keeps density-aware free-flight sampling. Keep the work
+sampling (8 minimum, 32 maximum, 0.01 relative-noise threshold), a four-bounce transmission cap and no steam cast shadows (the volumetric steam itself stays enabled). This avoids the coarse one-step volume-shadow estimate that darkened the transparent liquid; the path-traced steam keeps density-aware free-flight sampling. Keep the work
 directory on a volume with enough room for the simulation cache; `--small-only` skips the stills.

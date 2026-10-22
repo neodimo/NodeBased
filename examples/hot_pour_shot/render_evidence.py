@@ -41,7 +41,7 @@ def main():
     doc = load_document(ROOT / "hot_pour_shot.nbcomp")
     doc["nodes"]["render"]["params"].update(render_backend="gpu", render_mode="pathtrace", pt_samples=2,
                                                max_bounces=2, diffuse_bounces=1, specular_bounces=1,
-                                               transmission_bounces=2, volume_shadow_steps=1,
+                                               transmission_bounces=4, volume_shadow_steps=1, volume_shadow_density=0.0,
                                                sampling="fixed", noise_threshold=0.0)
     doc["nodes"]["render"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
     doc["nodes"]["plate_fit"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
@@ -87,8 +87,8 @@ def main():
         return
     doc["nodes"]["render"]["params"].update(
         render_backend="gpu", width=960, height=540, pt_samples=32,
-        max_bounces=4, diffuse_bounces=2, specular_bounces=2, transmission_bounces=2,
-        volume_shadow_steps=1, sampling="adaptive", min_samples=8, max_samples=32,
+        max_bounces=4, diffuse_bounces=2, specular_bounces=2, transmission_bounces=4,
+        volume_shadow_steps=1, volume_shadow_density=0.0, sampling="adaptive", min_samples=8, max_samples=32,
         adaptive_pass_size=8, noise_threshold=0.01)
     doc["nodes"]["plate_fit"]["params"].update(width=960, height=540)
     output_dir = Path(__file__).resolve().parents[2] / "docs" / "images" / "hot_pour_shot"
