@@ -27,6 +27,7 @@ import numpy as np
 from nodebased.core import Dispatcher, demo_document
 from nodebased.decodepool import DecodeAheadPool
 from nodebased.imaging import Evaluator, write_png
+from nodebased.media import write_exr
 from nodebased.tiers import Region
 from nodebased.tileexec import (TileExecutor, _compute_node_digests, _align_artifact_to,
                                 _read_decode_key)
@@ -652,19 +653,29 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
 
     def test_full_evaluator_consumes_warmed_raster_decode(self):
         with tempfile.TemporaryDirectory() as temp:
-            document = _read_view_document(self._plate(temp))
+            path = Path(temp) / "multilayer.exr"
+            beauty = np.full((16, 32, 4), 0.25, np.float32)
+            layers = {"normals": np.ones((16, 32, 3), np.float32)}
+            write_exr(path, beauty, bits="float", layers=layers)
+            dispatcher = Dispatcher()
+            dispatcher.execute({"op": "create", "type": "Read", "id": "r",
+                                "params": {"path": str(path), "colorspace": "Raw"}})
+            document = dispatcher.document
             pool = DecodeAheadPool(max_workers=1, budget_bytes=50_000_000)
             evaluator = Evaluator()
             evaluator.decode_pool = pool
             executor = TileExecutor(decode_pool=pool)
             try:
-                executor.prefetch_reads(document, "v", [1])
+                executor.prefetch_reads(document, "r", [1])
                 self.assertTrue(_wait_for(lambda: pool.stats()["entries"] == 1))
                 before = pool.hits
-                actual = evaluator.evaluate(document, "v", frame=1, tier=2)
+                actual = evaluator.evaluate_raster(document, "r", frame=1, tier=2, typed=True)
                 self.assertGreater(pool.hits, before)
-                expected = Evaluator().evaluate(document, "v", frame=1, tier=2)
-                np.testing.assert_array_equal(actual, expected)
+                expected = Evaluator().evaluate_raster(document, "r", frame=1, tier=2, typed=True)
+                np.testing.assert_array_equal(actual.pixels, expected.pixels)
+                self.assertEqual(set(actual.layers), {"normals"})
+                np.testing.assert_array_equal(actual.layers["normals"].pixels,
+                                              expected.layers["normals"].pixels)
             finally:
                 pool.shutdown()
 
