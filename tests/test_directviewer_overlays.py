@@ -106,6 +106,31 @@ class OverlayParityBase(ViewerCompareBase):
         return int(changed.sum())
 
 
+class BadgeParityTests(OverlayParityBase):
+    def test_the_label_is_left_out_of_the_direct_overlay_and_the_card_texture_has_its_ink(self):
+        self.viewer.last_scale = 2
+        self.assertEqual(self.viewer.badge_label(), "proxy 1/2")
+        view, physical, exact = self.pin_view(1.75)
+        label = (slice(0, int(26 * exact)), slice(physical[0] - int(130 * exact), physical[0]))
+        with_label = as_array(self.viewer.render_overlay(view, physical, exact))
+        self.assertTrue((with_label[label][..., 3] > 0).any())
+        self.assertIs(self.viewer.render_overlay(view, physical, exact, probe=True, badge=False), dv.EMPTY_OVERLAY)
+        image, x, y = self.viewer.render_badge("proxy 1/2", physical, exact)
+        ink = as_array(image)
+        self.assertTrue((ink[..., 3] > 0).any())
+        # Placed where the Viewer paints it: 100 logical pixels in from the right, in the top strip.
+        rows, columns = np.nonzero(as_array(self.viewer.render_overlay(view, physical, exact))[label][..., 3])
+        self.assertLessEqual(abs(int(columns.min()) + label[1].start - (x + int(np.nonzero(ink[..., 3].any(axis=0))[0][0]))), 2)
+        self.assertLessEqual(abs(int(rows.min()) - (y + int(np.nonzero(ink[..., 3].any(axis=1))[0][0]))), 2)
+
+    def test_the_region_of_interest_label_joins_the_tier_in_one_badge(self):
+        self.window.set_viewer_roi(on=True, rect=[0.2, 0.25, 0.7, 0.8])
+        self.settle()
+        self.viewer.last_scale = 4
+        self.assertEqual(self.viewer.badge_label().split("  ")[0], "proxy 1/4")
+        self.assertGreater(len(self.viewer.badge_label()), len("proxy 1/4"))
+
+
 class WipeParityTests(OverlayParityBase):
     def test_wipe_line_split_and_handles_match_the_viewer(self):
         self.compare(2, "wipe")
@@ -325,16 +350,48 @@ class WindowOverlayTests(ViewerCompareBase):
         self.assertTrue(wait_until(lambda: self.widget.presenter is not None and self.widget.presenter.has_picture()))
         self.addCleanup(lambda: self.window.direct_action.setChecked(False))
 
+    def with_overlay_content(self):
+        """A region of interest, so the Viewer's overlays (which the card still receives as an image) are not empty."""
+        self.window.set_viewer_roi(on=True, rect=[0.2, 0.25, 0.7, 0.8])
+        self.settle()
+
     def test_a_wipe_reaches_the_card_and_follows_the_viewer(self):
+        # Since 10/22 the card draws the wipe line and handles in its own shader, so a moved wipe is a new draw
+        # with no overlay upload.
         self.compare(2, "wipe")
-        self.assertTrue(wait_until(lambda: self.widget.presenter.counters["paint_uploads"] >= 1))
-        uploads = self.widget.presenter.counters["paint_uploads"]
+        presenter = self.widget.presenter
+        self.assertTrue(wait_until(lambda: presenter.compare == "wipe"))
+        wait_until(lambda: False, timeout=0.3)
+        uploads, draws = presenter.counters["paint_uploads"], presenter.counters["draws"]
         self.viewer.wipe.update(x=0.25)
         self.viewer.viewport().update()
-        self.assertTrue(wait_until(lambda: self.widget.presenter.counters["paint_uploads"] > uploads))
+        self.widget.overlay_dirty()
+        self.assertTrue(wait_until(lambda: presenter.counters["draws"] > draws))
+        self.assertEqual(presenter.counters["paint_uploads"], uploads)
+        self.assertIsNone(presenter.paint_size)
+
+    def test_the_tier_badge_is_a_cached_texture_and_leaves_the_overlay_empty(self):
+        presenter = self.widget.presenter
+        self.assertTrue(wait_until(lambda: presenter.counters["draws"] >= 1))
+        wait_until(lambda: False, timeout=0.3)
+        uploads = presenter.counters["paint_uploads"]
+        for tier in (2, 4, 2, 4, 2):
+            self.viewer.last_scale = tier
+            draws = presenter.counters["draws"]
+            self.widget.overlay_dirty()
+            self.assertTrue(wait_until(lambda: presenter.counters["draws"] > draws))
+            self.assertEqual(presenter.badge_shown[0], f"proxy 1/{tier}")
+        self.assertEqual(presenter.counters["badge_uploads"], 2)           # one texture per label, however often the tier flips
+        self.assertEqual(presenter.counters["paint_uploads"], uploads)     # and no overlay image went up for any of them
+        self.viewer.last_scale = 1
+        draws = presenter.counters["draws"]
+        self.widget.overlay_dirty()
+        self.assertTrue(wait_until(lambda: presenter.counters["draws"] > draws))
+        self.assertIsNone(presenter.badge_shown)
 
     def test_an_overlay_that_did_not_change_is_not_painted_again(self):
         self.compare(2, "wipe")
+        self.with_overlay_content()
         presenter = self.widget.presenter
         self.assertTrue(wait_until(lambda: presenter.counters["paint_uploads"] >= 1))
         wait_until(lambda: False, timeout=0.3)
@@ -354,6 +411,7 @@ class WindowOverlayTests(ViewerCompareBase):
 
     def test_after_a_recovery_the_same_overlay_is_painted_again(self):
         self.compare(2, "wipe")
+        self.with_overlay_content()
         presenter = self.widget.presenter
         self.assertTrue(wait_until(lambda: presenter.counters["paint_uploads"] >= 1))
         wait_until(lambda: False, timeout=0.3)
@@ -453,6 +511,76 @@ class CardPaintTests(unittest.TestCase):
         self.presenter.paint_size = (100, 100)       # a stale texture from before a resize
         self.presenter.draw(self.view, self.context.size)
         self.assertNotEqual(tuple(self.context.read()[5, 5, :3]), (255, 0, 0))
+
+    def badge_image(self, color=0xFFFF0000):
+        image = QImage(20, 8, QImage.Format.Format_RGBA8888_Premultiplied)
+        image.fill(0)
+        painter = QPainter(image)
+        painter.fillRect(0, 0, 20, 8, color)
+        painter.end()
+        return image
+
+    def test_a_badge_lands_on_its_pixels_and_each_label_is_made_and_uploaded_once(self):
+        key = ("proxy 1/2", 1.0, (160, 120))
+        made = []
+
+        def make():
+            made.append(1)
+            return self.badge_image(), 100, 60
+        self.presenter.draw(self.view, self.context.size)
+        before = self.context.read().copy()
+        for _ in range(4):
+            self.presenter.set_badge(key, make)
+            self.presenter.draw(self.view, self.context.size)
+        after = self.context.read()
+        self.assertEqual(len(made), 1)
+        self.assertEqual(self.presenter.counters["badge_uploads"], 1)
+        self.assertEqual(self.presenter.counters["badge_cached"], 3)
+        self.assertEqual(self.presenter.counters["paint_uploads"], 0)       # the overlay image never carried it
+        changed = np.argwhere((after != before).any(axis=2))
+        self.assertEqual({tuple(p) for p in changed}, {(y, x) for y in range(60, 68) for x in range(100, 120)})
+        self.assertEqual(tuple(after[63, 105, :3]), (255, 0, 0))
+
+    def test_the_badge_goes_when_the_label_does_and_comes_back_without_a_new_texture(self):
+        one, two = ("proxy 1/2", 1.0, (160, 120)), ("proxy 1/4", 1.0, (160, 120))
+        self.presenter.draw(self.view, self.context.size)
+        before = self.context.read().copy()
+        self.presenter.set_badge(one, lambda: (self.badge_image(), 100, 60))
+        self.presenter.draw(self.view, self.context.size)
+        self.assertFalse(np.array_equal(self.context.read(), before))
+        self.presenter.set_badge(None, None)
+        self.presenter.draw(self.view, self.context.size)
+        np.testing.assert_array_equal(self.context.read(), before)
+        self.presenter.set_badge(two, lambda: (self.badge_image(0xFF00FF00), 100, 60))
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(tuple(self.context.read()[63, 105, :3]), (0, 255, 0))
+        self.presenter.set_badge(one, lambda: self.fail("a label already on the card was made again"))
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(tuple(self.context.read()[63, 105, :3]), (255, 0, 0))
+        self.assertEqual(self.presenter.counters["badge_uploads"], 2)
+
+    def test_a_badge_made_for_another_surface_size_is_not_drawn(self):
+        self.presenter.draw(self.view, self.context.size)
+        before = self.context.read().copy()
+        self.presenter.set_badge(("proxy 1/2", 1.0, (100, 100)), lambda: (self.badge_image(), 100, 60))
+        self.presenter.draw(self.view, self.context.size)
+        np.testing.assert_array_equal(self.context.read(), before)
+
+    def test_the_badge_cache_is_bounded(self):
+        for n in range(dv.BADGE_CACHE + 5):
+            self.presenter.set_badge((f"proxy 1/{n}", 1.0, (160, 120)), lambda: (self.badge_image(), 100, 60))
+        self.assertEqual(len(self.presenter.badges), dv.BADGE_CACHE)
+
+    def test_the_outline_and_corner_mark_are_part_of_the_picture_pass(self):
+        self.assertFalse(hasattr(self.presenter, "overlay_pipeline"))
+        self.presenter.draw(self.view, self.context.size)
+        on = self.context.read()
+        self.assertGreater(int(on[2, 2, 0]), 200)                           # the orange corner mark
+        self.presenter.overlay = False
+        self.presenter.draw(self.view, self.context.size)
+        off = self.context.read()
+        self.assertNotEqual(tuple(off[2, 2, :3]), tuple(on[2, 2, :3]))
+        self.assertGreater(int((on != off).any(axis=2).sum()), 28)          # the mark and the format's edge
 
     @staticmethod
     def mark(x, y):

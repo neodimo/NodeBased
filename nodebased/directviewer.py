@@ -56,6 +56,7 @@ FILL_BANDS = 8                # a large picture is copied into the staging buffe
 # What an overlay provider returns instead of an image: nothing is painted / the same image as last time.
 EMPTY_OVERLAY = object()
 SAME_OVERLAY = object()
+BADGE_CACHE = 12              # tier badge labels kept on the card
 PAINT_BAND_GAP = 48           # changed overlay rows closer together than this go up as one band
 
 
@@ -219,6 +220,30 @@ fn encode(c: vec3f) -> vec3f {
 }
 """
 
+BADGE_SHADER = """
+// The tier badge ("proxy 1/2", "ROI"): a small premultiplied RGBA8 texture of the label, made once per text and
+// kept, drawn as one quad at a physical pixel rectangle. Uniform: x, y, w, h of the quad, then the surface
+// width and height, the sRGB flag, unused.
+@group(0) @binding(0) var badge: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> q: array<vec4f, 2>;
+struct Out { @builtin(position) p: vec4f };
+@vertex fn vs(@builtin(vertex_index) i: u32) -> Out {
+    var c = array<vec2f, 6>(vec2f(0., 0.), vec2f(1., 0.), vec2f(0., 1.), vec2f(0., 1.), vec2f(1., 0.), vec2f(1., 1.));
+    let px = q[0].xy + c[i] * q[0].zw;
+    var o: Out; o.p = vec4f(px.x / q[1].x * 2. - 1., 1. - px.y / q[1].y * 2., 0., 1.); return o;
+}
+fn encode(c: vec3f) -> vec3f {
+    if (q[1].z < 0.5) { return c; }
+    let lo = c / 12.92; let hi = pow((c + vec3f(0.055)) / 1.055, vec3f(2.4));
+    return select(hi, lo, c <= vec3f(0.04045));
+}
+@fragment fn fs(o: Out) -> @location(0) vec4f {
+    let t = textureLoad(badge, vec2i(o.p.xy - q[0].xy), 0);
+    if (t.a <= 0.0) { discard; }
+    return vec4f(encode(t.rgb / t.a) * t.a, t.a);
+}
+"""
+
 SHADER = """
 struct View {
     viewport: vec2f, centre: vec2f,
@@ -241,26 +266,29 @@ fn encode(c: vec3f) -> vec3f {
     return select(hi, lo, c <= vec3f(0.04045));
 }
 fn scene_at(frag: vec2f) -> vec2f { return v.centre + (frag - v.viewport * 0.5) / v.zoom; }
-@fragment fn fs(o: Out) -> @location(0) vec4f {
-    let s = scene_at(o.p.xy);
-    let rel = (s - v.image.xy) / v.image.zw;
-    if (rel.x < 0. || rel.y < 0. || rel.x >= 1. || rel.y >= 1.) { return vec4f(encode(v.surround.rgb), 1.); }
-    let t = vec2i(min(rel * v.tex, v.tex - vec2f(1.)));
-    return vec4f(encode(textureLoad(img, t, 0).rgb), 1.);
-}
-// Overlay pass: a one-pixel outline of the format rectangle plus an orange corner mark that says
-// "experimental" without text (Qt widgets cannot be drawn over a screen-presented surface).
-@fragment fn fs_overlay(o: Out) -> @location(0) vec4f {
-    let s = scene_at(o.p.xy);
+// A one-pixel outline of the format rectangle plus an orange corner mark that says "experimental" without
+// text (Qt widgets cannot be drawn over a screen-presented surface). It is folded into the picture pass:
+// `surround.w` is 1 when it is drawn, and the blend happens on the encoded colour, as a blend pass would.
+fn outline_over(enc: vec3f, p: vec2f, s: vec2f) -> vec3f {
+    if (v.surround.w < 0.5) { return enc; }
     let px = 1.0 / v.zoom;
     let lo = v.format.xy; let hi = v.format.xy + v.format.zw;
     let inside_outer = s.x >= lo.x - px && s.y >= lo.y - px && s.x <= hi.x + px && s.y <= hi.y + px;
     let inside_inner = s.x >= lo.x + px && s.y >= lo.y + px && s.x <= hi.x - px && s.y <= hi.y - px;
     var a = 0.0; var c = vec3f(0.9, 0.9, 0.4);
     if (inside_outer && !inside_inner) { a = 0.85; }
-    if (o.p.x + o.p.y < 28.0) { a = 1.0; c = vec3f(1.0, 0.55, 0.1); }
-    if (a == 0.0) { discard; }
-    return vec4f(encode(c), a);
+    if (p.x + p.y < 28.0) { a = 1.0; c = vec3f(1.0, 0.55, 0.1); }
+    if (a == 0.0) { return enc; }
+    return mix(enc, encode(c), a);
+}
+@fragment fn fs(o: Out) -> @location(0) vec4f {
+    let s = scene_at(o.p.xy);
+    let rel = (s - v.image.xy) / v.image.zw;
+    if (rel.x < 0. || rel.y < 0. || rel.x >= 1. || rel.y >= 1.) {
+        return vec4f(outline_over(encode(v.surround.rgb), o.p.xy, s), 1.);
+    }
+    let t = vec2i(min(rel * v.tex, v.tex - vec2f(1.)));
+    return vec4f(outline_over(encode(textureLoad(img, t, 0).rgb), o.p.xy, s), 1.);
 }
 """
 
@@ -646,6 +674,8 @@ class RetainedPresenter:
         self.paint_key = None        # what the texture was painted for; the widget compares before painting again
         self.paint_image = None      # the QImage the paint texture holds (kept to skip an identical upload)
         self.paint_copies = []       # (buffer, bytes per row, first row, rows, width, texture, first column): overlay bands the next draw copies in
+        self.badges = collections.OrderedDict()
+        self.badge_shown = None
         self.linear_error = ""
         self.uploaded_sequence = 0
         self.last_frame = None       # the ledger payload ("qimage"|"linear", ...) the texture was made from
@@ -670,15 +700,9 @@ class RetainedPresenter:
         self.context.configure(device=self.device, format=self.format, alpha_mode="opaque")
         module = self.device.create_shader_module(code=SHADER)
         target = {"format": self.format}
-        overlay_target = {"format": self.format, "blend": {
-            "color": {"src_factor": "src-alpha", "dst_factor": "one-minus-src-alpha", "operation": "add"},
-            "alpha": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"}}}
         self.pipeline = self.device.create_render_pipeline(
             layout="auto", vertex={"module": module, "entry_point": "vs"},
             fragment={"module": module, "entry_point": "fs", "targets": [target]})
-        self.overlay_pipeline = self.device.create_render_pipeline(
-            layout="auto", vertex={"module": module, "entry_point": "vs"},
-            fragment={"module": module, "entry_point": "fs_overlay", "targets": [overlay_target]})
         self.uniform = self.device.create_buffer(size=UNIFORM_BYTES, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self.uniform_data = None
         paint_module = self.device.create_shader_module(code=PAINT_SHADER)
@@ -692,7 +716,14 @@ class RetainedPresenter:
             [1.0 if self.format.endswith("srgb") else 0.0, 0, 0, 0], np.float32))
         self.paint_texture = self.paint_group = self.paint_size = self.paint_key = self.paint_image = None
         self.paint_copies = []
-        self.overlay_bind_group = None
+        badge_module = self.device.create_shader_module(code=BADGE_SHADER)
+        self.badge_pipeline = self.device.create_render_pipeline(
+            layout="auto", vertex={"module": badge_module, "entry_point": "vs"},
+            fragment={"module": badge_module, "entry_point": "fs", "targets": [{"format": self.format, "blend": {
+                "color": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"},
+                "alpha": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"}}}]})
+        self.badges = collections.OrderedDict()   # key -> (texture, uniform buffer, bind group): labels already on the card
+        self.badge_shown = None                    # the badges key drawn at each draw, or None for no badge
         self.vertex_module = module
         self.linear_layout = self.device.create_bind_group_layout(entries=[
             {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT,
@@ -753,15 +784,17 @@ class RetainedPresenter:
         tables = [entry[2] for entry in self.linear_pipelines.values() if entry is not None]
         floats = [entry[0] for entry in self.linear_by_format.values()]
         floats_b = [entry[0] for entry in self.linear_b_by_format.values()]
-        for resource in (self.texture, *floats, *floats_b, self.uniform, self.paint_texture, self.paint_flags, *tables):
+        for resource in (self.texture, *floats, *floats_b, self.uniform, self.paint_texture, self.paint_flags, *tables,
+                         *self._badge_resources()):
             self._destroy(resource)
+        self.badges, self.badge_shown = collections.OrderedDict(), None
         self.paint_texture = self.paint_group = self.paint_size = self.paint_key = self.paint_image = None
         self.paint_copies = []
         self.linear_by_format = {}
         self.linear_b_by_format = {}
         self.linear_b_texture = self.group_key = None
         self.compare = "A only"
-        self.texture = self.bind_group = self.overlay_bind_group = None
+        self.texture = self.bind_group = None
         self.texture_size = None
         self.texture_capacity = self.linear_capacity = (0, 0)
         self.linear_texture = self.linear_bind_group = self.linear = None
@@ -798,15 +831,16 @@ class RetainedPresenter:
             self._destroy(resource)
         for resource in (self.texture, *[entry[0] for entry in self.linear_by_format.values()],
                          *[entry[0] for entry in self.linear_b_by_format.values()], self.uniform,
-                         self.paint_texture, self.paint_flags):
+                         self.paint_texture, self.paint_flags, *self._badge_resources()):
             self._destroy(resource)
+        self.badges, self.badge_shown = collections.OrderedDict(), None
         self.paint_texture = self.paint_group = self.paint_size = self.paint_key = self.paint_image = None
         self.paint_copies = []
         self.linear_by_format = {}
         self.linear_b_by_format = {}
         self.linear_b_texture = self.group_key = None
         self.compare = "A only"
-        self.texture = self.bind_group = self.overlay_bind_group = None
+        self.texture = self.bind_group = None
         self.texture_size = None
         self.texture_capacity = self.linear_capacity = (0, 0)
         self.linear_texture = self.linear_bind_group = self.linear = None
@@ -961,10 +995,6 @@ class RetainedPresenter:
                 layout=self.pipeline.get_bind_group_layout(0),
                 entries=[{"binding": 0, "resource": texture.create_view()},
                          {"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
-        if self.overlay_bind_group is None:
-            self.overlay_bind_group = self.device.create_bind_group(
-                layout=self.overlay_pipeline.get_bind_group_layout(0),
-                entries=[{"binding": 1, "resource": {"buffer": self.uniform, "offset": 0, "size": 80}}])
         self.counters["texture_creates"] += 1
         return texture
 
@@ -1101,6 +1131,50 @@ class RetainedPresenter:
         self.paint_image = image
         self.counters["paint_uploads"] += 1
 
+    def _badge_resources(self):
+        return [item for entry in self.badges.values() for item in entry[:2]]
+
+    def set_badge(self, key, make):
+        """Show the tier badge for `key` (None for no badge) over the picture.
+
+        `make()` is called only when this card has not seen `key` yet and returns (image, x, y): a premultiplied
+        RGBA8888 QImage of the label and its top left corner in physical surface pixels. The texture, its
+        uniform and its bind group are kept (the last BADGE_CACHE labels), so a tier change that goes back to a
+        label already drawn costs no upload, and the label never goes through the overlay image."""
+        self.badge_shown = None
+        if key is None:
+            return
+        entry = self.badges.get(key)
+        if entry is None:
+            image, x, y = make()
+            width, height = image.width(), image.height()
+            padded = padded_row(width, 4)
+            staged = np.zeros((height, padded), np.uint8)
+            staged[:, :width * 4] = np.frombuffer(image.constBits(), np.uint8, count=height * image.bytesPerLine()).reshape(
+                height, image.bytesPerLine())[:, :width * 4]
+            texture = self.device.create_texture(
+                size=(width, height, 1), format="rgba8unorm",
+                usage=self.wgpu.TextureUsage.TEXTURE_BINDING | self.wgpu.TextureUsage.COPY_DST)
+            self.device.queue.write_texture(
+                {"texture": texture, "mip_level": 0, "origin": (0, 0, 0)}, staged.tobytes(),
+                {"offset": 0, "bytes_per_row": padded, "rows_per_image": height}, (width, height, 1))
+            sized = key[-1]
+            data = np.array([x, y, width, height, sized[0], sized[1], 1.0 if self.format.endswith("srgb") else 0.0, 0.0], np.float32)
+            buffer = self.device.create_buffer_with_data(data=data.tobytes(), usage=self.wgpu.BufferUsage.UNIFORM)
+            group = self.device.create_bind_group(layout=self.badge_pipeline.get_bind_group_layout(0), entries=[
+                {"binding": 0, "resource": texture.create_view()},
+                {"binding": 1, "resource": {"buffer": buffer, "offset": 0, "size": 32}}])
+            entry = self.badges[key] = (texture, buffer, group)
+            self.counters["badge_uploads"] += 1
+            while len(self.badges) > BADGE_CACHE:
+                _, old = self.badges.popitem(last=False)
+                for resource in old[:2]:
+                    self.ledger.retire(resource)
+        else:
+            self.badges.move_to_end(key)
+            self.counters["badge_cached"] += 1
+        self.badge_shown = key
+
     def has_picture(self):
         return self.texture is not None or self.linear_texture is not None
 
@@ -1163,7 +1237,7 @@ class RetainedPresenter:
                 pipeline, bind_group, size, tables = self.pipeline, self.bind_group, self.texture_size, None
                 display = [0.0] * 20
             data = np.array([*physical_size, cx, cy, *rect, *format_rect, *size, zoom,
-                             1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0, *display], np.float32)
+                             1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0 if self.overlay else 0.0, *display], np.float32)
             if self.uniform_data is None or not np.array_equal(self.uniform_data, data):
                 self.device.queue.write_buffer(self.uniform, 0, data)
                 self.uniform_data = data
@@ -1173,14 +1247,14 @@ class RetainedPresenter:
             if tables is not None:
                 rp.set_bind_group(1, tables)
             rp.draw(3)
-            if self.overlay:
-                rp.set_pipeline(self.overlay_pipeline)
-                rp.set_bind_group(0, self.overlay_bind_group)
-                rp.draw(3)
             if self.paint_size is not None and tuple(physical_size) == self.paint_size:
                 rp.set_pipeline(self.paint_pipeline)
                 rp.set_bind_group(0, self.paint_group)
                 rp.draw(3)
+            if self.badge_shown is not None and self.badge_shown[-1] == tuple(physical_size) and self.badge_shown in self.badges:
+                rp.set_pipeline(self.badge_pipeline)
+                rp.set_bind_group(0, self.badges[self.badge_shown][2])
+                rp.draw(6)
             rp.end()
             self.device.queue.submit([encoder.finish()])
         if slot is not None:
@@ -1275,6 +1349,8 @@ def make_widget(parent=None):
             self.recoveries = 0
             self.refusal = ""             # why the last picture was refused (too large for the card), or ""
             self.overlay_provider = None  # (view, physical_size, ratio) -> premultiplied RGBA QImage or None
+            self.badge_text = None        # () -> the tier badge's label ("" for none), when the owner draws it from the card
+            self.badge_maker = None       # (text, physical_size, ratio) -> (QImage, x, y): the label's pixels, asked once per label
             self.overlay_probed = False   # the provider records first and answers EMPTY/SAME_OVERLAY; an image it returns has content
             self.compare_provider = None  # () -> the wipe line (centre x, y, normal x, y) in scene units, or None
             self.wipe_handle_provider = None   # (logical zoom) -> the turn handle's scene point (x, y) when the card draws the line and handles, or None
@@ -1399,6 +1475,17 @@ def make_widget(parent=None):
                 presenter.set_paint(image, key, nonempty=self.overlay_probed)
             self.overlay_draws += 1
 
+        def _paint_badge(self, size):
+            """The tier badge comes from a texture the card keeps per label, not from the overlay image."""
+            presenter = self.presenter
+            text = self.badge_text() if self.badge_text is not None and self.badge_maker is not None else ""
+            if not text:
+                presenter.set_badge(None, None)
+                return
+            ratio = float(self.get_pixel_ratio())
+            size = tuple(size)
+            presenter.set_badge((text, ratio, size), lambda: self.badge_maker(text, size, ratio))
+
         def _fail(self, message):
             self.error = message
             if self.presenter is not None:
@@ -1429,6 +1516,7 @@ def make_widget(parent=None):
                     wipe = (*wipe[:4], handle[0], handle[1], ratio)
                 try:
                     self._paint_overlay(size)
+                    self._paint_badge(size)
                     self.presenter.draw(self.view, size, wipe)
                 except Exception as exc:
                     # A lost or failing device is replaced once; the same draw is then repeated on the new one.

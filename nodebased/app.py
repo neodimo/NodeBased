@@ -23,7 +23,7 @@ from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTi
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QBrush,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
-                           QConicalGradient, QRadialGradient, QTransform, QPixmapCache, QPicture)
+                           QConicalGradient, QRadialGradient, QTransform, QPixmapCache, QPicture, QFontMetricsF, QGuiApplication)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -3770,14 +3770,44 @@ class Viewer(PanZoomView):
                     if (x, y) != (box.center().x(), box.center().y()):
                         painter.drawRect(QRectF(x - size, y - size, size * 2, size * 2))
             painter.restore()
-        roi_label = (self.roi_fallback_label if self._roi_active() else "")
-        labels = [text for text in (self.proxy_badge_text(), roi_label or ("ROI" if self._roi_active() else "")) if text]
-        if labels:
+        label = self.badge_label()
+        if label and self._badge_in_overlay:
             painter.save()
             painter.resetTransform()
             painter.setPen(QColor("#f4c542"))
-            painter.drawText(self.overlay_width() - 100, 18, "  ".join(labels))
+            painter.drawText(self.overlay_width() - 100, 18, label)
             painter.restore()
+
+    # The corner label (tier, region of interest). The direct picture draws it from a texture the card keeps
+    # (`badge_label`, `render_badge`), so `render_overlay(..., badge=False)` leaves it out of the overlay image.
+    _badge_in_overlay = True
+
+    def badge_label(self):
+        roi_label = (self.roi_fallback_label if self._roi_active() else "")
+        labels = [text for text in (self.proxy_badge_text(), roi_label or ("ROI" if self._roi_active() else "")) if text]
+        return "  ".join(labels)
+
+    def render_badge(self, text, physical_size, ratio):
+        """The label as a premultiplied RGBA image and the physical pixel of its top left corner on a surface of
+        `physical_size`: the same text, colour and place `_draw_roi_and_masks` paints (100 logical pixels in from
+        the right edge, baseline 18 down)."""
+        font = QGuiApplication.font()
+        metrics = QFontMetricsF(font)
+        pad = 2
+        width = int(math.ceil(metrics.horizontalAdvance(text) * ratio)) + 2 * pad
+        height = int(math.ceil((metrics.ascent() + metrics.descent()) * ratio)) + 2 * pad
+        image = QImage(width, height, QImage.Format.Format_RGBA8888_Premultiplied)
+        image.setDevicePixelRatio(ratio)
+        image.fill(0)
+        painter = QPainter(image)
+        painter.setRenderHints(self.renderHints())
+        painter.setFont(font)
+        painter.setPen(QColor("#f4c542"))
+        painter.drawText(QPointF(pad / ratio, (pad / ratio) + metrics.ascent()), text)
+        painter.end()
+        x = int(round(physical_size[0] - 100 * ratio)) - pad
+        y = int(round(18 * ratio - metrics.ascent() * ratio)) - pad
+        return image, x, y
 
     def draw_format_overlay(self, scene_rect):
         """Record the display window so drawForeground can paint Nuke-style format guides
@@ -3828,7 +3858,7 @@ class Viewer(PanZoomView):
         override = self._overlay_view
         return self.viewport().width() if override is None else override["width"]
 
-    def render_overlay(self, view, physical_size, ratio, readout=None, probe=False, force=False):
+    def render_overlay(self, view, physical_size, ratio, readout=None, probe=False, force=False, badge=True):
         """The overlays as a premultiplied RGBA image of `physical_size` for the direct picture.
 
         `view` is the direct widget's (centre_x, centre_y, zoom) with zoom in physical pixels per scene
@@ -3840,7 +3870,10 @@ class Viewer(PanZoomView):
         surface-sized image is never made. A recording identical to the last one, for the same view, size and
         ratio, means the image would be the same one: `SAME_OVERLAY` comes back (unless `force`). Both are
         the common case on a paused picture, and the 4 MB fill, paint and compare of an image that did not
-        change cost 1 to 4 ms of Qt-thread time per picture (10/22)."""
+        change cost 1 to 4 ms of Qt-thread time per picture (10/22).
+
+        `badge=False` leaves the corner label (tier, region of interest) out: the direct picture draws it from a
+        texture of its own (`render_badge`), so a tier change repaints no overlay."""
         if self.format_rect is None:
             return None
         width, height = physical_size
@@ -3857,12 +3890,14 @@ class Viewer(PanZoomView):
             painter.setRenderHints(self.renderHints())
             painter.setTransform(transform)
             self._overlay_view = {"zoom": logical, "transform": transform, "width": width / ratio}
+            self._badge_in_overlay = badge
             try:
                 self.paint_overlays(painter, scene_rect)
                 if readout is not None:
                     self._paint_readout(painter, area, readout)
             finally:
                 self._overlay_view = None
+                self._badge_in_overlay = True
                 painter.end()
             if recording.size() <= self._empty_recording_size():
                 self._overlay_memo = None
@@ -3886,12 +3921,14 @@ class Viewer(PanZoomView):
         painter.setRenderHints(self.renderHints())      # the hints the Viewer paints its own foreground with
         painter.setTransform(transform)
         self._overlay_view = {"zoom": logical, "transform": transform, "width": width / ratio}
+        self._badge_in_overlay = badge
         try:
             self.paint_overlays(painter, scene_rect)
             if readout is not None:
                 self._paint_readout(painter, area, readout)
         finally:
             self._overlay_view = None
+            self._badge_in_overlay = True
             painter.end()
         self._overlay_memo = memo_key
         return image
@@ -14569,6 +14606,8 @@ class Window(QMainWindow):
             widget.failed.connect(self._direct_failed)
             widget.overlay_provider = self._direct_overlay
             widget.overlay_probed = True
+            widget.badge_text = self.viewer.badge_label
+            widget.badge_maker = self.viewer.render_badge
             widget.compare_provider = self.viewer.wipe_line
             widget.wipe_handle_provider = self.viewer.wipe_handle
             widget.hover = self._direct_hover
@@ -14598,7 +14637,7 @@ class Window(QMainWindow):
         self._direct_painting = True
         try:
             return self.viewer.render_overlay(view, physical_size, ratio, readout=self._direct_readout, probe=True,
-                                              force=force)
+                                              force=force, badge=False)
         finally:
             self._direct_painting = False
 

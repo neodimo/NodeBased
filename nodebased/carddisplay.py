@@ -131,9 +131,9 @@ layout(set = 0, binding = 3) uniform texture2D imgB;
 layout(set = 0, binding = 1) uniform View {
     vec2 viewport; vec2 centre;
     vec4 image;            // scene rectangle the picture covers: x, y, w, h
-    vec4 outline;          // scene rectangle of the format (overlay pass only)
+    vec4 outline;          // scene rectangle of the format (the outline folded into this pass)
     vec2 tex; float zoom; float srgb;
-    vec4 surround;
+    vec4 surround;         // picture-less colour; w is 1 when the format outline and corner mark are drawn
     vec4 disp0;            // gain (2^exposure), channel (0 RGB, 1 R, 2 G, 3 B, 4 A), gamma, zebra
     vec4 disp1;            // checker, checker level 0, checker level 1, unused
     vec4 cmp0;             // compare mode (0 none, 1 B only, 2 wipe, 3 over, 4 under, 5 minus, 6 difference), wipe centre x, y, unused
@@ -152,6 +152,21 @@ vec3 encode(vec3 c) {
     vec3 lo = c / 12.92;
     vec3 hi = pow((c + vec3(0.055)) / 1.055, vec3(2.4));
     return mix(hi, lo, vec3(lessThanEqual(c, vec3(0.04045))));
+}
+
+// The format outline and the orange corner mark (what the 8-bit picture's shader draws, see directviewer.SHADER),
+// blended onto the encoded colour in this pass: `v.surround.w` is 1 when they are drawn.
+vec3 outline_over(vec3 enc, vec2 s) {
+    if (v.surround.w < 0.5) { return enc; }
+    float px = 1.0 / v.zoom;
+    vec2 lo = v.outline.xy; vec2 hi = v.outline.xy + v.outline.zw;
+    bool inside_outer = s.x >= lo.x - px && s.y >= lo.y - px && s.x <= hi.x + px && s.y <= hi.y + px;
+    bool inside_inner = s.x >= lo.x + px && s.y >= lo.y + px && s.x <= hi.x - px && s.y <= hi.y - px;
+    float a = 0.0; vec3 c = vec3(0.9, 0.9, 0.4);
+    if (inside_outer && !inside_inner) { a = 0.85; }
+    if (gl_FragCoord.x + gl_FragCoord.y < 28.0) { a = 1.0; c = vec3(1.0, 0.55, 0.1); }
+    if (a == 0.0) { return enc; }
+    return mix(enc, encode(c), a);
 }
 
 // The wipe line and its two handles, drawn as the Viewer paints them (`Viewer._draw_wipe_handles`): a 1.5 px
@@ -223,11 +238,11 @@ void main() {
     vec2 s = v.centre + (gl_FragCoord.xy - v.viewport * 0.5) / v.zoom;
     vec2 rel = (s - v.image.xy) / v.image.zw;
     if (rel.x < 0.0 || rel.y < 0.0 || rel.x >= 1.0 || rel.y >= 1.0) {
-        fragColor = vec4(encode(wipe_marks(v.surround.rgb, s)), 1.0);
+        fragColor = vec4(outline_over(encode(wipe_marks(v.surround.rgb, s)), s), 1.0);
         return;
     }
     ivec2 t = ivec2(min(rel * v.tex, v.tex - vec2(1.0)));
-    fragColor = vec4(encode(wipe_marks(display(t, s), s)), 1.0);
+    fragColor = vec4(outline_over(encode(wipe_marks(display(t, s), s)), s), 1.0);
 }
 """
 
