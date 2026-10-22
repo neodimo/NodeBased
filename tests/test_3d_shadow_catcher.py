@@ -12,6 +12,7 @@ alpha is one minus their ratio."""
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -548,6 +549,34 @@ class LayerTests(unittest.TestCase):
                 np.testing.assert_allclose(cover, seen, atol=1e-6)        # the floor, antialiased on the layer's own grid
                 self.assertGreater(float(shadow[seen > .99].max()), .99)
                 self.assertEqual(float(shadow[seen == 0].max()), 0.0)
+
+    def test_path_shadow_quality_budget_is_independent_of_picture_samples(self):
+        measure = lambda _i, _g, points, _n: (np.ones(len(points)), np.ones(len(points)))
+        with patch.object(shadowcatch, "_path_measure", return_value=measure) as build, \
+             patch.object(shadowcatch, "_grid", wraps=shadowcatch._grid) as grid:
+            shadowcatch.shadow_layer(scene(), CAMERA, *SIZE, engine="path", samples=128, shadow_samples=1)
+        self.assertEqual(build.call_args.args[3], 128)
+        self.assertEqual(build.call_args.kwargs["shadow_samples"], 1)
+        self.assertEqual(grid.call_args.args, ("path", 1))
+
+    def test_coarse_path_shadow_map_is_upsampled_to_the_picture_size(self):
+        cover, shadow = shadowcatch.shadow_layer(scene(), CAMERA, *SIZE, engine="path", samples=4,
+                                                  shadow_samples=1, shadow_resolution_scale=1.5)
+        self.assertEqual(cover.shape, SIZE[::-1])
+        self.assertEqual(shadow.shape, SIZE[::-1])
+        self.assertTrue(np.isfinite(cover).all() and np.isfinite(shadow).all())
+
+    def test_gpu_path_catcher_uses_its_own_quality_budget(self):
+        with patch.object(shadowcatch, "render", return_value=np.zeros((*SIZE[::-1], 4), np.float32)) as wrapper:
+            pt.render(scene(), CAMERA, 960, 540, BLACK, 0.0, "rgba", pt.PathSettings(samples=128), backend="gpu")
+        self.assertEqual(wrapper.call_args.kwargs["shadow_samples"], 1)
+        self.assertEqual(wrapper.call_args.kwargs["shadow_resolution_scale"], 1.5)
+
+    def test_small_gpu_path_catcher_keeps_its_reference_budget(self):
+        with patch.object(shadowcatch, "render", return_value=np.zeros((*SIZE[::-1], 4), np.float32)) as wrapper:
+            pt.render(scene(), CAMERA, *SIZE, BLACK, 0.0, "rgba", pt.PathSettings(samples=24), backend="gpu")
+        self.assertIsNone(wrapper.call_args.kwargs["shadow_samples"])
+        self.assertEqual(wrapper.call_args.kwargs["shadow_resolution_scale"], 1.0)
 
     def test_a_mesh_that_is_no_catcher_is_left_alone_by_the_wrapper(self):
         plain = scene(catcher=False)

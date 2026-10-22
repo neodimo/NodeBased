@@ -3182,7 +3182,12 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         return shadowcatch.render(lambda sc, **more: render(sc, camera, width, height, ambient=ambient, settings=settings,
                                                             **{**bound, **more}),
                                   scene, camera, width, height, background=background, output=output, ambient=ambient,
-                                  engine="path", samples=settings.samples, volume=volume, cancel=cancel)
+                                  engine="path", samples=settings.samples,
+                                  shadow_samples=min(settings.samples, 1)
+                                  if width >= 960 and height >= 540 and settings.samples >= 16 else None,
+                                  shadow_resolution_scale=1.5
+                                  if width >= 960 and height >= 540 and settings.samples >= 16 else 1.0,
+                                  volume=volume, cancel=cancel)
     state = gpu3d._state()
     reason = check_capability(state)
     if reason:

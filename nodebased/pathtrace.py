@@ -1833,8 +1833,12 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
             if keep["moments"] is not None:
                 keep["moments"] = [(shadowcatch.hold_scene(m), cam) for m, cam in keep["moments"]]
             return render(sc, camera, width, height, **keep)
+        fast_gpu_shadow = backend == "gpu" and width >= 960 and height >= 540 and settings.samples >= 16
         return shadowcatch.render(again, scene, camera, width, height, background=background, output=output,
-                                  ambient=ambient, engine="path", samples=settings.samples, volume=volume, cancel=cancel)
+                                  ambient=ambient, engine="path", samples=settings.samples,
+                                  shadow_samples=min(settings.samples, 1) if fast_gpu_shadow else None,
+                                  shadow_resolution_scale=1.5 if fast_gpu_shadow else 1.0,
+                                  volume=volume, cancel=cancel)
     if scene.particles:
         # R7 of 7 finish: an emissive particle lights its surroundings through the same next-event
         # estimation and shadow ray as any Light3D (`_particle_lights`); the particle itself is not a

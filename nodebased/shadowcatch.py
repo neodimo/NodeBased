@@ -58,10 +58,11 @@ def hold_scene(scene):
 
 
 def render(draw, scene, camera, width, height, *, background, output, return_depth=False, ambient=0.0, engine="raster",
-           samples=1, volume=None, cancel=None, shadows=True, shade=False):
+           samples=1, shadow_samples=None, shadow_resolution_scale=1.0, volume=None, cancel=None, shadows=True, shade=False):
     """`draw(scene, **overrides)` is the calling renderer with all its other arguments bound (`background`, `output` and
     `return_depth` may be overridden). `engine` is "raster" (the raster and ray-traced modes, CPU and GPU) or "path"; `samples`
-    the antialiasing or path samples that size the shadow layer's sub-pixel grid and light samples."""
+    the antialiasing or path samples that size the shadow layer. `shadow_samples` independently caps the path mode's catcher
+    grid and light-measurement budget; it defaults to `samples`."""
     if shade or output in GEOMETRY_PASSES:
         return draw(plain_scene(scene))
     held = hold_scene(scene)
@@ -71,7 +72,8 @@ def render(draw, scene, camera, width, height, *, background, output, return_dep
     result = draw(held, background=(0.0, 0.0, 0.0, 0.0))
     image, depth = result if return_depth else (result, None)
     cover, mean_shadow = shadow_layer(scene, camera, width, height, ambient=ambient, engine=engine, samples=samples,
-                                      volume=volume, cancel=cancel, shadows=shadows)
+                                      volume=volume, cancel=cancel, shadows=shadows, shadow_samples=shadow_samples,
+                                      shadow_resolution_scale=shadow_resolution_scale)
     image = np.array(image, np.float32)
     alpha = image[..., 3].astype(np.float64)
     layer = cover * (1.0 - alpha) * mean_shadow                      # black, behind what the picture already holds
@@ -97,16 +99,20 @@ def render(draw, scene, camera, width, height, *, background, output, return_dep
 # --- the shadow layer -------------------------------------------------------------------------------------------------
 
 def shadow_layer(scene, camera, width, height, *, ambient=0.0, engine="raster", samples=1, volume=None, cancel=None,
-                 shadows=True):
+                 shadows=True, shadow_samples=None, shadow_resolution_scale=1.0):
     """(coverage, mean shadow) per pixel, both (height, width) float64: the fraction of the pixel's sub-pixels in which the
     camera's first catcher hit lies, and the mean shadow alpha over those. Occlusion by the picture's own content is not
     applied here."""
     scene = s.resolve_instances(scene) if scene.instances else scene
     catchers = [(i, g) for i, g in enumerate(scene.geometries) if g.shadow_catcher]
-    grid = _grid(engine, samples)
-    grid = max(1, min(grid, int(np.sqrt(_MAX_SUBPIXELS / max(width * height, 1)))))       # a big frame is measured on a coarser grid
+    scale = max(1.0, float(shadow_resolution_scale)) if engine == "path" else 1.0
+    sample_width = max(1, int(np.ceil(width / scale)))
+    sample_height = max(1, int(np.ceil(height / scale)))
+    grid_samples = samples if engine != "path" or shadow_samples is None else shadow_samples
+    grid = _grid(engine, grid_samples)
+    grid = max(1, min(grid, int(np.sqrt(_MAX_SUBPIXELS / max(sample_width * sample_height, 1)))))
     only = s.Scene(tuple(replace(g, shadow_catcher=False, holdout=False) for _, g in catchers))
-    big_w, big_h = width * grid, height * grid
+    big_w, big_h = sample_width * grid, sample_height * grid
     position = s.render(only, camera, big_w, big_h, output="position", cancel=cancel)
     normals = s.render(only, camera, big_w, big_h, output="normals", cancel=cancel)
     which = s.render(only, camera, big_w, big_h, output="object_id", cancel=cancel)
@@ -123,7 +129,8 @@ def shadow_layer(scene, camera, width, height, *, ambient=0.0, engine="raster", 
     normal = normals[..., :3].reshape(-1, 3)
     shadow = np.zeros(big_w * big_h)
     if shadows and (any(light.intensity > 0 for light in scene.lights) or ambient > 0 or scene.environments):
-        measure = _path_measure(scene, camera, ambient, samples, volume, cancel) if engine == "path" else \
+        measure = _path_measure(scene, camera, ambient, samples, volume, cancel,
+                                shadow_samples=shadow_samples) if engine == "path" else \
             _raster_measure(scene, ambient, volume, cancel)
         for slot, (geometry_index, geometry) in enumerate(catchers, 1):
             if not geometry.receive_shadows:
@@ -137,9 +144,28 @@ def shadow_layer(scene, camera, width, height, *, ambient=0.0, engine="raster", 
                     alpha = np.where(free > 1e-12, 1.0 - lit / np.maximum(free, 1e-12), 0.0)
                 shadow[chunk] = np.clip(alpha, 0.0, 1.0)
     covered = (index > 0).astype(np.float64)
-    count = covered.reshape(height, grid, width, grid).sum(axis=(1, 3))
-    total = shadow.reshape(height, grid, width, grid).sum(axis=(1, 3))
-    return count / (grid * grid), np.where(count > 0, total / np.maximum(count, 1), 0.0)
+    count = covered.reshape(sample_height, grid, sample_width, grid).sum(axis=(1, 3))
+    total = shadow.reshape(sample_height, grid, sample_width, grid).sum(axis=(1, 3))
+    cover = count / (grid * grid)
+    mean_shadow = np.where(count > 0, total / np.maximum(count, 1), 0.0)
+    if (sample_width, sample_height) != (width, height):
+        cover = _resize_linear(cover, width, height)
+        mean_shadow = _resize_linear(mean_shadow, width, height)
+        mean_shadow *= cover > 0
+    return cover, mean_shadow
+
+
+def _resize_linear(image, width, height):
+    """Bilinearly enlarge a scalar shadow/coverage map, clamping at its edge."""
+    source_h, source_w = image.shape
+    x = np.clip((np.arange(width) + 0.5) * source_w / width - 0.5, 0, source_w - 1)
+    y = np.clip((np.arange(height) + 0.5) * source_h / height - 0.5, 0, source_h - 1)
+    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+    x1, y1 = np.minimum(x0 + 1, source_w - 1), np.minimum(y0 + 1, source_h - 1)
+    fx, fy = x - x0, y - y0
+    top = image[y0[:, None], x0[None, :]] * (1 - fx)[None, :] + image[y0[:, None], x1[None, :]] * fx[None, :]
+    bottom = image[y1[:, None], x0[None, :]] * (1 - fx)[None, :] + image[y1[:, None], x1[None, :]] * fx[None, :]
+    return top * (1 - fy)[:, None] + bottom * fy[:, None]
 
 
 def _grid(engine, samples):
@@ -257,7 +283,7 @@ def _raster_context(scene, volume, cancel):
 
 # --- the path-traced modes: the path tracer's own light sampling ----------------------------------------------------
 
-def _path_measure(scene, camera, ambient, samples, volume, cancel):
+def _path_measure(scene, camera, ambient, samples, volume, cancel, shadow_samples=None):
     """`measure(index, geometry, points, normals)` for the path tracer: light from every point light, area light,
     environment and the ambient sky as a white diffuse surface receives it, with and without shadow rays (the same samples
     for both, so an unshadowed point is exactly 0 and a point hidden from every light exactly 1)."""
@@ -266,9 +292,10 @@ def _path_measure(scene, camera, ambient, samples, volume, cancel):
                                             for g in scene.geometries),
                     lights=scene.lights + (pt._particle_lights(scene) if scene.particles else ()), particles=())
     ps = pt.build_scene(quiet, ambient, eye=s._view_basis(camera)[0], volume=volume)
-    budget = int(np.clip(int(samples), 16, 128))
+    budget = int(np.clip(int(samples if shadow_samples is None else shadow_samples),
+                         16 if shadow_samples is None else 1, 128))
     per_axis = _grid("path", samples)
-    count = max(4, budget // (per_axis * per_axis))
+    count = max(4 if shadow_samples is None else 1, budget // (per_axis * per_axis))
 
     def measure(index, geometry, points, normals):
         n = len(points)

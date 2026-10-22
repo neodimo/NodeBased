@@ -33,10 +33,10 @@
     "denoise_iterations": 8,
     "catcher_shadow_samples": 128
   },
-  "bake_seconds": 0.71,
+  "bake_seconds": 158.5,
   "render_seconds": {
-    "60": 43.31,
-    "90": 45.74
+    "60": 44.77,
+    "90": 46.42
   },
   "comparison": {
     "1": {

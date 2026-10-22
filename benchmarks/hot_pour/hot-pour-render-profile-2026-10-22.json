@@ -340,5 +340,102 @@
         2.8334836699173138e-08
       ]
     }
+  },
+  "finish4_path_traced_catcher_optimization": {
+    "adapter": "NVIDIA GeForce RTX 3080 Ti / Vulkan",
+    "method": "GPU path-trace catcher and holdout layer uses a one-ray budget at 1.5x coarser linear resolution, then bilinearly upsamples. The main path-traced image keeps its original sampling settings.",
+    "before": {
+      "fixed_32_960x540_wall_seconds": 22.735,
+      "fixed_32_960x540_gpu_path_call_seconds": 1.215,
+      "no_catcher_or_holdout_wall_seconds": 1.445,
+      "volume_shadow_trilinear_points": 3095469,
+      "settled_1080p_seconds": 68.235,
+      "settled_noise_threshold": 0.01,
+      "settled_converged_pixel_fraction": 1.0
+    },
+    "after": {
+      "fixed_32_960x540": {
+        "wall_seconds": 2.874,
+        "shadow_layer_seconds": 0.335,
+        "shadow_measure_seconds": 0.121,
+        "shadow_measure_points": 137988
+      },
+      "settled_1920x1080": {
+        "wall_seconds": 6.769,
+        "sampling": "adaptive",
+        "min_samples": 8,
+        "max_samples": 8192,
+        "adaptive_pass_size": 256,
+        "noise_threshold": 0.01,
+        "mean_samples_per_pixel": 10.091728395061729,
+        "max_observed_samples": 7944,
+        "passes": 32,
+        "converged_pixel_fraction": 1.0,
+        "max_noise": 0.009998698088186988,
+        "fully_settled": true,
+        "under_60_seconds": true,
+        "gpu_path_call_seconds": 3.055,
+        "shadow_layer_seconds": 1.414,
+        "shadow_measure_seconds": 0.477,
+        "shadow_measure_points": 551354
+      },
+      "fresh_stills_960x540": {
+        "frames": {
+          "60": 44.77,
+          "90": 46.42
+        },
+        "visual_review": "coherent soft steam, continuous pour into the pool, smooth liquid surface, broad soft table shadow"
+      }
+    },
+    "radeon_8060s_laptop_standin": {
+      "settled_1920x1080": {
+        "wall_seconds": 6.07,
+        "noise_threshold": 0.01,
+        "mean_samples_per_pixel": 10.091604938271605,
+        "max_observed_samples": 7944,
+        "passes": 32,
+        "converged_pixel_fraction": 1.0,
+        "max_noise": 0.009998711104910333,
+        "fully_settled": true,
+        "under_60_seconds": true,
+        "shadow_layer_seconds": 1.307,
+        "shadow_measure_seconds": 0.469,
+        "shadow_measure_points": 551354
+      },
+      "first_look": {
+        "cold_press_to_picture_seconds": 0.9144500519614667,
+        "warm_median_seconds": 0.17253892589360476,
+        "target_seconds": 60.0,
+        "under_60_seconds": true
+      }
+    },
+    "cpu_gpu_comparison": {
+      "rtx_3080_ti": {
+        "frames": [
+          1,
+          60,
+          120
+        ],
+        "passed": true,
+        "mean_absolute_errors": [
+          2.894887884963282e-09,
+          2.091577400165079e-08,
+          2.5475575426980868e-08
+        ]
+      },
+      "radeon_8060s": {
+        "frames": [
+          1,
+          60,
+          120
+        ],
+        "passed": true,
+        "mean_absolute_errors": [
+          3.5921672303373953e-09,
+          2.5961918836969744e-08,
+          2.8334836699173138e-08
+        ]
+      }
+    }
   }
 }
