@@ -38,6 +38,7 @@ builds Render3D's own), and each step traces `pathtrace.render_motion` over them
 """
 from __future__ import annotations
 
+import math
 import os
 import time
 from dataclasses import dataclass, field, replace
@@ -270,22 +271,35 @@ def _cost_key(scene):
     return adapter, heavy, bool(scene3d.has_shadow_catchers(scene))
 
 
+FIRST_STAGE_STEP = 1.06       # the first stage's size moves in steps of this factor (see `_snap`)
+
+
+def _snap(pixels):
+    """`pixels` rounded down onto a ladder of sizes `FIRST_STAGE_STEP` apart, so that a small change in the measured cost does not
+    change the first look's size from one orbit to the next (it would otherwise creep up and down with the card's clock)."""
+    if pixels <= MIN_FIRST_PIXELS:
+        return int(pixels)
+    rung = math.floor(math.log(pixels / MIN_FIRST_PIXELS) / math.log(FIRST_STAGE_STEP) + 1e-9)
+    return int(MIN_FIRST_PIXELS * FIRST_STAGE_STEP ** rung)
+
+
 def first_stage_pixels(scene, stage_pixels, prepared=None):
     """How many pixels stage one traces for `scene`: `stage_pixels`, or fewer when the last first look of this kind of scene on this
-    adapter cost too much per pixel to finish inside its target; more than `stage_pixels` never. `prepared` True says the scene's
-    preparation (`scenecache`) is cached, so a camera move or a material edit traces for `WARM_FIRST_LOOK_SECONDS`; False says it
-    will be built again (a geometry or splat edit), and the last such build's time is taken off `FIRST_LOOK_SECONDS` first; None
-    (no information) sizes for `FIRST_LOOK_SECONDS` alone."""
+    adapter cost too much per pixel to finish inside its target; more than `stage_pixels` never. `prepared` says what the scene's
+    preparation (`scenecache`) will cost: True, nothing (a camera move); False, what the last build took (a material edit repacks, a
+    geometry or splat edit rebuilds), taken off the target; both aim for `WARM_FIRST_LOOK_SECONDS`. None (no information) aims for
+    `FIRST_LOOK_SECONDS` with nothing taken off."""
     key = _cost_key(scene)
     cost = _COST.get(key)
     if cost is None:
         return min(stage_pixels, HEAVY_FIRST_PIXELS) if key[1] else stage_pixels
     fraction = CATCHER_FIT_FRACTION if key[2] else FIT_FRACTION
-    target = WARM_FIRST_LOOK_SECONDS if prepared else FIRST_LOOK_SECONDS
+    target = FIRST_LOOK_SECONDS if prepared is None else WARM_FIRST_LOOK_SECONDS
     budget = target * fraction - ENLARGE_ALLOWANCE - (_BUILD.get(key, 0.0) if prepared is False else 0.0)
     fit = budget / cost
     floor = CATCHER_MIN_FIRST_PIXELS if key[2] else MIN_FIRST_PIXELS
-    return int(min(stage_pixels, max(floor, fit)))
+    chosen = max(floor, fit)
+    return int(stage_pixels) if chosen >= stage_pixels else _snap(chosen)
 
 
 def _prepared(scene, camera, ambient, backend):
@@ -304,7 +318,7 @@ def _record_cost(scene, seconds, pixels, built=0.0):
     cost = max(seconds - built, 0.0) / max(pixels, 1)
     _COST[key] = cost if key not in _COST else 0.5 * _COST[key] + 0.5 * cost
     if built > 0.0:
-        _BUILD[key] = built if key not in _BUILD else 0.5 * _BUILD[key] + 0.5 * built
+        _BUILD[key] = built          # the last build is the best guess for the next one (a repack after a cold build is much cheaper)
 
 
 def _preview(scene, camera, width, height, background, ambient, pixels, samples, backend, max_bounces, moments, cancel,

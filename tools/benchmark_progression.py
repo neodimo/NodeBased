@@ -13,7 +13,9 @@ Per scene it reports, on the adapter in use (the scene, the camera, the seed and
   ``settled_seconds`` (request to the converged picture). Cold is the first view in this process (pipelines compiled, scene
   uploaded); warm moves the camera a little for every repeat (a new view, the same device objects) and reports the median.
 * ``interaction``: a real `Viewport3D` at 1920 x 1080 is orbited by camera nudges (a held mouse button, about 47 ms apart: 33 ms
-  of waiting after each paint) for a second while the worker is busy, painting after each one. It reports the paint handler's own time (median and worst: the interface thread), how long the
+  of waiting after each paint) for a second, painting after each one, twice: right after the first picture, with the card at its
+  working clocks (``paint_ms_during_orbit_card_at_working_clocks``), and after a view has settled, when the card has been idle long
+  enough for its power state to drop (``paint_ms_during_orbit``). It reports the paint handler's own time (median and worst: the interface thread), how long the
   worker took to abandon the pass it was in (``cancel_latency``), the number of first looks it actually started for the burst
   (the debounce collapses the rest) and the seconds from the last nudge to the first denoised picture on screen.
 * ``responsive_during_refinement``: the worst paint time while a long full-size pass is in flight.
@@ -124,23 +126,29 @@ def interaction(scene, camera):
         app.processEvents()
         paint_ms.append((time.perf_counter() - started) * 1000.0)
 
-    # settle a first view so the device objects are warm, then orbit
-    widget.grab()
-    job.wait(lambda state, phase: phase == "settled", SETTLE_TIMEOUT)
-    paint_ms.clear()
     nudges = 30
-    last = None
-    widget._drag = (1, None)       # the orbit is a held mouse button: the viewport marks its requests as part of a drag
-    for i in range(nudges):
-        widget._scene_cache = ((1, None), (scene, moved(100 + i)))
-        last = time.perf_counter()
-        paint()
-        end = time.perf_counter() + 0.033
-        while time.perf_counter() < end:
-            app.processEvents()
-            time.sleep(0.002)
-    widget._drag = None            # released
-    burst = list(paint_ms)
+
+    def orbit(first):
+        """Thirty camera nudges as a held mouse button (the viewport marks its requests as part of a drag); the paint times."""
+        paint_ms.clear()
+        widget._drag = (1, None)
+        for i in range(nudges):
+            widget._scene_cache = ((1, None), (scene, moved(first + i)))
+            paint()
+            end = time.perf_counter() + 0.033
+            while time.perf_counter() < end:
+                app.processEvents()
+                time.sleep(0.002)
+        widget._drag = None            # released
+        return list(paint_ms)
+
+    # the first picture is up and the card is at its working clocks: orbit; then let a view settle (a minute of full load, after
+    # which the card's power state falls to its idle clocks within half a second) and orbit again
+    widget.grab()
+    job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT)
+    warm_card = orbit(100)
+    job.wait(lambda state, phase: phase == "settled", SETTLE_TIMEOUT)
+    burst = orbit(200)
     started_first = len(job.frames)
     waited = time.perf_counter()
     job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT)
@@ -156,6 +164,8 @@ def interaction(scene, camera):
     widget.close()
     return {"nudges": nudges, "interval_ms": 33,
             "paint_ms_during_orbit": {"median": round(statistics.median(burst), 2), "worst": round(max(burst), 2)},
+            "paint_ms_during_orbit_card_at_working_clocks": {"median": round(statistics.median(warm_card), 2),
+                                                             "worst": round(max(warm_card), 2)},
             "cancel_latency_ms": {"count": len(cancels), "median": round(1000 * statistics.median(cancels), 2) if cancels else None,
                                   "worst": round(1000 * max(cancels), 2) if cancels else None},
             "last_nudge_to_first_look_seconds": round(to_first, 4) if to_first is not None else None,
@@ -205,6 +215,8 @@ def edit_trial(job, scene, kind, n, delay_of):
     if not job.wait(lambda state, phase: state is not None, SETTLE_TIMEOUT):
         raise RuntimeError("no first look")
     idle = job.frames[0].since_submit * 1000.0
+    idle_phases = {k: round(1000 * v, 1) for k, v in job.frames[0].state.phases}
+    idle_traced = [job.frames[0].state.traced_width, job.frames[0].state.traced_height]
     # a long full-size pass in flight, then the edit
     if not job.wait(lambda state, phase: state is not None and state.samples >= 16 and phase == "tracing", SETTLE_TIMEOUT):
         raise RuntimeError("the view never reached a full-size pass")
@@ -223,7 +235,9 @@ def edit_trial(job, scene, kind, n, delay_of):
     first = job.frames[0].since_submit * 1000.0
     return {"delay_s": round(delay, 3), "idle_first_look_ms": round(idle, 2),
             "abandon_ms": None if abandon is None else round(abandon, 2), "edit_to_first_look_ms": round(first, 2),
-            "first_look_phases_ms": {k: round(1000 * v, 1) for k, v in job.frames[0].state.phases}}
+            "first_look_phases_ms": {k: round(1000 * v, 1) for k, v in job.frames[0].state.phases},
+            "idle_first_look_phases_ms": idle_phases, "idle_traced": idle_traced,
+            "traced": [job.frames[0].state.traced_width, job.frames[0].state.traced_height]}
 
 
 def edit_latency(job, scene, trials, label=None):

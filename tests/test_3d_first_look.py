@@ -296,15 +296,20 @@ class BudgetTests(unittest.TestCase):
         self.assertEqual(P.first_stage_pixels(self.surface, stage), stage)
         self.assertEqual(P.first_stage_pixels(self.heavy, stage), P.HEAVY_FIRST_PIXELS)
 
+    def assertFits(self, predicted, target):
+        """`predicted` seconds fill the target to within one size step (the first stage's size moves in steps, `_snap`)."""
+        self.assertLessEqual(predicted, target + 1e-9)
+        self.assertGreater(predicted, target - 0.07)
+
     def test_a_costly_scene_shrinks_the_next_first_look_to_fit_the_target(self):
         stage = 480 * 270
         P._record_cost(self.surface, 1.2, stage)                       # 1.2 s for the full stage: too slow
         pixels = P.first_stage_pixels(self.surface, stage)
         self.assertLess(pixels, stage)
         predicted = pixels * (1.2 / stage) + P.ENLARGE_ALLOWANCE
-        self.assertAlmostEqual(predicted, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
+        self.assertFits(predicted, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION)
 
-    def test_a_cached_preparation_sizes_for_the_warm_target_and_an_uncached_one_pays_for_its_build(self):
+    def test_a_cached_preparation_aims_for_the_warm_target_and_a_rebuild_pays_for_its_build(self):
         stage = 480 * 270
         P._record_cost(self.surface, 2.0, stage, built=0.4)            # 0.4 of the 2 s was the scene build
         self.assertAlmostEqual(P._COST[self.key], 1.6 / stage)
@@ -313,11 +318,26 @@ class BudgetTests(unittest.TestCase):
         rebuilt = P.first_stage_pixels(self.surface, stage, prepared=False)
         unknown = P.first_stage_pixels(self.surface, stage)
         cost = 1.6 / stage
-        self.assertAlmostEqual(warm * cost + P.ENLARGE_ALLOWANCE, P.WARM_FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
-        self.assertAlmostEqual(rebuilt * cost + P.ENLARGE_ALLOWANCE + 0.4, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
-        self.assertAlmostEqual(unknown * cost + P.ENLARGE_ALLOWANCE, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION, delta=0.01)
-        self.assertLess(rebuilt, warm)          # a build of 0.4 s costs more pixels than the warm target holds back
+        self.assertFits(warm * cost + P.ENLARGE_ALLOWANCE, P.WARM_FIRST_LOOK_SECONDS * P.FIT_FRACTION)
+        self.assertFits(rebuilt * cost + P.ENLARGE_ALLOWANCE + 0.4, P.WARM_FIRST_LOOK_SECONDS * P.FIT_FRACTION)
+        self.assertFits(unknown * cost + P.ENLARGE_ALLOWANCE, P.FIRST_LOOK_SECONDS * P.FIT_FRACTION)
+        self.assertLess(rebuilt, warm)
         self.assertLess(warm, unknown)
+        P._record_cost(self.surface, 1.0, stage, built=0.1)            # the next build was a repack: the latest build is the guess
+        self.assertAlmostEqual(P._BUILD[self.key], 0.1)
+
+    def test_the_first_stage_size_moves_in_steps_so_small_cost_changes_leave_it_alone(self):
+        stage = 480 * 270
+        sizes = set()
+        for seconds in (1.00, 1.01, 1.02, 1.03):                       # a card whose clock wobbles by 3 %
+            P._COST.clear()
+            P._record_cost(self.surface, seconds, stage)
+            sizes.add(P.first_stage_pixels(self.surface, stage, prepared=True))
+        self.assertLessEqual(len(sizes), 2)
+        for pixels in sizes:
+            ratio = pixels / P.MIN_FIRST_PIXELS
+            rung = round(np.log(ratio) / np.log(P.FIRST_STAGE_STEP))
+            self.assertAlmostEqual(ratio, P.FIRST_STAGE_STEP ** rung, delta=1e-3 * ratio)
 
     def test_a_cheap_scene_never_grows_past_the_stage_and_a_dear_one_never_below_the_floor(self):
         stage = 480 * 270
