@@ -30,6 +30,20 @@ def qt_global_to_x11(point, device_pixel_ratio=1.0):
     return tuple(int(round(float(value) * ratio)) for value in point)
 
 
+def qt_horizontal_drag_path(global_origin, width, height, device_pixel_ratio=1.0,
+                            start_fraction=0.25, end_fraction=0.75):
+    """Native X11 endpoints for an in-widget horizontal drag with a stable y coordinate."""
+    width, height = float(width), float(height)
+    if width <= 0 or height <= 0:
+        raise ValueError("slider dimensions must be positive")
+    if not 0.0 <= start_fraction < end_fraction <= 1.0:
+        raise ValueError("drag fractions must satisfy 0 <= start < end <= 1")
+    x, y = map(float, global_origin)
+    row = y + height / 2.0
+    return (qt_global_to_x11((x + width * start_fraction, row), device_pixel_ratio),
+            qt_global_to_x11((x + width * end_fraction, row), device_pixel_ratio))
+
+
 def self_check():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     sys.path.insert(0, str(ROOT))

@@ -2,7 +2,7 @@ import cProfile, io, json, os, pstats, subprocess, sys, threading, time
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from live_picture_bench import qt_global_to_x11
+from live_picture_bench import qt_global_to_x11, qt_horizontal_drag_path
 import tests.isolation
 from PySide6.QtCore import QObject, QTimer, Signal, Qt, QPointF, QEvent
 from PySide6.QtWidgets import QApplication
@@ -252,33 +252,68 @@ def scenario():
       return on_main(lambda:(lambda p:(p.x(),p.y()))(
           win.viewer.viewport().mapToGlobal(win.viewer.mapFromScene(QPointF(sx,sy)))))
     def perform_drag(name, key, knob=False):
+      knob_state={}
       if key:
         choose_view(key)
       if knob:
         def slider_xy():
+          from PySide6.QtCore import QPoint
           from PySide6.QtWidgets import QSlider
-          sliders=[s for s in win.properties_dock.findChildren(QSlider,'knob-slider') if s.isEnabled()]
+          sliders=[s for s in win.properties_dock.findChildren(QSlider,'knob-slider')
+                   if s.isEnabled() and s.isVisibleTo(win)]
           if not sliders: return None
-          s=sliders[0]; p=s.mapToGlobal(s.rect().center()); return p.x(),p.y()
-        pos=on_main(slider_xy)
-        if pos is None: return {'series':'drag','subject':name,'status':'no enabled properties slider'}
-        logical_x,logical_y=pos; x,y=qt_global_to_x11(pos,ratio)
+          s=sliders[0]; p=s.mapToGlobal(QPoint(0,0)); owner=s.parentWidget()
+          spin=getattr(owner,'spin',None)
+          knob_state.update(initial_value=s.value(), node_id=spin.property('nodebased_node_id') if spin else None,
+                            param=spin.property('nodebased_param') if spin else None)
+          return p.x(),p.y(),s.width(),s.height()
+        geometry=on_main(slider_xy)
+        if geometry is None: return {'series':'drag','subject':name,'status':'no visible enabled properties slider'}
+        logical_x,logical_y,width,height=geometry
+        (x,y),(knob_end_x,knob_end_y)=qt_horizontal_drag_path((logical_x,logical_y),width,height,ratio)
+        mark('properties_drag_target',subject=name,**knob_state,width=width,height=height,
+             start=[x,y],end=[knob_end_x,knob_end_y])
       else:
         logical_x,logical_y=global_xy(key); x,y=qt_global_to_x11((logical_x,logical_y),ratio)
       g0=win.frame_generation; began=time.monotonic(); first=None; first_move=None
       xd('mousemove',x,y); time.sleep(.12); xd('mousedown',1); time.sleep(.05)
       for n in range(1,7):
-        if first_move is None: first_move=time.monotonic()
-        xd('mousemove',x+round(10*ratio)*n,y+round(6*ratio)*n)
+        if first_move is None:
+          first_move=time.monotonic()
+          mark('drag_first_move',subject=name,generation=g0)
+        if knob:
+          xd('mousemove',x+round((knob_end_x-x)*n/6),y)
+        else:
+          xd('mousemove',x+round(10*ratio)*n,y+round(6*ratio)*n)
         if first is None: first=wait_new(g0,.05)
         time.sleep(.14)
       drag_end=time.monotonic(); during=win.frame_generation-g0; xd('mouseup',1)
       if first is None: first=wait_new(g0,45)
       settle()
+      with lock:
+        picture_events=[dict(event) for event in timeline
+                        if event.get('stage')=='picture_shown'
+                        and event.get('t',0)>=first_move
+                        and event.get('t',0)<=drag_end
+                        and int(event.get('generation') or -1)>g0]
+      picture_events.sort(key=lambda event:event['t'])
+      interval_ends=[event['t'] for event in picture_events]+[drag_end]
+      interval_starts=[first_move]+[event['t'] for event in picture_events]
+      picture_intervals=[max(0.0,end-start) for start,end in zip(interval_starts,interval_ends)]
+      if knob:
+        def slider_value_after():
+          from PySide6.QtWidgets import QSlider
+          sliders=[s for s in win.properties_dock.findChildren(QSlider,'knob-slider')
+                   if s.isEnabled() and s.isVisibleTo(win)]
+          return sliders[0].value() if sliders else None
+        knob_state['final_value']=on_main(slider_value_after)
       return {'series':'drag','subject':name,'first_picture_s':None if first is None else round(first-began,4),
               'first_move_to_picture_s':None if first is None or first_move is None else round(first-first_move,4),
               'picture_during_drag':first is not None and first<drag_end,'frames_during_drag':during,
-              'settle_s':round(time.monotonic()-drag_end,4),'status':win.viewer_info.text()}
+              'pictures_during_drag':len(picture_events),
+              'max_picture_interval_s':round(max(picture_intervals,default=drag_end-first_move),4),
+              'picture_intervals_s':[round(value,4) for value in picture_intervals],
+              'settle_s':round(time.monotonic()-drag_end,4),'status':win.viewer_info.text(),**knob_state}
     for name,key in (('RotoPaint','paint'),('Tracker','trk'),('PlanarTracker','plane')):
       drag_results.append(perform_drag(name,key))
     drag_results.append(perform_drag('Properties knob','paint',knob=True))

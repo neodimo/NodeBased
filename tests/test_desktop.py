@@ -1825,6 +1825,30 @@ class ProgressivePreviewTests(unittest.TestCase):
         self.assertEqual(w.dispatcher.document['nodes']['grade']['params']['exposure'], before)
         slider.setSliderDown(False)
 
+    def test_properties_slider_pointer_drag_queues_a_tier8_snapshot(self):
+        w = self.window
+        w.timer.stop()
+        w.graph.items_by_id['grade'].setSelected(True)
+        w.inspect('grade')
+        slider = w.properties.widget().findChild(QSlider, 'knob-slider')
+        self.assertIsNotNone(slider)
+        self.assertTrue(slider.isVisibleTo(w))
+        held = unittest.mock.patch.object(w, 'start_preview')
+        held.start()
+        self.addCleanup(held.stop)
+        before = w.dispatcher.document['nodes']['grade']['params']['exposure']
+        start = QPoint(round(slider.width() * 0.25), slider.height() // 2)
+        end = QPoint(round(slider.width() * 0.75), slider.height() // 2)
+        QTest.mousePress(slider, Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(slider, end, 20)
+        self.assertGreater(len(w.preview_queue), 0, 'a pointer drag produced no live preview request')
+        request, _cancel = w.preview_queue.take()
+        self.assertEqual(request.tier, 8)
+        self.assertNotEqual(request.document['nodes']['grade']['params']['exposure'], before)
+        self.assertEqual(w.dispatcher.document['nodes']['grade']['params']['exposure'], before,
+                         'the live pointer preview committed a knob value before release')
+        QTest.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=end)
+
     def test_fluid_stop_requests_half_surface_then_full_detail(self):
         w = self.window
         w.dispatcher.document["nodes"]["fluid_surface_marker"] = {"type": "FluidSurface3D"}
