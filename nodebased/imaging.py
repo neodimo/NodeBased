@@ -4369,8 +4369,10 @@ class Evaluator:
             color = np.array([p["red"] * p["alpha"], p["green"] * p["alpha"], p["blue"] * p["alpha"], p["alpha"]], dtype=np.float32)
             return np.broadcast_to(color, (p["height"], p["width"], 4)).copy()
         if kind == "Checker":
-            yy, xx = np.ogrid[:p["height"], :p["width"]]
-            pattern = ((xx // p["size"] + yy // p["size"]) % 2).astype(np.float32)
+            size = max(float(p["size"]), 1.0)
+            x = (np.floor(np.arange(p["width"], dtype=np.float64) / size).astype(np.int32) & 1)
+            y = (np.floor(np.arange(p["height"], dtype=np.float64) / size).astype(np.int32) & 1)
+            pattern = np.bitwise_xor(x[None, :], y[:, None]).astype(np.float32)
             frame = np.empty((p["height"], p["width"], 4), np.float32)
             frame[..., :3] = (0.06 + pattern * 0.24)[..., None]
             frame[..., 3] = 1.0

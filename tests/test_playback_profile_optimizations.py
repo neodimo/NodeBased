@@ -129,6 +129,15 @@ class CheckerGenerationTests(unittest.TestCase):
         np.testing.assert_array_equal(actual, expected)
         np.testing.assert_array_equal(tiled_source, expected)
 
+    def test_checker_preserves_fractional_animated_size_rounding(self):
+        params = {"width": 9, "height": 7, "size": 3.5}
+        yy, xx = np.ogrid[:7, :9]
+        pattern = ((xx // 3.5 + yy // 3.5) % 2).astype(np.float32)
+        expected = np.empty((7, 9, 4), np.float32)
+        expected[..., :3] = (0.06 + pattern * 0.24)[..., None]
+        expected[..., 3] = 1.0
+        np.testing.assert_array_equal(Evaluator._kernel("Checker", params, []), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

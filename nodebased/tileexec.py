@@ -82,10 +82,12 @@ def _full_image(node, frame):
     elif node["type"] == "Checker":
         h, w = int(params["height"]), int(params["width"])
         size = max(1, int(params["size"]))
-        yy, xx = np.ogrid[:h, :w]
-        pattern = ((xx // size + yy // size) % 2).astype(np.float32)
-        pixels = np.ones((h, w, 4), np.float32)
+        x = (np.arange(w, dtype=np.int32) // size) & 1
+        y = (np.arange(h, dtype=np.int32) // size) & 1
+        pattern = np.bitwise_xor(x[None, :], y[:, None]).astype(np.float32)
+        pixels = np.empty((h, w, 4), np.float32)
         pixels[..., :3] = (0.06 + pattern * 0.24)[..., None]
+        pixels[..., 3] = 1.0
     else:
         raise ValueError(f"{node['type']} is not a generator")
     pixels = np.asarray(pixels, dtype=np.float32)
