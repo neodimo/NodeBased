@@ -465,6 +465,7 @@ def measure_paused():
               "cpus": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
               "qt_scale_factor": os.environ.get("QT_SCALE_FACTOR", ""), "device_pixel_ratio": window.devicePixelRatioF(),
               "idle_wait_qt_thread_ms_per_edit_window": round(baseline, 3), "rows": rows, "gate": gates,
+              "dock_counters_all_rows": dict(widget.presenter.counters) if widget.presenter is not None else {},
               "gate_note": "the gate is on the Qt-thread time of putting the picture up (Window._show_image, the Viewer's "
                            "paint, the dock's draw and overlay paint), not the whole edit: the rest of an edit (command, "
                            "graph and panel refresh, status, timeline marks) is the same on every path and is reported as "

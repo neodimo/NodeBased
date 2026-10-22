@@ -53,6 +53,7 @@ STAGING_SLOTS = 3             # reused upload buffers: one being filled, one wai
 ROW_ALIGN = 256               # WebGPU's bytes_per_row alignment for a buffer-to-texture copy
 HALF_ABOVE = 4_000_000        # float pictures with more pixels than this go to the card as half floats
 FILL_BANDS = 8                # a large picture is copied into the staging buffer in this many bands at once
+PAINT_BAND_GAP = 48           # changed overlay rows closer together than this go up as one band
 
 
 class TooLarge(ValueError):
@@ -632,6 +633,7 @@ class RetainedPresenter:
         self.linear_b_texture = None
         self.compare = "A only"      # the compare mode of the retained picture ("A only" when it has no B)
         self.group_key = None        # (A texture, B texture) the current linear bind group was made for
+        self.uniform_data = None     # the view block last written to the uniform buffer
         self.limits = {}
         self.refusal = ""            # why the last picture was refused (too large for this card), or ""
         self.linear_pipelines = {}   # view -> pipeline running carddisplay's fragment shader
@@ -639,6 +641,7 @@ class RetainedPresenter:
         self.paint_size = None
         self.paint_group = None
         self.paint_key = None        # what the texture was painted for; the widget compares before painting again
+        self.paint_image = None      # the QImage the paint texture holds (kept to skip an identical upload)
         self.linear_error = ""
         self.uploaded_sequence = 0
         self.last_frame = None       # the ledger payload ("qimage"|"linear", ...) the texture was made from
@@ -673,6 +676,7 @@ class RetainedPresenter:
             layout="auto", vertex={"module": module, "entry_point": "vs"},
             fragment={"module": module, "entry_point": "fs_overlay", "targets": [overlay_target]})
         self.uniform = self.device.create_buffer(size=UNIFORM_BYTES, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self.uniform_data = None
         paint_module = self.device.create_shader_module(code=PAINT_SHADER)
         self.paint_pipeline = self.device.create_render_pipeline(
             layout="auto", vertex={"module": paint_module, "entry_point": "vs"},
@@ -682,7 +686,7 @@ class RetainedPresenter:
         self.paint_flags = self.device.create_buffer(size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self.device.queue.write_buffer(self.paint_flags, 0, np.array(
             [1.0 if self.format.endswith("srgb") else 0.0, 0, 0, 0], np.float32))
-        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = None
+        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = self.paint_image = None
         self.overlay_bind_group = None
         self.vertex_module = module
         self.linear_layout = self.device.create_bind_group_layout(entries=[
@@ -746,7 +750,7 @@ class RetainedPresenter:
         floats_b = [entry[0] for entry in self.linear_b_by_format.values()]
         for resource in (self.texture, *floats, *floats_b, self.uniform, self.paint_texture, self.paint_flags, *tables):
             self._destroy(resource)
-        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = None
+        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = self.paint_image = None
         self.linear_by_format = {}
         self.linear_b_by_format = {}
         self.linear_b_texture = self.group_key = None
@@ -790,7 +794,7 @@ class RetainedPresenter:
                          *[entry[0] for entry in self.linear_b_by_format.values()], self.uniform,
                          self.paint_texture, self.paint_flags):
             self._destroy(resource)
-        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = None
+        self.paint_texture = self.paint_group = self.paint_size = self.paint_key = self.paint_image = None
         self.linear_by_format = {}
         self.linear_b_by_format = {}
         self.linear_b_texture = self.group_key = None
@@ -929,7 +933,7 @@ class RetainedPresenter:
         if linear:
             texture, capacity, group = self.linear_by_format.get(fmt, (None, (0, 0), None))
             if texture is not None and capacity[0] >= width and capacity[1] >= height:
-                self.linear_texture, self.linear_capacity, self.linear_bind_group = texture, capacity, group
+                self.linear_texture, self.linear_capacity = texture, capacity
                 return texture
         else:
             texture, capacity = self.texture, self.texture_capacity
@@ -1015,13 +1019,39 @@ class RetainedPresenter:
 
     def set_paint(self, image, key):
         """Show `image` (a premultiplied RGBA8888 QImage the size of the surface) over the picture, or nothing
-        for None. `key` records what it was painted for. One small upload when it changes, none otherwise."""
+        for None. `key` records what it was painted for. One upload when it changes, none otherwise.
+
+        An image with nothing painted in it (a paused picture with no handle, wipe or readout) is not uploaded
+        and its pass is skipped; an image identical to the one on the card is not uploaded again. Over the eGPU
+        a 4 MB `write_texture` costs the Qt thread about 4 ms (10/22), and the Viewer repaints several times
+        per edit, so most of these images were empty or repeats."""
         self.paint_key = key
         if image is None:
             self.paint_size = None
+            self.paint_image = None
             return
         width, height = image.width(), image.height()
-        if self.paint_texture is None or self.paint_texture.size[:2] != (width, height):
+        pixels = np.frombuffer(image.constBits(), np.uint32, count=width * height)
+        if not pixels.any():
+            self.paint_size = None
+            self.paint_image = None
+            self.counters["paint_empty"] += 1
+            return
+        previous = self.paint_image
+        bands = [(0, height)]
+        if previous is not None and self.paint_size == (width, height) and self.paint_texture is not None:
+            before = np.frombuffer(previous.constBits(), np.uint32, count=width * height)
+            changed = np.flatnonzero((pixels != before).reshape(height, width).any(axis=1))
+            if changed.size == 0:
+                self.counters["paint_unchanged"] += 1
+                return
+            # Only the rows that differ go up (a tier badge, a dragged handle), in bands: changes at the top and
+            # the bottom of the surface are two small uploads, not one that spans it.
+            breaks = np.flatnonzero(np.diff(changed) > PAINT_BAND_GAP)
+            starts = np.concatenate(([0], breaks + 1))
+            ends = np.concatenate((breaks, [changed.size - 1]))
+            bands = [(int(changed[a]), int(changed[b]) - int(changed[a]) + 1) for a, b in zip(starts, ends)]
+        elif self.paint_texture is None or self.paint_texture.size[:2] != (width, height):
             self.ledger.retire(self.paint_texture)
             self.paint_texture = self.device.create_texture(
                 size=(width, height, 1), format="rgba8unorm",
@@ -1030,9 +1060,15 @@ class RetainedPresenter:
                 layout=self.paint_pipeline.get_bind_group_layout(0),
                 entries=[{"binding": 0, "resource": self.paint_texture.create_view()},
                          {"binding": 1, "resource": {"buffer": self.paint_flags, "offset": 0, "size": 16}}])
-        self.device.queue.write_texture({"texture": self.paint_texture}, image.constBits(),
-                                        {"bytes_per_row": image.bytesPerLine()}, (width, height, 1))
+        line = image.bytesPerLine()
+        whole = memoryview(image.constBits())
+        for first_row, rows in bands:
+            self.device.queue.write_texture({"texture": self.paint_texture, "origin": (0, first_row, 0)},
+                                            whole[first_row * line:(first_row + rows) * line],
+                                            {"bytes_per_row": line}, (width, rows, 1))
+            self.counters["paint_upload_rows"] += rows
         self.paint_size = (width, height)
+        self.paint_image = image
         self.counters["paint_uploads"] += 1
 
     def has_picture(self):
@@ -1092,7 +1128,9 @@ class RetainedPresenter:
                 display = [0.0] * 16
             data = np.array([*physical_size, cx, cy, *rect, *format_rect, *size, zoom,
                              1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0, *display], np.float32)
-            self.device.queue.write_buffer(self.uniform, 0, data)
+            if self.uniform_data is None or not np.array_equal(self.uniform_data, data):
+                self.device.queue.write_buffer(self.uniform, 0, data)
+                self.uniform_data = data
             rp = encoder.begin_render_pass(color_attachments=[self._attachment(target)])
             rp.set_pipeline(pipeline)
             rp.set_bind_group(0, bind_group)

@@ -380,12 +380,51 @@ class CardPaintTests(unittest.TestCase):
         self.presenter.draw(self.view, self.context.size)
         self.assertNotEqual(tuple(self.context.read()[5, 5, :3]), (255, 0, 0))
 
+    @staticmethod
+    def mark(x, y):
+        def fill(image):
+            painter = QPainter(image)
+            painter.fillRect(x, y, 4, 3, 0xFFFF0000)
+            painter.end()
+        return fill
+
     def test_an_unchanged_overlay_is_uploaded_once(self):
-        image = self.paint(lambda i: None)
-        self.presenter.set_paint(image, "k")
+        self.presenter.set_paint(self.paint(self.mark(30, 40)), "k")
         for _ in range(5):
             self.presenter.draw(self.view, self.context.size)
         self.assertEqual(self.presenter.counters["paint_uploads"], 1)
+        self.presenter.set_paint(self.paint(self.mark(30, 40)), "k2")      # painted again, same pixels
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(self.presenter.counters["paint_uploads"], 1)
+        self.assertEqual(self.presenter.counters["paint_unchanged"], 1)
+
+    def test_an_empty_overlay_is_not_uploaded_and_its_pass_is_skipped(self):
+        self.presenter.draw(self.view, self.context.size)
+        before = self.context.read().copy()
+        self.presenter.set_paint(self.paint(lambda i: None), "k")
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(self.presenter.counters["paint_uploads"], 0)
+        self.assertEqual(self.presenter.counters["paint_empty"], 1)
+        self.assertIsNone(self.presenter.paint_size)
+        np.testing.assert_array_equal(self.context.read(), before)
+
+    def test_only_the_changed_rows_go_up_and_the_picture_is_right(self):
+        self.presenter.draw(self.view, self.context.size)
+        plain = self.context.read().copy()
+        self.presenter.set_paint(self.paint(self.mark(30, 40)), "a")
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(tuple(self.context.read()[41, 31, :3]), (255, 0, 0))
+        full = self.presenter.counters["paint_upload_rows"]
+        self.presenter.set_paint(self.paint(self.mark(30, 41)), "b")        # moved one row down
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(self.presenter.counters["paint_upload_rows"] - full, 4)    # rows 40 and 43 changed: 40..43
+        again = self.context.read()
+        self.assertEqual(tuple(again[40, 31, :3]), tuple(plain[40, 31, :3]))        # the old top row is clear
+        self.assertEqual(tuple(again[43, 31, :3]), (255, 0, 0))
+        self.presenter.set_paint(self.paint(lambda i: None), "c")
+        self.presenter.set_paint(self.paint(self.mark(30, 40)), "d")        # empty, then back: a full upload
+        self.presenter.draw(self.view, self.context.size)
+        self.assertEqual(tuple(self.context.read()[41, 31, :3]), (255, 0, 0))
 
     def test_recovery_forgets_the_paint_so_it_is_painted_again(self):
         self.presenter.set_paint(self.paint(lambda i: None), "k")
