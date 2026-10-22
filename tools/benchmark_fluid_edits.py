@@ -81,9 +81,18 @@ def measure(adapter, cells, frames, workdir, profile_phases=False):
         evaluator = Evaluator(sim=store)
         dispatcher = build_document(args)
         doc = dispatcher.document
+        baseline_started = time.perf_counter()
+        for stage in STAGES:
+            for frame in range(1, frames + 1):
+                evaluator.evaluate_raster(doc, target=stage, frame=frame, typed=True)
+        baseline_elapsed = time.perf_counter() - baseline_started
+        profiled_solvers.clear()
+        if profile_phases:
+            profile_counters["cache_write_s"] = 0.0
         for node, param, delta in changes:
             doc["nodes"][node]["params"][param] += delta
-        record = {"first_frame_s": None, "stages_s": {}}
+        record = {"base_cache_prep_s": round(baseline_elapsed, 2),
+                  "first_frame_s": None, "stages_s": {}}
         started = time.perf_counter()
         elapsed, _ = _timed(evaluator.evaluate_raster, doc, target="steam_cache", frame=1, typed=True)
         record["first_frame_s"] = round(elapsed, 4)

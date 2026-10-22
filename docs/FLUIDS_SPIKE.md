@@ -1233,7 +1233,10 @@ outputs before display presentation; substep internals (transfers, pressure, spa
 readback) still need direct instrumentation. No timeline, stale-picture badge, edit-cancellation UI, or 64-cell
 Radeon 8060S measurement is still pending.
 
-**64-cell / 120-frame edit measurements (2026-10-22).** The first-frame column is time to solve and cache the first
+**64-cell / 120-frame cold-cache references (2026-10-22; superseded for the edit gate).** These first measurements
+started each edited graph with an empty cache, so they include unchanged upstream work and do not represent an artist
+editing an already-baked comp. The harness now pre-bakes the base graph and reuses unchanged cache keys; warmed edit
+measurements are being regenerated. The first-frame column below is time to solve and cache the first
 steam volume frame; viewport presentation is not measured. The full-bake column walks all four output stages. The
 largest exposed stage is the named evaluator output, not an internal solver phase.
 
@@ -1249,12 +1252,10 @@ largest exposed stage is the named evaluator output, not an internal solver phas
 | Radeon 8060S | Cup moved 5 cm | 0.263 s | 29.88 s | Steam cache, 19.85 s |
 | Radeon 8060S | Steam vorticity +0.4 | 0.247 s | 29.69 s | Steam cache, 20.08 s |
 
-The first solved volume is under one second on all three measured adapters. Bake time exceeds 30 seconds on the three
-llvmpipe cases and on two RTX cases; the 30.51-second pour case also misses by 0.51 seconds. The Radeon 8060S
-meets the under-30-second full-bake gate for all three edits, with two cases close to the limit. Detailed internal
-solver phase timing (advection, particle transfers, pressure, sparse occupancy, surface, cache writes, synchronization
-and readback) remains to be run with `--profile-phases`; that mode adds synchronization and inflates wall time. The
-A6000 is unavailable and unmeasured; a planning estimate is
+These cold-cache reference values do not decide the re-simulation gate. Detailed internal solver phase timing
+(advection, particle transfers, pressure, sparse occupancy, surface, cache writes, synchronization and readback) is
+being collected with `--profile-phases`; that mode adds synchronization and inflates wall time. The A6000 is
+unavailable and unmeasured; a planning estimate is
 0.8–1.3× the RTX wall time for the same 64-cell workload, with cache and bandwidth-heavy phases potentially outside
 that range. Treat this as an estimate only. Full JSON profiles are in `benchmarks/hot_pour/edit-resimulation-*.json`.
 
