@@ -186,15 +186,16 @@ costs are estimates; the paired JSON profiles preserve the timeline and sampling
 
 | Comp | Before: top five nodes (ms/frame) | After: top five nodes (ms/frame) |
 |---|---|---|
-| 1080p / RTX 3080 Ti | Transform 183.6; Blur 91.2; ColorCorrect 76.4; Read plate 31.5; Read background 29.8 | Transform 46.5; Grade 18.8; Blur 13.4; Merge 13.2; Roto 12.2 |
+| 1080p / RTX 3080 Ti | Transform 183.6; Blur 91.2; ColorCorrect 76.4; Read plate 31.5; Read background 29.8 | Transform 67.7; Grade 27.6; Merge 18.8; Blur 18.8; Roto 11.0 |
 | 4K / llvmpipe | Transform 667.2; ColorCorrect 324.0; Blur 311.0; Read background 118.8; Read plate 117.2 | Transform 499.3; ColorCorrect 286.7; Merge 131.7; Blur 122.3; Grade 119.7 |
 
-| Uncached run | Before → after |
+| Prior uncached measurements (historical; original runs included post-stop drain frames) | Rate |
 |---|---:|
-| 1080p / RTX 3080 Ti | 1.5 → 4.5 fps (finish 1; earlier after run 2.4) |
-| 1080p / llvmpipe | 1.6 → 2.4 fps |
-| 1080p / integrated laptop stand-in (four CPUs, 2× Qt scale) | — → 2.3 fps |
-| 4K / llvmpipe | 0.4 → 0.5 fps |
+| 1080p / RTX 3080 Ti, corrected exact-window run | 3.7 fps (37 frames / 10 s) |
+| 1080p / RTX 3080 Ti, earlier baseline → finish 1 | 1.5 → 4.5 fps (not gate-valid) |
+| 1080p / llvmpipe | 1.6 → 2.4 fps (historical) |
+| 1080p / integrated laptop stand-in (four CPUs, 2× Qt scale) | 2.3 fps (historical) |
+| 4K / llvmpipe | 0.4 → 0.5 fps (historical) |
 
 Cached playback stayed near its prior cadence: 1080p llvmpipe was 12.3 fps before and 11.7–11.8
 fps after, with about 84 ms median frame intervals in both runs. 4K llvmpipe reached 4.7 fps on a
@@ -209,6 +210,8 @@ interval medians were 41.659 ms and 41.715 ms. Its evidence is
 30-second cutoff anchored at the first live picture; the prior coarse sample timer could stop
 early and the boundary picture was excluded.
 
+The finish-1 4.5 fps result was overstated: the original benchmark kept counting frames delivered during worker drain after playback stopped. `tools/benchmark_2d_playback.py` now anchors a precise single-shot sample window, counts only displayed frames inside it, and samples the worker only within that interval. Its corrected 10-second RTX run displayed 37 frames (3.7 fps), with a 286.765 ms median frame interval and 298.573 ms p95. The 16 fps gate remains unmet. The corrected profile's estimated node costs average Transform 67.7 ms, Grade 27.6 ms, Merge 18.8 ms, Blur 18.8 ms and Roto 11.0 ms per evaluated frame; Transform's fractional animated offset still takes the full-frame resampling path. Evidence is `benchmarks/2d-playback/finish2-corrected-after-1022-1080p-rtx3080ti.json`. Earlier 4.5 fps profiles are retained as historical artifacts, not valid gate measurements.
+
 The measured full-resolution changes cut small-radius Blur with shifted-window accumulation,
 use separable cubic sampling for translation-only Transform, and bound Read-ahead to one upcoming
 full-resolution frame. Read-ahead is skipped when the future display frame is already cached.
@@ -221,7 +224,7 @@ uncached comp gate remains open; the animated Checker gate now passes on the RTX
 `benchmarks/2d-playback/` contain the per-stage timeline and Qt/worker sampling evidence; read
 decode events include future frames warmed by the reader pool.
 
-The 288.432 ms median frame interval reconciles approximately as follows. The node estimate is the
+The earlier 288.432 ms profile reconciles approximately as follows; it is retained as a diagnostic profile, while the corrected finish-2 run is the gate measurement. The node estimate is the
 mean of the 2 ms worker-stack samples; the two wall-clock values are medians from the same run, so
 the residual is explicit and the components are approximate.
 
@@ -245,8 +248,8 @@ For an exact integer-pixel translation, Transform now copies the overlapping sou
 instead of running the cubic sampler. At 1080p on CPU NumPy, the isolated translation path fell
 from 78.06 ms to 1.91 ms (nine-run medians) with pixel agreement within 1e-7 across nearest,
 bilinear and cubic filters; see `benchmarks/2d-playback/transform-integer-offset-1022.json`.
-The realistic comp animates by fractional pixels, so this optimization does not change its
-4.5 fps result.
+The realistic comp animates by fractional pixels, so this optimization does not improve the
+corrected 3.7 fps result.
 
 ### Still slow
 
