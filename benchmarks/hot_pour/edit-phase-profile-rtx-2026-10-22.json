@@ -1,0 +1,323 @@
+{
+  "adapter_request": "default",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "grid_cells": 64,
+  "frames": 120,
+  "edits": {
+    "pour_rate": {
+      "first_frame_s": 0.4597,
+      "stages_s": {
+        "liquid_cache": 2.138,
+        "surface": 3.986,
+        "whitewater": 3.237,
+        "steam_cache": 22.091
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 17.81,
+          "p95": 19.42
+        },
+        "surface": {
+          "mean": 33.22,
+          "p95": 61.3
+        },
+        "whitewater": {
+          "mean": 26.98,
+          "p95": 49.1
+        },
+        "steam_cache": {
+          "mean": 184.09,
+          "p95": 309.86
+        }
+      },
+      "all_stages_s": 31.92,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 22187520,
+          "memory_entries": 121,
+          "disk_bytes": 22286215,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1071505920,
+          "memory_entries": 136,
+          "disk_bytes": 1547117261,
+          "disk_entries": 213,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 290,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 21225188,
+          "memory_entries": 120,
+          "disk_bytes": 21289913,
+          "disk_entries": 120,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 120,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ],
+      "solver_phases": [
+        {
+          "solver": "liquid",
+          "seconds": {
+            "binning and maintenance totals": 0.826027040136978,
+            "maintenance": 0.07645761966705322,
+            "particle to grid": 0.08694539242424071,
+            "forces and constraints": 0.08083748840726912,
+            "pressure": 0.846686981851235,
+            "project": 0.06138767255470157,
+            "extrapolation": 0.1524820204358548,
+            "grid to particle and advection": 0.0889690169133246
+          },
+          "copies": {
+            "host_to_device": 0.2154712111223489,
+            "device_to_host": 0.026354763889685273
+          }
+        },
+        {
+          "solver": "steam",
+          "seconds": {
+            "host": 8.94716658606194,
+            "tiles": 0.41689157020300627,
+            "emit": 0.12214570748619735,
+            "advect": 0.412001850316301,
+            "forces": 0.1515089573804289,
+            "confine": 0.16932504740543664,
+            "setup": 0.17318245489150286,
+            "pressure": 4.064535107463598,
+            "finish": 0.1913813657592982
+          },
+          "copies": {}
+        }
+      ],
+      "cache_write_s": 0.521
+    },
+    "cup_position": {
+      "first_frame_s": 0.3436,
+      "stages_s": {
+        "liquid_cache": 3.557,
+        "surface": 3.14,
+        "whitewater": 14.746,
+        "steam_cache": 29.754
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 29.64,
+          "p95": 40.28
+        },
+        "surface": {
+          "mean": 26.17,
+          "p95": 31.79
+        },
+        "whitewater": {
+          "mean": 122.89,
+          "p95": 300.22
+        },
+        "steam_cache": {
+          "mean": 247.95,
+          "p95": 339.48
+        }
+      },
+      "all_stages_s": 51.55,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 41857728,
+          "memory_entries": 121,
+          "disk_bytes": 41957199,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1073342464,
+          "memory_entries": 136,
+          "disk_bytes": 1827353376,
+          "disk_entries": 238,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 340,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 7915171,
+          "memory_entries": 120,
+          "disk_bytes": 7977573,
+          "disk_entries": 118,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 118,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ],
+      "solver_phases": [
+        {
+          "solver": "liquid",
+          "seconds": {
+            "binning and maintenance totals": 0.8839393658563495,
+            "maintenance": 0.08960773632861674,
+            "particle to grid": 0.17256007925607264,
+            "forces and constraints": 0.16112508694641292,
+            "pressure": 1.3906711302697659,
+            "project": 0.1314105624333024,
+            "extrapolation": 0.385461900383234,
+            "grid to particle and advection": 0.1431169796269387
+          },
+          "copies": {
+            "host_to_device": 0.1523299610707909,
+            "device_to_host": 0.06352971424348652
+          }
+        },
+        {
+          "solver": "steam",
+          "seconds": {
+            "host": 8.344129192642868,
+            "tiles": 0.28903886349871755,
+            "emit": 0.10781245236285031,
+            "advect": 0.27869126037694514,
+            "forces": 0.10078116622753441,
+            "confine": 0.11906973761506379,
+            "setup": 0.12918442068621516,
+            "pressure": 12.204969138139859,
+            "finish": 0.16098787169903517
+          },
+          "copies": {}
+        }
+      ],
+      "cache_write_s": 1.902
+    },
+    "steam_vorticity": {
+      "first_frame_s": 0.3044,
+      "stages_s": {
+        "liquid_cache": 3.48,
+        "surface": 3.172,
+        "whitewater": 14.061,
+        "steam_cache": 29.888
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 29.0,
+          "p95": 52.86
+        },
+        "surface": {
+          "mean": 26.43,
+          "p95": 31.81
+        },
+        "whitewater": {
+          "mean": 117.18,
+          "p95": 299.96
+        },
+        "steam_cache": {
+          "mean": 249.07,
+          "p95": 314.0
+        }
+      },
+      "all_stages_s": 50.92,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 41194752,
+          "memory_entries": 121,
+          "disk_bytes": 41292677,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1071256672,
+          "memory_entries": 140,
+          "disk_bytes": 1795078434,
+          "disk_entries": 238,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 336,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 7225248,
+          "memory_entries": 120,
+          "disk_bytes": 7287546,
+          "disk_entries": 118,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 118,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ],
+      "solver_phases": [
+        {
+          "solver": "liquid",
+          "seconds": {
+            "binning and maintenance totals": 0.8619686018209904,
+            "maintenance": 0.09166442486457527,
+            "particle to grid": 0.1563743723090738,
+            "forces and constraints": 0.1475775653962046,
+            "pressure": 1.3690927596762776,
+            "project": 0.10660048597492278,
+            "extrapolation": 0.38976182928308845,
+            "grid to particle and advection": 0.1305443081073463
+          },
+          "copies": {
+            "host_to_device": 0.15648896270431578,
+            "device_to_host": 0.06663445988669991
+          }
+        },
+        {
+          "solver": "steam",
+          "seconds": {
+            "host": 9.192920073168352,
+            "tiles": 0.3267246277537197,
+            "emit": 0.12041487614624202,
+            "advect": 0.37552125891670585,
+            "forces": 0.12663897825405002,
+            "confine": 0.13053992111235857,
+            "setup": 0.14011310948990285,
+            "pressure": 12.51027625775896,
+            "finish": 0.1812815919984132
+          },
+          "copies": {}
+        }
+      ],
+      "cache_write_s": 0.678
+    }
+  }
+}

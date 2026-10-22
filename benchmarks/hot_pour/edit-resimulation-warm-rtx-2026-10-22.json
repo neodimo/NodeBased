@@ -1,0 +1,221 @@
+{
+  "adapter_request": "default",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "grid_cells": 64,
+  "frames": 120,
+  "edits": {
+    "pour_rate": {
+      "base_cache_prep_s": 48.04,
+      "first_frame_s": 0.3019,
+      "stages_s": {
+        "liquid_cache": 3.31,
+        "surface": 4.274,
+        "whitewater": 3.661,
+        "steam_cache": 23.266
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 27.58,
+          "p95": 43.64
+        },
+        "surface": {
+          "mean": 35.62,
+          "p95": 65.99
+        },
+        "whitewater": {
+          "mean": 30.51,
+          "p95": 54.41
+        },
+        "steam_cache": {
+          "mean": 193.88,
+          "p95": 322.07
+        }
+      },
+      "all_stages_s": 34.82,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 63382272,
+          "memory_entries": 242,
+          "disk_bytes": 63578892,
+          "disk_entries": 242,
+          "hits": 1469,
+          "misses": 242,
+          "disk_hits": 0,
+          "writes": 242,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 28450436,
+          "memory_entries": 240,
+          "disk_bytes": 28577459,
+          "disk_entries": 238,
+          "hits": 238,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 238,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1071505920,
+          "memory_entries": 136,
+          "disk_bytes": 3377636182,
+          "disk_entries": 451,
+          "hits": 239,
+          "misses": 480,
+          "disk_hits": 0,
+          "writes": 766,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    },
+    "cup_position": {
+      "base_cache_prep_s": 49.45,
+      "first_frame_s": 0.293,
+      "stages_s": {
+        "liquid_cache": 3.273,
+        "surface": 3.163,
+        "whitewater": 14.525,
+        "steam_cache": 28.925
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 27.28,
+          "p95": 41.49
+        },
+        "surface": {
+          "mean": 26.36,
+          "p95": 33.5
+        },
+        "whitewater": {
+          "mean": 121.04,
+          "p95": 305.0
+        },
+        "steam_cache": {
+          "mean": 241.04,
+          "p95": 268.47
+        }
+      },
+      "all_stages_s": 50.19,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 82590208,
+          "memory_entries": 242,
+          "disk_bytes": 82787629,
+          "disk_entries": 242,
+          "hits": 1469,
+          "misses": 242,
+          "disk_hits": 0,
+          "writes": 242,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 15280214,
+          "memory_entries": 240,
+          "disk_bytes": 15404922,
+          "disk_entries": 236,
+          "hits": 238,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 236,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1073342464,
+          "memory_entries": 136,
+          "disk_bytes": 3657872142,
+          "disk_entries": 476,
+          "hits": 239,
+          "misses": 480,
+          "disk_hits": 0,
+          "writes": 816,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    },
+    "steam_vorticity": {
+      "base_cache_prep_s": 49.47,
+      "first_frame_s": 0.0776,
+      "stages_s": {
+        "liquid_cache": 0.076,
+        "surface": 0.079,
+        "whitewater": 0.173,
+        "steam_cache": 29.739
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 0.64,
+          "p95": 0.66
+        },
+        "surface": {
+          "mean": 0.65,
+          "p95": 0.66
+        },
+        "whitewater": {
+          "mean": 1.44,
+          "p95": 1.47
+        },
+        "steam_cache": {
+          "mean": 247.82,
+          "p95": 325.35
+        }
+      },
+      "all_stages_s": 30.15,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 40732480,
+          "memory_entries": 121,
+          "disk_bytes": 40830430,
+          "disk_entries": 121,
+          "hits": 1350,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 7365043,
+          "memory_entries": 120,
+          "disk_bytes": 7427349,
+          "disk_entries": 118,
+          "hits": 239,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 118,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1073631072,
+          "memory_entries": 137,
+          "disk_bytes": 3651103113,
+          "disk_entries": 476,
+          "hits": 239,
+          "misses": 480,
+          "disk_hits": 0,
+          "writes": 815,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    }
+  }
+}

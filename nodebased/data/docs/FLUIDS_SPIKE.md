@@ -1252,12 +1252,31 @@ largest exposed stage is the named evaluator output, not an internal solver phas
 | Radeon 8060S | Cup moved 5 cm | 0.263 s | 29.88 s | Steam cache, 19.85 s |
 | Radeon 8060S | Steam vorticity +0.4 | 0.247 s | 29.69 s | Steam cache, 20.08 s |
 
-These cold-cache reference values do not decide the re-simulation gate. Detailed internal solver phase timing
-(advection, particle transfers, pressure, sparse occupancy, surface, cache writes, synchronization and readback) is
-being collected with `--profile-phases`; that mode adds synchronization and inflates wall time. The A6000 is
+These cold-cache reference values do not decide the re-simulation gate. A cold-cache diagnostic provides internal
+solver phase timing; a warmed per-phase split remains pending. The `--profile-phases` mode adds synchronization and
+inflates wall time. The A6000 is
 unavailable and unmeasured; a planning estimate is
 0.8–1.3× the RTX wall time for the same 64-cell workload, with cache and bandwidth-heavy phases potentially outside
 that range. Treat this as an estimate only. Full JSON profiles are in `benchmarks/hot_pour/edit-resimulation-*.json`.
+
+**Warmed RTX edit gate readings (2026-10-22).** Each edited document started from a fully baked base cache. The
+base-cache preparation took 48.04–49.47 seconds and is reported separately; the edit-only column begins after that
+base run exists. Times are solve-to-cache, before viewport presentation.
+
+| Edit | First solved volume | Edit-only 120-frame stages | Largest output stage |
+| --- | ---: | ---: | --- |
+| Pour velocity ×1.25 | 0.302 s | 34.82 s | Steam cache, 23.27 s |
+| Cup moved 5 cm | 0.293 s | 50.19 s | Steam cache, 28.93 s |
+| Steam vorticity +0.4 | 0.078 s | 30.15 s | Steam cache, 29.74 s |
+
+The vorticity edit reuses the unchanged liquid, surface and whitewater caches; those output stages together take 0.33
+seconds. Pressure profiling on the cold-cache diagnostic run totals 4.07–12.51 seconds across the steam bake, with
+host/setup work at 8.34–9.19 seconds and sparse tile updates at 0.29–0.42 seconds. Liquid profile counters include
+particle-to-grid, grid-to-particle/advection, pressure and transfer copies. Cache-write time is 0.52–1.90 seconds.
+These phase timers force synchronization, so use them to rank costs rather than as gate wall times. The diagnostic
+JSON is `benchmarks/hot_pour/edit-phase-profile-rtx-2026-10-22.json`; the warmed edit JSON is
+`benchmarks/hot_pour/edit-resimulation-warm-rtx-2026-10-22.json`. Cost-reduction and the warmed Radeon gate readings
+remain open.
 
 ### S1: the Hot pour in a rendered shot (finish 1)
 

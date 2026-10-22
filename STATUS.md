@@ -1,3 +1,7 @@
+# Lane 6 step A of 2 — in progress (2026-10-22)
+
+Complete-frame solver callbacks and the Hot pour edit benchmark are committed. Cold-cache edit profiles are retained as references; the corrected warmed RTX run records 0.08–0.30 s to a solved first volume frame and 30.15–50.19 s across all four 120-frame output stages. The warmed Radeon run is queued behind other GPU-lock owners. The callback is not yet wired to timeline playback, stale-picture labeling, or edit-triggered cancellation; detailed warm per-phase profiling and cost reduction remain open.
+
 # Lane 8 step A of 2 — in progress (2026-10-22)
 
 Base is the newly merged live-picture plan. Building a generated animated 1080p/4K comp and a real-window benchmark with frame-stage profiling; initial GPU baseline is queued behind an existing RTX lock holder.
