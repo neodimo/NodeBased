@@ -44,7 +44,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
 SCENES = ("empty", "cube", "furnished", "glass", "mixed", "grade")
-FIELDS = ("adapter", "scene", "size", "backend", "fps", "shown", "interval_ms", "render_ms_status", "status")
+FIELDS = ("adapter", "scene", "size", "backend", "proxy", "fps", "shown", "interval_ms", "render_ms_status", "tier_pictures",
+          "fps_at_end_tier", "time_row", "settle_s", "status")
 
 
 def parse_args(argv=None):
@@ -65,6 +66,10 @@ def parse_args(argv=None):
                    help="also time 12 single Render3D frames through the evaluator (no playback): render_once_ms")
     p.add_argument("--samples", type=int, default=0, help="Render3D samples (default: the node's own, 2)")
     p.add_argument("--view", default="", help="display view to play through (default: the window's own, ACES 2.0)")
+    p.add_argument("--proxy", default="off", choices=("off", "on"),
+                   help="on: play as the app ships, with \"Proxy while playing\" checked (a frame that misses the comp's rate steps "
+                        "the picture down a tier); off: play at the size set, the raw cost (default)")
+    p.add_argument("--settle-wait", type=float, default=30.0, help="seconds to wait after stopping for the full-quality picture")
     return p.parse_args(argv)
 
 
@@ -201,7 +206,14 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     window.agent_command({"op": "batch", "commands": ops})
     last = 240
     window.set_time(first=1, last=last, current=1, fps=args.fps)
-    window.playback_proxy.setChecked(False)     # play at the size the artist set
+    window.playback_proxy.setChecked(args.proxy == "on")     # off: play at the size the artist set
+    shown_tiers = []                      # (monotonic time, proxy tier) of every picture the viewer was handed
+    real_show = window._show_image
+
+    def show_image(image, scale, *rest, **more):
+        shown_tiers.append((time.monotonic(), int(scale)))
+        return real_show(image, scale, *rest, **more)
+    window._show_image = show_image
     if args.view:
         window.display_view.setCurrentText(args.view)
     window.agent_command({"op": "view", "id": view})
@@ -230,8 +242,19 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         spin(0.1)
         statuses.append(window.statusBar().currentMessage())
     elapsed = time.monotonic() - start
+    playing_tier = int(window.proxy.currentData() or 1)
     window.toggle_playback(False)
+    stopped = time.monotonic()
     events = playback_trace.disable()
+    settle_s, settle_status = None, ""
+    deadline = stopped + args.settle_wait
+    while time.monotonic() < deadline:
+        spin(0.02)
+        if (not window.busy and not len(window.preview_queue) and int(window.proxy.currentData() or 1) == 1
+                and any(t >= stopped and tier == 1 for t, tier in shown_tiers)):
+            settle_s = round(max(t for t, tier in shown_tiers if t >= stopped and tier == 1) - stopped, 2)
+            break
+    settle_status = window.statusBar().currentMessage()
     spin(0.3)
     times = [t for t in list(window.playback_shown_times) if start <= t <= start + elapsed]
     intervals = [(b - a) * 1000 for a, b in zip(times, times[1:])]
@@ -247,8 +270,18 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         "comp_fps": args.fps, "shown": len(times), "fps": round(len(times) / elapsed, 2) if elapsed else 0.0,
         "interval_ms": distribution(intervals), "render_ms_status": distribution(render_ms),
         "dropped": window.playback_dropped_frames - dropped_before, "status": status,
-        "proxy_tier_at_end": getattr(window, "playback_tier", None),
+        "proxy": args.proxy, "tier_at_end": playing_tier,
     }
+    in_run = [(t, tier) for t, tier in shown_tiers if start <= t <= start + elapsed]
+    result["tier_pictures"] = {str(tier): sum(1 for _, k in in_run if k == tier) for tier in sorted({k for _, k in in_run})}
+    last_tier = in_run[-1][1] if in_run else 1
+    final = [t for t, tier in in_run if tier == last_tier]
+    if len(final) > 2:
+        # the rate at the tier playback ended on: the span of the pictures drawn at it
+        result["fps_at_end_tier"] = round((len(final) - 1) / (final[-1] - final[0]), 2) if final[-1] > final[0] else 0.0
+    result["time_row"] = window.realtime_label.text()
+    result["settle_s"] = settle_s
+    result["settle_status"] = settle_status
     if once:
         result["render_once_ms"] = once
         result["render_samples"] = args.samples or "node default (2)"
@@ -306,6 +339,7 @@ def main(argv=None):
                    "--fps", str(args.fps), "--backend", args.backend, "--adapter", args.adapter,
                    "--splats", str(args.splats), "--view", args.view, "--samples", str(args.samples), "--out", name]
             cmd += ["--once"] if args.once else []
+            cmd += ["--proxy", args.proxy, "--settle-wait", str(args.settle_wait)]
             subprocess.run(cmd, check=False, env=dict(os.environ, PYTHONPATH=str(ROOT)))
             try:
                 results.append(json.loads(Path(name).read_text()))

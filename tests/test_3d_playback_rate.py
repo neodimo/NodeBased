@@ -4,6 +4,7 @@ Each test fails on the code before its change: the shadow BVH was not chosen for
 camera move repacked and re-uploaded the whole scene, a scene with nothing translucent drew a second pass over every
 triangle, and the display conversion divided and multiplied by an alpha of 1 on one thread."""
 import dataclasses
+import time
 import unittest
 import unittest.mock
 
@@ -11,6 +12,7 @@ import numpy as np
 
 import tests.isolation  # noqa: F401
 from nodebased import gpu3d, imaging, scene3d as s
+from tests.test_new_look_viewer_strip_nl5 import Base
 
 
 def card(width, height, color, position, rotation=(0, 0, 0), **fields):
@@ -230,6 +232,41 @@ class DisplayConversionTests(unittest.TestCase):
         with unittest.mock.patch.object(color._cpu_pool, "map", side_effect=lambda *a, **k: calls.append(1) or real(*a, **k)):
             imaging._quantize(np.zeros((600, 700, 3), np.float32))
         self.assertEqual(len(calls), 1)
+
+
+class TimeRowTierTests(Base):
+    """The time row says which resolution tier is on screen while playing."""
+
+    def play_at(self, tier, fps_shown):
+        w = self.open_window()
+        w.set_time(fps=24.0)
+        w.playing = True
+        w.playback_origin_time = time.monotonic() - 1.0
+        now = time.monotonic()
+        w.playback_shown_times.clear()
+        w.playback_shown_times.extend(now - 1.0 + i * (1.0 / fps_shown) for i in range(1, int(fps_shown) + 1))
+        w.proxy.setCurrentIndex(w.proxy.findData(tier))
+        return w
+
+    def test_full_resolution_adds_nothing(self):
+        w = self.play_at(1, 24)
+        w.update_realtime_light()
+        self.assertEqual(w.realtime_label.text(), "real time · 24 fps")
+        w.playing = False
+
+    def test_a_proxy_tier_is_named_when_the_rate_holds_and_when_it_does_not(self):
+        for tier, note in ((2, "half res"), (4, "quarter res"), (8, "eighth res")):
+            with self.subTest(tier=tier):
+                w = self.play_at(tier, 24)
+                w.update_realtime_light()
+                self.assertEqual(w.realtime_label.text(), f"real time · 24 fps · {note}")
+                w.playback_shown_times.clear()
+                w.playback_shown_times.extend(time.monotonic() - 0.95 + i * 0.0865 for i in range(11))
+                w.update_realtime_light()
+                self.assertTrue(w.realtime_label.text().endswith(f"of 24 fps · {note}"), w.realtime_label.text())
+                w.playing = False
+                w.update_realtime_light()
+                self.assertEqual(w.realtime_label.text(), "real time")
 
 
 if __name__ == "__main__":

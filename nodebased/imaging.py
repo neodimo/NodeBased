@@ -263,6 +263,9 @@ def zebra_masks(rgb, height, width):
     return (rgb > ZEBRA_HIGH).any(axis=2) & stripe, (rgb < ZEBRA_LOW).any(axis=2) & stripe
 
 
+OPAQUE_SHORTCUT = True       # a frame with alpha 1 everywhere skips the divide and the multiply by alpha (both are by 1)
+THREADED_QUANTIZE = True     # the clip, scale and cast to 8 bits run on row bands in the display worker pool
+_QUANTIZE_BELOW = 1 << 18    # ... for frames of at least this many pixels
 CROP_TRANSPARENT = True      # convert only the covered rectangle of a frame with transparent surroundings
 _CROP_BELOW = 0.7            # ... when it is under this fraction of the frame
 
@@ -298,6 +301,29 @@ def _unpremultiply(rgb, weight):
     box = (slice(rows[0], rows[-1] + 1), slice(cols[0], cols[-1] + 1))
     np.divide(rgb[box], weight[box], out=straight[box], where=covered[box][..., None])
     return straight
+
+
+def _quantize(rgb):
+    """``clip(rgb, 0, 1) * 255 + 0.5`` cast to uint8, in place on ``rgb`` (which the caller owns). Large frames go through
+    the display worker pool in row bands: the four full-frame passes were about 14 ms of a 1080p conversion on one thread."""
+    rows = rgb.shape[0]
+    if not THREADED_QUANTIZE or rows * rgb.shape[1] < _QUANTIZE_BELOW:
+        scaled = np.clip(rgb, 0, 1, out=rgb)
+        scaled *= 255
+        scaled += 0.5
+        return scaled.astype(np.uint8)
+    from .color import _cpu_pool, _CPU_WORKERS
+    out = np.empty(rgb.shape, np.uint8)
+
+    def band(span):
+        part = rgb[span[0]:span[1]]
+        np.clip(part, 0, 1, out=part)
+        part *= 255
+        part += 0.5
+        out[span[0]:span[1]] = part.astype(np.uint8)
+    bands = min(_CPU_WORKERS, rows)
+    list(_cpu_pool.map(band, [(i * rows // bands, (i + 1) * rows // bands) for i in range(bands)]))
+    return out
 
 
 def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None):
@@ -336,13 +362,19 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         # has always unpremultiplied first, so the viewer and the exporter used to disagree
         # on exactly those pixels. Same order here: divide out alpha, transform, re-associate.
         weight = np.clip(alpha, 0, 1)
-        straight = _unpremultiply(rgb, weight)
+        opaque = OPAQUE_SHORTCUT and bool(weight.min() >= 1.0)
+        straight = rgb if opaque else _unpremultiply(rgb, weight)
         gamma = float((look or {}).get("gamma", 1.0))
         if gamma != 1.0:
             straight = np.sign(straight) * np.abs(straight) ** np.float32(1.0 / gamma)
         shown = display_rgb(straight, view)
         # The view transforms hand back a new array; Linear and Raw hand back their input, which the clipping warning still reads.
-        rgb = shown * weight if shown is straight else np.multiply(shown, weight, out=shown)
+        if opaque:
+            # weight is 1 everywhere: `shown * weight` is `shown`. A view transform made a new array; Linear and Raw handed
+            # back their input, which may be the caller's frame.
+            rgb = shown.copy() if shown is rgb else shown
+        else:
+            rgb = shown * weight if shown is straight else np.multiply(shown, weight, out=shown)
         zebra = (zebra_masks(straight, *straight.shape[:2]) if (look or {}).get("zebra") else None)
         if background == "checker":
             # Composited after the transform, so the checker keeps the tone it was authored
@@ -351,10 +383,7 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
             levels = display_rgb(np.array([[[0.055] * 3, [0.095] * 3]], np.float32), view)[0, :, 0]
             bg = np.where((xx // 16 + yy // 16) % 2 == 0, levels[0], levels[1]).astype(np.float32)
             rgb = rgb + bg[..., None] * (1 - weight)
-    scaled = np.clip(rgb, 0, 1, out=rgb)      # `rgb` is ours by now; in place, each full-frame temporary is about 25 MB at 1080p
-    scaled *= 255
-    scaled += 0.5
-    rgb8 = scaled.astype(np.uint8)
+    rgb8 = _quantize(rgb)      # `rgb` is ours by now; in place, each full-frame temporary is about 25 MB at 1080p
     if channel != "A" and (look or {}).get("zebra"):
         over, under = zebra
         rgb8[over] = (255, 0, 0)

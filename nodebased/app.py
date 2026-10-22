@@ -9465,6 +9465,14 @@ class Window(QMainWindow):
             return None
         return sum(1 for shown in self.playback_shown_times if shown >= now - span) / span
 
+    PLAYING_TIER_NOTES = {2: "half res", 4: "quarter res", 8: "eighth res"}
+
+    def playing_tier_note(self):
+        """Which proxy tier the frames on screen are drawn at while playing ("half res"), or "" at full resolution. Playback
+        steps down a tier when a frame cannot finish within the comp's frame time (`_adapt_playback_proxy`) and the
+        picture refines to full resolution when playback stops, so the time row says which one it is showing."""
+        return self.PLAYING_TIER_NOTES.get(int(self.proxy.currentData() or 1), "")
+
     def update_realtime_light(self):
         """The "real time" light follows the rate playback really achieves. Green while the
         frames on screen keep up with the comp's rate, warm with the real figure ("11 of 24 fps")
@@ -9479,6 +9487,9 @@ class Window(QMainWindow):
         else:
             behind = self.playing and self.playback_dropped_frames > 0
             text = "dropping frames" if behind else "real time"
+        tier = self.playing_tier_note()
+        if tier and self.playing:
+            text += f" · {tier}"
         self.realtime_dot.set_color(TOKENS["warn"] if behind else TOKENS["acc"])
         self.realtime_label.setText(text)
         self.realtime_label.setProperty("behind", behind)
@@ -9902,6 +9913,7 @@ class Window(QMainWindow):
         self.proxy.setCurrentIndex(next_index)
         self.statusBar().showMessage(
             f"Playback proxy 1/{next_tier}: adapting to {fps:g} fps target")
+        self.update_realtime_light()
         return True
 
     def _menus(self):
