@@ -58,6 +58,17 @@ EMPTY_OVERLAY = object()
 SAME_OVERLAY = object()
 BADGE_CACHE = 12              # tier badge labels kept on the card
 PAINT_BAND_GAP = 48           # changed overlay rows closer together than this go up as one band
+OVERLAY_SLOTS = 3             # staging buffers of the overlay ring: one being painted, one waiting for a draw, one the card copies from
+OVERLAY_BANDS = 64            # room kept in an overlay staging buffer for the alignment gaps of this many bands
+
+
+class DeferredOverlay:
+    """What an overlay provider returns while the card paints the overlay off the Qt thread (playback): the
+    recorded painting (a QPicture, commands only) and the render hints it is replayed with."""
+    __slots__ = ("picture", "hints")
+
+    def __init__(self, picture, hints):
+        self.picture, self.hints = picture, hints
 
 
 class TooLarge(ValueError):
@@ -379,6 +390,28 @@ def pick_display_adapter(context, preference=None, backend=None):
     return adapter, context.get_preferred_format(adapter), selection["note"]
 
 
+def paint_bands(pixels, before, width, height):
+    """The (first row, rows, first column, columns) bands of an overlay image (`pixels`, uint32 per texel) that differ
+    from `before` (the image the card holds, or None for a card with nothing): the whole image for None, and None
+    when nothing differs. Rows closer than PAINT_BAND_GAP go up together; within a band only the columns that
+    differ."""
+    if before is None:
+        return [(0, height, 0, width)]
+    changed = np.flatnonzero((pixels != before).reshape(height, width).any(axis=1))
+    if changed.size == 0:
+        return None
+    breaks = np.flatnonzero(np.diff(changed) > PAINT_BAND_GAP)
+    starts = np.concatenate(([0], breaks + 1))
+    ends = np.concatenate((breaks, [changed.size - 1]))
+    now, then = pixels.reshape(height, width), before.reshape(height, width)
+    bands = []
+    for a, b in zip(starts, ends):
+        first, last = int(changed[a]), int(changed[b])
+        columns = np.flatnonzero((now[first:last + 1] != then[first:last + 1]).any(axis=0))
+        bands.append((first, last - first + 1, int(columns[0]), int(columns[-1]) - int(columns[0]) + 1))
+    return bands
+
+
 def padded_row(width, texel):
     """Bytes per row in a staging buffer: the picture's row rounded up to WebGPU's 256-byte copy alignment."""
     return (width * texel + ROW_ALIGN - 1) // ROW_ALIGN * ROW_ALIGN
@@ -626,6 +659,232 @@ class StagingRing:
             slot.update(buffer=None, capacity=0, state="free", meta=None)
 
 
+class OverlayRing:
+    """The overlay painted, compared and staged off the Qt thread (while a picture plays).
+
+    The Qt thread records the Viewer's painting into a QPicture (commands only) and hands it over. One worker
+    thread replays it into a reused QImage, finds the rows and columns that differ from the image before it and
+    writes those bands into the mapped memory of a staging slot. The next draw (Qt thread) records the copy of
+    each finished slot into the overlay texture and frees the slot. The Qt thread therefore spends only the
+    recording and the copy record on an overlay; the replay, the compare and the memory writes (about 4 ms a
+    megabyte over an eGPU link) are the worker's.
+
+    Jobs apply in the order they were made, so every job's compare base (the image before it) is what the card holds
+    once the earlier ones are copied. A job that has not started when a newer one arrives is replaced by it
+    (it never ran, so the base is untouched); a generation bump (the texture was written some other way, the device
+    was lost) makes older results stale and the next job a whole image."""
+
+    def __init__(self, device, wgpu, notify=None, counters=None, threaded=True):
+        import concurrent.futures
+        self.device, self.wgpu = device, wgpu
+        self.notify = notify
+        self.counters = counters if counters is not None else collections.Counter()
+        self.pool = concurrent.futures.ThreadPoolExecutor(1, thread_name_prefix="direct-overlay") if threaded else None
+        self.slots = [{"buffer": None, "capacity": 0, "state": "free", "used": 0, "seq": 0, "result": None}
+                      for _ in range(OVERLAY_SLOTS)]
+        self.lock = threading.Lock()
+        self.pending = None          # the newest job that waits for the worker or a free slot
+        self.running = None          # the job the worker holds
+        self.jobs = []
+        self.sequence = 0
+        self.clock = 0
+        self.generation = 0          # bumped by `settle` and by the presenter when the texture is written another way
+        self.images = [None, None]   # the worker's two images: the one it paints and the one before it
+        self.flip = 0
+        self.previous = None         # (image, generation) the last job painted, the base of the next compare
+        self.lost = False            # a result was dropped: the owner must paint the overlay again whatever its memo says
+
+    # -- Qt thread -----------------------------------------------------------------------------
+    def busy(self):
+        with self.lock:
+            return (self.pending is not None or self.running is not None
+                    or any(slot["state"] != "free" for slot in self.slots))
+
+    def submit(self, picture, hints, size, ratio, generation, empty=False):
+        """Queue the newest overlay (a QPicture, or `empty` for a state with nothing to draw). Never waits."""
+        self.sequence += 1
+        job = {"picture": picture, "hints": hints, "size": tuple(size), "ratio": ratio, "generation": generation,
+               "empty": empty, "seq": self.sequence}
+        with self.lock:
+            if self.pending is not None:
+                self.counters["overlay_replaced"] += 1
+            self.pending = job
+        self.pump()
+
+    def pump(self):
+        """Start the pending job when the worker is idle and a slot is free (Qt thread)."""
+        with self.lock:
+            job = self.pending
+            if job is None or self.running is not None:
+                return
+            free = [slot for slot in self.slots if slot["state"] == "free"]
+            if not free:
+                return
+            slot = min(free, key=lambda s: s["used"])
+            slot["state"] = "filling"
+            self.pending, self.running = None, job
+        view = None
+        if not job["empty"]:
+            width, height = job["size"]
+            need = padded_row(width, 4) * height + OVERLAY_BANDS * ROW_ALIGN
+            buffer = slot["buffer"]
+            if buffer is None or slot["capacity"] < need:
+                if buffer is not None:
+                    if buffer.map_state == "mapped":
+                        buffer.unmap()
+                    buffer.destroy()
+                buffer = self.device.create_buffer(size=need, usage=self.wgpu.BufferUsage.MAP_WRITE | self.wgpu.BufferUsage.COPY_SRC,
+                                                   mapped_at_creation=True)
+                slot["buffer"], slot["capacity"] = buffer, need
+                self.counters["overlay_buffer_creates"] += 1
+            elif buffer.map_state != "mapped":
+                buffer.map_sync("WRITE")
+            view = buffer._experimental_get_mapped_range(0, slot["capacity"])
+        job["slot"] = slot
+        if self.pool is None:
+            self._run(job, slot, view)
+        else:
+            self.jobs = [item for item in self.jobs if not item.done()]
+            self.jobs.append(self.pool.submit(self._run, job, slot, view))
+
+    def take(self):
+        """The finished slots, oldest first, unmapped and ready to copy from. Failed ones and ones from an older
+        generation are freed (and mark the overlay lost: the owner paints it again)."""
+        with self.lock:
+            ready = sorted((slot for slot in self.slots if slot["state"] in ("ready", "failed")), key=lambda s: s["seq"])
+            out = []
+            for slot in ready:
+                result = slot["result"]
+                if slot["state"] == "failed" or result["generation"] != self.generation:
+                    slot["state"], slot["result"] = "free", None
+                    self.lost = True
+                    self.counters["overlay_dropped"] += 1
+                    continue
+                slot["state"] = "copying"
+                out.append(slot)
+        for slot in out:
+            if slot["result"]["bands"] and slot["buffer"].map_state == "mapped":
+                slot["buffer"].unmap()          # a copy source must be unmapped before the submit
+        return out
+
+    def release(self, slot):
+        self.clock += 1
+        with self.lock:
+            slot["used"] = self.clock
+            slot["state"], slot["result"] = "free", None
+
+    def settle(self):
+        """Wait for the worker and drop everything not yet copied (the owner is about to write the texture itself)."""
+        self.wait()
+        with self.lock:
+            self.pending = None
+            for slot in self.slots:
+                if slot["state"] in ("ready", "failed", "filling"):
+                    slot["state"], slot["result"] = "free", None
+            self.generation += 1
+
+    def wait(self):
+        for job in list(self.jobs):
+            try:
+                job.result()
+            except Exception:
+                pass
+        self.jobs = []
+
+    def bytes(self):
+        return sum(slot["capacity"] for slot in self.slots)
+
+    def close(self):
+        self.wait()
+        if self.pool is not None:
+            self.pool.shutdown(wait=True)
+        for slot in self.slots:
+            buffer = slot["buffer"]
+            if buffer is not None:
+                try:
+                    if buffer.map_state == "mapped":
+                        buffer.unmap()
+                    buffer.destroy()
+                except Exception:
+                    pass
+            slot.update(buffer=None, capacity=0, state="free", result=None)
+        self.pending = self.running = None
+
+    # -- worker thread -------------------------------------------------------------------------
+    def _run(self, job, slot, view):
+        started = time.perf_counter()
+        try:
+            result = self._paint(job, slot, view)
+            state = "ready"
+        except Exception:
+            result, state = None, "failed"
+        with self.lock:
+            slot["result"], slot["state"], slot["seq"] = result, state, job["seq"]
+            self.running = None
+            self.counters["overlay_jobs"] += 1
+            self.counters["overlay_job_ms_total"] += (time.perf_counter() - started) * 1000.0
+        if self.notify is not None:
+            try:
+                self.notify()
+            except Exception:
+                pass
+
+    def _paint(self, job, slot, view):
+        from PySide6.QtGui import QImage, QPainter
+        generation = job["generation"]
+        if job["empty"]:
+            return {"empty": True, "size": None, "bands": None, "generation": generation}
+        width, height = job["size"]
+        previous = None
+        if self.previous is not None and self.previous[1] == generation:
+            previous = self.previous[0]
+        if previous is not None and (previous.width(), previous.height()) != (width, height):
+            previous = None
+        image = self.images[self.flip]
+        if image is None or image.size().width() != width or image.size().height() != height:
+            image = self.images[self.flip] = QImage(width, height, QImage.Format.Format_RGBA8888_Premultiplied)
+        self.flip = 1 - self.flip
+        image.setDevicePixelRatio(job["ratio"])
+        image.fill(0)
+        painter = QPainter(image)
+        try:
+            painter.setRenderHints(job["hints"])
+            job["picture"].play(painter)
+        finally:
+            painter.end()
+        pixels = np.frombuffer(image.constBits(), np.uint32, count=width * height)
+        before = None if previous is None else np.frombuffer(previous.constBits(), np.uint32, count=width * height)
+        bands = paint_bands(pixels, before, width, height)
+        self.previous = (image, generation)
+        if bands is None:
+            return {"empty": False, "size": (width, height), "bands": [], "generation": generation}
+        line = image.bytesPerLine()
+        whole = memoryview(image.constBits())
+        capacity = slot["capacity"]
+        placed, offset = [], 0
+        for first_row, rows, first_column, columns in bands:
+            padded = padded_row(columns, 4)
+            size = padded * rows
+            if offset + size > capacity:        # more alignment gaps than the room kept: one band of the whole image
+                bands, placed, offset = [(0, height, 0, width)], [], 0
+                break
+            dst = np.frombuffer(view, np.uint8, count=size, offset=offset).reshape(rows, padded)
+            dst[:, :columns * 4] = np.frombuffer(whole[first_row * line:(first_row + rows) * line], np.uint8,
+                                                 count=rows * line).reshape(rows, line)[
+                :, first_column * 4:(first_column + columns) * 4]
+            placed.append((offset, padded, first_row, rows, columns, first_column))
+            offset = (offset + size + ROW_ALIGN - 1) // ROW_ALIGN * ROW_ALIGN
+        if not placed:
+            padded = padded_row(width, 4)
+            dst = np.frombuffer(view, np.uint8, count=padded * height).reshape(height, padded)
+            dst[:, :width * 4] = np.frombuffer(whole[:height * line], np.uint8, count=height * line).reshape(
+                height, line)[:, :width * 4]
+            placed.append((0, padded, 0, height, width, 0))
+        self.counters["overlay_rows"] += sum(item[3] for item in placed)
+        self.counters["overlay_texels"] += sum(item[3] * item[4] for item in placed)
+        return {"empty": False, "size": (width, height), "bands": placed, "generation": generation}
+
+
 class RetainedPresenter:
     """Owns the device, the retained picture texture and the two pipelines; draws into the surface."""
 
@@ -676,6 +935,7 @@ class RetainedPresenter:
         self.paint_copies = []       # (buffer, bytes per row, first row, rows, width, texture, first column): overlay bands the next draw copies in
         self.badges = collections.OrderedDict()
         self.badge_shown = None
+        self.overlay_ring = None     # the overlay painted off the Qt thread (OverlayRing), made with the device
         self.linear_error = ""
         self.uploaded_sequence = 0
         self.last_frame = None       # the ledger payload ("qimage"|"linear", ...) the texture was made from
@@ -697,6 +957,8 @@ class RetainedPresenter:
             self.device = self.adapter.request_device_sync()
         self.limits = {key: int(self.device.limits[key]) for key in ("max-buffer-size", "max-texture-dimension-2d")}
         self.ring = StagingRing(self.device, wgpu, threaded=self.fill_thread, notify=self.notify, counters=self.counters)
+        self.overlay_ring = OverlayRing(self.device, wgpu, notify=self.notify, counters=self.counters,
+                                        threaded=self.fill_thread)
         self.context.configure(device=self.device, format=self.format, alpha_mode="opaque")
         module = self.device.create_shader_module(code=SHADER)
         target = {"format": self.format}
@@ -779,6 +1041,9 @@ class RetainedPresenter:
         if self.ring is not None:
             self.ring.close()
             self.ring = None
+        if self.overlay_ring is not None:
+            self.overlay_ring.close()
+            self.overlay_ring = None
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
         tables = [entry[2] for entry in self.linear_pipelines.values() if entry is not None]
@@ -827,6 +1092,9 @@ class RetainedPresenter:
                 pending = staged                 # staged but never copied: newer than the retained picture
             self.ring.close()
             self.ring = None
+        if self.overlay_ring is not None:
+            self.overlay_ring.close()
+            self.overlay_ring = None
         for resource in self.ledger.new_epoch():
             self._destroy(resource)
         for resource in (self.texture, *[entry[0] for entry in self.linear_by_format.values()],
@@ -1054,10 +1322,96 @@ class RetainedPresenter:
         self.counters["upload_bytes"] += row * height
         return payload
 
+    def _ensure_paint_texture(self, width, height):
+        """The overlay texture at this size (a new one, with an empty content, when the size changed)."""
+        if self.paint_texture is not None and self.paint_texture.size[:2] == (width, height):
+            return
+        self.ledger.retire(self.paint_texture)
+        self.paint_texture = self.device.create_texture(
+            size=(width, height, 1), format="rgba8unorm",
+            usage=self.wgpu.TextureUsage.TEXTURE_BINDING | self.wgpu.TextureUsage.COPY_DST)
+        self.paint_group = self.device.create_bind_group(
+            layout=self.paint_pipeline.get_bind_group_layout(0),
+            entries=[{"binding": 0, "resource": self.paint_texture.create_view()},
+                     {"binding": 1, "resource": {"buffer": self.paint_flags, "offset": 0, "size": 16}}])
+
+    def _overlay_texture_written(self):
+        """The overlay texture is (or is about to be) written other than by the overlay ring: whatever the ring has
+        in flight is stale and its next job is a whole image."""
+        if self.overlay_ring is not None:
+            self.overlay_ring.generation += 1
+
+    # -- the overlay painted off the Qt thread (playback) --------------------------------------
+    def overlay_busy(self):
+        """True while an overlay is being painted, waits for a draw or is queued."""
+        return self.overlay_ring is not None and self.overlay_ring.busy()
+
+    def overlay_lost(self):
+        """True once after an overlay painted off the Qt thread was dropped (the texture was written meanwhile, the
+        worker failed): the owner paints the overlay again whatever its memo says."""
+        ring = self.overlay_ring
+        if ring is None or not ring.lost:
+            return False
+        ring.lost = False
+        self.paint_key = None
+        return True
+
+    def paint_deferred(self, deferred, key, size, ratio):
+        """Paint a recorded overlay (`DeferredOverlay`) on the worker and show it at the next draw after it is done.
+        Returns at once."""
+        self.paint_key = key
+        self.overlay_ring.submit(deferred.picture, deferred.hints, size, ratio, self.overlay_ring.generation)
+        self.counters["overlay_deferred"] += 1
+
+    def paint_empty_deferred(self, key):
+        """The same as `set_paint_empty`, in the order of the overlays painted off the Qt thread."""
+        self.paint_key = key
+        if self.paint_size is None and not self.overlay_ring.busy():
+            self.counters["paint_empty"] += 1      # nothing is shown and nothing is on its way: nothing to order
+            return
+        self.overlay_ring.submit(None, None, (0, 0), 1.0, self.overlay_ring.generation, empty=True)
+        self.counters["overlay_deferred_empty"] += 1
+
+    def _apply_overlays(self, encoder):
+        """Record the copy of every overlay the worker finished into the overlay texture (inside a draw). Returns
+        the slots to give back once the draw is submitted."""
+        ring = self.overlay_ring
+        if ring is None:
+            return []
+        slots = ring.take()
+        for slot in slots:
+            result = slot["result"]
+            if result["empty"]:
+                self.paint_size = None
+                self.paint_image = None
+                self.counters["paint_empty"] += 1
+                continue
+            width, height = result["size"]
+            whole = any(band[2] == 0 and band[5] == 0 and band[3] == height and band[4] == width
+                        for band in result["bands"])
+            if (self.paint_texture is None or self.paint_texture.size[:2] != (width, height)) and not whole:
+                ring.generation += 1        # a compare base the card does not hold: the next overlay is a whole image
+                ring.lost = True
+                self.counters["overlay_dropped"] += 1
+                continue
+            self._ensure_paint_texture(width, height)
+            for offset, padded, first_row, rows, columns, first_column in result["bands"]:
+                encoder.copy_buffer_to_texture(
+                    {"buffer": slot["buffer"], "offset": offset, "bytes_per_row": padded, "rows_per_image": rows},
+                    {"texture": self.paint_texture, "mip_level": 0, "origin": (first_column, first_row, 0)},
+                    (columns, rows, 1))
+                self.counters["paint_upload_rows"] += rows
+                self.counters["paint_upload_texels"] += rows * columns
+            self.counters["paint_uploads" if result["bands"] else "paint_unchanged"] += 1
+            self.paint_size = (width, height)
+            self.paint_image = None         # the card's content is the ring's now; a set_paint after this uploads whole
+        return slots
+
     def set_paint_empty(self, key):
         """The overlay has nothing painted in it (the Viewer found out without making the image): the same state
         `set_paint` reaches for an all-clear image, minus the image. The texture keeps its last content."""
         self.paint_key = key
+        self._overlay_texture_written()
         self.paint_size = None
         self.counters["paint_empty"] += 1
 
@@ -1071,12 +1425,14 @@ class RetainedPresenter:
         per edit, so most of these images were empty or repeats."""
         self.paint_key = key
         if image is None:
+            self._overlay_texture_written()
             self.paint_size = None
             self.paint_image = None
             return
         width, height = image.width(), image.height()
         pixels = np.frombuffer(image.constBits(), np.uint32, count=width * height)
         if not nonempty and not pixels.any():      # `nonempty`: the painter recorded a drawing command, so the scan is skipped
+            self._overlay_texture_written()
             self.paint_size = None          # nothing to draw: the pass is skipped; the texture keeps its last content
             self.counters["paint_empty"] += 1
             return
@@ -1085,33 +1441,17 @@ class RetainedPresenter:
         if (previous is not None and (previous.width(), previous.height()) == (width, height)
                 and self.paint_texture is not None):
             before = np.frombuffer(previous.constBits(), np.uint32, count=width * height)
-            changed = np.flatnonzero((pixels != before).reshape(height, width).any(axis=1))
-            if changed.size == 0:
+            # Only the rows that differ go up (a tier badge, a dragged handle), in bands: changes at the top and
+            # the bottom of the surface are two small uploads, not one that spans it; and within a band only the
+            # columns that differ (over the eGPU the staging buffer costs the Qt thread about 4 ms a megabyte, 10/22).
+            bands = paint_bands(pixels, before, width, height)
+            if bands is None:
                 self.paint_size = (width, height)     # shown again; the card already holds exactly this
                 self.counters["paint_unchanged"] += 1
                 return
-            # Only the rows that differ go up (a tier badge, a dragged handle), in bands: changes at the top and
-            # the bottom of the surface are two small uploads, not one that spans it.
-            breaks = np.flatnonzero(np.diff(changed) > PAINT_BAND_GAP)
-            starts = np.concatenate(([0], breaks + 1))
-            ends = np.concatenate((breaks, [changed.size - 1]))
-            now, then = pixels.reshape(height, width), before.reshape(height, width)
-            bands = []
-            for a, b in zip(starts, ends):
-                first, last = int(changed[a]), int(changed[b])
-                # ... and within a band only the columns that differ: a tier badge is a hundred texels wide, and over
-                # the eGPU the staging buffer costs the Qt thread about 4 ms a megabyte (10/22).
-                columns = np.flatnonzero((now[first:last + 1] != then[first:last + 1]).any(axis=0))
-                bands.append((first, last - first + 1, int(columns[0]), int(columns[-1]) - int(columns[0]) + 1))
         elif self.paint_texture is None or self.paint_texture.size[:2] != (width, height):
-            self.ledger.retire(self.paint_texture)
-            self.paint_texture = self.device.create_texture(
-                size=(width, height, 1), format="rgba8unorm",
-                usage=self.wgpu.TextureUsage.TEXTURE_BINDING | self.wgpu.TextureUsage.COPY_DST)
-            self.paint_group = self.device.create_bind_group(
-                layout=self.paint_pipeline.get_bind_group_layout(0),
-                entries=[{"binding": 0, "resource": self.paint_texture.create_view()},
-                         {"binding": 1, "resource": {"buffer": self.paint_flags, "offset": 0, "size": 16}}])
+            self._ensure_paint_texture(width, height)
+        self._overlay_texture_written()
         line = image.bytesPerLine()
         whole = memoryview(image.constBits())
         for first_row, rows, first_column, columns in bands:
@@ -1196,6 +1536,7 @@ class RetainedPresenter:
                 {"buffer": buffer, "offset": 0, "bytes_per_row": line, "rows_per_image": rows},
                 {"texture": texture, "mip_level": 0, "origin": (first_column, first_row, 0)}, (width, rows, 1))
             self.ledger.retire(buffer)
+        applied = self._apply_overlays(encoder)
         slot = self.ring.take_newest()
         if slot is not None and slot["sequence"] > self.uploaded_sequence:
             started = time.perf_counter()
@@ -1260,6 +1601,11 @@ class RetainedPresenter:
         if slot is not None:
             self.ring.release(slot)
             self.stage_pending()          # a pending picture that found every slot busy goes now
+        if applied:
+            for finished in applied:
+                self.overlay_ring.release(finished)
+        if self.overlay_ring is not None:
+            self.overlay_ring.pump()      # an overlay that found the worker or every slot busy goes now
         self.counters["draws"] += 1
         self.counters["draw_ms_total"] += (time.perf_counter() - started) * 1000.0
         for resource in self.ledger.note_present():
@@ -1355,9 +1701,12 @@ def make_widget(parent=None):
             self.compare_provider = None  # () -> the wipe line (centre x, y, normal x, y) in scene units, or None
             self.wipe_handle_provider = None   # (logical zoom) -> the turn handle's scene point (x, y) when the card draws the line and handles, or None
             self.hover = None             # (scene point or None) -> None; the owner updates its readout
+            self._pointer = None          # the pointer's physical surface position while it is over the picture, or None
+            self._hover_view = None       # the view the owner's readout was last read for
             self.edit = None              # (kind, scene point, button, modifiers, zoom, pressure) -> handled?; None: view only
             self._editing = False         # a left press was taken by a handle and its release is owed
             self.overlay_serial = 0       # bumped by the owner when the overlays changed
+            self.overlay_async = False    # the owner is playing: the overlay is recorded here and painted, compared and staged by a worker
             self.overlay_draws = 0
             self.waiting = ""             # why the surface is not made yet (no area, no native window), or ""
             self._retry = None            # the hand-over to repeat once the window can take a surface
@@ -1460,17 +1809,27 @@ def make_widget(parent=None):
                     presenter.set_paint(None, None)
                 return
             ratio = self.get_pixel_ratio()
+            lost = presenter.overlay_lost()
             key = (self.view, tuple(size), ratio, self.overlay_serial)
             if presenter.paint_key == key:
                 return
-            image = provider(self.view, tuple(size), ratio)
-            if image is SAME_OVERLAY and presenter.paint_size is None:
-                image = provider(self.view, tuple(size), ratio, force=True)       # the card holds nothing to keep (cleared, recovered)
+            ring = self.overlay_async and presenter.overlay_ring is not None
+            options = {"deferred": True} if ring else {}
+            if lost:
+                options["force"] = True
+            image = provider(self.view, tuple(size), ratio, **options)
+            if image is SAME_OVERLAY and presenter.paint_size is None and not presenter.overlay_busy():
+                image = provider(self.view, tuple(size), ratio, **{**options, "force": True})   # the card holds nothing to keep (cleared, recovered)
             if image is EMPTY_OVERLAY:
-                presenter.set_paint_empty(key)
+                if ring:
+                    presenter.paint_empty_deferred(key)
+                else:
+                    presenter.set_paint_empty(key)
             elif image is SAME_OVERLAY:
                 presenter.paint_key = key
                 presenter.counters["paint_unchanged"] += 1
+            elif isinstance(image, DeferredOverlay):
+                presenter.paint_deferred(image, key, size, ratio)
             else:
                 presenter.set_paint(image, key, nonempty=self.overlay_probed)
             self.overlay_draws += 1
@@ -1508,6 +1867,8 @@ def make_widget(parent=None):
                 return
             if self.auto_fit and self.rect is not None:
                 self.view = fit_view(size, self.rect)
+            if self._pointer is not None and self.view != self._hover_view:
+                self._rehover()       # a wheel zoom, a pan, a fit or a resize moved the picture under a still pointer
             try:
                 wipe = self.compare_provider() if self.compare_provider is not None else None
                 ratio = float(self.get_pixel_ratio())
@@ -1539,6 +1900,7 @@ def make_widget(parent=None):
         def wheelEvent(self, event):
             delta = event.angleDelta()
             steps = (delta.y() or delta.x()) / 120
+            self._pointer = self._cursor(event)
             if steps and self.rect is not None:
                 ratio = self.get_pixel_ratio()
                 factor = 1.15 ** steps
@@ -1548,6 +1910,12 @@ def make_widget(parent=None):
                     self.auto_fit = False
                     self._request()
             event.accept()
+
+        def _rehover(self):
+            """Read the owner's readout again for the point now under the pointer."""
+            self._hover_view = self.view
+            if self.hover is not None and self._pointer is not None and self.rect is not None:
+                self.hover(self.scene_point(*self._pointer))
 
         def _edit_point(self, event):
             return self.scene_point(*self._cursor(event))
@@ -1583,8 +1951,10 @@ def make_widget(parent=None):
             event.accept()
 
         def mouseMoveEvent(self, event):
+            self._pointer = self._cursor(event)
             if self._pan is None and self.hover is not None and self.rect is not None:
-                self.hover(self.scene_point(*self._cursor(event)))
+                self._hover_view = self.view
+                self.hover(self.scene_point(*self._pointer))
             if self._pan is not None:
                 (px, py), button = self._pan
                 x, y = self._cursor(event)
@@ -1609,6 +1979,7 @@ def make_widget(parent=None):
             event.accept()
 
         def leaveEvent(self, event):
+            self._pointer = None
             if self.hover is not None:
                 self.hover(None)
             super().leaveEvent(event)

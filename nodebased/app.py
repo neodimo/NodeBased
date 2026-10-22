@@ -1717,6 +1717,17 @@ class Viewer(PanZoomView):
         self._pixel_readout_active = False
         self.pixel_readout.hide()
 
+    def overlay_follows_frame(self):
+        """Whether the handles on show depend on the playhead: an animated Roto or warp shape, a Tracker or
+        planar track, a Transform, Flare or analysis box. The direct picture repaints its overlay for every new
+        frame only then; a wipe or a region of interest does not move with time."""
+        if self.format_rect is None:
+            return False
+        window = self.window
+        return any(context() is not None for context in (
+            self._roto_context, self._warp_context, self._transform_context, self._flare_context,
+            self._analysis_context, window._tracker_context, window._planar_context))
+
     def pixel_readout_info(self, scene_pos):
         """What the readout shows for a scene point, read from the float picture (`window.frame`),
         or None when the point is off the picture. Shared by the Viewer and the direct picture."""
@@ -3858,7 +3869,8 @@ class Viewer(PanZoomView):
         override = self._overlay_view
         return self.viewport().width() if override is None else override["width"]
 
-    def render_overlay(self, view, physical_size, ratio, readout=None, probe=False, force=False, badge=True):
+    def render_overlay(self, view, physical_size, ratio, readout=None, probe=False, force=False, badge=True,
+                       deferred=False):
         """The overlays as a premultiplied RGBA image of `physical_size` for the direct picture.
 
         `view` is the direct widget's (centre_x, centre_y, zoom) with zoom in physical pixels per scene
@@ -3873,7 +3885,11 @@ class Viewer(PanZoomView):
         change cost 1 to 4 ms of Qt-thread time per picture (10/22).
 
         `badge=False` leaves the corner label (tier, region of interest) out: the direct picture draws it from a
-        texture of its own (`render_badge`), so a tier change repaints no overlay."""
+        texture of its own (`render_badge`), so a tier change repaints no overlay.
+
+        With `deferred` (and `probe`) a changed overlay comes back as a `DeferredOverlay`, the recording itself: the
+        card replays it into the image, compares it and stages it on a worker thread while a picture plays, and the
+        Qt thread pays only for the recording."""
         if self.format_rect is None:
             return None
         width, height = physical_size
@@ -3905,6 +3921,9 @@ class Viewer(PanZoomView):
             memo_key = ((int(width), int(height)), ratio, tuple(view), bytes(recording.data()))
             if not force and memo_key == self._overlay_memo:
                 return directviewer.SAME_OVERLAY
+            if deferred:
+                self._overlay_memo = memo_key
+                return directviewer.DeferredOverlay(recording, self.renderHints())
         if probe:
             # Two images taken in turn: the card's presenter keeps the last one it was given as the base of its next
             # row diff, so the other is free to paint into, and a fresh 4 MB allocation (zeroed pages faulted in
@@ -9324,6 +9343,7 @@ class Window(QMainWindow):
         self.frame_info.setText(f"{span} frame{'' if span == 1 else 's'} · {seconds:.2f} s")
         self.refresh_timeline_marks()
         self.refresh_animated_panel()
+        self._direct_frame_moved()
 
     def refresh_animated_panel(self):
         """Re-read the properties panel when the playhead lands on a new frame.
@@ -9517,6 +9537,9 @@ class Window(QMainWindow):
         stopping_proxy = not start and (self.proxy.currentData() != 1
                                         or self.playback_auto_proxy_index is not None)
         self.playing = start
+        widget = getattr(self, "direct_widget", None)
+        if widget is not None:
+            widget.overlay_async = start      # while a picture plays the card paints the overlay off the Qt thread
         if start:
             self._playback_saved_disk_spills = self.evaluator.disk_spills_enabled
             self.evaluator.disk_spills_enabled = False
@@ -14620,6 +14643,7 @@ class Window(QMainWindow):
             widget.failed.connect(self._direct_failed)
             widget.overlay_provider = self._direct_overlay
             widget.overlay_probed = True
+            widget.overlay_async = bool(self.playing)
             widget.badge_text = self.viewer.badge_label
             widget.badge_maker = self.viewer.render_badge
             widget.compare_provider = self.viewer.wipe_line
@@ -14647,23 +14671,38 @@ class Window(QMainWindow):
         if widget is not None and widget.isVisible() and not getattr(self, "_direct_painting", False):
             widget.overlay_dirty()
 
-    def _direct_overlay(self, view, physical_size, ratio, force=False):
+    def _direct_overlay(self, view, physical_size, ratio, force=False, deferred=False):
         self._direct_painting = True
         try:
             return self.viewer.render_overlay(view, physical_size, ratio, readout=self._direct_readout, probe=True,
-                                              force=force, badge=False)
+                                              force=force, badge=False, deferred=deferred)
         finally:
             self._direct_painting = False
 
     _direct_readout = None
 
+    _direct_pointer = None      # the scene point under the pointer on the direct picture, or None when it is off it
+
     def _direct_hover(self, scene_point):
         """The pointer moved over the direct picture: the same readout the Viewer shows, from the float frame."""
+        self._direct_pointer = scene_point
         info = None if scene_point is None else self.viewer.pixel_readout_info(QPointF(*scene_point))
         previous = self._direct_readout
         self._direct_readout = info
         if (info or {}).get("text") != (previous or {}).get("text") and self.direct_widget is not None:
             self.direct_widget.overlay_dirty()
+
+    def _direct_frame_moved(self):
+        """The playhead or the picture under a still pointer changed: the handles that follow the frame and the
+        pixel readout are read again for it (they were frozen until the pointer moved or playback stopped)."""
+        widget = getattr(self, "direct_widget", None)
+        dock = getattr(self, "direct_dock", None)
+        if widget is None or dock is None or not dock.isVisible() or not getattr(self, "_direct_linear_on", False):
+            return
+        if self._direct_pointer is not None:
+            self._direct_hover(self._direct_pointer)
+        if self.viewer.overlay_follows_frame():
+            widget.overlay_dirty()
 
     def _direct_failed(self, message):
         self._direct_linear_on = False
@@ -14741,6 +14780,7 @@ class Window(QMainWindow):
         self.direct_lazy = picture
         self.direct_shown = (picture, scale, render_region)
         self.direct_linear_shown = getattr(self, "direct_linear_shown", 0) + 1
+        self._direct_frame_moved()
         if not self.playing:
             self._park_viewer(scale, render_region, width, height)
         if self.output_preview_dock.isVisible():
