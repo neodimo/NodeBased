@@ -1,5 +1,27 @@
 ## 2026-10-22 — Lane 6 step B of 2: the Hot pour settles in under a minute (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (3:12 AM on 2026-10-22 PDT)
+
+`main` moved `d91eadd0` -> `9ffbd0b7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `9ffbd0b7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-0302.log`, started 3:02 AM): **Ran 5740 tests in 478.929 s, OK (skipped=17), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the Hot pour settles in under a minute.** Commits:
+  - `8d28451b` Record Hot pour step B handoff
+  - `1b267f28` Document optimized Hot pour render profile
+  - `a71af0cd` Speed up Hot pour shot volume shadows and sampling
+  - `e3d1ca0f` Record Hot pour path-tracing cost profile
+  Diff: 17 files changed, 2549 insertions(+), 27 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done — evidence:** With one volume-shadow step, the RTX 3080 Ti frame-60 960 × 540 fixed-32 render took 22.735 s vs 200.38 s at 16 steps. The optimized 1080p adaptive run took 83.511 s, mean 8.379 spp, cap 64, 29 passes; 99.405% pixels passed noise threshold 0.01. Frame 60 NVIDIA CPU/GPU comparisons passed at frames 1/60/120. Integrated AMD Radeon 8060S 64-cell/120-frame preview: 29.7 s bake, 134.31 warm FPS, 13.4 ms stop-to-full-detail. Adaptive/volume targeted tests: 12/12 NVIDIA, 12/12 forced-integrated invocation, 12/12 llvmpipe; Hot pour tests 2/2; knowledge tests 7/7. The stills remain grainy and the pour stream reads weakly.
 - **Artifacts:** Code commit `a71af0cd`; profile commit `e3d1ca0f`; docs, profile summary, preview JSON, comparison stills and baseline copies are committed as `1b267f28` on `openclaw/nb-fluids-spike` (local only, not pushed). Scratch logs under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`; large task cache removed before closure.
 - **State:** Partial against the fully-settled 1080p and legible-pour goals. 0.595% of pixels remain above the threshold at the 64-sample cap; visual quality is not accepted as final. A6000 and Windows unverified.
