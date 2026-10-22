@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the Hot pour settles in under a minute (finish 2: the catcher shadow off the CPU), Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
+
+- **What was done:** `main` `09dd7655` -> `31880d7a` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `31880d7a`: Ran 5971 tests in 504.316 s, OK (skipped=32), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step C of 3: overlays and the pixel readout follow playback, and the Direct picture becomes a docked viewer DiMo can switch on, Lane 4 (Rendering, Claude Sonnet 5.5) step A of 2: find where 3D playback's time goes, commit the profile, and remove the biggest costs (integrator tick)
 
 - **What was done:** `main` `0a388be9` -> `25f44534` plus this docs commit. Evidence and per-lane commit

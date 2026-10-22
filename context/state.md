@@ -1,5 +1,33 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (4:22 PM on 2026-10-22 PDT)
+
+`main` moved `09dd7655` -> `31880d7a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `31880d7a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1612.log`, started 4:12 PM): **Ran 5971 tests in 504.316 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the Hot pour settles in under a minute (finish 2: the catcher shadow off the CPU).** Commits:
+  - `7b077713` speed up path-traced catcher shadow maps
+  Diff: 8 files changed, 191 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (finish 1).** Commits:
+  - `0af65de9` Record corrected real-comp playback measurement
+  - `8f1e98fc` Measure only active playback frames and samples
+  - `a42ef360` Schedule playback at precise fractional frame periods
+  - `7243b54a` Record integer Transform benchmark
+  - `ff080298` Skip resampling for integer Transform offsets
+  - `02f02ea0` Profile remaining 2D playback frame overhead
+  Diff: 12 files changed, 8411 insertions(+), 34 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (4:02 PM on 2026-10-22 PDT)
 
 `main` moved `0a388be9` -> `25f44534` (lane commits cherry-picked onto main in lane order) and then to this
