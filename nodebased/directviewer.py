@@ -45,7 +45,7 @@ import numpy as np
 ENV = "NODEBASED_DIRECT_VIEWER"
 ADAPTER_ENV = "NODEBASED_DIRECT_ADAPTER"
 BACKEND_ENV = "NODEBASED_DIRECT_BACKEND"
-UNIFORM_BYTES = 144           # the 80-byte view block, then carddisplay's display vec4s and its two compare vec4s
+UNIFORM_BYTES = 160           # the 80-byte view block, then carddisplay's display vec4s and its three compare vec4s
 ZOOM_RANGE = (0.05, 20.0)     # logical zoom, the same bounds PanZoomView.wheelEvent applies
 SURROUND = (0.0, 0.0, 0.0)    # VIEWER_SURROUND is pure black in every theme
 RECOVERY_LIMIT = (3, 30.0)    # at most this many device recoveries in this many seconds, then the dock gives up
@@ -1161,7 +1161,7 @@ class RetainedPresenter:
                 display = carddisplay.uniform_values(self.linear) + carddisplay.compare_values(self.compare, wipe)
             else:
                 pipeline, bind_group, size, tables = self.pipeline, self.bind_group, self.texture_size, None
-                display = [0.0] * 16
+                display = [0.0] * 20
             data = np.array([*physical_size, cx, cy, *rect, *format_rect, *size, zoom,
                              1.0 if self.format.endswith("srgb") else 0.0, *SURROUND, 1.0, *display], np.float32)
             if self.uniform_data is None or not np.array_equal(self.uniform_data, data):
@@ -1277,6 +1277,7 @@ def make_widget(parent=None):
             self.overlay_provider = None  # (view, physical_size, ratio) -> premultiplied RGBA QImage or None
             self.overlay_probed = False   # the provider records first and answers EMPTY/SAME_OVERLAY; an image it returns has content
             self.compare_provider = None  # () -> the wipe line (centre x, y, normal x, y) in scene units, or None
+            self.wipe_handle_provider = None   # (logical zoom) -> the turn handle's scene point (x, y) when the card draws the line and handles, or None
             self.hover = None             # (scene point or None) -> None; the owner updates its readout
             self.edit = None              # (kind, scene point, button, modifiers, zoom, pressure) -> handled?; None: view only
             self._editing = False         # a left press was taken by a handle and its release is owed
@@ -1422,6 +1423,10 @@ def make_widget(parent=None):
                 self.view = fit_view(size, self.rect)
             try:
                 wipe = self.compare_provider() if self.compare_provider is not None else None
+                ratio = float(self.get_pixel_ratio())
+                handle = self.wipe_handle_provider(self.view[2] / ratio) if self.wipe_handle_provider is not None else None
+                if wipe is not None and handle is not None:
+                    wipe = (*wipe[:4], handle[0], handle[1], ratio)
                 try:
                     self._paint_overlay(size)
                     self.presenter.draw(self.view, size, wipe)

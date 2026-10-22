@@ -211,6 +211,27 @@ class CardCompareAgreementTests(unittest.TestCase):
         for key in ("linear_uploads", "b_uploads", "upload_bytes", "conversions"):
             self.assertEqual(self.presenter.counters[key], before.get(key, 0), key)
 
+    def test_the_card_draws_the_wipe_line_and_handles_when_given_the_handle_point(self):
+        a, b = self.pairs["ramps/noise"]
+        settings = carddisplay.settings_from(0.0, "RGB", "black", "sRGB")
+        plain = wipe_line(40.3, 27.1, 90.0)           # a horizontal line; the turn handle sits 30 units to the right
+        marked = (*plain, 70.3, 27.1, 1.0)
+        without = self.card(a, b, "wipe", settings, plain).astype(int)
+        with_marks = self.card(a, b, "wipe", settings, marked).astype(int)
+        gold, dark = np.array([244, 206, 99]), np.array([32, 33, 39])
+        for x, y in ((40, 27), (70, 27)):             # the two dots
+            self.assertLessEqual(int(np.abs(with_marks[y, x] - gold).max()), 12, (x, y))
+        for x, y in ((44, 27), (74, 27)):             # inside each disc, outside its dot
+            self.assertLessEqual(int(np.abs(with_marks[y, x] - dark).max()), 12, (x, y))
+        self.assertLessEqual(int(np.abs(with_marks[27, 10] - gold).max()), 60)      # on the line, away from the handles
+        changed = np.abs(with_marks - without).max(axis=2) > 0
+        self.assertFalse(changed[:20, :].any())                                        # nothing far from the marks moves
+        self.assertFalse(changed[40:, :].any())
+        self.assertTrue(changed[26:28, :].all())                                        # the line runs the full width
+        # The marks belong to the wipe: another mode draws none, and a four-value line never does.
+        other = self.card(a, b, "difference", settings, marked).astype(int)
+        self.assertLessEqual(int(np.abs(other - self.card(a, b, "difference", settings, plain).astype(int)).max()), 0)
+
     def test_a_picture_without_b_after_one_with_b_shows_a_alone(self):
         a, b = self.pairs["ramps/noise"]
         settings = carddisplay.settings_from(0.0, "RGB", "black", "sRGB")
@@ -501,6 +522,21 @@ class CompareOnTheCardTests(DirectWindowCase):
         self.assertEqual((round(nx, 6), round(ny, 6)), (1.0, 0.0))
         viewer.wipe["angle"] = 90.0
         self.assertEqual(tuple(round(v, 6) for v in viewer.wipe_line()[2:]), (0.0, 1.0))
+        # The card draws the line and handles (the handle sits 70 logical pixels along the line); the overlay holds none.
+        hx, hy = viewer.wipe_handle(2.0)
+        self.assertAlmostEqual(hx, cx + 35.0, places=3)
+        self.assertAlmostEqual(hy, cy, places=3)
+        w.command({"op": "viewer_mask", "mask": "format", "mode": "none"})
+        w.set_viewer_roi(on=False)
+        view = (cx, cy, 1.0)
+        def gold_pixels():
+            image = viewer.render_overlay(view, (200, 120), 1.0)
+            pixels = np.frombuffer(image.constBits(), np.uint8).reshape(120, 200, 4)
+            return int(((np.abs(pixels[..., :3].astype(int) - (244, 206, 99)).max(axis=2) < 8) & (pixels[..., 3] == 255)).sum())
+        self.assertEqual(gold_pixels(), 0)                     # the tier badge may be there; the line and handles are not
+        viewer.card_wipe = False
+        self.assertIsNone(viewer.wipe_handle(2.0))             # no card to draw them: the Viewer's own wipe paints them
+        viewer.card_wipe = True
 
     def test_a_pair_too_big_for_the_card_is_named_and_the_viewer_shows_it(self):
         from tests.waiting import wait_until

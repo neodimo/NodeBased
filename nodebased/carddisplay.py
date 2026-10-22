@@ -138,6 +138,7 @@ layout(set = 0, binding = 1) uniform View {
     vec4 disp1;            // checker, checker level 0, checker level 1, unused
     vec4 cmp0;             // compare mode (0 none, 1 B only, 2 wipe, 3 over, 4 under, 5 minus, 6 difference), wipe centre x, y, unused
     vec4 cmp1;             // wipe normal x, y (towards B), unused, unused
+    vec4 cmp2;             // wipe handle point x, y (scene), pixel ratio, 1 when the line and handles are drawn here
 } v;
 layout(set = 0, binding = 2) uniform sampler smp;
 layout(set = 1, binding = 0, std430) readonly buffer OcioTables { vec4 data[]; } ocio_tables;
@@ -151,6 +152,27 @@ vec3 encode(vec3 c) {
     vec3 lo = c / 12.92;
     vec3 hi = pow((c + vec3(0.055)) / 1.055, vec3(2.4));
     return mix(hi, lo, vec3(lessThanEqual(c, vec3(0.04045))));
+}
+
+// The wipe line and its two handles, drawn as the Viewer paints them (`Viewer._draw_wipe_handles`): a 1.5 px
+// gold line, two dark discs of radius 6 with a gold rim, a gold dot of 2.1 inside each. Sizes are in logical
+// pixels times the pixel ratio; coverage is the distance to the shape's edge, one pixel wide.
+vec3 wipe_marks(vec3 c, vec2 s) {
+    if (v.cmp2.w < 0.5) { return c; }
+    vec3 gold = vec3(244.0, 206.0, 99.0) / 255.0;
+    vec3 dark = vec3(32.0, 33.0, 39.0) / 255.0;
+    float k = v.cmp2.z;
+    float half_pen = 0.75 * k;
+    c = mix(c, gold, clamp(half_pen - abs(dot(s - v.cmp0.yz, v.cmp1.xy)) * v.zoom + 0.5, 0.0, 1.0));
+    float dc = length(s - v.cmp0.yz) * v.zoom;
+    float dh = length(s - v.cmp2.xy) * v.zoom;
+    c = mix(c, dark, clamp(6.0 * k - dc + 0.5, 0.0, 1.0));
+    c = mix(c, gold, clamp(half_pen - abs(dc - 6.0 * k) + 0.5, 0.0, 1.0));
+    c = mix(c, dark, clamp(6.0 * k - dh + 0.5, 0.0, 1.0));
+    c = mix(c, gold, clamp(half_pen - abs(dh - 6.0 * k) + 0.5, 0.0, 1.0));
+    c = mix(c, gold, clamp(2.1 * k + half_pen - dc + 0.5, 0.0, 1.0));
+    c = mix(c, gold, clamp(2.1 * k + half_pen - dh + 0.5, 0.0, 1.0));
+    return c;
 }
 
 vec4 compared(ivec2 t, vec2 s) {
@@ -201,11 +223,11 @@ void main() {
     vec2 s = v.centre + (gl_FragCoord.xy - v.viewport * 0.5) / v.zoom;
     vec2 rel = (s - v.image.xy) / v.image.zw;
     if (rel.x < 0.0 || rel.y < 0.0 || rel.x >= 1.0 || rel.y >= 1.0) {
-        fragColor = vec4(encode(v.surround.rgb), 1.0);
+        fragColor = vec4(encode(wipe_marks(v.surround.rgb, s)), 1.0);
         return;
     }
     ivec2 t = ivec2(min(rel * v.tex, v.tex - vec2(1.0)));
-    fragColor = vec4(encode(display(t, s)), 1.0);
+    fragColor = vec4(encode(wipe_marks(display(t, s), s)), 1.0);
 }
 """
 
@@ -233,12 +255,16 @@ def uniform_values(settings):
 
 
 def compare_values(mode="A only", wipe=None):
-    """The 8 floats after the display block: compare mode, wipe centre (scene units) and wipe normal.
+    """The 12 floats after the display block: compare mode, wipe centre (scene units), wipe normal, and the handles.
 
     `wipe` is (centre_x, centre_y, normal_x, normal_y) in scene units, the Viewer's wipe line
-    (`compare.wipe_normal` points from A's side into B's)."""
-    cx, cy, nx, ny = wipe or (0.0, 0.0, 1.0, 0.0)
-    return [float(COMPARE_IDS[mode]), float(cx), float(cy), 0.0, float(nx), float(ny), 0.0, 0.0]
+    (`compare.wipe_normal` points from A's side into B's). With three more values, (handle_x, handle_y, ratio),
+    the shader also draws the line and its two handles over the picture (the Viewer's turn handle sits at the
+    given scene point; `ratio` is the surface's device pixel ratio)."""
+    cx, cy, nx, ny, *marks = wipe or (0.0, 0.0, 1.0, 0.0)
+    hx, hy, ratio, drawn = (*marks, 1.0) if len(marks) == 3 else (0.0, 0.0, 1.0, 0.0)
+    return [float(COMPARE_IDS[mode]), float(cx), float(cy), 0.0, float(nx), float(ny), 0.0, 0.0,
+            float(hx), float(hy), float(ratio), float(drawn if mode == "wipe" else 0.0)]
 
 
 @lru_cache(maxsize=16)

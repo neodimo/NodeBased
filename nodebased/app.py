@@ -1872,6 +1872,15 @@ class Viewer(PanZoomView):
         centre, _, (nx, ny), _ = self._wipe_scene_geometry()
         return (centre.x(), centre.y(), nx, ny)
 
+    def wipe_handle(self, logical_zoom):
+        """The turn handle's scene point when the card draws the wipe line and handles, else None. `logical_zoom` is
+        the card's logical pixels per scene unit: the handle sits 70 of them along the line from the centre."""
+        if not (self.card_wipe and self._wipe_active()):
+            return None
+        centre, (dx, dy), _, _ = self._wipe_scene_geometry()
+        reach = 70.0 / max(abs(logical_zoom), 0.05)
+        return centre.x() + dx * reach, centre.y() + dy * reach
+
     def _wipe_scene_geometry(self):
         """Centre, unit line direction, unit B-side normal and rotation-handle point, in scene units."""
         rect = self.format_rect
@@ -3888,7 +3897,8 @@ class Viewer(PanZoomView):
             painter.restore()
         if self._wipe_active():
             self._draw_wipe_b(painter)
-            self._draw_wipe_handles(painter)
+            if not (self.card_wipe and self._overlay_view is not None):
+                self._draw_wipe_handles(painter)     # the card draws them itself when B is on it
         context = self._roto_context()
         if context is not None:
             _, _, payload, tier = context
@@ -14469,6 +14479,7 @@ class Window(QMainWindow):
             widget.overlay_provider = self._direct_overlay
             widget.overlay_probed = True
             widget.compare_provider = self.viewer.wipe_line
+            widget.wipe_handle_provider = self.viewer.wipe_handle
             widget.hover = self._direct_hover
             widget.edit = self._direct_edit if self.preferences.direct_edit() else None
             self.viewer.cursor_sink = getattr(widget, "mirror_cursor", None)

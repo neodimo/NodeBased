@@ -347,7 +347,7 @@ def measure_paused():
             for key in list(timings):
                 timings[key] = 0 if isinstance(timings[key], int) else 0.0
             serial[0] += 1
-            value = 1.0 + 0.0013 * (serial[0] % 97)
+            value = 1.0 + 0.00037 * serial[0]      # never the same value twice: a repeat would come back from the frame cache and skip the render
             t0, c0, p0 = time.perf_counter(), time.thread_time(), time.process_time()
             window.command({"op": "set", "id": "g", "param": "multiply", "value": value})
             wait(lambda: window.generation > 0 and idle() and time.perf_counter() - t0 > 0.12)
