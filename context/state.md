@@ -1,5 +1,24 @@
 ## 2026-10-22 — Lane 6 step B finish 2 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:32 AM on 2026-10-22 PDT)
+
+`main` moved `66217360` -> `6434a596` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `6434a596` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1022.log`, started 10:22 AM): **Ran 5806 tests in 480.759 s, OK (skipped=19), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step B of 3: the Direct picture shows the true float picture at rest, and the A/B compare runs on the card (finish 1).** Commits:
+  - `9610adad` Direct picture: the card draws the wipe line and handles in its shader (a paused compare leaves the overlay to the tier badge); paused bench no longer repeats a knob value, so no edit comes from the frame cache; cost-gate figures redone (not met: no B 6 to 7 percent costlier, wipe 24 and 27 percent cheaper)
+  Diff: 7 files changed, 112 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (9:22 AM on 2026-10-22 PDT)
 
 `main` moved `1e10ca44` -> `8d5fefe9` (lane commits cherry-picked onto main in lane order) and then to this
