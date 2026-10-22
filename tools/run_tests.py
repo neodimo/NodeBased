@@ -129,6 +129,7 @@ def run_captured(n, total, batch, cmd, env):
 
 def run_parallel(mods, args, env):
     pool_batches, serial_batches = plan(mods, args.batch)
+    pool_env = dict(env, NODEBASED_TEST_TIMEOUT_SCALE=str(args.jobs))  # see tests/progressive_widget.py
     batches = pool_batches + serial_batches
     total = len(batches)
     failed, ran = [], 0
@@ -148,7 +149,7 @@ def run_parallel(mods, args, env):
 
     print(f"=== {total} batches over {args.jobs} jobs, heaviest first", flush=True)
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(run_captured, n, total, b, cmd_for(b), env)
+        futures = [pool.submit(run_captured, n, total, b, cmd_for(b), pool_env)
                    for n, b in enumerate(pool_batches, 1)]
         for f in concurrent.futures.as_completed(futures):
             finish(f.result())
