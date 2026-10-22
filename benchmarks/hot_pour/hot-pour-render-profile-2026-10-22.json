@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-22",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti / Vulkan",
+  "frame": 60,
+  "rendering_noise_threshold": 0.01,
+  "baseline_settings": {
+    "width": 960,
+    "height": 540,
+    "sampling": "fixed",
+    "samples": 32,
+    "max_bounces": 4,
+    "volume_shadow_steps": 16
+  },
+  "baseline": {
+    "wall_seconds": 200.38,
+    "gpu_path_call_seconds": 1.167
+  },
+  "counterfactuals": {
+    "no_steam": {
+      "wall_seconds": 7.705
+    },
+    "no_liquid_geometry": {
+      "wall_seconds": 195.434
+    },
+    "no_catcher_or_holdout": {
+      "wall_seconds": 1.539
+    }
+  },
+  "render_mode_1920x1080": {
+    "wall_seconds": 701.447,
+    "sampling": "adaptive",
+    "min_samples": 8,
+    "max_samples": 64,
+    "mean_samples_per_pixel": 8.378183834876543,
+    "passes": 29,
+    "pixels_under_threshold_fraction": 0.9940456211419753,
+    "noise_mean": 0.0008156863547114032,
+    "noise_max": 0.3492187595794847,
+    "fully_settled": false
+  },
+  "method": "The wall time includes the full evaluator and shadow-catcher pass. Counterfactuals omit one scene component in turn. GPU path-call time was captured separately from total wall time. Render mode settling is per-pixel relative noise <= 0.01; the 64-sample cap returned with 99.4% of pixels under threshold."
+}
