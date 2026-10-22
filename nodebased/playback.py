@@ -117,21 +117,34 @@ _SAMPLED_MODES = ("raster", "raytrace")
 
 def playing_document(document):
     """The document a *playing* request evaluates: every raster or ray-traced Render3D capped at
-    ``PLAYBACK_SAMPLES`` samples. Returns ``document`` itself when nothing needs capping, otherwise a copy
-    that shares everything except the capped nodes. Path-traced Render3D nodes are left alone: they take
-    their sample count from ``pt_samples``, not from ``samples``."""
+    ``PLAYBACK_SAMPLES`` samples and, when a GPU adapter exists, off the CPU rasteriser (a ``cpu`` backend plays as
+    ``auto``: the GPU where it can draw the scene, the CPU reference where it cannot). Returns ``document`` itself
+    when nothing needs changing, otherwise a copy that shares everything except those nodes. Path-traced Render3D
+    nodes are left alone: they take their sample count from ``pt_samples``, not from ``samples``."""
     nodes = document.get("nodes", {})
-    capped = {}
+    changed = {}
+    gpu = None
     for key, node in nodes.items():
         if node.get("type") != "Render3D":
             continue
         params = node.get("params", {})
-        if (params.get("render_mode", "raster") in _SAMPLED_MODES
-                and int(params.get("samples", 1)) > PLAYBACK_SAMPLES):
-            capped[key] = {**node, "params": {**params, "samples": PLAYBACK_SAMPLES}}
-    if not capped:
+        if params.get("render_mode", "raster") not in _SAMPLED_MODES:
+            continue
+        edits = {}
+        if int(params.get("samples", 1)) > PLAYBACK_SAMPLES:
+            edits["samples"] = PLAYBACK_SAMPLES
+        if params.get("render_backend", "cpu") == "cpu":
+            if gpu is None:
+                from . import gpu3d
+                gpu = bool(gpu3d.available())
+            if gpu:
+                edits["render_backend"] = "auto"
+        if edits:
+            changed[key] = {**node, "params": {**params, **edits}}
+    if not changed:
         return document
-    return {**document, "nodes": {**nodes, **capped}}
+    return {**document, "nodes": {**nodes, **changed}}
+
 
 # Node kinds whose output is a pure function of their parameters and inputs: no file sequence, no
 # simulation, no per-frame state. This is an allow-list on purpose. A kind that is missing from it

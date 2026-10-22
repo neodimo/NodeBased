@@ -24,8 +24,7 @@ Scenes (every camera animates; frame 1 to 240 swings the camera round the scene)
 
     python tools/benchmark_3d_playback.py --self-check      # offscreen, tiny, a few seconds
 
-``--adapter default|discrete|integrated|cpu`` forces the 3D adapter the way ``run/force-adapter.py`` does
-(``cpu`` is llvmpipe). ``--backend auto|gpu|cpu`` sets Render3D's ``render_backend`` (the node's own default is
+``--adapter NAME`` runs on the adapter whose name contains NAME (RTX, Radeon, llvmpipe), as NODEBASED_ADAPTER does. ``--backend auto|gpu|cpu`` sets Render3D's ``render_backend`` (the node's own default is
 ``cpu``). ``--field`` prints one JSON object of the fields worth pasting back from another machine.
 ``--stages`` also records the per-stage timeline (see ``nodebased.playback_trace``) when the build has it.
 Run it under /tmp/nb-gpu.lock when the card matters: it needs the whole card for the length of the run.
@@ -50,17 +49,21 @@ FIELDS = ("adapter", "scene", "size", "backend", "fps", "shown", "interval_ms", 
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--scene", default="cube", help="one of %s, or 'all'" % ", ".join(SCENES))
+    p.add_argument("--scene", default="cube", help="one of %s, a comma list of them, or 'all' (all but glass)" % ", ".join(SCENES))
     p.add_argument("--size", default="1920x1080", help="Render3D width x height")
     p.add_argument("--seconds", type=float, default=10.0)
     p.add_argument("--fps", type=float, default=24.0, help="the comp's rate")
     p.add_argument("--backend", default="auto", choices=("auto", "gpu", "cpu"))
-    p.add_argument("--adapter", default="default", choices=("default", "discrete", "integrated", "cpu"))
+    p.add_argument("--adapter", default="default",
+                   help="a part of an adapter's name (RTX, Radeon, llvmpipe), as NODEBASED_ADAPTER takes it; default: the app's choice")
     p.add_argument("--out", default="", help="JSON file (or a directory: one file per scene)")
     p.add_argument("--field", action="store_true", help="print the compact field JSON (for a machine you cannot reach)")
     p.add_argument("--stages", action="store_true", help="record the per-stage timeline")
     p.add_argument("--self-check", action="store_true")
     p.add_argument("--splats", type=int, default=20000)
+    p.add_argument("--once", action="store_true",
+                   help="also time 12 single Render3D frames through the evaluator (no playback): render_once_ms")
+    p.add_argument("--samples", type=int, default=0, help="Render3D samples (default: the node's own, 2)")
     p.add_argument("--view", default="", help="display view to play through (default: the window's own, ACES 2.0)")
     return p.parse_args(argv)
 
@@ -191,6 +194,10 @@ def run_scene(window, app, scene, args, splat_path, width, height):
             time.sleep(0.001)
 
     ops, view = build_scene(scene, width, height, args.backend, splat_path=splat_path)
+    if args.samples:
+        for op in ops:
+            if op.get("type") == "Render3D":
+                op["params"]["samples"] = args.samples
     window.agent_command({"op": "batch", "commands": ops})
     last = 240
     window.set_time(first=1, last=last, current=1, fps=args.fps)
@@ -205,6 +212,15 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     window.playback_shown_times.clear()
     shown_before = len(window.playback_shown_times)
     dropped_before = window.playback_dropped_frames
+    once = None
+    if args.once:
+        document = window.dispatcher.document
+        times = []
+        for frame in range(1, 14):
+            started = time.perf_counter()
+            window.evaluator.evaluate(document, "render", frame=frame, tier=1)
+            times.append((time.perf_counter() - started) * 1000)
+        once = distribution(times[1:])       # the first frame builds pipelines
     from nodebased import playback_trace
     playback_trace.enable()
     window.toggle_playback(True)
@@ -233,10 +249,15 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         "dropped": window.playback_dropped_frames - dropped_before, "status": status,
         "proxy_tier_at_end": getattr(window, "playback_tier", None),
     }
-    table, jobs, _ = playback_trace.stage_table(events)
+    if once:
+        result["render_once_ms"] = once
+        result["render_samples"] = args.samples or "node default (2)"
+    table, jobs = [], 0
+    if hasattr(playback_trace, "stage_table"):         # a checkout from before the stage table still runs the tool
+        table, jobs, _ = playback_trace.stage_table(events)
     result["worker_jobs"] = jobs
     result["stage_p50_ms"] = {row["stage"]: row["p50_ms"] for row in sorted(table, key=lambda r: -r["p50_ms"])}
-    waits = playback_trace.stage_table.series.get("submit to gpu_done", [])
+    waits = getattr(getattr(playback_trace, "stage_table", None), "series", {}).get("submit to gpu_done", [])
     if waits:
         # Another process using the same card shows up here as a step: the wait for a trivial render jumps from a few
         # milliseconds to a time slice or more and back. A run where the spread is over 2.5 times is not a clean one.
@@ -271,7 +292,7 @@ def main(argv=None):
         args.scene, args.size, args.seconds, args.backend, args.splats = "cube", "128x72", 2.0, "auto", 200
     if args.adapter != "default":
         os.environ["NODEBASED_ADAPTER"] = args.adapter
-    scenes = tuple(s for s in SCENES if s != "glass") if args.scene == "all" else (args.scene,)
+    scenes = tuple(s for s in SCENES if s != "glass") if args.scene == "all" else tuple(args.scene.split(","))
     for scene in scenes:
         if scene not in SCENES:
             raise SystemExit(f"unknown scene {scene!r}; choose from {', '.join(SCENES)} or all")
@@ -283,7 +304,8 @@ def main(argv=None):
                 name = handle.name
             cmd = [sys.executable, __file__, "--scene", scene, "--size", args.size, "--seconds", str(args.seconds),
                    "--fps", str(args.fps), "--backend", args.backend, "--adapter", args.adapter,
-                   "--splats", str(args.splats), "--view", args.view, "--out", name]
+                   "--splats", str(args.splats), "--view", args.view, "--samples", str(args.samples), "--out", name]
+            cmd += ["--once"] if args.once else []
             subprocess.run(cmd, check=False, env=dict(os.environ, PYTHONPATH=str(ROOT)))
             try:
                 results.append(json.loads(Path(name).read_text()))

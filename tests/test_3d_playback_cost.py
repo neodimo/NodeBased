@@ -21,12 +21,13 @@ def build(*commands):
     return dispatcher.document
 
 
-def render_commands(samples=2, mode="raster", scene_members=("cube",)):
+def render_commands(samples=2, mode="raster", scene_members=("cube",), backend="auto"):
     commands = [{"op": "create", "type": "Cube3D", "id": "cube", "params": {}},
                 {"op": "create", "type": "Scene3D", "id": "scene", "params": {}},
                 {"op": "create", "type": "Camera3D", "id": "camera", "params": {}},
                 {"op": "create", "type": "Render3D", "id": "render",
-                 "params": {"width": 64, "height": 36, "samples": samples, "render_mode": mode}},
+                 "params": {"width": 64, "height": 36, "samples": samples, "render_mode": mode,
+                            "render_backend": backend}},
                 {"op": "connect", "id": "render", "input": "scene", "source": "scene"},
                 {"op": "connect", "id": "render", "input": "camera", "source": "camera"},
                 {"op": "view", "id": "render"}]
@@ -46,6 +47,42 @@ class PlayingDocumentTests(unittest.TestCase):
         self.assertEqual(playback.playing_document(build(*render_commands(4, "raytrace")))["nodes"]["render"]["params"]["samples"], 1)
         pathtrace = build(*render_commands(4, "pathtrace"))
         self.assertIs(playback.playing_document(pathtrace), pathtrace)
+
+    def test_the_cpu_rasteriser_is_not_used_for_playback_when_a_gpu_exists(self):
+        document = build(*render_commands(samples=1, backend="cpu"))
+        with unittest.mock.patch.object(gpu3d, "available", return_value=True):
+            playing = playback.playing_document(document)
+        self.assertEqual(playing["nodes"]["render"]["params"]["render_backend"], "auto")
+        self.assertEqual(document["nodes"]["render"]["params"]["render_backend"], "cpu")
+
+    def test_without_a_gpu_the_backend_is_left_alone(self):
+        document = build(*render_commands(samples=1, backend="cpu"))
+        with unittest.mock.patch.object(gpu3d, "available", return_value=False):
+            self.assertIs(playback.playing_document(document), document)
+
+    def test_an_explicit_gpu_or_auto_backend_stays(self):
+        for backend in ("gpu", "auto"):
+            document = build(*render_commands(samples=1, backend=backend))
+            with unittest.mock.patch.object(gpu3d, "available", return_value=True):
+                self.assertIs(playback.playing_document(document), document)
+
+    def test_a_cpu_backend_plays_on_the_gpu_in_the_window(self):
+        if not gpu3d.available():
+            self.skipTest("no GPU adapter")
+        from PySide6.QtWidgets import QApplication
+        from nodebased.app import Window
+        QApplication.instance() or QApplication([])
+        window = Window(agent_name="playcost-" + uuid.uuid4().hex)
+        window.agent_command({"op": "batch", "commands": render_commands(samples=2, backend="cpu")})
+        window.set_time(first=1, last=24, current=1, fps=24.0)
+        window.toggle_playback(True)
+        window.request_preview(playhead_only=True)
+        request, _ = window.preview_queue.take()
+        window.toggle_playback(False)
+        self.assertEqual(request.document["nodes"]["render"]["params"]["render_backend"], "auto")
+        window.request_preview()
+        request, _ = window.preview_queue.take()
+        self.assertEqual(request.document["nodes"]["render"]["params"]["render_backend"], "cpu")
 
     def test_nothing_to_cap_returns_the_same_document(self):
         document = build(*render_commands(samples=1))
