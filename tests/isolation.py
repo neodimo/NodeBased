@@ -23,7 +23,21 @@ for _format in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
     QSettings.setPath(_format, QSettings.Scope.UserScope, _SETTINGS_DIR.name)
 # NativeFormat is the registry on Windows, which setPath cannot redirect: parallel batches (tools/run_tests.py
 # --jobs) then shared one key and a test that saved a tab layout found it cleared by another batch's
-# `remove('workspace')` (CI 39792276070). An ini file in this process's own directory is private.
+# `remove('workspace')` (CI 39792276070). setDefaultFormat does not reach the app's QSettings("NodeBased",
+# "NodeBased") calls (that constructor is always NativeFormat; CI 39800740711 still lost favourites and radial
+# pins), so the constructor itself is patched: (organization, application) opens an ini file in this process's
+# own directory. Patching the class reaches the test modules that imported QSettings before this module too.
+_QSETTINGS_INIT = QSettings.__init__
+
+
+def _private_settings_init(self, *args, **kwargs):
+    if len(args) == 2 and not kwargs and all(isinstance(a, str) for a in args):
+        return _QSETTINGS_INIT(self, QSettings.Format.IniFormat, QSettings.Scope.UserScope, *args)
+    return _QSETTINGS_INIT(self, *args, **kwargs)
+
+
+if getattr(QSettings.__init__, "__name__", "") != "_private_settings_init":
+    QSettings.__init__ = _private_settings_init
 QSettings.setDefaultFormat(QSettings.Format.IniFormat)
 
 from nodebased.app import Preferences  # noqa: E402  (after setPath, before any QSettings use)
