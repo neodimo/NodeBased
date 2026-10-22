@@ -1,0 +1,218 @@
+{
+  "adapter_request": "integrated",
+  "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+  "grid_cells": 64,
+  "frames": 120,
+  "edits": {
+    "pour_rate": {
+      "first_frame_s": 0.4366,
+      "stages_s": {
+        "liquid_cache": 2.162,
+        "surface": 4.374,
+        "whitewater": 2.682,
+        "steam_cache": 13.402
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 18.02,
+          "p95": 18.99
+        },
+        "surface": {
+          "mean": 36.45,
+          "p95": 68.39
+        },
+        "whitewater": {
+          "mean": 22.35,
+          "p95": 37.28
+        },
+        "steam_cache": {
+          "mean": 111.69,
+          "p95": 167.55
+        }
+      },
+      "all_stages_s": 23.06,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 22952960,
+          "memory_entries": 121,
+          "disk_bytes": 23051671,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1073342464,
+          "memory_entries": 136,
+          "disk_bytes": 1551122204,
+          "disk_entries": 217,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 298,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 22341723,
+          "memory_entries": 120,
+          "disk_bytes": 22406486,
+          "disk_entries": 120,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 120,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    },
+    "cup_position": {
+      "first_frame_s": 0.2628,
+      "stages_s": {
+        "liquid_cache": 2.223,
+        "surface": 3.055,
+        "whitewater": 4.477,
+        "steam_cache": 19.852
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 18.52,
+          "p95": 25.04
+        },
+        "surface": {
+          "mean": 25.46,
+          "p95": 29.43
+        },
+        "whitewater": {
+          "mean": 37.31,
+          "p95": 80.98
+        },
+        "steam_cache": {
+          "mean": 165.43,
+          "p95": 215.36
+        }
+      },
+      "all_stages_s": 29.88,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 43450624,
+          "memory_entries": 121,
+          "disk_bytes": 43550126,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1073342464,
+          "memory_entries": 136,
+          "disk_bytes": 1827353371,
+          "disk_entries": 238,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 340,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 8050951,
+          "memory_entries": 120,
+          "disk_bytes": 8113371,
+          "disk_entries": 118,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 118,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    },
+    "steam_vorticity": {
+      "first_frame_s": 0.2473,
+      "stages_s": {
+        "liquid_cache": 2.23,
+        "surface": 3.139,
+        "whitewater": 3.979,
+        "steam_cache": 20.084
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 18.58,
+          "p95": 24.26
+        },
+        "surface": {
+          "mean": 26.16,
+          "p95": 29.92
+        },
+        "whitewater": {
+          "mean": 33.16,
+          "p95": 67.85
+        },
+        "steam_cache": {
+          "mean": 167.37,
+          "p95": 201.54
+        }
+      },
+      "all_stages_s": 29.69,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 39593280,
+          "memory_entries": 121,
+          "disk_bytes": 39691180,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1069344704,
+          "memory_entries": 137,
+          "disk_bytes": 1816297931,
+          "disk_entries": 238,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 339,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 6780240,
+          "memory_entries": 120,
+          "disk_bytes": 6842479,
+          "disk_entries": 118,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 118,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    }
+  }
+}

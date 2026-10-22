@@ -1231,7 +1231,7 @@ cache tests. `tools/benchmark_fluid_edits.py` builds the 64-cell Hot pour and me
 cup collider, and changed steam vorticity, including frame-1 time and per-output-stage bake time. It reports solver
 outputs before display presentation; substep internals (transfers, pressure, sparse occupancy, synchronization and
 readback) still need direct instrumentation. No timeline, stale-picture badge, edit-cancellation UI, or 64-cell
-adapter measurements have landed yet.
+Radeon 8060S measurement is still pending.
 
 **64-cell / 120-frame edit measurements (2026-10-22).** The first-frame column is time to solve and cache the first
 steam volume frame; viewport presentation is not measured. The full-bake column walks all four output stages. The
@@ -1245,11 +1245,16 @@ largest exposed stage is the named evaluator output, not an internal solver phas
 | llvmpipe | Pour velocity ×1.25 | 0.620 s | 51.98 s | Steam cache, 24.81 s |
 | llvmpipe | Cup moved 5 cm | 0.338 s | 88.75 s | Steam cache, 61.85 s |
 | llvmpipe | Steam vorticity +0.4 | 0.389 s | 91.37 s | Steam cache, 70.45 s |
+| Radeon 8060S | Pour velocity ×1.25 | 0.437 s | 23.06 s | Steam cache, 13.40 s |
+| Radeon 8060S | Cup moved 5 cm | 0.263 s | 29.88 s | Steam cache, 19.85 s |
+| Radeon 8060S | Steam vorticity +0.4 | 0.247 s | 29.69 s | Steam cache, 20.08 s |
 
-The first solved volume is under one second on both measured adapters. Bake time exceeds 30 seconds on the three
-llvmpipe cases and on two RTX cases; the 30.51-second pour case also misses by 0.51 seconds. The AMD Radeon
-8060S measurement and internal advection / particle-transfer / pressure / sparse-occupancy / surface / cache-write /
-synchronization / readback split remain pending. The A6000 is unavailable and unmeasured; a planning estimate is
+The first solved volume is under one second on all three measured adapters. Bake time exceeds 30 seconds on the three
+llvmpipe cases and on two RTX cases; the 30.51-second pour case also misses by 0.51 seconds. The Radeon 8060S
+meets the under-30-second full-bake gate for all three edits, with two cases close to the limit. Detailed internal
+solver phase timing (advection, particle transfers, pressure, sparse occupancy, surface, cache writes, synchronization
+and readback) remains to be run with `--profile-phases`; that mode adds synchronization and inflates wall time. The
+A6000 is unavailable and unmeasured; a planning estimate is
 0.8–1.3× the RTX wall time for the same 64-cell workload, with cache and bandwidth-heavy phases potentially outside
 that range. Treat this as an estimate only. Full JSON profiles are in `benchmarks/hot_pour/edit-resimulation-*.json`.
 

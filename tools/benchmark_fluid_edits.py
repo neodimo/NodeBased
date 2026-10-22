@@ -24,15 +24,54 @@ EDITS = {
 STAGES = ("liquid_cache", "surface", "whitewater", "steam_cache")
 
 
-def measure(adapter, cells, frames, workdir):
+def _profile_factories():
+    """Instrument optional per-solver phase hooks without changing solver output."""
+    from nodebased import flip_gpu_resident, fluid_gpu_solver, simcache
+
+    solvers = []
+    counters = {"cache_write_s": 0.0}
+    smoke = fluid_gpu_solver.GpuSmoke3D
+    liquid = flip_gpu_resident.create_solver
+    write_disk = simcache.SimCache._write_disk_locked
+
+    def profiled_smoke(*args, **kwargs):
+        kwargs["profile"] = True
+        solver = smoke(*args, **kwargs)
+        solvers.append(("steam", solver))
+        return solver
+
+    def profiled_liquid(*args, **kwargs):
+        kwargs["profile"] = True
+        solver = liquid(*args, **kwargs)
+        solvers.append(("liquid", solver))
+        return solver
+
+    def profiled_write(store, key, state):
+        started = time.perf_counter()
+        try:
+            return write_disk(store, key, state)
+        finally:
+            counters["cache_write_s"] += time.perf_counter() - started
+
+    fluid_gpu_solver.GpuSmoke3D = profiled_smoke
+    flip_gpu_resident.create_solver = profiled_liquid
+    simcache.SimCache._write_disk_locked = profiled_write
+    return solvers, counters
+
+
+def measure(adapter, cells, frames, workdir, profile_phases=False):
     from nodebased import gpu3d, simcache
     from nodebased.imaging import Evaluator
 
+    profiled_solvers, profile_counters = _profile_factories() if profile_phases else ([], {})
     args = SimpleNamespace(liquid_cells=cells, smoke_cells=cells, frames=frames,
                            liquid_pressure="resident", smoke_pressure="resident_sparse", spout_height=0.62)
     results = {"adapter_request": adapter, "adapter": gpu3d._state()["info"].get("device"),
                "grid_cells": cells, "frames": frames, "edits": {}}
     for edit, changes in EDITS.items():
+        profiled_solvers.clear()
+        if profile_phases:
+            profile_counters["cache_write_s"] = 0.0
         case_dir = workdir / edit
         case_dir.mkdir(parents=True, exist_ok=True)
         os.environ["NODEBASED_SIM_CACHE_MB"] = "400000"
@@ -62,6 +101,12 @@ def measure(adapter, cells, frames, workdir):
             }
         record["all_stages_s"] = round(time.perf_counter() - started, 2)
         record["cache_stores"] = [cache.stats() for cache in evaluator._sim_stores.values()]
+        if profile_phases:
+            record["solver_phases"] = [{"solver": name,
+                                         "seconds": dict(getattr(solver, "phase_seconds", {})),
+                                         "copies": dict(getattr(solver, "copy_seconds", {}))}
+                                        for name, solver in profiled_solvers]
+            record["cache_write_s"] = round(profile_counters["cache_write_s"], 3)
         results["edits"][edit] = record
         # The per-edit cache is reproducible from the committed graph and seed; retain the
         # measurement, not hundreds of MB of regenerated checkpoints.
@@ -83,9 +128,11 @@ def main():
     parser.add_argument("--frames", type=int, default=120)
     parser.add_argument("--workdir", required=True)
     parser.add_argument("--json", required=True)
+    parser.add_argument("--profile-phases", action="store_true",
+                        help="enable solver phase timers; their synchronization makes wall time slower")
     args = parser.parse_args()
     force_adapter(args.adapter)
-    result = measure(args.adapter, args.cells, args.frames, Path(args.workdir))
+    result = measure(args.adapter, args.cells, args.frames, Path(args.workdir), args.profile_phases)
     target = Path(args.json)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(result, indent=2) + "\n")
