@@ -157,11 +157,17 @@ def fake_widget_class():
             self.linear.append((frame, settings, tuple(rect)))
             return True
 
+        def overlay_dirty(self):
+            pass
+
+        def release(self):
+            pass
+
     return FakeDirectWidget
 
 
-class PlaybackRoutingTests(unittest.TestCase):
-    """With the direct picture up, playback frames go to the card as floats and skip `to_qimage`."""
+class DirectWindowCase(unittest.TestCase):
+    """A real Window with the direct dock open on a fake widget that records what the window hands it."""
 
     def setUp(self):
         import uuid
@@ -189,13 +195,18 @@ class PlaybackRoutingTests(unittest.TestCase):
         import types
         return types.SimpleNamespace(playing=playing, document=copy.deepcopy(self.window.dispatcher.document))
 
-    def test_worker_routes_only_playback_without_a_b_buffer(self):
+
+class PlaybackRoutingTests(DirectWindowCase):
+    """With the direct picture up, playback and paused frames go to the card as floats and skip `to_qimage`."""
+
+    def test_worker_routes_playing_and_paused_frames_but_not_a_b_buffer(self):
         w = self.window
         self.assertTrue(w._direct_linear_for(self.request(), "ACES 2.0"))
-        self.assertFalse(w._direct_linear_for(self.request(playing=False), "ACES 2.0"))
+        self.assertTrue(w._direct_linear_for(self.request(playing=False), "ACES 2.0"))
         self.assertFalse(w._direct_linear_for(self.request(), "No such view"))
         w.direct_action.setChecked(False)
         self.assertFalse(w._direct_linear_for(self.request(), "ACES 2.0"))
+        self.assertFalse(w._direct_linear_for(self.request(playing=False), "ACES 2.0"))
 
     def test_lazy_picture_goes_to_the_card_and_is_never_converted(self):
         w = self.window
@@ -218,6 +229,69 @@ class PlaybackRoutingTests(unittest.TestCase):
         self.assertTrue(picture.built())
         self.assertIs(w.viewer.last_display_image, picture.image())
         self.assertIs(self.widget.images[-1], picture.image())   # and the dock gets the 8-bit picture
+
+
+class PausedPictureTests(DirectWindowCase):
+    """Outside playback the card shows the float frame and the Viewer builds no 8-bit picture."""
+
+    def lazy(self, name="ramps", tier=1):
+        return carddisplay.LazyPicture(test_frames()[name], 0.0, "RGB", "black", "ACES 2.0", None)
+
+    def test_a_paused_picture_parks_the_viewer_and_builds_nothing(self):
+        w = self.window
+        self.assertFalse(w.playing)
+        picture = self.lazy()
+        w._show_image(picture, 1, None, generation=99)
+        self.assertFalse(picture.built())
+        self.assertEqual(len(self.widget.linear), 1)
+        self.assertEqual(w.viewer.last_frame_size, (96, 64))
+        self.assertEqual((w.viewer.sceneRect().width(), w.viewer.sceneRect().height()), (96.0, 64.0))
+        self.assertEqual(w.viewer.format_rect.size().toTuple(), (96.0, 64.0))
+        self.assertEqual(len(w.viewer.scene().items()), 1)           # one black rectangle, no picture
+        self.assertIsNone(w.viewer.readout_geometry)
+        # Something asks for 8 bits: the output preview, once, from the same frame.
+        image = w.display_image()
+        self.assertIs(image, picture.image())
+        self.assertTrue(picture.built())
+
+    def test_progressive_tiers_each_reach_the_card_as_floats_and_replace_each_other(self):
+        w = self.window
+        pictures = [self.lazy() for _ in range(3)]
+        for tier, picture in zip((8, 4, 1), pictures):
+            w._show_image(picture, tier, None, generation=100 + tier)
+        self.assertEqual(len(self.widget.linear), 3)
+        self.assertEqual([entry[2][2] for entry in self.widget.linear], [96.0 * 8, 96.0 * 4, 96.0])
+        self.assertFalse(any(picture.built() for picture in pictures))
+        self.assertIs(w.direct_lazy, pictures[-1])
+
+    def test_closing_the_dock_repaints_the_viewer_from_the_float_frame(self):
+        w = self.window
+        picture = self.lazy()
+        w._show_image(picture, 1, None, generation=99)
+        self.assertFalse(picture.built())
+        w.direct_action.setChecked(False)
+        QApplication.instance().processEvents()
+        self.assertTrue(picture.built())
+        self.assertIs(w.viewer.last_display_image, picture.image())
+        self.assertTrue(any(hasattr(item, "pixmap") for item in w.viewer.scene().items()))
+
+    def test_an_edit_while_paused_reaches_the_card_without_to_qimage(self):
+        import unittest.mock
+        from tests.waiting import wait_until
+        import nodebased.app as app_module
+        w = self.window
+        calls = []
+        real = app_module.to_qimage
+
+        def counting(*args, **kwargs):
+            calls.append(1)
+            return real(*args, **kwargs)
+        before = len(self.widget.linear)
+        with unittest.mock.patch.object(app_module, "to_qimage", counting):
+            w.request_preview()
+            self.assertTrue(wait_until(lambda: len(self.widget.linear) > before, timeout=20))
+        self.assertEqual(calls, [])
+        self.assertFalse(w.direct_lazy.built())
 
 
 if __name__ == "__main__":

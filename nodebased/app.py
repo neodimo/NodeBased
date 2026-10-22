@@ -20,7 +20,7 @@ import time
 import uuid
 
 from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QVariantAnimation, QSize, QByteArray, QMimeData
-from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap,
+from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QBrush,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
                            QConicalGradient, QRadialGradient, QTransform, QPixmapCache)
@@ -8117,8 +8117,7 @@ class Window(QMainWindow):
             self.output_preview.set_write(node_label(node) or node["name"], details)
         else:
             self.output_preview.set_write(None, "")
-        image = getattr(self.viewer, "last_display_image", None)
-        self.output_preview.set_image(image)
+        self.output_preview.set_image(self.display_image())
 
     def _follow_viewer_mode_in_tabs(self, mode):
         """The viewer mode can also change from the viewer's own 2D / 3D buttons or Tab; keep the
@@ -14068,11 +14067,11 @@ class Window(QMainWindow):
         self.executor.submit(work)
 
     def _direct_linear_for(self, request, view, frame=None):
-        """Runs on the worker. True when this playback frame goes to the direct viewer as floats and
-        skips `to_qimage`: the direct picture is up, the card can run `view`, no B buffer is in play
-        (compare pictures are still built on the processor) and the frame fits the card (a larger one
-        is converted here, on the worker, and the Viewer shows it)."""
-        if not (getattr(self, "_direct_linear_on", False) and request.playing):
+        """Runs on the worker. True when this frame goes to the direct viewer as floats and skips
+        `to_qimage`: the direct picture is up, the card can run `view`, no B buffer is in play (compare
+        pictures are still built on the processor) and the frame fits the card (a larger one is converted
+        here, on the worker, and the Viewer shows it). Playing or paused alike: one path for both."""
+        if not getattr(self, "_direct_linear_on", False):
             return False
         if compare_model.active_b(request.document)[1] is not None:
             return False
@@ -14154,7 +14153,10 @@ class Window(QMainWindow):
             if cached is None:
                 continue
             height, width = cached.shape[:2]
-            image = to_qimage(cached, exposure, channel, background=background, view=view, look=look)
+            if request.display and self._direct_linear_for(request, view, cached):
+                image = carddisplay.LazyPicture(cached, exposure, channel, background, view, look)
+            else:
+                image = to_qimage(cached, exposure, channel, background=background, view=view, look=look)
             self.signals.interim.emit(
                 (request, cancel), image,
                 f"{width * tier} × {height * tier}  ·  proxy 1/{tier} from cache  ·  "
@@ -14228,6 +14230,7 @@ class Window(QMainWindow):
                 return
             image = image.image()   # the card refused it: build the picture on the processor after all
         previous = self.viewer.sceneRect().size()
+        self._viewer_parked = False
         shown_image = image   # the proxy-sized picture, before the display upscale below
         self.viewer.set_compare_image(image_b, scale, render_region)
         # The pixmap is displayed in full-resolution scene coordinates, but the live frame stays
@@ -14269,10 +14272,20 @@ class Window(QMainWindow):
             # location instead of rebasing the crop to (0,0), otherwise a pan would make the
             # image visibly jump and EXR overscan would be lost at display.
             pixmap.setPos(render_region.x * scale, render_region.y * scale)
+        scene_rect = self._frame_viewer_to(scale, render_region, image.width(), image.height(), previous)
+        self.viewer._place_pixel_readout()
+        self._offer_direct(shown_image, scale, render_region, scene_rect, generation)
+
+    def _frame_viewer_to(self, scale, render_region, width, height, previous):
+        """Give the Viewer the geometry of the picture just shown: the scene rectangle, the corner readout,
+        the format guide, and a refit when the picture's size changed. `width` and `height` are the picture's
+        size in scene units (proxy size times the tier). Returns the scene rectangle. Shared by the pixmap path
+        and the card-only path, which has no pixmap to measure."""
+        if render_region is not None:
             scene_rect = QRectF(render_region.full_x * scale, render_region.full_y * scale,
                                 render_region.full_width * scale, render_region.full_height * scale)
         else:
-            scene_rect = QRectF(0, 0, image.width(), image.height())
+            scene_rect = QRectF(0, 0, width, height)
         self.viewer.set_image_rect(scene_rect)
         self.update_corner_readout(scene_rect, scale)
         format_rect = scene_rect
@@ -14289,8 +14302,7 @@ class Window(QMainWindow):
             # A different picture size (not the few pixels a 1/8 proxy rounds up to) frames it again;
             # refining 1/8 -> 1/4 -> full must not undo the artist's zoom (540 -> 544 -> 540 did).
             self.viewer.fit()
-        self.viewer._place_pixel_readout()
-        self._offer_direct(shown_image, scale, render_region, scene_rect, generation)
+        return scene_rect
 
     # The opt-in retained-texture picture (nodebased/directviewer.py). The default Viewer above keeps
     # painting and stays the fallback, export source and pixel-sampling source; this dock only shows the
@@ -14342,6 +14354,7 @@ class Window(QMainWindow):
                 if getattr(self, "direct_widget", None) is not None:
                     self.direct_widget.release()
                 self._direct_limits = None
+            self.unpark_viewer()
             self._refresh_direct_memory()
             return
         if dock is None:
@@ -14366,7 +14379,7 @@ class Window(QMainWindow):
             self.direct_widget = widget
         dock.show()
         self._direct_linear_on = True
-        image = getattr(self.viewer, "last_display_image", None)
+        image = self.display_image()
         if image is not None:
             self._offer_direct(image, self.viewer.last_scale, self.viewer.last_render_region,
                                self.viewer.sceneRect(), None)
@@ -14409,6 +14422,7 @@ class Window(QMainWindow):
             dock.deleteLater()
             self.direct_dock = None
             self.direct_widget = None
+        self.unpark_viewer()
 
     def _refresh_direct_memory(self):
         """The Direct picture's memory in the cache inspector: its retained picture and upload buffers."""
@@ -14462,10 +14476,50 @@ class Window(QMainWindow):
             return False
         self.viewer.readout_geometry = (scale, render_region, (width, height))
         self.direct_lazy = picture
+        self.direct_shown = (picture, scale, render_region)
         self.direct_linear_shown = getattr(self, "direct_linear_shown", 0) + 1
+        if not self.playing:
+            self._park_viewer(scale, render_region, width, height)
         if self.output_preview_dock.isVisible():
             self.output_preview.set_image(picture.image())
         return True
+
+    def _park_viewer(self, scale, render_region, width, height):
+        """A paused picture that only the card shows: the Viewer takes its geometry (scene rectangle, corner
+        readout, format guide, tier, region, so the hit-test, the readout and the refit see what is on the card)
+        and a black rectangle where the picture is, and builds no 8-bit picture. `unpark_viewer` repaints it
+        from the same float frame when the dock closes. Playback leaves the Viewer's last picture alone."""
+        viewer = self.viewer
+        previous = viewer.sceneRect().size()
+        viewer.set_compare_image(None, scale, render_region)
+        viewer.last_scale = scale
+        viewer.last_render_region = render_region
+        viewer.last_frame_size = (width, height)
+        viewer.readout_geometry = None
+        viewer.scene().clear()
+        viewer.backdrop_item = None
+        x, y = (0.0, 0.0) if render_region is None else (render_region.x * scale, render_region.y * scale)
+        viewer.scene().addRect(QRectF(x, y, width * scale, height * scale), QPen(Qt.PenStyle.NoPen),
+                               QBrush(QColor("#000000")))
+        self._frame_viewer_to(scale, render_region, width * scale, height * scale, previous)
+        viewer._place_pixel_readout()
+        self._viewer_parked = True
+
+    def unpark_viewer(self):
+        """The card stops showing the picture (dock closed or failed): the Viewer paints the last float frame."""
+        if not getattr(self, "_viewer_parked", False):
+            return
+        self._viewer_parked = False
+        shown = getattr(self, "direct_shown", None)
+        if shown is not None:
+            picture, scale, render_region = shown
+            self._show_image(picture.image(), scale, render_region)
+
+    def display_image(self):
+        """The 8-bit picture the Viewer would show now (built from the float frame when only the card has it)."""
+        if getattr(self, "_viewer_parked", False) and getattr(self, "direct_shown", None) is not None:
+            return self.direct_shown[0].image()
+        return getattr(self.viewer, "last_display_image", None)
 
     def _offer_direct(self, image, scale, render_region, scene_rect, generation):
         dock = getattr(self, "direct_dock", None)
@@ -14550,6 +14604,7 @@ class Window(QMainWindow):
                                  extras["image_b"] if extras is not None else None,
                                  generation=request.generation)
             else:
+                self._viewer_parked = False
                 self.viewer.scene().clear()
                 self.viewer._hide_pixel_readout()
                 text = self.viewer.scene().addText(status)
