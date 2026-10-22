@@ -1,0 +1,95 @@
+{
+ "scene": "mixed: the furnished room, a 40,000-splat shell and a smoke puff (tools/benchmark_pathtrace.soft_scene)",
+ "output": [
+  1920,
+  1080
+ ],
+ "adapter": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti",
+ "date": "2026-10-22",
+ "how": "tools/profile_first_look.py --scene mixed --warm N: each warm trial nudges the camera (a new view, the same document) and runs the first look and its display conversion with timers around the stages; a stage's own time has the stages inside it taken off",
+ "before": {
+  "commit": "e10c77a6 (main before step B)",
+  "cold_wall_seconds": 0.9492,
+  "cold_stage_seconds": {
+   "scene build: mesh triangle tree": 0.0331,
+   "scene build: splat layer (arrays and tree)": 0.3274,
+   "scene build: smoke grid": 0.0002,
+   "scene build: instances, lights, bookkeeping": 0.0052,
+   "pack for the card": 0.0444,
+   "trace (dispatch, readback, upload)": 0.3261,
+   "denoise": 0.1213,
+   "enlarge": 0.0271,
+   "background composite": 0.0198,
+   "display conversion": 0.0399,
+   "everything else (guide setup, python glue)": 0.0048
+  },
+  "warm_runs": 5,
+  "warm_median_wall_seconds": 0.7904,
+  "warm_median_stage_seconds": {
+   "scene build: splat layer (arrays and tree)": 0.3095,
+   "trace (dispatch, readback, upload)": 0.1748,
+   "denoise": 0.1239,
+   "pack for the card": 0.0426,
+   "display conversion": 0.0381,
+   "scene build: mesh triangle tree": 0.033,
+   "enlarge": 0.0243,
+   "background composite": 0.0196,
+   "scene build: instances, lights, bookkeeping": 0.0052,
+   "everything else (guide setup, python glue)": 0.0046,
+   "scene build: smoke grid": 0.0002
+  },
+  "warm_median_phase_seconds": {
+   "render": 0.4552,
+   "guides": 0.1141,
+   "denoise": 0.1241,
+   "enlarge": 0.047
+  },
+  "traced_pixels_last_warm_run": [
+   262,
+   148
+  ]
+ },
+ "after": {
+  "commit": "step B",
+  "cold_wall_seconds": 0.6101,
+  "cold_stage_seconds": {
+   "scene build: mesh triangle tree": 0.0046,
+   "scene build: splat layer (arrays and tree)": 0.0973,
+   "scene build: smoke grid": 0.0002,
+   "scene build: instances, lights, bookkeeping": 0.005,
+   "pack for the card": 0.0185,
+   "trace (dispatch, readback, upload)": 0.3381,
+   "denoise": 0.1172,
+   "background composite": 0.0008,
+   "enlarge": 0.0168,
+   "display conversion": 0.0093,
+   "everything else (guide setup, python glue)": 0.0023
+  },
+  "warm_runs": 12,
+  "warm_median_wall_seconds": 0.5116,
+  "warm_median_stage_seconds": {
+   "trace (dispatch, readback, upload)": 0.3012,
+   "denoise": 0.1894,
+   "enlarge": 0.0091,
+   "display conversion": 0.0078,
+   "everything else (guide setup, python glue)": 0.0024,
+   "background composite": 0.0008
+  },
+  "warm_median_phase_seconds": {
+   "render": 0.1079,
+   "guides": 0.1945,
+   "denoise": 0.1894,
+   "enlarge": 0.01
+  },
+  "traced_pixels_last_warm_run": [
+   364,
+   205
+  ],
+  "steady_runs": 6,
+  "steady_traced": [
+   364,
+   205
+  ]
+ },
+ "reading": "The stages that do not depend on the picture size (the splat layer, the mesh trees, the pack and the scene build) are the 'before' column's 0.39 s and the 'after' column's 0 s on a camera move. Trace, guides and denoise grow with the pixels traced: 262 x 148 before, 364 x 205 after. Enlarge, display conversion and background composite are the picture-size part (1080p)."
+}
