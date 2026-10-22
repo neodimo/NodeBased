@@ -1,0 +1,218 @@
+{
+  "adapter_request": "default",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "grid_cells": 64,
+  "frames": 120,
+  "edits": {
+    "pour_rate": {
+      "first_frame_s": 0.4749,
+      "stages_s": {
+        "liquid_cache": 1.923,
+        "surface": 3.875,
+        "whitewater": 3.224,
+        "steam_cache": 21.001
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 16.03,
+          "p95": 16.79
+        },
+        "surface": {
+          "mean": 32.29,
+          "p95": 59.92
+        },
+        "whitewater": {
+          "mean": 26.87,
+          "p95": 47.03
+        },
+        "steam_cache": {
+          "mean": 175.01,
+          "p95": 306.85
+        }
+      },
+      "all_stages_s": 30.51,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 22187520,
+          "memory_entries": 121,
+          "disk_bytes": 22286215,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1071505920,
+          "memory_entries": 136,
+          "disk_bytes": 1547117261,
+          "disk_entries": 213,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 290,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 21225188,
+          "memory_entries": 120,
+          "disk_bytes": 21289913,
+          "disk_entries": 120,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 120,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    },
+    "cup_position": {
+      "first_frame_s": 0.3259,
+      "stages_s": {
+        "liquid_cache": 2.592,
+        "surface": 4.107,
+        "whitewater": 14.69,
+        "steam_cache": 31.821
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 21.6,
+          "p95": 38.57
+        },
+        "surface": {
+          "mean": 34.23,
+          "p95": 42.15
+        },
+        "whitewater": {
+          "mean": 122.42,
+          "p95": 281.38
+        },
+        "steam_cache": {
+          "mean": 265.17,
+          "p95": 350.9
+        }
+      },
+      "all_stages_s": 53.55,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 41857728,
+          "memory_entries": 121,
+          "disk_bytes": 41957199,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1073342464,
+          "memory_entries": 136,
+          "disk_bytes": 1827353376,
+          "disk_entries": 238,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 340,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 7915171,
+          "memory_entries": 120,
+          "disk_bytes": 7977573,
+          "disk_entries": 118,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 118,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    },
+    "steam_vorticity": {
+      "first_frame_s": 0.335,
+      "stages_s": {
+        "liquid_cache": 3.809,
+        "surface": 4.127,
+        "whitewater": 13.79,
+        "steam_cache": 33.054
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 31.74,
+          "p95": 38.57
+        },
+        "surface": {
+          "mean": 34.39,
+          "p95": 40.57
+        },
+        "whitewater": {
+          "mean": 114.92,
+          "p95": 293.05
+        },
+        "steam_cache": {
+          "mean": 275.45,
+          "p95": 375.88
+        }
+      },
+      "all_stages_s": 55.13,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 41194752,
+          "memory_entries": 121,
+          "disk_bytes": 41292677,
+          "disk_entries": 121,
+          "hits": 735,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1071256672,
+          "memory_entries": 140,
+          "disk_bytes": 1795078434,
+          "disk_entries": 238,
+          "hits": 120,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 336,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 7225248,
+          "memory_entries": 120,
+          "disk_bytes": 7287546,
+          "disk_entries": 118,
+          "hits": 119,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 118,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ]
+    }
+  }
+}

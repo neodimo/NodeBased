@@ -1233,6 +1233,26 @@ outputs before display presentation; substep internals (transfers, pressure, spa
 readback) still need direct instrumentation. No timeline, stale-picture badge, edit-cancellation UI, or 64-cell
 adapter measurements have landed yet.
 
+**64-cell / 120-frame edit measurements (2026-10-22).** The first-frame column is time to solve and cache the first
+steam volume frame; viewport presentation is not measured. The full-bake column walks all four output stages. The
+largest exposed stage is the named evaluator output, not an internal solver phase.
+
+| Adapter | Edit | First solved frame | Full 120-frame bake | Largest output stage |
+| --- | --- | ---: | ---: | --- |
+| RTX 3080 Ti | Pour velocity ×1.25 | 0.475 s | 30.51 s | Steam cache, 21.00 s |
+| RTX 3080 Ti | Cup moved 5 cm | 0.326 s | 53.55 s | Steam cache, 31.82 s |
+| RTX 3080 Ti | Steam vorticity +0.4 | 0.335 s | 55.13 s | Steam cache, 33.05 s |
+| llvmpipe | Pour velocity ×1.25 | 0.620 s | 51.98 s | Steam cache, 24.81 s |
+| llvmpipe | Cup moved 5 cm | 0.338 s | 88.75 s | Steam cache, 61.85 s |
+| llvmpipe | Steam vorticity +0.4 | 0.389 s | 91.37 s | Steam cache, 70.45 s |
+
+The first solved volume is under one second on both measured adapters. Bake time exceeds 30 seconds on the three
+llvmpipe cases and on two RTX cases; the 30.51-second pour case also misses by 0.51 seconds. The AMD Radeon
+8060S measurement and internal advection / particle-transfer / pressure / sparse-occupancy / surface / cache-write /
+synchronization / readback split remain pending. The A6000 is unavailable and unmeasured; a planning estimate is
+0.8–1.3× the RTX wall time for the same 64-cell workload, with cache and bandwidth-heavy phases potentially outside
+that range. Treat this as an estimate only. Full JSON profiles are in `benchmarks/hot_pour/edit-resimulation-*.json`.
+
 ### S1: the Hot pour in a rendered shot (finish 1)
 
 Completed the pending proof: the 120-frame 32-cell bake took 26.17 seconds on the RTX 3080 Ti; full-size path-traced stills
