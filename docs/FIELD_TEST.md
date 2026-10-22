@@ -193,6 +193,8 @@ python tools\laptop_present_check.py --backend Dx12 --seconds 60 --maximize --ou
 python tools\laptop_present_check.py --read laptop-check
 python tools\laptop_present_check.py --edit --out laptop-edit          # about a minute: real mouse drags on the direct picture; do not touch the mouse
 python tools\laptop_present_check.py --edit --preference low-power --out laptop-edit-igpu   # the same on the Intel graphics
+python tools\laptop_present_check.py --paused --out laptop-paused     # about two minutes: paused edits and the wipe line on the card; do not touch the mouse
+python tools\laptop_present_check.py --paused --preference low-power --out laptop-paused-igpu   # the same on the Intel graphics
 ```
 
 During each run move the pointer and click inside the window. Write down by hand which adapter Windows Settings, System, Display, Advanced display
@@ -204,6 +206,12 @@ and frames per second for a held and a changing picture). The numbers are when e
 each and times every step from the mouse move to the end of the first frame that shows the moved handle. Leave the machine alone while it runs, because
 the pointer moves. `laptop-edit\result.json` ("edit") holds the 50th and 95th percentile per handle, the adapter used and the 50 ms limit. It has not been
 run on Windows yet, so the first run may need a fix to the input driver; bring back `laptop-edit\edit.log` as well.
+
+`--paused` (10/22) measures the paused picture on the card. It edits a Grade knob forty times and records, for the Viewer alone and for the direct
+picture, how much time the main thread and the whole process spend on each edit (with and without an A/B wipe), then drives the mouse like `--edit`
+to drag the wipe line 25 times and times each step to the first frame that shows it. `laptop-paused\result.json` ("paused") holds the wipe press and
+move times against the 50 ms limit, the Viewer-against-direct figures and the saving. Run it on the A6000 machine the same way. Bring back the
+whole `laptop-paused` folder; nothing is claimed for either machine until its own `result.json` exists.
 
 ## What the A6000 lets us test that the 3080 Ti cannot
 

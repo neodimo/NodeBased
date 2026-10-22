@@ -11,6 +11,8 @@ measures nothing about a GPU. Basis and limits: docs/WINDOWS_HYBRID_PRESENTATION
     python tools\\laptop_present_check.py --read laptop-check                      (print the summary, any machine)
     python tools\\laptop_present_check.py --edit --out laptop-edit                 (drag timing on the direct picture)
     python tools\\laptop_present_check.py --edit --preference low-power --out laptop-edit-igpu
+    python tools\\laptop_present_check.py --paused --out laptop-paused              (paused edits and the wipe on the card)
+    python tools\\laptop_present_check.py --paused --preference low-power --out laptop-paused-igpu
 
 What it records, per run (`result.json` next to `metadata.json` and `frames.json`):
   * the adapter actually used (name, type, driver, backend), next to the one asked for (a mismatch is flagged);
@@ -24,6 +26,11 @@ overlay shows it. It needs the NodeBased package importable (run it from the rep
 writes the 50th and 95th percentile per handle, the adapter used, the input driver and the 50 ms gate into
 `result.json` under "edit". Nothing is claimed for a machine until its own `result.json` exists; `--self-check`
 covers the record's fields on a synthetic run and measures nothing.
+`--paused` (Lane 2, 10/22) runs the cost of a paused edit (`tools/viewer_direct_bench.py --paused`: Qt-thread time and
+process CPU per edit for the Viewer, the dock with the old hand-off and the direct picture, with and without an A/B
+wipe) and the wipe drag on the card (`tools/viewer_direct_edit.py --handles wipe`: press and moves timed to the first
+presented frame that shows them), and writes both under "paused" in `result.json`. Same rules as `--edit`: nothing is
+claimed for the laptop or the A6000 machine until its own `result.json` exists.
 Present return is when the call returns, not when light leaves the panel; no photon measurement is claimed.
 """
 from __future__ import annotations
@@ -61,7 +68,10 @@ def parse_args(argv=None):
     p.add_argument("--self-check", action="store_true")
     p.add_argument("--edit", action="store_true",
                    help="time Roto-point and Transform-centre drags on the direct picture (needs NodeBased importable)")
-    p.add_argument("--edit-drags", type=int, default=25, help="drags per handle for --edit")
+    p.add_argument("--edit-drags", type=int, default=25, help="drags per handle for --edit and --paused")
+    p.add_argument("--paused", action="store_true",
+                   help="time paused edits (Viewer against the direct picture) and the wipe drag on the card")
+    p.add_argument("--paused-edits", type=int, default=40, help="timed edits per path for --paused")
     p.add_argument("--read", metavar="DIR", help="print the summary of a finished run or matrix folder and exit")
     a = p.parse_args(argv)
     if a.seconds < 10 or a.seconds > 120:
@@ -73,6 +83,7 @@ MATRIX = [("Dx12", "high-performance"), ("Vulkan", "high-performance"),
           ("auto", "high-performance"), ("Dx12", "low-power")]
 EDIT_KEYS = ("status", "platform", "driver", "adapter", "size", "gate_limit_ms", "worst_p95_ms", "failed", "handles",
              "measured_on_windows")
+PAUSED_KEYS = ("status", "platform", "driver", "adapter", "size", "wipe", "cost", "measured_on_windows")
 RESULT_KEYS = ("status", "platform", "requested_backend", "requested_preference", "selected_adapter",
                "selected_backend", "selection_matches_requested_class", "cadence")
 
@@ -126,6 +137,90 @@ def build_edit_result(raw, preference="high-performance"):
                     "present return, not photons; the picture's re-render follows later"}
 
 
+def build_paused_result(cost_raw, wipe_raw, preference="high-performance"):
+    """The compact record for the paused picture: built from the two tools' JSON (either may be missing), never invented."""
+    cost_raw, wipe_raw = cost_raw or {}, wipe_raw or {}
+    wipe = {}
+    for entry in wipe_raw.get("handles") or []:
+        move, press = entry.get("move_to_presented_overlay_ms") or {}, entry.get("press_to_presented_overlay_ms") or {}
+        wipe = {"drags": entry.get("drags"), "moves": move.get("n"), "move_p50_ms": move.get("p50"),
+                "move_p95_ms": move.get("p95"), "move_max_ms": move.get("max"), "presses": press.get("n"),
+                "press_p50_ms": press.get("p50"), "press_p95_ms": press.get("p95"),
+                "move_to_present_return_p95_ms": (entry.get("move_to_present_return_ms") or {}).get("p95"),
+                "gate_limit_ms": (wipe_raw.get("gate") or {}).get("limit_ms"),
+                "passed": bool((wipe_raw.get("gate") or {}).get("passed"))}
+    cost = {}
+    for row in cost_raw.get("rows") or []:
+        name = row.get("path") + (" + wipe" if row.get("ab_wipe") else "")
+        cost[name] = {"picture_path_p50_ms": (row.get("picture_path_qt_thread_ms_per_edit") or {}).get("p50"),
+                      "qt_thread_p50_ms": (row.get("qt_thread_ms_per_edit") or {}).get("p50"),
+                      "qt_thread_without_surface_present_p50_ms":
+                          (row.get("qt_thread_ms_per_edit_without_surface_present") or {}).get("p50"),
+                      "process_cpu_p50_ms": (row.get("process_cpu_ms_per_edit") or {}).get("p50"),
+                      "to_qimage_runs_per_edit": row.get("to_qimage_runs_per_edit_mean")}
+    gate = cost_raw.get("gate") or {}
+    cost["saving"] = {k: v.get("saving") for k, v in gate.items()}
+    cost["passed"] = bool(cost_raw.get("gate_passed"))
+    ran = bool(cost_raw) and bool(wipe_raw)
+    passed = ran and cost["passed"] and wipe.get("passed", False)
+    platform_name = str(wipe_raw.get("platform") or cost_raw.get("platform") or "")
+    adapter = (wipe_raw.get("adapter") or cost_raw.get("adapter") or {}).get("device")
+    return {"status": "passed" if passed else ("failed" if ran else "incomplete"), "requested_preference": preference,
+            "platform": platform_name, "driver": wipe_raw.get("driver"), "size": wipe_raw.get("size") or cost_raw.get("frame"),
+            "adapter": adapter, "wipe": wipe, "cost": cost,
+            "device_pixel_ratio": cost_raw.get("device_pixel_ratio"), "cpus": cost_raw.get("cpus"),
+            "measured_on_windows": platform_name.lower() == "windows",
+            "note": "Qt-thread time is time.thread_time() of the main thread from the edit to the settled picture; "
+                    "the wipe is timed from the pointer event to the end of the first draw that shows it; "
+                    "present return, not photons"}
+
+
+def describe_paused(paused):
+    wipe, cost = paused.get("wipe") or {}, paused.get("cost") or {}
+    lines = [f"  paused picture: {paused.get('status')} (adapter {paused.get('adapter')}, input {paused.get('driver')})",
+             f"    wipe drag on the card: press p95 {wipe.get('press_p95_ms')} ms, moves p50 {wipe.get('move_p50_ms')} ms, "
+             f"p95 {wipe.get('move_p95_ms')} ms (limit {wipe.get('gate_limit_ms')} ms)"]
+    for name, row in cost.items():
+        if isinstance(row, dict) and "qt_thread_p50_ms" in row:
+            lines.append(f"    {name}: picture path p50 {row.get('picture_path_p50_ms')} ms, whole edit "
+                         f"{row.get('qt_thread_p50_ms')} ms ({row.get('qt_thread_without_surface_present_p50_ms')} ms "
+                         f"without the surface present), process CPU p50 {row.get('process_cpu_p50_ms')} ms")
+    lines.append(f"    saving in the picture path against the Viewer: {cost.get('saving')}")
+    return lines
+
+
+def run_paused(a, out):
+    """Run the cost bench and the wipe drag in child processes (a native abort cannot take the check down)."""
+    out.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    env["NODEBASED_DIRECT_ADAPTER"] = "discrete" if a.preference == "high-performance" else "integrated"
+    tools = Path(__file__).resolve().parent
+    raws = {}
+    steps = (("cost", "viewer_direct_bench.py", ["--paused", "--edits", str(a.paused_edits), "--out"]),
+             ("wipe", "viewer_direct_edit.py", None))
+    codes = {}
+    for name, script, extra in steps:
+        raw_file = out / f"paused-{name}-raw.json"
+        if extra is not None:
+            cmd = [sys.executable, str(tools / script), *extra, str(raw_file)]
+        else:
+            cmd = [sys.executable, str(tools / script), str(raw_file), "--handles", "wipe", "--drags", str(a.edit_drags)]
+        print("Starting", name, ":", " ".join(cmd), flush=True)
+        with (out / f"paused-{name}.log").open("w", encoding="utf-8") as log:
+            try:
+                codes[name] = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, env=env,
+                                             cwd=str(tools.parent), timeout=900).returncode
+            except subprocess.TimeoutExpired:
+                codes[name] = "timeout; child stopped"
+        if raw_file.exists():
+            raws[name] = json.loads(raw_file.read_text(encoding="utf-8"))
+    paused = build_paused_result(raws.get("cost"), raws.get("wipe"), a.preference)
+    paused["returncodes"] = codes
+    save(out / "result.json", {"paused": paused})
+    print("\n".join(describe_paused(paused)), "\ndetails in", str(out), flush=True)
+    return 0 if paused.get("status") == "passed" else 1
+
+
 def describe_edit(edit):
     lines = [f"  drag timing on the direct picture: {edit.get('status')} "
              f"(adapter {edit.get('adapter')}, input {edit.get('driver')}, limit {edit.get('gate_limit_ms')} ms)"]
@@ -162,6 +257,8 @@ def run_edit(a, out):
 
 
 def describe(result):
+    if "paused" in result and "selected_adapter" not in result:
+        return describe_paused(result["paused"])
     if "edit" in result and "selected_adapter" not in result:
         return describe_edit(result["edit"])
     adapter = result.get("selected_adapter") or {}
@@ -232,6 +329,35 @@ def self_check():
     raw["gate"] = {"limit_ms": 50.0, "worst_p95_ms": 30.0, "failed": [], "passed": True}
     assert build_edit_result(raw)["status"] == "passed"
     assert describe_edit(edit)[0].startswith("  drag timing")
+    assert parse_args(["--paused"]).paused is True and parse_args([]).paused is False
+    wipe_raw = {"platform": "windows", "driver": "windows", "size": [1920, 1080], "adapter": {"device": "Synthetic GPU"},
+                "handles": [{"handle": "wipe centre", "drags": 25, "undo_entries_from_drags": 0,
+                             "move_to_presented_overlay_ms": {"n": 200, "p50": 12.0, "p95": 31.0, "max": 40.0},
+                             "move_to_present_return_ms": {"n": 200, "p50": 14.0, "p95": 35.0, "max": 44.0},
+                             "press_to_presented_overlay_ms": {"n": 25, "p50": 15.0, "p95": 29.0, "max": 29.0}}],
+                "gate": {"limit_ms": 50.0, "worst_p95_ms": 31.0, "failed": [], "passed": True}}
+    cost_raw = {"platform": "windows", "frame": [1920, 1080], "adapter": {"device": "Synthetic GPU"}, "gate_passed": True,
+                "rows": [{"path": "viewer", "ab_wipe": False, "qt_thread_ms_per_edit": {"p50": 50.0},
+                          "picture_path_qt_thread_ms_per_edit": {"p50": 20.0},
+                          "qt_thread_ms_per_edit_without_surface_present": {"p50": 50.0},
+                          "process_cpu_ms_per_edit": {"p50": 400.0}, "to_qimage_runs_per_edit_mean": 4.0},
+                         {"path": "direct", "ab_wipe": False, "qt_thread_ms_per_edit": {"p50": 20.0},
+                          "picture_path_qt_thread_ms_per_edit": {"p50": 5.0},
+                          "qt_thread_ms_per_edit_without_surface_present": {"p50": 18.0},
+                          "process_cpu_ms_per_edit": {"p50": 200.0}, "to_qimage_runs_per_edit_mean": 0.0}],
+                "gate": {"without_b": {"saving": 0.75, "passed": True}}}
+    paused = build_paused_result(cost_raw, wipe_raw)
+    assert all(key in paused for key in PAUSED_KEYS), sorted(set(PAUSED_KEYS) - set(paused))
+    assert paused["status"] == "passed" and paused["measured_on_windows"] is True
+    assert paused["wipe"]["move_p95_ms"] == 31.0 and paused["wipe"]["press_p95_ms"] == 29.0
+    assert paused["cost"]["direct"]["to_qimage_runs_per_edit"] == 0.0 and paused["cost"]["viewer"]["qt_thread_p50_ms"] == 50.0
+    assert build_paused_result(cost_raw, None)["status"] == "incomplete"
+    wipe_raw["gate"] = {"limit_ms": 50.0, "worst_p95_ms": 61.0, "failed": ["wipe centre"], "passed": False}
+    assert build_paused_result(cost_raw, wipe_raw)["status"] == "failed"
+    assert describe_paused(paused)[0].startswith("  paused picture")
+    with tempfile.TemporaryDirectory() as folder:
+        save(Path(folder) / "result.json", {"paused": paused})
+        assert read_back(folder) == 0
     with tempfile.TemporaryDirectory() as folder:
         save(Path(folder) / "result.json", {"edit": edit})
         assert read_back(folder) == 0
@@ -259,6 +385,8 @@ def main():
         return self_check()
     if a.edit and not a.matrix:
         return run_edit(a, Path(a.out))
+    if a.paused and not a.matrix:
+        return run_paused(a, Path(a.out))
     if sys.platform != "win32":
         raise SystemExit("Windows measurement only; --self-check is safe on other systems")
     if a.matrix:

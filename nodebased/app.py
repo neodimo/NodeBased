@@ -14528,29 +14528,41 @@ class Window(QMainWindow):
         """A paused picture that only the card shows: the Viewer takes its geometry (scene rectangle, corner
         readout, format guide, tier, region, so the hit-test, the readout and the refit see what is on the card)
         and a black rectangle where the picture is, and builds no 8-bit picture. `unpark_viewer` repaints it
-        from the same float frame when the dock closes. Playback leaves the Viewer's last picture alone."""
+        from the same float frame when the dock closes. Playback leaves the Viewer's last picture alone.
+
+        The scene is rebuilt only when the picture's place changed: refining 1/8 -> 1/4 -> full, or an edit that
+        leaves the frame where it was, only updates the tier and size the hit-test and the readout read."""
         viewer = self.viewer
-        previous = viewer.sceneRect().size()
         viewer.set_compare_image(None, scale, render_region)
         viewer.last_scale = scale
         viewer.last_render_region = render_region
         viewer.last_frame_size = (width, height)
         viewer.readout_geometry = None
+        x, y = (0.0, 0.0) if render_region is None else (render_region.x * scale, render_region.y * scale)
+        shown = getattr(self, "overscan_display", None)
+        key = (x, y, width * scale, height * scale, None if render_region is None else (
+            render_region.full_x * scale, render_region.full_y * scale,
+            render_region.full_width * scale, render_region.full_height * scale),
+            tuple(shown) if shown is not None else None, viewer.sceneRect().getRect())
+        if getattr(self, "_viewer_parked", False) and getattr(self, "_parked_key", None) == key:
+            self.update_corner_readout(viewer.sceneRect(), scale)
+            return
+        previous = viewer.sceneRect().size()
         viewer.scene().clear()
         viewer.backdrop_item = None
-        x, y = (0.0, 0.0) if render_region is None else (render_region.x * scale, render_region.y * scale)
         viewer.scene().addRect(QRectF(x, y, width * scale, height * scale), QPen(Qt.PenStyle.NoPen),
                                QBrush(QColor("#000000")))
         self._frame_viewer_to(scale, render_region, width * scale, height * scale, previous)
         viewer._place_pixel_readout()
         self._viewer_parked = True
+        self._parked_key = key[:-1] + (viewer.sceneRect().getRect(),)
 
     def unpark_viewer(self):
         """The card stops showing the picture (dock closed or failed): the Viewer paints the last float frame."""
         if not getattr(self, "_viewer_parked", False):
             return
         self._viewer_parked = False
-        shown = getattr(self, "direct_shown", None)
+        shown, self.direct_shown = getattr(self, "direct_shown", None), None
         if shown is not None:
             picture, scale, render_region = shown
             self._show_image(picture.image(), scale, render_region, picture.image_b())
