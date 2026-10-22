@@ -342,3 +342,53 @@ class BudgetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BandedConversionTests(unittest.TestCase):
+    """The enlargement and the display conversion run in bands on a thread pool (step B of the Progress plan); the pixels are the
+    ones a single pass over all the rows gives."""
+
+    def setUp(self):
+        rng = np.random.default_rng(11)
+        self.image = rng.uniform(0.0, 1.5, (97, 131, 4)).astype(np.float32)
+        self.image[..., 3] = rng.uniform(0.0, 1.0, (97, 131))
+
+    @staticmethod
+    def reference_enlarge(image, width, height):
+        h, w = image.shape[:2]
+        def axis(count, target):
+            position = np.clip((np.arange(target) + 0.5) * count / target - 0.5, 0, count - 1)
+            low = np.minimum(position.astype(np.int64), count - 1)
+            high = np.minimum(low + 1, count - 1)
+            return low, high, (position - low).astype(np.float32)
+        y0, y1, wy = axis(h, height)
+        x0, x1, wx = axis(w, width)
+        rows = image[y0] * (1 - wy)[:, None, None] + image[y1] * wy[:, None, None]
+        return rows[:, x0] * (1 - wx)[None, :, None] + rows[:, x1] * wx[None, :, None]
+
+    def test_the_enlargement_is_the_single_pass_result(self):
+        for size in ((131, 97), (1000, 700), (400, 301), (1920, 1080)):
+            got = P.enlarge(self.image, *size)
+            self.assertEqual(got.shape, (size[1], size[0], 4))
+            self.assertTrue(np.array_equal(got, self.reference_enlarge(self.image, *size)), size)
+
+    def test_the_display_conversion_is_the_single_pass_result_with_and_without_cancel(self):
+        import threading
+        big = P.enlarge(self.image, 1000, 700)
+        whole = np.empty(big.shape[:2] + (4,), np.uint8)
+        whole[..., 3] = 255
+        rgb = np.clip(big[..., :3] / np.maximum(big[..., 3:4], 1e-6), 0.0, 1.0)
+        P.display_rgba8(big[:1])                                   # builds the table
+        whole[..., :3] = P._SRGB_LUT[(rgb * P._SRGB_LUT_SIZE + 0.5).astype(np.int32)]
+        self.assertTrue(np.array_equal(P.display_rgba8(big), whole))
+        self.assertTrue(np.array_equal(P.display_rgba8(big, threading.Event()), whole))
+        stop = threading.Event()
+        stop.set()
+        with self.assertRaises(Cancelled):
+            P.display_rgba8(big, stop)
+
+    def test_the_background_under_the_small_picture_gives_the_background_over_the_enlarged_one(self):
+        background = (0.02, 0.02, 0.03, 1.0)
+        small = P.enlarge(pathtrace.over_background(self.image, background).astype(np.float32), 700, 520)
+        late = pathtrace.over_background(P.enlarge(self.image, 700, 520), background)
+        np.testing.assert_allclose(small, late, atol=2e-6)

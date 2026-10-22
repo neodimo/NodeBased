@@ -49,7 +49,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 
 from benchmark_pathtrace import CAMERA, furnished_scene, soft_scene
-from nodebased import gpu3d, progressiverender as P, scene3d as s
+from nodebased import gpu3d, progressiverender as P, scenecache, scene3d as s
 from nodebased.progressivejob import ProgressiveJob, Request
 
 WIDTH, HEIGHT = 1920, 1080
@@ -326,10 +326,15 @@ def field_record(results):
             "settled_seconds": {"cold": result["cold"]["settled_seconds"], "warm_median": result["warm"]["settled_seconds"]["median"]},
             "abandon_ms": edit.get("abandon_ms"), "edit_to_first_look_ms": edit.get("edit_to_first_look_ms"),
             "idle_first_look_ms": edit.get("idle_first_look_ms"), "edit_trials": edit.get("trials"),
-            "gate": edit.get("gate")}
+            "gate": edit.get("gate"),
+            # step B of the Progress plan: how sharp the warm first look was, how the orbit painted, what the scene cache did
+            "first_look_traced": result["warm"]["last_run_frames"][0]["traced"],
+            "first_look_phases_seconds": result["warm"]["last_run_frames"][0]["phases"],
+            "orbit_paint_ms": (result.get("interaction") or {}).get("paint_ms_during_orbit")}
     report = gpu3d.adapter_report()
     return {"schema": 1, "output": [WIDTH, HEIGHT], "adapter": report.splitlines()[0], "adapter_report": report,
-            "backend": backend_name(), "first_look_target_seconds": P.FIRST_LOOK_SECONDS, "scenes": scenes}
+            "backend": backend_name(), "first_look_target_seconds": P.FIRST_LOOK_SECONDS,
+            "warm_first_look_target_seconds": P.WARM_FIRST_LOOK_SECONDS, "scene_cache": scenecache.counters(), "scenes": scenes}
 
 
 def main():
@@ -355,7 +360,7 @@ def main():
     SETTLE = not (args.no_settle or args.first_look_only)
     if args.field:
         SETTLE = not args.quick
-        args.warm, args.no_interaction, args.no_edits = 1, True, False
+        args.warm, args.no_interaction, args.no_edits = 1, args.quick, False
         args.edits = 3 if args.quick else 5
         args.scene = "furnished" if args.quick else "both"
     results = []

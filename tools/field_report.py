@@ -493,6 +493,13 @@ def step_render_mode(ctx, step):
             settled = (scene.get("settled_seconds") or {}).get("warm_median")
             if settled is not None:
                 step.number(f"rendermode.{name}.settled", f"Render mode settle time, {name} scene", settled, "s")
+            traced = scene.get("first_look_traced")
+            if traced:
+                step.number(f"rendermode.{name}.first_look_pixels", f"Render mode first look, {name} scene: pixels traced before the enlargement",
+                            traced[0] * traced[1], "px")
+            orbit = scene.get("orbit_paint_ms") or {}
+            if orbit.get("worst") is not None:
+                step.number(f"rendermode.{name}.orbit_paint_worst", f"Render mode: slowest paint while orbiting, {name} scene", orbit["worst"], "ms")
     elif step.status == "ok":
         step.status, step.reason = "failed", "the benchmark wrote no JSON"
 

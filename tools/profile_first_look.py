@@ -104,16 +104,20 @@ def main():
     P._COST.clear()
     cold = one_look(scene, CAMERA, ("cold", args.scene))
     warm = [one_look(scene, moved(i), ("warm", args.scene, i)) for i in range(1, args.warm + 1)]
-    names = sorted({k for r in warm for k in r["stages"]})
-    median = {k: round(statistics.median(r["stages"].get(k, 0.0) for r in warm), 4) for k in names}
+    # the first stage sizes itself from what the last one cost, so the early warm runs are still settling toward their size:
+    # the table reads the second half of the runs
+    steady = warm[len(warm) // 2:]
+    names = sorted({k for r in steady for k in r["stages"]})
+    median = {k: round(statistics.median(r["stages"].get(k, 0.0) for r in steady), 4) for k in names}
     out = {"scene": args.scene, "output": [WIDTH, HEIGHT], "adapter": gpu3d.adapter_report().splitlines()[0],
            "cold": cold, "warm_runs": warm,
-           "warm_median_wall_seconds": round(statistics.median(r["wall_seconds"] for r in warm), 4),
+           "steady_runs": len(steady), "steady_traced": steady[-1]["traced"],
+           "warm_median_wall_seconds": round(statistics.median(r["wall_seconds"] for r in steady), 4),
            "warm_median_stage_seconds": dict(sorted(median.items(), key=lambda kv: -kv[1])),
-           "warm_median_phases": {k: round(statistics.median(r["phases"].get(k, 0.0) for r in warm), 4)
+           "warm_median_phases": {k: round(statistics.median(r["phases"].get(k, 0.0) for r in steady), 4)
                                   for k in ("render", "guides", "denoise", "enlarge")}}
     print("cold wall:", cold["wall_seconds"], "traced", cold["traced"])
-    print("warm median wall:", out["warm_median_wall_seconds"], "traced", warm[-1]["traced"])
+    print("steady warm median wall:", out["warm_median_wall_seconds"], "traced", warm[-1]["traced"], f"({len(steady)} runs)")
     for k, v in out["warm_median_stage_seconds"].items():
         print(f"  {v * 1000:8.1f} ms  {k}")
     print("  phases:", out["warm_median_phases"])

@@ -113,7 +113,8 @@ class FieldReportSurvivesFailures(unittest.TestCase):
             "first_look_seconds": {"cold": 0.9, "warm_median": 0.52, "warm_worst": 0.55},
             "settled_seconds": {"cold": 9.0, "warm_median": 8.1},
             "abandon_ms": {"n": 6, "median": 12.0, "p95": 31.5, "worst": 31.5},
-            "edit_to_first_look_ms": {"n": 6, "median": 580.0, "p95": 620.0, "worst": 620.0}}}}
+            "edit_to_first_look_ms": {"n": 6, "median": 580.0, "p95": 620.0, "worst": 620.0},
+            "first_look_traced": [640, 360], "orbit_paint_ms": {"median": 12.3, "worst": 13.6}}}}
         seen = []
 
         def fake_run(argv, log, timeout, **more):
@@ -134,6 +135,8 @@ class FieldReportSurvivesFailures(unittest.TestCase):
         self.assertEqual(keys["rendermode.furnished.abandon_p95"], 31.5)
         self.assertEqual(keys["rendermode.furnished.edit_first_look_p95"], 620.0)
         self.assertEqual(keys["rendermode.furnished.settled"], 8.1)
+        self.assertEqual(keys["rendermode.furnished.first_look_pixels"], 640 * 360)
+        self.assertEqual(keys["rendermode.furnished.orbit_paint_worst"], 13.6)
         self.assertEqual(step.data["adapter"], "wgpu adapter: test card")
         self.assertIn("bench_render_mode", [name for name, _, _ in field_report.STEPS])
 
