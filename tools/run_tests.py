@@ -108,10 +108,20 @@ def plan(mods, batch_size):
 
 def run_captured(n, total, batch, cmd, env):
     started = time.monotonic()
-    proc = subprocess.run(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    text = proc.stdout.decode("utf-8", "replace")
+    notes = ""
+    while True:
+        proc = subprocess.run(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        text = proc.stdout.decode("utf-8", "replace")
+        # Every test passed and the interpreter then died on a signal at exit (seen once in two full
+        # local parallel runs: SIGSEGV after "OK" in a batch that passes alone three times out of three).
+        # Say so, and run the batch once more; a second death or any test failure still fails the batch.
+        if proc.returncode < 0 and not notes and re.search(r"^OK\b", text, re.M):
+            notes = (text + f"\n=== batch {n}: all tests passed, then the process died with signal {-proc.returncode} "
+                     f"at exit; running it once more\n")
+            continue
+        break
     elapsed = time.monotonic() - started
-    out = (f"=== batch {n} of {total}: {batch[0]} .. {batch[-1]} ({len(batch)} modules)\n{text}"
+    out = (f"=== batch {n} of {total}: {batch[0]} .. {batch[-1]} ({len(batch)} modules)\n{notes}{text}"
            + ("" if text.endswith("\n") or not text else "\n")
            + f"=== batch {n} exit {proc.returncode} in {elapsed:.1f} s")
     return n, proc.returncode, out, text
