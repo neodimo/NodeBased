@@ -86,9 +86,9 @@ def main():
             raise SystemExit("CPU/GPU path-tracer comparison failed")
         return
     doc["nodes"]["render"]["params"].update(
-        render_backend="gpu", width=960, height=540, pt_samples=32,
+        render_backend="gpu", width=960, height=540, pt_samples=64,
         max_bounces=4, diffuse_bounces=2, specular_bounces=2, transmission_bounces=4,
-        volume_shadow_steps=1, volume_shadow_density=0.0, sampling="adaptive", min_samples=8, max_samples=32,
+        volume_shadow_steps=1, volume_shadow_density=0.0, sampling="adaptive", min_samples=16, max_samples=64,
         adaptive_pass_size=8, noise_threshold=0.01)
     doc["nodes"]["plate_fit"]["params"].update(width=960, height=540)
     output_dir = Path(__file__).resolve().parents[2] / "docs" / "images" / "hot_pour_shot"
