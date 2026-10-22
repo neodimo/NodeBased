@@ -1,3 +1,11 @@
+## 2026-10-22 — Lane 8 cold first-play playback finish (PARTIAL)
+
+Profile `benchmarks/live-picture/profile-1022-cold-rtx.json` measured 22 foreground source decodes in the 8-second cold playback interval (median 85.3 ms, p95 98.2 ms; 1.946 s total) and 22 RotoPaint rasterizations (median 47.2 ms). The full-frame Roto fallback could not consume the existing decode-ahead cache, and prefetch traversal skipped its optional wired background input. The evaluator/tile paths now share bounded immutable Raster decodes and optional-input prefetch. Four workers starved preview despite 21/22 decode hits (15.564/15.571/7.617 fps). Final policy defaults to one worker on larger CPU affinities and disables prefetch at <=4 CPUs. Final 8-second cold playback: RTX 21.356, llvmpipe 20.953, integrated 16.473 fps; all below 24 fps. Integrated final run had zero dropped frames.
+
+Commits `1711c3f6`, `0c67c6d7`, `16d4821c` are local on `openclaw/nb-2d-parity-b`, not pushed. Final adapter/profile JSONs and both synchronized `docs/ROTO_TRACKING.md` copies are committed. The clean integrated one-worker diagnostic was 13.741 fps; the contaminated earlier sample was moved to trash. Focused test suites passed (114). Exact run report: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L8.md`. Board task `l8-live-picture-finish-1022` is Blocked on the unmet 24 fps gate. Gonzo owns follow-up: profile Roto graph/display cadence and remeasure all adapters under `/tmp/nb-gpu.lock`.
+
+Failure mode: four concurrent decode workers compete with the preview/UI path; available CPU affinity must gate read-ahead. The live-picture harness expects `NB_QA_PLATE` to name a directory.
+
 ## 2026-10-22 — Lane 8 step A finish: integrated drag proven; 24 fps playback remains open (PARTIAL)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (8:32 AM on 2026-10-22 PDT)

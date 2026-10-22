@@ -1,3 +1,12 @@
+## 2026-10-22 — Lane 8 step A: cold first-play profile and affinity-aware read-ahead (PARTIAL)
+
+- **What was done — evidence:** Cold RTX profile found 22 serial Read decodes in 8 seconds (median 85.3 ms, p95 98.2 ms; 1.946 s total) and 22 RotoPaint passes (median 47.2 ms; 1.038 s total). The full-frame fallback did not consume decode-ahead, and optional `Roto.bg` was omitted from read traversal. Full Evaluator and tile paths now share immutable bounded Raster decodes, including named layers. Four-worker prefetch starved playback (15.564 / 15.571 / 7.617 fps); one worker restored discrete adapters near baseline. Disabling prefetch at four-or-fewer CPUs yielded 16.473 fps integrated with zero dropped frames. Final RTX / llvmpipe / integrated rates are 21.356 / 20.953 / 16.473 fps versus the 24 fps target.
+- **Artifacts:** Commits `1711c3f6`, `0c67c6d7`, `16d4821c` on `openclaw/nb-2d-parity-b`, local and not pushed. Profile and final adapter JSONs live under `benchmarks/live-picture/`; final docs copies are byte-identical. Exact handoff: `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/report-L8.md`. The first integrated one-worker sample overlapped CPU tests and was trashed; its clean rerun is recorded separately.
+- **Verification:** `tests.test_tileexec`, `tests.test_decodepool`, `tests.test_media`, `tests.test_boundingbox`, `tests.test_live_picture_bench`, `tests.test_roto_paint`: 114 passed. `py_compile`, `git diff --check`, docs-copy check passed.
+- **State:** PARTIAL/BLOCKED: cold playback remains below 24 fps on every adapter.
+- **Next owner + concrete artifact:** Gonzo continues using `benchmarks/live-picture/profile-1022-cold-rtx.json` and the final `after-*-cold-*.json` timelines; rerun all adapters under `/tmp/nb-gpu.lock`.
+- **Failure mode:** Four simultaneous EXR decoders can starve preview/UI. Bound the pool using available CPU affinity. `NB_QA_PLATE` expects the sequence directory, not the filename pattern.
+
 ## 2026-10-22 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step B of 3: the mixed mesh and splat scene's first look under one second, and a sharper first look (finish 1) (integrator tick)
 
 - **What was done:** `main` `9ce12b9a` -> `7f6acd4e` plus this docs commit. Evidence and per-lane commit
