@@ -21,6 +21,10 @@ from PySide6.QtCore import QSettings
 _SETTINGS_DIR = tempfile.TemporaryDirectory(prefix="nodebased-test-settings-")
 for _format in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
     QSettings.setPath(_format, QSettings.Scope.UserScope, _SETTINGS_DIR.name)
+# NativeFormat is the registry on Windows, which setPath cannot redirect: parallel batches (tools/run_tests.py
+# --jobs) then shared one key and a test that saved a tab layout found it cleared by another batch's
+# `remove('workspace')` (CI 39792276070). An ini file in this process's own directory is private.
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
 
 from nodebased.app import Preferences  # noqa: E402  (after setPath, before any QSettings use)
 

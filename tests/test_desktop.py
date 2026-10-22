@@ -58,6 +58,10 @@ from PySide6.QtCore import QSettings
 _SETTINGS_DIR = tempfile.TemporaryDirectory(prefix='nodebased-desktop-settings-')
 for _format in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
     QSettings.setPath(_format, QSettings.Scope.UserScope, _SETTINGS_DIR.name)
+# NativeFormat is the registry on Windows, which setPath cannot redirect: parallel batches (tools/run_tests.py
+# --jobs) then shared one key and a test that saved a tab layout found it cleared by another batch's
+# `remove('workspace')` (CI 39792276070). An ini file in this process's own directory is private.
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
 # Discovery imports this module as test_desktop and a sibling may import it as tests.test_desktop;
 # the second copy would otherwise take the first copy's stub for the real method.
 _REAL_WORKSPACE = getattr(Preferences.workspace, 'real_workspace', Preferences.workspace)
