@@ -1,5 +1,36 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (4:02 PM on 2026-10-22 PDT)
+
+`main` moved `0a388be9` -> `25f44534` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `25f44534` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1552.log`, started 3:52 PM): **Ran 5966 tests in 482.342 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step C of 3: overlays and the pixel readout follow playback, and the Direct picture becomes a docked viewer DiMo can switch on.** Commits:
+  - `a89c67c6` Direct picture: the overlay ring maps its staging slots on the worker; field kit matrix gains playback-with-overlay and paused-edit cases; decision memo updated with what stays open and the evidence that closes each; playback-with-overlay numbers on the RTX 3080 Ti and llvmpipe
+  - `00b080bb` Direct picture: tests and title follow the always-present dock; the corner readout's uploads count apart from the tier badge's; the fit hook tolerates a stand-in widget
+  - `8a0a76a6` Direct picture: a real docked viewer. The dock exists from the start and is saved and restored with the workspace layout; Preferences gains "Use the direct picture as the main viewer" (off by default), which puts it in the Viewer's place with the Viewer's strip and timeline around it and the Viewer alive behind it; the corner readout (picture size and zoom) is drawn on it; any start failure or refused picture hands back to the Viewer with a message; fit and keys reach the Viewer's own handlers
+  - `a4ec9854` Direct picture: handles that move with time and the pixel readout follow the frame; while a picture plays the overlay is recorded on the Qt thread and replayed, compared and staged by a worker (new overlay ring), with a playback tool and tests
+  Diff: 22 files changed, 4238 insertions(+), 120 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 2: find where 3D playback's time goes, commit the profile, and remove the biggest costs.** Commits:
+  - `05e445d6` 3D playback: profile table, before and after frame rates and the A6000 note in docs/PERFORMANCE.md
+  - `4cc949d8` 3D playback: before and after measurements on the RTX 3080 Ti, Radeon, llvmpipe and the laptop stand-in; repeat runs; profiles after the fixes
+  - `42a7558c` 3D playback: a cpu-backend Render3D plays on the GPU when one exists; benchmark: single-frame timing, scene lists, adapter by name
+  - `e1570e3d` 3D playback: shadow BVH reuse, vector vertex packing, merged draws, covered-box display conversion, no tick wait
+  - `5e0304eb` 3D playback: one sample while playing, an empty scene stays static, readback buffer reused, no bytearray copy, no disk spill, cheaper display conversion
+  - `69c109ee` 3D playback: measuring tool, per-stage trace and the first profiles (cube, empty, furnished room, glass room)
+  Diff: 58 files changed, 8091 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (3:32 PM on 2026-10-22 PDT)
 
 `main` moved `a5caf406` -> `4e23575d` (lane commits cherry-picked onto main in lane order) and then to this
