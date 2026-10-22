@@ -1,5 +1,33 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (1:42 PM on 2026-10-22 PDT)
+
+`main` moved `e9534e70` -> `6eeba375` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `6eeba375` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1332.log`, started 1:32 PM): **Ran 5851 tests in 477.642 s, OK (skipped=20), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step C of 3: Render mode settles in seconds: stop sampling where the picture is already clean.** Commits:
+  - `aeca6974` Render mode settle: adaptive sampling write-up, settle table on four adapters, 48 GB tier note and the settle benchmark records
+  - `1f87b9d2` Settle accumulation transfers in cancellable pieces, tighter noise estimate and resume handling, with tests for the adaptive settle
+  - `1dbdf81c` Render mode settles by continuing one accumulation: only the pixels still above the noise threshold are sampled again, the filter runs on the card, and the splats-and-smoke kernel keeps its 8x8 workgroup on NVIDIA
+  Diff: 18 files changed, 5526 insertions(+), 58 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step B of 2: the drag picture within a third of a second, the scrub within a third, and playback at the set rate (finish 1).** Commits:
+  - `65b60cd6` Close Lane 8 live-picture finish
+  - `1c3f9bc5` Record final live-picture drag gates
+  - `031f7e2b` Measure in-drag picture cadence reliably
+  - `9b150c7c` Limit solid paint strokes to affected bounds
+  Diff: 12 files changed, 217 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:22 PM on 2026-10-22 PDT)
 
 `main` moved `219263f7` -> `873cc57b` (lane commits cherry-picked onto main in lane order) and then to this

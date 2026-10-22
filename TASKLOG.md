@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step C of 3: Render mode settles in seconds: stop sampling where the picture is already clean, Lane 8 (2D parity B, GPT-6 Luna) step B of 2: the drag picture within a third of a second, the scrub within a third, and playback at the set rate (finish 1) (integrator tick)
+
+- **What was done:** `main` `e9534e70` -> `6eeba375` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `6eeba375`: Ran 5851 tests in 477.642 s, OK (skipped=20), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 8 step B finish 1 (DONE)
 
 - **What was done — evidence:** Clipped solid-over paint work is byte-identical to full-tile rendering. A valid 1920 × 1800 virtual desktop exposed the Properties slider for an actual pointer drag. RTX 3080 Ti measurements pass all first-picture, maximum in-drag gap, full-tier settle, scrub, and playback gates. The completed table is in `docs/ROTO_TRACKING.md`; its bundled copy is byte-identical.
