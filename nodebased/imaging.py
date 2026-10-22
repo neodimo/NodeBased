@@ -4371,8 +4371,9 @@ class Evaluator:
         if kind == "Checker":
             yy, xx = np.ogrid[:p["height"], :p["width"]]
             pattern = ((xx // p["size"] + yy // p["size"]) % 2).astype(np.float32)
-            frame = np.ones((p["height"], p["width"], 4), np.float32)
+            frame = np.empty((p["height"], p["width"], 4), np.float32)
             frame[..., :3] = (0.06 + pattern * 0.24)[..., None]
+            frame[..., 3] = 1.0
             return frame
         if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile", "PlanarTracker"):
             # Write is a tap, not a transform: rendering it is an explicit action, and the pixels
@@ -6683,6 +6684,8 @@ class Evaluator:
         HDR-safe: never produces NaN/inf for finite inputs (mix and mask.a are in [0, 1]).
         """
         if mask is None:
+            if float(mix) == 1.0:
+                return filtered
             gate = np.float32(mix)
         else:
             if mask.shape != source.shape:
@@ -6910,7 +6913,11 @@ class Evaluator:
     @staticmethod
     def _grade(image, p):
         frame = image.copy()
-        frame[..., :3] = frame[..., :3] * (2.0 ** p["exposure"]) * p["multiply"] + p["offset"] * frame[..., 3:4]
+        rgb = frame[..., :3]
+        np.multiply(rgb, 2.0 ** p["exposure"], out=rgb)
+        np.multiply(rgb, p["multiply"], out=rgb)
+        if p["offset"] != 0.0:
+            np.add(rgb, frame[..., 3:4] * p["offset"], out=rgb)
         return frame
 
     @staticmethod
@@ -7000,6 +7007,11 @@ class Evaluator:
         from .core import SPECS
         from . import colorcurves
         q = {**SPECS["ColorCorrect"]["params"], **p}
+        controls = ("saturation", "contrast", "gamma", "gain", "offset")
+        if all(float(q[name]) == (0.0 if name == "offset" else 1.0) for name in controls) and all(
+                float(q[f"{zone}_{name}"]) == (0.0 if name == "offset" else 1.0)
+                for zone in ("shadows", "midtones", "highlights") for name in controls):
+            return image
         frame = image
         alpha = frame[..., 3:4]
         straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
@@ -7293,6 +7305,21 @@ class Evaluator:
                  rotate=rotate, scale=scale, center_x=center_x, center_y=center_y)
         forward = Evaluator._transform_forward_matrix(p)
         inverse = np.linalg.inv(forward)
+        separable_cubic = (filter == "cubic" and rotate % 360.0 == 0 and scale == 1.0
+                           and p.get("scale_mode", "uniform") == "uniform"
+                           and p.get("skew_x", 0.0) == 0.0 and p.get("skew_y", 0.0) == 0.0
+                           and not p.get("invert", 0))
+        if separable_cubic:
+            x = np.arange(dst_box.width, dtype=np.float32) + dst_box.x + 0.5
+            y = np.arange(dst_box.height, dtype=np.float32) + dst_box.y + 0.5
+            sx = x + np.float32(inverse[0, 2]) - 0.5 - src_box.x
+            sy = y + np.float32(inverse[1, 2]) - 0.5 - src_box.y
+            result = Evaluator._resample_cubic_separable(src, sx, sy, clamp=bool(p.get("clamp", 0)))
+            if p.get("black_outside", 0):
+                outside_x = (sx < -0.5) | (sx > src.shape[1] - 0.5)
+                outside_y = (sy < -0.5) | (sy > src.shape[0] - 0.5)
+                result[outside_y[:, None] | outside_x[None, :]] = (0.0, 0.0, 0.0, 1.0)
+            return result.astype(np.float32, copy=False)
         # Destination pixel centres (world space). Nuke convention: integer pixel indices span
         # [i, i+1) and the centre sits at i + 0.5, which makes translate=0 sample the source on its
         # own pixel centres for the identity transform.
@@ -7308,15 +7335,7 @@ class Evaluator:
         # Translation-only cubic transforms have separable sample coordinates. Reuse four
         # horizontal and four vertical taps instead of constructing sixteen full-frame gathers.
         # Keep the general path for rotations, scale, skew and perspective-like transforms.
-        if (filter == "cubic" and rotate % 360.0 == 0 and scale == 1.0
-                and p.get("scale_mode", "uniform") == "uniform"
-                and p.get("skew_x", 0.0) == 0.0 and p.get("skew_y", 0.0) == 0.0
-                and not p.get("invert", 0)):
-            result = Evaluator._resample_cubic_separable(
-                src, sx_frac[0, :], sy_frac[:, 0], clamp=clamp
-            ).astype(np.float32)
-        else:
-            result = Evaluator._resample(src, sx_frac, sy_frac, filter, clamp=clamp).astype(np.float32)
+        result = Evaluator._resample(src, sx_frac, sy_frac, filter, clamp=clamp).astype(np.float32)
         if p.get("black_outside", 0):
             outside = ((sx_frac < -0.5) | (sx_frac > src.shape[1] - 0.5) |
                        (sy_frac < -0.5) | (sy_frac > src.shape[0] - 0.5))
@@ -7342,19 +7361,33 @@ class Evaluator:
             result_shape = (image.shape[0], len(coordinates), image.shape[2]) if axis == 1 else \
                            (len(coordinates), image.shape[1], image.shape[2])
             result = np.zeros(result_shape, dtype=np.float32)
+            scratch = np.empty(result_shape, dtype=np.float32)
+            first = True
             for offset in (-1, 0, 1, 2):
                 indices = base + offset
                 valid = (indices >= 0) & (indices < length)
                 clipped = np.clip(indices, 0, length - 1)
-                samples = image[:, clipped, :] if axis == 1 else image[clipped, :, :]
+                np.take(image, clipped, axis=axis, out=scratch)
                 if not clamp:
-                    samples = np.where(valid[None, :, None] if axis == 1 else valid[:, None, None],
-                                       samples, np.float32(0.0))
+                    if axis == 1:
+                        scratch[:, ~valid, :] = 0.0
+                    else:
+                        scratch[~valid, :, :] = 0.0
                 factors = weight(coordinates - indices).reshape((1, -1, 1) if axis == 1 else (-1, 1, 1))
-                result += samples * factors
+                np.multiply(scratch, factors, out=scratch)
+                if first:
+                    result[...] = scratch
+                    first = False
+                else:
+                    result += scratch
             return result
 
         horizontal = axis_sample(src, sx, axis=1)
+        # The common animated Transform case moves only horizontally. When y maps each
+        # destination row to the same source row, the vertical cubic pass is an exact identity.
+        if sy.shape == (src.shape[0],) and np.array_equal(
+                sy, np.arange(src.shape[0], dtype=np.float32)):
+            return horizontal
         return axis_sample(horizontal, sy, axis=0)
 
     @staticmethod
