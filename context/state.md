@@ -1,6 +1,6 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
-Fresh 60/90 frames pass visual review for coherent soft steam, continuous pour, smooth pool and soft catcher shadow; RTX CPU/GPU comparisons pass at frames 1/60/120. Full convergence at 1920 × 1080 and noise 0.01 took 69.253 seconds; the best pass-size experiment took 68.235 seconds. The under-60-second settled render remains the sole open acceptance item. Evidence: `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`; updated before/after stills are linked in `docs/FLUIDS_SPIKE.md`. Next owner: Gonzo coordinates catcher/path-render cost reduction with L4.
+Fresh 60/90 frames pass visual review for coherent soft steam, continuous pour, smooth pool and soft catcher shadow; RTX 3080 Ti and Radeon 8060S CPU/GPU comparisons pass at frames 1/60/120. Full convergence at 1920 × 1080 and noise 0.01 took 69.253 seconds; the best pass-size experiment took 68.235 seconds. The under-60-second settled render remains the sole open acceptance item. Evidence: `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`; updated before/after stills are linked in `docs/FLUIDS_SPIKE.md`. Next owner: Gonzo coordinates catcher/path-render cost reduction with L4.
 
 ## 2026-10-22 — Lane 6 step B finish 2 (PARTIAL)
 

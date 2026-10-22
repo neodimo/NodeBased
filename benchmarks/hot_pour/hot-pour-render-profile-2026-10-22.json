@@ -325,6 +325,20 @@
         2.5475575426980868e-08
       ]
     },
-    "note": "Path-traced layer did not meet the strict under-60-second settled target. Raster steam is composited after this measurement."
+    "note": "Path-traced layer did not meet the strict under-60-second settled target. Raster steam is composited after this measurement.",
+    "radeon_cpu_gpu_comparison": {
+      "adapter": "AMD Radeon 8060S Graphics / RADV Vulkan",
+      "frames": [
+        1,
+        60,
+        120
+      ],
+      "passed": true,
+      "mean_absolute_errors": [
+        3.5921672303373953e-09,
+        2.5961918836969744e-08,
+        2.8334836699173138e-08
+      ]
+    }
   }
 }

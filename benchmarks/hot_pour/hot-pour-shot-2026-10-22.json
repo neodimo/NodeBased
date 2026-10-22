@@ -54,5 +54,19 @@
       "limit": 0.017156388759613037,
       "passed": true
     }
+  },
+  "integrated_comparison": {
+    "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO) / Vulkan (rgba32float)",
+    "frames": [
+      1,
+      60,
+      120
+    ],
+    "passed": true,
+    "mean_absolute_errors": [
+      3.5921672303373953e-09,
+      2.5961918836969744e-08,
+      2.8334836699173138e-08
+    ]
   }
 }

@@ -1,7 +1,7 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
-- **What was done — evidence:** Fresh frame-60 and frame-90 stills now show a soft coherent steam plume, continuous liquid reaching the cup pool, a smooth pool, and a broad soft catcher shadow. RTX CPU/GPU comparison passed on frames 1, 60 and 120. A fully converged 1920 × 1080 render at noise threshold 0.01 took 69.253 seconds; the best pass-size experiment took 68.235 seconds. Both miss the strict under-60-second target.
-- **Artifacts:** Updated generator, graph, evidence runner, test, stills, profile JSON, and byte-identical docs copies in this worktree; large render cache is temporary scratch and will be trashed before handoff.
+- **What was done — evidence:** Fresh frame-60 and frame-90 stills now show a soft coherent steam plume, continuous liquid reaching the cup pool, a smooth pool, and a broad soft catcher shadow. RTX 3080 Ti and Radeon 8060S CPU/GPU comparisons passed on frames 1, 60 and 120. A fully converged 1920 × 1080 render at noise threshold 0.01 took 69.253 seconds; the best pass-size experiment took 68.235 seconds. Both miss the strict under-60-second target.
+- **Artifacts:** Updated generator, graph, evidence runner, test, stills, profile JSON, and byte-identical docs copies in this worktree; large render cache is temporary scratch and was trashed before handoff.
 - **State:** PARTIAL; the only remaining acceptance item is fully converged 1080p under 60 seconds.
 - **Next owner + concrete artifact:** Gonzo coordinates a catcher/path-render cost reduction with L4 using `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`.
 
