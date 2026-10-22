@@ -27,58 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
-# (stage name, from label, to label), in the order a frame meets them
-STAGES = (
-    ("scene evaluation", "worker_start", "render_begin"),
-    ("scene prepare (shadow data, vertex packing)", "render_begin", "scene_ready"),
-    ("scene upload (buffers, textures, pipelines, bind groups)", "scene_ready", "upload_done"),
-    ("render encode", "upload_done", "submit"),
-    ("GPU render and wait", "submit", "gpu_done"),
-    ("readback copy", "gpu_done", "readback_done"),
-    ("resolve (supersample, background)", "readback_done", "resolve_done"),
-    ("after the render (node bookkeeping)", "resolve_done", "put_begin"),
-    ("display cache put", "put_begin", "cache_put"),
-    ("convert and emit", "cache_put", "emit"),
-    ("hand-over to the display", "emit", "handover"),
-)
-
-
-def stage_table(events):
-    """Split the marks into frames at each worker_start; per frame, the time between consecutive stage marks."""
-    frames, current = [], None
-    for stamp, thread, label in events:
-        if label == "worker_start":
-            current = {}
-            frames.append(current)
-        if current is None:
-            continue
-        if label in ("submit", "gpu_done", "readback_done"):
-            current.setdefault(label + "_first", stamp)
-            current[label] = stamp
-        else:
-            current.setdefault(label, stamp)
-    rows = collections.defaultdict(list)
-    for f in frames:
-        if "handover" not in f or "render_begin" not in f:
-            continue
-        marks = [("worker_start", f["worker_start"]), ("render_begin", f["render_begin"]),
-                 ("scene_ready", f.get("scene_ready")), ("upload_done", f.get("upload_done")),
-                 ("submit", f.get("submit_first")), ("gpu_done", f.get("gpu_done")),
-                 ("readback_done", f.get("readback_done")), ("resolve_done", f.get("resolve_done")),
-                 ("put_begin", f.get("put_begin")), ("cache_put", f.get("cache_put")), ("emit", f.get("emit")), ("handover", f.get("handover"))]
-        marks = [(n, t) for n, t in marks if t is not None]
-        for (a, ta), (b, tb) in zip(marks, marks[1:]):
-            rows[(a, b)].append((tb - ta) * 1000)
-        rows[("total", "")].append((marks[-1][1] - marks[0][1]) * 1000)
-    names = {(a, b): name for name, a, b in STAGES}
-    table = []
-    for (a, b), values in rows.items():
-        name = names.get((a, b), f"{a} to {b}") if a != "total" else "worker start to hand-over (whole frame)"
-        table.append({"stage": name, "from": a, "to": b, "n": len(values), "p50_ms": round(statistics.median(values), 2),
-                      "p95_ms": round(sorted(values)[min(len(values) - 1, int(0.95 * len(values)))], 2),
-                      "mean_ms": round(statistics.fmean(values), 2)})
-    tick_gaps = [(b[0] - a[0]) * 1000 for a, b in zip([e for e in events if e[2] == "tick"], [e for e in events if e[2] == "tick"][1:])]
-    return table, len(frames), tick_gaps
+from nodebased.playback_trace import STAGES, stage_table  # noqa: E402
 
 
 def main():
@@ -89,6 +38,7 @@ def main():
     p.add_argument("--backend", default="auto", choices=("auto", "gpu", "cpu"))
     p.add_argument("--adapter", default="default")
     p.add_argument("--splats", type=int, default=20000)
+    p.add_argument("--no-cache", action="store_true", help="experiment: no display cache, a one-frame evaluator cache")
     p.add_argument("--out", required=True)
     args = p.parse_args()
     if args.adapter != "default":
@@ -124,6 +74,10 @@ def main():
         spin(0.05)
     first_frame_s = round(time.perf_counter() - t0, 2)
 
+    if args.no_cache:
+        window.display_cache.put = lambda *a, **k: None
+        window.evaluator._fixed_budget = 1
+        window.evaluator._shared_budget = None
     # cProfile of the worker: one Profile object, switched on and off around each job
     worker_profile = cProfile.Profile()
     submit = window.executor.submit
@@ -197,6 +151,7 @@ def main():
         one_frame = [[round((e[0] - events[first][0]) * 1000, 2), e[1], e[2]] for e in events[first:last]]
     result = {
         "one_frame_marks": one_frame,
+        "per_frame_ms": stage_table.series,
         "scene": args.scene, "size": [width, height], "backend": args.backend, "adapter": adapter,
         "seconds": round(elapsed, 2), "first_frame_s": first_frame_s, "frames_shown": len(shown),
         "fps": round(len(shown) / elapsed, 2), "worker_jobs": frames,

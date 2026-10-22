@@ -263,6 +263,28 @@ def zebra_masks(rgb, height, width):
     return (rgb > ZEBRA_HIGH).any(axis=2) & stripe, (rgb < ZEBRA_LOW).any(axis=2) & stripe
 
 
+CROP_TRANSPARENT = True      # convert only the covered rectangle of a frame with transparent surroundings
+_CROP_BELOW = 0.7            # ... when it is under this fraction of the frame
+
+
+def _covered_box(frame, channel, background, look):
+    """The (rows, cols) slices around the pixels with any coverage, or None when the whole frame has to be converted:
+    alpha, a single colour channel's display, the checker background and the clipping warning all read pixels outside
+    the covered area, and a box that is most of the frame saves nothing."""
+    if channel not in ("RGB", "RGBA") or background == "checker" or (look or {}).get("zebra"):
+        return None
+    if frame.ndim != 3 or frame.shape[2] < 4 or frame.shape[0] * frame.shape[1] < 4096:
+        return None
+    covered = np.clip(frame[..., 3], 0, 1) > 1e-8
+    rows = np.flatnonzero(covered.any(axis=1))
+    if not rows.size:
+        return None
+    cols = np.flatnonzero(covered.any(axis=0))
+    box = (slice(int(rows[0]), int(rows[-1]) + 1), slice(int(cols[0]), int(cols[-1]) + 1))
+    area = (box[0].stop - box[0].start) * (box[1].stop - box[1].start)
+    return box if area < _CROP_BELOW * frame.shape[0] * frame.shape[1] else None
+
+
 def _unpremultiply(rgb, weight):
     """``rgb / weight`` where ``weight`` > 1e-8, zero elsewhere. Only the bounding box of the covered pixels is
     divided: a 3D render of an object on a transparent background covers a fraction of the frame, and the masked
@@ -291,6 +313,16 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
     transform (`v ** (1 / gamma)`, sign kept), and the clipping warning tests that same adjusted
     scene-linear value and paints over the displayable buffer only.
     """
+    box = _covered_box(frame, channel, background, look) if CROP_TRANSPARENT else None
+    if box is not None:
+        # Only the covered rectangle goes through the view transform; every pixel outside it has no coverage and is
+        # exactly black in the full-frame path too (display(0) * weight(0)).
+        crop = to_qimage(frame[box], exposure, channel, background, view, look)
+        rgb8 = np.zeros((frame.shape[0], frame.shape[1], 3), np.uint8)
+        rows = crop.height()
+        view8 = np.frombuffer(crop.constBits(), np.uint8, count=crop.bytesPerLine() * rows).reshape(rows, crop.bytesPerLine())
+        rgb8[box] = view8[:, :crop.width() * 3].reshape(rows, crop.width(), 3)
+        return QImage(rgb8.data, rgb8.shape[1], rgb8.shape[0], rgb8.strides[0], QImage.Format.Format_RGB888).copy()
     alpha = frame[..., 3:4]
     if channel == "A":
         rgb = np.repeat(alpha, 3, axis=2)
@@ -308,7 +340,9 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         gamma = float((look or {}).get("gamma", 1.0))
         if gamma != 1.0:
             straight = np.sign(straight) * np.abs(straight) ** np.float32(1.0 / gamma)
-        rgb = display_rgb(straight, view) * weight
+        shown = display_rgb(straight, view)
+        # The view transforms hand back a new array; Linear and Raw hand back their input, which the clipping warning still reads.
+        rgb = shown * weight if shown is straight else np.multiply(shown, weight, out=shown)
         zebra = (zebra_masks(straight, *straight.shape[:2]) if (look or {}).get("zebra") else None)
         if background == "checker":
             # Composited after the transform, so the checker keeps the tone it was authored
@@ -317,7 +351,7 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
             levels = display_rgb(np.array([[[0.055] * 3, [0.095] * 3]], np.float32), view)[0, :, 0]
             bg = np.where((xx // 16 + yy // 16) % 2 == 0, levels[0], levels[1]).astype(np.float32)
             rgb = rgb + bg[..., None] * (1 - weight)
-    scaled = np.clip(rgb, 0, 1)         # in place from here: each full-frame temporary is about 25 MB at 1080p
+    scaled = np.clip(rgb, 0, 1, out=rgb)      # `rgb` is ours by now; in place, each full-frame temporary is about 25 MB at 1080p
     scaled *= 255
     scaled += 0.5
     rgb8 = scaled.astype(np.uint8)

@@ -92,9 +92,15 @@ class BVHValidation(unittest.TestCase):
                     gpu3d.render(sc, reference.ShadowTests.camera, 8, 8, samples=2)
                 render.assert_not_called()
             build.reset_mock()
+            state.pop('shadow_cache', None)      # a render of an unchanged scene reuses the BVH; this one counts a build
             with patch.dict(gpu3d.SHADOW_BVH_WORK_BUDGETS, discrete=expected):
                 gpu3d.render(sc, reference.ShadowTests.camera, 8, 8, samples=2)
             build.assert_called_once()
+            self.assertEqual(gpu3d.last_shadow_path, 'bvh')
+            build.reset_mock()
+            with patch.dict(gpu3d.SHADOW_BVH_WORK_BUDGETS, discrete=expected):
+                gpu3d.render(sc, reference.ShadowTests.camera, 8, 8, samples=2)
+            build.assert_not_called()
             self.assertEqual(gpu3d.last_shadow_path, 'bvh')
 
 

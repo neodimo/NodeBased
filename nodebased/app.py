@@ -15252,6 +15252,14 @@ class Window(QMainWindow):
         if len(self.preview_queue):
             self.start_preview()
         else:
+            if self.playing and request.display and request.playing and not cancel.is_set():
+                # A played frame just finished. The transport tick that wanted the next one may have fired while this
+                # one rendered (and found nothing to advance to), so look at the clock now instead of waiting up to a
+                # whole frame interval for the next tick: a 78 ms frame at 24 fps otherwise costs 83 or 125 ms.
+                self.playback_tick()
+                if len(self.preview_queue):
+                    self.start_preview()
+                    return
             if not self.playing and self.display_cache.has_pending:
                 self.compact_display_cache()
             if not self.playing and self.show_thumbnails:

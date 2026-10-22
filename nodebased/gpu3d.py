@@ -1103,11 +1103,71 @@ def link_mask(link, order):
     return float(sum(1 << k for k, light in enumerate(order[:24]) if not scene3d.light_reaches(link, light)))
 
 
+VECTOR_PREPARE = True      # pack a geometry's triangles with NumPy when none of them needs near-plane clipping
+
+
+def _pack_triangles(geometry, local, world, normals, uvs, camera, focal, width, height, object_id, tint, pbr, maps,
+                    emissive_color, scales):
+    """`_prepare`'s per-triangle loop for a geometry without textures, done on whole arrays: (packed triangles
+    (K,3,38) float32, mean depth per triangle), or None when any visible triangle crosses the near plane (the loop clips
+    those). The same float32 and float64 operations in the same order as the loop, so the packed bytes are equal; the
+    loop took 32 ms and the BVH around it 150 ms of a 475 ms furnished-room frame."""
+    tris = np.asarray(geometry.triangles)
+    if not len(tris):
+        return np.empty((0, 3, 38), 'f4'), np.empty(0)
+    z = -local[tris, 2]
+    visible = ~((z <= camera.near).all(axis=1) | (z >= camera.far).all(axis=1))
+    if not visible.any():
+        return np.empty((0, 3, 38), 'f4'), np.empty(0)
+    tris, z = tris[visible], z[visible]
+    if not (z > camera.near).all():
+        return None
+    w0, w1, w2 = world[tris[:, 0]], world[tris[:, 1]], world[tris[:, 2]]
+    e1, e2 = w1 - w0, w2 - w0
+    if normals is None:
+        face = np.cross(e1, e2)
+        face = face / np.maximum(np.linalg.norm(face, axis=1, keepdims=True), 1e-8)
+        ns = np.repeat(face[:, None, :], 3, axis=1)
+    else:
+        ns = normals[tris]
+    uv = uvs[tris]
+    duv1, duv2 = uv[:, 1] - uv[:, 0], uv[:, 2] - uv[:, 0]
+    det = duv1[:, 0]*duv2[:, 1] - duv2[:, 0]*duv1[:, 1]
+    good = np.abs(det) > 1e-12
+    safe = np.where(good, det, 1.0)[:, None]
+    tangent = np.where(good[:, None], (e1*duv2[:, 1:2] - e2*duv1[:, 1:2]) / safe, e1)
+    attrs = np.concatenate((local[tris], world[tris], ns, uv, np.repeat(tangent[:, None, :], 3, axis=1)),
+                           axis=2).astype('f4')
+    zs = -attrs[:, :, 2]
+    count = len(attrs)
+    xy = scene3d._to_pixels(attrs[:, :, :3].reshape(-1, 3), zs.reshape(-1), focal, width/height, width, height)
+    xy = xy.reshape(count, 3, 2)
+    a, b, c = xy[:, 0], xy[:, 1], xy[:, 2]
+    den = (b[:, 1]-c[:, 1])*(a[:, 0]-c[:, 0]) + (c[:, 0]-b[:, 0])*(a[:, 1]-c[:, 1])
+    drawn = ~(np.abs(den) < 1e-8)
+    if not drawn.all():
+        attrs, zs = attrs[drawn], zs[drawn]
+        count = len(attrs)
+    packed = np.empty((count, 3, 38), 'f4')
+    packed[:, :, :11] = attrs[:, :, :11]
+    packed[:, :, 11:15] = tint
+    packed[:, :, 15] = 0                 # one mip level: the loop's lod clips to 0
+    packed[:, :, 16:19] = (geometry.specular, geometry.shininess, geometry.emission)
+    packed[:, :, 19] = object_id
+    packed[:, :, 20:24] = pbr
+    packed[:, :, 24:27] = attrs[:, :, 11:14]
+    packed[:, :, 27:31] = maps
+    packed[:, :, 31:34] = emissive_color
+    packed[:, :, 34:38] = scales
+    return packed, zs.mean(axis=1)
+
+
 def _prepare(scene, camera, width, height, cancel):
     eye, view = scene3d._view_basis(camera)
     order = link_order(scene)
     focal = 1 / math.tan(math.radians(camera.fov) / 2)
     vertices, queue, materials = [], [], []
+    emitted = 0      # triangles packed so far: the first vertex of the next one is 3 * emitted
     for object_id, geometry in enumerate(scene.geometries, 1):
         _cancel(cancel)
         if not geometry.visible_to_camera:
@@ -1149,6 +1209,16 @@ def _prepare(scene, camera, width, height, cancel):
         scales = (float(geometry.normal_scale) if is_pbr else 0.0, float(geometry.occlusion_strength) if is_pbr else 0.0,
                   link_mask(geometry.light_link, order),
                   (0.0 if geometry.receive_shadows else 1.0) + (2.0 if geometry.holdout else 0.0))
+        if VECTOR_PREPARE and len(mips) == 1:
+            fast = _pack_triangles(geometry, local, world, normals, uvs, camera, focal, width, height, object_id,
+                                   tint, pbr, maps, emissive_color, scales)
+            if fast is not None:
+                chunk, depths = fast
+                queue.extend(zip(depths.tolist(), (emitted*3 + 3*np.arange(len(chunk))).tolist(),
+                                 [material]*len(chunk), [geometry.holdout]*len(chunk)))
+                vertices.append(chunk.reshape(-1, 38))
+                emitted += len(chunk)
+                continue
         for index, tri in enumerate(geometry.triangles):
             if index % 256 == 0:
                 _cancel(cancel)
@@ -1192,8 +1262,9 @@ def _prepare(scene, camera, width, height, cancel):
                 packed[:, 27:31] = maps
                 packed[:, 31:34] = emissive_color
                 packed[:, 34:38] = scales
-                queue.append((float(zs.mean()), len(vertices)*3, material, geometry.holdout))
+                queue.append((float(zs.mean()), emitted*3, material, geometry.holdout))
                 vertices.append(packed)
+                emitted += 1
     return eye, focal, vertices, sorted(queue, key=lambda q: q[0], reverse=True), materials
 
 
@@ -1225,6 +1296,32 @@ def _shadow_data(scene, count, limit, cancel):
             block[:, 1, 3] = caster_mask(geometry, order)
             offset += n
     return packed, 1e-3 * max(1.0, float((high-low).max()) if count else 1.0)
+
+
+def _shadow_key(scene):
+    """What the packed shadow triangles and their BVH are made of, without reading a vertex: the identity of each
+    geometry's arrays (the cache entry keeps them alive, so an id cannot be reused), its world matrix, opacity and
+    caster mask. A camera that moves leaves all of it alone."""
+    order = link_order(scene)
+    return tuple((id(g.vertices), id(g.triangles), g.world_matrix().tobytes(), float(g.color[3]), caster_mask(g, order))
+                 for g in scene.geometries)
+
+
+def _shadow_cache(state, scene, count):
+    """The state's single cached shadow entry when it is this scene's (a dict), else a fresh empty one for the caller to
+    fill and `_shadow_cache_keep` to store. Rebuilding the packed triangles and the BVH on every frame of a camera move
+    cost 150 ms of a 475 ms furnished-room frame (docs/PERFORMANCE.md, Lane 4 playback profile)."""
+    key = (count, _shadow_key(scene))
+    entry = state.get('shadow_cache')
+    if entry is not None and entry['key'] == key:
+        state['shadow_cache_hits'] = state.get('shadow_cache_hits', 0) + 1
+        return entry
+    state['shadow_cache_misses'] = state.get('shadow_cache_misses', 0) + 1
+    return {'key': key, 'refs': [(g.vertices, g.triangles) for g in scene.geometries]}
+
+
+def _shadow_cache_keep(state, entry):
+    state['shadow_cache'] = entry
 
 
 def _splat_extras(scene, ambient=0.0, provider=None, cancel=None):
@@ -1457,13 +1554,19 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         bvh_threshold = (SHADOW_BVH_THRESHOLD if SHADOW_BVH_THRESHOLD is not None
                          else SHADOW_BVH_THRESHOLDS[_adapter_kind(state)])
         if triangles > bvh_threshold and _bvh_capable(limits, 48, triangles*4):
-            shadow_prepared = _shadow_data(scene, triangles, limits['max-storage-buffer-binding-size'], cancel)
-            packed = shadow_prepared[0]
-            tri_set = raytrace.TriangleSet(packed[:, 0, :3], packed[:, 1, :3],
-                                          packed[:, 2, :3], packed[:, 0, 3])
-            bvh = raytrace.Bvh.build(*tri_set.aabbs(), cancel=cancel)
-            if _bvh_capable(limits, len(bvh.left)*48, triangles*4):
-                bvh_data = _pack_bvh(bvh, cancel)
+            entry = _shadow_cache(state, scene, triangles)
+            if 'prepared' not in entry:
+                entry['prepared'] = _shadow_data(scene, triangles, limits['max-storage-buffer-binding-size'], cancel)
+            shadow_prepared = entry['prepared']
+            if 'bvh' not in entry:
+                packed = shadow_prepared[0]
+                tri_set = raytrace.TriangleSet(packed[:, 0, :3], packed[:, 1, :3],
+                                              packed[:, 2, :3], packed[:, 0, 3])
+                bvh = raytrace.Bvh.build(*tri_set.aabbs(), cancel=cancel)
+                entry['bvh'] = _pack_bvh(bvh, cancel) if _bvh_capable(limits, len(bvh.left)*48, triangles*4) else None
+            _shadow_cache_keep(state, entry)
+            if entry['bvh'] is not None:
+                bvh_data = entry['bvh']
                 last_shadow_path = 'bvh'
                 levels = math.log2(triangles+2)
                 work = width * height * samples**2 * shadow_count * 16 * levels + 16 * triangles * levels
@@ -1742,6 +1845,12 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
     data = output in scene3d.DATA_OUTPUTS
     if bands is None:
         bands = _band_plan(state, 0, 'brute', height)
+    if shadow_prepared is None and shadow_triangles:
+        entry = _shadow_cache(state, scene, shadow_triangles)
+        if 'prepared' not in entry:
+            entry['prepared'] = _shadow_data(scene, shadow_triangles, device.limits['max-storage-buffer-binding-size'], cancel)
+        _shadow_cache_keep(state, entry)
+        shadow_prepared = entry['prepared']
     shadow_data, bias = shadow_prepared if shadow_prepared is not None else _shadow_data(scene, shadow_triangles,
         device.limits['max-storage-buffer-binding-size'], cancel)
     _cancel(cancel)
@@ -1923,9 +2032,16 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                     rp.set_vertex_buffer(0, vertex_buffer)
                     use_hold = hold_pass is not None and pass_number == 0
                     drawing_holdout, current = False, groups
+                    # Triangles that follow each other in the vertex buffer with the same material go out as one draw,
+                    # and the bind group is set when the material changes: 4,400 triangles were 8,800 Python calls.
+                    run_start, run_count, bound = 0, 0, None
                     for _, start, material, holdout in queue:
                         if use_hold and holdout != drawing_holdout:
+                            if run_count:
+                                rp.draw(3*run_count, 1, run_start, 0)
+                                run_count = 0
                             drawing_holdout = holdout
+                            bound = None
                             if holdout:
                                 rp.set_pipeline(hold_pass[0])
                                 rp.set_bind_group(2, hold_pass[2])
@@ -1934,8 +2050,17 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                                 rp.set_pipeline(pipeline)
                                 rp.set_bind_group(2, env_group)
                                 current = groups
-                        rp.set_bind_group(0, current[material])
-                        rp.draw(3, 1, start, 0)
+                        if run_count and bound == material and start == run_start + 3*run_count:
+                            run_count += 1
+                            continue
+                        if run_count:
+                            rp.draw(3*run_count, 1, run_start, 0)
+                        if bound != material:
+                            rp.set_bind_group(0, current[material])
+                            bound = material
+                        run_start, run_count = start, 1
+                    if run_count:
+                        rp.draw(3*run_count, 1, run_start, 0)
                 rp.end()
             if volume_pass is not None:
                 _cancel(cancel)

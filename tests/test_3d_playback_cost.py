@@ -252,6 +252,42 @@ class WindowPlaybackRequestTests(unittest.TestCase):
         self.assertTrue(self.window.evaluator.disk_spills_enabled)
 
 
+class TransportPacingTests(WindowPlaybackRequestTests):
+    """A finished played frame looks at the clock itself instead of waiting for the next transport tick."""
+
+    def test_the_next_frame_is_requested_when_a_played_frame_lands(self):
+        import threading
+        from nodebased.playback import FrameRequest
+        w = self.window
+        w.toggle_playback(True)
+        w.playback_timer.stop()                  # no tick is coming
+        w.playback_origin_time -= 1.0            # a second of the wall clock has gone by: the next frame is owed
+        w.preview_queue.take()
+        origin = w.playback_origin_frame
+        request = FrameRequest(w.generation, origin, True, w.dispatcher.document, 1, None, True)
+        cancel = threading.Event()
+        w.busy = True
+        frame = np.zeros((36, 64, 4), np.float32)
+        with unittest.mock.patch.object(w, "start_preview") as start:
+            w.preview_ready((request, cancel), frame, imaging.to_qimage(frame), "64 x 36  -  5 ms")
+        start.assert_called_once()
+        queued = list(w.preview_queue._items)
+        self.assertEqual([item.frame for item in queued if item.display], [origin + 1])
+        w.toggle_playback(False)
+
+    def test_a_paused_finish_does_not_advance_anything(self):
+        import threading
+        from nodebased.playback import FrameRequest
+        w = self.window
+        request = FrameRequest(w.generation, 1, True, w.dispatcher.document, 1, None, False)
+        cancel = threading.Event()
+        w.busy = True
+        frame = np.zeros((36, 64, 4), np.float32)
+        with unittest.mock.patch.object(w, "playback_tick") as tick:
+            w.preview_ready((request, cancel), frame, imaging.to_qimage(frame), "64 x 36  -  5 ms")
+        tick.assert_not_called()
+
+
 class BenchmarkToolTests(unittest.TestCase):
     def test_every_scene_builds_valid_operations(self):
         import sys
@@ -291,3 +327,148 @@ class BenchmarkToolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoveredBoxConversionTests(unittest.TestCase):
+    """to_qimage converts only the rectangle with coverage; the picture is the full-frame conversion's, byte for byte."""
+
+    def frame(self, seed=0, box=(20, 60, 30, 110), partial=True):
+        generator = np.random.RandomState(seed)
+        frame = np.zeros((100, 160, 4), np.float32)
+        y0, y1, x0, x1 = box
+        frame[y0:y1, x0:x1, :3] = generator.uniform(0, 2, (y1 - y0, x1 - x0, 3))
+        frame[y0:y1, x0:x1, 3] = generator.choice([1.0, 0.5, 0.25], (y1 - y0, x1 - x0)) if partial else 1.0
+        frame[y0:y1, x0:x1, :3] *= frame[y0:y1, x0:x1, 3:4]
+        return frame
+
+    def both(self, frame, **kwargs):
+        args = dict(exposure=0.0, channel="RGB", background="black", view="sRGB", look=None)
+        args.update(kwargs)
+        full = unittest.mock.patch.object(imaging, "CROP_TRANSPARENT", False)
+        with full:
+            reference = imaging.to_qimage(frame, **args)
+        return imaging.to_qimage(frame, **args), reference
+
+    def test_the_cropped_conversion_equals_the_full_one(self):
+        for view in ("sRGB", "Linear"):
+            for exposure in (0.0, 1.5):
+                with self.subTest(view=view, exposure=exposure):
+                    cropped, reference = self.both(self.frame(), view=view, exposure=exposure)
+                    self.assertEqual(cropped, reference)
+
+    def test_the_crop_is_actually_taken(self):
+        frame = self.frame()
+        self.assertIsNotNone(imaging._covered_box(frame, "RGB", "black", None))
+        calls = []
+        real = imaging.to_qimage
+        with unittest.mock.patch.object(imaging, "to_qimage", side_effect=lambda f, *a, **k: calls.append(f.shape) or real(f, *a, **k)):
+            real(frame)
+        self.assertEqual(calls, [(40, 80, 4)])
+
+    def test_edges_of_the_frame_and_single_pixels(self):
+        for box in ((0, 30, 0, 50), (70, 100, 110, 160), (50, 51, 80, 81)):
+            with self.subTest(box=box):
+                cropped, reference = self.both(self.frame(box=box))
+                self.assertEqual(cropped, reference)
+
+    def test_whole_frame_cases_are_not_cropped(self):
+        frame = self.frame(box=(0, 100, 0, 160))
+        self.assertIsNone(imaging._covered_box(frame, "RGB", "black", None))
+        self.assertIsNone(imaging._covered_box(self.frame(), "A", "black", None))
+        self.assertIsNone(imaging._covered_box(self.frame(), "RGB", "checker", None))
+        self.assertIsNone(imaging._covered_box(self.frame(), "RGB", "black", {"zebra": True}))
+        self.assertIsNone(imaging._covered_box(np.zeros((100, 160, 4), np.float32), "RGB", "black", None))
+
+    def test_other_channels_and_the_checker_background_match_too(self):
+        for kwargs in ({"channel": "A"}, {"channel": "G"}, {"background": "checker"}, {"look": {"zebra": True}}):
+            with self.subTest(**kwargs):
+                cropped, reference = self.both(self.frame(), **kwargs)
+                self.assertEqual(cropped, reference)
+
+
+class SceneReuseTests(unittest.TestCase):
+    """A camera that moves leaves the scene's shadow triangles and BVH alone, and the vertex packing is the loop's."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not gpu3d.available():
+            raise unittest.SkipTest("no GPU adapter")
+
+    def room(self):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+        from benchmark_pathtrace import furnished_scene
+        scene = furnished_scene()
+        lights = tuple(__import__("dataclasses").replace(light, shadows=True) for light in scene.lights)
+        # the raster renderer draws meshes and a lamp; the room's glass ball, instanced shelf and sky are for the ray tracers
+        meshes = tuple(g for g in scene.geometries if g.material != "liquid")
+        return __import__("dataclasses").replace(scene, geometries=meshes, lights=lights, instances=(), environments=())
+
+    def camera(self, x):
+        return s.Camera(s.Transform3D(s.Vec3(x, 1.6, 6.2)), s.Vec3(0, 0.95, 0), 40.0)
+
+    def test_a_moving_camera_builds_the_shadow_bvh_once(self):
+        from nodebased import raytrace
+        scene = self.room()
+        state = gpu3d._state()
+        state.pop("shadow_cache", None)
+        with unittest.mock.patch.object(raytrace.Bvh, "build", wraps=raytrace.Bvh.build) as build, \
+                unittest.mock.patch.object(gpu3d, "_shadow_data", wraps=gpu3d._shadow_data) as pack, \
+                unittest.mock.patch.object(gpu3d, "SHADOW_BVH_THRESHOLD", 0):
+            first = gpu3d.render(scene, self.camera(0.0), 96, 54, (0, 0, 0, 0), 0.2, 1)
+            for x in (0.4, 0.8, -0.4):
+                gpu3d.render(scene, self.camera(x), 96, 54, (0, 0, 0, 0), 0.2, 1)
+        self.assertEqual(build.call_count, 1, "the BVH was rebuilt for a camera move")
+        self.assertEqual(pack.call_count, 1, "the shadow triangles were repacked for a camera move")
+        self.assertTrue(np.isfinite(first).all())
+
+    def test_a_moved_object_rebuilds_them(self):
+        import dataclasses
+        from nodebased import raytrace
+        scene = self.room()
+        moved = dataclasses.replace(scene, geometries=(dataclasses.replace(
+            scene.geometries[4], transform=s.Transform3D(s.Vec3(-1.0, 0.8, 0.4))),) + scene.geometries[1:])
+        state = gpu3d._state()
+        state.pop("shadow_cache", None)
+        with unittest.mock.patch.object(raytrace.Bvh, "build", wraps=raytrace.Bvh.build) as build, \
+                unittest.mock.patch.object(gpu3d, "SHADOW_BVH_THRESHOLD", 0):
+            gpu3d.render(scene, self.camera(0.0), 64, 36, (0, 0, 0, 0), 0.2, 1)
+            gpu3d.render(moved, self.camera(0.0), 64, 36, (0, 0, 0, 0), 0.2, 1)
+        self.assertEqual(build.call_count, 2)
+
+    def test_reused_shadows_give_the_picture_a_fresh_build_gives(self):
+        scene = self.room()
+        state = gpu3d._state()
+        with unittest.mock.patch.object(gpu3d, "SHADOW_BVH_THRESHOLD", 0):
+            gpu3d.render(scene, self.camera(0.0), 80, 45, (0, 0, 0, 0), 0.2, 1)
+            reused = gpu3d.render(scene, self.camera(0.5), 80, 45, (0, 0, 0, 0), 0.2, 1)
+            state.pop("shadow_cache", None)
+            fresh = gpu3d.render(scene, self.camera(0.5), 80, 45, (0, 0, 0, 0), 0.2, 1)
+        np.testing.assert_array_equal(reused, fresh)
+
+    def test_vector_packing_equals_the_triangle_loop(self):
+        scene = self.room()
+        for camera in (self.camera(0.0), s.Camera(s.Transform3D(s.Vec3(-3.0, 2.0, 5.0)), s.Vec3(0, 1, 0), 40.0),
+                       s.Camera(s.Transform3D(s.Vec3(0.2, 0.5, 2.0)), s.Vec3(0, 1, 0), 70.0)):
+            with unittest.mock.patch.object(gpu3d, "VECTOR_PREPARE", False):
+                loop = gpu3d._prepare(scene, camera, 320, 180, None)
+            vector = gpu3d._prepare(scene, camera, 320, 180, None)
+            np.testing.assert_array_equal(np.concatenate(loop[2]), np.concatenate(vector[2]))
+            self.assertEqual(loop[3], vector[3])
+
+    def test_a_geometry_that_crosses_the_near_plane_keeps_the_loop(self):
+        scene = self.room()
+        camera = s.Camera(s.Transform3D(s.Vec3(0.0, 0.3, 0.2)), s.Vec3(0, 0.3, -3.0), 90.0)     # inside the room, floor and walls close
+        with unittest.mock.patch.object(gpu3d, "VECTOR_PREPARE", False):
+            loop = gpu3d._prepare(scene, camera, 160, 90, None)
+        vector = gpu3d._prepare(scene, camera, 160, 90, None)
+        np.testing.assert_array_equal(np.concatenate(loop[2]), np.concatenate(vector[2]))
+        self.assertEqual(loop[3], vector[3])
+
+    def test_draws_are_merged_but_every_triangle_is_still_drawn(self):
+        scene = self.room()
+        with unittest.mock.patch.object(gpu3d, "SHADOW_BVH_THRESHOLD", 0):
+            image = gpu3d.render(scene, self.camera(0.0), 120, 68, (0, 0, 0, 0), 0.2, 1)
+        covered = float((image[..., 3] > 0).mean())
+        self.assertGreater(covered, 0.5)

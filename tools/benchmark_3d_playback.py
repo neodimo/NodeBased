@@ -205,6 +205,8 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     window.playback_shown_times.clear()
     shown_before = len(window.playback_shown_times)
     dropped_before = window.playback_dropped_frames
+    from nodebased import playback_trace
+    playback_trace.enable()
     window.toggle_playback(True)
     start = time.monotonic()
     statuses = []
@@ -213,6 +215,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         statuses.append(window.statusBar().currentMessage())
     elapsed = time.monotonic() - start
     window.toggle_playback(False)
+    events = playback_trace.disable()
     spin(0.3)
     times = [t for t in list(window.playback_shown_times) if start <= t <= start + elapsed]
     intervals = [(b - a) * 1000 for a, b in zip(times, times[1:])]
@@ -230,6 +233,15 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         "dropped": window.playback_dropped_frames - dropped_before, "status": status,
         "proxy_tier_at_end": getattr(window, "playback_tier", None),
     }
+    table, jobs, _ = playback_trace.stage_table(events)
+    result["worker_jobs"] = jobs
+    result["stage_p50_ms"] = {row["stage"]: row["p50_ms"] for row in sorted(table, key=lambda r: -r["p50_ms"])}
+    waits = playback_trace.stage_table.series.get("submit to gpu_done", [])
+    if waits:
+        # Another process using the same card shows up here as a step: the wait for a trivial render jumps from a few
+        # milliseconds to a time slice or more and back. A run where the spread is over 2.5 times is not a clean one.
+        result["gpu_wait_ms"] = {"min": min(waits), "p50": statistics.median(waits), "max": max(waits),
+                                 "shared_card_suspected": max(waits) > 2.5 * max(min(waits), 1.0)}
     return result
 
 
