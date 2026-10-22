@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where the live picture's time goes, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
+
+- **What was done:** `main` `155e3974` -> `87791fd8` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `87791fd8`: Ran 5805 tests in 474.693 s, OK (skipped=19), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 8 step A: cold first-play profile and affinity-aware read-ahead (PARTIAL)
 
 - **What was done — evidence:** Cold RTX profile found 22 serial Read decodes in 8 seconds (median 85.3 ms, p95 98.2 ms; 1.946 s total) and 22 RotoPaint passes (median 47.2 ms; 1.038 s total). The full-frame fallback did not consume decode-ahead, and optional `Roto.bg` was omitted from read traversal. Full Evaluator and tile paths now share immutable bounded Raster decodes, including named layers. Four-worker prefetch starved playback (15.564 / 15.571 / 7.617 fps); one worker restored discrete adapters near baseline. Disabling prefetch at four-or-fewer CPUs yielded 16.473 fps integrated with zero dropped frames. Final RTX / llvmpipe / integrated rates are 21.356 / 20.953 / 16.473 fps versus the 24 fps target.
