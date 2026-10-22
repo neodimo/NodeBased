@@ -1,5 +1,28 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (3:02 PM on 2026-10-22 PDT)
+
+`main` moved `907d56d7` -> `74523025` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `74523025` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1442.log`, started 2:42 PM): **Ran 5855 tests in 469.929 s, OK (skipped=20), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs.** Commits:
+  - `b7bf8aa2` Document playback optimization measurements
+  - `af7269a6` Bound playback read-ahead to useful frames
+  - `e52fdcf5` Optimize profiled 2D playback costs
+  - `f6d1a4e7` Record realistic 2D playback baseline profiles
+  - `a989feec` Add real-window 2D playback benchmark comp
+  Diff: 23 files changed, 38005 insertions(+), 15 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (1:42 PM on 2026-10-22 PDT)
 
 `main` moved `e9534e70` -> `6eeba375` (lane commits cherry-picked onto main in lane order) and then to this
