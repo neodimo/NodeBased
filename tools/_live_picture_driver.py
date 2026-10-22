@@ -275,7 +275,14 @@ def scenario():
       for prof in profs[1:]: stats.add(prof)
       txt=io.StringIO(); stats.stream=txt; stats.sort_stats('cumtime').print_stats(50)
       profile_rows.append({'thread_id':tid,'top':txt.getvalue()})
-    payload={'adapter':adapter,'results':[drag,scrub,playback],'timeline':timeline,'profiles':profile_rows}
+    try:
+      selected = gpu3d._state().get('info', {})
+      adapter_info = gpu3d._summary(type('AdapterInfo', (), {'info': selected})())
+    except Exception as exc:
+      adapter_info = {'name': adapter, 'type': 'unknown', 'backend': 'unknown',
+                      'driver': f'{type(exc).__name__}: {exc}'}
+    payload={'adapter':adapter,'adapter_info':adapter_info,'backend':adapter_info.get('backend'),
+             'force_adapter':force,'results':[drag,scrub,playback],'timeline':timeline,'profiles':profile_rows}
     with open(output,'w') as f: json.dump(payload,f,indent=2)
     print(json.dumps(payload,ensure_ascii=False),flush=True)
   except BaseException:

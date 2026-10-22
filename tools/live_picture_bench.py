@@ -49,6 +49,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-check", action="store_true")
     parser.add_argument("--output", type=pathlib.Path, default=pathlib.Path("live-picture.json"))
+    parser.add_argument("--field", type=pathlib.Path,
+                        help="write the field-kit JSON to this path (includes the selected adapter and backend)")
     parser.add_argument("--display", default=os.environ.get("DISPLAY"))
     parser.add_argument("--adapter", default=os.environ.get("QA_ADAPTER", "unknown"))
     parser.add_argument("--force-adapter", choices=("default", "integrated", "cpu"), default="default")
@@ -68,8 +70,9 @@ def main():
     if not fixture.exists():
         parser.error(f"QA comp is missing: {fixture}")
     driver = pathlib.Path(__file__).with_name("_live_picture_driver.py")
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run([sys.executable, str(driver), str(fixture), str(args.output),
+    output = args.field or args.output
+    output.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run([sys.executable, str(driver), str(fixture), str(output),
                              str(args.seconds), args.adapter, args.force_adapter, args.profile_thread,
                              str(int(args.warm_playback_range))], cwd=ROOT,
                             env={**os.environ, "DISPLAY": args.display, "QT_QPA_PLATFORM": "xcb"},

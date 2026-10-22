@@ -140,6 +140,33 @@ class FieldReportSurvivesFailures(unittest.TestCase):
         self.assertEqual(step.data["adapter"], "wgpu adapter: test card")
         self.assertIn("bench_render_mode", [name for name, _, _ in field_report.STEPS])
 
+    def test_live_picture_field_step_records_adapter_backend_and_observations(self):
+        record = {"adapter_info": {"name": "Example GPU", "backend": "Vulkan"},
+                  "results": [{"series": "roto_drag", "first_picture_s": 0.21,
+                               "settle_s": 1.2},
+                              {"series": "tier4_playback", "fps": 22.5}]}
+        seen = []
+
+        def fake_run(argv, log, timeout, **more):
+            seen.append([str(a) for a in argv])
+            Path(argv[argv.index("--field") + 1]).write_text(json.dumps(record), encoding="utf-8")
+            return dict(returncode=0, timed_out=False, seconds=1.0, output="", output_tail="")
+        with tempfile.TemporaryDirectory(prefix="field-live-picture-test-") as tmp:
+            ctx = field_report.Context(Path(tmp) / "out", "Field laptop", True, False)
+            ctx.work.mkdir(parents=True)
+            step = field_report.Step("bench_live_picture", "Live picture")
+            with mock.patch.object(field_report, "run_command", fake_run):
+                field_report.step_live_picture(ctx, step)
+        self.assertEqual(step.status, "ok")
+        self.assertIn("live_picture_bench.py", seen[0][1])
+        self.assertIn("--field", seen[0])
+        self.assertIn("--adapter", seen[0])
+        keys = {h["key"]: h["value"] for h in step.headlines}
+        self.assertEqual(keys["livepicture.adapter"], "Example GPU")
+        self.assertEqual(keys["livepicture.roto_drag.first_picture_s"], 0.21)
+        self.assertEqual(keys["livepicture.tier4_playback.fps"], 22.5)
+        self.assertIn("bench_live_picture", [name for name, _, _ in field_report.STEPS])
+
     def test_every_headline_baseline_names_a_source(self):
         for key, (value, unit, source) in field_report.BASELINES.items():
             self.assertGreater(value, 0, key)

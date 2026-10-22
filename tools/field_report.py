@@ -504,6 +504,29 @@ def step_render_mode(ctx, step):
         step.status, step.reason = "failed", "the benchmark wrote no JSON"
 
 
+def step_live_picture(ctx, step):
+    """Field-machine interaction timings; these are reported as observations, with no RTX target claim."""
+    json_path = ctx.work / "live-picture.json"
+    result = run_command([PY, "tools/live_picture_bench.py", "--field", json_path,
+                          "--adapter", ctx.label], ctx.log("bench-live-picture"), 1800)
+    finish_command(step, ctx, result, "bench-live-picture")
+    if json_path.exists():
+        data = read_json(json_path)
+        step.data = data
+        machine = data.get("adapter_info") or {}
+        step.number("livepicture.adapter", f"live-picture adapter ({machine.get('backend', 'unknown')} backend)",
+                    machine.get("name", ctx.label), "adapter")
+        for row in data.get("results", []):
+            series = row.get("series", "interaction")
+            for key, label, unit in (("first_picture_s", "first picture", "s"),
+                                     ("settle_s", "settle", "s"), ("fps", "playback", "fps")):
+                value = row.get(key)
+                if value is not None:
+                    step.number(f"livepicture.{series}.{key}", f"Live picture {series}: {label}", value, unit)
+    elif step.status == "ok":
+        step.status, step.reason = "failed", "the benchmark wrote no JSON"
+
+
 def step_hot_pour(ctx, step):
     json_path = ctx.work / "hot-pour.json"
     if ctx.quick:
@@ -649,6 +672,7 @@ STEPS = [
     ("bench_pathtrace", "GPU path tracer", "step_pathtrace"),
     ("bench_render", "Portable final render", "step_render"),
     ("bench_render_mode", "Render mode: first look and edit latency", "step_render_mode"),
+    ("bench_live_picture", "Live picture: drag, scrub and playback", "step_live_picture"),
     ("bench_instances", "Instances", "step_instances"),
     ("bench_hot_pour", "Hot pour (bake and preview playback)", "step_hot_pour"),
     ("sdxl", "SDXL ControlNet on the demo shot", "step_sdxl"),
