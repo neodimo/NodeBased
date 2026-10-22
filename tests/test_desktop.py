@@ -1922,14 +1922,42 @@ class DecodeAheadPlaybackTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_playback_warms_the_decode_pool_within_its_memory_bound(self):
+        from unittest.mock import patch
+
         w = self.window
         # Exercise the full-resolution path too; this is the common 1080p playback tier.
         w.proxy.setCurrentIndex(w.proxy.findData(1))
-        w.toggle_playback(True)
-        self.assertTrue(wait_until(lambda: w.decode_pool.stats()['entries'] > 0))
+        w.playback_proxy.setChecked(False)
+        original_prefetch = w.tile_executor.prefetch_reads
+        with patch.object(w.tile_executor, 'prefetch_reads', wraps=original_prefetch) as prefetch:
+            w.toggle_playback(True)
+            self.assertTrue(wait_until(lambda: w.decode_pool.stats()['entries'] > 0))
+            self.assertTrue(prefetch.call_args_list)
+            self.assertTrue(all(len(call.args[2]) == 1 for call in prefetch.call_args_list),
+                            'full-resolution playback should warm only its next frame')
         stats = w.decode_pool.stats()
         self.assertLessEqual(stats['bytes'], w.decode_pool.budget)
         w.toggle_playback(False)
+
+    def test_playback_does_not_prefetch_reads_for_cached_future_frames(self):
+        from unittest.mock import patch
+
+        w = self.window
+        w.proxy.setCurrentIndex(w.proxy.findData(1))
+        w.playback_proxy.setChecked(False)
+        document = w.dispatcher.document
+        target = document.get('view')
+        future = 2
+        key = DisplayCache.key(document, target, future, 1)
+        w.display_cache.put(key, np.zeros((1, 1, 4), np.float32), None)
+        with patch.object(w, 'future_frames', return_value=[future]), \
+             patch.object(w.tile_executor, 'prefetch_reads') as prefetch:
+            w.playing = True
+            w.request_preview(playhead_only=True)
+            w.timer.stop()
+            w.preview_queue.cancel()
+            w.playing = False
+        prefetch.assert_not_called()
 
     def test_a_plain_playhead_tick_does_not_bump_the_epoch(self):
         w = self.window

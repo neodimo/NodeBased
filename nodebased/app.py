@@ -14049,7 +14049,11 @@ class Window(QMainWindow):
         # graph frames on this single preview worker can hold the next visible frame behind a
         # hundreds-of-milliseconds Roto miss, even when that frame is already in DisplayCache.
         future = ()
-        decode_ahead = self.future_frames(frame) if self.playing else ()
+        # Full-resolution evaluation cannot keep up with the nominal 24 fps playhead on the
+        # measured graph; warming three future frames queued substantial reads for frames the
+        # viewer skipped. One UHD frame is enough lead time for the reader pool. Proxy playback
+        # remains cheap enough to retain the wider three-frame lead.
+        decode_ahead = self.future_frames(frame, count=1 if tier == 1 else 3) if self.playing else ()
         viewport = None
         # A first preview, or one whose source canvas just changed size, has no scene extent
         # worth clamping against: request the complete data window so the first frame establishes
@@ -14098,7 +14102,12 @@ class Window(QMainWindow):
         # rasters. Benchmark the normal tier too: the earlier tier-1 restriction left the
         # largest measured decode cost on the serial preview worker.
         if target and decode_ahead:
-            self.tile_executor.prefetch_reads(snapshot, target, decode_ahead)
+            # A warm scene-linear frame already owns its Read result downstream; decoding those
+            # same future sources again only competes with cached playback for memory bandwidth.
+            decode_ahead = [future for future in decode_ahead
+                            if not self._selected_tier_is_cached(snapshot, target, future, tier)]
+            if decode_ahead:
+                self.tile_executor.prefetch_reads(snapshot, target, decode_ahead)
         # The normal 35 ms coalescing window is useful for paused property edits. A live drag
         # already has its own gesture cadence and needs the first coarse picture promptly.
         self.timer.start(0 if self.playing or live_preview else 35)
