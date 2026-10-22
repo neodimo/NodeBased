@@ -16,6 +16,7 @@ from nodebased.core import load_document
 from nodebased.imaging import to_qimage as _to_qimage
 from nodebased.tileexec import SUPPORTED_TILED_KINDS, _all_ancestors
 from nodebased import groups
+from nodebased import media as media_module, paint as paint_module
 
 comp, output, duration, adapter = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4]
 timeline=[]; profiles={}; lock=threading.Lock(); first_drag_move=[None]
@@ -89,6 +90,27 @@ def evaluate(document,target=None,*a,**k):
          elapsed_ms=round((time.perf_counter()-start)*1000,3),fallback=False,reason=None)
     return result
 win.evaluator.evaluate=evaluate
+original_read_media_raster = media_module.read_media_raster
+def read_media_raster(*a, **k):
+    started = time.perf_counter()
+    mark('source_decode_start', thread=threading.current_thread().name)
+    try:
+        return original_read_media_raster(*a, **k)
+    finally:
+        mark('source_decode_end', elapsed_ms=round((time.perf_counter() - started) * 1000, 3),
+             thread=threading.current_thread().name)
+media_module.read_media_raster = read_media_raster
+original_paint_rasterise = paint_module.rasterise
+def paint_rasterise(*a, **k):
+    started = time.perf_counter()
+    frame = a[2] if len(a) > 2 else k.get('frame')
+    mark('paint_rasterise_start', frame=frame, thread=threading.current_thread().name)
+    try:
+        return original_paint_rasterise(*a, **k)
+    finally:
+        mark('paint_rasterise_end', elapsed_ms=round((time.perf_counter() - started) * 1000, 3),
+             frame=frame, thread=threading.current_thread().name)
+paint_module.rasterise = paint_rasterise
 original_supports=win.tile_executor.supports_tiled
 def supports(document,target):
     result=original_supports(document,target)
@@ -124,6 +146,12 @@ def cache_get(*a,**k):
     mark('display_cache_lookup_start'); value=original_cache_get(*a,**k)
     mark('display_cache_lookup_end',hit=value is not None); return value
 win.display_cache.get=cache_get
+original_decode_get=win.decode_pool.get
+def decode_get(key):
+    value=original_decode_get(key)
+    mark('decode_ahead_lookup',hit=value is not None)
+    return value
+win.decode_pool.get=decode_get
 def traced_qimage(*a,**k):
     mark('to_qimage_start'); result=_to_qimage(*a,**k); mark('to_qimage_end'); return result
 app_module.to_qimage=traced_qimage

@@ -113,7 +113,7 @@ class DecodeAheadPool:
     def request(self, key, decode_fn):
         """Ensure `key` is resident or being decoded. Fire-and-forget: this is read-ahead, not
         a request for the pixels themselves, so it never blocks the caller and returns nothing.
-        `decode_fn` takes no arguments, returns an array, and runs only on this pool's own
+        `decode_fn` takes no arguments, returns an array or immutable Raster, and runs only on this pool's own
         worker threads -- never on the caller's thread."""
         with self._lock:
             if self._shutdown:

@@ -212,7 +212,7 @@ def _compute_node_digests(document, tier, frame, solve=None):
     return hashes
 
 
-def _all_ancestors(document, target):
+def _all_ancestors(document, target, include_optional=False):
     """Yield every ancestor of `target` reachable through evaluated inputs.
 
     Disabled nodes pass through to their first input; Switch nodes only traverse the selected
@@ -248,6 +248,8 @@ def _all_ancestors(document, target):
                     stack.append(src)
             continue
         slots = list(SPECS[kind]["inputs"])
+        if include_optional:
+            slots.extend(SPECS[kind].get("optional_inputs", ()))
         for s in slots:
             src = node["inputs"].get(s)
             if src is not None:
@@ -495,10 +497,11 @@ class TileExecutor:
     def prefetch_reads(self, document, target, frames):
         """Fire-and-forget decode-ahead for every Read ancestor of `target`, at each of `frames`.
 
-        No-op without a `decode_pool`. Only the source decode runs early; graph evaluation, tile
+        No-op without a `decode_pool`. Only source decoding runs early; graph evaluation, tile
         compose and the display transform still happen on the single preview worker when that
         frame is actually requested, so ordering and cancellation for the *displayed* result are
-        completely unaffected -- this only warms `_generator_tile`'s decode lookup ahead of time.
+        unaffected. Both `_generator_tile` and the full-frame Evaluator can consume the warmed
+        immutable Raster.
         """
         if self.decode_pool is None or not frames:
             return
@@ -507,7 +510,7 @@ class TileExecutor:
             base = resolve_document(document, int(frames[0]))
         except Exception:
             return
-        read_ids = [node_id for node_id in _all_ancestors(base, target)
+        read_ids = [node_id for node_id in _all_ancestors(base, target, include_optional=True)
                    if base["nodes"][node_id]["type"] == "Read"]
         if not read_ids:
             return
@@ -527,7 +530,11 @@ class TileExecutor:
                 def decode_fn(p=params, f=frame):
                     p = dict(p)
                     p["frame"] = f
-                    return imaging.read_image(**p)
+                    raster = imaging.read_image_raster(**p)
+                    raster.pixels.flags.writeable = False
+                    for layer in (raster.layers or {}).values():
+                        layer.pixels.flags.writeable = False
+                    return raster
 
                 self.decode_pool.request(key, decode_fn)
 
@@ -925,7 +932,7 @@ class TileExecutor:
             elif tile_kind_reads_files(kind):
                 cached_decode = (self.decode_pool.get(_read_decode_key(params, frame))
                                  if kind == "Read" and self.decode_pool is not None else None)
-                if cached_decode is not None and kind == "Read" and not _read_has_named_layers(params, frame):
+                if cached_decode is not None and kind == "Read":
                     raster = None
                 elif kind == "ReadBundle":
                     from .bundle import read_bundle_raster
@@ -934,10 +941,14 @@ class TileExecutor:
                     raster = self.evaluator.evaluate_raster(document, node_id, frame=frame, tier=tier)
                 else:
                     raster = imaging.read_image_raster(**params, frame=frame)
-                full = np.asarray(cached_decode if cached_decode is not None else raster.pixels,
+                cached_raster = cached_decode if hasattr(cached_decode, "pixels") else None
+                full = np.asarray(cached_raster.pixels if cached_raster is not None
+                                  else cached_decode if cached_decode is not None else raster.pixels,
                                   dtype=np.float32)
+                layer_source = cached_raster if cached_raster is not None else raster
                 full_layers = ({name: np.asarray(value.pixels, dtype=np.float32)
-                                for name, value in (raster.layers or {}).items()} if raster is not None else {})
+                                for name, value in (layer_source.layers or {}).items()}
+                               if layer_source is not None else {})
                 if int(tier) != 1:
                     full = Evaluator._decimate(full, int(tier))
                     full_layers = {name: Evaluator._decimate(arr, int(tier))

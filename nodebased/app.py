@@ -8442,6 +8442,7 @@ class Window(QMainWindow):
         # decodepool.py. Decode shares no state with the single-owner Evaluator/TileCache above,
         # so it is safe to run several of these in parallel while the preview worker stays single.
         self.decode_pool = DecodeAheadPool()
+        self.evaluator.decode_pool = self.decode_pool
         # Preview takes the tile path when every upstream node supports it. The executor reports
         # an explicit fallback for unsupported graphs; export remains the reference evaluator.
         self.tile_executor = TileExecutor(

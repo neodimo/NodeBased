@@ -549,6 +549,9 @@ class Evaluator:
         if shared_budget is not None:
             shared_budget.register(shared_name, self)
         self.disk = cachetier.DiskCache(enabled=False) if disk is None else disk
+        # Optional bounded source decode-ahead cache installed by the desktop app. The evaluator
+        # remains single-owner; only the immutable decoded Raster is shared across threads.
+        self.decode_pool = None
         self.cache = OrderedDict()
         self.bytes = 0
         # Roto coverage is independent of the connected plate's frame. Keep a separate bounded
@@ -2665,9 +2668,16 @@ class Evaluator:
                             raise ValueError(f'{node["name"]}: {params["message"]}')
                         raster = source
                     else:
-                        raster = self._windowed_kernel(
-                            kind, params, images, frame, data, cancel=cancel, progress=self,
-                            roto_rasterizer=(self._roto_matte if kind == "Roto" else None))
+                        cached_read = None
+                        if kind == "Read" and self.decode_pool is not None:
+                            from .tileexec import _read_decode_key
+                            cached_read = self.decode_pool.get(_read_decode_key(params, frame))
+                        if kind == "Read" and isinstance(cached_read, Raster):
+                            raster = cached_read
+                        else:
+                            raster = self._windowed_kernel(
+                                kind, params, images, frame, data, cancel=cancel, progress=self,
+                                roto_rasterizer=(self._roto_matte if kind == "Roto" else None))
                     if raster.meta is None and not any(raster is image for image in images):
                         raster.meta = _inherited_metadata(kind, images)
                 if tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:

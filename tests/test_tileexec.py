@@ -595,10 +595,30 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
         write_png(path, np.full((64, 128, 4), 0.5, np.float32))
         return path
 
+    def _optional_roto_view_document(self, path):
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Read", "id": "r", "params": {"path": str(path)}})
+        d.execute({"op": "create", "type": "Roto", "id": "roto", "params": {}})
+        d.execute({"op": "create", "type": "Viewer", "id": "v", "params": {}})
+        d.execute({"op": "connect", "id": "roto", "input": "bg", "source": "r"})
+        d.execute({"op": "connect", "id": "v", "input": "image", "source": "roto"})
+        return d.document
+
     def test_prefetch_reads_warms_the_pool_for_every_read_ancestor(self):
         with tempfile.TemporaryDirectory() as temp:
             document = _read_view_document(self._plate(temp))
             pool = DecodeAheadPool(max_workers=2, budget_bytes=50_000_000)
+            executor = TileExecutor(decode_pool=pool)
+            try:
+                executor.prefetch_reads(document, "v", [1])
+                self.assertTrue(_wait_for(lambda: pool.stats()["entries"] == 1))
+            finally:
+                pool.shutdown()
+
+    def test_prefetch_reads_traverses_optional_roto_background(self):
+        with tempfile.TemporaryDirectory() as temp:
+            document = self._optional_roto_view_document(self._plate(temp))
+            pool = DecodeAheadPool(max_workers=1, budget_bytes=50_000_000)
             executor = TileExecutor(decode_pool=pool)
             try:
                 executor.prefetch_reads(document, "v", [1])
@@ -630,6 +650,24 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
             finally:
                 pool.shutdown()
 
+    def test_full_evaluator_consumes_warmed_raster_decode(self):
+        with tempfile.TemporaryDirectory() as temp:
+            document = _read_view_document(self._plate(temp))
+            pool = DecodeAheadPool(max_workers=1, budget_bytes=50_000_000)
+            evaluator = Evaluator()
+            evaluator.decode_pool = pool
+            executor = TileExecutor(decode_pool=pool)
+            try:
+                executor.prefetch_reads(document, "v", [1])
+                self.assertTrue(_wait_for(lambda: pool.stats()["entries"] == 1))
+                before = pool.hits
+                actual = evaluator.evaluate(document, "v", frame=1, tier=2)
+                self.assertGreater(pool.hits, before)
+                expected = Evaluator().evaluate(document, "v", frame=1, tier=2)
+                np.testing.assert_array_equal(actual, expected)
+            finally:
+                pool.shutdown()
+
     def test_a_cache_miss_falls_back_to_a_normal_decode_and_still_populates_the_tile_cache(self):
         with tempfile.TemporaryDirectory() as temp:
             document = _read_view_document(self._plate(temp))
@@ -656,7 +694,7 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
             try:
                 executor.prefetch_reads(document, "v", [1])
                 self.assertTrue(_wait_for(lambda: pool.stats()["entries"] == 1))
-                old_pixels = pool.get(old_key).copy()
+                old_pixels = pool.get(old_key).pixels.copy()
 
                 # Keep the path and frame fixed while changing both payload/size and mtime.
                 write_png(path, np.full((64, 128, 4), 0.125, np.float32))
@@ -667,7 +705,7 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
 
                 executor.prefetch_reads(document, "v", [1])
                 self.assertTrue(_wait_for(lambda: pool.get(new_key) is not None))
-                new_pixels = pool.get(new_key)
+                new_pixels = pool.get(new_key).pixels
                 self.assertFalse(np.array_equal(old_pixels, new_pixels))
             finally:
                 pool.shutdown()
