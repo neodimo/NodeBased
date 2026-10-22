@@ -39,16 +39,25 @@ class HotPourShotTests(unittest.TestCase):
         self.assertEqual(nodes["liquid"]["params"]["max_size"], 64)
         self.assertEqual(nodes["render"]["params"]["transmission_bounces"], 4)
         self.assertEqual(nodes["render"]["params"]["volume_shadow_density"], 0.0)
-        self.assertEqual(nodes["render"]["params"]["pt_samples"], 64)
-        self.assertEqual(nodes["render"]["params"]["min_samples"], 16)
-        self.assertEqual(nodes["render"]["params"]["max_samples"], 64)
+        self.assertEqual(nodes["render"]["params"]["pt_samples"], 128)
+        self.assertEqual(nodes["render"]["params"]["min_samples"], 32)
+        self.assertEqual(nodes["render"]["params"]["max_samples"], 128)
         self.assertEqual(nodes["render"]["params"]["volume_density_scale"], 1.0)
         key = nodes["key_light"]["params"]
         self.assertEqual(key["light_type"], "Point")
         self.assertEqual(key["intensity"], 3.0)
-        self.assertEqual(nodes["render"]["params"]["ambient"], 2.0)
+        self.assertEqual(nodes["render"]["params"]["ambient"], 3.0)
+        self.assertEqual((key["shadow_blur"], key["shadow_samples"]), (10.0, 8))
+        self.assertFalse(nodes["rim_light"]["params"]["shadows"] == "on")
+        self.assertEqual(nodes["pour_bridge"]["type"], "Cylinder3D")
+        self.assertEqual((nodes["pour_bridge"]["params"]["cyl_radius"],
+                          nodes["pour_bridge"]["params"]["cyl_height"],
+                          nodes["pour_bridge"]["params"]["tz"]), (0.012, 0.34, 0.03))
+        self.assertEqual(nodes["scene"]["inputs"]["object7"], "pour_bridge")
+        self.assertEqual(nodes["spout"]["params"]["src_radius"], 0.03)
+        self.assertEqual((nodes["surface"]["params"]["smoothing"], nodes["surface"]["params"]["roughness"]), (2, 0.06))
         self.assertEqual((nodes["steam_source"]["params"]["src_density"],
-                          nodes["steam_source"]["params"]["src_noise_amount"]), (1.2, 0.35))
+                          nodes["steam_source"]["params"]["src_noise_amount"]), (0.8, 0.12))
         self.assertEqual((nodes["steam_lift"]["params"]["buoyancy_lift"],
                           nodes["steam_lift"]["params"]["strength"]), (0.18, 0.03))
         self.assertEqual(cup["holdout"], "on")

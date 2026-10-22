@@ -86,10 +86,11 @@ def main():
             raise SystemExit("CPU/GPU path-tracer comparison failed")
         return
     doc["nodes"]["render"]["params"].update(
-        render_backend="gpu", width=960, height=540, pt_samples=64,
+        render_backend="gpu", width=960, height=540, pt_samples=128,
         max_bounces=4, diffuse_bounces=2, specular_bounces=2, transmission_bounces=4,
-        volume_shadow_steps=1, volume_shadow_density=0.0, sampling="adaptive", min_samples=16, max_samples=64,
+        volume_shadow_steps=1, volume_shadow_density=0.0, sampling="adaptive", min_samples=32, max_samples=128,
         adaptive_pass_size=8, noise_threshold=0.01)
+    doc["nodes"]["render"]["params"]["denoise"] = "final"
     doc["nodes"]["plate_fit"]["params"].update(width=960, height=540)
     output_dir = Path(__file__).resolve().parents[2] / "docs" / "images" / "hot_pour_shot"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -100,10 +101,16 @@ def main():
         write_png(output_dir / f"hot-pour-{frame:03d}.png", shot)
         render_seconds[str(frame)] = round(time.perf_counter() - before, 2)
         print(json.dumps({"rendered": frame, "elapsed_seconds": render_seconds[str(frame)]}), flush=True)
-    result = {"adapter": args.adapter, "device": str(adapter_name), "cells": 32, "frames": 120,
-              "visual_settings": {"volume_density_scale": 1.0, "key_light": "Point", "ambient": 2.0,
-                                  "steam_source_density": 1.2, "steam_source_noise": 0.35,
-                                  "steam_buoyancy_lift": 0.18, "steam_force_strength": 0.03},
+    result = {"adapter": args.adapter, "device": str(adapter_name),
+              "liquid_cells": int(doc["nodes"]["liquid"]["params"]["max_size"]),
+              "steam_cells": int(doc["nodes"]["steam"]["params"]["max_size"]), "frames": 120,
+              "visual_settings": {"volume_density_scale": 1.0, "key_light": "Point", "ambient": 3.0,
+                                  "key_shadow_blur": 10.0, "key_shadow_samples": 8,
+                                  "spout_radius": 0.03, "surface_smoothing": 2,
+                                  "steam_cells": 64, "steam_source_density": 0.8, "steam_source_noise": 0.12,
+                                  "steam_buoyancy_lift": 0.18, "steam_force_strength": 0.03,
+                                  "continuity_bridge": {"radius": 0.012, "height": 0.34, "camera_z": 0.03},
+                                  "showcase_denoise": "final"},
               "bake_seconds": round(bake_seconds, 2),
               "render_seconds": render_seconds, "comparison": comparisons}
     (run_dir / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")

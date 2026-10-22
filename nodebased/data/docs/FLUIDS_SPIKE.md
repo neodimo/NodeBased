@@ -1642,12 +1642,12 @@ The showcase disables steam cast shadows (the steam volume remains visible) and 
 
 CPU/GPU comparisons passed at frames 1, 60 and 120 on the RTX 3080 Ti and AMD Radeon 8060S. NVIDIA mean absolute errors were 7.03e-9, 1.01e-4 and 5.06e-5; Radeon errors were 7.56e-9, 9.85e-5 and 7.26e-5. Adaptive-sampling and volume-majorant GPU test modules passed on both adapters; llvmpipe checks also passed in the prior Step B validation. The integrated 64-cell/120-frame proxy preview measured earlier baked in 29.7 s, played at 126.89 FPS cold and 134.31 FPS warm, and returned to full detail in 13.4 ms; preview code and settings are unchanged by this finish pass.
 
-**Visual review:** the new frames show a golden liquid column entering the centered open cup, and the more accurate transmission setting restores liquid color. In this view the stream reads as a pour. The steam remains faint, the cup/pool still has sampling speckle, and the tabletop point-light shadow remains hard-edged. Steam cast shadows are disabled for this preset; the geometry shadow and visible steam remain. The A6000 estimate above is still unmeasured, and this Linux machine cannot verify Windows rendering.
+**Visual review:** the fresh replacement frames now show a continuous golden stream from the spout, through the cup opening, down to the pool; the pool is smoother after final denoising. The steam still reads grainy and the table-catcher shadow remains too crisp. The continuity bridge is a narrow liquid cylinder placed in front of the holdout cup so the simulated pour remains visible through the cup silhouette. Steam cast shadows are disabled; the volume remains visible. This pass is PARTIAL on visual softness and the strict under-minute gate.
 
-| Frame | Prior baseline | No steam cast shadows, 4 transmission bounces, adaptive 16–64 |
+| Frame | Prior baseline | Softened key shadow, visible pour bridge, denoised adaptive 32–128 |
 | ---: | --- | --- |
 | 60 | ![Baseline frame 60](images/hot_pour_shot/baseline/hot-pour-060.png) | ![Updated frame 60](images/hot_pour_shot/hot-pour-060.png) |
 | 90 | ![Baseline frame 90](images/hot_pour_shot/baseline/hot-pour-090.png) | ![Updated frame 90](images/hot_pour_shot/hot-pour-090.png) |
 | 120 | ![Baseline frame 120](images/hot_pour_shot/baseline/hot-pour-120.png) | ![Updated frame 120](images/hot_pour_shot/hot-pour-120.png) |
 
-Render profile: `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`; evidence runner output: `benchmarks/hot_pour/hot-pour-shot-2026-10-22.json`; preview: `benchmarks/hot_pour/radeon-preview-64cell-2026-10-22.json`. Windows and A6000 remain unverified.
+Render profile: `benchmarks/hot_pour/hot-pour-render-profile-2026-10-22.json`; evidence runner output: `benchmarks/hot_pour/hot-pour-shot-2026-10-22.json`; preview: `benchmarks/hot_pour/radeon-preview-64cell-2026-10-22.json`. The 960 × 540 fixed-32 profile took 10.69 s; the settled 1080p profile converged every pixel at noise threshold 0.01 in 60.86 s, 0.86 s over the gate. The steam remains grainy and the shadow edge remains sharper than requested.

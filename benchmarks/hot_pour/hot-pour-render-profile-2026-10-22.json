@@ -108,5 +108,120 @@
       "max_noise": 0.009999988851140817,
       "fully_settled": true
     }
+  },
+  "finish2_visual_settings": {
+    "volume_density_scale": 1.0,
+    "key_light": "Point",
+    "ambient": 2.0,
+    "steam_source_density": 1.2,
+    "steam_source_noise": 0.35,
+    "steam_buoyancy_lift": 0.18,
+    "steam_force_strength": 0.03
+  },
+  "finish2_render_mode_1920x1080": {
+    "wall_seconds": 47.122,
+    "path_calls": [
+      {
+        "wall_seconds": 8.0,
+        "backend": "gpu",
+        "sampling": "adaptive",
+        "samples": {
+          "shape": [
+            1080,
+            1920
+          ],
+          "min": 8.0,
+          "mean": 22.52400462962963,
+          "max": 2048.0
+        },
+        "passes": 256,
+        "seconds": 5.0944267029408365,
+        "adapter": "NVIDIA GeForce RTX 3080 Ti / Vulkan (rgba32float)",
+        "converged": {
+          "shape": [
+            1080,
+            1920
+          ],
+          "min": 0.0,
+          "mean": 0.9971214313271605,
+          "max": 1.0
+        },
+        "variance": {
+          "shape": [
+            1080,
+            1920
+          ],
+          "min": 0.0,
+          "mean": 0.00021014979199826861,
+          "max": 0.024107009907281225
+        },
+        "noise": {
+          "shape": [
+            1080,
+            1920
+          ],
+          "min": 0.0,
+          "mean": 0.00038845669442770964,
+          "max": 0.017196696179291045
+        }
+      },
+      {
+        "wall_seconds": 46.271
+      }
+    ],
+    "all_pixels_converged": false,
+    "noise_max": 0.017196696179291045
+  },
+  "finish3_visual_settings": {
+    "key_light": "Point",
+    "ambient": 3.0,
+    "key_shadow_blur": 5.0,
+    "key_shadow_samples": 8,
+    "steam_source_density": 1.2,
+    "steam_source_noise": 0.35
+  },
+  "finish3_render_mode_1920x1080": {
+    "wall_seconds": 47.122,
+    "adaptive_cap": 2048,
+    "converged_pixel_fraction": 0.9971214313,
+    "noise_max": 0.0171966962,
+    "fully_settled": false
+  },
+  "finish4_visual_settings": {
+    "key_light": "Point",
+    "ambient": 3.0,
+    "key_shadow_blur": 10.0,
+    "key_shadow_samples": 8,
+    "rim_light_shadows": false,
+    "spout_radius": 0.03,
+    "surface_smoothing": 2,
+    "surface_roughness": 0.06,
+    "steam_source_density": 0.8,
+    "steam_source_noise": 0.12,
+    "continuity_bridge": {
+      "radius": 0.012,
+      "height": 0.34,
+      "camera_z": 0.03
+    },
+    "showcase_denoise": "final"
+  },
+  "finish4_fixed32_960x540": {
+    "wall_seconds": 10.689,
+    "samples": 32,
+    "fully_under_60_seconds": true
+  },
+  "finish4_render_mode_1920x1080": {
+    "wall_seconds": 60.857,
+    "sampling": "adaptive",
+    "min_samples": 8,
+    "max_samples": 8192,
+    "adaptive_pass_size": 16,
+    "noise_threshold": 0.01,
+    "mean_samples_per_pixel": 53.9603472222,
+    "max_observed_samples": 4824,
+    "converged_pixel_fraction": 1.0,
+    "max_noise": 0.00999999939,
+    "fully_settled": true,
+    "under_60_seconds": false
   }
 }

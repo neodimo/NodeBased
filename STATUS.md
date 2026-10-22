@@ -1,6 +1,6 @@
-# Lane 6 finish 2 — visual polish active (2026-10-22, 4:53 AM PDT)
+# Lane 6 finish 2 — PARTIAL (2026-10-22, 6:20 AM PDT)
 
-Scope: strengthen the steam plume and soften the table shadow in fresh stills while preserving the measured under-60-second 1920 × 1080 converged Render-mode target. Waiting on the shared GPU lock held by Lane 4/Lane 2; no process was interrupted.
+Fresh frame 60/90/120 on the RTX 3080 Ti now show a continuous golden stream from spout to pool and a smoother denoised liquid surface. CPU/GPU comparisons pass. The 960 × 540 fixed-32 profile took 10.689 s. The fully converged 1920 × 1080 profile took 60.857 s (0.857 s over the strict limit). Steam remains grainy and the catcher shadow too crisp. The next candidate (smoke96, turbulence off, broader/fewer shadow samples) passed CPU tests but could not be rendered: the integration suite and Lane 2 GPU gates held the exclusive lock ahead of this work. Lane 6's queued render was canceled at the task time limit; no peer process was interrupted. Evidence in `benchmarks/hot_pour/`, fresh stills in `docs/images/hot_pour_shot/`, and detailed handoff in `TASKLOG.md`.
 
 # Lane 6 finish 1 — local gates complete; external hardware QA unavailable (2026-10-22, 4:15 AM PDT)
 

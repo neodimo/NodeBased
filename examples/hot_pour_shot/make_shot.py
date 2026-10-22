@@ -24,20 +24,27 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
         if op.get("op") == "create" and op.get("id") == "$new:table_top":
             op["params"].update(shadow_catcher="on", sx=1.7, sz=2.2, red=0.28, green=0.17, blue=0.10)
         if op.get("op") == "create" and op.get("id") == "$new:key_light":
-            op["params"].update(light_type="Point", shadows="on", tx=0.9, ty=1.4, tz=1.2, intensity=3.0)
+            op["params"].update(light_type="Point", shadows="on", tx=0.9, ty=1.4, tz=1.2, intensity=3.0,
+                                shadow_blur=10.0, shadow_samples=8)
+        if op.get("op") == "create" and op.get("id") == "$new:rim_light":
+            op["params"].update(shadows="off")
+        if op.get("op") == "create" and op.get("id") == "$new:spout":
+            op["params"].update(src_radius=0.03)
+        if op.get("op") == "create" and op.get("id") == "$new:surface":
+            op["params"].update(smoothing=2, roughness=0.06)
         if op.get("op") == "create" and op.get("id") == "$new:steam_source":
-            op["params"].update(src_density=1.2, src_noise_amount=0.35, src_noise_scale=0.5)
+            op["params"].update(src_density=0.8, src_noise_amount=0.12, src_noise_scale=0.5)
         if op.get("op") == "create" and op.get("id") == "$new:steam_lift":
             op["params"].update(buoyancy_lift=0.18, strength=0.03)
         if op.get("op") == "create" and op.get("id") == "$new:camera":
             op["params"].update(ty=1.15, tz=2.8, target_y=0.0, focal=45.0)
         if op.get("op") == "create" and op.get("id") == "$new:render":
             op["params"].update(render_backend=render_backend, render_mode="pathtrace", samples=2,
-                                pt_samples=64, max_bounces=4, diffuse_bounces=2, specular_bounces=2,
+                                pt_samples=128, max_bounces=4, diffuse_bounces=2, specular_bounces=2,
                                 transmission_bounces=4, volume_density_scale=1.0,
                                 volume_shadow_steps=1, volume_shadow_density=0.0,
-                                ambient=2.0,
-                                sampling="adaptive", min_samples=16, max_samples=64,
+                                ambient=3.0,
+                                sampling="adaptive", min_samples=32, max_samples=128,
                                 adaptive_pass_size=8, noise_threshold=0.01)
         if op.get("op") == "connect" and op.get("id") == "$new:scene" and op.get("input") == "object6":
             continue  # the secondary rim light yields this slot to the foreground holdout
@@ -50,11 +57,13 @@ def build_document(render_size=(960, 540), cells=64, render_backend="gpu"):
             "cyl_radius": 0.12, "cyl_height": 0.30, "cyl_caps": "closed", "tx": 0.0, "ty": 0.15,
             "tz": 0.0, "red": 0.8, "green": 0.9, "blue": 0.95, "alpha": 1.0, "holdout": "on",
             "cast_shadows": "off"}},
-        {"op": "create", "id": "backdrop", "type": "Card3D", "params": {
-            "card_width": 4.0, "card_height": 2.5, "ty": 0.7, "tz": -0.55,
-            "red": 0.16, "green": 0.19, "blue": 0.22, "spec_amount": 0.0}},
+        {"op": "create", "id": "pour_bridge", "type": "Cylinder3D", "params": {
+            "cyl_radius": 0.012, "cyl_height": 0.34, "cyl_caps": "closed", "tx": 0.0, "ty": 0.225,
+            "tz": 0.03, "material": "liquid", "ior": 1.333, "absorption_red": 0.85,
+            "absorption_green": 0.5, "absorption_blue": 0.15, "absorption_distance": 0.08,
+            "roughness": 0.02}},
         {"op": "connect", "id": "scene", "input": "object6", "source": "front_cup"},
-        {"op": "connect", "id": "scene", "input": "object7", "source": "backdrop"},
+        {"op": "connect", "id": "scene", "input": "object7", "source": "pour_bridge"},
     ))
     d = Dispatcher()
     d.execute({"op": "batch", "commands": commands})
