@@ -645,7 +645,7 @@ class RetainedPresenter:
         self.paint_group = None
         self.paint_key = None        # what the texture was painted for; the widget compares before painting again
         self.paint_image = None      # the QImage the paint texture holds (kept to skip an identical upload)
-        self.paint_copies = []       # (buffer, bytes per row, first row, rows, width, texture): overlay bands the next draw copies in
+        self.paint_copies = []       # (buffer, bytes per row, first row, rows, width, texture, first column): overlay bands the next draw copies in
         self.linear_error = ""
         self.uploaded_sequence = 0
         self.last_frame = None       # the ledger payload ("qimage"|"linear", ...) the texture was made from
@@ -1051,7 +1051,7 @@ class RetainedPresenter:
             self.counters["paint_empty"] += 1
             return
         previous = self.paint_image
-        bands = [(0, height)]
+        bands = [(0, height, 0, width)]
         if (previous is not None and (previous.width(), previous.height()) == (width, height)
                 and self.paint_texture is not None):
             before = np.frombuffer(previous.constBits(), np.uint32, count=width * height)
@@ -1065,7 +1065,14 @@ class RetainedPresenter:
             breaks = np.flatnonzero(np.diff(changed) > PAINT_BAND_GAP)
             starts = np.concatenate(([0], breaks + 1))
             ends = np.concatenate((breaks, [changed.size - 1]))
-            bands = [(int(changed[a]), int(changed[b]) - int(changed[a]) + 1) for a, b in zip(starts, ends)]
+            now, then = pixels.reshape(height, width), before.reshape(height, width)
+            bands = []
+            for a, b in zip(starts, ends):
+                first, last = int(changed[a]), int(changed[b])
+                # ... and within a band only the columns that differ: a tier badge is a hundred texels wide, and over
+                # the eGPU the staging buffer costs the Qt thread about 4 ms a megabyte (10/22).
+                columns = np.flatnonzero((now[first:last + 1] != then[first:last + 1]).any(axis=0))
+                bands.append((first, last - first + 1, int(columns[0]), int(columns[-1]) - int(columns[0]) + 1))
         elif self.paint_texture is None or self.paint_texture.size[:2] != (width, height):
             self.ledger.retire(self.paint_texture)
             self.paint_texture = self.device.create_texture(
@@ -1077,17 +1084,19 @@ class RetainedPresenter:
                          {"binding": 1, "resource": {"buffer": self.paint_flags, "offset": 0, "size": 16}}])
         line = image.bytesPerLine()
         whole = memoryview(image.constBits())
-        for first_row, rows in bands:
+        for first_row, rows, first_column, columns in bands:
             # Recorded into the next draw's own command buffer (a copy from a small buffer), not sent with
             # `queue.write_texture`: over the eGPU a queue write issued right after the last draw's picture copy
             # held the Qt thread for the length of that copy (about 8 ms of CPU a call, 10/22).
-            padded = padded_row(width, 4)
+            padded = padded_row(columns, 4)
             staged = np.zeros((rows, padded), np.uint8)
-            staged[:, :width * 4] = np.frombuffer(whole[first_row * line:(first_row + rows) * line], np.uint8,
-                                                  count=rows * line).reshape(rows, line)[:, :width * 4]
+            staged[:, :columns * 4] = np.frombuffer(whole[first_row * line:(first_row + rows) * line], np.uint8,
+                                                    count=rows * line).reshape(rows, line)[
+                :, first_column * 4:(first_column + columns) * 4]
             buffer = self.device.create_buffer_with_data(data=staged.tobytes(), usage=self.wgpu.BufferUsage.COPY_SRC)
-            self.paint_copies.append((buffer, padded, first_row, rows, width, self.paint_texture))
+            self.paint_copies.append((buffer, padded, first_row, rows, columns, self.paint_texture, first_column))
             self.counters["paint_upload_rows"] += rows
+            self.counters["paint_upload_texels"] += rows * columns
         self.paint_size = (width, height)
         self.paint_image = image
         self.counters["paint_uploads"] += 1
@@ -1108,10 +1117,10 @@ class RetainedPresenter:
         self.stage_pending()
         encoder = self.device.create_command_encoder()
         copies, self.paint_copies = self.paint_copies, []
-        for buffer, line, first_row, rows, width, texture in copies:
+        for buffer, line, first_row, rows, width, texture, first_column in copies:
             encoder.copy_buffer_to_texture(
                 {"buffer": buffer, "offset": 0, "bytes_per_row": line, "rows_per_image": rows},
-                {"texture": texture, "mip_level": 0, "origin": (0, first_row, 0)}, (width, rows, 1))
+                {"texture": texture, "mip_level": 0, "origin": (first_column, first_row, 0)}, (width, rows, 1))
             self.ledger.retire(buffer)
         slot = self.ring.take_newest()
         if slot is not None and slot["sequence"] > self.uploaded_sequence:

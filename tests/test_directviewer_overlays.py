@@ -519,6 +519,25 @@ class CardPaintTests(unittest.TestCase):
         self.assertEqual(self.presenter.counters["paint_upload_rows"] - rows, 4)
         self.assertEqual(tuple(self.context.read()[41, 31, :3]), (255, 0, 0))
 
+    def test_only_the_changed_columns_of_a_band_go_up_and_the_picture_is_right(self):
+        self.presenter.draw(self.view, self.context.size)
+        plain = self.context.read().copy()
+        self.presenter.set_paint(self.paint(self.mark(30, 40)), "a")        # the first image goes up whole
+        self.presenter.draw(self.view, self.context.size)
+        texels = self.presenter.counters["paint_upload_texels"]
+        self.presenter.set_paint(self.paint(lambda i: (self.mark(30, 41)(i), self.mark(120, 41)(i))), "b")
+        self.presenter.draw(self.view, self.context.size)
+        # rows 40..43 at columns 30..33 changed, and (a second mark) rows 41..43 at columns 120..123: one band of
+        # 4 rows spanning columns 30..123 is the upload, not the surface's width
+        sent = self.presenter.counters["paint_upload_texels"] - texels
+        self.assertLessEqual(sent, 4 * 94)
+        self.assertGreater(sent, 0)
+        shown = self.context.read()
+        self.assertEqual(tuple(shown[42, 31, :3]), (255, 0, 0))
+        self.assertEqual(tuple(shown[42, 121, :3]), (255, 0, 0))
+        self.assertEqual(tuple(shown[40, 31, :3]), tuple(plain[40, 31, :3]))        # the old top row is clear
+        self.assertEqual(tuple(shown[42, 80, :3]), tuple(plain[42, 80, :3]))      # between the marks nothing was drawn
+
     def test_recovery_forgets_the_paint_so_it_is_painted_again(self):
         self.presenter.set_paint(self.paint(lambda i: None), "k")
         self.presenter.recover("test")

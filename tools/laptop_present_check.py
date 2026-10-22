@@ -71,7 +71,9 @@ def parse_args(argv=None):
     p.add_argument("--edit-drags", type=int, default=25, help="drags per handle for --edit and --paused")
     p.add_argument("--paused", action="store_true",
                    help="time paused edits (Viewer against the direct picture) and the wipe drag on the card")
-    p.add_argument("--paused-edits", type=int, default=40, help="timed edits per path for --paused")
+    p.add_argument("--paused-edits", type=int, default=25, help="timed edits per path and round for --paused")
+    p.add_argument("--paused-rounds", type=int, default=3,
+                   help="rounds of Viewer-then-direct for --paused (the gate reads the pooled edits)")
     p.add_argument("--read", metavar="DIR", help="print the summary of a finished run or matrix folder and exit")
     a = p.parse_args(argv)
     if a.seconds < 10 or a.seconds > 120:
@@ -196,7 +198,7 @@ def run_paused(a, out):
     env["NODEBASED_DIRECT_ADAPTER"] = "discrete" if a.preference == "high-performance" else "integrated"
     tools = Path(__file__).resolve().parent
     raws = {}
-    steps = (("cost", "viewer_direct_bench.py", ["--paused", "--edits", str(a.paused_edits), "--out"]),
+    steps = (("cost", "viewer_direct_bench.py", ["--paused", "--edits", str(a.paused_edits), "--rounds", str(a.paused_rounds), "--out"]),
              ("wipe", "viewer_direct_edit.py", None))
     codes = {}
     for name, script, extra in steps:
