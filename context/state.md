@@ -1,5 +1,25 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:22 PM on 2026-10-22 PDT)
+
+`main` moved `219263f7` -> `873cc57b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `873cc57b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1312.log`, started 1:12 PM): **Ran 5819 tests in 483.785 s, OK (skipped=20), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step B of 3: the Direct picture shows the true float picture at rest, and the A/B compare runs on the card (finish 1).** Commits:
+  - `da9e17f3` Docs: outline in the picture pass and the tier badge from a cached texture; paused cost figures redone (RTX no B 13 percent less, wipe 43 percent less; laptop stand-in 28 and 53 to 55 percent less)
+  - `22c4132a` Direct picture: the format outline is drawn inside the picture pass, and the tier badge comes from a texture the card keeps per label, so a tier change repaints no overlay; the overlay tests that relied on the badge now use a region of interest
+  Diff: 10 files changed, 7247 insertions(+), 59 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (1:02 PM on 2026-10-22 PDT)
 
 `main` moved `031f9394` -> `b9fc0920` (lane commits cherry-picked onto main in lane order) and then to this
