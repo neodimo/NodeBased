@@ -1197,6 +1197,13 @@ def render(state, scene, camera, width, height, background, ambient,
             persistent = [upload(data, wgpu.BufferUsage.STORAGE) for data in (attrs, table, texels)]
             caster_buffer = upload(caster_data, wgpu.BufferUsage.STORAGE)
             pipeline = _pipeline(state)
+            # One ray buffer for every band of rows: making and filling a new one per band cost 28 ms each (43 bands of a 1080p
+            # frame at two samples), 1.2 s of the 3 s a still frame of the mixed mesh and splat scene took on the RTX 3080 Ti.
+            io_buffer = None
+            if not layered:
+                io_buffer = device.create_buffer(size=rows*iw*64,
+                    usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC | wgpu.BufferUsage.COPY_DST)
+                resources.append(io_buffer)
             for y0 in range(0, ih, rows):
                 raytrace._cancel(cancel)
                 y1 = min(ih, y0+rows)
@@ -1218,7 +1225,8 @@ def render(state, scene, camera, width, height, background, ambient,
                         resources.append(io)
                         device.queue.write_buffer(io, 0, raw)
                     else:
-                        io = upload(raw, wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
+                        io = io_buffer
+                        device.queue.write_buffer(io, 0, raw)
                     uniform = upload(params, wgpu.BufferUsage.UNIFORM)
                     bindings = [*triangles.buffers, *persistent, io, uniform, caster_buffer]
                     group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
@@ -1232,7 +1240,7 @@ def render(state, scene, camera, width, height, background, ambient,
                         rgb, alpha = resolver.resolve(y0, y1, io, n*4, cancel)
                         result[y0:y1, :, :3], result[y0:y1, :, 3] = rgb, alpha
                         continue
-                    raw_read = np.frombuffer(device.queue.read_buffer(io), 'f4').reshape(n, 4, 4)
+                    raw_read = np.frombuffer(device.queue.read_buffer(io, 0, n*64), 'f4').reshape(n, 4, 4)
                     read = raw_read[:, 2]
                     if mesh_depth is not None:
                         mesh_depth[y0:y1] = raw_read[:, 3, 0].reshape(y1-y0, iw)
