@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step A of 2: an edit to the Hot pour shows its re-simulated first frames within a second, Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
+
+- **What was done:** `main` `6e5c5d12` -> `e4679e89` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `e4679e89`: Ran 5974 tests in 488.078 s, OK (skipped=32), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the Hot pour settles in under a minute (finish 2: the catcher shadow off the CPU), Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
 
 - **What was done:** `main` `09dd7655` -> `31880d7a` plus this docs commit. Evidence and per-lane commit

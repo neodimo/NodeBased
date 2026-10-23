@@ -1,5 +1,37 @@
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (5:32 PM on 2026-10-22 PDT)
+
+`main` moved `6e5c5d12` -> `e4679e89` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e4679e89` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1714.log`, started 5:14 PM): **Ran 5974 tests in 488.078 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step A of 2: an edit to the Hot pour shows its re-simulated first frames within a second.** Commits:
+  - `a6c999bc` Record warmed RTX fluid edit phase profile
+  - `4906f13c` Record Lane 6 edit resimulation handoff
+  - `29b8ce03` Record warmed Radeon edit profiles
+  - `4d39bb61` Record warmed RTX fluid edit timings
+  - `df851556` Warm upstream caches before edit timing
+  - `e121a26f` Profile edit bake phases and record Radeon gate
+  - `d4ba9b69` Record Hot pour edit re-simulation profiles
+  - `8879481e` Add Hot pour edit benchmark harness
+  - `5407fd6e` Expose completed simulation frames during baking
+  Diff: 18 files changed, 2445 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (finish 1).** Commits:
+  - `14d2e2b4` Record fractional Transform playback follow-up
+  - `2af1ec65` Optimize fractional horizontal Transform resampling
+  Diff: 8 files changed, 20622 insertions(+), 15 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (4:22 PM on 2026-10-22 PDT)
 
 `main` moved `09dd7655` -> `31880d7a` (lane commits cherry-picked onto main in lane order) and then to this
