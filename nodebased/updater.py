@@ -26,10 +26,14 @@ MAX_DOWNLOAD = 1024 * 1024 * 1024
 
 
 def version_tuple(version):
-    match = re.fullmatch(r'v?(\d+)\.(\d+)\.(\d+)', version)
+    # Preview builds (DiMo 10/23) are "X.Y.Z-preview.N" and sort below the stable X.Y.Z, so a preview
+    # install is offered the stable release that follows it. Previews are GitHub pre-releases, which
+    # releases/latest never returns, so stable installs never see them.
+    match = re.fullmatch(r'v?(\d+)\.(\d+)\.(\d+)(?:-preview\.(\d+))?', version)
     if not match:
         raise ValueError('Unsupported release version')
-    return tuple(map(int, match.groups()))
+    major, minor, patch, preview = match.groups()
+    return (int(major), int(minor), int(patch), 0 if preview else 1, int(preview or 0))
 
 
 @dataclass(frozen=True)

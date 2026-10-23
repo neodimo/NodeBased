@@ -41,6 +41,11 @@ class UpdateTests(unittest.TestCase):
         self.assertIsNone(select_release(metadata('0.1.0'), '0.2.0', 'linux'))
         self.assertTrue(select_release(metadata(system='win32'), '0.1.0', 'win32').name.endswith('setup.exe'))
 
+    def test_preview_install_is_offered_the_stable_release_that_follows_it(self):
+        self.assertEqual(select_release(metadata('0.43.0'), '0.43.0-preview.2', 'linux').version, '0.43.0')
+        self.assertEqual(select_release(metadata('0.43.0'), '0.42.1-preview.1', 'linux').version, '0.43.0')
+        self.assertIsNone(select_release(metadata('0.42.1'), '0.43.0-preview.1', 'linux'))
+
     def test_reject_incomplete_untrusted_or_prerelease(self):
         for change in ('url', 'digest', 'missing', 'prerelease'):
             data = metadata()

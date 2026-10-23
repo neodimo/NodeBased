@@ -38,7 +38,11 @@ jobs:
         run: |
           if (!(Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe')) { choco install nsis -y --no-progress }
       - run: python -m pip install ".[gpu,usd]" pyinstaller==6.19.0
+      # Preview tags (vX.Y.Z-preview.N, DiMo 10/23) skip the full test run: they exist to put the latest main in
+      # artists' hands quickly. The packaging smoke tests below still run on both systems. The stable release
+      # that follows each preview runs everything.
       - run: python tools/run_tests.py -v --jobs 4
+        if: ${{ !contains(github.ref_name, '-preview.') }}
       - name: Verify release version
         if: startsWith(github.ref, 'refs/tags/')
         shell: python
@@ -126,4 +130,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           files: release/*
           body_path: release_notes_current.md
+          prerelease: ${{ contains(github.ref_name, '-preview.') }}
+          make_latest: ${{ !contains(github.ref_name, '-preview.') }}
           fail_on_unmatched_files: true
