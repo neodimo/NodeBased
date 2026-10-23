@@ -1,4 +1,0 @@
-cube exit 0
-furnished exit 0
-mixed exit 0
-mixedglass exit 0

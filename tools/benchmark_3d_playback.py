@@ -87,6 +87,9 @@ def parse_args(argv=None):
     p.add_argument("--play-at", default="settled", choices=("settled", "first"),
                    help="when playback starts: after the scene's own pictures are done (settled, the default) or as soon as the first picture "
                         "is on screen, as an artist presses play (first; the refinement still running is cancelled by the play)")
+    p.add_argument("--play-delay", type=float, default=0.0,
+                   help="with --play-at first: seconds to wait after the first picture before pressing play (the refinement that is "
+                        "running by then is what the press has to cancel)")
     p.add_argument("--replay", action="store_true", help="with --first-seconds: stop, rewind to frame 1 and play the first seconds again (warm)")
     p.add_argument("--first-frame-wait", type=float, default=120.0,
                    help="seconds to wait for the stopped first frame before playing (0: play at once; \"mixedglass\" needs it, its stopped "
@@ -301,6 +304,8 @@ def first_seconds_report(times, start, span, budget_ms, events, builds):
     report = {
         "span_s": span, "shown": len(inside), "fps": round(len(inside) / span, 2),
         "first_picture_after_play_ms": round((inside[0] - start) * 1000, 1) if inside else None,
+        # the rate the pictures came at once the first was up: the first picture's own latency is reported apart
+        "fps_between_pictures": round((len(inside) - 1) / (inside[-1] - inside[0]), 2) if len(inside) > 2 and inside[-1] > inside[0] else None,
         "frame_budget_ms": round(budget_ms, 1),
         "shown_at_ms": [round((t - start) * 1000, 1) for t in inside],
         "intervals_ms": [round(v, 1) for v in intervals],
@@ -383,6 +388,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     if args.play_at == "first":
         while not any(t >= t_view for t, _tier in shown_tiers) and time.perf_counter() - t0 < args.first_frame_wait:
             spin(0.005)
+        spin(args.play_delay)
     else:
         while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < args.first_frame_wait:
             spin(0.05)
@@ -392,7 +398,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         first_picture = {"scene_build_s": round(t_view - t_open, 3),
                          "open_to_first_picture_s": round(later[0] - t_open, 3) if later else None,
                          "view_to_first_picture_s": round(later[0] - t_view, 3) if later else None,
-                         "view_to_ready_s": round(time.perf_counter() - t0, 3), "play_at": args.play_at,
+                         "view_to_ready_s": round(time.perf_counter() - t0, 3), "play_at": args.play_at, "play_delay_s": args.play_delay,
                          "builds_before_first_picture": builds.within(t_open, later[0]) if later else {}}
     warm_ms = None
     window.playback_shown_times.clear()
@@ -562,7 +568,7 @@ def main(argv=None):
                    "--fps", str(args.fps), "--backend", args.backend, "--adapter", args.adapter,
                    "--splats", str(args.splats), "--view", args.view, "--samples", str(args.samples), "--out", name]
             cmd += ["--once"] if args.once else []
-            cmd += ["--proxy", args.proxy, "--settle-wait", str(args.settle_wait), "--play-at", args.play_at]
+            cmd += ["--proxy", args.proxy, "--settle-wait", str(args.settle_wait), "--play-at", args.play_at, "--play-delay", str(args.play_delay)]
             cmd += ["--first-seconds", str(args.first_seconds)] if args.first_seconds else []
             cmd += ["--replay"] if args.replay else []
             subprocess.run(cmd, check=False, env=dict(os.environ, PYTHONPATH=str(ROOT)))

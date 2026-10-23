@@ -1,0 +1,5665 @@
+{
+ "scene": "mixedglass",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 6.03,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "platform": "xcb",
+ "display": ":160",
+ "comp_fps": 24.0,
+ "shown": 143,
+ "fps": 23.73,
+ "interval_ms": {
+  "n": 142,
+  "p50": 42.15,
+  "p95": 50.35,
+  "p99": 55.4,
+  "max": 74.2,
+  "mean": 41.92
+ },
+ "render_ms_status": {
+  "n": 27,
+  "p50": 25,
+  "p95": 30,
+  "p99": 32,
+  "max": 32,
+  "mean": 24.41
+ },
+ "dropped": 2,
+ "status": "Evaluating frame 145\u2026",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 143
+ },
+ "fps_at_end_tier": 23.85,
+ "time_row": "real time",
+ "settle_s": null,
+ "settle_status": "Rendering splats  \u00b7  0%  \u00b7  roughly 3 s in total",
+ "worker_jobs": 144,
+ "frame_timeline": {
+  "frames": 142,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 2.666,
+   "setup (region, display cache lookup)": 0.541,
+   "node evaluation": 22.713,
+   "frame waits for conversion (cache put, stage pickup)": 0.25,
+   "display conversion": 0.601,
+   "picture hand-off to the Qt queue": 0.004,
+   "Qt queue delivery": 0.929,
+   "Viewer present": 2.453
+  },
+  "latency_ms": 30.155,
+  "transport_wait_ms": 12.192,
+  "overlap_ms": 0.437,
+  "accounted_interval_ms": 41.91,
+  "interval_ms": 41.91,
+  "sum_of_stage_means_ms": 30.157
+ },
+ "first_seconds": {
+  "cold": {
+   "span_s": 3.0,
+   "shown": 70,
+   "fps": 23.33,
+   "first_picture_after_play_ms": 37.2,
+   "fps_between_pictures": 23.65,
+   "frame_budget_ms": 41.7,
+   "shown_at_ms": [
+    37.2,
+    75.4,
+    110.8,
+    153.1,
+    193.6,
+    236.0,
+    279.7,
+    321.8,
+    363.6,
+    407.3,
+    446.6,
+    487.1,
+    530.9,
+    573.5,
+    615.3,
+    656.8,
+    699.0,
+    745.2,
+    786.2,
+    829.0,
+    880.4,
+    908.6,
+    950.3,
+    993.2,
+    1035.3,
+    1077.9,
+    1120.5,
+    1161.0,
+    1204.4,
+    1251.5,
+    1297.0,
+    1329.2,
+    1372.0,
+    1414.3,
+    1458.2,
+    1492.8,
+    1536.4,
+    1579.6,
+    1621.4,
+    1663.5,
+    1706.6,
+    1751.5,
+    1825.7,
+    1869.1,
+    1911.7,
+    1952.4,
+    1991.5,
+    2032.5,
+    2073.9,
+    2117.1,
+    2158.4,
+    2198.0,
+    2239.5,
+    2284.4,
+    2327.6,
+    2367.0,
+    2403.7,
+    2446.5,
+    2487.6,
+    2530.1,
+    2570.6,
+    2613.1,
+    2653.6,
+    2697.5,
+    2738.7,
+    2782.8,
+    2823.1,
+    2866.5,
+    2911.2,
+    2954.9
+   ],
+   "intervals_ms": [
+    38.2,
+    35.3,
+    42.4,
+    40.5,
+    42.4,
+    43.6,
+    42.1,
+    41.9,
+    43.7,
+    39.3,
+    40.5,
+    43.8,
+    42.6,
+    41.8,
+    41.5,
+    42.2,
+    46.2,
+    41.0,
+    42.8,
+    51.4,
+    28.2,
+    41.7,
+    42.9,
+    42.2,
+    42.6,
+    42.6,
+    40.4,
+    43.4,
+    47.1,
+    45.5,
+    32.2,
+    42.8,
+    42.3,
+    43.8,
+    34.6,
+    43.6,
+    43.2,
+    41.8,
+    42.1,
+    43.1,
+    44.9,
+    74.2,
+    43.5,
+    42.5,
+    40.7,
+    39.1,
+    41.0,
+    41.4,
+    43.2,
+    41.3,
+    39.7,
+    41.5,
+    44.9,
+    43.2,
+    39.4,
+    36.8,
+    42.8,
+    41.1,
+    42.5,
+    40.6,
+    42.5,
+    40.5,
+    43.9,
+    41.1,
+    44.2,
+    40.2,
+    43.4,
+    44.7,
+    43.7
+   ],
+   "interval_max_ms": 74.2,
+   "intervals_over_2x_budget": 0,
+   "worker_frames": [
+    {
+     "frame": 0,
+     "start_ms": 6.8,
+     "whole_ms": 33.0,
+     "stages_ms": {
+      "worker_start to render_begin": 3.5,
+      "render_begin to scene_ready": 9.0,
+      "scene_ready to upload_done": 1.1,
+      "upload_done to submit": 1.3,
+      "submit to gpu_done": 6.5,
+      "gpu_done to readback_done": 4.2,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 1.4,
+      "emit to handover": 5.5
+     },
+     "builds": {
+      "create_buffer": {
+       "count": 22,
+       "total_ms": 0.29,
+       "bytes": 48068400,
+       "slowest_ms": 0.07
+      },
+      "create_buffer_with_data": {
+       "count": 17,
+       "total_ms": 0.85,
+       "bytes": 2709440,
+       "slowest_ms": 0.4
+      },
+      "create_texture": {
+       "count": 15,
+       "total_ms": 0.22,
+       "bytes": 0,
+       "slowest_ms": 0.06
+      },
+      "write_texture": {
+       "count": 11,
+       "total_ms": 0.25,
+       "bytes": 0,
+       "slowest_ms": 0.1
+      },
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.04,
+       "bytes": 1006960,
+       "slowest_ms": 0.03
+      }
+     }
+    },
+    {
+     "frame": 1,
+     "start_ms": 53.0,
+     "whole_ms": 23.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 10.1,
+      "gpu_done to readback_done": 3.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 1.2,
+      "emit to handover": 2.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.18,
+       "bytes": 1006960,
+       "slowest_ms": 0.11
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.11,
+       "bytes": 3202480,
+       "slowest_ms": 0.02
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.28,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 2,
+     "start_ms": 89.7,
+     "whole_ms": 21.6,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 11.0,
+      "gpu_done to readback_done": 2.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 1.1,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 3,
+     "start_ms": 130.6,
+     "whole_ms": 23.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 11.1,
+      "gpu_done to readback_done": 2.8,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.6
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 4,
+     "start_ms": 170.9,
+     "whole_ms": 23.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 11.0,
+      "gpu_done to readback_done": 2.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 5,
+     "start_ms": 213.4,
+     "whole_ms": 23.1,
+     "stages_ms": {
+      "worker_start to render_begin": 1.8,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 12.0,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 6,
+     "start_ms": 255.1,
+     "whole_ms": 25.2,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 1.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 11.8,
+      "gpu_done to readback_done": 2.8,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 1.0,
+       "bytes": 1006960,
+       "slowest_ms": 0.94
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.41,
+       "bytes": 322480,
+       "slowest_ms": 0.2
+      }
+     }
+    },
+    {
+     "frame": 7,
+     "start_ms": 296.7,
+     "whole_ms": 25.6,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 12.1,
+      "gpu_done to readback_done": 3.4,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.8
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 8,
+     "start_ms": 338.8,
+     "whole_ms": 25.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.5,
+      "render_begin to scene_ready": 2.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 12.5,
+      "gpu_done to readback_done": 3.2,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 9,
+     "start_ms": 381.6,
+     "whole_ms": 26.2,
+     "stages_ms": {
+      "worker_start to render_begin": 3.0,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 12.3,
+      "gpu_done to readback_done": 3.3,
+      "readback_done to resolve_done": 0.4,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 1.0,
+      "emit to handover": 3.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 10,
+     "start_ms": 421.1,
+     "whole_ms": 26.0,
+     "stages_ms": {
+      "worker_start to render_begin": 1.7,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 13.4,
+      "gpu_done to readback_done": 3.6,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 3.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 11,
+     "start_ms": 462.9,
+     "whole_ms": 24.8,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 13.1,
+      "gpu_done to readback_done": 2.6,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 3.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.32,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 12,
+     "start_ms": 505.2,
+     "whole_ms": 26.2,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.4,
+      "gpu_done to readback_done": 2.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.15,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.24,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 13,
+     "start_ms": 546.3,
+     "whole_ms": 27.7,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 2.0,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.5,
+      "gpu_done to readback_done": 3.4,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.6
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.11,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 14,
+     "start_ms": 589.2,
+     "whole_ms": 26.7,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 15.2,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 15,
+     "start_ms": 631.0,
+     "whole_ms": 26.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.5,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 15.1,
+      "gpu_done to readback_done": 3.4,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.11,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 16,
+     "start_ms": 672.4,
+     "whole_ms": 27.0,
+     "stages_ms": {
+      "worker_start to render_begin": 2.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.8,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 15.2,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.22,
+       "bytes": 1006960,
+       "slowest_ms": 0.14
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.16,
+       "bytes": 3202480,
+       "slowest_ms": 0.05
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.37,
+       "bytes": 322480,
+       "slowest_ms": 0.14
+      }
+     }
+    },
+    {
+     "frame": 17,
+     "start_ms": 717.8,
+     "whole_ms": 27.9,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 16.1,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 18,
+     "start_ms": 758.9,
+     "whole_ms": 27.8,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 15.8,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.7
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.15,
+       "bytes": 1006960,
+       "slowest_ms": 0.11
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 19,
+     "start_ms": 800.0,
+     "whole_ms": 29.5,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 1.8,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 16.3,
+      "gpu_done to readback_done": 3.4,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.6
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 1.25,
+       "bytes": 1006960,
+       "slowest_ms": 1.17
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.04
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 21,
+     "start_ms": 879.1,
+     "whole_ms": 1.9,
+     "stages_ms": {
+      "worker_start to render_begin": 2.8,
+      "render_begin to scene_ready": 2.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.2,
+      "submit to gpu_done": 16.6,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": -25.9
+     },
+     "builds": {}
+    },
+    {
+     "frame": 22,
+     "start_ms": 922.5,
+     "whole_ms": 28.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.4,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 16.3,
+      "gpu_done to readback_done": 3.5,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 23,
+     "start_ms": 964.2,
+     "whole_ms": 29.5,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 2.6,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 16.9,
+      "gpu_done to readback_done": 2.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 24,
+     "start_ms": 1006.1,
+     "whole_ms": 29.8,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 16.8,
+      "gpu_done to readback_done": 3.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 25,
+     "start_ms": 1048.2,
+     "whole_ms": 30.2,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.9,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 17.5,
+      "gpu_done to readback_done": 2.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.8
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.3,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 26,
+     "start_ms": 1090.9,
+     "whole_ms": 30.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 17.5,
+      "gpu_done to readback_done": 2.8,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 27,
+     "start_ms": 1133.4,
+     "whole_ms": 28.1,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 17.5,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 28,
+     "start_ms": 1174.8,
+     "whole_ms": 30.2,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 18.3,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 1.0,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 29,
+     "start_ms": 1219.0,
+     "whole_ms": 33.0,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 2.6,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 18.9,
+      "gpu_done to readback_done": 2.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 31,
+     "start_ms": 1295.5,
+     "whole_ms": 3.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.6,
+      "render_begin to scene_ready": 1.9,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 21.1,
+      "gpu_done to readback_done": 3.4,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": -28.7
+     },
+     "builds": {}
+    },
+    {
+     "frame": 32,
+     "start_ms": 1342.7,
+     "whole_ms": 29.8,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 18.3,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 2.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 33,
+     "start_ms": 1385.0,
+     "whole_ms": 29.9,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 18.6,
+      "gpu_done to readback_done": 2.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.9,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 34,
+     "start_ms": 1429.0,
+     "whole_ms": 29.7,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 18.1,
+      "gpu_done to readback_done": 3.3,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 35,
+     "start_ms": 1461.4,
+     "whole_ms": 31.9,
+     "stages_ms": {
+      "worker_start to render_begin": 1.8,
+      "render_begin to scene_ready": 1.5,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.5,
+      "submit to gpu_done": 19.0,
+      "gpu_done to readback_done": 4.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.82,
+       "bytes": 3202480,
+       "slowest_ms": 0.26
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 1.4,
+       "bytes": 322480,
+       "slowest_ms": 0.47
+      }
+     }
+    },
+    {
+     "frame": 36,
+     "start_ms": 1505.7,
+     "whole_ms": 31.5,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 17.9,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 4.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 37,
+     "start_ms": 1550.2,
+     "whole_ms": 29.9,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 18.0,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 38,
+     "start_ms": 1592.9,
+     "whole_ms": 29.0,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 17.7,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 39,
+     "start_ms": 1635.2,
+     "whole_ms": 28.8,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 17.7,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.9,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 40,
+     "start_ms": 1676.2,
+     "whole_ms": 31.2,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.6,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 18.1,
+      "gpu_done to readback_done": 3.3,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 1.0,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.32,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 41,
+     "start_ms": 1721.3,
+     "whole_ms": 30.7,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 17.7,
+      "gpu_done to readback_done": 3.5,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.1
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 42,
+     "start_ms": 1796.1,
+     "whole_ms": 30.2,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 18.8,
+      "gpu_done to readback_done": 2.8,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 1.0,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.14,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.24,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 43,
+     "start_ms": 1838.5,
+     "whole_ms": 31.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.9,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 16.8,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 44,
+     "start_ms": 1883.9,
+     "whole_ms": 28.3,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 17.0,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.9,
+      "emit to handover": 2.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.32,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 45,
+     "start_ms": 1924.6,
+     "whole_ms": 28.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 16.3,
+      "gpu_done to readback_done": 2.8,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 46,
+     "start_ms": 1965.2,
+     "whole_ms": 26.8,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.6,
+      "gpu_done to readback_done": 3.3,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.5,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 47,
+     "start_ms": 2005.9,
+     "whole_ms": 27.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.5,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 48,
+     "start_ms": 2047.2,
+     "whole_ms": 27.2,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.9,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.5,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.3,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 49,
+     "start_ms": 2088.9,
+     "whole_ms": 28.7,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.4,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 50,
+     "start_ms": 2130.5,
+     "whole_ms": 28.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.5,
+      "gpu_done to readback_done": 3.5,
+      "readback_done to resolve_done": 1.1,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.5,
+      "emit to handover": 2.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 51,
+     "start_ms": 2171.9,
+     "whole_ms": 26.7,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 15.0,
+      "gpu_done to readback_done": 2.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 52,
+     "start_ms": 2213.8,
+     "whole_ms": 26.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.3,
+      "gpu_done to readback_done": 3.5,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 53,
+     "start_ms": 2258.2,
+     "whole_ms": 26.8,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 14.5,
+      "gpu_done to readback_done": 2.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 54,
+     "start_ms": 2300.8,
+     "whole_ms": 27.4,
+     "stages_ms": {
+      "worker_start to render_begin": 2.5,
+      "render_begin to scene_ready": 2.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.3,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 55,
+     "start_ms": 2340.6,
+     "whole_ms": 26.9,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 13.6,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 1.0,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 56,
+     "start_ms": 2379.9,
+     "whole_ms": 24.3,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 13.4,
+      "gpu_done to readback_done": 2.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.24,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 57,
+     "start_ms": 2421.8,
+     "whole_ms": 25.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 13.6,
+      "gpu_done to readback_done": 3.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.15,
+       "bytes": 3202480,
+       "slowest_ms": 0.05
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.25,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 58,
+     "start_ms": 2464.0,
+     "whole_ms": 24.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 12.5,
+      "gpu_done to readback_done": 3.5,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 2.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.3,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 59,
+     "start_ms": 2505.2,
+     "whole_ms": 25.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 12.7,
+      "gpu_done to readback_done": 2.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.6
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 60,
+     "start_ms": 2546.7,
+     "whole_ms": 24.5,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 13.0,
+      "gpu_done to readback_done": 2.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 61,
+     "start_ms": 2587.9,
+     "whole_ms": 25.7,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.1,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 62,
+     "start_ms": 2629.6,
+     "whole_ms": 24.5,
+     "stages_ms": {
+      "worker_start to render_begin": 1.6,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.1,
+      "gpu_done to readback_done": 2.6,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.16,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 63,
+     "start_ms": 2671.6,
+     "whole_ms": 26.5,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.5,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 13.8,
+      "gpu_done to readback_done": 4.1,
+      "readback_done to resolve_done": 0.3,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.3,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 64,
+     "start_ms": 2713.1,
+     "whole_ms": 26.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.3,
+      "gpu_done to readback_done": 2.7,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.4,
+      "cache_put to emit": 0.8,
+      "emit to handover": 2.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 65,
+     "start_ms": 2755.5,
+     "whole_ms": 28.4,
+     "stages_ms": {
+      "worker_start to render_begin": 2.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.3,
+      "submit to gpu_done": 15.0,
+      "gpu_done to readback_done": 3.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 1.2,
+      "emit to handover": 2.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.24,
+       "bytes": 3202480,
+       "slowest_ms": 0.07
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.34,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 66,
+     "start_ms": 2797.4,
+     "whole_ms": 26.5,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.3,
+      "submit to gpu_done": 15.0,
+      "gpu_done to readback_done": 2.6,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 2.6
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.18,
+       "bytes": 1006960,
+       "slowest_ms": 0.13
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.22,
+       "bytes": 3202480,
+       "slowest_ms": 0.06
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.33,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 67,
+     "start_ms": 2839.8,
+     "whole_ms": 27.7,
+     "stages_ms": {
+      "worker_start to render_begin": 1.6,
+      "render_begin to scene_ready": 1.6,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 2.0,
+      "submit to gpu_done": 15.3,
+      "gpu_done to readback_done": 2.6,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.0,
+      "cache_put to emit": 0.6,
+      "emit to handover": 3.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.21,
+       "bytes": 3202480,
+       "slowest_ms": 0.06
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.58,
+       "bytes": 322480,
+       "slowest_ms": 0.27
+      }
+     }
+    },
+    {
+     "frame": 68,
+     "start_ms": 2881.7,
+     "whole_ms": 30.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.5,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.3,
+      "submit to gpu_done": 15.9,
+      "gpu_done to readback_done": 2.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.1,
+      "cache_put to emit": 1.1,
+      "emit to handover": 4.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.18,
+       "bytes": 3202480,
+       "slowest_ms": 0.06
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.39,
+       "bytes": 322480,
+       "slowest_ms": 0.1
+      }
+     }
+    },
+    {
+     "frame": 69,
+     "start_ms": 2927.8,
+     "whole_ms": 28.0,
+     "stages_ms": {
+      "worker_start to render_begin": 2.4,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.8,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 16.0,
+      "gpu_done to readback_done": 2.8,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.1,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.7
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.31,
+       "bytes": 1006960,
+       "slowest_ms": 0.24
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.24,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    }
+   ],
+   "slowest_worker_frames": [
+    {
+     "frame": 0,
+     "start_ms": 6.8,
+     "whole_ms": 33.0,
+     "top_stage": "render_begin to scene_ready",
+     "builds": {
+      "create_buffer": {
+       "count": 22,
+       "total_ms": 0.29,
+       "bytes": 48068400,
+       "slowest_ms": 0.07
+      },
+      "create_buffer_with_data": {
+       "count": 17,
+       "total_ms": 0.85,
+       "bytes": 2709440,
+       "slowest_ms": 0.4
+      },
+      "create_texture": {
+       "count": 15,
+       "total_ms": 0.22,
+       "bytes": 0,
+       "slowest_ms": 0.06
+      },
+      "write_texture": {
+       "count": 11,
+       "total_ms": 0.25,
+       "bytes": 0,
+       "slowest_ms": 0.1
+      },
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.04,
+       "bytes": 1006960,
+       "slowest_ms": 0.03
+      }
+     }
+    },
+    {
+     "frame": 29,
+     "start_ms": 1219.0,
+     "whole_ms": 33.0,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 35,
+     "start_ms": 1461.4,
+     "whole_ms": 31.9,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.82,
+       "bytes": 3202480,
+       "slowest_ms": 0.26
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 1.4,
+       "bytes": 322480,
+       "slowest_ms": 0.47
+      }
+     }
+    },
+    {
+     "frame": 36,
+     "start_ms": 1505.7,
+     "whole_ms": 31.5,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 40,
+     "start_ms": 1676.2,
+     "whole_ms": 31.2,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.32,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    }
+   ],
+   "builds": {
+    "create_buffer": {
+     "count": 862,
+     "total_ms": 10.26,
+     "bytes": 272242000,
+     "slowest_ms": 0.26
+    },
+    "create_buffer_with_data": {
+     "count": 717,
+     "total_ms": 19.84,
+     "bytes": 25283040,
+     "slowest_ms": 0.47
+    },
+    "create_texture": {
+     "count": 15,
+     "total_ms": 0.22,
+     "bytes": 0,
+     "slowest_ms": 0.06
+    },
+    "write_texture": {
+     "count": 11,
+     "total_ms": 0.25,
+     "bytes": 0,
+     "slowest_ms": 0.1
+    },
+    "write_buffer": {
+     "count": 142,
+     "total_ms": 11.2,
+     "bytes": 71494160,
+     "slowest_ms": 1.17
+    }
+   },
+   "first_picture": {
+    "scene_build_s": 0.011,
+    "open_to_first_picture_s": 0.625,
+    "view_to_first_picture_s": 0.614,
+    "view_to_ready_s": 0.616,
+    "play_at": "first",
+    "play_delay_s": 0.0,
+    "builds_before_first_picture": {
+     "create_texture": {
+      "count": 18,
+      "total_ms": 13.02,
+      "bytes": 0,
+      "slowest_ms": 12.77
+     },
+     "create_shader_module": {
+      "count": 9,
+      "total_ms": 29.72,
+      "bytes": 0,
+      "slowest_ms": 13.6
+     },
+     "create_compute_pipeline": {
+      "count": 1,
+      "total_ms": 12.79,
+      "bytes": 0,
+      "slowest_ms": 12.79
+     },
+     "create_render_pipeline": {
+      "count": 7,
+      "total_ms": 120.43,
+      "bytes": 0,
+      "slowest_ms": 64.31
+     },
+     "create_buffer": {
+      "count": 25,
+      "total_ms": 7.78,
+      "bytes": 9967632,
+      "slowest_ms": 6.37
+     },
+     "create_buffer_with_data": {
+      "count": 20,
+      "total_ms": 8.16,
+      "bytes": 4007072,
+      "slowest_ms": 6.4
+     },
+     "write_texture": {
+      "count": 14,
+      "total_ms": 38.11,
+      "bytes": 0,
+      "slowest_ms": 37.79
+     },
+     "write_buffer": {
+      "count": 2,
+      "total_ms": 0.1,
+      "bytes": 1006960,
+      "slowest_ms": 0.08
+     }
+    }
+   }
+  },
+  "warm": {
+   "span_s": 3.0,
+   "shown": 70,
+   "fps": 23.33,
+   "first_picture_after_play_ms": 25.6,
+   "fps_between_pictures": 23.26,
+   "frame_budget_ms": 41.7,
+   "shown_at_ms": [
+    25.6,
+    68.7,
+    110.0,
+    152.6,
+    192.6,
+    235.2,
+    277.7,
+    320.7,
+    361.7,
+    404.2,
+    445.5,
+    487.9,
+    532.5,
+    573.3,
+    615.8,
+    657.6,
+    698.8,
+    741.1,
+    785.2,
+    827.6,
+    872.7,
+    914.1,
+    956.1,
+    990.7,
+    1034.7,
+    1079.8,
+    1165.7,
+    1212.9,
+    1244.4,
+    1290.1,
+    1340.5,
+    1372.6,
+    1422.1,
+    1455.3,
+    1501.9,
+    1547.0,
+    1578.8,
+    1630.6,
+    1665.9,
+    1715.2,
+    1745.8,
+    1782.6,
+    1825.5,
+    1872.7,
+    1915.6,
+    1958.4,
+    2000.6,
+    2075.9,
+    2118.0,
+    2158.9,
+    2200.2,
+    2241.5,
+    2283.7,
+    2325.8,
+    2366.5,
+    2407.4,
+    2446.2,
+    2488.0,
+    2529.2,
+    2570.1,
+    2613.8,
+    2656.4,
+    2698.0,
+    2738.1,
+    2782.0,
+    2823.8,
+    2865.5,
+    2909.9,
+    2952.0,
+    2991.9
+   ],
+   "intervals_ms": [
+    43.1,
+    41.2,
+    42.6,
+    40.0,
+    42.6,
+    42.5,
+    43.0,
+    41.0,
+    42.5,
+    41.2,
+    42.4,
+    44.6,
+    40.8,
+    42.5,
+    41.7,
+    41.2,
+    42.3,
+    44.1,
+    42.5,
+    45.1,
+    41.3,
+    42.0,
+    34.6,
+    44.0,
+    45.1,
+    85.8,
+    47.2,
+    31.5,
+    45.7,
+    50.4,
+    32.1,
+    49.5,
+    33.2,
+    46.6,
+    45.1,
+    31.8,
+    51.8,
+    35.3,
+    49.3,
+    30.6,
+    36.8,
+    42.9,
+    47.2,
+    42.9,
+    42.7,
+    42.2,
+    75.3,
+    42.2,
+    40.9,
+    41.3,
+    41.3,
+    42.1,
+    42.2,
+    40.7,
+    40.9,
+    38.8,
+    41.8,
+    41.2,
+    40.9,
+    43.6,
+    42.6,
+    41.6,
+    40.2,
+    43.9,
+    41.8,
+    41.7,
+    44.5,
+    42.1,
+    39.8
+   ],
+   "interval_max_ms": 85.8,
+   "intervals_over_2x_budget": 1,
+   "worker_frames": [
+    {
+     "frame": 0,
+     "start_ms": 5.4,
+     "whole_ms": 21.3,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.6,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 8.6,
+      "gpu_done to readback_done": 2.4,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 4.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.04
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.32,
+       "bytes": 322480,
+       "slowest_ms": 0.1
+      }
+     }
+    },
+    {
+     "frame": 1,
+     "start_ms": 46.3,
+     "whole_ms": 23.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.8,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 10.4,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.0,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 2,
+     "start_ms": 87.9,
+     "whole_ms": 23.0,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 10.9,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.1,
+      "emit to handover": 4.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 3,
+     "start_ms": 129.0,
+     "whole_ms": 24.5,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 11.4,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.1,
+      "emit to handover": 4.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.1
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 4,
+     "start_ms": 171.2,
+     "whole_ms": 22.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 10.8,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 2.6
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 5,
+     "start_ms": 213.0,
+     "whole_ms": 23.3,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 11.6,
+      "gpu_done to readback_done": 1.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 6,
+     "start_ms": 254.9,
+     "whole_ms": 23.8,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 11.7,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 7,
+     "start_ms": 297.1,
+     "whole_ms": 24.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 1.0,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 11.5,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 4.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.15,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.3,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 8,
+     "start_ms": 338.8,
+     "whole_ms": 23.9,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 12.0,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.2,
+      "emit to handover": 3.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 9,
+     "start_ms": 380.3,
+     "whole_ms": 24.9,
+     "stages_ms": {
+      "worker_start to render_begin": 1.8,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 12.5,
+      "gpu_done to readback_done": 1.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 10,
+     "start_ms": 422.1,
+     "whole_ms": 24.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 12.9,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.0,
+      "emit to handover": 3.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 11,
+     "start_ms": 463.4,
+     "whole_ms": 25.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.8,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.9,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 13.2,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.7,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.14,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.32,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 12,
+     "start_ms": 507.1,
+     "whole_ms": 26.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.0,
+      "gpu_done to readback_done": 1.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.6,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 13,
+     "start_ms": 548.1,
+     "whole_ms": 26.3,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.4,
+      "gpu_done to readback_done": 1.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 4.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.16,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 14,
+     "start_ms": 590.1,
+     "whole_ms": 26.8,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.5,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 4.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 15,
+     "start_ms": 631.8,
+     "whole_ms": 26.8,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.1,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 16,
+     "start_ms": 673.6,
+     "whole_ms": 26.3,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.5,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.0,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.1,
+      "emit to handover": 3.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.06
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.02
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.3,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 17,
+     "start_ms": 714.0,
+     "whole_ms": 28.0,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.9,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.0,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.2,
+      "emit to handover": 4.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.24,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 18,
+     "start_ms": 756.3,
+     "whole_ms": 29.8,
+     "stages_ms": {
+      "worker_start to render_begin": 1.8,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.9,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.7,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 5.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.04
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 19,
+     "start_ms": 800.4,
+     "whole_ms": 28.4,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.9,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 4.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 20,
+     "start_ms": 843.3,
+     "whole_ms": 30.2,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 16.4,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.1,
+      "emit to handover": 5.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 21,
+     "start_ms": 886.3,
+     "whole_ms": 28.7,
+     "stages_ms": {
+      "worker_start to render_begin": 1.6,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 16.5,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.7
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.31,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 22,
+     "start_ms": 928.8,
+     "whole_ms": 28.3,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 16.4,
+      "gpu_done to readback_done": 1.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 4.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 23,
+     "start_ms": 960.5,
+     "whole_ms": 31.2,
+     "stages_ms": {
+      "worker_start to render_begin": 2.4,
+      "render_begin to scene_ready": 1.6,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.6,
+      "submit to gpu_done": 17.9,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.4
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.15,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.39,
+       "bytes": 3202480,
+       "slowest_ms": 0.15
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.85,
+       "bytes": 322480,
+       "slowest_ms": 0.32
+      }
+     }
+    },
+    {
+     "frame": 24,
+     "start_ms": 1007.0,
+     "whole_ms": 28.7,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 16.6,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.2,
+      "emit to handover": 3.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 25,
+     "start_ms": 1051.5,
+     "whole_ms": 29.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 1.0,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 17.5,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 26,
+     "start_ms": 1130.5,
+     "whole_ms": 36.1,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 20.8,
+      "gpu_done to readback_done": 2.5,
+      "readback_done to resolve_done": 0.3,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.5,
+      "emit to handover": 5.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.31,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 28,
+     "start_ms": 1211.5,
+     "whole_ms": 2.3,
+     "stages_ms": {
+      "worker_start to render_begin": 3.7,
+      "render_begin to scene_ready": 1.5,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 19.7,
+      "gpu_done to readback_done": 2.3,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": -28.3
+     },
+     "builds": {}
+    },
+    {
+     "frame": 29,
+     "start_ms": 1259.5,
+     "whole_ms": 31.7,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 18.5,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 4.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.28,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 31,
+     "start_ms": 1338.9,
+     "whole_ms": 2.6,
+     "stages_ms": {
+      "worker_start to render_begin": 4.1,
+      "render_begin to scene_ready": 1.6,
+      "scene_ready to upload_done": 1.0,
+      "upload_done to submit": 1.5,
+      "submit to gpu_done": 18.8,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": -28.0
+     },
+     "builds": {}
+    },
+    {
+     "frame": 33,
+     "start_ms": 1419.4,
+     "whole_ms": 3.5,
+     "stages_ms": {
+      "worker_start to render_begin": 5.4,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 20.9,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.6,
+      "emit to handover": -29.4
+     },
+     "builds": {}
+    },
+    {
+     "frame": 34,
+     "start_ms": 1470.5,
+     "whole_ms": 32.2,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 18.5,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.3,
+      "emit to handover": 4.8
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.06
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.02
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.29,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 36,
+     "start_ms": 1544.3,
+     "whole_ms": 3.6,
+     "stages_ms": {
+      "worker_start to render_begin": 4.8,
+      "render_begin to scene_ready": 1.6,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 19.5,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": -27.7
+     },
+     "builds": {}
+    },
+    {
+     "frame": 38,
+     "start_ms": 1628.3,
+     "whole_ms": 3.1,
+     "stages_ms": {
+      "worker_start to render_begin": 4.3,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 21.6,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.1,
+      "emit to handover": -30.1
+     },
+     "builds": {}
+    },
+    {
+     "frame": 40,
+     "start_ms": 1712.8,
+     "whole_ms": 4.1,
+     "stages_ms": {
+      "worker_start to render_begin": 3.6,
+      "render_begin to scene_ready": 2.2,
+      "scene_ready to upload_done": 0.7,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 19.3,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.2,
+      "emit to handover": -26.8
+     },
+     "builds": {}
+    },
+    {
+     "frame": 41,
+     "start_ms": 1751.1,
+     "whole_ms": 32.5,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.6,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.6,
+      "submit to gpu_done": 20.3,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.6,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.39,
+       "bytes": 3202480,
+       "slowest_ms": 0.16
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.61,
+       "bytes": 322480,
+       "slowest_ms": 0.3
+      }
+     }
+    },
+    {
+     "frame": 42,
+     "start_ms": 1797.5,
+     "whole_ms": 29.1,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 17.6,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 43,
+     "start_ms": 1841.8,
+     "whole_ms": 31.7,
+     "stages_ms": {
+      "worker_start to render_begin": 2.6,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 17.0,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.1,
+      "emit to handover": 5.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 44,
+     "start_ms": 1887.8,
+     "whole_ms": 28.9,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.5,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 16.8,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.0,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.3,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 45,
+     "start_ms": 1931.7,
+     "whole_ms": 27.7,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 16.8,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.3,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 46,
+     "start_ms": 1973.8,
+     "whole_ms": 27.8,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.1,
+      "submit to gpu_done": 16.1,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.5,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.2,
+      "emit to handover": 3.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 47,
+     "start_ms": 2046.6,
+     "whole_ms": 30.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 17.5,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.4,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 4.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 48,
+     "start_ms": 2092.3,
+     "whole_ms": 26.7,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.4,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.3,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.6
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.31,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 49,
+     "start_ms": 2132.5,
+     "whole_ms": 27.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.4,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.7,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 50,
+     "start_ms": 2173.5,
+     "whole_ms": 27.6,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.5,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 4.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 51,
+     "start_ms": 2215.5,
+     "whole_ms": 26.9,
+     "stages_ms": {
+      "worker_start to render_begin": 2.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 1.0,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.9,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.39,
+       "bytes": 1006960,
+       "slowest_ms": 0.32
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 52,
+     "start_ms": 2257.6,
+     "whole_ms": 27.0,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.4,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.16,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.31,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 53,
+     "start_ms": 2300.5,
+     "whole_ms": 26.3,
+     "stages_ms": {
+      "worker_start to render_begin": 2.4,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.3,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 2.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.27,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 54,
+     "start_ms": 2341.0,
+     "whole_ms": 26.4,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.9,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.7,
+      "submit to gpu_done": 13.5,
+      "gpu_done to readback_done": 2.4,
+      "readback_done to resolve_done": 0.5,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.7,
+      "emit to handover": 3.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.16,
+       "bytes": 3202480,
+       "slowest_ms": 0.04
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.27,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 55,
+     "start_ms": 2383.1,
+     "whole_ms": 25.2,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 13.8,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 56,
+     "start_ms": 2422.4,
+     "whole_ms": 24.7,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 1.0,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 13.5,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.14,
+       "bytes": 3202480,
+       "slowest_ms": 0.04
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.24,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 57,
+     "start_ms": 2463.2,
+     "whole_ms": 25.7,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 1.3,
+      "upload_done to submit": 1.2,
+      "submit to gpu_done": 13.6,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.17,
+       "bytes": 1006960,
+       "slowest_ms": 0.1
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.32,
+       "bytes": 3202480,
+       "slowest_ms": 0.07
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.81,
+       "bytes": 322480,
+       "slowest_ms": 0.19
+      }
+     }
+    },
+    {
+     "frame": 58,
+     "start_ms": 2505.7,
+     "whole_ms": 24.5,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.9,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 12.6,
+      "gpu_done to readback_done": 1.9,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.8
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 59,
+     "start_ms": 2546.5,
+     "whole_ms": 24.6,
+     "stages_ms": {
+      "worker_start to render_begin": 2.3,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 13.0,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 60,
+     "start_ms": 2588.1,
+     "whole_ms": 26.6,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.7,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.0,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 61,
+     "start_ms": 2631.0,
+     "whole_ms": 26.2,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.9,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 14.0,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 62,
+     "start_ms": 2672.9,
+     "whole_ms": 25.9,
+     "stages_ms": {
+      "worker_start to render_begin": 1.4,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.1,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.0,
+      "emit to handover": 3.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 63,
+     "start_ms": 2713.6,
+     "whole_ms": 25.5,
+     "stages_ms": {
+      "worker_start to render_begin": 2.0,
+      "render_begin to scene_ready": 1.6,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 13.9,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 3.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.23,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 64,
+     "start_ms": 2755.6,
+     "whole_ms": 27.2,
+     "stages_ms": {
+      "worker_start to render_begin": 2.2,
+      "render_begin to scene_ready": 1.2,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 14.4,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.9,
+      "emit to handover": 4.5
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.14,
+       "bytes": 1006960,
+       "slowest_ms": 0.1
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 65,
+     "start_ms": 2797.4,
+     "whole_ms": 27.2,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.8,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.5,
+      "submit to gpu_done": 14.9,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.1,
+      "emit to handover": 2.9
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.23,
+       "bytes": 3202480,
+       "slowest_ms": 0.08
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.38,
+       "bytes": 322480,
+       "slowest_ms": 0.13
+      }
+     }
+    },
+    {
+     "frame": 66,
+     "start_ms": 2840.1,
+     "whole_ms": 26.3,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.2,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.0,
+      "emit to handover": 3.2
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 67,
+     "start_ms": 2883.4,
+     "whole_ms": 27.5,
+     "stages_ms": {
+      "worker_start to render_begin": 1.9,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.6,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.5,
+      "emit to handover": 3.1
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.07
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.3,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 68,
+     "start_ms": 2925.1,
+     "whole_ms": 27.8,
+     "stages_ms": {
+      "worker_start to render_begin": 1.5,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 0.9,
+      "submit to gpu_done": 15.7,
+      "gpu_done to readback_done": 2.0,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 1.0,
+      "emit to handover": 4.3
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    },
+    {
+     "frame": 69,
+     "start_ms": 2965.9,
+     "whole_ms": 26.9,
+     "stages_ms": {
+      "worker_start to render_begin": 2.1,
+      "render_begin to scene_ready": 1.3,
+      "scene_ready to upload_done": 0.6,
+      "upload_done to submit": 1.0,
+      "submit to gpu_done": 15.5,
+      "gpu_done to readback_done": 2.1,
+      "readback_done to resolve_done": 0.2,
+      "resolve_done to put_begin": 0.1,
+      "put_begin to cache_put": 0.2,
+      "cache_put to emit": 0.8,
+      "emit to handover": 3.0
+     },
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.22,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    }
+   ],
+   "slowest_worker_frames": [
+    {
+     "frame": 26,
+     "start_ms": 1130.5,
+     "whole_ms": 36.1,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.31,
+       "bytes": 322480,
+       "slowest_ms": 0.09
+      }
+     }
+    },
+    {
+     "frame": 41,
+     "start_ms": 1751.1,
+     "whole_ms": 32.5,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.13,
+       "bytes": 1006960,
+       "slowest_ms": 0.09
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.39,
+       "bytes": 3202480,
+       "slowest_ms": 0.16
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.61,
+       "bytes": 322480,
+       "slowest_ms": 0.3
+      }
+     }
+    },
+    {
+     "frame": 34,
+     "start_ms": 1470.5,
+     "whole_ms": 32.2,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.11,
+       "bytes": 1006960,
+       "slowest_ms": 0.06
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.02
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.29,
+       "bytes": 322480,
+       "slowest_ms": 0.08
+      }
+     }
+    },
+    {
+     "frame": 29,
+     "start_ms": 1259.5,
+     "whole_ms": 31.7,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.13,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.28,
+       "bytes": 322480,
+       "slowest_ms": 0.07
+      }
+     }
+    },
+    {
+     "frame": 43,
+     "start_ms": 1841.8,
+     "whole_ms": 31.7,
+     "top_stage": "submit to gpu_done",
+     "builds": {
+      "write_buffer": {
+       "count": 2,
+       "total_ms": 0.12,
+       "bytes": 1006960,
+       "slowest_ms": 0.08
+      },
+      "create_buffer": {
+       "count": 12,
+       "total_ms": 0.12,
+       "bytes": 3202480,
+       "slowest_ms": 0.03
+      },
+      "create_buffer_with_data": {
+       "count": 10,
+       "total_ms": 0.21,
+       "bytes": 322480,
+       "slowest_ms": 0.06
+      }
+     }
+    }
+   ],
+   "builds": {
+    "write_buffer": {
+     "count": 140,
+     "total_ms": 9.41,
+     "bytes": 70487200,
+     "slowest_ms": 0.41
+    },
+    "create_buffer": {
+     "count": 840,
+     "total_ms": 10.21,
+     "bytes": 224173600,
+     "slowest_ms": 0.16
+    },
+    "create_buffer_with_data": {
+     "count": 700,
+     "total_ms": 19.19,
+     "bytes": 22573600,
+     "slowest_ms": 0.32
+    }
+   }
+  }
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 1
+ },
+ "card_pictures": {
+  "registered": 227,
+  "taken": 226
+ },
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 25.94,
+  "GPU render and wait": 14.44,
+  "hand-over to the display": 2.95,
+  "readback copy": 2.8,
+  "scene evaluation": 2.08,
+  "scene prepare (shadow data, vertex packing)": 1.37,
+  "render encode": 1.01,
+  "convert and emit": 0.75,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.63,
+  "resolve (supersample, background)": 0.19,
+  "after the render (node bookkeeping)": 0.11,
+  "display cache put": 0.06
+ },
+ "gpu_wait_ms": {
+  "min": 6.5,
+  "p50": 14.4,
+  "max": 21.1,
+  "shared_card_suspected": true
+ }
+}
