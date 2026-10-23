@@ -1867,7 +1867,13 @@ class ProgressivePreviewTests(unittest.TestCase):
 
     def test_fluid_stop_requests_half_surface_then_full_detail(self):
         w = self.window
-        w.dispatcher.document["nodes"]["fluid_surface_marker"] = {"type": "FluidSurface3D"}
+        # Since 10/22 the half-surface stop applies when the viewed graph contains a fluid node,
+        # not when any node in the project does, so the marker feeds the viewed node.
+        document = w.dispatcher.document
+        document["nodes"]["fluid_surface_marker"] = {"type": "FluidSurface3D"}
+        viewed = document["nodes"][document["view"]]
+        viewed["inputs"] = {**viewed.get("inputs", {}), "fluid_marker": "fluid_surface_marker"}
+        self.assertTrue(w._view_uses_fluid(document))
         quarter = w.proxy.findData(4)
         w.proxy.setCurrentIndex(quarter)
         try:
