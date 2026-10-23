@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the production-size Hot pour re-simulates only what changed (finish 2: the production-size gates) (integrator tick)
+
+- **What was done:** `main` `8b40b385` -> `7c3fe7d6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `7c3fe7d6`: Ran 6118 tests in 490.576 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-23 — Lane 6 step B finish 2: production gates (PARTIAL)
 
 - **What was done — evidence:** The production gate harness now selects the `scene` viewer output, so its edit scope/checkpoint logic follows the interactive app. RTX 3080 Ti at 256³ liquid / 192³ steam, pour keyed at frame 60: cProfile measured the first edited scene evaluation at 346.208 s before proxy conversion/display. It attributes 188.852 s to collider solid voxelization, including 182.967 s in surface voxelization. Proxy timeline reached frame 70; that frame took 16.487 s and misses 12 FPS. The 120-frame total, full-detail split, cup/steam edits, integrated Radeon, and A6000 are incomplete or unmeasured. Docs-copy check passed (7 knowledge tests).
