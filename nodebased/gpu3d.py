@@ -2093,6 +2093,9 @@ def _prepare_static(scene, order, cancel):
     vertices = np.concatenate(chunks) if chunks else np.empty((0, 38), 'f4')
     translucent = ({'start': np.concatenate(starts), 'centre': np.concatenate(centres), 'material': np.concatenate(mats)}
                    if starts else None)
+    if translucent is not None:
+        # the translucent triangles' vertices again, one row per triangle: a frame writes them far to near into one buffer
+        translucent['vertices'] = np.ascontiguousarray(vertices.reshape(-1, 3, 38)[translucent['start'] // 3])
     return vertices, materials, opaque, translucent, everything
 
 
@@ -2112,6 +2115,27 @@ def _translucent_runs(translucent, eye, view, ordered=True):
     first = np.flatnonzero(new)
     last = np.append(first[1:], len(order))
     return [(int(starts[i]), 3*int(j - i), int(mats[i])) for i, j in zip(first, last)]
+
+
+def _sorted_translucent(res, state, eye, view):
+    """(draws, vertex buffer) of the translucent triangles far to near: the frame's order is written into a buffer of their own
+    (their vertices gathered in that order: ~1 ms for 2,300 triangles) so a run of one material is a single draw, where drawing
+    from the shared buffer in depth order was a draw call per triangle (14 ms a frame of a glass sphere in Python)."""
+    translucent = res['translucent']
+    depth = -((translucent['centre'] - eye) @ view[2])
+    order = np.argsort(-depth, kind='stable')
+    rows = translucent['vertices'][order]
+    buffer = res.get('sorted')
+    if buffer is None:
+        wgpu = state['wgpu']
+        buffer = res['sorted'] = state['device'].create_buffer(size=rows.nbytes, usage=wgpu.BufferUsage.VERTEX | wgpu.BufferUsage.COPY_DST)
+    state['device'].queue.write_buffer(buffer, 0, rows)
+    mats = translucent['material'][order]
+    new = np.ones(len(order), bool)
+    new[1:] = mats[1:] != mats[:-1]
+    first = np.flatnonzero(new)
+    last = np.append(first[1:], len(order))
+    return [(3*int(i), 3*int(j - i), int(mats[i])) for i, j in zip(first, last)], buffer
 
 
 def _light_tables(scene):
@@ -2269,7 +2293,8 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
         runs_by_pass = [res['everything']]
         passes = [_resident_binds(state, res, 2)]
     else:
-        runs_by_pass = [res['opaque'], _translucent_runs(res['translucent'], eye, view) if res['translucent'] else []]
+        sorted_runs, sorted_buffer = _sorted_translucent(res, state, eye, view) if res['translucent'] else ([], None)
+        runs_by_pass = [res['opaque'], sorted_runs]
         passes = [_resident_binds(state, res, 0, smoke)] + ([_resident_binds(state, res, 1, smoke)] if runs_by_pass[1] else [])
     _mark('upload_done')
     dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
@@ -2324,7 +2349,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                 if smoke_groups and depth_target is None:
                     rp.set_bind_group(1, smoke_groups[pass_number])
                 rp.set_bind_group(2, env_group)
-                rp.set_vertex_buffer(0, res['vertices'])
+                rp.set_vertex_buffer(0, res['vertices'] if pass_number == 0 or runs is not None else sorted_buffer)
                 bound = None
                 for first, count, material in (runs if runs is not None else runs_by_pass[0 if pass_number == 0 else 1]):
                     if bound != material:
