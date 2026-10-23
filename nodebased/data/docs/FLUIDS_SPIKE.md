@@ -1223,24 +1223,11 @@ These are visual findings only; solver and lighting changes are outside this ste
 
 ### B: edit classes, proxy-first refresh and old-cache stop (partial, 2026-10-22)
 
-The implementation classifies fluid-node knobs as look-only, time-varying simulation, or from-start
-simulation edits. For an animated collider keyed at frame 60, the evaluator reuses the frame-58
-checkpoint and solves frames 59 and 60; frame 59 must be redone because collider velocity samples
-frame 60. The resulting density matches a full replay bit for bit, and the solver counter records
-two substeps/frames in the one-substep test setup. The artist-facing status reports the selected
-restart frame.
+Fluid-node edits are classified as look-only, keyed-from-frame, or restart-from-start, with the choice shown in the cache status. An animated collider key at frame 60 reuses the checkpoint at 58 and solves frames 59 and 60 because collider velocity samples frame 60; the edited result matches a full replay bit for bit. Proxy and full-detail refreshes use separate cache identities, with the proxy pass queued before full refinement and timeline marks promoted as full frames land. A 256-cubed configuration is capped at 64 cubed for its proxy. Tests cover the 64-cell cap and the staged scheduling/cache separation.
 
-Fluid edit refresh now runs a distinct capped proxy simulation stream first, queues a full-detail
-pass afterward, and tracks proxy/full frames separately. At the existing sub-64-cell test grid, the
-proxy and full checkpoint runs remain isolated. This proves scheduling and cache separation; the
-production-rate performance limits remain unmeasured. The old pre-P4 cache stop path remains
-unimplemented. No bake above
-64 cells was started because only 5.7 GB is free while the historical production cache is about
-8.5 GB. The production-size <1-second proxy, 120-frame/<30-second proxy, full-refinement stage
-timings, and 12 FPS playback gates are therefore unmeasured. The 64-cell Hot-pour reference is
-28.34 seconds for 120 frames on the Radeon 8060S. A simple cubic-workload extrapolation to 256³ is
-about 30 minutes for the same frame count; this is a rough workload estimate, not an RTX A6000
-measurement or a prediction of its speed. The A6000 remains unmeasured.
+A pre-P4 full-detail output can now supply the requested proxy and then full-detail frame without entering the solver. A visible one-time cache-status note marks its preview companion migration. The small legacy-cache test confirms zero extra solver steps and that the note does not repeat. Source-geometry rebuilding is avoided by serving the retained full output entry; this test uses a procedural plume without a geometry input.
+
+Production-rate limits remain unmeasured: the production-size <1-second first proxy, 120-frame/<30-second proxy, full-refinement timing split, and 12 FPS playback gate have not been run. No production-size bake was started because only 5.4 GB is free while the historical cache is about 8.5 GB. The prior 64-cell Hot-pour result is 28.34 seconds for 120 frames on the Radeon 8060S; it is a separate full-resolution baseline, not a measurement of this staged production proxy. The A6000 estimate remains unmeasured.
 
 ### A: checkpoint callbacks and progressive edit timeline (partial)
 
