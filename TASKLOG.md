@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step B of 2: 3D comps play at the comp's rate: the cube and the furnished room at 24 fps, the mixed scene progressively (resume 1), Lane 8 (2D parity B, GPT-6 Luna) step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 6) (integrator tick)
+
+- **What was done:** `main` `97729398` -> `74e1cffd` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `74e1cffd`: Ran 6102 tests in 486.402 s, OK (skipped=34), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 8 step B finish 6 — PARTIAL
 
 - **What was done — evidence:** On the merged Lane 2 pipeline, three uncached RTX 1080p read-ahead-on runs measured 5.680/5.382/5.449 fps (mean 5.504); off measured 4.626/4.580/4.557 (mean 4.588). The former 4.68 fps one-off is not reproduced with read-ahead on and is close to the no-read-ahead mean; these data cannot identify why that single run differed. Three implementation/measurement commits are `1b1df0bc`, `9bf0689b`, `8aac3a31`. Cold current-frame Reads are queued before the playback preview; targeted prefetch/tile tests passed (59). The final sampled RTX timeline has node evaluation 167.914 ms and display conversion 76.477 ms; node evaluation remains largest. A no-op vertical-row fit in Transform now returns the source image, and the isolated fractional-horizontal microbenchmark improved 24.918→23.933 ms median (3.95%) with exact pixels. Transform/bounding-box/tile regressions passed (76).

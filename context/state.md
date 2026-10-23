@@ -1,5 +1,42 @@
 # 2026-10-22 — Lane 8 step B finish 6 — PARTIAL
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (11:45 PM on 2026-10-22 PDT)
+
+`main` moved `97729398` -> `74e1cffd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `74e1cffd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-2335.log`, started 11:35 PM): **Ran 6102 tests in 486.402 s, OK (skipped=34), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step B of 2: 3D comps play at the comp's rate: the cube and the furnished room at 24 fps, the mixed scene progressively (resume 1).** Commits:
+  - `64f0437c` Splat transform memo counts a hit only when the cloud's fields are the same objects: a copy with intrinsics attached shared the memo and got the copy without them (test_3d_splat_intrinsics)
+  - `312b420a` 3D early-start test runs on the serial path: with the played-frame pipeline the worker is freed before the frame's ready, which test_playback_pipeline covers
+  - `630119ee` Test: the pacing test's start_preview stand-in takes the queued frame, as the real one does, now that the next frame is requested before the finished one is shown
+  - `3b61f99b` 3D playback at the comp's rate: final RTX, Radeon, llvmpipe and laptop stand-in measurements, Playback targets and the step B table in PERFORMANCE.md
+  - `8ff3d3b3` Playback: stopping draws the frame at the node's own settings when the picture on screen was a playback frame; the benchmark measures the time to that picture
+  - `fdedad95` Playback: the automatic proxy tier ignores the cold first frames of a play and of each new tier, and climbs back one tier after a run of frames with room to spare
+  - `f7b6f248` 3D ray tracing: one ray buffer for all bands of rows instead of a new one per band
+  - `886bf2b9` 3D playback: the display card makes the 8-bit picture of an opaque frame and reads back 6 MB instead of 25 MB of float colour; the card's input texture change no longer reaches the viewport renderer
+  - `f402336c` 3D playback: a full display cache rounds old frames on a background thread, the display conversion drops the three-channel copy, threads the unpremultiply and the quantise, a Render3D target skips the tile round trip, shape nodes remember their geometry, the next frame is requested before the finished one is shown
+  - `e14aad7a` 3D playback: the data passes draw from resident buffers too, shadow-ray budgets re-measured, splat clouds remember their transformed copy, meshes with splats play through the raster shader and a splat layer
+  - `b4eb21a0` 3D playback: an opaque frame converts for display without the divide and multiply by alpha, the 8-bit quantise runs on the worker pool, the time row names the proxy tier on screen, the benchmark can play with Proxy while playing and measures the settle time
+  - `3ca3f99c` 3D playback: shadow rays through the BVH from 300 triangles; a scene whose camera moves keeps its uploaded buffers, bind groups and draw lists, and the vertex shader works out camera space (furnished room 1080p on the RTX 3080 Ti: 107 ms to 17 ms for the render call)
+  Diff: 35 files changed, 2695 insertions(+), 177 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 6).** Commits:
+  - `6a4d9977` Record Lane 8 finish 6 measurements and handoff
+  - `8aac3a31` Reuse horizontal Transform output for unchanged rows
+  - `9bf0689b` Prefetch the cold frame before playback preview
+  - `1b1df0bc` Record Lane 8 RTX read-ahead A/B
+  Diff: 7 files changed, 77 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 RTX read-ahead A/B on the Lane 2 pipeline: 5.504 fps mean on vs 4.588 off (three 10-second runs each). The finish-5 4.68 fps one-off is not reproduced on; cause remains undetermined. Play-start cold Reads are queued before preview submission, with 59 focused tests passing. Final uncached first-pass rates: RTX 5.701, Radeon 5.680, llvmpipe 6.749, four-core integrated stand-in 4.272 fps. RTX timeline: node evaluation 167.914 ms (largest stage), display conversion 76.477 ms. Transform no-op row fitting now returns the original image; isolated median improved 3.95% with exact pixels; 76 targeted tests pass. 1080p/4K gates remain open. Standard benchmark warms frame 1 before playback, so first-frame cold-miss latency remains unverified. Local evidence and handoff are in the newest `TASKLOG.md` entry.
 
 ## 2026-10-22 — Lane 6 step B finish 1 (PARTIAL)
