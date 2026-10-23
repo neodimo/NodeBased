@@ -1,3 +1,7 @@
+# 2026-10-22 — Lane 6 step A finish 1 (PARTIAL)
+
+The artist-facing edit-bake timeline is wired in the lane worktree: amber marks track solved simulation frames independently of display-cache marks; stale output remains labeled until the edited playhead frame appears; only one background frame is queued at a time; and forward playback is bounded to contiguous solved frames. A newer preview signals cancellation of in-flight work. Cache identity and edit invalidation use the viewed solver dependency chain. UI tests and documentation checks pass, as do prior CPU and llvmpipe solver checks. No solver-cost reduction was verified; the Radeon cup move remains 32.43 s, above the 30 s gate. Production-size refresh was not started: only 5.7 GB is free versus an approximately 8.5 GB historical cache. Real-display QA and measured <50 ms cancellation remain open. Artifacts and exact next-owner handoff are in the Lane 6 finish 1 entry in `TASKLOG.md` and `docs/FLUIDS_SPIKE.md`.
+
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)
 
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (5:32 PM on 2026-10-22 PDT)
@@ -7323,3 +7327,6 @@ Measured finish4 source/settings and fresh stills are committed locally as `1e09
 # 2026-10-22 — Lane 6 step A edit-driven re-simulation — PARTIAL
 
 Progressive complete-frame cache callback and warmed Hot pour edit benchmark are committed on `openclaw/nb-fluids-spike`. Warm full-chain edit times: RTX 3080 Ti 30.15–50.19 s; Radeon 8060S 23.68–32.43 s. First solved volume frames: 0.078–0.302 s RTX and 0.055–0.256 s Radeon. Radeon cup movement misses the <30 s gate at 32.43 s. CPU/llvmpipe and targeted regressions passed. On-screen frame delivery remains unmeasured and app timeline/stale/cancel UI is not wired. Cost reduction and fresh production-scale edit bake remain outstanding. Warm Radeon and RTX phase JSON identify steam host/pressure, cache writes, and cup-move whitewater as optimization candidates. Next: Gonzo coordinates UI ownership and uses `tools/benchmark_fluid_edits.py` to optimize the Radeon cup case. Full evidence and the cold-cache harness correction are in the newest `TASKLOG.md` entry.
+# 2026-10-22 — Lane 6 step A finish 1 — PARTIAL
+
+The desktop now marks an edited visible fluid result as stale until its replacement appears, shows simulated frames in an amber timeline band, and queues sequential background renders using the existing single preview worker. New preview generations replace/cancel the queue; forward playback cannot outrun the contiguous solved prefix and frame baking resumes after playback stops. Targeted queue/timeline/state tests pass. Real-display visual review and measured <50 ms cancellation remain unverified. Cost optimization and a fresh production-size bake did not land; the old full-size cache is ~8.50 GB while only 5.7 GB is free. Full evidence, next owner and the progress-label test correction are in the newest `TASKLOG.md` entry.

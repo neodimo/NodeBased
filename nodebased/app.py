@@ -101,7 +101,7 @@ from .shortcuthelp import ShortcutOverlay
 from .outputpreview import OutputPreview
 from .viewerstrip import ChannelButtons, CornerReadouts, PixelReadout, ViewerStrip
 from .animation import CURVE_INTERPOLATIONS, resolve_document
-from .groups import scope_document
+from .groups import scope_document, flatten_groups
 from . import shapes as shape_model
 from . import handles2d
 from . import tracker as tracker_model
@@ -8715,6 +8715,8 @@ class Window(QMainWindow):
         self._progressive_target = None
         self._progressive_generation = None
         self._progressive_document = None
+        self._fluid_edit_bake = None
+        self._fluid_stale = False
         self.playback_elapsed_frames = 0
         self._playback_next_deadline = None
         self.playback_dropped_frames = 0
@@ -9359,7 +9361,12 @@ class Window(QMainWindow):
         self.frame_info = ShrinkableLabel("")
         self.frame_info.setObjectName("muted")
         row.add(self.frame_info)
-        row.set_optional([self.frame_info, self.fps_presets, self.realtime_label])
+        self.fluid_bake_status = QLabel("")
+        self.fluid_bake_status.setObjectName("fluid-bake-status")
+        self.fluid_bake_status.setToolTip("Amber ruler marks show simulation frames solved for the latest edit.")
+        self.fluid_bake_status.setStyleSheet(f"color: {TOKENS['warn']}; font-weight: 600")
+        row.add(self.fluid_bake_status)
+        row.set_optional([self.frame_info, self.fps_presets, self.realtime_label, self.fluid_bake_status])
         # Commit on Enter or focus-out rather than per keystroke: one undoable edit per typed value.
         for spin in (self.frame_first, self.frame_last, self.frame_current, self.frame_fps):
             spin.setKeyboardTracking(False)
@@ -9546,6 +9553,8 @@ class Window(QMainWindow):
         keyed = set(labels)
         self.keyed_frames = sorted(keyed)
         self.frame_slider.set_marks(cached, keyed, labels)
+        bake = getattr(self, "_fluid_edit_bake", None)
+        self.frame_slider.set_simulation_frames(() if bake is None else bake["baked"])
 
     def apply_fps_preset(self, index):
         rate = self.fps_presets.itemData(index)
@@ -9763,6 +9772,11 @@ class Window(QMainWindow):
         bounded_frames = min(elapsed_frames, self.playback_frames_rendered)
         target, finished = playhead_at(time_range["first"], time_range["last"], self.playback_origin_frame,
                                        bounded_frames, self.play_direction, self.loop_mode)
+        bake = self._fluid_edit_bake
+        if bake is not None and not bake["done"] and self.play_direction > 0:
+            limit = bake["first"] + self._contiguous_fluid_frames(bake) - 1
+            if target > limit:
+                target, finished = limit, True
         if target != time_range["current"]:
             self.set_time(transient=True, playhead_only=True, current=target)
         if finished:
@@ -10531,7 +10545,7 @@ class Window(QMainWindow):
                     self.request_preview(progressive=not bool(cmd.get("transient", False)))
             else:
                 self.after_command(render, sync_settings=cmd.get("op") in ("load", "undo", "redo"),
-                                   revision=before, moves=self._moves_only(cmd))
+                                   revision=before, moves=self._moves_only(cmd), command=cmd)
             return result
         except (ValueError, KeyError, TypeError, OSError) as error:
             self._show_command_error(error)
@@ -10610,7 +10624,7 @@ class Window(QMainWindow):
                 self.update_title()
                 self.request_preview()
             else:
-                self.after_command(sync_settings=cmd.get("op") in ("load", "undo", "redo"))
+                self.after_command(sync_settings=cmd.get("op") in ("load", "undo", "redo"), command=cmd)
         return result
 
     def reference_context(self, cmd):
@@ -10814,7 +10828,7 @@ class Window(QMainWindow):
                 return False
         return len(items) == len(self.graph_nodes())
 
-    def after_command(self, render=True, sync_settings=False, revision=None, moves=None):
+    def after_command(self, render=True, sync_settings=False, revision=None, moves=None, command=None):
         key = self.graph.selected_id()
         # An edit that changed nothing must not rebuild the graph and the properties panel.
         # `editingFinished` fires on focus-out, so right-clicking a knob to open its context menu
@@ -10845,7 +10859,173 @@ class Window(QMainWindow):
         # Only an edit that can change the viewed picture re-renders. Moving, renaming or
         # labelling a node -- or editing a branch the viewer does not see -- leaves it alone.
         if render and self.render_identity() != self.rendered_identity:
+            fluid_edit = (changed and self._view_uses_fluid(self.dispatcher.document)
+                          and self._command_changes_fluid_simulation(self.dispatcher.document, command))
+            if fluid_edit:
+                self._set_fluid_stale(True)
             self.request_preview(progressive=not self.playing)
+            if fluid_edit:
+                self._begin_fluid_edit_bake()
+
+    @staticmethod
+    def _fluid_simulation_scope(document):
+        target = document.get("view")
+        if target is None:
+            return {}, set()
+        try:
+            flat, target = flatten_groups(document, target)
+        except (KeyError, ValueError, TypeError):
+            return {}, set()
+        nodes = flat.get("nodes", {})
+
+        def ancestors(roots):
+            result, stack = set(), list(roots)
+            while stack:
+                key = stack.pop()
+                if key in result or key not in nodes:
+                    continue
+                result.add(key)
+                stack.extend(source for source in nodes[key].get("inputs", {}).values() if source is not None)
+            return result
+
+        visible = ancestors([target])
+        solvers = [key for key in visible if nodes[key].get("type") in
+                   ("FluidSolver3D", "FluidLiquidSolver3D")]
+        return nodes, ancestors(solvers)
+
+    @staticmethod
+    def _fluid_bake_identity(document):
+        nodes, simulation_ids = Window._fluid_simulation_scope(document)
+        if not simulation_ids:
+            return ""
+        sim_nodes = {key: nodes[key] for key in sorted(simulation_ids)}
+        curves = (document.get("animation") or {}).get("curves") or {}
+        expressions = document.get("expressions") or {}
+        payload = {"nodes": sim_nodes,
+                   "curves": {key: value for key, value in curves.items() if key in simulation_ids},
+                   "expressions": {key: value for key, value in expressions.items() if key in simulation_ids},
+                   "time": {key: value for key, value in (document.get("time") or {}).items()
+                            if key != "current"}}
+        return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+
+    @staticmethod
+    def _command_changes_fluid_simulation(document, command):
+        if not isinstance(command, dict):
+            return False
+        op = command.get("op")
+        if op in ("undo", "redo", "load"):
+            return Window._view_uses_fluid(document)
+        if op == "batch":
+            return any(Window._command_changes_fluid_simulation(document, item)
+                       for item in command.get("commands", ()))
+        if op in ("delete", "group", "ungroup"):
+            return Window._view_uses_fluid(document)
+        if op not in {"set", "connect", "disable", "set_shapes", "set_tracks", "set_key", "set_curve",
+                      "delete_key", "clear_curve"}:
+            return False
+        _nodes, simulation_ids = Window._fluid_simulation_scope(document)
+        return command.get("id") in simulation_ids
+
+    @staticmethod
+    def _view_uses_fluid(document):
+        target = document.get("view")
+        if target is None:
+            return False
+        try:
+            flat, target = flatten_groups(document, target)
+        except (KeyError, ValueError, TypeError):
+            return False
+        nodes = flat.get("nodes", {})
+        fluid_types = {"FluidSolver3D", "FluidLiquidSolver3D", "FluidCache3D", "FluidUpres3D",
+                       "FluidSurface3D", "FluidWhitewater3D", "FluidVolumeRender3D",
+                       "FluidCollide3D", "FluidSource3D"}
+        stack, seen = [target], set()
+        while stack:
+            key = stack.pop()
+            if key in seen or key not in nodes:
+                continue
+            seen.add(key)
+            node = nodes[key]
+            if node.get("type") in fluid_types:
+                return True
+            stack.extend(source for source in node.get("inputs", {}).values() if source is not None)
+        return False
+
+    def _set_fluid_stale(self, stale):
+        self._fluid_stale = bool(stale)
+        label = getattr(self, "fluid_bake_status", None)
+        if label is None:
+            return
+        state = self._fluid_edit_bake
+        if self._fluid_stale:
+            label.setText("SIM STALE · updating")
+            label.setAccessibleName("Simulation cache is stale; re-simulation is running")
+        elif state is not None:
+            count = self._contiguous_fluid_frames(state)
+            label.setText(f"SIM {count}/{state['last'] - state['first'] + 1}")
+            label.setAccessibleName(f"Simulation frames ready: {count}")
+
+    @staticmethod
+    def _contiguous_fluid_frames(state):
+        frame = state["first"]
+        while frame in state["baked"] and frame <= state["last"]:
+            frame += 1
+        return frame - state["first"]
+
+    def _clear_fluid_edit_bake(self):
+        self._fluid_edit_bake = None
+        self._set_fluid_stale(False)
+        label = getattr(self, "fluid_bake_status", None)
+        if label is not None:
+            label.clear()
+        slider = getattr(self, "frame_slider", None)
+        if slider is not None:
+            slider.set_simulation_frames(())
+
+    def _begin_fluid_edit_bake(self):
+        document = copy.deepcopy(self.dispatcher.document)
+        time_range = document.get("time", {})
+        first, last = int(time_range.get("first", 1)), int(time_range.get("last", 1))
+        self._fluid_edit_bake = {"generation": self.generation, "document": document,
+                                 "identity": self._fluid_bake_identity(document), "first": first,
+                                 "last": last, "baked": set(), "done": False}
+        self._set_fluid_stale(True)
+
+    def _advance_fluid_edit_bake(self, request, frame, cancel):
+        state = self._fluid_edit_bake
+        if state is None or request.generation != state["generation"] or cancel.is_set():
+            return
+        if frame is None:
+            state["done"] = True
+            self.fluid_bake_status.setText("SIM BAKE FAILED")
+            return
+        if request.display:
+            # A visible request solves and checkpoints each earlier simulation frame too.
+            state["baked"].update(range(state["first"], min(request.frame, state["last"]) + 1))
+            if request.frame == self.dispatcher.document["time"]["current"]:
+                self._set_fluid_stale(False)
+        else:
+            state["baked"].add(request.frame)
+        self.frame_slider.set_simulation_frames(state["baked"])
+        count = self._contiguous_fluid_frames(state)
+        total = state["last"] - state["first"] + 1
+        if not self._fluid_stale:
+            self.fluid_bake_status.setText(f"SIM {count}/{total}")
+        if count >= total:
+            state["done"] = True
+            self.fluid_bake_status.setText(f"SIM READY · {count}/{total}")
+            self.fluid_bake_status.setAccessibleName(f"Simulation ready: {count} frames")
+            return
+        if self.playing:
+            return
+        next_frame = state["first"] + count
+        self.preview_queue.enqueue_background(state["generation"], next_frame, state["document"], tier=1)
+
+    def _clamp_to_baked_fluid_frame(self, target):
+        state = self._fluid_edit_bake
+        if state is None or state["done"] or self.play_direction < 0:
+            return target
+        return min(int(target), state["first"] + self._contiguous_fluid_frames(state) - 1)
 
     def render_identity(self):
         document = self.dispatcher.document
@@ -14215,6 +14395,14 @@ class Window(QMainWindow):
         self.rendered_identity = self.render_identity()
         snapshot = copy.deepcopy(self.dispatcher.document if document_override is None
                                  else document_override)
+        bake = getattr(self, "_fluid_edit_bake", None)
+        if bake is not None:
+            current_identity = self._fluid_bake_identity(self.dispatcher.document)
+            if current_identity == bake["identity"]:
+                bake["generation"] = self.generation
+                bake["document"] = copy.deepcopy(self.dispatcher.document)
+            else:
+                self._clear_fluid_edit_bake()
         if self.playing:
             snapshot = playing_document(snapshot)
         frame = snapshot["time"]["current"]
@@ -15268,6 +15456,7 @@ class Window(QMainWindow):
         # which is exactly when the orange band grows. Refreshing here is what makes the strip
         # fill in live during playback instead of only after the next document edit.
         self.refresh_timeline_marks()
+        self._advance_fluid_edit_bake(request, frame, cancel)
         if len(self.preview_queue):
             self.start_preview()
         else:

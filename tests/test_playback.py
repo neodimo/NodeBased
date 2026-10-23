@@ -41,6 +41,17 @@ class PlaybackQueueTests(unittest.TestCase):
         self.assertTrue(active.is_set())
         self.assertEqual(len(queue), 0)
 
+    def test_background_edit_frame_is_queued_without_replacing_visible_request(self):
+        queue = PlaybackQueue()
+        queue.replace(4, 10, self.document)
+        visible, cancel = queue.take()
+        self.assertTrue(visible.display)
+        self.assertTrue(queue.enqueue_background(4, 11, self.document))
+        self.assertFalse(cancel.is_set())
+        self.assertFalse(queue.enqueue_background(4, 11, self.document))
+        request, _ = queue.take()
+        self.assertEqual((request.generation, request.frame, request.display), (4, 11, False))
+
     def test_enqueue_path_stays_inside_ui_budget_while_work_is_active(self):
         queue = PlaybackQueue()
         queue.replace(1, 1, self.document)

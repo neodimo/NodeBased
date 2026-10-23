@@ -1221,7 +1221,7 @@ These are visual findings only; solver and lighting changes are outside this ste
 
 ## Lane 6 step notes
 
-### A: checkpoint callbacks for progressive solves (partial)
+### A: checkpoint callbacks and progressive edit timeline (partial)
 
 `simcache.solve_to_frame`, `fluid3d.solve_frame` and `flip3d.solve_frame` now offer an optional callback after each
 complete frame has been stored under its run key.
@@ -1230,8 +1230,17 @@ uncached and unpublished. The callback stream is bit-identical to the correspond
 cache tests. `tools/benchmark_fluid_edits.py` builds the 64-cell Hot pour and measures a faster pour velocity, a moved
 cup collider, and changed steam vorticity, including frame-1 time and per-output-stage bake time. It reports solver
 outputs before display presentation; substep internals (transfers, pressure, sparse occupancy, synchronization and
-readback) are covered by diagnostic phase profiles below. No timeline, stale-picture badge or edit-cancellation UI
-is included yet.
+readback) are covered by diagnostic phase profiles below. The edit benchmark's first-frame timing still ends at solve
+and cache, before UI presentation.
+
+**Finish 1 UI wiring (2026-10-22):** when an edit changes the viewed fluid chain, the window keeps the previous
+picture on screen with `SIM STALE` in the timeline row, shows an amber simulation-frame band, and queues one
+non-displayed render at a time behind the current visible preview. Each finished frame advances the amber band and
+the ordinary display-cache marks; a newer preview replaces the queue and sets the in-flight cancellation event.
+Forward playback is bounded to the contiguous solved prefix and resumes baking after playback stops. The current
+edited playhead picture clears the stale label when it replaces the old one. CPU UI/state tests cover stale progress,
+ordered frame enqueueing and cancellation replacement. Real-display visual QA and the <50 ms cancellation gate
+remain unmeasured.
 
 **64-cell / 120-frame cold-cache references (2026-10-22; superseded for the edit gate).** These first measurements
 started each edited graph with an empty cache, so they include unchanged upstream work and do not represent an artist
@@ -1312,10 +1321,12 @@ cells and 120 frames is 1,940.5 seconds (`benchmarks/hot_pour/radeon-full-bake.j
 baseline; this step did not regenerate the production cache because the record's cache data is 8.50 GB while the host
 had 5.7 GB free. A fresh production-size edit bake remains to be timed when sufficient scratch space is available.
 
-Current gate state: first solved volume frames are under one second on RTX and Radeon, although viewport presentation is
-not measured. The Radeon cup move misses its bake gate. No display timeline, stale-picture label, 50 ms edit-cancellation
-UI or cost-reducing code change is included yet. Phase evidence identifies pressure/host work, cache writes and cup-move
-whitewater as the next optimization candidates. The A6000 estimate remains unmeasured.
+Current gate state: first solved volume frames are under one second on RTX and Radeon, although viewport presentation
+is not measured. The progressive timeline, stale label, single-frame background queue and playback bound are wired;
+real-display QA and the 50 ms worker-stop gate are unmeasured. The Radeon cup move still misses its bake gate. No
+cost-reducing change has been verified. Phase evidence identifies pressure/host work, cache writes and cup-move
+whitewater as optimization candidates. A fresh production-size bake is blocked by insufficient free disk; the A6000
+estimate remains unmeasured.
 
 ### S1: the Hot pour in a rendered shot (finish 1)
 

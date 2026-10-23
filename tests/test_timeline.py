@@ -90,6 +90,12 @@ class TimelineBarTests(unittest.TestCase):
         self.bar.set_marks({1, 2, 3}, {5})
         self.assertEqual(len(painted), 1)
 
+    def test_simulation_bake_marks_are_separate_from_display_cache_marks(self):
+        self.bar.set_marks({1, 2}, {5})
+        self.bar.set_simulation_frames({1, 2, 3})
+        self.assertEqual(self.bar.cached_frames, {1, 2})
+        self.assertEqual(self.bar.simulation_frames, {1, 2, 3})
+
     def test_paints_without_error_across_ranges_and_marks(self):
         # A paint that throws takes the whole window down, and the band/label code has enough
         # integer geometry in it to be worth actually exercising.
@@ -97,6 +103,7 @@ class TimelineBarTests(unittest.TestCase):
         for first, last in ((1, 1), (1, 24), (1, 100), (1001, 3000), (1, 20000)):
             self.bar.setRange(first, last)
             self.bar.set_marks(set(range(first, min(first + 40, last) + 1)), {first, last})
+            self.bar.set_simulation_frames(set(range(first, min(first + 20, last) + 1)))
             pixmap = QPixmap(self.bar.size())
             self.bar.render(pixmap)
 

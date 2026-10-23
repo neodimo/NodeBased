@@ -45,6 +45,7 @@ PLAYHEAD_INK = QColor(TOKENS["acc_ink"])
 TICK_COLOR = QColor(TOKENS["line2"])
 LABEL_COLOR = QColor(TOKENS["tx3"])
 TRACK_COLOR = QColor(TOKENS["line2"])
+SIMULATION_COLOR = QColor(TOKENS["warn"])
 
 # Track geometry, measured up from the bottom edge. The cache range is a 3 px rounded bar 4 px
 # above the bottom, as in the mockup; key diamonds sit above it, ticks and numbers hang from the top.
@@ -146,6 +147,7 @@ class TimelineBar(QWidget):
         self._value = 1
         self._visual_value = 1.0
         self.cached_frames: set[int] = set()
+        self.simulation_frames: set[int] = set()
         self.key_frames: set[int] = set()
         # frame -> ["Grade · exposure", ...]: what the key marks are keys of, for the hover tooltip.
         self.key_labels: dict[int, list[str]] = {}
@@ -153,6 +155,7 @@ class TimelineBar(QWidget):
         self.setCursor(Qt.CursorShape.SizeHorCursor)
         self.setToolTip("Scrub the playhead. ← → step, Home/End jump to the range ends.\n"
                         "Green bar: frames that are cached and will replay instantly.\n"
+                        "Amber bar: frames re-simulated after the latest edit.\n"
                         "Blue diamond: frame carries an animation key; hover it to see which knobs.")
 
     def sizeHint(self):
@@ -208,6 +211,13 @@ class TimelineBar(QWidget):
         self.cached_frames = cached
         self.key_frames = keys
         self.key_labels = labels
+        self.update()
+
+    def set_simulation_frames(self, frames):
+        frames = set(map(int, frames))
+        if frames == self.simulation_frames:
+            return
+        self.simulation_frames = frames
         self.update()
 
     def key_tooltip(self, frame):
@@ -317,6 +327,10 @@ class TimelineBar(QWidget):
         painter.setBrush(TRACK_COLOR)
         painter.drawRect(band)
         self._draw_cache_runs(painter, band)
+        sim_band = QRectF(band.x(), band.y() - CACHE_BAND_HEIGHT - 1, band.width(), CACHE_BAND_HEIGHT)
+        painter.setBrush(QColor(TOKENS["line2"]))
+        painter.drawRect(sim_band)
+        self._draw_runs(painter, sim_band, self.simulation_frames, SIMULATION_COLOR)
         self._draw_key_ticks(painter)
 
         # The playhead last, so nothing buries it: a 1 px accent line the full height and a small
@@ -339,11 +353,14 @@ class TimelineBar(QWidget):
                 painter.drawRect(self.key_mark_rect(frame))
 
     def _draw_cache_runs(self, painter, band):
-        if not self.cached_frames:
+        self._draw_runs(painter, band, self.cached_frames, CACHED_COLOR)
+
+    def _draw_runs(self, painter, band, frames, color):
+        if not frames:
             return
         per_frame = self.frame_width()
-        painter.setBrush(CACHED_COLOR)
-        for start, end in contiguous_runs(self.cached_frames):
+        painter.setBrush(color)
+        for start, end in contiguous_runs(frames):
             if end < self._first or start > self._last:
                 continue
             start = max(start, self._first)

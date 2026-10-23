@@ -1,6 +1,6 @@
-# Lane 6 step A of 2 — in progress (2026-10-22)
+# Lane 6 step A of 2 — PARTIAL; waiting for integration (2026-10-22, 5:47 PM PDT)
 
-Complete-frame solver callbacks and the Hot pour edit benchmark are committed. Cold-cache edit profiles are retained as references; warmed runs record first solved volume frames under 0.31 s on both RTX and Radeon. The Radeon cup-move edit takes 32.43 s for all 120 output stages, 2.43 s over the laptop gate; warm GPU phase profiles identify steam host/pressure work, cache writes and cup-move whitewater as candidates. The callback is not yet wired to timeline playback, stale-picture labeling or edit-triggered cancellation, and no cost-reducing solver change has landed.
+Complete-frame solver callbacks, Hot pour edit profiles, and artist-facing progressive timeline/stale state/cancellation wiring are committed. UI regressions plus CPU and llvmpipe simulation checks pass. First solved volume frames remain under 0.31 s on RTX and Radeon. The Radeon cup-move bake takes 32.43 s, 2.43 s over the 30 s target; no cost-reducing change is verified. A new production-size bake is deferred because 5.7 GB is free while the historical cache occupies about 8.5 GB. Real-display QA and measured <50 ms worker cancellation remain open; see `TASKLOG.md` and `docs/FLUIDS_SPIKE.md`.
 
 # Lane 8 step A of 2 — in progress (2026-10-22)
 
@@ -114,3 +114,6 @@ Final-code RTX, uncontended llvmpipe, and integrated laptop-stand-in measurement
 
 ## Lane 8 step A continuation — 10/22 3:15 AM PDT
 The worker profile identified repeated paint compositing and multichannel EXR reads among the frame costs. A solid-color paint-over fast path and shared beauty/layer EXR decode are committed; focused paint, media, bounding-box, cached-playback, and documentation-copy tests pass. Final-code adapter runs measure tier-4 playback at 22.089 fps RTX, 21.215 llvmpipe and 13.611 integrated. RTX drag first picture is 0.516 s during movement; llvmpipe is 0.497 s; the integrated stand-in produces no in-drag frame and takes 45.361 s to settle. The 24 fps target remains open on all adapters; the 0.5 s target passes only on llvmpipe. Issue and board will be paused with this partial result.
+# Lane 6 step A finish 1 — active (2026-10-22, 5:42 PM PDT)
+
+Scope is the prior PARTIAL's left-outs: artist-facing progressive timeline, stale status, edit cancellation, cost reduction and a fresh production-size bake. The `Window` now queues sequential non-display renders behind the visible edit preview; the timeline marks solved simulation frames separately, the old picture stays labeled stale until the current edit appears, and forward playback stops at the contiguous solved prefix. Queue/timeline/state tests pass. Fresh production-size cache needs ~8.5 GB based on the historical record, while the filesystem has 5.7 GB free; no such bake is running. Real-display QA and measured cancellation latency, cost reduction, and fresh production timing remain open. Worktree is `openclaw/nb-fluids-spike`.

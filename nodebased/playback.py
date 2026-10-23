@@ -89,6 +89,19 @@ class PlaybackQueue:
             self.active_cancel.set()
         self._items.clear()
 
+    def enqueue_background(self, generation, frame, document, tier=FULL_TIER):
+        """Append one non-displayed frame evaluation behind the visible request.
+
+        The caller owns the immutable document snapshot and may enqueue the next frame only after
+        this one completes. This keeps an edit bake bounded to one queued item and lets a new
+        preview replace/cancel it immediately.
+        """
+        frame = int(frame)
+        if any(item.generation == generation and item.frame == frame for item in self._items):
+            return False
+        self._items.append(FrameRequest(int(generation), frame, False, document, int(tier), None, False, False))
+        return True
+
     def take(self):
         if not self._items:
             return None
