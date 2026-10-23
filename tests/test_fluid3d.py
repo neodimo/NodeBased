@@ -182,6 +182,35 @@ class BuoyancyTests(unittest.TestCase):
 class ColliderTests(unittest.TestCase):
     PARAMS = {"nx": 24, "ny": 40, "nz": 24, "tolerance": 1e-4}
 
+    def test_voxelized_collider_pose_is_reused_across_frames_and_edit_streams(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        fluid3d.clear_collider_voxel_cache()
+        params = SimpleNamespace(shape=(24, 24, 24), origin=(0.0, 0.0, 0.0), voxel=1.0, substeps=2)
+
+        def provider(frame):
+            y = 8.0 if int(frame) < 2 else 9.0
+            return box_triangles((6.0, y, 6.0), (18.0, y + 4.0, 18.0))
+
+        def collider():
+            return fluid3d.Collider(fluid3d.GeometryTrack(provider, animated=True), animated=True)
+
+        try:
+            with patch.object(fluid3d, "voxelize_solid", wraps=fluid3d.voxelize_solid) as voxelize:
+                first = collider()
+                base_pose = first.mask(params, 1, 0, 2)
+                moved_pose = first.mask(params, 2, 0, 2)
+                repeated_pose = first.mask(params, 3, 0, 2)
+                edited_stream_pose = collider().mask(params, 3, 0, 2)
+                self.assertEqual(voxelize.call_count, 2)
+            self.assertFalse(np.array_equal(base_pose[0], moved_pose[0]))
+            for cached in (repeated_pose, edited_stream_pose):
+                np.testing.assert_array_equal(moved_pose[0], cached[0])
+                np.testing.assert_array_equal(moved_pose[1], cached[1])
+        finally:
+            fluid3d.clear_collider_voxel_cache()
+
     def run_with_box(self, frames=45):
         collider = box_collider((6.0, 14.0, 6.0), (18.0, 18.0, 18.0))
         return solve(self.PARAMS, frames, colliders=[collider])

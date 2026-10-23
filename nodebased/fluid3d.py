@@ -47,12 +47,75 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import threading
 import time
 from collections import OrderedDict
 
 import numpy as np
 
 from .cancellation import Cancelled
+
+
+# Collider geometry often retains the same pose across many animation frames, and a fresh
+# solver stream is built for each edit. Keep the voxelized solid keyed by its actual pose and
+# grid so those streams can share the expensive rasterization. Values are immutable; solvers
+# only read them while assembling their own combined solid mask.
+_COLLIDER_VOXEL_CACHE = OrderedDict()
+_COLLIDER_VOXEL_CACHE_BYTES = 0
+_COLLIDER_VOXEL_CACHE_LIMIT = 256 << 20
+_COLLIDER_VOXEL_CACHE_LOCK = threading.RLock()
+
+
+def clear_collider_voxel_cache():
+    """Clear the bounded process-wide cache of collider masks (also useful to isolate tests)."""
+    global _COLLIDER_VOXEL_CACHE_BYTES
+    with _COLLIDER_VOXEL_CACHE_LOCK:
+        _COLLIDER_VOXEL_CACHE.clear()
+        _COLLIDER_VOXEL_CACHE_BYTES = 0
+
+
+def _voxelized_collider(triangles, solver, motion_cells=None):
+    """Return a shared solid mask/velocity for this exact collider pose and solver grid."""
+    global _COLLIDER_VOXEL_CACHE_BYTES
+    tri = np.ascontiguousarray(triangles, dtype=np.float64).reshape(-1, 3, 3)
+    motion = None if motion_cells is None else np.ascontiguousarray(motion_cells, dtype=np.float64).reshape(-1, 3)
+    digest = hashlib.blake2b(digest_size=20)
+    digest.update(tri.tobytes())
+    if motion is not None:
+        digest.update(motion.tobytes())
+    key = (tuple(solver.shape), tuple(np.asarray(solver.origin, float)), float(solver.voxel),
+           None if motion is None else motion.shape, digest.digest())
+    with _COLLIDER_VOXEL_CACHE_LOCK:
+        cached = _COLLIDER_VOXEL_CACHE.get(key)
+        if cached is not None:
+            _COLLIDER_VOXEL_CACHE.move_to_end(key)
+            return cached
+
+    if not len(tri):
+        result = (np.zeros(solver.shape, bool), None)
+    elif motion is None:
+        result = (voxelize_solid(tri, solver.shape)[1], None)
+    else:
+        surface, solid, velocity = voxelize_solid(tri, solver.shape, motion)
+        mean = motion.mean(axis=0) if len(motion) else np.zeros(3)
+        result = (solid, np.where(surface[..., None], velocity, mean).astype(np.float32))
+
+    solid, velocity = result
+    solid.setflags(write=False)
+    if velocity is not None:
+        velocity.setflags(write=False)
+    size = solid.nbytes + (0 if velocity is None else velocity.nbytes)
+    if size <= _COLLIDER_VOXEL_CACHE_LIMIT:
+        with _COLLIDER_VOXEL_CACHE_LOCK:
+            previous = _COLLIDER_VOXEL_CACHE.pop(key, None)
+            if previous is not None:
+                _COLLIDER_VOXEL_CACHE_BYTES -= previous[0].nbytes + (0 if previous[1] is None else previous[1].nbytes)
+            _COLLIDER_VOXEL_CACHE[key] = result
+            _COLLIDER_VOXEL_CACHE_BYTES += size
+            while _COLLIDER_VOXEL_CACHE_BYTES > _COLLIDER_VOXEL_CACHE_LIMIT:
+                _, evicted = _COLLIDER_VOXEL_CACHE.popitem(last=False)
+                _COLLIDER_VOXEL_CACHE_BYTES -= evicted[0].nbytes + (0 if evicted[1] is None else evicted[1].nbytes)
+    return result
 from . import simcache
 from .simcache import State
 
@@ -681,8 +744,7 @@ class Collider:
             return cached
         if not self.animated:
             tri = (self.track.at(frame) - solver.origin) / solver.voxel
-            result = ((np.zeros(solver.shape, bool), None) if not len(tri)
-                      else (voxelize_solid(tri, solver.shape)[1], None))
+            result = _voxelized_collider(tri, solver)
         else:
             now, nxt = self.track.at(frame), self.track.at(int(frame) + 1)
             if now.shape != nxt.shape:
@@ -692,12 +754,7 @@ class Collider:
                 world = now + t * (nxt - now)
                 motion_cells = (nxt - now).mean(axis=1) / solver.voxel
             tri = (world - solver.origin) / solver.voxel
-            if not len(tri):
-                result = (np.zeros(solver.shape, bool), None)
-            else:
-                surface, solid, velocity = voxelize_solid(tri, solver.shape, motion_cells)
-                mean = motion_cells.mean(axis=0) if len(motion_cells) else np.zeros(3)
-                result = (solid, np.where(surface[..., None], velocity, mean).astype(np.float32))
+            result = _voxelized_collider(tri, solver, motion_cells)
         if len(self._cache) > 8:
             self._cache.clear()
         self._cache[key] = result

@@ -1,6 +1,6 @@
-# Lane 6 step B finish 2 — PARTIAL (2026-10-23, 2:34 AM PDT)
+# Lane 6 step B finish 2 — collider voxelization optimization (active, 2026-10-23 2:57 AM PDT)
 
-Production-size gates ran on RTX 3080 Ti at 256³ liquid / 192³ steam. Pour keyed at frame 60; profiled first edited scene evaluation took 346.208 s (before display render), dominated by collider voxelization (188.852 s). Timeline reached frame 70 at 16.487 s, missing the 12 FPS target. The 120-frame proxy total, full-detail stage split, cup/steam edits and integrated Radeon remain incomplete; A6000 is estimated only. Corrected harness sets the viewer output; prior blank-view results are superseded. Production scratch was moved to trash after capturing the committed JSON. Docs knowledge tests pass. Commit: ed77ee22.
+Base is merged at `ce168b62`. Scope is the committed PARTIAL report's left-outs, with focus on reusing collider voxelization across frames and edit streams. Current diagnosis: `Collider.mask` keys per-frame results locally, so repeated identical cup transforms re-voxelize. I am adding a bounded content-keyed cache plus exact-result/call-count regression, then will rerun the RTX proxy first-frame gate. Production runs stay under the shared lock and scratch limit; generated caches will be trashed after capture.
 
 # Lane 8 step B finish 6 — active (2026-10-22)
 

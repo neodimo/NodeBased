@@ -130,6 +130,8 @@ def main():
     parser.add_argument("--full-only", action="store_true")
     parser.add_argument("--profile-first", action="store_true",
                         help="profile the first edited proxy scene frame, then stop")
+    parser.add_argument("--first-only", action="store_true",
+                        help="measure and save the first displayed proxy frame, then stop")
     parser.add_argument("--play-width", type=int, default=1920)
     parser.add_argument("--play-height", type=int, default=1080)
     args = parser.parse_args()
@@ -203,6 +205,12 @@ def main():
                         "proxy_first_frame_s": round(first_elapsed, 4),
                         "edit_commands": commands,
                         "proxy_frames": {}})
+            checkpoint(args.json, result)
+            if args.first_only:
+                row["first_proxy_display_measured"] = True
+                checkpoint(args.json, result)
+                print(f"{edit}: first displayed proxy frame {first_elapsed:.3f}s", flush=True)
+                return
             times = []
             for frame in range(1, args.frames + 1):
                 started = time.perf_counter()
