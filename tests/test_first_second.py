@@ -5,6 +5,10 @@ processor render of the smoke, splats and glass scene started the moment playbac
 a minute and a half). Two causes, each with its test below: the direct Render3D path of `TileExecutor.compose_region` did not hand its
 cancel event to the evaluator, and `PlaybackQueue` cancelled only the newest taken job, not the one still running ahead of it.
 
+Part 3, builds before playback: the first picture builds every pipeline and shader the scene needs, and the display pass the played
+frames use (`gpupicture.warm`), so the first played frames build nothing. `tools/benchmark_3d_playback.py --first-seconds` reports the
+builds in the first seconds; the tests here count them.
+
 Part 1, the first picture: the coarse tiers of a progressive preview (the first look after opening a scene or editing it) draw
 a Render3D with splats and meshes on the card, as playback does. A scene with smoke, splats and a see-through sphere took 7 s
 for its first picture because the exact picture comes from the processor; each test here fails without `first_look_document`
@@ -19,6 +23,7 @@ import numpy as np
 
 import tests.isolation  # noqa: F401
 from nodebased import gpu3d, imaging, playback, scene3d
+from nodebased import scene3d as s
 from nodebased.core import Dispatcher
 from tests.test_3d_playback_cost import build, render_commands
 
@@ -224,6 +229,66 @@ class CancelReachesTheRunningRender(unittest.TestCase):
         queue.take()
         queue.cancel()
         self.assertTrue(running.is_set())
+
+
+PIPELINE_CALLS = ("create_render_pipeline", "create_compute_pipeline", "create_shader_module")
+
+
+def pipeline_builds(trace):
+    return [(kind, round(ms, 1)) for _started, kind, ms, _size in trace.rows if kind in PIPELINE_CALLS]
+
+
+@unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
+class FirstFramesBuildNothingNew(unittest.TestCase):
+    def setUp(self):
+        from nodebased import gpupicture
+        from tools.benchmark_3d_playback import BuildTrace
+        self.gpupicture = gpupicture
+        patcher = unittest.mock.patch.object(gpupicture, "ARMED_KINDS", ("discrete", "integrated", "cpu", "other"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.trace = BuildTrace()
+        self.addCleanup(self.trace.remove)
+
+    def render(self, scene, camera, *, view=None, warm=False, playing=False, **more):
+        self.gpupicture.clear()
+        if view is not None:
+            self.gpupicture.arm(view)
+        elif warm:
+            self.gpupicture.arm_warm(warm)
+        try:
+            with gpu3d.playing(playing):
+                return gpu3d.render(scene, camera, 96, 54, **more)
+        finally:
+            self.gpupicture.disarm()
+
+    def test_a_picture_before_playback_builds_the_display_pass_the_played_frames_use(self):
+        from tests.test_3d_card_picture import HDR_SCENE
+        state = gpu3d._state()
+        state.pop("picture", None)                      # a cold display pass
+        self.trace.install()
+        self.render(HDR_SCENE, s.Camera(), warm="ACES 2.0")        # the first picture, still, from the coarse tier
+        self.trace.rows.clear()
+        for step in range(3):                           # the first played frames
+            self.render(HDR_SCENE, s.Camera(), view="ACES 2.0")
+        self.assertEqual(pipeline_builds(self.trace), [], "a played frame built a shader or pipeline the first picture could have")
+
+    def test_the_played_frames_of_smoke_splats_and_glass_rebuild_no_pipeline_the_first_picture_built(self):
+        from dataclasses import replace
+        from tests.test_3d_splats_smoke_on_card import smoke_scene, SETTINGS
+        from tests.test_3d_splats_on_card import card, many
+        from tests.test_3d_gpu_volumes import CAMERA
+        scene = smoke_scene(many(300, 3), geometries=(card(-.5),), relight=1.0)
+        self.trace.install()
+        self.render(scene, CAMERA, playing=True, volume=SETTINGS, ambient=.2)      # the first picture (a draft is drawn as a played frame)
+        built = pipeline_builds(self.trace)
+        self.assertGreater(len(built), 0, "the first frame must have built the scene's pipelines")
+        self.trace.rows.clear()
+        position = CAMERA.transform.position
+        for step in range(1, 5):                        # the camera moves, as it does in the first seconds of playback
+            moved = replace(CAMERA, transform=replace(CAMERA.transform, position=s.Vec3(position.x + .02 * step, position.y, position.z)))
+            self.render(scene, moved, playing=True, volume=SETTINGS, ambient=.2)
+        self.assertEqual(pipeline_builds(self.trace), [], "the first frames after a cold start rebuilt pipelines the scene had built")
 
 
 if __name__ == "__main__":

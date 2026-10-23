@@ -67,6 +67,17 @@ def arm(view):
 
 def disarm():
     _local.view = None
+    _local.warm = None
+
+
+def arm_warm(view):
+    """The frames this thread renders from now on are not played, but a played frame will want the picture for `view`: they build
+    its display pass (`warm`) without making a picture."""
+    _local.warm = view if ENABLED else None
+
+
+def warm_view():
+    return getattr(_local, "warm", None)
 
 
 def armed_view():
@@ -174,7 +185,8 @@ def prepare(state, view, width, height):
         return None
 
 
-def _resources(state, view, width, height):
+def _view_pipeline(state, view):
+    """The display pass for `view` on this card: (pipeline, tables bind group, source layout, tables buffer), built once."""
     wgpu, device = state["wgpu"], state["device"]
     held = state.setdefault("picture", {})
     if "layouts" not in held:
@@ -199,7 +211,32 @@ def _resources(state, view, width, height):
         group = device.create_bind_group(layout=held["tables_layout"], entries=[
             {"binding": 0, "resource": {"buffer": buffer, "offset": 0, "size": tables.nbytes}}])
         pipelines[view] = (pipeline, group, held["source_layout"], buffer)
-    pipeline, group, layout, _buffer = pipelines[view]
+    return pipelines[view]
+
+
+def warm(state, view):
+    """Build the display pass for `view` before the first played frame needs it (the frames before playback start call this, so
+    the first played frame creates no shader module or pipeline). Quietly does nothing on a card that cannot make the picture."""
+    if state.get("picture_failed"):
+        return False
+    from . import gpu3d
+    if gpu3d._adapter_kind(state) not in ARMED_KINDS:
+        return False
+    try:
+        _view_pipeline(state, view)
+    except carddisplay.Unsupported as error:
+        state.setdefault("picture_unsupported", {})[view] = str(error)
+        return False
+    except Exception as error:
+        state["picture_failed"] = f"{type(error).__name__}: {error}"
+        return False
+    return True
+
+
+def _resources(state, view, width, height):
+    wgpu, device = state["wgpu"], state["device"]
+    held = state.setdefault("picture", {})
+    pipeline, group, layout, _buffer = _view_pipeline(state, view)
     key = (width, height)
     if held.get("size") != key:
         old = held.pop("target", None)

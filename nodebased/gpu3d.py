@@ -2327,6 +2327,8 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     picture_view = (gpupicture.armed_view() if output == 'rgba' and not data and not bg.any()
                     and _card_finishes_frame(scene, state['splats_on_card']) else None)
     recorder = gpupicture.prepare(state, picture_view, width, height) if picture_view is not None else None
+    if picture_view is None and gpupicture.warm_view() is not None:
+        gpupicture.warm(state, gpupicture.warm_view())       # a frame that is not played builds the display pass the played ones will use
     float_bytes = stride*max(y1-y0 for y0, y1 in bands)
     picture_offset = (float_bytes + 255)//256*256
     staging = _staging_buffer(state, picture_offset + (recorder.bytes if recorder is not None else 0), keep)

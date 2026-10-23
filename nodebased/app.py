@@ -14808,18 +14808,21 @@ class Window(QMainWindow):
         def work():
             # A played frame whose picture is `to_qimage`'s plain case: the render card makes the 8-bit picture in the frame's own
             # submission (nodebased/gpupicture.py) and the conversion stage takes it instead of converting the float frame.
-            plain = (request.display and request.playing and self.pipeline_playback and not exposure
-                     and channel in ("RGB", "RGBA") and background != "checker"
-                     and not look.get("zebra") and float(look.get("gamma", 1.0)) == 1.0
-                     and compare_model.active_b(request.document)[1] is None)
+            plain_look = (request.display and self.pipeline_playback and not exposure
+                          and channel in ("RGB", "RGBA") and background != "checker"
+                          and not look.get("zebra") and float(look.get("gamma", 1.0)) == 1.0
+                          and compare_model.active_b(request.document)[1] is None)
+            plain = plain_look and request.playing
             if plain:
                 gpupicture.arm(view)
+            elif plain_look:
+                gpupicture.arm_warm(view)      # a picture before playback builds the display pass the played ones will use
             try:
                 with self.render_progress_router.handler(report if request.display else None):
                     render()
             finally:
                 self.preview_queue.retire(cancel)
-                if plain:
+                if plain_look:
                     gpupicture.disarm()
         def render():
             start = time.perf_counter()
