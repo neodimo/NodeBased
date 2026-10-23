@@ -1,5 +1,33 @@
 ## 2026-10-22 — Lane 6 step A finish 2 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (7:35 PM on 2026-10-22 PDT)
+
+`main` moved `a91609e1` -> `647fd5c8` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `647fd5c8` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1925.log`, started 7:25 PM): **Ran 6013 tests in 481.704 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step A of 1: Roto drawing and the zoom keys on the Direct picture, and a steady picture count (resume 1).** Commits:
+  - `03540a23` Direct picture: steady picture count explained and measured over ten RTX runs, parity table against the Viewer with a recommendation, docs and bundled copy
+  - `f3e2fe61` Direct picture playback check: each size runs on the surface and on an offscreen texture, the picture count that gates comes from the offscreen pair, and the run records the card's power state and link
+  - `71260ddb` Stopping playback no longer blanks the Viewer: a cancelled tile render is a Cancelled, and a cancelled request with no frame leaves the picture, format rectangle and handles alone; overlay playback tool gains --offscreen-card, --drawing, present timing and draw intervals
+  - `179b5f5d` Direct picture: Roto and RotoPaint drawing proven identical to the Viewer; Delete, Shift+Z and Ctrl+A reach the points from the direct picture; every Viewer zoom key (fit, 1:1, zoom in, zoom out) works on it from one shared key map, and ? lists them
+  Diff: 11 files changed, 894 insertions(+), 42 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 2).** Commits:
+  - `098f092e` Record exact viewer acceptance and RTX playback gates
+  - `5983c891` Record final CPU-side playback follow-up rates
+  - `c6f42e34` Measure uncached 2D playback tiers and document open gates
+  Diff: 4 files changed, 104 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (7:15 PM on 2026-10-22 PDT)
 
 `main` moved `39cc8a78` -> `a98d95a2` (lane commits cherry-picked onto main in lane order) and then to this

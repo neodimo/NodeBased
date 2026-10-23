@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step A of 1: Roto drawing and the zoom keys on the Direct picture, and a steady picture count (resume 1), Lane 8 (2D parity B, GPT-6 Luna) step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 2) (integrator tick)
+
+- **What was done:** `main` `a91609e1` -> `647fd5c8` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `647fd5c8`: Ran 6013 tests in 481.704 s, OK (skipped=32), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the production-size Hot pour re-simulates only what changed (integrator tick)
 
 - **What was done:** `main` `39cc8a78` -> `a98d95a2` plus this docs commit. Evidence and per-lane commit
