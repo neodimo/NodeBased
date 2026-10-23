@@ -7011,6 +7011,10 @@ class Evaluator:
 
     @staticmethod
     def _grade(image, p):
+        if p["exposure"] == 0.0 and p["multiply"] == 1.0 and p["offset"] == 0.0:
+            # Identity Grade is common in comps as a placeholder; preserve value semantics
+            # without copying the frame and streaming its RGB through a neutral multiply.
+            return image.copy()
         frame = image.copy()
         rgb = frame[..., :3]
         np.multiply(rgb, 2.0 ** p["exposure"], out=rgb)

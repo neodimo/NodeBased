@@ -172,6 +172,12 @@ class ImageTests(unittest.TestCase):
         np.testing.assert_allclose(result, [[[4.1, -1.9, 0.5, 0.5]]], rtol=1e-6)
         np.testing.assert_array_equal(src, np.array([[[2, -1, 0.2, 0.5]]], np.float32))
 
+    def test_neutral_grade_preserves_pixels_without_aliasing_input(self):
+        src = np.array([[[2.0, -1.0, 0.2, 0.5], [0.0, 0.4, 1.5, 1.0]]], np.float32)
+        result = Evaluator._kernel('Grade', {'exposure': 0, 'multiply': 1, 'offset': 0}, [src])
+        np.testing.assert_array_equal(result, src)
+        self.assertFalse(np.shares_memory(result, src))
+
     def test_translation_does_not_wrap(self):
         src = np.ones((2, 3, 4), np.float32)
         result = Evaluator._kernel('Transform', {'translate_x': 1.0, 'translate_y': -1.0, 'rotate': 0.0,
