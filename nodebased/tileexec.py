@@ -502,11 +502,11 @@ class TileExecutor:
     def prefetch_reads(self, document, target, frames):
         """Fire-and-forget decode-ahead for every Read ancestor of `target`, at each of `frames`.
 
-        No-op without a `decode_pool`. Only source decoding runs early; graph evaluation, tile
-        compose and the display transform still happen on the single preview worker when that
-        frame is actually requested, so ordering and cancellation for the *displayed* result are
-        unaffected. Both `_generator_tile` and the full-frame Evaluator can consume the warmed
-        immutable Raster.
+        No-op without a `decode_pool`. Source decode and input color ingest to the ACEScg working
+        space run early through `read_image_raster`; graph evaluation, tile compose and the display
+        transform still happen on the single preview worker when that frame is actually requested,
+        so ordering and cancellation for the *displayed* result are unaffected. Both
+        `_generator_tile` and the full-frame Evaluator can consume the warmed immutable Raster.
         """
         if (self.decode_pool is None or self.decode_pool.max_workers == 0 or not frames):
             return
@@ -535,6 +535,8 @@ class TileExecutor:
                 def decode_fn(p=params, f=frame):
                     p = dict(p)
                     p["frame"] = f
+                    # `read_image_raster` includes media color conversion to working space. Keep
+                    # the pool entry ready for the Read consumer rather than raw decoded pixels.
                     raster = imaging.read_image_raster(**p)
                     raster.pixels.flags.writeable = False
                     for layer in (raster.layers or {}).values():

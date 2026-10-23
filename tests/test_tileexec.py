@@ -654,12 +654,14 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
     def test_full_evaluator_consumes_warmed_raster_decode(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "multilayer.exr"
-            beauty = np.full((16, 32, 4), 0.25, np.float32)
+            beauty = np.empty((16, 32, 4), np.float32)
+            beauty[..., :3] = (0.2, 0.45, 0.7)
+            beauty[..., 3] = 1.0
             layers = {"normals": np.ones((16, 32, 3), np.float32)}
             write_exr(path, beauty, bits="float", layers=layers)
             dispatcher = Dispatcher()
             dispatcher.execute({"op": "create", "type": "Read", "id": "r",
-                                "params": {"path": str(path), "colorspace": "Raw"}})
+                                "params": {"path": str(path), "colorspace": "Linear Rec.709"}})
             document = dispatcher.document
             pool = DecodeAheadPool(max_workers=1, budget_bytes=50_000_000)
             evaluator = Evaluator()
@@ -668,6 +670,13 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
             try:
                 executor.prefetch_reads(document, "r", [1])
                 self.assertTrue(_wait_for(lambda: pool.stats()["entries"] == 1))
+                from nodebased.color import to_working
+                expected_working = to_working(beauty, "Linear Rec.709")
+                self.assertFalse(np.array_equal(expected_working, beauty))
+                from nodebased.raster import Raster
+                warmed = pool.get(_read_decode_key(document["nodes"]["r"]["params"], 1))
+                self.assertIsInstance(warmed, Raster)
+                np.testing.assert_allclose(warmed.pixels, expected_working, rtol=1e-6, atol=1e-6)
                 before = pool.hits
                 actual = evaluator.evaluate_raster(document, "r", frame=1, tier=2, typed=True)
                 self.assertGreater(pool.hits, before)
