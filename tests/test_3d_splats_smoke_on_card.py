@@ -24,8 +24,8 @@ def smoke_scene(*clouds, geometries=(), lights=(SUN,), relight=0.0, shadow_catch
                    splats=tuple(s.SplatInstance(c, relight=relight, shadow_catch=shadow_catch) for c in clouds))
 
 
-def draw(scene, **more):
-    with gpu3d.playing(True):
+def draw(scene, playing=True, **more):
+    with gpu3d.playing(playing):
         return np.asarray(gpu3d.render(scene, CAMERA, W, H, volume=SETTINGS, ambient=.2, **more))
 
 
@@ -69,10 +69,13 @@ class SmokeWithSplatsOnTheCard(unittest.TestCase):
         scene = smoke_scene(many(300, 3), relight=1.0)
         np.testing.assert_allclose(draw(scene), reference(scene), atol=TOLERANCE * 3, rtol=0)
 
-    def test_smoke_shadows_on_lit_splats_stay_on_the_processor(self):
+    def test_smoke_shadows_on_lit_splats_stay_on_the_processor_outside_playback(self):
         sun = s.Light('Directional', position=s.Vec3(4, 5, 3), target=s.Vec3(), shadows=True)
+        scene = smoke_scene(many(100, 3), relight=1.0, lights=(sun,))
         with self.assertRaises(gpu3d.Unsupported):
-            draw(smoke_scene(many(100, 3), relight=1.0, lights=(sun,)))
+            draw(scene, playing=False)
+        frame = draw(scene)          # a played frame lights its splats without shadows, with smoke or without
+        self.assertGreater(float(frame[..., 3].max()), .5)
 
     def test_the_old_readback_route_leaves_smoke_with_splats_to_the_processor(self):
         with unittest.mock.patch.object(gpu3d, 'SPLATS_ON_CARD', False), self.assertRaises(gpu3d.Unsupported):
@@ -83,6 +86,14 @@ class SmokeWithSplatsOnTheCard(unittest.TestCase):
         np.testing.assert_allclose(draw(smoke), reference(smoke), atol=TOLERANCE, rtol=0)
         splats = s.Scene(splats=(s.SplatInstance(many(300, 3)),))
         np.testing.assert_allclose(draw(splats), reference(splats), atol=TOLERANCE, rtol=0)
+
+    def test_a_frame_in_several_bands_agrees(self):
+        # a smoke march too long for one submission goes out in row bands; each band gets its share of the splat layer
+        scene = smoke_scene(many(300, 3), geometries=(card(-.5),))
+        with unittest.mock.patch.object(gpu3d, 'GPU_FORCE_BANDS', 3), unittest.mock.patch.object(
+                gpusplat, 'render_layer', side_effect=AssertionError('the splat layer was read back')):
+            actual = draw(scene)
+        np.testing.assert_allclose(actual, reference(scene), atol=TOLERANCE, rtol=0)
 
     def test_a_background_and_two_samples_agree(self):
         scene = smoke_scene(many(300, 3), geometries=(card(-.5),))

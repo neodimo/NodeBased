@@ -1,0 +1,47 @@
+{
+ "adapter": "wgpu adapter: NVIDIA GeForce RTX 3080 Ti\n  type DiscreteGPU, backend Vulkan, vendor NVIDIA, driver 615.71.09, wgpu 0.32.0\n  rgba target rgba32float (float32-blendable present)\n  storage buffers per stage 8, binding size 2147483644, max texture 32768",
+ "size": "1920x1080",
+ "samples": 8,
+ "variants": {
+  "full": {
+   "seconds": 4.458,
+   "all_runs": [
+    5.95,
+    4.458
+   ],
+   "million_paths_per_second": 3.72
+  },
+  "no smoke": {
+   "seconds": 0.743,
+   "all_runs": [
+    0.743,
+    0.749
+   ],
+   "million_paths_per_second": 22.33
+  },
+  "no splats": {
+   "seconds": 0.535,
+   "all_runs": [
+    0.535,
+    0.589
+   ],
+   "million_paths_per_second": 31.01
+  },
+  "no splats, no smoke": {
+   "seconds": 0.358,
+   "all_runs": [
+    0.358,
+    0.358
+   ],
+   "million_paths_per_second": 46.35
+  },
+  "splats and smoke only": {
+   "seconds": 0.468,
+   "all_runs": [
+    0.468,
+    0.499
+   ],
+   "million_paths_per_second": 35.45
+  }
+ }
+}

@@ -1657,14 +1657,15 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         if volumes and scene.splats:
             # Smoke together with splats (the CPU draws the smoke over the meshes and splats, cut at the mesh depth): the splat layer
             # goes onto the card between the mesh passes and the smoke march. A shadow of the smoke on relit or shadow-catching
-            # splats, a frame in several bands or the old readback route stay with the CPU.
+            # splats stays with the CPU outside playback; a played frame lights its splats without shadows of any kind, as it does
+            # without smoke. The old readback route stays with the CPU.
             smoke_shades_splats = (volume.shadow_density > 0 and any(light.shadows and light.intensity > 0 for light in scene.lights)
                                    and any(getattr(i, 'relight', 0) > 0 or getattr(i, 'shadow_catch', 0) > 0 for i in scene.splats))
-            if (not SPLATS_ON_CARD or len(bands) != 1 or smoke_shades_splats or any(
+            if (not SPLATS_ON_CARD or (smoke_shades_splats and not is_playing()) or any(
                     getattr(e, 'visible_to_camera', False) for e in environments) or any(
                     light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0 for light in scene.lights)):
-                raise Unsupported('smoke together with splats is drawn on the card only in one band, without smoke shadows on relit '
-                                  'splats and without a visible environment or area light; the CPU draws the rest')
+                raise Unsupported('smoke together with splats is drawn on the card without smoke shadows on relit splats (outside playback) and '
+                                  'without a visible environment or area light; the CPU draws the rest')
         if (scene.splats and output == 'rgba' and SPLATS_ON_CARD and not any(
                 getattr(e, 'visible_to_camera', False) for e in environments) and not any(
                 light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0 for light in scene.lights)):
@@ -2515,6 +2516,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         result = np.empty((height, width, 4), 'f4')
         # Replaying the draw list multiplies host recording cost, acceptable only
         # for heavy-shadow scenes. Ordinary renders retain one submission.
+        splat_layer = False            # the splat layer of a frame with smoke: False until it is prepared, then it or None
         for y0, y1 in bands:
             _cancel(cancel)
             rows = y1-y0
@@ -2576,17 +2578,20 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                     if run_count:
                         rp.draw(3*run_count, 1, run_start, 0)
                 rp.end()
-            if splat_job is not None and has_volumes and not data and len(bands) == 1:
-                # The meshes go out first; the processor prepares the splat layer while the card draws them, and the layer is
-                # drawn over the meshes (reading their depth) before the smoke is marched over both.
+            if splat_job is not None and has_volumes and not data:
+                # The meshes go out first; the processor prepares the splat layer while the card draws them (once, for the first
+                # band), and the layer is drawn over the meshes (reading their depth) before the smoke is marched over both.
                 from . import gpusplat
-                _mark('submit')
-                device.queue.submit([encoder.finish()])
-                splat_layer = gpusplat.prepare_on_card(state, splat_job[0], camera, width, height, depth_view,
-                                                       lighting=splat_job[1], cancel=cancel, keep=keep)
-                encoder = device.create_command_encoder()
-                if splat_layer is not None:
-                    splat_layer(encoder, target_view)
+                if splat_layer is False:
+                    _mark('submit')
+                    device.queue.submit([encoder.finish()])
+                    splat_layer = gpusplat.prepare_on_card(state, splat_job[0], camera, width, height, depth_view,
+                                                           lighting=splat_job[1], cancel=cancel, keep=keep)
+                    encoder = device.create_command_encoder()
+                    if splat_layer is not None:
+                        splat_layer(encoder, target_view, rows=(y0, rows))
+                elif splat_layer is not None:
+                    splat_layer(encoder, target_view, rows=(y0, rows), project_now=False)
                 state['splats_on_card'] = True
             if volume_pass is not None:
                 _cancel(cancel)

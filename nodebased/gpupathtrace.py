@@ -69,6 +69,8 @@ COUNT_COLLISIONS = False   # compile the volume counting variant: a render's rgb
 ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
 STACK = 64
 TLAS_STACK = 32
+STACK_SIZES = (TLAS_STACK, STACK, STACK)      # the traversal stacks' lengths the shader is written for: top-level, mesh, splat tree
+STACK_BUCKETS = (16, 24, 32, 48, 64)          # a scene's trees ask for the first of these that holds their depth (`stack_sizes`)
 WG_SIZE = 8
 WG_SIZE_SPLATS_AND_VOLUMES = 4  # 8x8 miscompiles this variant (and splats with light links) on AMD (wrong albedo, 10x-dark beauty): fewer
                                 # threads per workgroup gives the driver's register allocator room (0.31.0 tag, 9/29)
@@ -196,8 +198,8 @@ fn path_key(pixel: u32, sample: u32, seed: u32) -> u32 { return pcg(pixel + pcg(
 fn rnd(key: u32, dim: u32) -> f32 { return f32(pcg(key ^ (dim * 2654435769u)) >> 8u) * (1.0 / 16777216.0); }
 
 // ------------------------------------------------------------------------------------------- traversal
-var<private> tlas_stack: array<i32, 32>;
-var<private> blas_stack: array<i32, 64>;
+var<private> tlas_stack: array<i32, TLAS_STACK_SIZE>;
+var<private> blas_stack: array<i32, BLAS_STACK_SIZE>;
 // Per-object render switches (a shape's `ids.yzw`: casts no shadow, hidden from the camera (bit 0) or a holdout (bit 1), takes no
 // shadow). A holdout ends a camera ray that reaches it with no light and no coverage; every other ray passes through it. A mesh that casts
 // no shadow is skipped by shadow rays; a hidden one by the camera's own rays (`camera_ray`, set around that one intersect call);
@@ -701,7 +703,7 @@ const SPLAT_ALPHA_FLOOR: f32 = 0.00392156862745098;
 const SPLAT_START_SCALE: f32 = 1.0;
 const COPLANAR_COS: f32 = 0.94;
 const SPLAT_DIM: u32 = 56u;
-var<private> splat_stack: array<i32, 64>;
+var<private> splat_stack: array<i32, SPLAT_STACK_SIZE>;
 
 fn sp(i: u32, k: u32) -> vec4<f32> { return env[params.g.z + i * SPLAT_VECS + k]; }
 // Record 8 holds integers as ordinary float values (instance, SH offset low 24 bits, degree + 16 * linear,
@@ -1398,78 +1400,82 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       if (smoke_run == 1u) { thr = thr * (1.0 + params.vp3.x); }
       var direct = vec3<f32>(0.0);
       var slot = 0u;
-      for (var li = 0u; li < lc; li++) {
-        let l0 = light_field(li, 0u);
-        let l5 = light_field(li, 5u);
-        let kind = u32(l0.x);
-        if (kind <= 2u) {
-          var wi = vec3<f32>(0.0);
-          var dist = INF;
-          var irr = l5.xyz;
-          if (kind == 0u) {
-            wi = -light_field(li, 2u).xyz;
+      // One light after another and then the environment (li == lc), all through the one shadow-ray call below: every inlined copy
+      // of `soft_visibility` (the splat tree walk and the smoke march) costs the whole shader registers and instruction cache, and
+      // three copies here made a splats-and-smoke scene twice as slow on the RTX 3080 Ti as one.
+      for (var li = 0u; li <= lc; li++) {
+        var live = false;                       // this light reaches the vertex unshadowed by meshes so far
+        var wi = vec3<f32>(0.0);
+        var dist = INF;                         // how far the shadow ray goes
+        var scale = vec3<f32>(0.0);             // what the light adds once the shadow ray's transmittance is known
+        var weight = 1.0;                       // the multiple-importance weight over the sampling density, folded with the phase
+        if (li < lc) {
+          let l0 = light_field(li, 0u);
+          let l5 = light_field(li, 5u);
+          let kind = u32(l0.x);
+          if (kind <= 2u) {
+            var irr = l5.xyz;
+            if (kind == 0u) {
+              wi = -light_field(li, 2u).xyz;
+            } else {
+              let to = light_field(li, 1u).xyz - pos;
+              dist = length(to);
+              wi = to / max(dist, 1e-12);
+              irr = irr * light_atten(li, pos);
+            }
+            if (max(irr.x, max(irr.y, irr.z)) > 0.0 && vol_reaches(li)) {
+              live = true;
+              scale = hg_phase(g, dot(wi, d)) * irr;
+            }
           } else {
-            let to = light_field(li, 1u).xyz - pos;
-            dist = length(to);
-            wi = to / max(dist, 1e-12);
-            irr = irr * light_atten(li, pos);
-          }
-          if (max(irr.x, max(irr.y, irr.z)) > 0.0 && vol_reaches(li)) {
+            let u1 = rnd(key, dim + 2u + slot);
+            let u2 = rnd(key, dim + 3u + slot);
+            slot += 2u;
+            var q = vec3<f32>(0.0);
+            var nq = vec3<f32>(0.0);
+            area_sample(li, u1, u2, &q, &nq);
+            let to = q - pos;
+            let dist_l = length(to);
+            wi = to / max(dist_l, 1e-12);
+            let cosr = dot(-wi, nq);
+            var cos_l = max(cosr, 0.0);
+            if (l0.y > 0.5) { cos_l = abs(cosr); }
+            if (cos_l > 1e-9 && dist_l > 1e-9 && vol_reaches(li)) {
+              dist = dist_l * (1.0 - 1e-4);
+              let pdf_l = dist_l * dist_l / max(cos_l * light_field(li, 3u).w, 1e-30);
+              let f = hg_phase(g, dot(wi, d));
 //#if LINKS
-            shadow_bit = li;
+              weight = lmis(li, pdf_l, f) / pdf_l;
+//#else
+              weight = mis(pdf_l, f) / pdf_l;
 //#endif
-            if (intersect(pos, wi, 0.0, dist, true).shape < 0) {
-              direct += hg_phase(g, dot(wi, d)) * irr * soft_visibility(pos, wi, dist, -1, vec3<f32>(0.0));
+              live = true;
+              scale = f * weight * l5.xyz;
             }
           }
-        } else {
+        } else if (has_env) {
           let u1 = rnd(key, dim + 2u + slot);
           let u2 = rnd(key, dim + 3u + slot);
           slot += 2u;
-          var q = vec3<f32>(0.0);
-          var nq = vec3<f32>(0.0);
-          area_sample(li, u1, u2, &q, &nq);
-          let to = q - pos;
-          let dist = length(to);
-          let wi = to / max(dist, 1e-12);
-          let cosr = dot(-wi, nq);
-          var cos_l = max(cosr, 0.0);
-          if (l0.y > 0.5) { cos_l = abs(cosr); }
-          if (cos_l > 1e-9 && dist > 1e-9 && vol_reaches(li)) {
-            let reach = dist * (1.0 - 1e-4);
-//#if LINKS
-            shadow_bit = li;
-//#endif
-            if (intersect(pos, wi, 0.0, reach, true).shape < 0) {
-              let pdf_l = dist * dist / max(cos_l * light_field(li, 3u).w, 1e-30);
-              let f = hg_phase(g, dot(wi, d));
-//#if LINKS
-              let wgt = lmis(li, pdf_l, f) / pdf_l * soft_visibility(pos, wi, reach, -1, vec3<f32>(0.0));
-//#else
-              let wgt = mis(pdf_l, f) / pdf_l * soft_visibility(pos, wi, reach, -1, vec3<f32>(0.0));
-//#endif
-              direct += f * wgt * l5.xyz;
-            }
-          }
-        }
-      }
-      if (has_env) {
-        let u1 = rnd(key, dim + 2u + slot);
-        let u2 = rnd(key, dim + 3u + slot);
-        slot += 2u;
-        let es = env_sample(u1, u2);
-        if (es.pdf > 0.0 && vol_reaches(lc)) {
-//#if LINKS
-          shadow_bit = lc;
-//#endif
-          if (intersect(pos, es.dir, 0.0, INF, true).shape < 0) {
+          let es = env_sample(u1, u2);
+          if (es.pdf > 0.0 && vol_reaches(lc)) {
+            wi = es.dir;
             let f = hg_phase(g, dot(es.dir, d));
 //#if LINKS
-            let wgt = lmis(lc, es.pdf, f) / es.pdf * soft_visibility(pos, es.dir, INF, -1, vec3<f32>(0.0));
+            weight = lmis(lc, es.pdf, f) / es.pdf;
 //#else
-            let wgt = mis(es.pdf, f) / es.pdf * soft_visibility(pos, es.dir, INF, -1, vec3<f32>(0.0));
+            weight = mis(es.pdf, f) / es.pdf;
 //#endif
-            direct += f * wgt * es.radiance;
+            live = true;
+            scale = f * weight * es.radiance;
+          }
+        }
+        if (live) {
+//#if LINKS
+          shadow_bit = li;
+//#endif
+          if (intersect(pos, wi, 0.0, dist, true).shape < 0) {
+            direct += scale * soft_visibility(pos, wi, dist, -1, vec3<f32>(0.0));
           }
         }
       }
@@ -2153,7 +2159,32 @@ def _preprocess(code, flags):
     return "\n".join(out)
 
 
-def shader_source(splats=False, volumes=False, links=False, sparse=False, count=False, wide=False):
+def tree_depth(bvh):
+    """The most interior nodes on a path from the root of a `raytrace.Bvh` to a leaf (0 for a single leaf)."""
+    if len(bvh.left) == 0:
+        return 0
+    frontier, depth = np.array([0]), 0
+    while True:
+        interior = frontier[bvh.prim_count[frontier] == 0]
+        if not len(interior):
+            return depth
+        frontier = np.concatenate((bvh.left[interior], bvh.right[interior]))
+        depth += 1
+
+
+def stack_sizes(tlas_depth, blas_depth, splat_depth):
+    """The traversal stacks' lengths for trees of these depths. A stack holds at most depth + 1 entries and a push writes one past
+    the top, so depth + 2 is enough; the lengths are rounded up to a few buckets so scenes share compiled shaders. The stacks live
+    in each thread's local memory: the three at their full length (32, 64, 64) cost the splats-and-smoke scene's shader half of its
+    speed on the RTX 3080 Ti (4.5 s against 2.3 s for the same 8-sample pass at 1080p, step A of the 10/23 gaps plan)."""
+    sizes = []
+    for depth, full in zip((tlas_depth, blas_depth, splat_depth), STACK_SIZES):
+        need = int(depth) + 2
+        sizes.append(min(full, next((b for b in STACK_BUCKETS if b >= need), full)) if need <= full else need)
+    return tuple(sizes)
+
+
+def shader_source(splats=False, volumes=False, links=False, sparse=False, count=False, wide=False, stacks=STACK_SIZES):
     """The WGSL for a scene kind: the splat and smoke code costs registers whether it runs or not, so a mesh-only scene
     is compiled without any of it. The splats-and-volumes variant also compiles with a smaller workgroup
     (`_wg_size`) except on NVIDIA (`wide`): the same code at 8x8 miscompiles on AMD."""
@@ -2161,13 +2192,15 @@ def shader_source(splats=False, volumes=False, links=False, sparse=False, count=
                                  "LINKS": bool(links), "SPARSE": bool(sparse and volumes),
                                  "COUNT": bool(count and volumes)})
     code = code.replace("SPLAT_ID", "splat_id" if splats else "-1")
+    for name, size in zip(("TLAS_STACK_SIZE", "BLAS_STACK_SIZE", "SPLAT_STACK_SIZE"), stacks):
+        code = code.replace(name, str(int(size)))
     return code.replace("WG_SIZE", str(_wg_size(splats, volumes, links, wide)))
 
 
-def _pipeline(state, splats=False, volumes=False, links=False, sparse=False):
+def _pipeline(state, splats=False, volumes=False, links=False, sparse=False, stacks=STACK_SIZES):
     cache = state.setdefault("_gpupt_pipelines", {})
     key = (bool(splats), bool(volumes), bool(links), bool(sparse and volumes), bool(COUNT_COLLISIONS and volumes),
-           bool(wide_workgroups(state)))
+           bool(wide_workgroups(state)), tuple(int(v) for v in stacks))
     if key not in cache:
         device = state["device"]
         COUNTERS["pipelines"] += 1
@@ -2192,6 +2225,7 @@ def pack(ps, environment_size=None, cancel=None):
     if len(ps.area_lights) + len(ps.point_lights) + len(ps.envs) > pt._MAX_LIGHT_SAMPLES:
         raise gpu3d.Unsupported("too many lights for the path tracer's random-number layout")
     packed = Packed()
+    depths = [0, 0, 0]       # the deepest top-level, mesh and splat trees (the traversal stacks are sized from them)
     n_shapes = ps.shapes
     nodes_parts, order_parts, tri_parts = [], [], []
     node_base = 0
@@ -2204,6 +2238,7 @@ def pack(ps, environment_size=None, cancel=None):
     shapes_empty = len(solid) == 0
     if not shapes_empty:
         tlas = raytrace.Bvh.build(ps.world_lo[solid], ps.world_hi[solid], cancel=cancel)
+        depths[0] = tree_depth(tlas)
         tlas_nodes, tlas_order = gpu3d._pack_bvh(tlas, cancel)
         tlas_order = solid[tlas_order]
     if shapes_empty:
@@ -2221,6 +2256,7 @@ def pack(ps, environment_size=None, cancel=None):
                 root_of_blas.append(0)
                 continue
             bvh = raytrace.Bvh.build(*blas.tris.aabbs(), cancel=cancel)
+            depths[1] = max(depths[1], tree_depth(bvh))
             nodes, order = gpu3d._pack_bvh(bvh, cancel)
             nodes = nodes.copy()
             interior = nodes["count"] == 0
@@ -2250,6 +2286,7 @@ def pack(ps, environment_size=None, cancel=None):
     if ps.splats is not None:
         # the splats' own tree: leaves hold splat ids, so its order entries take no triangle offset
         node_base, order_base = sum(len(a) for a in nodes_parts), sum(len(a) for a in order_parts)
+        depths[2] = tree_depth(ps.splats.bvh)
         nodes, order = gpu3d._pack_bvh(ps.splats.bvh, cancel)
         nodes = nodes.copy()
         interior = nodes["count"] == 0
@@ -2259,6 +2296,7 @@ def pack(ps, environment_size=None, cancel=None):
         packed.splat_root = node_base
         nodes_parts.append(nodes)
         order_parts.append(order.astype("u4"))
+    packed.stacks = stack_sizes(*depths)
     packed.nodes = np.concatenate(nodes_parts)
     packed.order = np.concatenate(order_parts).astype("u4")
     packed.triangles = np.ascontiguousarray(np.concatenate(tri_parts).astype("f4"))
@@ -3287,7 +3325,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             flags = resumed["accum"][:, 1, :]
             first_sample = int(flags[flags[:, 3] < 0.5, 2].max(initial=0))
         links = bool(ps.linked_bits) or ps.hidden is not None or ps.holdout is not None
-        pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes)
+        pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links, packed.sparse_volumes, packed.stacks)
         wg = _wg_size(ps.splats is not None, ps.volumes is not None, links, wide_workgroups(state))
         lap("upload")
         if data_pass or adaptive:

@@ -120,11 +120,20 @@ def profile_route(route, scene, camera, rest, kwargs, width, height, frames, vie
         # smoke together with splats raises Unsupported on this route: Render3D's `auto` backend falls back to the CPU frame
         gpu3d.SPLATS_ON_CARD = True
         timers.restore()
-        start = time.perf_counter()
-        scene3d.render(scene, camera, width, height, rest[0], ambient=rest[1], samples=1, volume=kwargs.get("volume"))
+        note, size = "the CPU frame: gpu3d.render raised Unsupported for smoke together with splats", (width, height)
+        for size in ((width, height), (width // 2, height // 2), (width // 4, height // 4)):
+            start = time.perf_counter()
+            try:
+                scene3d.render(scene, camera, *size, kwargs.get("background", (0, 0, 0, 0)), ambient=kwargs.get("ambient", 0.0),
+                               samples=1, volume=kwargs.get("volume"))
+            except ValueError as error:          # the CPU reference refuses a smoke march over its lookup budget
+                note += f"; refused at {size[0]} x {size[1]} ({error})"[:140]
+                continue
+            break
         total = (time.perf_counter() - start) * 1000
+        note += f"; timed at {size[0]} x {size[1]}"
         return {"frames": 1, "stages_ms": {"whole render call": round(total, 2)}, "frame_ms": round(total, 2),
-                "note": "the CPU frame: gpu3d.render raised Unsupported for smoke together with splats"}
+                "note": note}
     try:
         for index in range(frames + 3):
             angle = index * 0.05

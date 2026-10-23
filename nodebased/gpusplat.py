@@ -483,18 +483,23 @@ def prepare_on_card(state, instances, camera, width, height, depth_view, *, ligh
     last_timings['upload_ms'] = plan['upload_ms'] + (perf_counter()-t)*1000
     count = len(plan['order'])
 
-    def draw(encoder, colour_view, group):
+    def draw(encoder, colour_view, group, rows):
         rp = encoder.begin_render_pass(color_attachments=[dict(view=colour_view, resolve_target=None,
             clear_value=(0,0,0,0), load_op='load', store_op='store')])
+        if rows is not None:
+            rp.set_scissor_rect(0, rows[0], width, rows[1])
         rp.set_pipeline(render); rp.set_bind_group(0, group); rp.draw(6, count, 0, 0); rp.end()
 
-    def record(encoder, colour_view, between=None):
-        project(encoder)
-        draw(encoder, colour_view, groups[0])
+    def record(encoder, colour_view, between=None, rows=None, project_now=True):
+        """`rows` (first row, row count) limits the drawing to one band of a frame drawn in several submissions; the projection
+        pass only has to be recorded once for all of them (`project_now`)."""
+        if project_now:
+            project(encoder)
+        draw(encoder, colour_view, groups[0], rows)
         if glass_view is not None:
             if between is not None:
                 between(encoder)
-            draw(encoder, colour_view, groups[1])
+            draw(encoder, colour_view, groups[1], rows)
     return record
 
 

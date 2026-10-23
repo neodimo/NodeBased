@@ -32,7 +32,7 @@ Per scene it reports, on the adapter in use (the scene, the camera, the seed and
 * ``settle`` (step C of "Render mode responsiveness"): per scene, the request-to-settled seconds (cold, warm median and worst), the time-stamped
   steps of the warm run with the converged share at each, the share of the picture still above the noise threshold when the sample cap
   ended it (``refining_share_at_settle``), the noise threshold and cap in force, whether the one-minute rule holds and, on the RTX 3080 Ti
-  only, the gate: furnished room settled under 4 s and the mixed mesh and splat scene under 30 s (cold and warm worst).
+  only, the gate: furnished room settled under 4 s and the mixed mesh and splat scene under 10 s (cold and warm worst; 30 s until 10/23).
 * ``--field PATH`` writes one small JSON (adapter name, backend, first look, abandon and settle times) and nothing else, for
   ``tools/field_report.py``; ``--quick`` with it runs the furnished room only with fewer trials and stops each view at its first
   full-size pass instead of waiting for it to settle (no settle time then).
@@ -64,7 +64,7 @@ AMBIENT = 0.05
 SETTLE_TIMEOUT = 600.0
 # Step C of "Render mode responsiveness": the settled picture, from the request, at 1920 x 1080, gated on the RTX 3080 Ti only (the other
 # adapters' rows are recorded; the one-minute rule is DiMo's, 10/15: nothing makes the artist wait over a minute).
-SETTLE_GATE_SECONDS = {"furnished": 4.0, "mixed": 30.0}
+SETTLE_GATE_SECONDS = {"furnished": 4.0, "mixed": 10.0}
 ONE_MINUTE = 60.0
 
 
