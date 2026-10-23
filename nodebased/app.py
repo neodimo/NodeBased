@@ -10859,13 +10859,20 @@ class Window(QMainWindow):
         # Only an edit that can change the viewed picture re-renders. Moving, renaming or
         # labelling a node -- or editing a branch the viewer does not see -- leaves it alone.
         if render and self.render_identity() != self.rendered_identity:
-            fluid_edit = (changed and self._view_uses_fluid(self.dispatcher.document)
+            fluid_view = changed and self._view_uses_fluid(self.dispatcher.document)
+            fluid_edit = (fluid_view
                           and self._command_changes_fluid_simulation(self.dispatcher.document, command))
             if fluid_edit:
                 self._set_fluid_stale(True)
             self.request_preview(progressive=not self.playing)
             if fluid_edit:
                 self._begin_fluid_edit_bake()
+            elif fluid_view:
+                from . import fluid_edits
+                text = fluid_edits.status_text(self.dispatcher.document, command)
+                label = getattr(self, "fluid_bake_status", None)
+                if text and label is not None:
+                    label.setText(text)
 
     @staticmethod
     def _fluid_simulation_scope(document):

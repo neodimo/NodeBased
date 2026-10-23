@@ -1221,6 +1221,23 @@ These are visual findings only; solver and lighting changes are outside this ste
 
 ## Lane 6 step notes
 
+### B: edit classes, proxy-first refresh and old-cache stop (partial, 2026-10-22)
+
+The first implementation classifies fluid-node knobs as look-only, time-varying simulation, or
+from-start simulation edits. The artist-facing status now identifies a keyed edit's frame and the
+prior checkpoint boundary, or reports a from-start edit. Classification and the existing progressive
+timeline path pass their focused tests on the RTX 3080 Ti default, CPU and the integrated-adapter
+test harness. This is an initial classification layer: the current baker still solves a changed run
+from its start, so checkpoint reuse from frame 59 is **not implemented or measured**.
+
+Proxy-first-to-full promotion and the old pre-P4 cache stop path remain unimplemented. No bake above
+64 cells was started because only 5.7 GB is free while the historical production cache is about
+8.5 GB. The production-size <1-second proxy, 120-frame/<30-second proxy, full-refinement stage
+timings, and 12 FPS playback gates are therefore unmeasured. The 64-cell Hot-pour reference is
+28.34 seconds for 120 frames on the Radeon 8060S. A simple cubic-workload extrapolation to 256³ is
+about 30 minutes for the same frame count; this is a rough workload estimate, not an RTX A6000
+measurement or a prediction of its speed. The A6000 remains unmeasured.
+
 ### A: checkpoint callbacks and progressive edit timeline (partial)
 
 `simcache.solve_to_frame`, `fluid3d.solve_frame` and `flip3d.solve_frame` now offer an optional callback after each
