@@ -151,7 +151,7 @@ class Recorder:
         stride = self.resources["stride"]
         view = staging.read_mapped(copy=False)
         raw = np.frombuffer(view, np.uint8, count=self.height * stride, offset=self.offset).reshape(self.height, stride)
-        rgba = np.ascontiguousarray(raw[:, :self.width * 4]).reshape(self.height, self.width, 4)
+        rgba = raw[:, :self.width * 4].copy().reshape(self.height, self.width, 4)       # a copy: the mapping is released after this
         del raw, view
         return rgba
 

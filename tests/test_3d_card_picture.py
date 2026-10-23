@@ -130,6 +130,22 @@ class CardPictureTests(unittest.TestCase):
                 made = gpupicture.take(frame, 0.0, "RGB", "black", "sRGB", None)
                 self.assertEqual((made.width(), made.height()), (width, height))
 
+    def test_a_picture_survives_the_next_render_when_the_rows_have_no_padding(self):
+        # 256 pixels of 4 bytes fill the 256-byte row alignment exactly: the rows of the mapped buffer are the picture's rows,
+        # and a "copy" that is only a view of them would show the next render's pixels once the buffer is reused.
+        gpupicture.clear()
+        first_scene = scene_of((6.0, 0.4, 0.2, 1.0), (0.05, 0.9, 0.3, 1.0))
+        gpupicture.arm("sRGB")
+        try:
+            first = gpu3d.render(first_scene, s.Camera(), 256, 16)
+            kept = gpupicture._pending[id(first)][2].copy()
+            gpu3d.render(scene_of((0.2, 0.3, 8.0, 1.0)), s.Camera(), 256, 16)       # reuses the readback buffer
+            held = gpupicture._pending[id(first)][2]
+        finally:
+            gpupicture.disarm()
+        np.testing.assert_array_equal(held, kept)
+        self.assertTrue(held.flags.owndata or held.base is not None and held.base.flags.owndata)
+
     def test_only_a_few_pictures_wait_for_a_frame_that_may_never_be_converted(self):
         gpupicture.clear()
         frames = [render_armed(HDR_SCENE, "sRGB") for _ in range(gpupicture.MAX_PENDING + 3)]

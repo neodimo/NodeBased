@@ -194,6 +194,28 @@ def make_splat_file(count, directory):
 
 # ---- the run -------------------------------------------------------------------------------------------------
 
+def check_shown_picture(window):
+    """The picture on screen against what the processor makes of the float frame it was made from: the largest difference in
+    8-bit levels (1 or less is agreement). Catches a picture that is not the frame's own."""
+    import numpy as np
+    from nodebased import gpupicture, imaging
+    image, frame = getattr(window.viewer, "last_display_image", None), window.frame
+    if image is None or frame is None or window.proxy.currentData() not in (1, None) or (image.width(), image.height()) != frame.shape[1::-1]:
+        return {"checked": False}
+    gpupicture.clear()
+    saved, imaging.CARD_PICTURE = imaging.CARD_PICTURE, False
+    try:
+        expected = imaging.to_qimage(frame, view=window.display_view.currentText())
+    finally:
+        imaging.CARD_PICTURE = saved
+
+    def rows(picture):
+        raw = np.frombuffer(picture.constBits(), np.uint8, count=picture.sizeInBytes()).reshape(picture.height(), picture.bytesPerLine())
+        return raw[:, :picture.width() * 3].astype(int)
+    shown = image.convertToFormat(expected.format()) if image.format() != expected.format() else image
+    return {"checked": True, "max_difference_levels": int(np.abs(rows(shown) - rows(expected)).max())}
+
+
 def run_scene(window, app, scene, args, splat_path, width, height):
     import re
     from nodebased import gpu3d
@@ -257,6 +279,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         statuses.append(window.statusBar().currentMessage())
     elapsed = time.monotonic() - start
     playing_tier = int(window.proxy.currentData() or 1)
+    picture_check = check_shown_picture(window)
     window.toggle_playback(False)
     stopped = time.monotonic()
     events = playback_trace.disable()
@@ -307,6 +330,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     if hasattr(playback_trace, "stage_table"):         # a checkout from before the stage table still runs the tool
         table, jobs, _ = playback_trace.stage_table(events)
     result["worker_jobs"] = jobs
+    result["picture_check"] = picture_check
     try:
         from nodebased import gpupicture
         result["card_pictures"] = dict(gpupicture.counters)      # pictures the render card made / the conversion stage took
