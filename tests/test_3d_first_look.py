@@ -106,9 +106,13 @@ class DisplayHelperTests(unittest.TestCase):
 class FirstLookTests(unittest.TestCase):
     def setUp(self):
         P._COST.clear()
-        patch = mock.patch.object(P, "STAGE_TWO_MAX_FIRST_SECONDS", 1e9)      # a loaded test machine must not skip stage two
-        patch.start()
-        self.addCleanup(patch.stop)
+        # A loaded test machine must not skip stage two: the ladder ends early when stage one was slow, or when the cost
+        # it measured predicts a slow stage two (`_ladder_over`); the second call then came back at full size with
+        # traced_width 0 (0.42.0 package build, Linux).
+        for name in ("STAGE_TWO_MAX_FIRST_SECONDS", "STAGE_TWO_MAX_SECONDS"):
+            patch = mock.patch.object(P, name, 1e9)
+            patch.start()
+            self.addCleanup(patch.stop)
         self.addCleanup(P._COST.clear)
 
     def test_the_first_look_is_an_output_sized_nonempty_denoised_preview(self):

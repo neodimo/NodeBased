@@ -7,6 +7,7 @@ import os
 import threading
 import time
 import unittest
+import unittest.mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -180,11 +181,15 @@ class JobTests(unittest.TestCase):
 
     def test_every_request_of_an_interactive_drag_is_part_of_the_burst(self):
         script = Script([final], gated=False)
-        job = self.make(script, settle=0.04)
-        for i in range(6):
-            job.submit(replace(request(("drag", i)), interacting=True))
-            time.sleep(0.06)
-        self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
+        # The burst wait is widened so a runner that oversleeps a 60 ms gap (a loaded Windows machine took longer than
+        # the real 120 ms) cannot let the first request's wait run out; the plain settle (40 ms) stays under the 60 ms
+        # gap, so a request that were not flagged interacting would still be traced and fail this test.
+        with unittest.mock.patch.object(progressivejob, "BURST_SETTLE_SECONDS", 1.0):
+            job = self.make(script, settle=0.04)
+            for i in range(6):
+                job.submit(replace(request(("drag", i)), interacting=True))
+                time.sleep(0.06)
+            self.assertTrue(job.wait(lambda state, phase: phase == "settled", 10))
         self.assertEqual(sorted(script.calls), [("drag", 5)])  # nothing traced while the mouse was down and moving
 
     def test_a_lone_request_waits_only_the_debounce(self):
