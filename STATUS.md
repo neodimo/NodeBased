@@ -1,3 +1,11 @@
+# Lane 8 step B finish 6 — active (2026-10-22)
+
+**RTX read-ahead A/B on current main, 1080p, 10 s uncached, pipeline enabled.** Decode-ahead on: first-pass 5.680, 5.382, 5.449 fps (mean 5.504); node evaluation 173.59, 177.40, 176.49 ms (mean 175.83); display conversion 80.13, 83.39, 83.66 ms (mean 82.39). Decode-ahead off: 4.626, 4.580, 4.557 fps (mean 4.588); node evaluation 209.60, 211.77, 220.08 ms (mean 213.82); display conversion 85.17, 85.55, 87.55 ms (mean 86.09). Each run has Lane 2 per-request stage marks in `scratch/nb-lanes/run/finish6-read-ahead-{on,off}-{1,2,3}.json`.
+
+**Finding (measured):** disabling the pool costs about 38 ms in node evaluation and about 4 ms in display conversion, reducing the fresh rate around 20%. The latest 4.68 fps finish-5 result is not reproducible on current main with the pool active: the three on-runs average 5.50 fps, overlapping the prior 5.63 baseline within observed run spread. That older single run also recorded 18 pool hits but had no lane-stage timeline, so the cause of its low reading cannot be isolated. The evidence does not support read-ahead or threaded color ingest as the cause; there is no read-ahead code change to make from this A/B. Lane 2's timeline documents shared CPU/interpreter and memory-bandwidth cost from overlapping evaluation and display conversion (node evaluation 137 -> 150 ms; display conversion 40 -> 55 ms) while frame interval improves through overlap.
+
+Part 1 result and table committed before work on initial-frame misses. No playback scheduler, Viewer, or Direct picture changes are included in this part.
+
 # Lane 8 step B finish 5 — PARTIAL (2026-10-22)
 
 Read-ahead entries already carry working-space ACEScg pixels. The pool returned 18 prepared-frame hits in under 0.01 ms; two first-frame misses fell back to synchronous decoding and exceed the 5 ms per-Read target. A dedicated 1080p opaque-alpha conversion measurement improved from a 20.88 ms warmed median to 4.21 ms, with exact pixels. The owned EXR float32 buffer is reused and redundant alpha work is skipped. Raster.fit already returns the original pixel buffer for unchanged bounds; a regression now pins it.
