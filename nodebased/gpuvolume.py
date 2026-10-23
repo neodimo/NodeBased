@@ -40,7 +40,7 @@ VOLUME_WORK_BUDGETS = {'discrete': 1e10, 'integrated': 8e9, 'cpu': 4e7, 'other':
 # Texture memory the cached density (and temperature) grids may occupy per adapter.
 VOLUME_MEMORY_BUDGETS = {'discrete': 3 << 30, 'integrated': 1 << 30, 'cpu': 512 << 20, 'other': 512 << 20}
 MAX_SEGMENTS = 100_000   # per ray; a step size that asks for more is refused as a mistake
-_ESTIMATE_RAYS = 20_000
+_ESTIMATE_RAYS = 6_000    # was 20,000: the estimate cut 2 ms of every played frame of a scene with smoke, 0.6 ms now
 
 _SHADER = '''
 struct Params {

@@ -79,6 +79,10 @@ def parse_args(argv=None):
                    help="on: play as the app ships, with \"Proxy while playing\" checked (a frame that misses the comp's rate steps "
                         "the picture down a tier); off: play at the size set, the raw cost (default)")
     p.add_argument("--settle-wait", type=float, default=30.0, help="seconds to wait after stopping for the full-quality picture")
+    p.add_argument("--smoke-scale", type=float, default=0.0, help="\"mixedglass\": the puff's size in metres (default SMOKE_SCALE)")
+    p.add_argument("--first-frame-wait", type=float, default=120.0,
+                   help="seconds to wait for the stopped first frame before playing (0: play at once; \"mixedglass\" needs it, its stopped "
+                        "frame is the processor's, which is refused at 1080p)")
     return p.parse_args(argv)
 
 
@@ -260,7 +264,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         window.display_view.setCurrentText(args.view)
     window.agent_command({"op": "view", "id": view})
     t0 = time.perf_counter()
-    while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < 120:
+    while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < args.first_frame_wait:
         spin(0.05)
     warm_ms = None
     window.playback_shown_times.clear()
@@ -375,6 +379,9 @@ def run_one(args, scene):
 
 def main(argv=None):
     args = parse_args(argv)
+    if args.smoke_scale:
+        global SMOKE_SCALE
+        SMOKE_SCALE = args.smoke_scale
     if args.self_check:
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
         args.scene, args.size, args.seconds, args.backend, args.splats = "cube", "128x72", 2.0, "auto", 200

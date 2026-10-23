@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 import hashlib
 import itertools
+import functools
 import math
 import os
 import tempfile
@@ -506,6 +507,21 @@ class Volume:
 
 
 def analytic_plume(resolution=32, seed=0):
+    """`_analytic_plume` kept for the last few (resolution, seed) asked: a Plume3D node asks every frame of a played comp for the same
+    grid (1.7 ms of every frame of a comp with a puff), and its arrays are never written."""
+    return _plume_cache(int(resolution), int(seed))
+
+
+@functools.lru_cache(maxsize=8)
+def _plume_cache(resolution, seed):
+    volume = _analytic_plume(resolution, seed)
+    for field in (volume.density, volume.velocity, volume.temperature):
+        if field is not None:
+            field.flags.writeable = False
+    return volume
+
+
+def _analytic_plume(resolution=32, seed=0):
     """A deterministic rising smoke plume with a matching velocity field, for tests and demos.
 
     The domain is a unit cube (`voxel_size` 1 / resolution) with x and z centred on zero and y from 0

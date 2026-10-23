@@ -2096,11 +2096,16 @@ def _prepare_static(scene, order, cancel):
     return vertices, materials, opaque, translucent, everything
 
 
-def _translucent_runs(translucent, eye, view):
+def _translucent_runs(translucent, eye, view, ordered=True):
     """The translucent triangles far to near as (first vertex, vertex count, material) draws; neighbours in the vertex
-    buffer with the same material go out as one draw."""
-    depth = -((translucent['centre'] - eye) @ view[2])
-    order = np.argsort(-depth, kind='stable')
+    buffer with the same material go out as one draw. `ordered` False: in vertex order, where the neighbours are the whole mesh
+    (a pass that only writes depth, the glass depth the splat layer is ordered against, does not care and needs a draw per
+    material instead of one per triangle: 2,300 draws of a glass sphere a frame)."""
+    if not ordered:
+        order = np.argsort(translucent['start'], kind='stable')
+    else:
+        depth = -((translucent['centre'] - eye) @ view[2])
+        order = np.argsort(-depth, kind='stable')
     starts, mats = translucent['start'][order], translucent['material'][order]
     new = np.ones(len(order), bool)
     new[1:] = (mats[1:] != mats[:-1]) | (starts[1:] != starts[:-1] + 3)
@@ -2308,7 +2313,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
             _cancel(cancel)
             rows = y1-y0
             encoder = device.create_command_encoder()
-            def mesh_pass(encoder, pass_number, pipeline, groups, env_group, depth_target=None):
+            def mesh_pass(encoder, pass_number, pipeline, groups, env_group, depth_target=None, runs=None):
                 rp = encoder.begin_render_pass(color_attachments=[{'view': target_view,
                     'resolve_target': None, 'clear_value': (0, 0, 0, 0),
                     'load_op': 'clear' if pass_number == 0 else 'load', 'store_op': 'store'}],
@@ -2321,7 +2326,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                 rp.set_bind_group(2, env_group)
                 rp.set_vertex_buffer(0, res['vertices'])
                 bound = None
-                for first, count, material in runs_by_pass[0 if pass_number == 0 else 1]:
+                for first, count, material in (runs if runs is not None else runs_by_pass[0 if pass_number == 0 else 1]):
                     if bound != material:
                         rp.set_bind_group(0, groups[material])
                         bound = material
@@ -2330,7 +2335,8 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
             for pass_number, (pipeline, groups, env_group) in enumerate(passes):
                 if glass and pass_number == 1:
                     glass_view = _glass_depth(state, width, height)
-                    mesh_pass(encoder, 1, *_resident_binds(state, res, 3), depth_target=glass_view)     # their depth, no colour
+                    mesh_pass(encoder, 1, *_resident_binds(state, res, 3), depth_target=glass_view,      # their depth, no colour
+                              runs=_translucent_runs(res['translucent'], eye, view, ordered=False))
                     continue            # the translucent meshes themselves are drawn between the two parts of the splat layer
                 mesh_pass(encoder, pass_number, pipeline, groups, env_group)
             if splats_here:

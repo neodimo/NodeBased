@@ -38,6 +38,8 @@ def main():
     p.add_argument("--backend", default="auto", choices=("auto", "gpu", "cpu"))
     p.add_argument("--adapter", default="default")
     p.add_argument("--splats", type=int, default=20000)
+    p.add_argument("--first-frame-wait", type=float, default=180.0,
+                   help="seconds to wait for the stopped first frame before playing (0 for \"mixedglass\": its stopped frame is the processor's)")
     p.add_argument("--no-cache", action="store_true", help="experiment: no display cache, a one-frame evaluator cache")
     p.add_argument("--out", required=True)
     args = p.parse_args()
@@ -70,7 +72,7 @@ def main():
     window.playback_proxy.setChecked(False)
     window.agent_command({"op": "view", "id": view})
     t0 = time.perf_counter()
-    while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < 180:
+    while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < args.first_frame_wait:
         spin(0.05)
     first_frame_s = round(time.perf_counter() - t0, 2)
 
