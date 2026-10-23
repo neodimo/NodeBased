@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step A of 2: an edit to the Hot pour shows its re-simulated first frames within a second (finish 2), Lane 8 (2D parity B, GPT-6 Luna) step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 1) (integrator tick)
+
+- **What was done:** `main` `b1aa277a` -> `1e750ce0` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `1e750ce0`: Ran 5988 tests in 482.385 s, OK (skipped=32), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 6 step A finish 2 (PARTIAL)
 
 - **What was done — evidence:** The 64-cell / 120-frame Radeon cup-move bake measured 29.06 s with float32/all steam-cache channels and 28.34 s with half-precision density+temperature, using the same warmed upstream setup and bounded per-node cache caps. The optimized measurement clears the 30 s gate; the 0.72 s difference is one paired measurement and may include timing variation. Cancellation after FLIP substep entry was measured in three trials on each adapter: RTX 3080 Ti median 0.554 ms / worst 21.443 ms; Radeon 8060S median 0.278 ms / worst 0.535 ms. New-edit first-frame solver time was at most 0.161 s RTX and 0.167 s Radeon. Real viewport presentation is not part of these timings.

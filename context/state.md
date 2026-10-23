@@ -1,5 +1,33 @@
 ## 2026-10-22 — Lane 6 step A finish 2 (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (6:45 PM on 2026-10-22 PDT)
+
+`main` moved `b1aa277a` -> `1e750ce0` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `1e750ce0` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1835.log`, started 6:35 PM): **Ran 5988 tests in 482.385 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step A of 2: an edit to the Hot pour shows its re-simulated first frames within a second (finish 2).** Commits:
+  - `813e4fbb` Reduce Hot pour edit cache cost and measure cancellation
+  Diff: 18 files changed, 591 insertions(+), 40 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 1).** Commits:
+  - `235d81dc` Batch Roto scanlines: uncached first pass 6.07 to 7.28 fps
+  - `94d87c68` Reduce wide Blur prefix allocations: playback 6.10 to 6.07 fps
+  - `7eb33535` Seed small Blur accumulator from first sample: 6.00 to 6.10 fps
+  - `d3f1e3a7` Reduce masked Merge traffic: uncached first pass 5.93 to 6.00 fps
+  - `5e043936` Skip neutral Grade multiply pass: uncached first pass 5.64 to 5.93 fps
+  - `f640ab82` Optimize Transform blur-halo ROI sampling: 3.73 to 5.64 fps
+  Diff: 4 files changed, 174 insertions(+), 37 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done — evidence:** The 64-cell / 120-frame Radeon cup-move bake measured 29.06 s with float32/all steam-cache channels and 28.34 s with half-precision density+temperature, using the same warmed upstream setup and bounded per-node cache caps. The optimized measurement clears the 30 s gate; the 0.72 s difference is one paired measurement and may include timing variation. Cancellation after FLIP substep entry was measured in three trials on each adapter: RTX 3080 Ti median 0.554 ms / worst 21.443 ms; Radeon 8060S median 0.278 ms / worst 0.535 ms. New-edit first-frame solver time was at most 0.161 s RTX and 0.167 s Radeon. Real viewport presentation is not part of these timings.
 - **Artifacts:** Cost harness `tools/benchmark_fluid_edits.py`; cancellation harness `tools/benchmark_fluid_edit_cancel.py`; final comparison JSONs `benchmarks/hot_pour/edit-cup-bounded-{baseline,optimized}-radeon-2026-10-22.json`, `edit-cancel-rtx-2026-10-22.json`, and `edit-cancel-radeon-2026-10-22.json`; updated Hot pour generator output and example graph; `docs/FLUIDS_SPIKE.md` and byte-identical bundled copy. These are committed in this worktree change. Targeted logs are in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/` and remain local scratch. All generated large cache directories from this pass were empty and removed; no production bake was started.
 - **State:** PARTIAL. Cost and cancellation gates pass in the measured harnesses. Targeted GPU-liquid, rigid, preset, cache, surface and knowledge tests pass on RTX; resident solver tests pass on Radeon and llvmpipe. Real-display QA remains unverified because this session has no display session. Production-size refresh is deferred to step B by the brief; the historical cache is about 8.50 GB and free space was 5.7 GB.
