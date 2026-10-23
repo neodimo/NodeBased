@@ -652,7 +652,10 @@ class ViewportLabelTests(unittest.TestCase):
             raise ValueError("no particles")
         widget = self.widget(broken)
         widget.grab()
-        self.assertTrue(widget._progressive_job.wait(lambda state, phase: phase == "failed", 10))
+        # Wait with Qt events running: the job's wait() returns False at once while the job is idle with nothing
+        # pending, which it is until the widget's request reaches it through the event loop (a loaded suite, 10/22-23).
+        from tests.waiting import wait_until
+        self.assertTrue(wait_until(lambda: widget._progressive_job._phase == "failed", timeout=30))
         widget.grab()
         self.assertFalse(widget.render_mode)
         self.assertIn("no particles", widget.status)
