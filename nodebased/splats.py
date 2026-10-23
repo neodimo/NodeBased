@@ -11,6 +11,7 @@ import tempfile
 from collections import OrderedDict
 from threading import RLock
 
+import dataclasses
 import numpy as np
 
 MAX_SPLATS = 20_000_000
@@ -156,13 +157,18 @@ class SplatCloud:
             raise ValueError('matrix4 must be a finite column-vector affine 4x4 matrix')
         # A cloud never changes and a camera move does not change the matrix, so the eigen decomposition of 20,000
         # covariances (21 ms) is done once for a matrix and handed out again. The few last matrices are kept on the cloud.
+        # The memo is checked against the cloud's own fields: a copy of the cloud (copy.copy, or a cloud that had
+        # intrinsics attached) shares the instance dict, so a hit counts only when every field is the same object.
         memo = self.__dict__.setdefault('_transformed_memo', {})
         key = m.tobytes()
-        if key in memo:
-            return memo[key]
+        fields = tuple(getattr(self, f.name) for f in dataclasses.fields(self))
+        hit = memo.get(key)
+        if hit is not None and len(hit[0]) == len(fields) and all(a is b for a, b in zip(hit[0], fields)):
+            return hit[1]
         if len(memo) >= _TRANSFORMED_MEMO:
             memo.clear()
-        memo[key] = result = self._transformed(m)
+        result = self._transformed(m)
+        memo[key] = (fields, result)
         return result
 
     def _transformed(self, m):
