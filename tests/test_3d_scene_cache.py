@@ -7,7 +7,7 @@ from dataclasses import fields, replace
 
 import numpy as np
 
-from nodebased import gpupathtrace, pathtrace as pt, ptsplats, scenecache, scene3d as s
+from nodebased import gpu3d, gpupathtrace, pathtrace as pt, ptsplats, scenecache, scene3d as s
 from tests.test_3d_pathtrace import FRONT, box, gpu_ready, sphere
 from tests.test_3d_pathtrace_splats import SPLAT_CAMERA, SUN, instance, plane_cloud
 
@@ -216,7 +216,12 @@ class LruTests(Isolated):
         self.assertIsNone(cache.get("big"))            # larger than the budget: not kept
 
 
-@unittest.skipUnless(gpu_ready(), "wgpu adapter unavailable for the path tracer")
+def soft_ready():
+    """The scenes here hold splats: the GPU path tracer takes them on cleared adapters only (`soft_supported`)."""
+    return gpu_ready() and gpupathtrace.soft_supported(gpu3d._state())
+
+
+@unittest.skipUnless(soft_ready(), "no wgpu adapter cleared to path trace splats and smoke")
 class GpuSceneTests(Isolated):
     def render(self, scene, camera=SPLAT_CAMERA, samples=2):
         return pt.render(scene, camera, 24, 18, (0.02, 0.02, 0.03, 1.0), 0.1, "rgba",

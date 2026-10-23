@@ -454,6 +454,8 @@ class StubPresenter:
         self.offers = []
         self.ledger = dv.FrameLedger()
         self.counters = {}
+        self.limits = {}                 # what the app reads after a hand-over (`_direct_handed_over`)
+        self.adapter_info = {}
         self.paint_size = self.paint_key = None
 
     def set_paint(self, image, key):

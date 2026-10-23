@@ -38,9 +38,11 @@ class FluidFirstLook(unittest.TestCase):
 
     def test_camera_move_reuses_liquid_acceleration_and_uploaded_buffers(self):
         try:
-            gpu3d._state()
+            state = gpu3d._state()
         except Exception as error:  # pragma: no cover - headless environments without a wgpu device
             self.skipTest(f"a wgpu adapter is required for prepared-scene reuse: {error}")
+        if not gpupathtrace.soft_supported(state):      # the scene holds smoke: cleared adapters only
+            self.skipTest("this adapter is not cleared to path trace splats and smoke on the GPU")
         camera = s.Camera(s.Transform3D(s.Vec3(0, 0, 5)), s.Vec3(0, 0, 0), 45, 0.1, 100)
         moved = replace(camera, transform=replace(camera.transform, position=s.Vec3(0.1, 0, 5)))
         scene = s.Scene((s._card(2, 2, (0.6, 0.7, 0.8, 1), s.Transform3D()),),

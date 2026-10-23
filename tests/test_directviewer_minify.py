@@ -70,16 +70,24 @@ class MinificationTests(unittest.TestCase):
 
     def presenter(self, size):
         context = FakeContext(size)
-        presenter = dv.RetainedPresenter(context, adapter=self.adapter, overlay=False, fill_thread=False)
+        try:
+            presenter = dv.RetainedPresenter(context, adapter=self.adapter, overlay=False, fill_thread=False)
+        except RuntimeError as exc:                       # a software adapter out of device memory
+            self.skipTest(f"adapter not usable here: {exc}")
         self.addCleanup(presenter.lose_device)
         return presenter, context
 
     def card(self, frame, view, zoom, size, settings=None, centre=None):
         presenter, context = self.presenter(size)
-        settings = settings or carddisplay.settings_from(0.0, "RGB", "black", view)
-        self.assertTrue(presenter.offer_linear(frame, settings, (0, 0, WIDTH, HEIGHT), (0, 0, WIDTH, HEIGHT)))
-        presenter.draw(centre or (WIDTH / 2.0, HEIGHT / 2.0, zoom), size)
-        return context.read()[..., :3].astype(np.int64)
+        try:
+            settings = settings or carddisplay.settings_from(0.0, "RGB", "black", view)
+            self.assertTrue(presenter.offer_linear(frame, settings, (0, 0, WIDTH, HEIGHT), (0, 0, WIDTH, HEIGHT)))
+            presenter.draw(centre or (WIDTH / 2.0, HEIGHT / 2.0, zoom), size)
+            return context.read()[..., :3].astype(np.int64)
+        finally:
+            # One device per card call: a subTest loop makes dozens, and cleanups only run at the end of the test,
+            # which is how a software adapter on a cloud runner ran out of device memory ("Not enough memory left").
+            presenter.lose_device()
 
     def test_zoomed_out_the_card_matches_the_averaged_processor_picture(self):
         for view in ("sRGB", "ACES 2.0"):
