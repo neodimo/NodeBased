@@ -1,0 +1,89 @@
+{
+ "scene": "mixedglass",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "gpu",
+ "view": "ACES 2.0",
+ "seconds": 10.09,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":141",
+ "comp_fps": 24.0,
+ "shown": 6,
+ "fps": 0.59,
+ "interval_ms": {
+  "n": 5,
+  "p50": 1418.05,
+  "p95": 1423.14,
+  "p99": 1423.14,
+  "max": 1423.14,
+  "mean": 1410.34
+ },
+ "render_ms_status": {
+  "n": 82,
+  "p50": 1455,
+  "p95": 1921,
+  "p99": 1921,
+  "max": 1921,
+  "mean": 1530.39
+ },
+ "dropped": 1,
+ "status": "1920 \u00d7 1080  \u00b7  1451 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 189.8 / 4041 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 1",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 6
+ },
+ "fps_at_end_tier": 0.71,
+ "time_row": "real time",
+ "settle_s": null,
+ "settle_status": "GPU Render3D unsupported: volumes drawn with the ray tracer are CPU-only",
+ "worker_jobs": 7,
+ "frame_timeline": {
+  "frames": 5,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 0.127,
+   "setup (region, display cache lookup)": 0.348,
+   "node evaluation": 1409.643,
+   "frame waits for conversion (cache put, stage pickup)": 0.131,
+   "display conversion": 39.989,
+   "picture hand-off to the Qt queue": 0.006,
+   "Qt queue delivery": 1.918,
+   "Viewer present": 3.245
+  },
+  "latency_ms": 1455.407,
+  "transport_wait_ms": 0.0,
+  "overlap_ms": 45.34,
+  "accounted_interval_ms": 1410.067,
+  "interval_ms": 1410.068,
+  "sum_of_stage_means_ms": 1455.407
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 1
+ },
+ "card_pictures": {},
+ "stage_p50_ms": {
+  "GPU render and wait": 1355.08,
+  "worker start to hand-over (whole frame)": 37.04,
+  "scene prepare (shadow data, vertex packing)": 18.0,
+  "render encode": 9.61,
+  "scene evaluation": 5.92,
+  "hand-over to the display": 5.87,
+  "scene upload (buffers, textures, pipelines, bind groups)": 1.28,
+  "resolve (supersample, background)": 0.29,
+  "readback copy": 0.17,
+  "after the render (node bookkeeping)": 0.11,
+  "display cache put": 0.01,
+  "readback_done to emit": -1144.19,
+  "convert and emit": -1370.66
+ },
+ "gpu_wait_ms": {
+  "min": 1139.1,
+  "p50": 1355.1,
+  "max": 1382.7,
+  "shared_card_suspected": false
+ }
+}

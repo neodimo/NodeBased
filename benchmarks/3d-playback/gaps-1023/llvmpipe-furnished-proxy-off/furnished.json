@@ -1,0 +1,90 @@
+{
+ "scene": "furnished",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 10.07,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":141",
+ "comp_fps": 24.0,
+ "shown": 30,
+ "fps": 2.98,
+ "interval_ms": {
+  "n": 29,
+  "p50": 333.07,
+  "p95": 373.74,
+  "p99": 378.58,
+  "max": 378.58,
+  "mean": 333.8
+ },
+ "render_ms_status": {
+  "n": 98,
+  "p50": 329,
+  "p95": 367,
+  "p99": 374,
+  "max": 374,
+  "mean": 329.99
+ },
+ "dropped": 3,
+ "status": "544 \u00d7 150  \u00b7  374 ms  \u00b7  tiles 0 hit/6 miss  \u00b7  cache 951.7 / 3861 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 3",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 30
+ },
+ "fps_at_end_tier": 3.0,
+ "time_row": "real time",
+ "settle_s": null,
+ "settle_status": "Evaluating frame 31\u2026",
+ "worker_jobs": 31,
+ "frame_timeline": {
+  "frames": 29,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 0.172,
+   "setup (region, display cache lookup)": 0.548,
+   "node evaluation": 328.367,
+   "frame waits for conversion (cache put, stage pickup)": 0.171,
+   "display conversion": 2.543,
+   "picture hand-off to the Qt queue": 0.005,
+   "Qt queue delivery": 4.265,
+   "Viewer present": 2.501
+  },
+  "latency_ms": 338.572,
+  "transport_wait_ms": 0.0,
+  "overlap_ms": 4.777,
+  "accounted_interval_ms": 333.795,
+  "interval_ms": 333.795,
+  "sum_of_stage_means_ms": 338.572
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 1
+ },
+ "card_pictures": {},
+ "stage_p50_ms": {
+  "GPU render and wait": 321.96,
+  "worker start to hand-over (whole frame)": 4.54,
+  "convert and emit": 1.81,
+  "scene evaluation": 1.53,
+  "render encode": 0.83,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.77,
+  "after the render (node bookkeeping)": 0.77,
+  "scene prepare (shadow data, vertex packing)": 0.36,
+  "readback copy": 0.16,
+  "resolve (supersample, background)": 0.08,
+  "display cache put": 0.01,
+  "readback_done to handover": -137.95,
+  "cache_put to handover": -316.2,
+  "hand-over to the display": -330.62
+ },
+ "gpu_wait_ms": {
+  "min": 137.9,
+  "p50": 322.0,
+  "max": 366.2,
+  "shared_card_suspected": true
+ }
+}

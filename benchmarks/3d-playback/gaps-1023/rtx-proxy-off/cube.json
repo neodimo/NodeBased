@@ -1,0 +1,91 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 10.02,
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "platform": "xcb",
+ "display": ":150",
+ "comp_fps": 24.0,
+ "shown": 239,
+ "fps": 23.86,
+ "interval_ms": {
+  "n": 238,
+  "p50": 41.72,
+  "p95": 44.31,
+  "p99": 61.02,
+  "max": 64.03,
+  "mean": 41.58
+ },
+ "render_ms_status": {
+  "n": 49,
+  "p50": 19,
+  "p95": 36,
+  "p99": 81,
+  "max": 81,
+  "mean": 21.37
+ },
+ "dropped": 0,
+ "status": "Evaluating frame 1\u2026",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 239
+ },
+ "fps_at_end_tier": 24.05,
+ "time_row": "real time",
+ "settle_s": 0.12,
+ "settle_status": "1920 \u00d7 1080  \u00b7  122 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU",
+ "worker_jobs": 240,
+ "frame_timeline": {
+  "frames": 238,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 2.674,
+   "setup (region, display cache lookup)": 0.349,
+   "node evaluation": 18.315,
+   "frame waits for conversion (cache put, stage pickup)": 0.322,
+   "display conversion": 0.566,
+   "picture hand-off to the Qt queue": 0.006,
+   "Qt queue delivery": 0.824,
+   "Viewer present": 2.323
+  },
+  "latency_ms": 25.379,
+  "transport_wait_ms": 16.638,
+  "overlap_ms": 0.438,
+  "accounted_interval_ms": 41.579,
+  "interval_ms": 41.579,
+  "sum_of_stage_means_ms": 25.379
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 0
+ },
+ "card_pictures": {
+  "registered": 240,
+  "taken": 239
+ },
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 21.92,
+  "GPU render and wait": 13.35,
+  "hand-over to the display": 2.95,
+  "readback copy": 1.97,
+  "scene evaluation": 1.18,
+  "convert and emit": 0.72,
+  "render encode": 0.39,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.32,
+  "scene prepare (shadow data, vertex packing)": 0.21,
+  "display cache put": 0.18,
+  "resolve (supersample, background)": 0.09,
+  "after the render (node bookkeeping)": 0.07
+ },
+ "gpu_wait_ms": {
+  "min": 13.2,
+  "p50": 13.3,
+  "max": 50.9,
+  "shared_card_suspected": true
+ }
+}

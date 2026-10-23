@@ -1,0 +1,91 @@
+{
+ "scene": "mixed",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 10.0,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "platform": "xcb",
+ "display": ":141",
+ "comp_fps": 24.0,
+ "shown": 240,
+ "fps": 23.99,
+ "interval_ms": {
+  "n": 239,
+  "p50": 41.68,
+  "p95": 44.68,
+  "p99": 46.17,
+  "max": 48.59,
+  "mean": 41.13
+ },
+ "render_ms_status": {
+  "n": 58,
+  "p50": 15,
+  "p95": 18,
+  "p99": 18,
+  "max": 19,
+  "mean": 15.12
+ },
+ "dropped": 0,
+ "status": "1920 \u00d7 1080  \u00b7  14 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 0",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 240
+ },
+ "fps_at_end_tier": 24.31,
+ "time_row": "real time",
+ "settle_s": 0.77,
+ "settle_status": "1920 \u00d7 1080  \u00b7  734 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU",
+ "worker_jobs": 240,
+ "frame_timeline": {
+  "frames": 239,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 2.568,
+   "setup (region, display cache lookup)": 0.544,
+   "node evaluation": 13.824,
+   "frame waits for conversion (cache put, stage pickup)": 0.3,
+   "display conversion": 0.597,
+   "picture hand-off to the Qt queue": 0.004,
+   "Qt queue delivery": 0.866,
+   "Viewer present": 2.54
+  },
+  "latency_ms": 21.244,
+  "transport_wait_ms": 19.96,
+  "overlap_ms": 0.075,
+  "accounted_interval_ms": 41.129,
+  "interval_ms": 41.129,
+  "sum_of_stage_means_ms": 21.243
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 1
+ },
+ "card_pictures": {
+  "registered": 240,
+  "taken": 240
+ },
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 18.49,
+  "GPU render and wait": 8.63,
+  "hand-over to the display": 3.19,
+  "readback copy": 2.05,
+  "scene evaluation": 1.99,
+  "convert and emit": 0.75,
+  "scene prepare (shadow data, vertex packing)": 0.4,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.28,
+  "render encode": 0.28,
+  "display cache put": 0.18,
+  "resolve (supersample, background)": 0.14,
+  "after the render (node bookkeeping)": 0.1
+ },
+ "gpu_wait_ms": {
+  "min": 5.6,
+  "p50": 8.6,
+  "max": 12.1,
+  "shared_card_suspected": false
+ }
+}

@@ -1,0 +1,90 @@
+{
+ "scene": "mixed",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 10.06,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":141",
+ "comp_fps": 24.0,
+ "shown": 24,
+ "fps": 2.38,
+ "interval_ms": {
+  "n": 23,
+  "p50": 415.42,
+  "p95": 453.37,
+  "p99": 457.38,
+  "max": 457.38,
+  "mean": 414.91
+ },
+ "render_ms_status": {
+  "n": 85,
+  "p50": 437,
+  "p95": 469,
+  "p99": 469,
+  "max": 473,
+  "mean": 435.25
+ },
+ "dropped": 3,
+ "status": "1920 \u00d7 1080  \u00b7  473 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 793.5 / 4041 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 3",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 24
+ },
+ "fps_at_end_tier": 2.41,
+ "time_row": "real time",
+ "settle_s": 2.06,
+ "settle_status": "1920 \u00d7 1080  \u00b7  1761 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 856.8 / 4041 MiB  \u00b7  display GPU",
+ "worker_jobs": 25,
+ "frame_timeline": {
+  "frames": 23,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 1.757,
+   "setup (region, display cache lookup)": 0.875,
+   "node evaluation": 406.948,
+   "frame waits for conversion (cache put, stage pickup)": 0.396,
+   "display conversion": 26.349,
+   "picture hand-off to the Qt queue": 0.008,
+   "Qt queue delivery": 2.641,
+   "Viewer present": 2.44
+  },
+  "latency_ms": 441.415,
+  "transport_wait_ms": 0.0,
+  "overlap_ms": 26.503,
+  "accounted_interval_ms": 414.912,
+  "interval_ms": 414.912,
+  "sum_of_stage_means_ms": 441.414
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 1
+ },
+ "card_pictures": {},
+ "stage_p50_ms": {
+  "GPU render and wait": 322.34,
+  "resolve (supersample, background)": 65.92,
+  "worker start to hand-over (whole frame)": 27.85,
+  "hand-over to the display": 5.0,
+  "readback copy": 2.64,
+  "after the render (node bookkeeping)": 2.37,
+  "scene evaluation": 2.0,
+  "render encode": 0.48,
+  "scene prepare (shadow data, vertex packing)": 0.42,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.35,
+  "display cache put": 0.02,
+  "readback_done to emit": -133.99,
+  "convert and emit": -386.97,
+  "cache_put to handover": -403.04
+ },
+ "gpu_wait_ms": {
+  "min": 133.4,
+  "p50": 322.35,
+  "max": 357.4,
+  "shared_card_suspected": true
+ }
+}

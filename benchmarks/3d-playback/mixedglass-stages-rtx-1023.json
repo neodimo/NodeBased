@@ -7,25 +7,25 @@
   "processor": {
    "frames": 1,
    "stages_ms": {
-    "whole render call": 101902.88
+    "whole render call": 127163.06
    },
-   "frame_ms": 101902.88,
-   "note": "the CPU frame: gpu3d.render raised Unsupported for smoke together with splats; refused at 1920 x 1080 (Volume raymarch exceeds the CPU reference budget: 354,300,264 estimated density lookups > 300,000,000; lower the r; timed at 960 x 540"
+   "frame_ms": 127163.06,
+   "note": "the CPU frame: gpu3d.render raised Unsupported for smoke together with splats; timed at 1920 x 1080"
   },
   "card": {
    "frames": 30,
    "stages_ms": {
-    "card picture used": 0.0,
-    "card: first submit to the last pixels mapped": 1027.23,
-    "display picture (conversion stage)": 58.57,
-    "mesh passes (colour, and the depth pass on the processor route)": 1047.85,
-    "readback copy": 0.31,
-    "splat colours (relit on the processor)": 3.13,
-    "splat preparation on the card route (sort, colours, buffers)": 4.93,
-    "splat sort": 0.96,
-    "whole render call": 1050.84
+    "card picture used": 1.0,
+    "card: first submit to the last pixels mapped": 25.09,
+    "display picture (conversion stage)": 0.64,
+    "mesh passes (colour, and the depth pass on the processor route)": 30.25,
+    "readback copy": 1.99,
+    "splat colours (relit on the processor)": 3.03,
+    "splat preparation on the card route (sort, colours, buffers)": 4.84,
+    "splat sort": 0.91,
+    "whole render call": 32.85
    },
-   "frame_ms": 1050.84
+   "frame_ms": 32.85
   }
  }
 }

@@ -1,0 +1,91 @@
+{
+ "scene": "mixedglass",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 10.07,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "platform": "xcb",
+ "display": ":150",
+ "comp_fps": 24.0,
+ "shown": 238,
+ "fps": 23.64,
+ "interval_ms": {
+  "n": 237,
+  "p50": 41.27,
+  "p95": 48.05,
+  "p99": 75.09,
+  "max": 81.27,
+  "mean": 40.53
+ },
+ "render_ms_status": {
+  "n": 52,
+  "p50": 22,
+  "p95": 29,
+  "p99": 33,
+  "max": 409,
+  "mean": 29.33
+ },
+ "dropped": 4,
+ "status": "Evaluating frame 2\u2026",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 238
+ },
+ "fps_at_end_tier": 24.67,
+ "time_row": "real time",
+ "settle_s": null,
+ "settle_status": "Rendering splats  \u00b7  0%  \u00b7  roughly 2 s in total",
+ "worker_jobs": 239,
+ "frame_timeline": {
+  "frames": 237,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 2.308,
+   "setup (region, display cache lookup)": 0.501,
+   "node evaluation": 20.142,
+   "frame waits for conversion (cache put, stage pickup)": 0.307,
+   "display conversion": 0.608,
+   "picture hand-off to the Qt queue": 0.004,
+   "Qt queue delivery": 1.268,
+   "Viewer present": 2.646
+  },
+  "latency_ms": 27.784,
+  "transport_wait_ms": 13.449,
+  "overlap_ms": 0.699,
+  "accounted_interval_ms": 40.534,
+  "interval_ms": 40.534,
+  "sum_of_stage_means_ms": 27.784
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 0
+ },
+ "card_pictures": {
+  "registered": 239,
+  "taken": 239
+ },
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 21.69,
+  "GPU render and wait": 12.84,
+  "hand-over to the display": 3.08,
+  "readback copy": 2.02,
+  "scene evaluation": 2.01,
+  "scene prepare (shadow data, vertex packing)": 1.4,
+  "render encode": 1.0,
+  "convert and emit": 0.74,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.61,
+  "resolve (supersample, background)": 0.19,
+  "display cache put": 0.19,
+  "after the render (node bookkeeping)": 0.11
+ },
+ "gpu_wait_ms": {
+  "min": 5.7,
+  "p50": 12.8,
+  "max": 21.4,
+  "shared_card_suspected": true
+ }
+}

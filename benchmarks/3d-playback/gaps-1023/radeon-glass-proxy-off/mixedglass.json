@@ -1,0 +1,92 @@
+{
+ "scene": "mixedglass",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 10.07,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "platform": "xcb",
+ "display": ":150",
+ "comp_fps": 24.0,
+ "shown": 239,
+ "fps": 23.74,
+ "interval_ms": {
+  "n": 238,
+  "p50": 41.47,
+  "p95": 45.0,
+  "p99": 52.63,
+  "max": 78.84,
+  "mean": 40.33
+ },
+ "render_ms_status": {
+  "n": 48,
+  "p50": 22,
+  "p95": 31,
+  "p99": 32,
+  "max": 32,
+  "mean": 22.04
+ },
+ "dropped": 3,
+ "status": "Evaluating frame 2\u2026",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 239
+ },
+ "fps_at_end_tier": 24.8,
+ "time_row": "real time",
+ "settle_s": null,
+ "settle_status": "Rendering splats  \u00b7  0%  \u00b7  roughly 2 s in total",
+ "worker_jobs": 240,
+ "frame_timeline": {
+  "frames": 238,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 4.21,
+   "setup (region, display cache lookup)": 0.56,
+   "node evaluation": 20.695,
+   "frame waits for conversion (cache put, stage pickup)": 0.35,
+   "display conversion": 0.531,
+   "picture hand-off to the Qt queue": 0.005,
+   "Qt queue delivery": 1.138,
+   "Viewer present": 2.548
+  },
+  "latency_ms": 30.036,
+  "transport_wait_ms": 13.09,
+  "overlap_ms": 2.8,
+  "accounted_interval_ms": 40.326,
+  "interval_ms": 40.326,
+  "sum_of_stage_means_ms": 30.037
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 0
+ },
+ "card_pictures": {
+  "registered": 240,
+  "taken": 240
+ },
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 23.16,
+  "GPU render and wait": 12.8,
+  "hand-over to the display": 3.26,
+  "readback copy": 2.82,
+  "scene evaluation": 2.07,
+  "scene prepare (shadow data, vertex packing)": 1.36,
+  "render encode": 1.01,
+  "convert and emit": 0.68,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.62,
+  "resolve (supersample, background)": 0.18,
+  "display cache put": 0.18,
+  "after the render (node bookkeeping)": 0.11,
+  "cache_put to handover": -22.86
+ },
+ "gpu_wait_ms": {
+  "min": 5.8,
+  "p50": 12.8,
+  "max": 22.0,
+  "shared_card_suspected": true
+ }
+}
