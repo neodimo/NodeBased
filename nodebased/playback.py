@@ -50,6 +50,10 @@ class PlaybackQueue:
         self.max_prefetch = max_prefetch
         self._items = deque()
         self.active_cancel: threading.Event | None = None
+        # Every job taken and not yet retired. The worker is one thread: a job taken while the one before it still runs waits
+        # behind it, and `active_cancel` names only the newer, so a cancel that reached only that left the running render
+        # (a 100 s processor frame of the stopped scene) to finish before the first played frame could start.
+        self._running: set[threading.Event] = set()
 
     def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER, viewport=None,
                 playing=False, cancel_active=True, live_preview=False):
@@ -67,8 +71,8 @@ class PlaybackQueue:
         if int(tier) not in PROXY_TIERS:
             raise ValueError(f"Unsupported proxy tier {tier}; expected one of {PROXY_TIERS}")
         tier = int(tier)
-        if cancel_active and self.active_cancel is not None:
-            self.active_cancel.set()
+        if cancel_active:
+            self._cancel_running()
         self._items.clear()
         self._items.append(
             FrameRequest(generation, int(frame), True, document, tier, viewport, playing, live_preview))
@@ -85,10 +89,19 @@ class PlaybackQueue:
             if len(self._items) >= 1 + self.max_prefetch:
                 break
 
-    def cancel(self):
+    def _cancel_running(self):
         if self.active_cancel is not None:
             self.active_cancel.set()
+        for event in list(self._running):
+            event.set()
+
+    def cancel(self):
+        self._cancel_running()
         self._items.clear()
+
+    def retire(self, cancel):
+        """The worker is done with the job whose cancel event this is (finished, failed or cancelled)."""
+        self._running.discard(cancel)
 
     def enqueue_background(self, generation, frame, document, tier=FULL_TIER):
         """Append one non-displayed frame evaluation behind the visible request.
@@ -108,6 +121,7 @@ class PlaybackQueue:
             return None
         request = self._items.popleft()
         self.active_cancel = threading.Event()
+        self._running.add(self.active_cancel)
         return request, self.active_cancel
 
     def finish(self, cancel):

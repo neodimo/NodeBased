@@ -84,6 +84,9 @@ def parse_args(argv=None):
                    help="record the start: seconds from opening the scene to the first picture, every frame interval of the first N seconds "
                         "of playback (3 is the lane's number) and the pipeline and buffer builds that fall in them; --replay repeats the "
                         "playback from frame 1 in the same process (warm)")
+    p.add_argument("--play-at", default="settled", choices=("settled", "first"),
+                   help="when playback starts: after the scene's own pictures are done (settled, the default) or as soon as the first picture "
+                        "is on screen, as an artist presses play (first; the refinement still running is cancelled by the play)")
     p.add_argument("--replay", action="store_true", help="with --first-seconds: stop, rewind to frame 1 and play the first seconds again (warm)")
     p.add_argument("--first-frame-wait", type=float, default=120.0,
                    help="seconds to wait for the stopped first frame before playing (0: play at once; \"mixedglass\" needs it, its stopped "
@@ -377,15 +380,19 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     t_view = time.monotonic()
     window.agent_command({"op": "view", "id": view})
     t0 = time.perf_counter()
-    while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < args.first_frame_wait:
-        spin(0.05)
+    if args.play_at == "first":
+        while not any(t >= t_view for t, _tier in shown_tiers) and time.perf_counter() - t0 < args.first_frame_wait:
+            spin(0.005)
+    else:
+        while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < args.first_frame_wait:
+            spin(0.05)
     first_picture = None
     if args.first_seconds:
         later = [t for t, _tier in shown_tiers if t >= t_view]
         first_picture = {"scene_build_s": round(t_view - t_open, 3),
                          "open_to_first_picture_s": round(later[0] - t_open, 3) if later else None,
                          "view_to_first_picture_s": round(later[0] - t_view, 3) if later else None,
-                         "view_to_ready_s": round(time.perf_counter() - t0, 3),
+                         "view_to_ready_s": round(time.perf_counter() - t0, 3), "play_at": args.play_at,
                          "builds_before_first_picture": builds.within(t_open, later[0]) if later else {}}
     warm_ms = None
     window.playback_shown_times.clear()
@@ -555,7 +562,9 @@ def main(argv=None):
                    "--fps", str(args.fps), "--backend", args.backend, "--adapter", args.adapter,
                    "--splats", str(args.splats), "--view", args.view, "--samples", str(args.samples), "--out", name]
             cmd += ["--once"] if args.once else []
-            cmd += ["--proxy", args.proxy, "--settle-wait", str(args.settle_wait)]
+            cmd += ["--proxy", args.proxy, "--settle-wait", str(args.settle_wait), "--play-at", args.play_at]
+            cmd += ["--first-seconds", str(args.first_seconds)] if args.first_seconds else []
+            cmd += ["--replay"] if args.replay else []
             subprocess.run(cmd, check=False, env=dict(os.environ, PYTHONPATH=str(ROOT)))
             try:
                 results.append(json.loads(Path(name).read_text()))

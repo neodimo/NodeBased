@@ -594,7 +594,7 @@ class TileExecutor:
             fallback_nodes = tuple(sorted({resolved["nodes"][key]["type"]
                                            for key in _all_ancestors(resolved, target)
                                            if resolved["nodes"][key]["type"] not in SUPPORTED_TILED_KINDS}))
-            pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
+            pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier, cancel=cancel)
             # A fallback cannot honour a partial request without evaluating the reference
             # full frame.  Crop only at this API boundary and report ``tiled=False`` so callers
             # can account for the cost rather than mistaking it for ROI execution.
@@ -626,7 +626,7 @@ class TileExecutor:
             resolved["nodes"][key]["type"] == "Roto" for key in _all_ancestors(resolved, target))
         if contains_roto:
             self.stats["full_frame_fallbacks"] += 1
-            pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
+            pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier, cancel=cancel)
             x0, y0 = region.x - region.full_x, region.y - region.full_y
             cropped = pixels[y0:y0 + region.height, x0:x0 + region.width]
             return TileResult(pixels=cropped, canvas_width=region.width, canvas_height=region.height,
@@ -658,7 +658,7 @@ class TileExecutor:
                       max((h[1] for h in halos), default=0))
         if not fits_in_budget(region.width, region.height, self.tile_edge, *worst_halo, self.cache.budget):
             self.stats["full_frame_fallbacks"] += 1
-            pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
+            pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier, cancel=cancel)
             x0, y0 = region.x - region.full_x, region.y - region.full_y
             cropped = pixels[y0:y0 + region.height, x0:x0 + region.width]
             return TileResult(pixels=cropped, canvas_width=region.width, canvas_height=region.height, tier=tier,
@@ -674,7 +674,7 @@ class TileExecutor:
             # A Render3D that is the whole target is one picture from the renderer. The generator path below would cut it
             # into 256-pixel tiles, keep each in the tile cache and copy them back into a new canvas: about 7 ms of a
             # 1080p played frame (docs/PERFORMANCE.md, "3D playback at the comp's rate"). The pixels are the ones it would have put back.
-            raster = self.evaluator.evaluate_raster(resolved, target, frame=frame, tier=tier)
+            raster = self.evaluator.evaluate_raster(resolved, target, frame=frame, tier=tier, cancel=cancel)
             layers = {name: np.asarray(value.pixels, dtype=np.float32) for name, value in (raster.layers or {}).items()}
             self.stats["source_decodes"] += 1
             return TileResult(pixels=np.asarray(raster.pixels, dtype=np.float32), canvas_width=region.width,

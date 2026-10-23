@@ -1,5 +1,10 @@
 """The first second of a 3D scene (docs/PERFORMANCE.md, "Lane 4: the first second").
 
+Part 2, the first played frames: a stopped-frame render that cannot be cancelled kept the first played frame waiting (the 100 s
+processor render of the smoke, splats and glass scene started the moment playback stopped; pressing play again showed nothing for
+a minute and a half). Two causes, each with its test below: the direct Render3D path of `TileExecutor.compose_region` did not hand its
+cancel event to the evaluator, and `PlaybackQueue` cancelled only the newest taken job, not the one still running ahead of it.
+
 Part 1, the first picture: the coarse tiers of a progressive preview (the first look after opening a scene or editing it) draw
 a Render3D with splats and meshes on the card, as playback does. A scene with smoke, splats and a see-through sphere took 7 s
 for its first picture because the exact picture comes from the processor; each test here fails without `first_look_document`
@@ -161,6 +166,64 @@ class DraftIsDrawnOnTheCard(unittest.TestCase):
 
     def test_the_exact_picture_still_comes_from_the_processor(self):
         self.assertEqual(len(self.evaluate(self.document, 8)), 1)
+
+
+class CancelReachesTheRunningRender(unittest.TestCase):
+    def test_a_cancel_set_before_the_direct_render3d_path_runs_stops_it(self):
+        import threading
+        from nodebased import tileexec
+        from nodebased.cancellation import Cancelled
+        document = build(*render_commands(samples=1, backend="cpu"))
+        executor = tileexec.TileExecutor()
+        bounds = executor.canvas_region(document, "render", frame=1, tier=1)
+        cancel = threading.Event()
+        cancel.set()
+        with unittest.mock.patch.object(tileexec, "RENDER3D_DIRECT", True), self.assertRaises(Cancelled):
+            executor.compose_region(document, "render", bounds, frame=1, tier=1, cancel=cancel)
+
+    def test_the_queue_cancels_every_job_still_running_not_only_the_newest(self):
+        queue = playback.PlaybackQueue()
+        document = {"nodes": {}}
+        queue.replace(1, 1, document)
+        _, running = queue.take()                  # the stopped frame's render: it runs for a long time
+        queue.replace(2, 1, document, cancel_active=False)
+        _, waiting = queue.take()                  # taken while the first still runs; it waits behind it on the one worker
+        self.assertIsNot(running, waiting)
+        queue.replace(3, 2, document)              # the artist presses play
+        self.assertTrue(running.is_set(), "the render running ahead of the newest job was left to finish")
+        self.assertTrue(waiting.is_set())
+
+    def test_a_retired_job_is_not_touched_again(self):
+        queue = playback.PlaybackQueue()
+        document = {"nodes": {}}
+        queue.replace(1, 1, document)
+        _, done = queue.take()
+        queue.retire(done)
+        queue.active_cancel = None
+        queue.replace(2, 1, document)
+        self.assertFalse(done.is_set())
+
+    def test_the_worker_retires_every_job_it_ran(self):
+        import time
+        w = _window()
+        self.addCleanup(lambda: (setattr(w, "saved_document", w.dispatcher.document), w.close()))
+        w.agent_command({"op": "batch", "commands": render_commands(samples=1, backend="cpu")})
+        w.agent_command({"op": "view", "id": "render"})
+        end = time.monotonic() + 60
+        while time.monotonic() < end and (w.busy or len(w.preview_queue) or w.frame is None):
+            APP.processEvents()
+            time.sleep(0.01)
+        self.assertIsNotNone(w.frame)
+        self.assertEqual(w.preview_queue._running, set(), "jobs the worker finished are still listed as running")
+
+    def test_cancel_reaches_a_running_job_too(self):
+        queue = playback.PlaybackQueue()
+        queue.replace(1, 1, {"nodes": {}})
+        _, running = queue.take()
+        queue.replace(2, 1, {"nodes": {}}, cancel_active=False)
+        queue.take()
+        queue.cancel()
+        self.assertTrue(running.is_set())
 
 
 if __name__ == "__main__":

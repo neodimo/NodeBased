@@ -14818,6 +14818,7 @@ class Window(QMainWindow):
                 with self.render_progress_router.handler(report if request.display else None):
                     render()
             finally:
+                self.preview_queue.retire(cancel)
                 if plain:
                     gpupicture.disarm()
         def render():
