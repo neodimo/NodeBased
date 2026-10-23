@@ -1,6 +1,6 @@
 {
   "date": "2026-10-23",
-  "status": "partial; production gates incomplete",
+  "status": "partial; baked proxy scrub gate passes after pipeline cache; production full-detail refinement split remains incomplete",
   "adapter": "NVIDIA GeForce RTX 3080 Ti",
   "requested_adapter": "default",
   "configuration": {
@@ -37,7 +37,9 @@
     "The pose cache reduced profiled solid voxelization from 188.852 s to 24.474 s, and surface voxelization from 182.967 s to 21.424 s. The edited-scene profile fell from 346.208 s to 122.454 s, but solver/downstream replay remains dominant.",
     "The 120-frame proxy total, full-detail stage split, cup move, steam edit and integrated Radeon gates remain incomplete or unmeasured. The proxy timeline reached frame 70 in the earlier run; frame 70 took 16.487 s.",
     "A6000 estimate: 0.8-1.3x RTX wall time for the same proxy workload, based on the existing 64-cell planning range; unmeasured and not a production full-detail estimate.",
-    "The production harness pour_rate edit was run with fresh src_vel_y deltas (+0.36 for displayed-frame timing and +0.38 for profiling) so neither result reused a prior edited frame-60 cache entry."
+    "The production harness pour_rate edit was run with fresh src_vel_y deltas (+0.36 for displayed-frame timing and +0.38 for profiling) so neither result reused a prior edited frame-60 cache entry.",
+    "Finish 1 separated the 120-frame forward bake from retained-cache playback. The prior 3.92 FPS number measured forward simulation; the same-evaluator baked replay measured 46.73 FPS on RTX and 142.03 FPS on Radeon, both above the 12 FPS target. Full-detail production split attempts hit adapter/resource/time limits recorded in finish1_playback_and_adapters.",
+    "Profile-driven optimization: GpuWhitewater3D previously compiled two compute pipelines in each frame evaluation. Pipelines now persist per device under a thread-safe lock. On RTX cached playback improved 46.73\u2192126.49 FPS, p95 24.95\u219210.12 ms, and frame-120 evaluator time 14.24\u21921.99 ms. Radeon playback measured 142.03\u2192154.37 FPS; llvmpipe first-proxy timing was unchanged within run noise."
   ],
   "profile_top_costs_s_after_pose_cache": {
     "liquid_solver_and_downstream_replay": 120.441,
@@ -165,5 +167,139 @@
       "scratch/nb-lanes/run/big-L6/f4-first/split-profile.log"
     ],
     "gate": "PARTIAL: first fresh proxy is under 1 s with zero tier-1 FLIP steps; complete 120-frame measurement exists, but sequential timeline scrub averages 3.92 FPS and misses 12 FPS."
+  },
+  "finish1_playback_and_adapters": {
+    "date": "2026-10-23",
+    "status": "partial; production proxy scrub and adapters measured, production full-detail split incomplete",
+    "configuration": {
+      "liquid_cells": 256,
+      "steam_cells": 192,
+      "frames": 120,
+      "edit": "pour_rate keyed at frame 60",
+      "viewport": [
+        1920,
+        1080
+      ]
+    },
+    "scrub_definition": "120-frame replay of the completed bake in the same retained evaluator; forward bake time is reported separately",
+    "rtx_3080_ti": {
+      "first_proxy_s": 0.4342,
+      "first_proxy_solver_steps": {
+        "flip": 16,
+        "smoke": 1
+      },
+      "forward_bake_s": 29.89,
+      "forward_bake_fps": 4.02,
+      "scrub_s": 0.95,
+      "scrub_fps": 126.49,
+      "scrub_p95_ms": 10.12,
+      "scrub_max_ms": 12.27,
+      "scrub_12fps_holds": true,
+      "profile_frame_120": {
+        "frame": 120,
+        "total_ms": 9.1,
+        "evaluation_ms": 1.99,
+        "proxy_conversion_ms": 0.01,
+        "draw_ms": 7.1,
+        "cprofile_top": "         5749 function calls (5709 primitive calls) in 0.004 seconds\n\n   Ordered by: cumulative time\n   List reduced from 214 to 20 due to restriction <20>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        1    0.001    0.001    0.004    0.004 imaging.py:1031(evaluate_raster)\n        8    0.000    0.000    0.001    0.000 fluid3d.py:1669(chain_for)\n       49    0.000    0.000    0.001    0.000 __init__.py:183(dumps)\n       49    0.000    0.000    0.001    0.000 encoder.py:183(encode)\n        6    0.000    0.000    0.001    0.000 fluid3d.py:1622(_geo_track)\n       49    0.001    0.000    0.001    0.000 encoder.py:205(iterencode)\n        6    0.000    0.000    0.000    0.000 fluid3d.py:1580(_geo_track_signature)\n        8    0.000    0.000    0.000    0.000 fluid3d.py:1546(_resolver)\n        3    0.000    0.000    0.000    0.000 scene3d.py:1921(scene_from_node)\n        1    0.000    0.000    0.000    0.000 fluid3d.py:2048(cached_volume)\n       44    0.000    0.000    0.000    0.000 _classes.py:673(__del__)\n        1    0.000    0.000    0.000    0.000 flip3d.py:1005(build_stream)\n        1    0.000    0.000    0.000    0.000 fluid3d.py:2032(_fixed_preview_volume_value)\n       15    0.000    0.000    0.000    0.000 simcache.py:29(run_key)\n      134    0.000    0.000    0.000    0.000 loader.py:60(feature_import)\n       44    0.000    0.000    0.000    0.000 _api.py:2686(_release)\n     1041    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}\n       92    0.000    0.000    0.000    0.000 {method 'extend' of 'list' objects}\n       44    0.000    0.000    0.000    0.000 _api.py:1059(_release)\n        3    0.000    0.000    0.000    0.000 scene3d.py:105(matrix)\n\n\n",
+        "interpretation": "baked-frame replay in the same evaluator that produced the bake"
+      },
+      "full_detail_limit": "Full-only base prefix completed liquid and surface; GPUValidationError Not enough memory left while evaluating whitewater frame 31 on 12 GB adapter."
+    },
+    "radeon_8060s": {
+      "first_proxy_s": 0.2788,
+      "first_proxy_solver_steps": {
+        "flip": 16,
+        "smoke": 1
+      },
+      "forward_bake_s": 31.05,
+      "forward_bake_fps": 3.87,
+      "scrub_s": 0.78,
+      "scrub_fps": 154.37,
+      "scrub_p95_ms": 7.07,
+      "scrub_max_ms": 8.74,
+      "scrub_12fps_holds": true,
+      "full_detail_limit": "59-frame base prefix took 553.5 s; edited liquid stage reached frame 80/120; run stopped at ~14 GB RSS with swap active."
+    },
+    "llvmpipe_standin": {
+      "production_first_proxy_s": 1.0857,
+      "production_proxy_solver_steps": {
+        "flip": 16,
+        "smoke": 1
+      },
+      "full_timeline": "not measured at production resolution; prior 64^3/120-frame output-stage reference: benchmarks/hot_pour/edit-resimulation-llvmpipe-2026-10-22.json",
+      "production_first_proxy_s_before_after": [
+        1.0787,
+        1.0857
+      ]
+    },
+    "raw_logs": "workspace scratch scratch/nb-lanes/run/big-L6/finish1/",
+    "regressions": [
+      "tests.test_fluid_surface_cache.FluidSurfaceCacheTests.test_proxy_steam_geometry_sampling_never_requests_tier_one_liquid",
+      "tests.test_fluid3d.ColliderTests.test_resident_solid_composition_reuses_an_identical_animated_pose"
+    ],
+    "whitewater_pipeline_cache": {
+      "change": "Compile and retain emission/motion compute pipelines per GPU device under a thread-safe lock.",
+      "regression": "tests.test_whitewater.WhitewaterPipelineCacheTests.test_gpu_pipelines_are_reused_for_the_same_device",
+      "rtx_before_after": {
+        "first_proxy_s": [
+          0.4919,
+          0.4342
+        ],
+        "forward_bake_s": [
+          32.4,
+          29.89
+        ],
+        "scrub_fps": [
+          46.73,
+          126.49
+        ],
+        "scrub_p95_ms": [
+          24.95,
+          10.12
+        ],
+        "scrub_max_ms": [
+          26.37,
+          12.27
+        ],
+        "frame120_evaluation_ms": [
+          14.24,
+          1.99
+        ],
+        "frame120_proxy_ms": [
+          0.01,
+          0.01
+        ],
+        "frame120_draw_ms": [
+          7.85,
+          7.1
+        ]
+      },
+      "radeon_before_after": {
+        "first_proxy_s": [
+          0.2904,
+          0.2788
+        ],
+        "forward_bake_s": [
+          20.93,
+          31.05
+        ],
+        "scrub_fps": [
+          142.03,
+          154.37
+        ],
+        "scrub_p95_ms": [
+          7.35,
+          7.07
+        ]
+      },
+      "llvmpipe_before_after": {
+        "first_proxy_s": [
+          1.0787,
+          1.0857
+        ]
+      },
+      "bake_comparison_note": "The adapter runs were fresh caches but non-deterministic workload/system timing varied; do not infer bake-speed change from these samples. Playback is the targeted metric."
+    }
   }
 }

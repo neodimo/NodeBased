@@ -4,9 +4,11 @@ from __future__ import annotations
 import argparse
 import copy
 import cProfile
+import io
 import json
 import math
 import os
+import pstats
 import statistics
 import sys
 import time
@@ -138,7 +140,7 @@ def check_scratch(workdir):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--adapter", choices=("default", "integrated"), required=True)
+    parser.add_argument("--adapter", choices=("default", "integrated", "cpu"), required=True)
     parser.add_argument("--liquid-cells", type=int, default=256)
     parser.add_argument("--smoke-cells", type=int, default=192)
     parser.add_argument("--frames", type=int, default=120)
@@ -151,6 +153,8 @@ def main():
                         help="profile the first edited proxy scene frame, then stop")
     parser.add_argument("--first-only", action="store_true",
                         help="measure and save the first displayed proxy frame, then stop")
+    parser.add_argument("--profile-scrub-frame", type=int,
+                        help="after the proxy bake, profile one retained-cache playback frame")
     parser.add_argument("--play-width", type=int, default=1920)
     parser.add_argument("--play-height", type=int, default=1080)
     args = parser.parse_args()
@@ -158,6 +162,10 @@ def main():
         parser.error("choose only one of --proxy-only and --full-only")
     if args.frames != 120 or args.liquid_cells != 256 or args.smoke_cells != 192:
         parser.error("gates require 120 frames, 256 liquid cells and 192 steam cells")
+    if args.profile_scrub_frame is not None and not 1 <= args.profile_scrub_frame <= args.frames:
+        parser.error("--profile-scrub-frame must be within the 120-frame bake")
+    if args.profile_scrub_frame is not None and (args.full_only or args.first_only):
+        parser.error("--profile-scrub-frame requires the full proxy bake and playback pass")
     args.workdir.mkdir(parents=True, exist_ok=True)
     force_adapter(args.adapter)
 
@@ -254,17 +262,65 @@ def main():
                     print(f"{edit}: proxy timeline frame {frame}/{args.frames}, {elapsed:.3f}s", flush=True)
                 check_scratch(args.workdir)
             row.update({
-                "proxy_120_frames_s": round(sum(times), 2),
-                "proxy_frame_p95_ms": round(percentile(times, 0.95) * 1000, 2),
-                "proxy_frame_max_ms": round(max(times) * 1000, 2),
-                "proxy_mean_fps": round(len(times) / sum(times), 2),
-                "scrub_12fps_holds": max(times) <= (1.0 / 12.0),
+                "proxy_bake_120_frames_s": round(sum(times), 2),
+                "proxy_bake_frame_p95_ms": round(percentile(times, 0.95) * 1000, 2),
+                "proxy_bake_frame_max_ms": round(max(times) * 1000, 2),
+                "proxy_bake_mean_fps": round(len(times) / sum(times), 2),
             })
             row["proxy_cache_bytes"] = check_scratch(args.workdir)
+            scrub_times = []
+            for frame in range(1, args.frames + 1):
+                started = time.perf_counter()
+                scene = evaluator.evaluate_raster(doc, "scene", frame=frame, tier=4, typed=True)
+                scene = proxy_scene(scene, 4)
+                renderer.render(scene, camera, max(1, -(-args.play_width // 4)),
+                                max(1, -(-args.play_height // 4)), (0.02, 0.02, 0.025, 1.0), ambient=0.2)
+                scrub_times.append(time.perf_counter() - started)
+            row.update({
+                "proxy_scrub_120_frames_s": round(sum(scrub_times), 2),
+                "proxy_scrub_frame_p95_ms": round(percentile(scrub_times, 0.95) * 1000, 2),
+                "proxy_scrub_frame_max_ms": round(max(scrub_times) * 1000, 2),
+                "proxy_scrub_mean_fps": round(len(scrub_times) / sum(scrub_times), 2),
+                "scrub_12fps_holds": max(scrub_times) <= (1.0 / 12.0),
+            })
+            if args.profile_scrub_frame is not None:
+                # Time the normal retained-cache playback first, then profile the same hot frame
+                # independently so profiler overhead cannot contaminate the 120-frame gate.
+                frame = args.profile_scrub_frame
+                scrub_started = time.perf_counter()
+                scrub_scene = evaluator.evaluate_raster(doc, "scene", frame=frame, tier=4, typed=True)
+                evaluation_s = time.perf_counter() - scrub_started
+                scrub_started = time.perf_counter()
+                scrub_scene = proxy_scene(scrub_scene, 4)
+                conversion_s = time.perf_counter() - scrub_started
+                scrub_started = time.perf_counter()
+                renderer.render(scrub_scene, camera, max(1, -(-args.play_width // 4)),
+                                max(1, -(-args.play_height // 4)), (0.02, 0.02, 0.025, 1.0), ambient=0.2)
+                draw_s = time.perf_counter() - scrub_started
+                profiler = cProfile.Profile()
+                profiler.runcall(evaluator.evaluate_raster, doc, "scene", frame=frame,
+                                 tier=4, typed=True)
+                profile_text = io.StringIO()
+                pstats.Stats(profiler, stream=profile_text).strip_dirs().sort_stats(
+                    "cumtime").print_stats(20)
+                row["proxy_scrub_profile"] = {
+                    "frame": frame,
+                    "total_ms": round((evaluation_s + conversion_s + draw_s) * 1000, 2),
+                    "evaluation_ms": round(evaluation_s * 1000, 2),
+                    "proxy_conversion_ms": round(conversion_s * 1000, 2),
+                    "draw_ms": round(draw_s * 1000, 2),
+                    "cprofile_top": profile_text.getvalue(),
+                    "interpretation": "baked-frame replay in the same evaluator that produced the bake",
+                }
+                print(f"{edit}: scrub frame {frame}: {row['proxy_scrub_profile']['total_ms']:.2f}ms "
+                      f"(eval {row['proxy_scrub_profile']['evaluation_ms']:.2f}, "
+                      f"proxy {row['proxy_scrub_profile']['proxy_conversion_ms']:.2f}, "
+                      f"draw {row['proxy_scrub_profile']['draw_ms']:.2f})", flush=True)
             checkpoint(args.json, result)
             print(f"{edit}: first proxy frame {row['proxy_first_frame_s']:.3f}s; "
-                  f"120-frame proxy {row['proxy_120_frames_s']:.2f}s; "
-                  f"scrub {row['proxy_mean_fps']:.2f} fps, p95 {row['proxy_frame_p95_ms']:.2f} ms",
+                  f"120-frame bake {row['proxy_bake_120_frames_s']:.2f}s; "
+                  f"scrub {row['proxy_scrub_mean_fps']:.2f} fps, "
+                  f"p95 {row['proxy_scrub_frame_p95_ms']:.2f} ms",
                   flush=True)
 
     if args.full_only or not args.proxy_only:

@@ -2,15 +2,50 @@
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 
 from nodebased import simcache, whitewater
+from nodebased.fluid_gpu_whitewater import GpuWhitewater3D
 from nodebased.core import Dispatcher, INPUT_TYPES, OUTPUT_TYPES, SPECS
 from nodebased.imaging import Evaluator
 from nodebased.knobs import knob_layout
 from nodebased.scene3d import ParticleInstance, Volume
 from tests.test_particles_nodes import make, wire
+
+
+class WhitewaterPipelineCacheTests(unittest.TestCase):
+    def test_gpu_pipelines_are_reused_for_the_same_device(self):
+        class Device:
+            def __init__(self):
+                self.shader_modules = 0
+                self.pipelines = 0
+
+            def create_shader_module(self, *, code):
+                self.shader_modules += 1
+                return object()
+
+            def create_compute_pipeline(self, **kwargs):
+                self.pipelines += 1
+                return object()
+
+        device = Device()
+        state = {'device': device, 'wgpu': object(), 'info': {'device': 'test-adapter'}}
+        key = id(device)
+        with GpuWhitewater3D._pipeline_lock:
+            GpuWhitewater3D._pipeline_cache.pop(key, None)
+        try:
+            with mock.patch('nodebased.gpu3d._state', return_value=state):
+                first = GpuWhitewater3D()
+                second = GpuWhitewater3D()
+            self.assertIs(first.pipeline, second.pipeline)
+            self.assertIs(first.motion_pipeline, second.motion_pipeline)
+            self.assertEqual(device.shader_modules, 2)
+            self.assertEqual(device.pipelines, 2)
+        finally:
+            with GpuWhitewater3D._pipeline_lock:
+                GpuWhitewater3D._pipeline_cache.pop(key, None)
 
 
 def liquid(positions, velocities, phi=None, ids=None):

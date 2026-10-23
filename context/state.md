@@ -1,3 +1,11 @@
+# Lane 6 — 2026-10-23 finish 1 status (PARTIAL)
+
+## Lane 6 step B finish 1 — baked proxy playback and production adapter rows
+
+The production proxy harness now separates the 120-frame forward bake from replay of all 120 baked frames in the retained evaluator. RTX 3080 Ti at 256³ liquid / 192³ steam: before/after per-device whitewater pipeline caching, first proxy 0.492→0.434 s; forward bake 32.40→29.89 s; cached replay 46.73→126.49 FPS (p95 24.95→10.12 ms, max 26.37→12.27 ms). Frame-120 evaluation fell 14.24→1.99 ms; proxy conversion stayed 0.01 ms and draw moved 7.85→7.10 ms. The earlier 3.92 FPS measured bake throughput. Radeon 8060S at production size: cached replay moved 142.03→154.37 FPS (p95 7.35→7.07 ms); forward bake varied 20.93→31.05 s. llvmpipe production first proxy measured 1.079→1.086 s; prior 64³/120-frame output-stage reference remains the only software-adapter timeline row.
+
+Full-detail production refinement is PARTIAL. RTX completed base liquid and surface prefixes, then failed allocating memory in whitewater at frame 31. Radeon completed the base prefix in 553.5 s and reached edited liquid frame 80/120 before stopping at ~14 GB RSS with swap active. No stage totals were produced. JSON: `benchmarks/hot_pour/production-edit-refresh-rtx-2026-10-23.json`; logs are under workspace scratch `scratch/nb-lanes/run/big-L6/finish1/`. Per-device whitewater-pipeline caching, same-tier steam and collider-composition regressions pass; all 7 knowledge-copy tests pass. Needs Gonzo: rerun `tools/benchmark_fluid_edit_stages.py --full-only` with a bounded/refactored full-detail whitewater resource strategy; generated benchmark caches are in user Trash, where they remain recoverable and continue occupying disk space.
+
 # Lane 6 — 2026-10-23 finish 4 status (PARTIAL)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (6:55 AM on 2026-10-23 PDT)

@@ -6,6 +6,8 @@ CPU reference so seeded emission and cap ordering remain stable.
 """
 from __future__ import annotations
 
+import threading
+
 import numpy as np
 
 WGSL = """
@@ -123,16 +125,28 @@ def neighbor_lists(positions, h, chunk=20000):
 
 
 class GpuWhitewater3D:
+    _pipeline_lock = threading.Lock()
+    _pipeline_cache = {}
+
     def __init__(self):
         from . import gpu3d
         state = gpu3d._state()
         self.device = state['device']
         self.wgpu = state['wgpu']
         self.adapter_name = str(state['info'].get('device', '?'))
-        module = self.device.create_shader_module(code=WGSL)
-        self.pipeline = self.device.create_compute_pipeline(layout='auto', compute={'module': module, 'entry_point': 'main'})
-        motion_module = self.device.create_shader_module(code=MOTION_WGSL)
-        self.motion_pipeline = self.device.create_compute_pipeline(layout='auto', compute={'module': motion_module, 'entry_point': 'main'})
+        key = id(self.device)
+        with self._pipeline_lock:
+            cached = self._pipeline_cache.get(key)
+            if cached is None or cached[0] is not self.device:
+                module = self.device.create_shader_module(code=WGSL)
+                pipeline = self.device.create_compute_pipeline(
+                    layout='auto', compute={'module': module, 'entry_point': 'main'})
+                motion_module = self.device.create_shader_module(code=MOTION_WGSL)
+                motion_pipeline = self.device.create_compute_pipeline(
+                    layout='auto', compute={'module': motion_module, 'entry_point': 'main'})
+                cached = (self.device, pipeline, motion_pipeline)
+                self._pipeline_cache[key] = cached
+        self.pipeline, self.motion_pipeline = cached[1:]
 
     def move(self, positions, velocities, kinds, nearest, liquid_velocities, dt, params):
         n = len(positions)
