@@ -8304,10 +8304,15 @@ class Window(QMainWindow):
         """Put the 2D viewer or the 3D viewport on top of the shared viewer panel. Neither view is
         rebuilt: the 2D zoom, pan, ROI and compare and the 3D camera, render mode and selection
         stay where they were, and only the view being shown paints (Viewport3D skips drawing while
-        hidden). Also brings the VIEWER dock forward when it was closed or tabbed away."""
+        hidden). Also brings the VIEWER dock forward when it was closed or tabbed away, except while the direct
+        picture is the main viewer and in front of it: the 3D page then opens beside the direct picture, which stays
+        where it is (`_viewer_beside_direct`), and 2D tabs the two together again."""
         if mode not in self.VIEWER_MODES:
             raise ValueError(f"viewer mode must be one of {self.VIEWER_MODES}")
-        self._bring_forward(self.viewer_dock)
+        if mode == "3d" and self._direct_main_in_front():
+            self._viewer_beside_direct()
+        else:
+            self._bring_forward(self.viewer_dock)
         index = self.VIEWER_MODES.index(mode)
         changed = self.view_stack.currentIndex() != index
         self.view_stack.setCurrentIndex(index)
@@ -15429,6 +15434,19 @@ class Window(QMainWindow):
             dock.setFloating(False)
         self._place_direct_in_viewer_place()
         self._bring_forward(dock)
+
+    def _direct_main_in_front(self):
+        """The direct picture is the main viewer and is the tab showing in the Viewer's place."""
+        direct, viewer = getattr(self, "direct_dock", None), self.viewer_dock
+        return bool(direct is not None and self.direct_widget is not None and self.preferences.direct_main()
+                    and self._dock_front.get("direct") and direct.isVisible() and not direct.isFloating()
+                    and not viewer.isFloating() and direct in self.tabifiedDockWidgets(viewer))
+
+    def _viewer_beside_direct(self):
+        """Open the Viewer's dock (the 3D page) in a split next to the direct picture instead of in front of it, so
+        the direct picture is not covered or released; going back to 2D tabs the two together again."""
+        self.splitDockWidget(self.direct_dock, self.viewer_dock, Qt.Orientation.Horizontal)
+        self.viewer_dock.show()
 
     def _open_direct_main(self):
         """The switch is on: open the direct picture in the Viewer's place."""

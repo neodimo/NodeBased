@@ -26,11 +26,22 @@ REAL_WORKSPACE = getattr(Preferences.workspace, "real_workspace", Preferences.wo
 class StubWidget(QWidget):
     """What stands in for the card's widget: the calls the Window makes on it."""
 
+    error = None
+
     def fit(self):
         pass
 
     def release(self):
         pass
+
+    def overlay_dirty(self):                # the Viewer repainted its overlays (both are on show beside each other)
+        pass
+
+    def submit(self, image, rect, format_rect=None, generation=None):
+        return True
+
+    def submit_linear(self, *args, **kwargs):
+        return False
 
 
 def front(window, dock):
@@ -39,6 +50,8 @@ def front(window, dock):
     from PySide6.QtWidgets import QTabBar
     if not dock.isVisible():
         return False
+    if not window.tabifiedDockWidgets(dock):
+        return True                         # on its own in its place (a split, or floating): nothing is in front of it
     title = dock.windowTitle()
     for bar in window.findChildren(QTabBar):
         if not bar.isVisible() or not window.rect().contains(bar.geometry().center()):
@@ -242,18 +255,76 @@ class DirectMainSwitchTests(DockCase):
         self.assertFalse(window.direct_dock.isFloating())
         self.assertIn(window.direct_dock, window.tabifiedDockWidgets(window.viewer_dock))
 
-    def test_the_3d_view_brings_the_viewer_forward_and_2d_takes_the_picture_back(self):
+    def test_the_3d_view_opens_beside_the_picture_and_2d_tabs_them_together_again(self):
         window = self.window()
         window.direct_main_action.setChecked(True)
         self.settle()
+        self.assertIn(window.direct_dock, window.tabifiedDockWidgets(window.viewer_dock))
+        picture = window.direct_widget
+        window.set_viewer_mode("3d")
+        self.settle()
+        self.assertEqual(window.viewer_mode(), "3d")
+        self.assertTrue(front(window, window.viewer_dock))
+        self.assertTrue(front(window, window.direct_dock), "the direct picture stays in view")
+        self.assertNotIn(window.direct_dock, window.tabifiedDockWidgets(window.viewer_dock))
+        self.assertFalse(window.direct_dock.isFloating())
+        self.assertIs(window.direct_widget, picture, "the card's widget is not released or replaced")
+        self.assertLess(window.direct_dock.geometry().right(), window.viewer_dock.geometry().left() + 4)
+        self.assertGreater(window.direct_dock.width(), 100)
+        self.assertGreater(window.viewer_dock.width(), 100)
+        self.assertTrue(window.preferences.direct_main())
+        window.set_viewer_mode("2d")
+        self.settle()
+        self.assertEqual(window.viewer_mode(), "2d")
+        self.assertIn(window.direct_dock, window.tabifiedDockWidgets(window.viewer_dock))
+        self.assertTrue(front(window, window.direct_dock))
+        self.assertFalse(front(window, window.viewer_dock))
+        self.assertIs(window.direct_widget, picture)
+
+    def test_the_3d_view_comes_forward_as_before_when_the_picture_is_not_the_main_viewer(self):
+        window = self.window()
+        window.direct_action.setChecked(True)               # open by hand, the switch off
+        self.settle()
+        self.assertFalse(window.preferences.direct_main())
         window.set_viewer_mode("3d")
         self.settle()
         self.assertTrue(front(window, window.viewer_dock))
         self.assertFalse(front(window, window.direct_dock))
         window.set_viewer_mode("2d")
+        window.direct_main_action.setChecked(True)
         self.settle()
+        window.direct_dock.setFloating(True)                # a floating picture is not covered by the Viewer's tab
+        self.settle()
+        window.set_viewer_mode("3d")
+        self.settle()
+        self.assertTrue(front(window, window.viewer_dock))
+        self.assertTrue(window.direct_dock.isFloating())
+        self.assertTrue(window.direct_dock.isVisible())
+
+    def test_a_layout_saved_in_the_3d_split_comes_back_with_the_picture_in_front(self):
+        window = self.window()
+        window.direct_main_action.setChecked(True)
+        self.settle()
+        window.set_viewer_mode("3d")
+        self.settle()
+        again = self.reopen(window)
+        self.settle()
+        self.assertTrue(wait_until(lambda: front(again, again.direct_dock) and again.viewer_mode() == "2d"))
+
+    def test_going_to_3d_twice_and_the_3d_tab_keep_the_split(self):
+        window = self.window()
+        window.direct_main_action.setChecked(True)
+        self.settle()
+        window.set_viewer_mode("3d")
+        window.set_viewer_mode("3d")
+        window.select_workspace_tab("3D")
+        self.settle()
+        self.assertTrue(front(window, window.viewer_dock))
         self.assertTrue(front(window, window.direct_dock))
-        self.assertFalse(front(window, window.viewer_dock))
+        window.select_workspace_tab("Composite")
+        self.settle()
+        self.assertEqual(window.viewer_mode(), "2d")
+        self.assertTrue(front(window, window.direct_dock))
 
     def test_the_default_is_unchanged(self):
         window = self.window()
