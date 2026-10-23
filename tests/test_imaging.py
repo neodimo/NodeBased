@@ -166,6 +166,16 @@ class ImageTests(unittest.TestCase):
         np.testing.assert_allclose(Evaluator._kernel('Merge', {'mix': 1}, [a, b]), [[[0.5, 0, 0.5, 1]]])
         np.testing.assert_allclose(Evaluator._kernel('Merge', {'mix': 0}, [a, b]), b)
 
+    def test_unmasked_over_reuses_output_without_changing_pixels_or_inputs(self):
+        a = np.array([[[0.13, 0.21, 0.0, 0.35], [0.8, 0.1, 0.4, 0.9]]], np.float32)
+        b = np.array([[[0.02, 0.1, 0.3, 0.8], [0.25, 0.4, 0.6, 1.0]]], np.float32)
+        original_a, original_b = a.copy(), b.copy()
+        expected = a + b * (1.0 - a[..., 3:4])
+        result = Evaluator._kernel('Merge', {'mix': 1}, [a, b])
+        np.testing.assert_array_equal(result, expected)
+        np.testing.assert_array_equal(a, original_a)
+        np.testing.assert_array_equal(b, original_b)
+
     def test_grade_preserves_hdr_negative_and_alpha(self):
         src = np.array([[[2, -1, 0.2, 0.5]]], np.float32)
         result = Evaluator._kernel('Grade', {'exposure': 1, 'multiply': 1, 'offset': 0.2}, [src])

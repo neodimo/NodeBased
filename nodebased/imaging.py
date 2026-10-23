@@ -4799,6 +4799,14 @@ class Evaluator:
         """
         if mask is not None and mask.shape[:2] != b.shape[:2]:
             raise ValueError("Merge mask must match the merged format")
+        if op == "over" and mask is None and mix == 1.0:
+            # The common unmasked Over can use B's copy as the output and update it in place,
+            # avoiding separate full-frame foreground and background temporaries.
+            result = b.copy()
+            remaining = np.subtract(1.0, a[..., 3:4])
+            np.multiply(result, remaining, out=result)
+            np.add(result, a, out=result)
+            return result
         gate = (np.float32(mix) if mask is None else
                 mask[..., 3:4] if mix == 1.0 else np.float32(mix) * mask[..., 3:4])
         if op == "over":
