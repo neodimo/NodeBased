@@ -72,6 +72,9 @@ Targets:
   laptop stand-in targets at least 12 fps; its latest result is 3.473 fps. At 4K, the target is
   24 fps on an automatic reduced tier and a full-resolution still within one second after stop;
   the RTX result is pending.
+- A 3D comp under an animated camera plays at the comp's rate on the RTX 3080 Ti: the cube at full resolution, the
+  furnished room with a few pictures at half resolution, the mixed mesh and splat scene at a lower tier that refines
+  to the full picture within 3 s of stopping (see "Lane 4 step notes", 3D playback at the comp's rate).
 
 What changed, with the measurement from before and after:
 
@@ -497,3 +500,45 @@ Costs not reached, ranked: (1) convert and emit, 27 to 47 ms a frame (float to d
 (2) display cache put, 17 ms on the cube; (3) the furnished room's 122 ms GPU render and 19 ms render encode; (4) node
 bookkeeping after the render, 9 to 15 ms; (5) the mixed mesh and splat scene at 1.0 fps, not profiled; (6) readback
 overlapping the next render (double-buffered staging), which the 2 ms readback no longer justifies.
+
+### 3D playback at the comp's rate (10/22, step B)
+
+Measured with `tools/benchmark_3d_playback.py`, 1920 x 1080, 24 fps comp, 8 s of playback in the real window, camera
+animated. Results are under `benchmarks/3d-playback/final/<adapter>-proxy-on|off/`. "Proxy on" is the app as shipped
+("Proxy while playing" checked: a frame that misses the comp's rate steps the picture down one resolution tier and the
+automatic tier climbs back after a run of frames with room to spare); "off" plays every picture at full size, the raw cost.
+The full test suite did not share the card during these runs, but other lanes' GPU jobs queue on the same lock.
+
+What changed since the profile above:
+
+- Shadow rays go through the BVH from 300 triangles; a scene whose camera moves keeps its uploaded buffers, bind groups and
+  draw lists (furnished room render call 107 to 17 ms).
+- An opaque frame converts for display without the divide and multiply by alpha; the display card makes the 8-bit
+  picture and reads back 6 MB instead of 25 MB of float colour.
+- A full display cache rounds old frames on a background thread; one ray buffer serves all bands; shape nodes remember their
+  geometry; splat clouds remember their transformed copy; meshes with splats play through the raster shader and a splat layer.
+- The automatic proxy tier ignores the cold first frames of a play and of each new tier. Stopping draws the frame at the
+  node's own settings, and the benchmark times it (`settle_s`).
+
+| Case (frames per second shown) | RTX 3080 Ti, proxy on | RTX 3080 Ti, proxy off | Radeon 8060S, proxy on | llvmpipe, proxy on | Laptop stand-in, proxy on | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| Cube, animated camera | 24.1 | 23.9 | 24.0 | 23.9 | 24.0 | 24 (RTX), 24 (laptop) |
+| Furnished room | 24.1 | 21.4 | 24.1 | not run | 24.1 | 24 (RTX), 12 (laptop) |
+| Mixed mesh and splat scene | 23.9 | 7.3 | 24.0 | not run | not run | 24 at a reduced tier |
+
+Tier mix with proxy on (pictures at full, half, quarter, eighth size): cube on the RTX 152, 41, 0, 0; furnished room 180,
+13, 0, 0; mixed scene 3, 8, 181, 0. After stopping, the mixed scene's full picture is on screen in 2.3 s on the RTX (gate
+3 s) and 0.8 s on the Radeon. The time row read "real time" in every proxy-on run. The furnished room at full resolution
+and the mixed scene at full resolution do not hold 24 fps on their own (21.4 and 7.3 fps): the shipped app reaches the
+rate by dropping the picture a tier for part of the run, and the tier shown is named in the time row. The cube on the
+RTX steps to half size for about one picture in five although it runs at 23.9 fps at full size, because the automatic tier
+reads anything under 24 as a miss; that flapping is left as it is.
+
+The laptop stand-in is the Radeon with `taskset -c 0-3` and `QT_SCALE_FACTOR=2`; it is not the Windows laptop with the
+Iris Xe and the RTX 4070. The A6000 and the laptop itself are not measured here.
+
+Where the furnished room's full-size time goes now (RTX, per frame, milliseconds): GPU render and wait 14.5; display
+picture 20 (the ACES 2.0 shader alone takes 6.9 ms on this card, 10 ms with upload and readback when the card is idle, and
+about 20 ms when it shares the card with the ray render). The next step for full-size 24 fps in the furnished room is
+overlapping the display conversion of one picture with the render of the next, or a cheaper ACES evaluation.
+

@@ -1,0 +1,66 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.02,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":95",
+ "comp_fps": 24.0,
+ "shown": 192,
+ "fps": 23.94,
+ "interval_ms": {
+  "n": 191,
+  "p50": 41.36,
+  "p95": 72.01,
+  "p99": 76.03,
+  "max": 89.16,
+  "mean": 41.66
+ },
+ "render_ms_status": {
+  "n": 54,
+  "p50": 13,
+  "p95": 34,
+  "p99": 37,
+  "max": 37,
+  "mean": 19.44
+ },
+ "dropped": 1,
+ "status": "544 \u00d7 141  \u00b7  11 ms  \u00b7  tiles 0 hit/6 miss  \u00b7  cache 3812.7 / 3813 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 1",
+ "proxy": "on",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 179,
+  "2": 13
+ },
+ "fps_at_end_tier": 22.37,
+ "time_row": "real time",
+ "settle_s": 0.11,
+ "settle_status": "544 \u00d7 141  \u00b7  75 ms  \u00b7  tiles 0 hit/6 miss  \u00b7  cache 3812.7 / 3813 MiB  \u00b7  display GPU",
+ "worker_jobs": 194,
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 13.52,
+  "GPU render and wait": 4.51,
+  "readback copy": 2.53,
+  "hand-over to the display": 2.3,
+  "convert and emit": 2.16,
+  "scene evaluation": 1.07,
+  "after the render (node bookkeeping)": 0.7,
+  "render encode": 0.38,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.34,
+  "scene prepare (shadow data, vertex packing)": 0.2,
+  "resolve (supersample, background)": 0.1,
+  "display cache put": 0.01,
+  "resolve_done to handover": -5.48
+ },
+ "gpu_wait_ms": {
+  "min": 2.0,
+  "p50": 4.5,
+  "max": 14.0,
+  "shared_card_suspected": true
+ }
+}

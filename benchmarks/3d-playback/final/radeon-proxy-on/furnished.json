@@ -1,0 +1,66 @@
+{
+ "scene": "furnished",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 8.03,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "platform": "xcb",
+ "display": ":95",
+ "comp_fps": 24.0,
+ "shown": 193,
+ "fps": 24.05,
+ "interval_ms": {
+  "n": 192,
+  "p50": 41.79,
+  "p95": 76.98,
+  "p99": 85.9,
+  "max": 89.92,
+  "mean": 41.34
+ },
+ "render_ms_status": {
+  "n": 54,
+  "p50": 18,
+  "p95": 24,
+  "p99": 24,
+  "max": 26,
+  "mean": 17.22
+ },
+ "dropped": 0,
+ "status": "544 \u00d7 133  \u00b7  12 ms  \u00b7  tiles 0 hit/6 miss  \u00b7  cache 3385.5 / 3386 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 0",
+ "proxy": "on",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 180,
+  "2": 13
+ },
+ "fps_at_end_tier": 22.55,
+ "time_row": "real time",
+ "settle_s": 0.19,
+ "settle_status": "544 \u00d7 133  \u00b7  153 ms  \u00b7  tiles 0 hit/6 miss  \u00b7  cache 3385.5 / 3386 MiB  \u00b7  display GPU",
+ "worker_jobs": 194,
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 15.4,
+  "GPU render and wait": 8.34,
+  "hand-over to the display": 2.38,
+  "readback copy": 2.26,
+  "convert and emit": 1.93,
+  "scene evaluation": 1.88,
+  "after the render (node bookkeeping)": 1.21,
+  "scene prepare (shadow data, vertex packing)": 0.42,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.35,
+  "render encode": 0.27,
+  "resolve (supersample, background)": 0.07,
+  "display cache put": 0.01,
+  "resolve_done to handover": -11.59
+ },
+ "gpu_wait_ms": {
+  "min": 3.8,
+  "p50": 8.3,
+  "max": 11.9,
+  "shared_card_suspected": true
+ }
+}

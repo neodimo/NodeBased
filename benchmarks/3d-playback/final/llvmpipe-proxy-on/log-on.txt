@@ -1,0 +1,1 @@
+{"scene": "cube", "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)", "fps": 23.94, "interval_ms": {"n": 191, "p50": 41.36, "p95": 72.01, "p99": 76.03, "max": 89.16, "mean": 41.66}, "status": "544 \u00d7 141  \u00b7  11 ms  \u00b7  tiles 0 hit/6 miss  \u00b7  cache 3812.7 / 3813 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 1"}
