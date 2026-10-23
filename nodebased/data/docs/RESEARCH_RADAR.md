@@ -2,6 +2,8 @@
 
 ## Where to look next
 
+**2D playback priority:** [2D compositing on the graphics card, swept 10/23](#2d-compositing-on-the-graphics-card-swept-1023): measure a float32 resident Transform/Blur/Merge/Grade island against CPU pixels first; the real Iris Xe + RTX 4070 laptop is the priority field gate.
+
 **Volume/liquid priority:** [Volumes and liquids at interactive speed, swept 10/20](#volumes-and-liquids-at-interactive-speed-swept-1020): retain preparation, bound a useful preview, then preserve samples; the ranked R5 briefs target Hot pour without assuming production-renderer timings transfer.
 
 **Windows laptop priority:** [Windows hybrid presentation, swept 10/18](#windows-hybrid-presentation-swept-1018) recommends a surface-compatible RTX/D3D12 VP2 candidate, with Vulkan comparison and a complete field-kit check; laptop performance and actual scanout remain unmeasured.
@@ -33,6 +35,59 @@
 **Operational state outside the research queue:** P4's committed stop record is now present and supports intermediate/full-detail cached display on Radeon; U1 records its exact scope and separates two playback runs. Keep old-cache/whitewater edge-case validation with the fluids owner. No solver replacement or further worker is started here.
 
 See [the dated speed sweep](#speed-and-the-two-card-tiers-swept-1015) for first-image versus steady-throughput evidence, one consolidated T1–T3 two-card table, the progressive presentation contract and source dates. The old sweep-specific rankings below describe their original decisions; this sheet supersedes them.
+
+## 2D compositing on the graphics card, swept 10/23
+
+**2026-10-23 · Lane 3, R6 · documentation-only decision package.** No app code changed,
+GPU workloads run or performance gains measured in this sweep. Baseline inspected at
+`2e0a2b9d`; later main/package results are explicitly separate observations.
+
+### Evidence and decision
+
+[Production source survey](GPU_2D_COMPOSITING.md) covers Nuke GPU Blink and its verified
+accelerated-node subset, dated 16/17 release changes, Fusion/Resolve, Flame, Natron/OpenFX,
+Copernicus and TouchDesigner. It distinguishes resident images from GPU-enabled nodes,
+ROI from dispatch tiles, arithmetic from storage precision, and documented behavior from
+private/unknown scheduler policy. Fusion documents eligible transform concatenation;
+Copernicus documents storage reuse, memory controls and spill; OpenFX supplies explicit
+GPU resource/queue boundaries. None supplies a measured NodeBased playback result.
+
+[Implementation map and estimates](GPU_2D_PLAN.md) follows the current evaluator, Raster,
+tile executor, decode pool, Direct presenter and colour paths. Direct picture still uploads
+CPU-produced frames to its own device. The proposed resident image must carry windows,
+metadata, device epoch and completion/lifetime state; a texture cannot cross wgpu devices
+merely because their adapters have the same name. CPU-only nodes remain explicit boundaries,
+and existing CPU/golden pixel tests remain the truth.
+
+The brief's approximately 170 ms node envelope and 5.7 fresh fps are rounded decision
+inputs. Main also contains newer pipelined evaluation at 150.1 ms and 6.50 fresh fps on
+RTX, 4.18 fps on the Radeon laptop stand-in. The four nominated nodes total 132.9 ms in
+an earlier sampled profile; those profiles must not be treated as one exact additive run.
+A hypothetical 8–20 ms resident island plus 3–12 ms transfers leaves 48.1–69.1 ms against
+the 170 ms envelope. That is a testable 2.5–3.5× node-stage opportunity, **not a 24 fps claim**.
+CPU ColorCorrect follows the island; Roto supplies a separate mask branch. Measure both.
+
+### Ranked next briefs (three, conditional)
+
+| Rank | Proposed executable brief | Effort estimate and gate |
+| --- | --- | --- |
+| 1 | [R6-1: measured four-node resident spike](../briefs/proposed/R6-1-resident-four-node-spike.md) | 4–6 engineer-days. Same CPU pixels; no intermediate readback; resident p95 ≤20 ms and transfer-inclusive p95 ≤30 ms. Actual comp and actual laptop required. |
+| 2 | [R6-2: resident evaluator and viewer](../briefs/proposed/R6-2-resident-evaluator-and-viewer.md) | 6–10 additional days, only after a worthwhile spike. Explicit CPU islands, ColorCorrect and same-device final display. Target 24 fresh fps at 1080p with p95 interval ≤41.67 ms. |
+| 3 | [R6-3: budgeted ROI/device tiles](../briefs/proposed/R6-3-budgeted-roi-and-tiles.md) | 5–8 additional days if memory/ROI evidence warrants it. CPU-identical halos/windows, bounded leases, no semantic transform/filter changes. |
+
+**Tiers and risk.** RTX 3080 Ti 12 GB starts with a 1 GiB 2D cap; A6000 48 GB repeats the
+same workload/cap before any larger-cache experiment. The actual Iris Xe + RTX 4070 laptop
+starts at 512 MiB and must record render/present devices and real internal-display timing.
+Radeon 8060S and llvmpipe correctness are required; software-GPU execution is distinct from
+CPU fallback. Windows software D3D12 needs feature/limit/failure tests. The v0.42.0 package
+failure is verified; v0.42.1 package success was also observed. Neither validates new GPU
+kernels. A6000/laptop performance remains unmeasured. No half-float or proxy result may be
+reported as full-precision/full-resolution success.
+
+**Next owner:** Gonzo reviews and assigns R6-1 to a 2D lane; coordinate viewer-owned code
+before R6-2. Research is complete when its four documentation parts are committed. The
+proposed implementation and all new runtime/hardware gates remain outstanding. Source
+fetch limitations and undocumented vendor internals are listed in the production survey.
 
 ## Generative video, swept 10/12
 

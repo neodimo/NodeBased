@@ -1,3 +1,25 @@
+# Lane 3 — 2026-10-23 R6 research complete
+
+The four-part documentation-only GPU 2D compositing sweep is complete on `openclaw/nb-research`,
+based on main snapshot `2e0a2b9d`. See `docs/GPU_2D_COMPOSITING.md` for dated production evidence,
+`docs/GPU_2D_PLAN.md` for current code boundaries, estimates and pixel/adapter gates, and the
+radar section “2D compositing on the graphics card, swept 10/23.” Exactly three proposed briefs
+are under `briefs/proposed/R6-*.md`; the first measures a resident Grade/Transform/Blur/Merge
+island while keeping CPU Roto/ColorCorrect in the actual comp timing.
+
+Evidence: knowledge tests pass (7); all three changed source/bundle doc pairs are byte-identical;
+new local links and whitespace checks pass. No app changes, GPU execution or new speed results.
+The 170 ms / approximately 5.7 fps brief baseline is distinguished from main's newer trace.
+Estimated gains and 15–24 total engineer-days are hypotheses, not benchmark outcomes. A6000 and
+actual Iris Xe + RTX 4070 laptop remain unmeasured. Windows v0.42.0 package failure and v0.42.1
+package success were read separately; neither validates these proposed shaders.
+
+Artifacts are committed in this lane only, not pushed; temporary source downloads were discarded.
+The lane's issue/card is paused for integration in closeout. Needs Gonzo: review the package and
+assign `briefs/proposed/R6-1-resident-four-node-spike.md`; coordinate viewer-owned code before
+R6-2 and retain explicit AMD/llvmpipe/D3D12 correctness plus real laptop field gates. No follow-up
+implementation started. Detailed completion shape and limits are in the newest `TASKLOG.md` entry.
+
 # Lane 6 — 2026-10-23 finish 1 status (PARTIAL)
 
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (7:45 AM on 2026-10-23 PDT)

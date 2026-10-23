@@ -133,7 +133,7 @@ that display policy is not permission to halve compositing precision or change e
 
 ## ROI, transform concatenation and filter fusion: separate stages
 
-For pointwise kernels, output ROI maps directly to input ROI. Merge intersects/alines the
+For pointwise kernels, output ROI maps directly to input ROI. Merge intersects/aligns the
 requested region with each input data window; Blur expands it by its exact kernel support.
 Transform inverse-maps output bounds and expands by reconstruction support; rotation,
 negative origins and minification need dedicated tests. The existing CPU tile path remains
