@@ -330,6 +330,8 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     if hasattr(playback_trace, "stage_table"):         # a checkout from before the stage table still runs the tool
         table, jobs, _ = playback_trace.stage_table(events)
     result["worker_jobs"] = jobs
+    if hasattr(playback_trace, "frame_summary"):     # Lane 2's per-frame stage marks: how the stages add up to the interval and how much overlaps
+        result["frame_timeline"] = playback_trace.frame_summary(playback_trace.frame_timeline(events))
     result["picture_check"] = picture_check
     try:
         from nodebased import gpupicture

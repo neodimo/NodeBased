@@ -1,0 +1,3 @@
+{"adapter": "NVIDIA GeForce RTX 3080 Ti", "format": "rgba32float", "Linear": {"submit_to_mapped_ms": 3.49, "copy_out_ms": 0.56}, "sRGB": {"submit_to_mapped_ms": 2.96, "copy_out_ms": 0.39}, "ACES 2.0": {"submit_to_mapped_ms": 3.39, "copy_out_ms": 0.56}}
+{"adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)", "format": "rgba32float", "Linear": {"submit_to_mapped_ms": 0.34, "copy_out_ms": 0.17}, "sRGB": {"submit_to_mapped_ms": 0.34, "copy_out_ms": 0.17}, "ACES 2.0": {"submit_to_mapped_ms": 0.38, "copy_out_ms": 0.17}}
+{"adapter": "llvmpipe (LLVM 22.1.8, 256 bits)", "format": "rgba32float", "Linear": {"submit_to_mapped_ms": 1.53, "copy_out_ms": 0.3}, "sRGB": {"submit_to_mapped_ms": 2.08, "copy_out_ms": 0.3}, "ACES 2.0": {"submit_to_mapped_ms": 7.24, "copy_out_ms": 0.38}}

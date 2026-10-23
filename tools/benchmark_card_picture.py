@@ -1,6 +1,22 @@
-import os, sys, time, statistics, json
+"""What the render card's display picture pass costs on its own (nodebased/gpupicture.py).
+
+Uploads a 1920 x 1080 HDR float frame once, then times 40 times: the pass for a view (no transform, sRGB, ACES 2.0), the copy of its
+8-bit picture into a mappable buffer, the wait for it and the copy out. `submit_to_mapped_ms` is the card's share (the shader plus the
+picture's trip over the link); the difference between "ACES 2.0" and "Linear" is the shader. One JSON line per adapter.
+
+    python tools/benchmark_card_picture.py [default|discrete|integrated|cpu]      # run under /tmp/nb-gpu.lock
+"""
+import json
+import os
+import statistics
+import sys
+import time
+
 import numpy as np
-from nodebased import gpu3d, gpupicture
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from nodebased import gpu3d, gpupicture  # noqa: E402
+
 kind = sys.argv[1] if len(sys.argv) > 1 else "default"
 orig = gpu3d._state
 gpu3d._state = lambda choice=None: orig(kind if (choice or 'default') == 'default' else choice)

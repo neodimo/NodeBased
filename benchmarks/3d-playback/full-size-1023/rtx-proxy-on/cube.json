@@ -1,0 +1,72 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 9.01,
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "platform": "xcb",
+ "display": ":95",
+ "comp_fps": 24.0,
+ "shown": 215,
+ "fps": 23.87,
+ "interval_ms": {
+  "n": 214,
+  "p50": 41.62,
+  "p95": 43.67,
+  "p99": 58.88,
+  "max": 81.31,
+  "mean": 41.57
+ },
+ "render_ms_status": {
+  "n": 46,
+  "p50": 19,
+  "p95": 56,
+  "p99": 79,
+  "max": 79,
+  "mean": 21.78
+ },
+ "dropped": 0,
+ "status": "Evaluating frame 217\u2026",
+ "proxy": "on",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 215
+ },
+ "fps_at_end_tier": 24.06,
+ "time_row": "real time",
+ "settle_s": 0.15,
+ "settle_status": "1920 \u00d7 1080  \u00b7  150 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU",
+ "worker_jobs": 216,
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 0
+ },
+ "card_pictures": {
+  "registered": 216,
+  "taken": 215
+ },
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 21.84,
+  "GPU render and wait": 13.35,
+  "hand-over to the display": 2.97,
+  "readback copy": 1.95,
+  "scene evaluation": 1.16,
+  "convert and emit": 0.69,
+  "render encode": 0.39,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.32,
+  "scene prepare (shadow data, vertex packing)": 0.21,
+  "display cache put": 0.15,
+  "resolve (supersample, background)": 0.1,
+  "after the render (node bookkeeping)": 0.07
+ },
+ "gpu_wait_ms": {
+  "min": 13.1,
+  "p50": 13.3,
+  "max": 50.8,
+  "shared_card_suspected": true
+ }
+}

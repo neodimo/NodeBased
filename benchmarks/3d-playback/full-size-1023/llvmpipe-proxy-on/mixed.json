@@ -1,0 +1,75 @@
+{
+ "scene": "mixed",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 9.1,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":95",
+ "comp_fps": 24.0,
+ "shown": 84,
+ "fps": 9.23,
+ "interval_ms": {
+  "n": 83,
+  "p50": 76.19,
+  "p95": 376.48,
+  "p99": 417.21,
+  "max": 539.03,
+  "mean": 103.74
+ },
+ "render_ms_status": {
+  "n": 71,
+  "p50": 77,
+  "p95": 458,
+  "p99": 468,
+  "max": 468,
+  "mean": 159.15
+ },
+ "dropped": 7,
+ "status": "1920 \u00d7 1080  \u00b7  proxy 1/8  \u00b7  74 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 308.5 / 4041 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 7",
+ "proxy": "on",
+ "tier_at_end": 8,
+ "tier_pictures": {
+  "1": 5,
+  "2": 4,
+  "4": 4,
+  "8": 71
+ },
+ "fps_at_end_tier": 13.5,
+ "time_row": "real time",
+ "settle_s": 2.18,
+ "settle_status": "1920 \u00d7 1080  \u00b7  2122 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 340.6 / 4041 MiB  \u00b7  display GPU",
+ "worker_jobs": 88,
+ "picture_check": {
+  "checked": false
+ },
+ "card_pictures": {},
+ "stage_p50_ms": {
+  "GPU render and wait": 43.5,
+  "resolve (supersample, background)": 21.99,
+  "worker start to hand-over (whole frame)": 6.13,
+  "scene evaluation": 2.73,
+  "convert and emit": 1.68,
+  "render encode": 0.62,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.44,
+  "scene prepare (shadow data, vertex packing)": 0.34,
+  "submit to handover": 0.15,
+  "after the render (node bookkeeping)": 0.1,
+  "readback copy": 0.04,
+  "display cache put": 0.01,
+  "hand-over to the display": -60.93,
+  "cache_put to handover": -65.0,
+  "resolve_done to handover": -138.52,
+  "resolve_done to emit": -349.7
+ },
+ "gpu_wait_ms": {
+  "min": 28.7,
+  "p50": 43.5,
+  "max": 317.2,
+  "shared_card_suspected": true
+ }
+}

@@ -532,13 +532,92 @@ Tier mix with proxy on (pictures at full, half, quarter, eighth size): cube on t
 and the mixed scene at full resolution do not hold 24 fps on their own (21.4 and 7.3 fps): the shipped app reaches the
 rate by dropping the picture a tier for part of the run, and the tier shown is named in the time row. The cube on the
 RTX steps to half size for about one picture in five although it runs at 23.9 fps at full size, because the automatic tier
-reads anything under 24 as a miss; that flapping is left as it is.
+reads anything under 24 as a miss (fixed in step A, "3D playback at full size" below).
 
 The laptop stand-in is the Radeon with `taskset -c 0-3` and `QT_SCALE_FACTOR=2`; it is not the Windows laptop with the
 Iris Xe and the RTX 4070. The A6000 and the laptop itself are not measured here.
 
 Where the furnished room's full-size time goes now (RTX, per frame, milliseconds): GPU render and wait 14.5; display
 picture 20 (the ACES 2.0 shader alone takes 6.9 ms on this card, 10 ms with upload and readback when the card is idle, and
-about 20 ms when it shares the card with the ray render). The next step for full-size 24 fps in the furnished room is
-overlapping the display conversion of one picture with the render of the next, or a cheaper ACES evaluation.
+about 20 ms when it shares the card with the ray render). That conversion ran on Mesa's software OpenGL, not on the card
+(see step A below, which removes it).
+
+### 3D playback at full size (10/23, step A)
+
+Gate: the cube and the furnished room play at 24 fps at full size (1920 x 1080, animated camera, "Proxy while playing" off) on the
+RTX 3080 Ti. Measured with `tools/benchmark_3d_playback.py --stages` on the private Xvfb display, 9 s of playback, 24 fps comp; results are
+under `benchmarks/3d-playback/full-size-1023/<adapter>-proxy-off|on/` (the `rtx-proxy-off-card-picture-off` row is the same build with
+`NODEBASED_CARD_PICTURE=0`, the old conversion).
+
+What the 10/22 numbers were measuring. The "display GPU" of these runs is not the card: Xvfb has no hardware OpenGL, so the display
+conversion ran on Mesa llvmpipe, the processor (the ACES 2.0 shader alone took 5.7 ms there, 12.6 ms for the whole conversion of a
+frame). The conversion already ran beside the next evaluation (Lane 2's pipeline serves 3D playback), but both then fought for the
+processor: with the old conversion the furnished room's evaluation took 23.7 ms, its conversion 26.5 ms and a picture's latency from
+request to screen 61 ms, over the 41.7 ms frame time. The automatic tier reads that latency, which is what made the cube step down.
+
+| RTX 3080 Ti, per frame, ms (mean) | Furnished, old conversion | Furnished, card picture | Cube, old | Cube, card picture |
+|---|---:|---:|---:|---:|
+| Node evaluation (includes the card's picture pass) | 23.7 | 20.9 | 16.1 | 18.4 |
+| Display conversion | 26.5 | 0.5 | 21.8 | 0.6 |
+| Request to screen | 61.0 | 27.6 | 46.5 | 25.9 |
+| Overlap with the previous picture | 20.0 | 0.1 | 6.3 | 0.9 |
+| Interval p95 | 59.9 | 43.7 | 51.8 | 44.5 |
+
+Part 1, overlap. The pipeline already overlaps conversion with the next evaluation (rows above, "overlap"). What it could not hide was a
+conversion that cost as much as the evaluation and competed for the same processor. The conversion is gone from the stage instead:
+
+- `nodebased/gpupicture.py`: the render card makes the 8-bit picture of a played frame in the frame's own command submission, one
+  more pass after the render that reads the frame texture and writes the picture (unpremultiply, the view's OCIO shader, associate again,
+  quantise: `to_qimage`'s order). It is read back through the same buffer as the float frame (8 MB beside 33 MB). The float frame is
+  untouched. `gpu3d.render` registers the picture against the array it returns; `to_qimage` asks the registry first, by identity, and
+  builds the picture itself when nothing matches. The window arms it for played frames whose display is the plain case (exposure 0, RGB,
+  gamma 1, no checker or clipping warning, no compare buffer). Not made: a frame with a background colour or supersampling, a scene with
+  splats, a visible environment or area light (something is drawn over the card's frame), a software adapter, or a card that cannot build the
+  shader; the old conversion runs for those. `NODEBASED_CARD_PICTURE=0` turns it off.
+- Agreement with the processor: at most 1 of 255 on every channel, on the RTX 3080 Ti, the Radeon 8060S and llvmpipe (`tests/test_3d_card_picture.py`),
+  and 0 or 1 level between the picture on screen and the processor's picture of the same float frame in every benchmark run
+  (`picture_check` in the JSON).
+- A scene with splats got 5 times slower in its splat layer (mixed scene 7.3 to 2.8 fps) when the picture's 8 MB of readback
+  memory existed beside it; the cause is not found (an extra persistent readback buffer reproduced it, and so did enlarging the existing
+  one; an extra texture alone did not). Such frames get no picture, which is also right because the splat layer changes the frame afterwards.
+
+Part 2, ACES 2.0 on its own (`tools/benchmark_card_picture.py`, the card's share from submit to the picture mapped, 1920 x 1080,
+the float frame already on the card; `benchmarks/3d-playback/full-size-1023/card-picture-pass.jsonl`): RTX 3080 Ti 3.4 ms with ACES 2.0,
+3.0 with sRGB and 3.5 with no transform (run-to-run noise about 0.5 ms; the 8 MB picture's trip over this machine's USB4 link is nearly all of
+it, so the shader is under half a millisecond); Radeon 8060S 0.38, 0.34 and 0.34 ms; llvmpipe 7.2, 2.1 and 1.5 ms (5.7 ms for ACES 2.0 on the
+processor, which is why a software adapter keeps the old path). Copying the picture out of the mapped buffer adds 0.2 to 0.6 ms on the worker.
+A baked 3D LUT or a shorter transform would save under half a millisecond on the RTX and nothing measurable on the Radeon, and would put
+the agreement with the processor (1/255, `tests/test_carddisplay.py`) at risk on saturated colour, so the shader is unchanged. The gain
+was moving the conversion to the card, not making it cheaper.
+
+Part 3, no flapping. The automatic tier steps down when the middle picture of the last 12 took longer than the frame time (6 pictures at
+least), or at once when 3 pictures in a row took over twice the frame time; one slow picture no longer does. A climb back that is
+undone doubles the run of pictures with room to spare the next climb needs (12, 24, ... 96). Tests: a cube-like series with one
+picture in five over the frame time stays at full size through 240 pictures (10 s); a severe series drops after 3 pictures.
+`tests/test_3d_playback_rate.py` and `tests/test_desktop.py` were changed for the new rule (their old form dropped a tier on one
+picture).
+
+Part 4, the gates (frames per second shown; interval p95 in ms in brackets; every row 1920 x 1080):
+
+| Case | RTX proxy off | RTX proxy on | Radeon off / on | Laptop stand-in off / on | llvmpipe off / on | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| Cube | 23.98 (44) | 23.87 (44), all pictures full size | 24.02 / 24.06 | 23.97 / 24.05 | 23.99 / 23.94 | 24 at full size |
+| Furnished room | 23.95 (44) | 23.96 (44), all full size | 24.07 / 24.02 | 24.01 / 23.98 | 2.97 / 18.5 (mostly 1/8) | 24 at full size |
+| Mixed mesh and splat scene | 7.77 (135) | 23.93 at 1/4 size (5 full, 7 half, 205 quarter) | 10.42 / 23.99 | 9.83 / 23.93 | not run / 9.23 | recorded; reduced tier refines in under 3 s |
+
+After stopping, the mixed scene's full picture is on screen in 2.24 s on the RTX (1.92 s with proxy off), 0.87 s on the Radeon and 0.78 s on the laptop
+stand-in (gate 3 s). The furnished room on llvmpipe did not refine within the benchmark's 30 s (a software full-quality frame is
+slower than that); its rate is a software figure and no gate. The old conversion on the same day, same card: cube 23.89 (p95 51.8), furnished 23.86 (p95 59.9) at the
+comp's rate, 36.3 and 29.3 fps at a 60 fps comp; with the card picture 39.9 and 39.7 fps. At the comp's rate both builds show about 24 fps when
+the card is not shared; the difference is the headroom (1.10 times for the cube, 1.35 for the furnished room) and the jitter, and on 10/22 a run with the card shared showed 21.4 fps for the old
+build. The laptop stand-in is the Radeon with `taskset -c 0-3` and `QT_SCALE_FACTOR=2` on this workstation, not the Windows laptop with the Iris Xe and the RTX 4070.
+
+The A6000 (estimate, not measured): the cube's 11 ms of "GPU render and wait" on this machine matches the 33 MB float readback over the
+USB4 link (about 2.7 GB/s, 12 ms) more than any drawing (an inference from the link speed; the two were not timed apart). On a card in a PCIe 4.0 x16 slot that readback is a tenth of that, so the furnished room's render plus
+picture pass should take about 7 to 8 ms and the cube's about 3 ms, with the presentation on the Qt thread the bound (the 60 fps headroom rows
+stop near 40 fps on Xvfb, where presenting a picture costs about 20 ms of the Qt thread). Run
+`python tools/benchmark_3d_playback.py --scene cube,furnished,mixed --stages` there and read `fps`, `interval_ms`, `frame_timeline` and `picture_check`.
+
+Not done: the mixed scene at full size (7.8 fps on the RTX) is bound by the splat layer, which is not on the card's picture path; the
+Windows laptop is not measured.
 
