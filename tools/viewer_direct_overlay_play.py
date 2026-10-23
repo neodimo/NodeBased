@@ -89,6 +89,20 @@ def spin(seconds):
         time.sleep(0.001)
 
 
+def gpu_state():
+    """The NVIDIA card's power state, clocks and link right now (nvidia-smi), or None where there is none. The surface
+    present's copy-out crosses this link, so its speed is what a run's picture count turns on."""
+    import subprocess
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=pstate,clocks.sm,clocks.mem,pcie.link.gen.current,pcie.link.gen.max,"
+                              "pcie.link.width.current,utilization.gpu,power.draw", "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=10).stdout.strip().split("\n")[0].split(", ")
+        keys = ("pstate", "sm_mhz", "mem_mhz", "link_gen", "link_gen_max", "link_width", "util_percent", "power_w")
+        return dict(zip(keys, out))
+    except Exception:
+        return None
+
+
 def dist(values):
     v = sorted(x for x in values if x is not None)
     if not v:
@@ -353,6 +367,8 @@ for series in (WALL, CPU):
 DRAW_STARTS.clear()
 overlay_frames.clear()
 before = dict(presenter.counters)
+GPU_BEFORE = gpu_state()
+LOAD_BEFORE = os.getloadavg()[0]
 draws_before = widget.draw_requests
 produced[0] = 0
 start = time.perf_counter()
@@ -367,6 +383,7 @@ while time.perf_counter() - start < args.seconds:
     if not args.feed:
         move_pointer(playheads[-1])
 elapsed = time.perf_counter() - start
+GPU_AFTER = gpu_state()
 after = dict(presenter.counters)
 if not args.feed:
     w.toggle_playback(False)
@@ -381,6 +398,7 @@ paired = [a + b for a, b in zip(WALL[overlay], WALL[copy])]
 paired_cpu = [a + b for a, b in zip(CPU[overlay], CPU[copy])]
 intervals = [(b - a) * 1000 for a, b in zip(DRAW_STARTS, DRAW_STARTS[1:])]
 result = {
+    "gpu_before": GPU_BEFORE, "gpu_after": GPU_AFTER, "load_average_before": round(LOAD_BEFORE, 2),
     "offscreen_card": args.offscreen_card, "drawing": args.drawing, "follow_state": FOLLOW_STATE,
     "draw_interval_ms": dist(intervals),
     "counters_delta": {k: (round(v, 2) if isinstance(v, float) else v) for k, v in sorted(delta.items())},

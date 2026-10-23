@@ -36,7 +36,10 @@ claimed for the laptop or the A6000 machine until its own `result.json` exists.
 the direct picture at 24 a second with an animated Roto shape selected, once with the handles left frozen (as before
 10/22) and once following every frame, at 1080p and 4K. It records the Qt thread's time for the overlay per frame (95th
 percentile against the 4 ms gate), the pictures the card showed with and without the overlay, and the adapter, under
-"playback" in `result.json`. Same rules as `--edit`.
+"playback" in `result.json`. Each size runs four times (10/22): the real surface with and without the overlay, and the same
+pair drawn into an offscreen texture (`--offscreen-card`). The picture count that gates is the offscreen pair's, where every
+picture handed over is drawn; the surface's count moves with how long each present takes (on the eGPU here 94 to 233 pictures
+in 10 s at 1080p, with no overlay), so it is recorded and not gated. Same rules as `--edit`.
 `--matrix` runs the four present-cadence cases and then these two as well (playback with the overlay, and the paused
 edit), so one ten-minute run on a machine answers "can the direct picture be the default here": the cadence on its own
 panel, the overlay following playback, and an edit while paused. Nothing is claimed for a machine until its own
@@ -205,7 +208,16 @@ def build_playback_result(runs, preference="high-performance", limit_ms=4.0, kee
             continue
         p95 = on.get("overlay_p95_wall_ms")
         shown_off, shown_on = off.get("frames_shown_by_dock", 0), on.get("frames_shown_by_dock", 0)
-        ok = p95 is not None and p95 < limit_ms and shown_on >= keep * shown_off
+        # With the real surface, the number of pictures the card draws is the number of presents that fit in the run,
+        # and a present moves from 20 ms to 94 ms between identical runs on the eGPU here (10/22: 94 to 233 pictures
+        # at 1080p with no overlay at all). The count that gates is the one from the same pair drawn into an
+        # offscreen texture, where every picture handed over is drawn; the surface counts stay as information.
+        card_off, card_on = (pair or {}).get("card_off"), (pair or {}).get("card_on")
+        if card_off and card_on:
+            gate_off, gate_on = card_off.get("frames_shown_by_dock", 0), card_on.get("frames_shown_by_dock", 0)
+        else:
+            gate_off, gate_on = shown_off, shown_on
+        ok = p95 is not None and p95 < limit_ms and gate_on >= keep * gate_off
         worst = max(worst, p95 or 0.0)
         platform_name = platform_name or str(on.get("platform") or "")
         adapter = adapter or (on.get("selection") or {}).get("adapter")
@@ -214,6 +226,9 @@ def build_playback_result(runs, preference="high-performance", limit_ms=4.0, kee
                        "overlay_p50_wall_ms": (on.get("overlay_per_draw_wall_ms") or {}).get("p50"),
                        "pictures_produced": on.get("frames_produced"), "shown_with_overlay": shown_on,
                        "shown_without_overlay": shown_off, "draws_with_overlay": on.get("draws"),
+                       "counted_on": "offscreen card" if card_off and card_on else "surface",
+                       "card_shown_with_overlay": (card_on or {}).get("frames_shown_by_dock"),
+                       "card_shown_without_overlay": (card_off or {}).get("frames_shown_by_dock"),
                        "overlay_uploads": on.get("overlay_uploads")}
     failed = [size for size, row in sizes.items() if row.get("status") == "failed"]
     ran = bool(sizes) and not missing
@@ -232,12 +247,15 @@ def describe_playback(playback):
     for size, row in (playback.get("sizes") or {}).items():
         lines.append(f"    {size}: overlay p50 {row.get('overlay_p50_wall_ms')} ms, p95 {row.get('overlay_p95_wall_ms')} ms "
                      f"(CPU {row.get('overlay_p95_cpu_ms')} ms); pictures shown {row.get('shown_with_overlay')} with, "
-                     f"{row.get('shown_without_overlay')} without ({row.get('status')})")
+                     f"{row.get('shown_without_overlay')} without on the surface"
+                     + (f"; counted on the offscreen card {row.get('card_shown_with_overlay')} with, "
+                        f"{row.get('card_shown_without_overlay')} without" if row.get("counted_on") == "offscreen card" else "")
+                     + f" ({row.get('status')})")
     return lines
 
 
 def run_playback(a, out):
-    """Run the playback check in child processes (a native abort cannot take the check down); writes result.json."""
+    """Run the playback check (each size on the surface and on an offscreen texture) in child processes (a native abort cannot take the check down); writes result.json."""
     out.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env["NODEBASED_DIRECT_ADAPTER"] = "discrete" if a.preference == "high-performance" else "integrated"
@@ -245,20 +263,21 @@ def run_playback(a, out):
     runs, codes = {}, {}
     for size in ("1920x1080", "3840x2160"):
         runs[size] = {}
-        for overlay in ("off", "on"):
-            raw_file = out / f"playback-{size}-{overlay}.json"
+        for overlay, card in (("off", False), ("on", False), ("off", True), ("on", True)):
+            name = ("card_" if card else "") + overlay
+            raw_file = out / f"playback-{size}-{name}.json"
             cmd = [sys.executable, str(tool), str(raw_file), "--feed", "--size", size, "--overlay", overlay,
-                   "--seconds", str(a.playback_seconds)]
-            print("Starting playback", size, "overlay", overlay, ":", " ".join(cmd), flush=True)
-            with (out / f"playback-{size}-{overlay}.log").open("w", encoding="utf-8") as log:
+                   "--seconds", str(a.playback_seconds)] + (["--offscreen-card"] if card else [])
+            print("Starting playback", size, name, ":", " ".join(cmd), flush=True)
+            with (out / f"playback-{size}-{name}.log").open("w", encoding="utf-8") as log:
                 try:
-                    codes[f"{size} {overlay}"] = subprocess.run(
+                    codes[f"{size} {name}"] = subprocess.run(
                         cmd, stdout=log, stderr=subprocess.STDOUT, env=env, cwd=str(tool.parent.parent),
                         timeout=a.playback_seconds + 300).returncode
                 except subprocess.TimeoutExpired:
-                    codes[f"{size} {overlay}"] = "timeout; child stopped"
+                    codes[f"{size} {name}"] = "timeout; child stopped"
             if raw_file.exists():
-                runs[size][overlay] = json.loads(raw_file.read_text(encoding="utf-8"))
+                runs[size][name] = json.loads(raw_file.read_text(encoding="utf-8"))
     playback = build_playback_result(runs, a.preference)
     playback["returncodes"] = codes
     save(out / "result.json", {"playback": playback})
@@ -464,6 +483,14 @@ def self_check():
     dropped = build_playback_result({"1920x1080": {"off": play(230, 0.03), "on": play(150, 1.0)}})
     assert dropped["status"] == "failed"
     assert build_playback_result({"1920x1080": {"off": play(230, 0.03)}})["status"] == "incomplete"
+    # the surface's count swings with the present; the offscreen card's pair decides when it ran
+    swung = build_playback_result({"1920x1080": {"off": play(233, 0.03), "on": play(93, 1.2),
+                                                 "card_off": play(241, 0.03), "card_on": play(240, 1.2)}})
+    assert swung["status"] == "passed" and swung["sizes"]["1920x1080"]["counted_on"] == "offscreen card"
+    assert swung["sizes"]["1920x1080"]["shown_with_overlay"] == 93
+    lost = build_playback_result({"1920x1080": {"off": play(233, 0.03), "on": play(233, 1.2),
+                                                "card_off": play(241, 0.03), "card_on": play(150, 1.2)}})
+    assert lost["status"] == "failed"
     assert build_playback_result({})["status"] == "incomplete"
     assert describe_playback(playback)[0].startswith("  playback with the overlay")
     with tempfile.TemporaryDirectory() as folder:
