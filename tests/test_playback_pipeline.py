@@ -149,6 +149,21 @@ class PlaybackPipelineWindowTests(unittest.TestCase):
         wait_until(lambda: not self.window.busy and self.window.convert_stage.idle, 5.0)
         APP.processEvents()
 
+    def test_play_start_prefetches_the_cold_current_frame_before_queueing_preview(self):
+        calls = []
+        original = self.window.tile_executor.prefetch_reads
+        self.window._selected_tier_is_cached = lambda *_args: False
+
+        def record(document, target, frames):
+            calls.append((list(frames), len(self.window.preview_queue)))
+            return original(document, target, frames)
+
+        self.window.tile_executor.prefetch_reads = record
+        self.window.toggle_playback(True)
+        self.window.toggle_playback(False)
+        self.assertGreaterEqual(len(calls), 2)
+        self.assertEqual(calls[0], ([1], 0))
+
     def test_the_next_frame_evaluates_while_the_last_one_converts(self):
         self.window.pipeline_playback = True
         self.play(2.0)

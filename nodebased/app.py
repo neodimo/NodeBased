@@ -14702,6 +14702,11 @@ class Window(QMainWindow):
             # runs to completion, but its result is discarded rather than stored.
             self.decode_pool.bump_epoch()
             self._cancel_staged()
+        if (self.playing and not playhead_only and target
+                and not self._selected_tier_is_cached(snapshot, target, frame, tier)):
+            # On play start, queue this frame's source Reads before the visible preview reaches
+            # the worker. The next-frame read-ahead below cannot cover this first cold frame.
+            self.tile_executor.prefetch_reads(snapshot, target, [frame])
         self.preview_queue.replace(self.generation, frame, snapshot, future,
                                    tier=tier, viewport=viewport,
                                    playing=self.playing,
