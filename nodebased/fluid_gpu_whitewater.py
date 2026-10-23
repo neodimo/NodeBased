@@ -6,7 +6,10 @@ CPU reference so seeded emission and cap ordering remain stable.
 """
 from __future__ import annotations
 
+import os
+import subprocess
 import threading
+from pathlib import Path
 
 import numpy as np
 
@@ -81,7 +84,11 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 """
 
 
-def neighbor_lists(positions, h, chunk=20000):
+class NeighborListBudgetExceeded(ValueError):
+    """The exact CSR list would exceed the caller's explicit memory budget."""
+
+
+def neighbor_lists(positions, h, chunk=20000, max_member_bytes=None):
     """The CSR neighbour list of every particle: all particles in the 27 bins of side `h` around its own, as (starts (n + 1,)
     int64, members uint32). The order is fixed: bins in (dx, dy, dz) order, ascending particle index inside a bin, which
     is the order the shader sums them in, so the potentials are the same bits however the list was built. Built with array
@@ -107,6 +114,10 @@ def neighbor_lists(positions, h, chunk=20000):
         counts[:, o] = np.where(hit, count[where], 0)
         firsts[:, o] = np.where(hit, first[where], 0)
     per_particle = counts.sum(axis=1)
+    required_member_bytes = max(int(per_particle.sum()), 1) * np.dtype(np.uint32).itemsize
+    if max_member_bytes is not None and required_member_bytes > int(max_member_bytes):
+        raise NeighborListBudgetExceeded(
+            f"whitewater neighbor list needs {required_member_bytes:,} bytes; budget is {int(max_member_bytes):,}")
     starts = np.zeros(n + 1, np.int64)
     starts[1:] = np.cumsum(per_particle)
     members = np.zeros(max(int(per_particle.sum()), 1), np.uint32)
@@ -122,6 +133,51 @@ def neighbor_lists(positions, h, chunk=20000):
         members[written:written + total] = order[position]
         written += total
     return starts, members
+
+
+def whitewater_gpu_budget_bytes(free_bytes, default_bytes=64 << 20):
+    """Reserve at most five percent of currently free VRAM for one whitewater neighbor pass."""
+    if free_bytes is None:
+        return int(default_bytes)
+    return max(16 << 20, min(256 << 20, int(free_bytes) // 20))
+
+
+def _free_card_memory_bytes(adapter_name):
+    """Best-effort free device memory from Linux driver counters; None when unavailable."""
+    if "NVIDIA" in str(adapter_name).upper() or "GEFORCE" in str(adapter_name).upper():
+        try:
+            result = subprocess.run(["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                                    capture_output=True, text=True, timeout=1, check=False)
+            values = [int(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+            if values:
+                return min(values) * 2**20
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+    if "AMD" in str(adapter_name).upper() or "RADEON" in str(adapter_name).upper():
+        for card in sorted(Path("/sys/class/drm").glob("card[0-9]")):
+            device = card / "device"
+            try:
+                if (device / "vendor").read_text().strip() == "0x1002":
+                    total = int((device / "mem_info_vram_total").read_text())
+                    used = int((device / "mem_info_vram_used").read_text())
+                    return max(0, total - used)
+            except (OSError, ValueError):
+                continue
+    return None
+
+
+_budget_notice_lock = threading.Lock()
+_budget_notices = set()
+
+
+def _budgeted_sample_indices(count, budget_bytes, bytes_per_particle=1024):
+    limit = max(1, int(budget_bytes) // int(bytes_per_particle))
+    if count <= limit:
+        return None, None
+    selected = np.linspace(0, count - 1, limit, dtype=np.int64)
+    message = (f"FluidWhitewater3D: reducing neighbor evaluation from {count:,} to {len(selected):,} "
+               f"liquid points to stay within the {int(budget_bytes) // (1 << 20)} MiB card budget")
+    return selected, message
 
 
 class GpuWhitewater3D:
@@ -169,24 +225,59 @@ class GpuWhitewater3D:
         layout = self.motion_pipeline.get_bind_group_layout(0)
         group = self.device.create_bind_group(layout=layout, entries=[
             {'binding': i, 'resource': {'buffer': b}} for i, b in enumerate(buffers)])
-        encoder = self.device.create_command_encoder()
-        compute = encoder.begin_compute_pass()
-        compute.set_pipeline(self.motion_pipeline)
-        compute.set_bind_group(0, group)
-        compute.dispatch_workgroups((n + 127) // 128)
-        compute.end()
-        self.device.queue.submit([encoder.finish()])
-        return tuple(np.frombuffer(self.device.queue.read_buffer(b), 'f4').reshape(n, 4)[:, :3].astype(np.float64)
-                     for b in buffers[-2:])
+        try:
+            encoder = self.device.create_command_encoder()
+            compute = encoder.begin_compute_pass()
+            compute.set_pipeline(self.motion_pipeline)
+            compute.set_bind_group(0, group)
+            compute.dispatch_workgroups((n + 127) // 128)
+            compute.end()
+            self.device.queue.submit([encoder.finish()])
+            return tuple(np.frombuffer(self.device.queue.read_buffer(b), 'f4').reshape(n, 4)[:, :3].astype(np.float64)
+                         for b in buffers[-2:])
+        finally:
+            for buffer in buffers:
+                buffer.destroy()
 
-    def potentials(self, positions, velocities, normals, support, mass=1.0):
+    def potentials(self, positions, velocities, normals, support, mass=1.0, _max_points=None):
         positions = np.asarray(positions, np.float64)
         n = len(positions)
         if n == 0:
             empty = np.zeros(0, np.float64)
             return empty, empty, empty
         h = max(float(support), 1e-8)
-        starts, neighbors = neighbor_lists(positions, h)
+        free_bytes = _free_card_memory_bytes(self.adapter_name)
+        budget = whitewater_gpu_budget_bytes(free_bytes)
+        if _max_points is not None:
+            budget = min(budget, max(1, int(_max_points)) * 1024)
+        original_count = n
+        original_positions = positions
+        original_velocities = np.asarray(velocities, np.float64)
+        original_normals = np.asarray(normals, np.float64)
+        sample, _notice = _budgeted_sample_indices(n, budget)
+        current_count = n if sample is None else len(sample)
+        while True:
+            sample = None if current_count == original_count else np.linspace(
+                0, original_count - 1, current_count, dtype=np.int64)
+            positions = original_positions if sample is None else original_positions[sample]
+            velocities = original_velocities if sample is None else original_velocities[sample]
+            normals = original_normals if sample is None else original_normals[sample]
+            n = len(positions)
+            try:
+                starts, neighbors = neighbor_lists(positions, h, max_member_bytes=budget)
+                break
+            except NeighborListBudgetExceeded:
+                if current_count <= 1:
+                    raise
+                current_count = max(1, current_count // 2)
+        if sample is not None:
+            message = (f"FluidWhitewater3D: reducing neighbor evaluation from {original_count:,} to {n:,} "
+                       f"liquid points to stay within the {budget // (1 << 20)} MiB card budget")
+            key = self.adapter_name
+            with _budget_notice_lock:
+                if key not in _budget_notices:
+                    print(message, flush=True)
+                    _budget_notices.add(key)
         limit = int(getattr(self, "binding_limit", 0) or self.device.limits['max-storage-buffer-binding-size'])
         capacity = max(limit // 4, 1)                              # list entries one storage binding holds
         widest = int(np.diff(starts).max())
@@ -199,35 +290,62 @@ class GpuWhitewater3D:
         normal = np.asarray(normals, np.float64)
         normal = normal / np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-12)
         usage = self.wgpu.BufferUsage
-        def buffer(array, output=False):
+        allocated = []
+        def buffer(array, output=False, usage_override=None):
             if output:
-                return self.device.create_buffer(size=array.nbytes, usage=usage.STORAGE | usage.COPY_SRC)
-            return self.device.create_buffer_with_data(data=np.ascontiguousarray(array).tobytes(), usage=usage.STORAGE)
-        particle_buffers = [buffer(vec4(positions)), buffer(vec4(velocities)), buffer(vec4(normal))]
-        layout = self.pipeline.get_bind_group_layout(0)
-        values = np.zeros((n, 4), np.float32)
-        low = 0
-        while low < n:
-            # the largest slice of particles [low, high) whose list fits one binding: the 2.2 GB list of a 256-cell pour
-            # went over the adapter's 2 GiB and ended the bake
-            high = int(np.searchsorted(starts, starts[low] + capacity, side="right")) - 1
-            high = min(max(high, low + 1), n)
-            local_starts = (starts[low:high + 1] - starts[low]).astype(np.uint32)
-            members = neighbors[int(starts[low]):int(starts[high])]
-            payload = np.array([high - low, low], 'u4').tobytes() + np.array([h, mass], 'f4').tobytes()
-            params = self.device.create_buffer_with_data(data=payload, usage=usage.UNIFORM)
-            out = buffer(np.empty((high - low, 4), np.float32), output=True)
-            group = self.device.create_bind_group(layout=layout, entries=[
-                {'binding': k, 'resource': {'buffer': b}} for k, b in enumerate(
-                    [params, *particle_buffers, buffer(local_starts), buffer(members if len(members) else np.zeros(1, np.uint32)),
-                     out])])
-            encoder = self.device.create_command_encoder()
-            compute = encoder.begin_compute_pass()
-            compute.set_pipeline(self.pipeline)
-            compute.set_bind_group(0, group)
-            compute.dispatch_workgroups((high - low + 127) // 128)
-            compute.end()
-            self.device.queue.submit([encoder.finish()])
-            values[low:high] = np.frombuffer(self.device.queue.read_buffer(out), 'f4').reshape(high - low, 4)
-            low = high
+                result = self.device.create_buffer(size=array.nbytes, usage=usage.STORAGE | usage.COPY_SRC)
+            else:
+                result = self.device.create_buffer_with_data(
+                    data=np.ascontiguousarray(array).tobytes(), usage=usage.STORAGE if usage_override is None else usage_override)
+            allocated.append(result)
+            return result
+        gpu_error = None
+        try:
+            particle_buffers = [buffer(vec4(positions)), buffer(vec4(velocities)), buffer(vec4(normal))]
+            layout = self.pipeline.get_bind_group_layout(0)
+            values = np.zeros((n, 4), np.float32)
+            low = 0
+            while low < n:
+                # The largest slice whose list fits one storage binding.
+                high = int(np.searchsorted(starts, starts[low] + capacity, side="right")) - 1
+                high = min(max(high, low + 1), n)
+                local_starts = (starts[low:high + 1] - starts[low]).astype(np.uint32)
+                members = neighbors[int(starts[low]):int(starts[high])]
+                payload = np.array([high - low, low], 'u4').tobytes() + np.array([h, mass], 'f4').tobytes()
+                params = buffer(np.frombuffer(payload, dtype=np.uint8), usage_override=usage.UNIFORM)
+                out = buffer(np.empty((high - low, 4), np.float32), output=True)
+                offsets_buffer = buffer(local_starts)
+                members_buffer = buffer(members if len(members) else np.zeros(1, np.uint32))
+                group = self.device.create_bind_group(layout=layout, entries=[
+                    {'binding': k, 'resource': {'buffer': b}} for k, b in enumerate(
+                        [params, *particle_buffers, offsets_buffer, members_buffer, out])])
+                encoder = self.device.create_command_encoder()
+                compute = encoder.begin_compute_pass()
+                compute.set_pipeline(self.pipeline)
+                compute.set_bind_group(0, group)
+                compute.dispatch_workgroups((high - low + 127) // 128)
+                compute.end()
+                self.device.queue.submit([encoder.finish()])
+                values[low:high] = np.frombuffer(self.device.queue.read_buffer(out), 'f4').reshape(high - low, 4)
+                for resource in (params, out, offsets_buffer, members_buffer):
+                    resource.destroy()
+                    allocated.remove(resource)
+                low = high
+        except Exception as exc:
+            gpu_error = exc
+        finally:
+            for resource in allocated:
+                resource.destroy()
+        if gpu_error is not None:
+            memory_error = isinstance(gpu_error, MemoryError) or any(
+                phrase in str(gpu_error).lower() for phrase in ("not enough memory", "out of memory", "allocation failed"))
+            if memory_error and n > 1:
+                retry_points = max(1, n // 2)
+                return self.potentials(original_positions, original_velocities, original_normals,
+                                       support, mass, _max_points=retry_points)
+            raise gpu_error
+        if sample is not None:
+            expanded = np.zeros((original_count, 3), np.float64)
+            expanded[sample] = values[:, :3]
+            return tuple(expanded[:, i] for i in range(3))
         return tuple(values[:, i].astype(np.float64) for i in range(3))

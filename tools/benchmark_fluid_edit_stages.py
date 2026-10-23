@@ -39,6 +39,24 @@ def process_rss_mb():
     return None
 
 
+def process_swap_mb():
+    try:
+        for line in Path("/proc/self/status").read_text().splitlines():
+            if line.startswith("VmSwap:"):
+                return int(line.split()[1]) / 1024.0
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def enforce_process_rss_cap(limit_mb):
+    if limit_mb is None:
+        return
+    current = process_rss_mb()
+    if current is not None and current > float(limit_mb):
+        raise MemoryError(f"process RSS {current:.1f} MiB exceeded the {float(limit_mb):.0f} MiB cap")
+
+
 def card_memory_mb(adapter):
     """Current process/card allocation where the driver exposes it."""
     if adapter == "default":
@@ -71,6 +89,7 @@ class StageMemoryPeak:
     def __init__(self, adapter):
         self.adapter = adapter
         self.host_peak = 0.0
+        self.swap_peak = 0.0
         self.card_peak = None
         self.done = threading.Event()
         self.thread = threading.Thread(target=self._sample, daemon=True)
@@ -80,6 +99,9 @@ class StageMemoryPeak:
             rss = process_rss_mb()
             if rss is not None:
                 self.host_peak = max(self.host_peak, rss)
+            swapped = process_swap_mb()
+            if swapped is not None:
+                self.swap_peak = max(self.swap_peak, swapped)
             card = card_memory_mb(self.adapter)
             if card is not None:
                 self.card_peak = max(self.card_peak or 0.0, card)
@@ -95,6 +117,7 @@ class StageMemoryPeak:
 
     def result(self):
         return {"peak_process_rss_mb": round(self.host_peak, 1),
+                "peak_process_swap_mb": round(self.swap_peak, 1),
                 "peak_card_memory_mb": None if self.card_peak is None else round(self.card_peak, 1),
                 "card_memory_scope": "process allocation" if self.adapter == "default" else
                                      "adapter VRAM in use" if self.adapter == "integrated" else "unavailable"}
@@ -199,10 +222,13 @@ def capped_nodes(doc):
         params = node.get("params", {})
         if node["type"] == "ParticleCache3D":
             params["cache_disk_mb"] = 6144
+            params["cache_memory_mb"] = 64
         elif node["type"] == "FluidWhitewater3D":
             params["cache_disk_mb"] = 1536
+            params["cache_memory_mb"] = 64
         elif node["type"] == "FluidCache3D":
             params["cache_disk_mb"] = 10240
+            params["cache_memory_mb"] = 64
 
 
 def check_scratch(workdir):
@@ -218,7 +244,7 @@ def install_cache_write_probe(adapter):
     from nodebased import simcache
 
     original = simcache.SimCache._write_disk_locked
-    peak = {"peak_process_rss_mb": 0.0, "peak_card_memory_mb": None,
+    peak = {"peak_process_rss_mb": 0.0, "peak_process_swap_mb": 0.0, "peak_card_memory_mb": None,
             "card_memory_scope": "process allocation" if adapter == "default" else
                                  "adapter VRAM in use" if adapter == "integrated" else "unavailable"}
 
@@ -227,6 +253,7 @@ def install_cache_write_probe(adapter):
             result = original(store, key, state)
         values = sample.result()
         peak["peak_process_rss_mb"] = max(peak["peak_process_rss_mb"], values["peak_process_rss_mb"])
+        peak["peak_process_swap_mb"] = max(peak["peak_process_swap_mb"], values["peak_process_swap_mb"])
         if values["peak_card_memory_mb"] is not None:
             peak["peak_card_memory_mb"] = max(peak["peak_card_memory_mb"] or 0.0,
                                                values["peak_card_memory_mb"])
@@ -251,6 +278,8 @@ def main():
     parser.add_argument("--json", type=Path, required=True)
     parser.add_argument("--proxy-only", action="store_true")
     parser.add_argument("--full-only", action="store_true")
+    parser.add_argument("--max-process-rss-mb", type=int,
+                        help="stop cleanly once sampled process RSS exceeds this cap")
     parser.add_argument("--profile-first", action="store_true",
                         help="profile the first edited proxy scene frame, then stop")
     parser.add_argument("--first-only", action="store_true",
@@ -278,9 +307,11 @@ def main():
     os.environ["NODEBASED_SIM_CACHE_MB"] = "24000"
     os.environ["XDG_CACHE_HOME"] = str(args.workdir / "xdg")
     sim_root = args.workdir / "simcache"
-    template = simcache.SimCache(root=sim_root, memory_budget=2 << 30,
+    template = simcache.SimCache(root=sim_root, memory_budget=64 << 20,
                                  disk_budget=24_000 << 20)
-    evaluator = Evaluator(sim=template)
+    # Keep retained evaluator results small; full-detail liquid surfaces can otherwise keep
+    # multiple 100+ MiB frames alive alongside their disk-backed simulation checkpoints.
+    evaluator = Evaluator(cache_bytes=128 << 20, sim=template)
     base = base_document(args)
     base_doc = base.document
     capped_nodes(base_doc)
@@ -291,7 +322,9 @@ def main():
         "adapter": str(gpu3d._state()["info"].get("device")),
         "liquid_cells": args.liquid_cells, "smoke_cells": args.smoke_cells,
         "frames": args.frames, "edit_frame": EDIT_FRAME,
+        "max_process_rss_mb": args.max_process_rss_mb,
         "proxy_resolution_cells": 64, "viewport": [args.play_width, args.play_height], "edits": {}})
+    result["max_process_rss_mb"] = args.max_process_rss_mb
     edit_names = list(EDITS) if args.edit == "all" else [args.edit]
     restore_cache_probe, cache_write_peak = install_cache_write_probe(args.adapter)
 
@@ -438,6 +471,7 @@ def main():
                     for frame in range(1, EDIT_FRAME):
                         failed_frame = frame
                         evaluator.evaluate_raster(base_doc, stage, frame=frame, tier=1, typed=True)
+                        enforce_process_rss_cap(args.max_process_rss_mb)
                         if frame % 10 == 0:
                             result["full_base_prefix_memory_peaks"][stage] = sample.result()
                             result["full_base_prefix_memory_peaks"]["cache_write"] = cache_write_peak()
@@ -480,6 +514,7 @@ def main():
                             failed_frame = frame
                             started = time.perf_counter()
                             evaluator.evaluate_raster(doc, stage, frame=frame, tier=1, typed=True)
+                            enforce_process_rss_cap(args.max_process_rss_mb)
                             elapsed = time.perf_counter() - started
                             frame_times.append(elapsed)
                             if frame % 10 == 0:
