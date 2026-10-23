@@ -684,5 +684,35 @@ machine's USB4 link (about 2.7 GB/s, an inference from the link speed) and the m
 mixed frame's evaluation should be about 12 to 15 ms and the Qt thread's presentation the bound, as for the other scenes. Run
 `python tools/benchmark_3d_playback.py --scene cube,furnished,mixed --stages` there.
 
-Not done: smoke together with splats (CPU-only), translucent meshes with splats on the card (they use the ray tracer's layer merge), the
+Not done in this section (smoke and glass with splats are on the card since the 10/23 gaps step, below): the
 mixed scene's 2-sample full-quality frame still reads back the layer through the ray tracer, the Windows laptop.
+
+### Smoke and glass with splats on the card (10/23, step A of the gaps step)
+
+Scene: `--scene mixedglass` of `tools/benchmark_3d_playback.py` is the mixed scene plus a 1.2 m smoke puff and a translucent glass sphere
+(24 rows, about 2,300 triangles). Before this step smoke together with splats raised Unsupported in `gpu3d.render` (the CPU drew the
+frame, 1.3 s at 1080p) and a translucent mesh with splats took the ray tracer's layer merge. Now the splat layer is drawn on the card
+between the mesh passes and the smoke march, and around the glass in two parts ordered by a second depth buffer of the nearest
+translucent surface; the smoke with meshes plays from resident buffers.
+
+Where the card frame goes (RTX 3080 Ti, 1080p, 1 sample, 30 frames, `tools/profile_3d_mixed_stages.py --scene mixedglass`,
+`benchmarks/3d-playback/gaps-1023/stages-rtx-mixedglass-card.json`): 32 ms for the whole render call. Without the smoke 21.7 ms, without
+the splats 23.5 ms, without both 17.8 ms (before the last two changes below). Three changes took the played frame from 44 ms to 40.7 ms:
+the glass depth pass draws one run per material (2,300 draws became 1); the translucent triangles are written far to near into a buffer
+of their own, so the colour pass is one draw per material (it was a draw call per triangle, 14 ms of Python a frame); the ray count of the
+volume work estimate is 6,000 (was 20,000), and `Plume3D`'s analytic plume is cached read-only per resolution and seed.
+
+Gates, 1080p, "Proxy while playing" off, 10 s of playback (`benchmarks/3d-playback/gaps-1023/<adapter>-proxy-off|glass-proxy-off/`):
+
+| Scene | RTX 3080 Ti | Radeon 8060S | Laptop stand-in (Radeon, 4 CPUs, 2x scale) | llvmpipe |
+|---|---:|---:|---:|---:|
+| cube | 23.86 fps | 23.9 | 23.9 | 23.93 |
+| furnished room | 23.93 | 23.92 | 23.98 | 2.98 |
+| mixed | 23.79 | 23.79 | 23.99 | 2.38 |
+| mixedglass (new) | 23.2, 24.56 once the first tier settles | 23.74 | 23.64 | 0.59 (earlier build) |
+
+The frame interval of the new scene is 40.8 ms on the RTX (budget 41.7 ms); the fps column includes the first frames of the run. The cube,
+furnished and mixed rows on the Radeon and laptop rows were measured at 10:30 on the build before the glass changes (those scenes have no
+translucent mesh and no smoke, so the changes do not touch them). The A6000 estimate (not measured): an estimate from the RTX's 26 ms card time: a
+workstation card with the same or more shader throughput holds the 41.7 ms budget; the airgapped machine has to run it to confirm. Render mode settles the mixed scene in 6.3 s cold and 6.0 s
+warm on the RTX (target under 10 s; Radeon 8.9 s, laptop stand-in 8.8 s; `benchmarks/progression/*-settle-1023.json`), was 24 s.

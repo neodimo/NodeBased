@@ -1,0 +1,23 @@
+{
+ "scene": "mixedglass",
+ "size": "1920x1080",
+ "splats": 20000,
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "routes": {
+  "card": {
+   "frames": 30,
+   "stages_ms": {
+    "card picture used": 1.0,
+    "card: first submit to the last pixels mapped": 26.5,
+    "display picture (conversion stage)": 0.61,
+    "mesh passes (colour, and the depth pass on the processor route)": 30.5,
+    "readback copy": 1.87,
+    "splat colours (relit on the processor)": 3.27,
+    "splat preparation on the card route (sort, colours, buffers)": 5.18,
+    "splat sort": 0.93,
+    "whole render call": 32.01
+   },
+   "frame_ms": 32.01
+  }
+ }
+}
