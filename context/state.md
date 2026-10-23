@@ -1,5 +1,25 @@
 ## 2026-10-22 — Lane 6 step B finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (9:25 PM on 2026-10-22 PDT)
+
+`main` moved `e6c503e0` -> `a6b885c5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a6b885c5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-2115.log`, started 9:15 PM): **Ran 6024 tests in 475.958 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 4).** Commits:
+  - `74ec5f17` Record Lane 8 finish 4 profile and gate state
+  - `8d0d5812` Skip cubic sampling for identity transforms
+  Diff: 3 files changed, 24 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (8:15 PM on 2026-10-22 PDT)
 
 `main` moved `65b02101` -> `1bf22fad` (lane commits cherry-picked onto main in lane order) and then to this
