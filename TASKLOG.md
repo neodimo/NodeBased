@@ -1,3 +1,11 @@
+## 2026-10-23 — Lane 6 step B finish 2: production gates (PARTIAL)
+
+- **What was done — evidence:** The production gate harness now selects the `scene` viewer output, so its edit scope/checkpoint logic follows the interactive app. RTX 3080 Ti at 256³ liquid / 192³ steam, pour keyed at frame 60: cProfile measured the first edited scene evaluation at 346.208 s before proxy conversion/display. It attributes 188.852 s to collider solid voxelization, including 182.967 s in surface voxelization. Proxy timeline reached frame 70; that frame took 16.487 s and misses 12 FPS. The 120-frame total, full-detail split, cup/steam edits, integrated Radeon, and A6000 are incomplete or unmeasured. Docs-copy check passed (7 knowledge tests).
+- **Artifacts:** Committed benchmark JSON `benchmarks/hot_pour/production-edit-refresh-rtx-2026-10-23.json`; harness `tools/benchmark_fluid_edit_stages.py`; table and evidence in `docs/FLUIDS_SPIKE.md` and identical bundle. Raw profiles/logs and cache scratch were moved to trash after recording the measurements; the committed JSON preserves the relevant metrics.
+- **State:** PARTIAL. Production first-frame and 12 FPS gates miss; other requested adapter/edit/stage gates remain open. No solver optimization landed; profiling isolates collider voxelization as the largest measured cost.
+- **Next owner + concrete artifact:** Needs Gonzo: optimize/retest collider voxelization from `nodebased/fluid3d.py` with a targeted regression, then resume RTX/Radeon gates with `tools/benchmark_fluid_edit_stages.py`.
+- **Failure mode:** The first harness left `document["view"]` unset; `_fluid_simulation_scope` therefore returned an empty scope and the pour edit restarted from frame 1. Selecting `scene` corrects the benchmark classification. Profiling overhead is explicitly labeled and was excluded from any displayed-first-frame claim.
+
 ## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 1: 3D comps at full size: the furnished room at 24 fps with the proxy off, and no tier flapping on the cube (integrator tick)
 
 - **What was done:** `main` `240452a2` -> `2dbc03af` plus this docs commit. Evidence and per-lane commit

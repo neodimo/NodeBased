@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-23",
+  "status": "partial; production gates incomplete",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "requested_adapter": "default",
+  "configuration": {
+    "liquid_cells": 256,
+    "steam_cells": 192,
+    "frames": 120,
+    "edit_frame": 60,
+    "proxy_resolution_cells": 64,
+    "viewport": [
+      1920,
+      1080
+    ]
+  },
+  "edit": "pour_rate",
+  "checkpoint_frame": 60,
+  "measurements": {
+    "profiled_first_edited_scene_evaluation_s": 346.208,
+    "first_proxy_display_time_s": null,
+    "proxy_timeline_last_completed_frame": 70,
+    "proxy_timeline_frame_70_s": 16.487,
+    "proxy_120_frames_s": null,
+    "full_detail_stage_split_s": null,
+    "scrub_12fps_holds": false
+  },
+  "profile_top_costs_s": {
+    "simcache_solve_to_frame": 316.292,
+    "liquid_cached_volume": 312.627,
+    "collider_mask_voxelize_solid": 188.852,
+    "voxelize_surface": 182.967
+  },
+  "notes": [
+    "The first edited scene-evaluation timing was collected under cProfile and excludes proxy conversion and viewport rendering; it is a diagnostic, not a first-displayed-frame timing.",
+    "The timeline pass was stopped after frame 70 to keep this lane step within its bounded run window. The 120-frame proxy total and full-detail stage split were not completed.",
+    "Cup move, steam edit, integrated Radeon and A6000 are unmeasured.",
+    "A6000 estimate: 0.8-1.3x RTX wall time for the same proxy workload, based on the existing 64-cell planning range; unmeasured and not a production full-detail estimate."
+  ]
+}

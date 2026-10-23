@@ -1,3 +1,7 @@
+# Lane 6 step B finish 2 — PARTIAL (2026-10-23, 2:34 AM PDT)
+
+Production-size gates ran on RTX 3080 Ti at 256³ liquid / 192³ steam. Pour keyed at frame 60; profiled first edited scene evaluation took 346.208 s (before display render), dominated by collider voxelization (188.852 s). Timeline reached frame 70 at 16.487 s, missing the 12 FPS target. The 120-frame proxy total, full-detail stage split, cup/steam edits and integrated Radeon remain incomplete; A6000 is estimated only. Corrected harness sets the viewer output; prior blank-view results are superseded. Production scratch was moved to trash after capturing the committed JSON. Docs knowledge tests pass. Commit: ed77ee22.
+
 # Lane 8 step B finish 6 — active (2026-10-22)
 
 **RTX read-ahead A/B on current main, 1080p, 10 s uncached, pipeline enabled.** Decode-ahead on: first-pass 5.680, 5.382, 5.449 fps (mean 5.504); node evaluation 173.59, 177.40, 176.49 ms (mean 175.83); display conversion 80.13, 83.39, 83.66 ms (mean 82.39). Decode-ahead off: 4.626, 4.580, 4.557 fps (mean 4.588); node evaluation 209.60, 211.77, 220.08 ms (mean 213.82); display conversion 85.17, 85.55, 87.55 ms (mean 86.09). Each run has Lane 2 per-request stage marks in `scratch/nb-lanes/run/finish6-read-ahead-{on,off}-{1,2,3}.json`.

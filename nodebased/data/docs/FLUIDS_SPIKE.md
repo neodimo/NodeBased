@@ -1227,7 +1227,14 @@ Fluid-node edits are classified as look-only, keyed-from-frame, or restart-from-
 
 A pre-P4 full-detail output can now supply the requested proxy and then full-detail frame without entering the solver. A visible one-time cache-status note marks its preview companion migration. The small legacy-cache test confirms zero extra solver steps and that the note does not repeat. Source-geometry rebuilding is avoided by serving the retained full output entry; this test uses a procedural plume without a geometry input.
 
-Production-rate limits remain unmeasured: the production-size <1-second first proxy, 120-frame/<30-second proxy, full-refinement timing split, and 12 FPS playback gate have not been run. No production-size bake was started because only 5.4 GB is free while the historical cache is about 8.5 GB. The prior 64-cell Hot-pour result is 28.34 seconds for 120 frames on the Radeon 8060S; it is a separate full-resolution baseline, not a measurement of this staged production proxy. The A6000 estimate remains unmeasured.
+Production gates were attempted on 2026-10-23 after disk headroom was restored. The corrected RTX harness selected the `scene` viewer output and classified a pour key at frame 60. Under cProfile, first edited scene evaluation took 346.208 seconds before proxy conversion or viewport rendering; the largest measured cost was 188.852 seconds in collider solid voxelization (182.967 seconds in surface voxelization). The proxy timeline reached frame 70; that frame took 16.487 seconds. This misses the <1-second first-frame and 12 FPS scrub targets. The 120-frame total and full-detail stage split were not completed; cup move, steam edit and integrated Radeon were not measured. The 64-cell result above remains a separate baseline. An A6000 planning estimate is 0.8–1.3× the RTX time for this proxy workload, extrapolated from the prior 64-cell range; it is unmeasured and does not estimate full-detail refinement. See `benchmarks/hot_pour/production-edit-refresh-rtx-2026-10-23.json`.
+
+| Adapter | Edit | First proxy picture | 120 proxy frames | Full-detail stage split | 12 FPS scrub |
+| --- | --- | ---: | ---: | --- | --- |
+| RTX 3080 Ti | Pour keyed at frame 60 | 346.208 s profiled scene evaluation (no display render) | Incomplete at frame 70; that frame 16.487 s | Unmeasured | Miss |
+| Integrated Radeon | Pour / cup / steam | Unmeasured | Unmeasured | Unmeasured | Unmeasured |
+
+**Finish 2 profile finding:** collider voxelization dominates this corrected checkpointed run. The current step records the profile and gate miss; it does not land a solver optimization. Further cost removal plus all remaining adapter/edit/stage measurements are still required.
 
 ### A: checkpoint callbacks and progressive edit timeline (partial)
 
