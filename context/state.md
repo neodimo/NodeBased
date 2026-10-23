@@ -1,5 +1,41 @@
 # Lane 6 — 2026-10-23 step A full-detail refinement memory (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (12:39 PM on 2026-10-23 PDT)
+
+`main` moved `eed3dca0` -> `58b1f6aa` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `58b1f6aa` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-1228.log`, started 12:28 PM): **Ran 6176 tests in 529.017 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 1: smoke and see-through objects with splats stay on the card, and Render mode settles the mixed scene faster (resume 1).** Commits:
+  - `dff380fd` VRAM budget test: smoke + splats now render on the raster card path (10/23), so the test bounds that render (73 MB measured on the RTX, budget +30%) and keeps raytrace refusing it
+  - `46ea7b5c` docs: smoke and glass with splats on the card, gates and settle (step A)
+  - `62df0209` Glass sorted-draw test; benchmark results for the glass scene and the gates (step A, part 5)
+  - `04e56c9a` Translucent meshes draw from a far-to-near vertex buffer: one draw per material run instead of one per triangle; the glass scene plays at 40.7 ms a frame at 1080p on the RTX (was 44) (step A, part 5)
+  - `de0ed6b6` Glass depth for the splat layer draws per material; the estimate casts 6,000 rays; the analytic plume is kept read-only per (resolution, seed) (step A, resume)
+  - `47735b62` Smoke with meshes plays from resident buffers and shadows the meshes' triangles through the tree: the mixed scene with a smoke puff, splats and glass is 34 ms a frame at 1080p on the RTX (was 1.3 s); volume bands counted by the tree walk; glass and splats around it in row bands (step A, parts 2, 3 and 5)
+  - `46f9a872` Render mode settles the mixed scene in 6 s (was 24): path tracer stacks sized to the trees and one shadow-ray call per smoke vertex; smoke with splats on the card in row bands and in played frames with lit splats (step A, part 4)
+  - `ead1faa7` Smoke with splats and translucent meshes with splats on the card: the splat layer is drawn between the mesh passes and the smoke march; around the glass in two parts ordered by a second depth buffer of the nearest translucent surface (step A, parts 2 and 3)
+  - `4dd004f6` Benchmark scene with smoke, splats and glass: mixedglass in the playback tools, --scene and --routes in the stage profile
+  Diff: 40 files changed, 3494 insertions(+), 170 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step A of 1: the full-detail Hot pour refines within memory on all three machines.** Commits:
+  - `ff1791f1` bench(fluid): preserve cold baseline memory peaks
+  - `d898b527` docs(fluid): record adaptive memory retry results
+  - `cf144ec3` docs(fluid): finalize step A handoff notes
+  - `81d1a8fa` docs(fluid): record partial refinement memory gates
+  - `97324671` fix(fluid): bound full-detail whitewater memory
+  - `6beaa99a` bench(fluid): capture stage memory peaks for refinement
+  Diff: 8 files changed, 719 insertions(+), 59 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Cold RTX refinement completed liquid and surface, then whitewater allocation failed during frame 90. A warm-cache retry completed whitewater through frame 120 with adaptive neighbor reduction; steam reached frame 70 before timeout. RSS peaks were sampled, swap remained zero, and the RTX/Radeon/llvmpipe whitewater checks passed. The integrated laptop RSS gate, full steam run and measured A6000 result remain open. See the newest TASKLOG entry and `benchmarks/hot_pour/full-refinement-memory-rtx-2026-10-23.json`.
 
 # Lane 6 — 2026-10-23 step A status (PARTIAL)

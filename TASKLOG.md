@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 1: smoke and see-through objects with splats stay on the card, and Render mode settles the mixed scene faster (resume 1), Lane 6 (Fluids, GPT-6 Luna) step A of 1: the full-detail Hot pour refines within memory on all three machines (integrator tick)
+
+- **What was done:** `main` `eed3dca0` -> `58b1f6aa` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `58b1f6aa`: Ran 6176 tests in 529.017 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 # Lane 6 step A — full-detail refinement memory (PARTIAL, 2026-10-23)
 
 - **What was done — evidence:** Per-stage RSS, card-memory and swap sampling is implemented; caches/checkpoints are bounded and streamed, and whitewater neighbor work adapts to available card memory with a status message and reduced-budget retry. The cold 256³/192³ RTX run completed edited liquid and surface stages, then whitewater failed during frame 90 at 12,628.7 MiB RSS / 9,821 MiB card allocation. Warm retry completed whitewater through frame 120; steam reached frame 70 before timeout. Swap was zero.
