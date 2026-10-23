@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 1: 3D comps at full size: the furnished room at 24 fps with the proxy off, and no tier flapping on the cube (integrator tick)
+
+- **What was done:** `main` `240452a2` -> `2dbc03af` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `2dbc03af`: Ran 6118 tests in 487.945 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step B of 2: 3D comps play at the comp's rate: the cube and the furnished room at 24 fps, the mixed scene progressively (resume 1), Lane 8 (2D parity B, GPT-6 Luna) step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 6) (integrator tick)
 
 - **What was done:** `main` `97729398` -> `74e1cffd` plus this docs commit. Evidence and per-lane commit

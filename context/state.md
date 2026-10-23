@@ -1,5 +1,27 @@
 # 2026-10-22 — Lane 8 step B finish 6 — PARTIAL
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (1:15 AM on 2026-10-23 PDT)
+
+`main` moved `240452a2` -> `2dbc03af` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `2dbc03af` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-0105.log`, started 1:05 AM): **Ran 6118 tests in 487.945 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 1: 3D comps at full size: the furnished room at 24 fps with the proxy off, and no tier flapping on the cube.** Commits:
+  - `2436efa6` 3D playback at full size: gate measurements on the RTX, Radeon, llvmpipe and laptop stand-in, per-frame timeline in the benchmark, the card picture pass benchmark, docs (step A)
+  - `e249b058` Card picture: copy the picture out of the mapped buffer (rows without padding were a view of memory that is unmapped right after); the benchmark checks the picture on screen against the processor's
+  - `96769eab` 3D playback: the render card makes the 8-bit display picture in the frame's own submission (view transform and quantise as one more pass, read back beside the float frame); the conversion stage takes it instead of converting 33 MB of float colour on the CPU, so the furnished room's maximum rate goes from 26 to 40 fps on the RTX 3080 Ti
+  - `ba7442e4` Automatic playback tier: drop on a missed rate, not on one slow picture; a climb that is undone waits twice as long next time (the cube at full size holds 23.9 fps and no longer steps down for one picture in five); benchmark can dump its raw trace events
+  Diff: 51 files changed, 2998 insertions(+), 25 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (11:45 PM on 2026-10-22 PDT)
 
 `main` moved `97729398` -> `74e1cffd` (lane commits cherry-picked onto main in lane order) and then to this
