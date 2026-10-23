@@ -241,8 +241,23 @@ void main() {
         fragColor = vec4(outline_over(encode(wipe_marks(v.surround.rgb, s)), s), 1.0);
         return;
     }
-    ivec2 t = ivec2(min(rel * v.tex, v.tex - vec2(1.0)));
-    fragColor = vec4(outline_over(encode(wipe_marks(display(t, s), s)), s), 1.0);
+    // Zoomed out the picture is filtered: a pixel averages the display values of the n x n texels it covers
+    // (a box, with the taps spread evenly over the pixel's footprint and at most 8 x 8, so a 1:16 view skips
+    // texels evenly instead of costing 256 taps). Up to 1.35 texels per pixel n is 1 and the tap is the texel
+    // under the pixel centre, as at 1:1 and in: the filter starts where nearest visibly skips texels, and a 4K
+    // view at 0.8 does not pay four taps for it. `n` follows the texels per screen pixel, so a proxy tier shown
+    // at its real size (more scene units than texels) is not filtered until it is shown smaller than its texels.
+    int n = int(clamp(ceil(v.tex.x / v.image.z / v.zoom - 0.35), 1.0, 8.0));
+    vec3 sum = vec3(0.0);
+    for (int j = 0; j < n; j++) {
+        for (int i = 0; i < n; i++) {
+            vec2 st = s + ((vec2(float(i), float(j)) + 0.5) / float(n) - 0.5) / v.zoom;
+            vec2 r = clamp((st - v.image.xy) / v.image.zw, vec2(0.0), vec2(1.0));
+            ivec2 t = ivec2(min(r * v.tex, v.tex - vec2(1.0)));
+            sum += display(t, st);
+        }
+    }
+    fragColor = vec4(outline_over(encode(wipe_marks(sum / float(n * n), s)), s), 1.0);
 }
 """
 

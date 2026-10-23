@@ -298,8 +298,18 @@ fn outline_over(enc: vec3f, p: vec2f, s: vec2f) -> vec3f {
     if (rel.x < 0. || rel.y < 0. || rel.x >= 1. || rel.y >= 1.) {
         return vec4f(outline_over(encode(v.surround.rgb), o.p.xy, s), 1.);
     }
-    let t = vec2i(min(rel * v.tex, v.tex - vec2f(1.)));
-    return vec4f(outline_over(encode(textureLoad(img, t, 0).rgb), o.p.xy, s), 1.);
+    // Zoomed out, a pixel averages the n x n texels it covers (see carddisplay.FRAGMENT); up to 1.35 texels per pixel n is 1.
+    let n = i32(clamp(ceil(v.tex.x / v.image.z / v.zoom - 0.35), 1., 8.));
+    var sum = vec3f(0.);
+    for (var j = 0; j < n; j++) {
+        for (var i = 0; i < n; i++) {
+            let st = s + ((vec2f(f32(i), f32(j)) + 0.5) / f32(n) - 0.5) / v.zoom;
+            let r = clamp((st - v.image.xy) / v.image.zw, vec2f(0.), vec2f(1.));
+            let t = vec2i(min(r * v.tex, v.tex - vec2f(1.)));
+            sum += textureLoad(img, t, 0).rgb;
+        }
+    }
+    return vec4f(outline_over(encode(sum / f32(n * n)), o.p.xy, s), 1.);
 }
 """
 
