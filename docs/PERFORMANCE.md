@@ -67,6 +67,11 @@ Targets:
   itself. Met in the opt-in Direct picture (about 2.7 ms, see "Direct viewer display transform"); not
   met yet in the default Viewer, where `to_qimage` is still about 41 ms per frame (see "Still slow").
 - The time row shows the frames per second playback achieves, and turns warm below the comp's rate.
+- The realistic moving 1080p comp targets 24 fps uncached on the RTX 3080 Ti; 16 fps is the
+  intermediate gate. The latest first-pass result is 7.277 fps, so both gates remain open. The
+  laptop stand-in targets at least 12 fps; its latest result is 3.473 fps. At 4K, the target is
+  24 fps on an automatic reduced tier and a full-resolution still within one second after stop;
+  the RTX result is pending.
 
 What changed, with the measurement from before and after:
 
@@ -196,6 +201,30 @@ costs are estimates; the paired JSON profiles preserve the timeline and sampling
 | 1080p / llvmpipe | 1.6 → 2.4 fps (historical) |
 | 1080p / integrated laptop stand-in (four CPUs, 2× Qt scale) | 2.3 fps (historical) |
 | 4K / llvmpipe | 0.4 → 0.5 fps (historical) |
+
+Finish-2 follow-up (10-second uncached runs, unique fresh-frame pass): 1080p reached 7.277 fps on
+the RTX 3080 Ti in the final node-optimization run, 5.390 fps on llvmpipe, and 3.473 fps on the
+four-CPU / 2×-scale laptop stand-in. The RTX result remains below the 16 fps intermediate gate;
+the laptop result remains below 12 fps. A 4K llvmpipe run enabled automatic playback proxying and
+showed tiers 1, 2, 4 and 8 in the viewer status, at 2.512 fps; the full-resolution still arrived
+1,417 ms after stop. These measurements establish the current fallback behavior and leave the
+RTX 4K gate open pending its card-locked run. JSON evidence is in the matching `L8-finish-*1022.json`
+files under the lane run directory.
+
+| Finish-2 follow-up (uncached first pass) | Rate | Other gate evidence |
+|---|---:|---|
+| 1080p / RTX 3080 Ti | 7.277 fps | 16 fps intermediate: open |
+| 1080p / llvmpipe | 5.390 fps | Diagnostic only |
+| 1080p / laptop stand-in (four CPUs, 2× scale) | 3.473 fps | 12 fps target: open |
+| 4K / llvmpipe with automatic proxy | 2.512 fps | Tiers 1, 2, 4 and 8; full still after 1,417 ms |
+
+For the unreachable 48 GB A6000 workstation, run `python tools/benchmark_2d_playback.py --size
+1080p --field` with generated plate/background sequences and repeat at `--size 4k`. The compact
+field output reports `adapter`, `resolution`, `playback_proxy_enabled`, `playback_tiers`,
+`achieved_fps`, `first_pass_fps`, `post_stop_full_resolution_ms` and `status_line`. The 1080p run
+should show full-tier fresh playback against 24 fps; the 4K run should show a reduced tier in the
+time row, comp-rate playback, and a full-resolution still within 1,000 ms. No A6000 measurement is
+claimed here.
 
 Cached playback stayed near its prior cadence: 1080p llvmpipe was 12.3 fps before and 11.7–11.8
 fps after, with about 84 ms median frame intervals in both runs. 4K llvmpipe reached 4.7 fps on a

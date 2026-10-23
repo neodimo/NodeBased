@@ -123,3 +123,7 @@ The worker profile identified repeated paint compositing and multichannel EXR re
 # Lane 6 step A finish 1 — active (2026-10-22, 5:42 PM PDT)
 
 Scope is the prior PARTIAL's left-outs: artist-facing progressive timeline, stale status, edit cancellation, cost reduction and a fresh production-size bake. The `Window` now queues sequential non-display renders behind the visible edit preview; the timeline marks solved simulation frames separately, the old picture stays labeled stale until the current edit appears, and forward playback stops at the contiguous solved prefix. Queue/timeline/state tests pass. Fresh production-size cache needs ~8.5 GB based on the historical record, while the filesystem has 5.7 GB free; no such bake is running. Real-display QA and measured cancellation latency, cost reduction, and fresh production timing remain open. Worktree is `openclaw/nb-fluids-spike`.
+
+# Lane 8 step B finish 2 — PARTIAL (2026-10-22)
+
+The merged base is `39cc8a78`. Fresh 1080p uncached first-pass results are 7.277 fps on the RTX 3080 Ti, 5.390 fps on llvmpipe and 3.473 fps on the four-CPU / 2×-scale laptop stand-in; the 16 fps and 12 fps gates remain open. A 4K llvmpipe run enabled automatic proxying and presented tiers 1, 2, 4 and 8 at 2.512 fps; the full-resolution still arrived 1,417 ms after stop. Fourteen proxy/tier tests, seven docs-copy tests and the benchmark self-check pass. Final 1080p and 4K RTX runs are queued behind an existing GPU-lock owner. New 4K inputs occupy 175 MB under the lane run directory and will be removed after measurements.

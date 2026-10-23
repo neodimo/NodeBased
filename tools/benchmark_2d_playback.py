@@ -80,7 +80,8 @@ def run_window(args):
     from nodebased.tileexec import TileRegion, SUPPORTED_TILED_KINDS, _all_ancestors
     from nodebased import groups
 
-    events=[]; shown=[]; statuses=[]; worker_profiles=[]; sample_counts={'qt':{},'worker':{}}; node_samples={}; node_costs={}; sample_period_ms=2.0
+    events=[]; shown=[]; statuses=[]; displayed_tiers=[]; post_stop_full_ms=[]; stop_requested_at=[None]
+    worker_profiles=[]; sample_counts={'qt':{},'worker':{}}; node_samples={}; node_costs={}; sample_period_ms=2.0
     lock=threading.Lock(); trace_origin=time.perf_counter(); sample_start=[None]; run_end=[None]; sample_stop=[None]
     def mark(stage, **kw):
         row={'stage':stage,'t_ms':round((time.perf_counter()-trace_origin)*1000,3),**kw}
@@ -142,7 +143,9 @@ def run_window(args):
         if not win._direct_linear_on:
             raise RuntimeError('Direct picture did not become active')
     win.proxy.setCurrentIndex(win.proxy.findData(1))
-    win.playback_proxy.setChecked(False)  # measure full-resolution evaluation; automatic proxying changes the gate
+    # Keep the HD gate full resolution. At UHD, exercise automatic proxy playback and full-res
+    # restoration on stop, which are part of the production playback contract.
+    win.playback_proxy.setChecked(args.size=='4k')
     win.show_thumbnails=False
     # Keep the cached run's scene-linear frames warm before the measured playback interval.
     if args.cache_mode=='cached':
@@ -236,9 +239,14 @@ def run_window(args):
     media.read_media_raster=read_media
     def finished(payload,frame,image,status,render_region=None):
         req,cancel=payload
-        mark('ui_handoff',frame=req.frame,status=status.split('  ·  ')[0],has_frame=frame is not None)
-        if frame is not None:
-            shown.append((time.perf_counter(),req.frame)); statuses.append(status.split('  ·  ')[0])
+        presented=frame is not None and win.frame_generation == req.generation and win.frame is not None
+        mark('ui_handoff',frame=req.frame,tier=int(req.tier),status=status,
+             has_frame=frame is not None,presented=presented)
+        if presented:
+            shown.append((time.perf_counter(),req.frame)); statuses.append(status)
+            displayed_tiers.append(int(req.tier))
+            if stop_requested_at[0] is not None and int(req.tier) == 1:
+                post_stop_full_ms.append(round((time.perf_counter()-stop_requested_at[0])*1000,3))
     win.signals.finished.connect(finished)
     original_submit=win.executor.submit
     job_counter=[0]
@@ -255,13 +263,17 @@ def run_window(args):
         sample_start[0]=time.perf_counter(); sample_stop[0]=sample_start[0]+args.seconds
         mark('playback_start',mode=args.cache_mode,adapter=args.adapter)
         win.toggle_playback(True)
+        mark('playback_tier_selected',tier=int(win.proxy.currentData() or 1),automatic=win.playback_proxy.isChecked())
         sample_timer = QTimer(win)
         sample_timer.setSingleShot(True)
         sample_timer.setTimerType(Qt.TimerType.PreciseTimer)
         sample_timer.timeout.connect(finish)
         sample_timer.start(round(args.seconds*1000))
     def finish():
-        win.toggle_playback(False); win.timer.stop(); win.preview_queue.cancel()
+        stop_requested_at[0]=time.perf_counter()
+        # toggle_playback owns cancellation and queues the full-resolution still after restoring
+        # an automatic proxy. Cancelling again here would also cancel that required refinement.
+        win.toggle_playback(False); win.timer.stop()
         mark('playback_stop',frames=len(shown))
         def quit_when_idle():
             if win.busy:
@@ -286,6 +298,12 @@ def run_window(args):
     last=None
     sample_start_ms=((sample_start[0]-trace_origin)*1000) if sample_start[0] is not None else None
     sample_stop_ms=((sample_stop[0]-trace_origin)*1000) if sample_stop[0] is not None else None
+    playback_tiers=sorted({event['tier'] for event in events
+                           if event['stage']=='ui_handoff' and event.get('presented') and 'tier' in event
+                           and sample_start_ms <= event['t_ms'] <= sample_stop_ms})
+    playback_statuses=[event['status'] for event in events
+                       if event['stage']=='ui_handoff' and event.get('presented')
+                       and sample_start_ms <= event['t_ms'] <= sample_stop_ms]
     for event in events:
         if (sample_start_ms is not None and event['t_ms'] < sample_start_ms
                 or sample_stop_ms is not None and event['t_ms'] > sample_stop_ms):
@@ -309,6 +327,11 @@ def run_window(args):
         'disk_cache_enabled':disk.enabled,
         'frames_displayed':len(measured_shown),'achieved_fps':round(len(measured_shown)/args.seconds,3),
         'first_pass_frames':len(cold_pass),'first_pass_fps':round(cold_pass_fps,3) if cold_pass_fps else None,
+        'playback_proxy_enabled':bool(win.playback_proxy.isChecked()),
+        'playback_tiers':playback_tiers,
+        'playback_status_lines':playback_statuses,
+        'displayed_tiers':sorted(set(displayed_tiers)),
+        'post_stop_full_resolution_ms':post_stop_full_ms[-1] if post_stop_full_ms else None,
         'frame_interval_ms':{'p50':percentile(intervals,50),'p95':percentile(intervals,95),'p99':percentile(intervals,99)},
         'worker_to_handoff_ms':{'p50':percentile(frame_times,50),'p95':percentile(frame_times,95),'p99':percentile(frame_times,99)},
         'status_line':statuses[-1] if statuses else win.statusBar().currentMessage(),
@@ -318,7 +341,12 @@ def run_window(args):
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
     win.close()
-    print(json.dumps({k:result[k] for k in ('case','resolution','cache_mode','adapter','achieved_fps','frames_displayed','first_pass_fps','frame_interval_ms','worker_to_handoff_ms','status_line')}))
+    field_keys=('adapter','resolution','playback_proxy_enabled','playback_tiers','achieved_fps',
+                'first_pass_fps','post_stop_full_resolution_ms','status_line')
+    summary_keys=('case','resolution','cache_mode','adapter','achieved_fps','frames_displayed',
+                  'first_pass_fps','playback_tiers','displayed_tiers','post_stop_full_resolution_ms',
+                  'frame_interval_ms','worker_to_handoff_ms','status_line')
+    print(json.dumps({k:result[k] for k in (field_keys if args.field else summary_keys)}))
 
 
 def main():
@@ -339,6 +367,7 @@ def main():
                    help='route finished linear frames through the optional Direct picture viewer')
     p.add_argument('--case',default='1080p')
     p.add_argument('--display',default=os.environ.get('DISPLAY'))
+    p.add_argument('--field',action='store_true',help='print compact fields for a run on another machine')
     a=p.parse_args()
     if a.self_check:
         os.environ.setdefault('QT_QPA_PLATFORM','offscreen'); sys.path.insert(0,str(ROOT))
