@@ -154,6 +154,18 @@ class SplatCloud:
         m = np.asarray(matrix4, dtype=np.float64)
         if m.shape != (4,4) or not np.isfinite(m).all() or not np.allclose(m[3], (0,0,0,1)):
             raise ValueError('matrix4 must be a finite column-vector affine 4x4 matrix')
+        # A cloud never changes and a camera move does not change the matrix, so the eigen decomposition of 20,000
+        # covariances (21 ms) is done once for a matrix and handed out again. The few last matrices are kept on the cloud.
+        memo = self.__dict__.setdefault('_transformed_memo', {})
+        key = m.tobytes()
+        if key in memo:
+            return memo[key]
+        if len(memo) >= _TRANSFORMED_MEMO:
+            memo.clear()
+        memo[key] = result = self._transformed(m)
+        return result
+
+    def _transformed(self, m):
         a = m[:3,:3]
         cov = a @ self.covariance() @ a.T
         values, axes = np.linalg.eigh(cov)
@@ -164,6 +176,9 @@ class SplatCloud:
                           _matrix_quaternions(axes), self.opacity, sh, self.sh_degree,
                           raw_opacity_logit=self.raw_opacity_logit, colorspace=self.colorspace,
                           intrinsics=None if self.intrinsics is None else self.intrinsics.transformed(a))
+
+
+_TRANSFORMED_MEMO = 4       # matrices a cloud remembers the transformed copy of
 
 
 def _basis(directions, degree):

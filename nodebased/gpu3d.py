@@ -7,6 +7,7 @@ rounded area heuristic rather than hardware derivative-based LOD.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import os
@@ -45,7 +46,10 @@ _errors = {}
 # Budgets bound one submission to about a second on each adapter type (display-driver timeouts; a
 # submitted job cannot be cancelled); 'other' is a guess. Windows and other adapters are unmeasured.
 SHADOW_WORK_BUDGETS = {'discrete': 4e10, 'integrated': 1e10, 'cpu': 3e8, 'other': 2e9}
-SHADOW_BVH_WORK_BUDGETS = {'discrete': 4e8, 'integrated': 4e8, 'cpu': 1e7, 'other': 2e8}
+# Re-measured 10/22: a 1080p furnished room is 4.0e8 BVH units and took 6.4 ms on the RTX 3080 Ti and 5.6 ms on the Radeon 8060S
+# (6e10 and 7e10 units a second, against the 0.4-1.4e9 above), so the old 4e8 budget cut every 1080p frame into two
+# submissions. 2e9 is about 30 ms of that work on either card.
+SHADOW_BVH_WORK_BUDGETS = {'discrete': 2e9, 'integrated': 2e9, 'cpu': 1e7, 'other': 5e8}
 # Triangle count above which the BVH path is chosen (when the adapter is capable). None = per-adapter table.
 SHADOW_BVH_THRESHOLDS = {'discrete': 300, 'integrated': 300, 'cpu': 500, 'other': 1000}
 SHADOW_BVH_THRESHOLD = None
@@ -1031,6 +1035,29 @@ def particle_data(scene, camera, width, height, limits, cancel, output='rgba'):
     return packed, texel_data, params
 
 
+_playing = threading.local()
+
+
+class playing:
+    """``with gpu3d.playing(True):`` a render on this thread draws splats with meshes as the playback tier does: the meshes
+    with the raster shader and the splats as a layer over them, instead of the ray tracer the shadows between the two
+    need (see ``playback.PLAYING_SPLAT_SEED``)."""
+
+    def __init__(self, on=True):
+        self.on = bool(on)
+
+    def __enter__(self):
+        self.before = getattr(_playing, 'on', False)
+        _playing.on = self.on
+
+    def __exit__(self, *exc):
+        _playing.on = self.before
+
+
+def is_playing():
+    return getattr(_playing, 'on', False)
+
+
 def _view_rows(camera):
     """The camera's rotation as three padded rows (`Params.view0..2`): the vertex shader turns a world position into
     camera space with them, so no vertex buffer holds a camera-space value."""
@@ -1322,13 +1349,27 @@ def _shadow_data(scene, count, limit, cancel):
     return packed, 1e-3 * max(1.0, float((high-low).max()) if count else 1.0)
 
 
+HASH_BYTES = 16 << 20      # arrays over this are told apart by identity (a hash of 16 MB costs about 15 ms)
+
+
+def _array_key(array):
+    """What tells one array from another in a cache key. The Evaluator builds a scene's geometry again for every frame, so the
+    arrays of an unchanged mesh are new objects each time: a writeable array is identified by a hash of its bytes (about 0.2 ms
+    for a few thousand triangles). A read-only array, or one too big to hash on every frame, by itself (the cache entry keeps it
+    alive, so the identity stays unique)."""
+    if array is None:
+        return 0
+    if not array.flags.writeable or array.nbytes > HASH_BYTES:
+        return ('id', id(array))
+    return ('hash', array.shape, array.dtype.str, hashlib.blake2b(np.ascontiguousarray(array), digest_size=16).digest())
+
+
 def _shadow_key(scene):
-    """What the packed shadow triangles and their BVH are made of, without reading a vertex: the identity of each
-    geometry's arrays (the cache entry keeps them alive, so an id cannot be reused), its world matrix, opacity and
-    caster mask. A camera that moves leaves all of it alone."""
+    """What the packed shadow triangles and their BVH are made of, without reading a vertex: each geometry's arrays (by
+    `_array_key`), its world matrix, opacity and caster mask. A camera that moves leaves all of it alone."""
     order = link_order(scene)
-    return tuple((id(g.vertices), id(g.triangles), g.world_matrix().tobytes(), float(g.color[3]), caster_mask(g, order))
-                 for g in scene.geometries)
+    return tuple((_array_key(g.vertices), _array_key(g.triangles), g.world_matrix().tobytes(), float(g.color[3]),
+                  caster_mask(g, order)) for g in scene.geometries)
 
 
 def _shadow_cache(state, scene, count):
@@ -1516,7 +1557,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         # relit or caught splats, splats shadowing meshes and each other) goes to the ray tracer, whose
         # opaque-mesh result equals the raster one.
         shadowed = any(light.shadows and light.intensity > 0 for light in scene.lights)
-        if output == 'rgba' and shadowed and (scene.geometries or any(getattr(i, 'relight', 0) > 0 for i in scene.splats)):
+        if (output == 'rgba' and shadowed and not is_playing()
+                and (scene.geometries or any(getattr(i, 'relight', 0) > 0 for i in scene.splats))):
             return render(scene, camera, width, height, background, ambient, samples, output,
                           cancel, adapter, mode='raytrace')
     # The splat contribution layer is CPU-only, including empty scenes.
@@ -1874,12 +1916,13 @@ def _staging_buffer(state, size, keep):
 # passes depend on the camera.
 
 RESIDENT = True      # off: every frame packs and uploads its scene again (the comparison tests use it)
+RESIDENT_SCENES = 2  # a scene that also draws a depth pass for its splats keeps one entry for each of the two passes
 OPAQUE_ALPHA = np.float32(0.999)        # the shader's PASS 0 / PASS 1 split of `source.a`
 
 
 def _resident_ok(scene, output, volume):
     """True when the scene can be drawn from resident buffers: nothing depends on the camera but the uniform."""
-    if not RESIDENT or output in scene3d.DATA_OUTPUTS:
+    if not RESIDENT:
         return False
     if output in _PARTICLE_OUTPUT_MODES and getattr(scene, 'particles', ()):
         return False
@@ -1897,16 +1940,12 @@ def _resident_ok(scene, output, volume):
     return drawn > 0
 
 
-def _array_id(array):
-    return 0 if array is None else id(array)
-
-
 def _mesh_key(scene, order):
-    """Everything the packed vertices, the materials and the draw lists are made of, without reading a vertex: array
-    identities (the resident entry keeps the geometries alive, so an id cannot be reused) and the scalar fields."""
-    return tuple((_array_id(g.vertices), _array_id(g.triangles), _array_id(g.normals), _array_id(g.uvs), _array_id(g.texture),
-                  _array_id(g.metallic_roughness_texture), _array_id(g.normal_texture), _array_id(g.occlusion_texture),
-                  _array_id(g.emissive_texture), g.world_matrix().tobytes(), tuple(float(v) for v in g.color),
+    """Everything the packed vertices, the materials and the draw lists are made of: the arrays (by `_array_key`; the
+    resident entry keeps the geometries alive, so an identity cannot be reused) and the scalar fields."""
+    return tuple((_array_key(g.vertices), _array_key(g.triangles), _array_key(g.normals), _array_key(g.uvs), _array_key(g.texture),
+                  _array_key(g.metallic_roughness_texture), _array_key(g.normal_texture), _array_key(g.occlusion_texture),
+                  _array_key(g.emissive_texture), g.world_matrix().tobytes(), tuple(float(v) for v in g.color),
                   float(g.specular), float(g.shininess), float(g.emission), g.material, float(g.metallic),
                   float(g.pbr_roughness), float(g.pbr_specular), tuple(float(v) for v in g.emissive_color),
                   float(g.normal_scale), float(g.occlusion_strength), bool(g.receive_shadows),
@@ -1960,9 +1999,10 @@ def _pack_static(geometry, world, normals, uvs, object_id, tint, pbr, maps, emis
 
 def _prepare_static(scene, order, cancel):
     """The camera-free half of `_prepare`: (vertices (3K,38) float32, materials, opaque draws [(first vertex, vertex count,
-    material)], translucent triangles {start, centre, material} or None). Triangles are never dropped here (the hardware
+    material)], translucent triangles {start, centre, material} or None, the draws of every geometry for the data passes).
+    Triangles are never dropped here (the hardware
     clips what is behind the camera or beyond the far plane, as it did for the triangles `_prepare` kept)."""
-    chunks, materials, opaque, starts, centres, mats = [], [], [], [], [], []
+    chunks, materials, opaque, everything, starts, centres, mats = [], [], [], [], [], [], []
     emitted = 0
     for object_id, geometry in enumerate(scene.geometries, 1):
         _cancel(cancel)
@@ -1974,6 +2014,7 @@ def _prepare_static(scene, order, cancel):
             continue
         material = len(materials)
         materials.append((mips, *maps_textures))
+        everything.append((emitted*3, len(packed)*3, material))
         alpha = np.float32(tint[3])
         if geometry.texture is not None and geometry.uvs is not None:
             alpha = np.float32(alpha * np.float32(np.float16(geometry.texture[..., 3].flat[0])))
@@ -1988,7 +2029,7 @@ def _prepare_static(scene, order, cancel):
     vertices = np.concatenate(chunks) if chunks else np.empty((0, 38), 'f4')
     translucent = ({'start': np.concatenate(starts), 'centre': np.concatenate(centres), 'material': np.concatenate(mats)}
                    if starts else None)
-    return vertices, materials, opaque, translucent
+    return vertices, materials, opaque, translucent, everything
 
 
 def _translucent_runs(translucent, eye, view):
@@ -2018,40 +2059,41 @@ def drop_resident(state=None, targets=True):
     The buffers and textures are released with their last reference rather than destroyed by hand: a state dict that a
     test restores from a snapshot may still point at them."""
     state = _state() if state is None else state
-    state.pop('resident', None)
+    state.pop('residents', None)
     if targets:
         state.pop('targets', None)
 
 
 def _build_resident(state, scene, order, key, light_data, area_lights_data, area_samples_data, shadow_data, bvh_data,
                     shadow_triangles, cancel):
+    """Pack the scene without the camera and upload everything a frame binds. The buffers and textures are released
+    with the entry (see `drop_resident`), so nothing is tracked for destruction here."""
     wgpu, device = state['wgpu'], state['device']
-    keep = lambda resource: resource       # released with the entry, not destroyed by hand (see `drop_resident`)
-    if True:
-        vertices, materials, opaque, translucent = _prepare_static(scene, order, cancel)
-        res = {'key': key, 'refs': (list(scene.geometries), shadow_data, bvh_data),
-               'opaque': opaque, 'translucent': translucent, 'triangles': len(vertices) // 3, 'binds': {}}
-        res['uniform'] = keep(device.create_buffer(size=112, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST))
-        res['lights'] = keep(device.create_buffer_with_data(data=light_data, usage=wgpu.BufferUsage.STORAGE))
-        res['area_lights'] = keep(device.create_buffer_with_data(data=area_lights_data, usage=wgpu.BufferUsage.STORAGE))
-        res['area_samples'] = keep(device.create_buffer_with_data(data=area_samples_data, usage=wgpu.BufferUsage.STORAGE))
-        res['shadow'] = keep(device.create_buffer_with_data(data=shadow_data, usage=wgpu.BufferUsage.STORAGE))
-        res['bvh'] = []
-        if bvh_data is not None:
-            for binding, array in zip((5, 6), bvh_data):
-                buffer = keep(device.create_buffer_with_data(data=array, usage=wgpu.BufferUsage.STORAGE))
-                res['bvh'].append({'binding': binding, 'resource': {'buffer': buffer}})
-        res['vertices'] = keep(device.create_buffer_with_data(data=vertices, usage=wgpu.BufferUsage.VERTEX))
-        res['sampler'] = device.create_sampler(mag_filter='linear', min_filter='linear', mipmap_filter='linear')
-        res['env'] = _environment_resources(state, keep, getattr(scene, 'environments', ()))
-        _, res['textures'] = _upload_materials(wgpu, device, keep, materials, cancel)
+    keep = lambda resource: resource
+    vertices, materials, opaque, translucent, everything = _prepare_static(scene, order, cancel)
+    res = {'key': key, 'refs': (list(scene.geometries), shadow_data, bvh_data), 'opaque': opaque,
+           'translucent': translucent, 'everything': everything, 'triangles': len(vertices) // 3, 'binds': {}}
+    res['uniform'] = device.create_buffer(size=112, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+    res['lights'] = device.create_buffer_with_data(data=light_data, usage=wgpu.BufferUsage.STORAGE)
+    res['area_lights'] = device.create_buffer_with_data(data=area_lights_data, usage=wgpu.BufferUsage.STORAGE)
+    res['area_samples'] = device.create_buffer_with_data(data=area_samples_data, usage=wgpu.BufferUsage.STORAGE)
+    res['shadow'] = device.create_buffer_with_data(data=shadow_data, usage=wgpu.BufferUsage.STORAGE)
+    res['bvh'] = []
+    if bvh_data is not None:
+        for binding, array in zip((5, 6), bvh_data):
+            buffer = device.create_buffer_with_data(data=array, usage=wgpu.BufferUsage.STORAGE)
+            res['bvh'].append({'binding': binding, 'resource': {'buffer': buffer}})
+    res['vertices'] = device.create_buffer_with_data(data=vertices, usage=wgpu.BufferUsage.VERTEX)
+    res['sampler'] = device.create_sampler(mag_filter='linear', min_filter='linear', mipmap_filter='linear')
+    res['env'] = _environment_resources(state, keep, getattr(scene, 'environments', ()))
+    _, res['textures'] = _upload_materials(wgpu, device, keep, materials, cancel)
     return res
 
 
 def _resident_binds(state, res, phase):
     """(pipeline, per-material bind groups, environment bind group) for one pass; rebuilt when the pipeline cache was reset."""
     bvh = bool(res['bvh'])
-    pipeline = _pipeline(state, False, phase, bvh, False)
+    pipeline = _pipeline(state, phase == 2, phase, bvh, False)
     held = res['binds'].get(phase)
     if held is not None and held[0] is pipeline:
         return held
@@ -2074,16 +2116,19 @@ def _resident_binds(state, res, phase):
 
 
 def _frame_targets(state, width, height, fmt):
-    """The colour and depth textures of a frame size, kept between renders (a camera move does not change them)."""
+    """The colour and depth textures of a frame size and format, kept between renders (a camera move does not change
+    them; a scene that also draws a depth pass for its splats alternates two formats)."""
     wgpu, device = state['wgpu'], state['device']
-    held = state.get('targets')
-    if held is not None and held['key'] == (width, height, fmt):
-        return held['target'].create_view(), held['depth'].create_view(), held['target']
-    target = device.create_texture(size=(width, height, 1), format=fmt,
-        usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)
-    depth = device.create_texture(size=(width, height, 1), format='depth32float',
-        usage=wgpu.TextureUsage.RENDER_ATTACHMENT)
-    state['targets'] = {'key': (width, height, fmt), 'target': target, 'depth': depth}
+    held = state.setdefault('targets', {})
+    key = (width, height, fmt)
+    if key not in held:
+        while len(held) >= 3:
+            held.pop(next(iter(held)))
+        held[key] = (device.create_texture(size=(width, height, 1), format=fmt,
+                                           usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC),
+                     device.create_texture(size=(width, height, 1), format='depth32float',
+                                           usage=wgpu.TextureUsage.RENDER_ATTACHMENT))
+    target, depth = held[key]
     return target.create_view(), depth.create_view(), target
 
 
@@ -2096,27 +2141,37 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     key = (_mesh_key(scene, order), light_data.tobytes(), area_lights_data.tobytes(), area_samples_data.tobytes(),
            _environment_key(getattr(scene, 'environments', ())), shadow_triangles,
            id(shadow_data) if shadow_triangles else None, id(bvh_data[0]) if bvh_data is not None else None)
-    res = state.get('resident')
-    if res is None or res['key'] != key:
-        drop_resident(state, targets=False)
-        res = state['resident'] = _build_resident(state, scene, order, key, light_data, area_lights_data, area_samples_data,
-                                                  shadow_data, bvh_data, shadow_triangles, cancel)
+    held = state.setdefault('residents', {})
+    res = held.get(key)
+    if res is None:
+        res = _build_resident(state, scene, order, key, light_data, area_lights_data, area_samples_data, shadow_data,
+                              bvh_data, shadow_triangles, cancel)
+        held[key] = res
+        while len(held) > RESIDENT_SCENES:          # oldest first (insertion order)
+            held.pop(next(iter(held)))
         state['resident_builds'] = state.get('resident_builds', 0) + 1
     else:
+        held[key] = held.pop(key)                   # most recent last
         state['resident_reuses'] = state.get('resident_reuses', 0) + 1
     _mark('scene_ready')
     if not res['triangles']:
         return np.broadcast_to(bg, (height, width, 4)).copy()
+    data = output in scene3d.DATA_OUTPUTS
     eye, view = scene3d._view_basis(camera)
     focal = 1 / math.tan(math.radians(camera.fov) / 2)
     params = np.array([focal/(width/height), focal, camera.near, camera.far, *eye, 0, ambient, len(lights),
                        scene3d.RENDER_OUTPUTS.index(output), len(area), bias, shadow_triangles, bvh_data is not None, 0,
                        *_view_rows(camera)], 'f4')
     device.queue.write_buffer(res['uniform'], 0, params)
-    fmt = state['format']
+    fmt = 'rgba32float' if data else state['format']
     target_view, depth_view, target = _frame_targets(state, width, height, fmt)
-    runs_by_pass = [res['opaque'], _translucent_runs(res['translucent'], eye, view) if res['translucent'] else []]
-    passes = [_resident_binds(state, res, 0)] + ([_resident_binds(state, res, 1)] if runs_by_pass[1] else [])
+    if data:
+        # One pass over every triangle, depth tested: the order does not matter.
+        runs_by_pass = [res['everything']]
+        passes = [_resident_binds(state, res, 2)]
+    else:
+        runs_by_pass = [res['opaque'], _translucent_runs(res['translucent'], eye, view) if res['translucent'] else []]
+        passes = [_resident_binds(state, res, 0)] + ([_resident_binds(state, res, 1)] if runs_by_pass[1] else [])
     _mark('upload_done')
     dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
     stride = ((width*4*dtype.itemsize+255)//256)*256
