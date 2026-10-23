@@ -1697,7 +1697,9 @@ class PlaybackProxyToggleTests(unittest.TestCase):
         request = FrameRequest(w.generation, w.dispatcher.document['time']['current'], True,
                                copy.deepcopy(w.dispatcher.document), tier=w.proxy.currentData(),
                                playing=True)
-        self.assertTrue(w._adapt_playback_proxy(request, 1000 / 24 + 1))
+        # one slow picture is not a missed rate: the tier drops when the middle of the recent pictures misses the frame time
+        results = [w._adapt_playback_proxy(request, 1000 / 24 + 1) for _ in range(w.ADAPT_DOWN_MIN_FRAMES)]
+        self.assertEqual(results, [False] * (w.ADAPT_DOWN_MIN_FRAMES - 1) + [True])
         self.assertEqual(w.proxy.currentData(), 4)
         self.assertFalse(w._adapt_playback_proxy(request, 1000 / 24 + 1),
                          'an obsolete tier result must not drive another adaptation')

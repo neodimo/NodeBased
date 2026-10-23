@@ -17,6 +17,7 @@ it is one attribute test when nobody is looking. Stages, in the order a played 3
     cache_put            the display cache took the frame
     emit                 the worker handed the frame to the Qt thread
     handover             Window._show_image returned on the Qt thread (hand-over to the display)
+    paint_begin/end      the Viewer's paintEvent (Qt thread); the display server's flush after it is not covered
 """
 import collections
 import statistics

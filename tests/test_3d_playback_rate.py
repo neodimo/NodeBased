@@ -4,6 +4,7 @@ Each test fails on the code before its change: the shadow BVH was not chosen for
 camera move repacked and re-uploaded the whole scene, a scene with nothing translucent drew a second pass over every
 triangle, and the display conversion divided and multiplied by an alpha of 1 on one thread."""
 import dataclasses
+import statistics
 import sys
 import tempfile
 import time
@@ -636,7 +637,7 @@ class NextFrameBeforeHandOverTests(Base):
 
 
 class PlaybackTierAdaptationTests(Base):
-    """The automatic playback tier ignores cold frames, steps down when frames miss the rate and climbs back when they have room."""
+    """The automatic playback tier ignores cold frames, steps down when the frames miss the rate and climbs back when they have room."""
 
     def start(self, fps=24.0):
         w = self.open_window((1280, 720))
@@ -646,33 +647,73 @@ class PlaybackTierAdaptationTests(Base):
         w._adapt_floor_tier = 1
         w._adapt_warm = w.ADAPT_WARM_FRAMES
         w._adapt_headroom = 0
+        w._adapt_recent = []
+        w._adapt_up_frames = w.ADAPT_UP_FRAMES
+        w._adapt_climbed_from = None
         return w
 
     def frame(self, w, ms):
         from types import SimpleNamespace
         return w._adapt_playback_proxy(SimpleNamespace(tier=int(w.proxy.currentData() or 1)), ms)
 
+    def miss(self, w, ms=60, frames=None):
+        """Feed frames that miss the frame time until the tier drops; returns how many it took."""
+        for count in range(1, (frames or 4 * w.ADAPT_DOWN_WINDOW) + 1):
+            if self.frame(w, ms):
+                return count
+        return None
+
     def test_cold_frames_do_not_move_the_tier(self):
         w = self.start()
         self.assertEqual([self.frame(w, 900), self.frame(w, 400)], [False, False])
         self.assertEqual(int(w.proxy.currentData()), 1)
-        self.assertTrue(self.frame(w, 400))
+        self.assertEqual([self.frame(w, 400) for _ in range(w.ADAPT_SEVERE_FRAMES)], [False, False, True])
         self.assertEqual(int(w.proxy.currentData()), 2)
         w.playing = False
 
-    def test_each_new_tier_gets_one_cold_frame_and_a_miss_steps_down_again(self):
+    def test_each_new_tier_gets_one_cold_frame_and_a_run_of_misses_steps_down_again(self):
         w = self.start()
         w._adapt_warm = 0
-        self.assertTrue(self.frame(w, 60))
+        self.assertEqual(self.miss(w), w.ADAPT_DOWN_MIN_FRAMES)
         self.assertFalse(self.frame(w, 300))            # the first frame at the new tier: not counted
-        self.assertTrue(self.frame(w, 60))
+        self.assertEqual(self.miss(w), w.ADAPT_DOWN_MIN_FRAMES)
         self.assertEqual(int(w.proxy.currentData()), 4)
+        w.playing = False
+
+    def test_one_slow_picture_does_not_drop_a_tier(self):
+        w = self.start()
+        w._adapt_warm = 0
+        for ms in [30] * 5 + [150] + [30] * 6 + [90, 30, 30, 30] + [30] * 20:
+            self.assertFalse(self.frame(w, ms))
+        self.assertEqual(int(w.proxy.currentData()), 1)
+        w.playing = False
+
+    def test_a_picture_far_over_the_frame_time_drops_the_tier_after_three(self):
+        w = self.start()
+        w._adapt_warm = 0
+        self.assertEqual(self.miss(w, ms=130), w.ADAPT_SEVERE_FRAMES)
+        self.assertEqual(int(w.proxy.currentData()), 2)
+        w.playing = False
+
+    def test_a_cube_that_holds_the_rate_at_full_size_stays_at_full_size_for_ten_seconds(self):
+        # The pictures' times in milliseconds as the cube at 1920 x 1080 measured on the RTX 3080 Ti (docs/PERFORMANCE.md):
+        # median 37, one in five over the 41.7 ms frame time, a spike near 70.
+        w = self.start()
+        w._adapt_warm = 0
+        pattern = [34, 36, 37, 33, 44, 35, 38, 36, 70, 37, 45, 34, 36, 41, 52, 35, 37, 39, 33, 47, 36, 38, 35, 72]
+        self.assertGreater(sum(ms > 1000 / 24 for ms in pattern) / len(pattern), 0.15)
+        self.assertLess(statistics.median(pattern), 1000 / 24)
+        pictures = 10 * 24
+        for index in range(pictures):
+            self.assertFalse(self.frame(w, pattern[index % len(pattern)]), f"picture {index}")
+        self.assertEqual(int(w.proxy.currentData()), 1)
+        self.assertIsNone(w.playback_auto_proxy_index)
         w.playing = False
 
     def test_the_tier_climbs_back_after_a_run_of_frames_with_room_and_stops_at_the_floor(self):
         w = self.start()
         w._adapt_warm = 0
-        self.assertTrue(self.frame(w, 60))
+        self.assertTrue(self.miss(w))
         self.assertTrue(self.frame(w, 60) is False)      # cold frame at tier 2
         results = [self.frame(w, 10) for _ in range(w.ADAPT_UP_FRAMES)]
         self.assertTrue(results[-1])
@@ -685,7 +726,7 @@ class PlaybackTierAdaptationTests(Base):
     def test_frames_without_enough_room_keep_the_tier_and_a_slow_one_resets_the_count(self):
         w = self.start()
         w._adapt_warm = 0
-        self.assertTrue(self.frame(w, 60))
+        self.assertTrue(self.miss(w))
         self.frame(w, 10)
         for _ in range(3 * w.ADAPT_UP_FRAMES):
             self.assertFalse(self.frame(w, 30))          # inside the frame time but over 1/2.5 of it
@@ -697,11 +738,31 @@ class PlaybackTierAdaptationTests(Base):
         self.assertEqual(int(w.proxy.currentData()), 2)
         w.playing = False
 
+    def test_a_climb_that_is_undone_waits_twice_as_long_for_the_next(self):
+        # A scene that fits half size with room to spare but not full size: it must not climb and fall every second.
+        w = self.start()
+        w._adapt_warm = 0
+        self.assertTrue(self.miss(w))
+        self.frame(w, 10)                                # cold frame at tier 2
+        self.assertEqual(self.run_until_climb(w), w.ADAPT_UP_FRAMES)
+        self.assertEqual(int(w.proxy.currentData()), 1)
+        self.frame(w, 10)                                # cold frame at tier 1
+        self.assertTrue(self.miss(w))                    # full size does not fit: back down
+        self.frame(w, 10)
+        self.assertEqual(self.run_until_climb(w), 2 * w.ADAPT_UP_FRAMES)
+        w.playing = False
+
+    def run_until_climb(self, w, limit=400):
+        for count in range(1, limit + 1):
+            if self.frame(w, 10):
+                return count
+        return None
+
     def test_a_tier_the_artist_chose_is_left_alone(self):
         w = self.start()
         w.proxy.setCurrentIndex(w.proxy.findData(2))
         w._adapt_warm = 0
-        for ms in (500, 500, 5, 5):
+        for ms in (500, 500, 500, 500, 5, 5):
             self.assertFalse(self.frame(w, ms))
         self.assertEqual(int(w.proxy.currentData()), 2)
         w.playing = False

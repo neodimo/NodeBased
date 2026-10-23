@@ -12,6 +12,7 @@ import math
 import numpy as np
 import os
 import re
+import statistics
 from pathlib import Path
 import sys
 import tempfile
@@ -1681,7 +1682,9 @@ class Viewer(PanZoomView):
         # before each paint so pixel grabs never sample the controls themselves.
         self._place_pixel_readout()
         self.report_zoom()
+        _trace_mark("paint_begin")
         super().paintEvent(event)
+        _trace_mark("paint_end")
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -8807,6 +8810,9 @@ class Window(QMainWindow):
         self._adapt_warm = 0
         self._adapt_headroom = 0
         self._adapt_floor_tier = 1
+        self._adapt_recent = []
+        self._adapt_up_frames = self.ADAPT_UP_FRAMES
+        self._adapt_climbed_from = None
         # Frame the properties panel was last built for. Animated knobs read their value at the
         # playhead, so the panel has to be rebuilt when that moves; this is how the rebuild is
         # kept to actual frame changes. See refresh_animated_panel.
@@ -9807,6 +9813,9 @@ class Window(QMainWindow):
             self._adapt_floor_tier = int(self.proxy.currentData() or 1)
             self._adapt_warm = self.ADAPT_WARM_FRAMES
             self._adapt_headroom = 0
+            self._adapt_recent = []
+            self._adapt_up_frames = self.ADAPT_UP_FRAMES
+            self._adapt_climbed_from = None
             # One precise wakeup per target frame is enough: playback_tick follows the monotonic
             # clock and bounds the playhead to completed renders. Waking twice per frame (500/fps)
             # adds UI/event-loop work without improving picture cadence, and the overhead costs
@@ -9911,9 +9920,21 @@ class Window(QMainWindow):
     # tier up costs two to three times the pixels, so the room has to hold that.
     ADAPT_UP_FACTOR = 2.5
     ADAPT_UP_FRAMES = 12
+    # A tier is dropped when the middle picture of the last ADAPT_DOWN_WINDOW took longer than the frame time (a rate that is
+    # missed; 10/22 the cube at full size, which holds 23.9 fps, stepped down for about one picture in five on single slow
+    # frames), once ADAPT_DOWN_MIN_FRAMES of them are in. Pictures that are far over the frame time (a scene
+    # at a tenth of the rate) do not wait for the median: ADAPT_SEVERE_FRAMES in a row over ADAPT_SEVERE_FACTOR times it drop
+    # the tier at once.
+    ADAPT_DOWN_WINDOW = 12
+    ADAPT_DOWN_MIN_FRAMES = 6
+    ADAPT_SEVERE_FACTOR = 2.0
+    ADAPT_SEVERE_FRAMES = 3
+    # A climb back that is undone (the tier it left is the one the next drop lands on) doubles the run of frames with room the
+    # next climb needs, up to ADAPT_UP_FRAMES_MAX, so a scene that fits one tier but not the one above does not alternate.
+    ADAPT_UP_FRAMES_MAX = 96
 
     def _adapt_playback_proxy(self, request, elapsed_ms):
-        """Lower an automatic playback tier when the measured render misses the chosen fps, and climb back one tier (never above
+        """Lower an automatic playback tier when the measured renders miss the chosen fps, and climb back one tier (never above
         the one playback started at) when frames have had room to spare for a while."""
         if (not self.playing or not self.playback_proxy.isChecked()
                 or int(request.tier) != int(self.proxy.currentData() or 1)):
@@ -9924,24 +9945,34 @@ class Window(QMainWindow):
         fps = max(1.0, float(self.dispatcher.document["time"].get("fps", 24.0)))
         budget = 1000.0 / fps
         current_tier = int(self.proxy.currentData() or 1)
+        recent = self._adapt_recent
+        recent.append(float(elapsed_ms))
+        del recent[:-self.ADAPT_DOWN_WINDOW]
         if float(elapsed_ms) <= budget:
             if (self.playback_auto_proxy_index is not None and current_tier > self._adapt_floor_tier
                     and float(elapsed_ms) * self.ADAPT_UP_FACTOR < budget):
                 self._adapt_headroom += 1
-                if self._adapt_headroom >= self.ADAPT_UP_FRAMES:
+                if self._adapt_headroom >= self._adapt_up_frames:
                     previous = max(tier for tier in PROXY_TIERS if tier < current_tier)
                     index = self.proxy.findData(previous)
                     if index >= 0:
                         self._adapt_headroom = 0
                         self._adapt_warm = 1
+                        self._adapt_recent = []
+                        self._adapt_climbed_from = current_tier
                         self.proxy.setCurrentIndex(index)
                         self.statusBar().showMessage(f"Playback proxy 1/{previous}: room to spare at {fps:g} fps")
                         self.update_realtime_light()
                         return True
             else:
                 self._adapt_headroom = 0
+        else:
+            self._adapt_headroom = 0
+        severe = (len(recent) >= self.ADAPT_SEVERE_FRAMES
+                  and min(recent[-self.ADAPT_SEVERE_FRAMES:]) > self.ADAPT_SEVERE_FACTOR * budget)
+        missing = (len(recent) >= self.ADAPT_DOWN_MIN_FRAMES and statistics.median(recent) > budget)
+        if not (severe or missing):
             return False
-        self._adapt_headroom = 0
         original_index = self.playback_auto_proxy_index
         if original_index is None:
             # Preserve an explicit proxy choice; adaptation owns only the artist's Full choice.
@@ -9954,8 +9985,12 @@ class Window(QMainWindow):
         next_index = self.proxy.findData(next_tier)
         if next_index < 0:
             return False
+        if self._adapt_climbed_from == next_tier:
+            self._adapt_up_frames = min(self._adapt_up_frames * 2, self.ADAPT_UP_FRAMES_MAX)
+        self._adapt_climbed_from = None
         self.playback_auto_proxy_index = original_index
         self._adapt_warm = 1
+        self._adapt_recent = []
         self.proxy.setCurrentIndex(next_index)
         self.statusBar().showMessage(
             f"Playback proxy 1/{next_tier}: adapting to {fps:g} fps target")

@@ -65,6 +65,7 @@ def parse_args(argv=None):
     p.add_argument("--out", default="", help="JSON file (or a directory: one file per scene)")
     p.add_argument("--field", action="store_true", help="print the compact field JSON (for a machine you cannot reach)")
     p.add_argument("--stages", action="store_true", help="record the per-stage timeline")
+    p.add_argument("--events", default="", help="write the raw playback trace events (monotonic seconds, thread, label) to this JSON file")
     p.add_argument("--self-check", action="store_true")
     p.add_argument("--splats", type=int, default=20000)
     p.add_argument("--once", action="store_true",
@@ -259,6 +260,8 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     window.toggle_playback(False)
     stopped = time.monotonic()
     events = playback_trace.disable()
+    if args.events:
+        Path(args.events).write_text(json.dumps(events))
     settle_s, settle_status = None, ""
     deadline = stopped + args.settle_wait
     while time.monotonic() < deadline:
