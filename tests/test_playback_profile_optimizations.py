@@ -46,6 +46,14 @@ class SmallRadiusBlurTests(unittest.TestCase):
                 np.testing.assert_array_equal(Evaluator._box_blur_axis(frame, 5, axis),
                                               self.reference(frame, 5, axis))
 
+    def test_wide_radius_prefix_sum_does_not_concatenate_a_second_full_buffer(self):
+        frame = np.random.default_rng(29).random((13, 17, 4), dtype=np.float32)
+        expected = self.reference(frame, 5, axis=1)
+        with patch("nodebased.imaging.np.concatenate", side_effect=AssertionError(
+                "wide blur should write its prefix sum into one buffer")):
+            actual = Evaluator._box_blur_axis(frame, 5, axis=1)
+        np.testing.assert_array_equal(actual, expected)
+
     def test_small_radius_path_does_not_zero_fill_its_accumulator(self):
         frame = np.random.default_rng(28).random((13, 17, 4), dtype=np.float32)
         expected = self.reference(frame, 2, axis=1)

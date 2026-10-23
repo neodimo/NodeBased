@@ -4403,10 +4403,13 @@ class Evaluator:
             return result
         pad = [(0, 0)] * frame.ndim
         pad[axis] = (r, r)
-        padded = np.pad(frame, pad, mode="edge").astype(np.float64)
-        zero_shape = list(padded.shape)
-        zero_shape[axis] = 1
-        cumsum = np.concatenate([np.zeros(zero_shape, dtype=np.float64), np.cumsum(padded, axis=axis)], axis=axis)
+        padded = np.pad(frame, pad, mode="edge")
+        prefix_shape = list(padded.shape)
+        prefix_shape[axis] += 1
+        cumsum = np.zeros(prefix_shape, dtype=np.float64)
+        prefix = [slice(None)] * frame.ndim
+        prefix[axis] = slice(1, None)
+        np.cumsum(padded, axis=axis, dtype=np.float64, out=cumsum[tuple(prefix)])
         window = 2 * r + 1
         hi = [slice(None)] * frame.ndim
         hi[axis] = slice(window, window + n)
