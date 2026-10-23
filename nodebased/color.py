@@ -86,7 +86,7 @@ def config_view_processor(view):
     return config().getProcessor(transform).getDefaultCPUProcessor()
 
 
-def to_working(rgba, space, associated=False):
+def to_working(rgba, space, associated=False, *, in_place=False):
     """Convert a decoded frame into the premultiplied ACEScg working representation.
 
     The unpremult/premult round trip below operates on the *whole* contiguous ``result``
@@ -97,18 +97,25 @@ def to_working(rgba, space, associated=False):
     single ``(H, W, 1)`` scale across RGBA keeps that loop contiguous without allocating two
     additional full-size four-channel factor arrays. Alpha is restored after the final multiply.
     """
-    result = np.array(rgba, dtype=np.float32, copy=True, order='C')
-    alpha = result[..., 3:4].copy()
+    source = np.asarray(rgba)
+    can_reuse = (in_place and source.dtype == np.float32 and source.flags.c_contiguous
+                 and source.flags.writeable)
+    result = source if can_reuse else np.array(rgba, dtype=np.float32, copy=True, order='C')
     if space not in INPUT_SPACES:
         raise ValueError(f'Unknown input color space: {space}')
-    if associated:
+    opaque = bool(np.all(result[..., 3:4] == 1.0))
+    alpha = None if opaque else result[..., 3:4].copy()
+    if associated and not opaque:
         scale = np.where(np.abs(alpha) > 1e-8, alpha, 1).astype(np.float32)
         result /= scale
     if space not in PASSTHROUGH:
         processor(INPUT_SPACES[space], WORKING).applyRGBA(result)
-    channel_scale = scale if associated else alpha
-    result *= channel_scale
-    result[..., 3:4] = alpha
+    if opaque:
+        result[..., 3:4] = 1.0
+    else:
+        channel_scale = scale if associated else alpha
+        result *= channel_scale
+        result[..., 3:4] = alpha
     return result
 
 

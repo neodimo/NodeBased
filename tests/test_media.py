@@ -30,6 +30,16 @@ def write_exr_raw(path, pixels, channelnames, x=0, y=0, full=None, attributes=()
 
 
 class ColorTests(unittest.TestCase):
+    def test_opaque_ingest_can_convert_its_owned_buffer_in_place(self):
+        source = np.random.default_rng(504).random((13, 17, 4), dtype=np.float32)
+        source[..., 3] = 1.0
+        expected = to_working(source, 'Linear Rec.709', associated=True)
+        owned = source.copy()
+        actual = to_working(owned, 'Linear Rec.709', associated=True, in_place=True)
+        self.assertIs(actual, owned)
+        np.testing.assert_array_equal(actual, expected)
+        np.testing.assert_array_equal(source[..., 3], 1.0)
+
     def test_srgb_decode_matches_transfer_function(self):
         # Neutrals are the only values where the OETF can be checked on its own: AP1 and
         # Rec.709 share a neutral axis, so the gamut half of the conversion is a no-op here.

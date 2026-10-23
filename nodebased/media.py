@@ -370,7 +370,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
                 rgba[..., 3] = pixels[..., alpha - first]
             space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
             associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
-            rgba = to_working(rgba, space, associated)
+            rgba = to_working(rgba, space, associated, in_place=True)
         # Both windows in display-window-relative coordinates: the display window is rebased to
         # (0, 0) and the data window keeps its offset, which may be negative or reach past w/h.
         display = Region(0, 0, w, h)
@@ -473,7 +473,7 @@ def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer=
             rgba[..., 3] = pixels[..., alpha - first]
         space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
         associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
-        rgba = to_working(rgba, space, associated)
+        rgba = to_working(rgba, space, associated, in_place=True)
         oy, ox = overlap.y - requested.y, overlap.x - requested.x
         out[oy:oy + overlap.height, ox:ox + overlap.width] = rgba
         return Raster(out, requested, display)
