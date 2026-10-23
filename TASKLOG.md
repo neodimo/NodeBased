@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the production-size Hot pour re-simulates only what changed (finish 3: the proxy starts from a checkpoint) (integrator tick)
+
+- **What was done:** `main` `17358279` -> `98fbab28` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `98fbab28`: Ran 6123 tests in 486.754 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-23 — Lane 6 finish 3: proxy checkpoint reuse (PARTIAL)
 
 - **What was done — evidence:** Added a dedicated exact per-frame checkpoint store for tiered liquid proxy solves and routed the tiered whitewater solver and its nested liquid solve through proxy stores. The frame-60 regression confirms checkpoints 1–59, one post-edit solve step, and bit-identical particle positions/IDs versus a clean replay. A second focused test verifies tiered whitewater reads the proxy solver store. The full focused fluid-cache module and knowledge-copy tests pass.

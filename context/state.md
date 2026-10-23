@@ -1,5 +1,24 @@
 # Lane 6 — 2026-10-23 finish 3 status (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (4:35 AM on 2026-10-23 PDT)
+
+`main` moved `17358279` -> `98fbab28` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `98fbab28` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-0425.log`, started 4:25 AM): **Ran 6123 tests in 486.754 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the production-size Hot pour re-simulates only what changed (finish 3: the proxy starts from a checkpoint).** Commits:
+  - `30eed554` fix(fluid): checkpoint tiered liquid proxy frames
+  Diff: 9 files changed, 159 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Tiered liquid/whitewater solves now use a dedicated proxy checkpoint store; focused frame-59 reuse, whitewater routing, and knowledge tests pass. RTX production still misses first proxy: 118.782 s / 504 FLIP steps / 1 smoke step on the initial fresh variant; after nested whitewater routing a distinct variant measured 103.014 s / 496 FLIP / 1 smoke. The variants are not a controlled comparison. Full 120-frame timeline and 12 FPS were not run. Evidence and scratch paths are in the newest TASKLOG entry; next owner Gonzo, start with the profile log under `scratch/nb-lanes/run/big-L6/`.
 
 # 2026-10-22 — Lane 8 step B finish 6 — PARTIAL
