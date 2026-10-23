@@ -9821,6 +9821,7 @@ class Window(QMainWindow):
             # picture catches up with the playhead (a cached frame is instant) instead of lagging it by one.
             catch_up = (self.pipeline_playback and not fluid_project and self.playback_auto_proxy_index is None
                         and getattr(self, "_displayed_frame", None) not in (None, self.dispatcher.document["time"]["current"]))
+            tier_before_stop = self.proxy.currentIndex()
             if self.playback_auto_proxy_index is not None:
                 if fluid_project:
                     self.proxy.blockSignals(True)
@@ -9830,7 +9831,13 @@ class Window(QMainWindow):
                     self.proxy.setCurrentIndex(self.playback_auto_proxy_index)
                 self.playback_auto_proxy_index = None
             self.update_realtime_light()
-            if catch_up:
+            if (not fluid_project and playing_document(self.dispatcher.document) is not self.dispatcher.document
+                    and self.proxy.currentIndex() == tier_before_stop):
+                # What was on screen is a playback frame (fewer samples, the shadows between splats and meshes left out): draw the
+                # frame at the node's own settings. A stop that puts the artist's tier back already does, through the tier
+                # change above (coarse first, then the chosen tier).
+                self.request_preview()
+            elif catch_up:
                 QTimer.singleShot(0, self._catch_up_picture)
             if fluid_project:
                 if stopping_proxy:

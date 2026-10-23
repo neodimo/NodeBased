@@ -219,6 +219,14 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         shown_tiers.append((time.monotonic(), int(scale)))
         return real_show(image, scale, *rest, **more)
     window._show_image = show_image
+    readies = []                          # (monotonic time, request.playing, request.display, request.tier, picture shown?, status)
+
+    def ready(payload, frame, image, status, render_region=None):
+        request = payload[0]
+        readies.append((time.monotonic(), bool(request.playing), bool(request.display), int(request.tier), frame is not None, status))
+        return window.__class__.preview_ready(window, payload, frame, image, status, render_region)
+    window.signals.finished.disconnect()
+    window.signals.finished.connect(ready)
     if args.view:
         window.display_view.setCurrentText(args.view)
     window.agent_command({"op": "view", "id": view})
@@ -255,11 +263,13 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     deadline = stopped + args.settle_wait
     while time.monotonic() < deadline:
         spin(0.02)
-        if (not window.busy and not len(window.preview_queue) and int(window.proxy.currentData() or 1) == 1
-                and any(t >= stopped and tier == 1 for t, tier in shown_tiers)):
-            settle_s = round(max(t for t, tier in shown_tiers if t >= stopped and tier == 1) - stopped, 2)
+        # the full-quality picture: a finished request that is not a playing one, drawn at the artist's own tier
+        refined = [r for r in readies if r[0] >= stopped and not r[1] and r[2] and r[3] == 1 and r[4]]
+        if refined and not window.busy and not len(window.preview_queue):
+            settle_s, settle_status = round(refined[-1][0] - stopped, 2), refined[-1][5]
             break
-    settle_status = window.statusBar().currentMessage()
+    if settle_s is None:
+        settle_status = window.statusBar().currentMessage()
     spin(0.3)
     times = [t for t in list(window.playback_shown_times) if start <= t <= start + elapsed]
     intervals = [(b - a) * 1000 for a, b in zip(times, times[1:])]

@@ -703,6 +703,41 @@ class PlaybackTierAdaptationTests(Base):
         w.playing = False
 
 
+class RefineOnStopTests(Base):
+    """A stop draws the frame at the node's own settings when the picture on screen was a playback frame."""
+
+    def stop_requests(self, commands, tier=None):
+        w = self.open_window((1280, 720))
+        w.agent_command({"op": "batch", "commands": commands})
+        self.assertTrue(wait_until(lambda: not w.busy and not len(w.preview_queue)))
+        if tier is not None:
+            w.proxy.setCurrentIndex(w.proxy.findData(tier))
+            self.assertTrue(wait_until(lambda: not w.busy and not len(w.preview_queue)))
+        w.set_time(first=1, last=24, current=1, fps=24.0)
+        w.toggle_playback(True)
+        seen = []
+        real = w.request_preview
+        w.request_preview = lambda *a, **k: seen.append((a, k)) or real(*a, **k)
+        w.toggle_playback(False)
+        return seen
+
+    def test_a_render3d_at_two_samples_is_redrawn_when_playback_stops(self):
+        commands = [{"op": "create", "type": "Cube3D", "id": "cube", "params": {}},
+                    {"op": "create", "type": "Scene3D", "id": "scene", "params": {}},
+                    {"op": "create", "type": "Camera3D", "id": "camera", "params": {}},
+                    {"op": "create", "type": "Render3D", "id": "render", "params": {"width": 64, "height": 36, "samples": 2,
+                                                                                     "render_backend": "auto"}},
+                    {"op": "connect", "id": "scene", "input": "object0", "source": "cube"},
+                    {"op": "connect", "id": "render", "input": "scene", "source": "scene"},
+                    {"op": "connect", "id": "render", "input": "camera", "source": "camera"},
+                    {"op": "view", "id": "render"}]
+        self.assertEqual(len(self.stop_requests(commands)), 1)
+
+    def test_a_comp_with_no_playback_frames_of_its_own_asks_for_nothing(self):
+        commands = [{"op": "create", "type": "Constant", "id": "flat", "params": {}}, {"op": "view", "id": "flat"}]
+        self.assertEqual(self.stop_requests(commands), [])
+
+
 class TimeRowTierTests(Base):
     """The time row says which resolution tier is on screen while playing."""
 
