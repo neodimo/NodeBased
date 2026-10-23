@@ -126,9 +126,16 @@ class SplatCloud:
         return covariance_upper(self.covariance())
 
     def normals(self):
-        """Shortest local axis in world space; ties choose the first scale axis."""
-        r = _rotation(self.rotations)
-        return r[np.arange(len(self)), :, self.scales.argmin(axis=1)].astype(np.float32)
+        """Shortest local axis in world space; ties choose the first scale axis. A cloud is immutable, so the
+        axes are worked out once (they were 1.9 ms of every played frame of a relit 20,000-splat cloud, 10/23); the
+        caller gets its own copy."""
+        cached = self.__dict__.get('_normals')
+        if cached is None:
+            r = _rotation(self.rotations)
+            cached = r[np.arange(len(self)), :, self.scales.argmin(axis=1)].astype(np.float32)
+            cached.flags.writeable = False
+            object.__setattr__(self, '_normals', cached)
+        return cached.copy()
 
     def aabbs(self, k=3.0):
         """Exact ellipsoid AABBs, half extent k*sqrt(diag(covariance))."""

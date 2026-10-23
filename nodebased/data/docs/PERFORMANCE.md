@@ -72,9 +72,9 @@ Targets:
   laptop stand-in targets at least 12 fps; its latest result is 3.473 fps. At 4K, the target is
   24 fps on an automatic reduced tier and a full-resolution still within one second after stop;
   the RTX result is pending.
-- A 3D comp under an animated camera plays at the comp's rate on the RTX 3080 Ti: the cube at full resolution, the
-  furnished room with a few pictures at half resolution, the mixed mesh and splat scene at a lower tier that refines
-  to the full picture within 3 s of stopping (see "Lane 4 step notes", 3D playback at the comp's rate).
+- A 3D comp under an animated camera plays at the comp's rate on the RTX 3080 Ti at full resolution (1920 x 1080): the cube, the
+  furnished room and, since 10/23, the mixed mesh and splat scene, which refines to its full-quality picture within 2 s of
+  stopping (see "Lane 4 step notes", 3D playback at full size and the mixed scene at full size).
 
 What changed, with the measurement from before and after:
 
@@ -571,15 +571,17 @@ conversion that cost as much as the evaluation and competed for the same process
   quantise: `to_qimage`'s order). It is read back through the same buffer as the float frame (8 MB beside 33 MB). The float frame is
   untouched. `gpu3d.render` registers the picture against the array it returns; `to_qimage` asks the registry first, by identity, and
   builds the picture itself when nothing matches. The window arms it for played frames whose display is the plain case (exposure 0, RGB,
-  gamma 1, no checker or clipping warning, no compare buffer). Not made: a frame with a background colour or supersampling, a scene with
-  splats, a visible environment or area light (something is drawn over the card's frame), a software adapter, or a card that cannot build the
-  shader; the old conversion runs for those. `NODEBASED_CARD_PICTURE=0` turns it off.
+  gamma 1, no checker or clipping warning, no compare buffer). Not made: a frame with a background colour or supersampling, a visible
+  environment or area light (something is drawn over the card's frame), a software adapter, a card that cannot build the
+  shader, or a scene with splats on the old route (the splat layer is now drawn on the card, see the mixed scene at full size below); the
+  old conversion runs for those. `NODEBASED_CARD_PICTURE=0` turns it off.
 - Agreement with the processor: at most 1 of 255 on every channel, on the RTX 3080 Ti, the Radeon 8060S and llvmpipe (`tests/test_3d_card_picture.py`),
   and 0 or 1 level between the picture on screen and the processor's picture of the same float frame in every benchmark run
   (`picture_check` in the JSON).
 - A scene with splats got 5 times slower in its splat layer (mixed scene 7.3 to 2.8 fps) when the picture's 8 MB of readback
-  memory existed beside it; the cause is not found (an extra persistent readback buffer reproduced it, and so did enlarging the existing
-  one; an extra texture alone did not). Such frames get no picture, which is also right because the splat layer changes the frame afterwards.
+  memory existed beside it. Found on 10/23 (mixed scene lane): a MAP_READ buffer of about 24 MB or more kept alive makes every other
+  readback on the RTX 3080 Ti, each created and destroyed per call, take about 3 times as long (see the mixed scene at full size below).
+  At the time such frames were given no picture; that has changed.
 
 Part 2, ACES 2.0 on its own (`tools/benchmark_card_picture.py`, the card's share from submit to the picture mapped, 1920 x 1080,
 the float frame already on the card; `benchmarks/3d-playback/full-size-1023/card-picture-pass.jsonl`): RTX 3080 Ti 3.4 ms with ACES 2.0,
@@ -618,6 +620,69 @@ picture pass should take about 7 to 8 ms and the cube's about 3 ms, with the pre
 stop near 40 fps on Xvfb, where presenting a picture costs about 20 ms of the Qt thread). Run
 `python tools/benchmark_3d_playback.py --scene cube,furnished,mixed --stages` there and read `fps`, `interval_ms`, `frame_timeline` and `picture_check`.
 
-Not done: the mixed scene at full size (7.8 fps on the RTX) is bound by the splat layer, which is not on the card's picture path; the
-Windows laptop is not measured.
+Not done at the time: the mixed scene at full size (7.8 fps on the RTX) was bound by the splat layer, which was not on the card's
+picture path; that is the next section. The Windows laptop is not measured.
 
+### Mixed mesh and splat scene at full size (10/23, step A of the mixed lane)
+
+Gate: the mixed scene (the furnished room, a 20,000-splat relit shell, one shadowing point light; `tools/benchmark_3d_playback.py --scene
+mixed`) plays at 24 fps at 1920 x 1080 under the animated camera with "Proxy while playing" off on the RTX 3080 Ti, shows its full node
+settings within 3 s of the stop, and the cube and the furnished room stay at 24 fps. Results: `benchmarks/3d-playback/mixed-1023/<adapter>-proxy-off|on/`,
+the timeline in `benchmarks/3d-playback/mixed-1023/stages-rtx.json` (`tools/profile_3d_mixed_stages.py`, both routes). The benchmark's
+mixed scene has no smoke; a volume together with splats is CPU-only (`gpu3d.render` raises Unsupported), so the timeline has no smoke row.
+
+Part 1, where a 89 ms frame went (RTX 3080 Ti, 1080p, 1 sample, medians over 30 frames, processor route = `gpu3d.SPLATS_ON_CARD = False`):
+
+| Stage, ms | Processor route | Card route |
+|---|---:|---:|
+| Mesh render (colour pass, plus a second depth pass for the splats' occlusion) with readback | 30.9 | 21.1 for the whole call |
+| Splat sort (back to front, on the processor, 20,000 splats) | 1.1 | 0.9 |
+| Splat colours (relit on the processor) | 3.2 | 3.0 |
+| Splat layer: depth texture upload (8 MB), projection, raster, 33 MB readback | 34.9 (includes the sort and colours) | drawn in the mesh frame's submission |
+| Compositing the splat layer over the meshes (NumPy on the processor) and the rest | 23.5 | 0 |
+| Readback of the finished float frame | included above | 1.8 |
+| Display picture (conversion stage) | 57.9 | 0.6 (made by the card) |
+| Whole render call / frame as the pipeline sees it | 89.3 / 147 | 21.4 / 22 |
+
+The splat sort was never the cost (1 ms at 20,000 splats); the layer left the card as a 33 MB float picture of its own, the mesh depth went
+up to the card again as an 8 MB texture, the composite ran on the processor and the processor then converted the frame to 8 bits.
+
+Part 2, the layer on the card's picture path. `gpusplat.prepare_on_card` projects the splats in a compute pass and draws them over the mesh
+pass's colour target, back to front with premultiplied over blending (over is associative, so blending onto the meshes is the layer
+composited over them). The splat shader reads the mesh pass's own depth buffer (a `depth32float` texture also bound for sampling) and
+turns it back into the camera-forward distance, `near * far / (far - d * (far - near))`, where the raster shader wrote
+`far * (z - near) / ((far - near) * z)`; nothing was drawn where it reads 1. No depth pass, no readback of the layer, no upload of the depth.
+The meshes are submitted first and the processor prepares the layer (order, colours, buffers: 4.9 ms) while the card draws them; the layer
+and the copies out follow in a second submission over the same frame. The display picture is made in that submission, as for any played
+frame. `SplatCloud.normals()` is kept (a cloud is immutable) and was 1.9 ms of every relit frame. Used for opaque meshes with splats,
+one band, a plain background, no volume, every adapter; translucent meshes with splats still go to the ray tracer's layer merge and a
+shadowing light with splats outside playback still goes to the ray tracer (unchanged). `gpu3d.SPLATS_ON_CARD = False` returns the layer to the processor.
+
+The cause of the 10/22 "5 times slower with a picture buffer" finding: any MAP_READ buffer of about 24 MB or more kept alive on the
+RTX 3080 Ti makes the other readbacks (each creates, maps and destroys its own buffer) take about 3 times as long. It showed again as the full-quality picture
+after a stop (the ray tracer reads back in 16 bands) taking 5.6 s instead of 1.9 s once a played frame's 25 MB readback buffer
+(16.6 MB of half-float colour and the 8 MB picture) stayed alive. `gpu3d._release_staging` lets go of that buffer before a ray-traced render; a played
+frame allocates it once again.
+
+Part 3, the gates (frames per second shown; interval p95 in ms in brackets; every row 1920 x 1080, 10 s, Xvfb with software OpenGL):
+
+| Case | RTX proxy off | RTX proxy on | Radeon off | Laptop stand-in off | llvmpipe off / on | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| Cube | 23.93 (45) | 23.85 (44) | 23.87 (44) | 23.85 (45) | 23.90 (50) / 23.92 (49) | 24 at full size |
+| Furnished room | 23.93 (45) | 23.90 (44) | 23.88 (44) | 23.79 (46) | 2.98 / 20.6 (mostly 1/8) | 24 at full size |
+| Mixed mesh and splat scene | 23.99, 23.69, 23.69 (45 to 47) | 23.78 (45), all pictures full size | 23.82 (44) | 23.88 (45) | 2.39 / 11.0 (mostly 1/8) | 24 at full size |
+
+Before: mixed 7.77 on the RTX (p95 135), 10.42 on the Radeon, 9.83 on the laptop stand-in, 9.23 on llvmpipe with the proxy on
+(`benchmarks/3d-playback/full-size-1023`). The mixed scene's three RTX runs scatter between 23.7 and 24.0 (one to three of 240
+pictures late per run) where the cube and the furnished room read 23.9; its node evaluation is 25 ms against 21 ms for the furnished room. The full-quality picture
+is on screen 1.8 s after a stop on the RTX (gate 3 s), 0.9 s on the Radeon and 0.8 s on the laptop stand-in. The furnished room on llvmpipe is a software
+figure and no gate. Picture on screen against the processor's picture of the same float frame: 0 or 1 level of 255 in every run (`picture_check`).
+The laptop stand-in is the Radeon with `taskset -c 0-3` and `QT_SCALE_FACTOR=2` on this workstation, not the Windows laptop with the Iris Xe and the RTX 4070 (not measured).
+
+The A6000 (estimate, not measured): the RTX's 19 ms of "GPU render and wait" holds roughly 9 ms of the 25 MB of half-float frame and picture crossing this
+machine's USB4 link (about 2.7 GB/s, an inference from the link speed) and the mesh and splat drawing. On a card in a PCIe 4.0 x16 slot the transfer is about a tenth of that, so the
+mixed frame's evaluation should be about 12 to 15 ms and the Qt thread's presentation the bound, as for the other scenes. Run
+`python tools/benchmark_3d_playback.py --scene cube,furnished,mixed --stages` there.
+
+Not done: smoke together with splats (CPU-only), translucent meshes with splats on the card (they use the ray tracer's layer merge), the
+mixed scene's 2-sample full-quality frame still reads back the layer through the ray tracer, the Windows laptop.

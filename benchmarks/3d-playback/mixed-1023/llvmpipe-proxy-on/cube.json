@@ -1,0 +1,91 @@
+{
+ "scene": "cube",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 10.04,
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "platform": "xcb",
+ "display": ":147",
+ "comp_fps": 24.0,
+ "shown": 240,
+ "fps": 23.92,
+ "interval_ms": {
+  "n": 239,
+  "p50": 41.64,
+  "p95": 48.65,
+  "p99": 51.55,
+  "max": 52.08,
+  "mean": 41.43
+ },
+ "render_ms_status": {
+  "n": 31,
+  "p50": 29,
+  "p95": 37,
+  "p99": 45,
+  "max": 45,
+  "mean": 28.42
+ },
+ "dropped": 0,
+ "status": "1920 \u00d7 1080  \u00b7  22 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 0",
+ "proxy": "on",
+ "tier_at_end": 1,
+ "tier_pictures": {
+  "1": 226,
+  "2": 16
+ },
+ "fps_at_end_tier": 22.59,
+ "time_row": "real time",
+ "settle_s": 0.14,
+ "settle_status": "1920 \u00d7 1080  \u00b7  99 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU",
+ "worker_jobs": 243,
+ "frame_timeline": {
+  "frames": 241,
+  "stages_ms": {
+   "scheduling wait (request to worker)": 3.293,
+   "setup (region, display cache lookup)": 0.344,
+   "node evaluation": 8.662,
+   "frame waits for conversion (cache put, stage pickup)": 0.357,
+   "display conversion": 20.121,
+   "picture hand-off to the Qt queue": 0.008,
+   "Qt queue delivery": 1.252,
+   "Viewer present": 2.308
+  },
+  "latency_ms": 36.345,
+  "transport_wait_ms": 6.485,
+  "overlap_ms": 1.498,
+  "accounted_interval_ms": 41.332,
+  "interval_ms": 41.333,
+  "sum_of_stage_means_ms": 36.345
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 0
+ },
+ "card_pictures": {},
+ "stage_p50_ms": {
+  "worker start to hand-over (whole frame)": 30.19,
+  "convert and emit": 19.89,
+  "GPU render and wait": 4.39,
+  "hand-over to the display": 2.86,
+  "readback copy": 2.35,
+  "scene evaluation": 1.13,
+  "render encode": 0.34,
+  "scene upload (buffers, textures, pipelines, bind groups)": 0.29,
+  "scene prepare (shadow data, vertex packing)": 0.2,
+  "display cache put": 0.14,
+  "resolve (supersample, background)": 0.09,
+  "after the render (node bookkeeping)": 0.08,
+  "resolve_done to handover": -4.1,
+  "cache_put to handover": -6.66
+ },
+ "gpu_wait_ms": {
+  "min": 1.9,
+  "p50": 4.4,
+  "max": 5.8,
+  "shared_card_suspected": true
+ }
+}

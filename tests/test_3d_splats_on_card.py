@@ -145,6 +145,21 @@ class SplatsOnTheCard(unittest.TestCase):
         self.assertEqual(float(render_with(cases()['splats behind a card'], True)[..., 3].max()) > 0, True)
 
 
+class CloudNormalsAreWorkedOutOnce(unittest.TestCase):
+    """A relit cloud asked for its normals twice a frame; 1.9 ms of every played frame at 20,000 splats."""
+
+    def test_the_axes_are_computed_once_and_each_caller_gets_its_own_copy(self):
+        cloud = many(500, 4)
+        with unittest.mock.patch.object(splats, '_rotation', wraps=splats._rotation) as rotation:
+            first, second = cloud.normals(), cloud.normals()
+        self.assertEqual(rotation.call_count, 1)
+        np.testing.assert_array_equal(first, second)
+        first[:] = 0
+        np.testing.assert_array_equal(cloud.normals(), second)
+        self.assertEqual(first.dtype, np.float32)
+        self.assertTrue(np.allclose(np.linalg.norm(second, axis=1), 1, atol=1e-5))
+
+
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
 class ReadbackBufferIsReleasedForTheRayTracer(unittest.TestCase):
     def test_a_big_readback_buffer_is_let_go_before_a_ray_traced_render(self):

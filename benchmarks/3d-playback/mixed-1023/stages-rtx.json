@@ -8,32 +8,32 @@
    "frames": 30,
    "stages_ms": {
     "card picture used": 0.0,
-    "card: first submit to the last pixels mapped": 28.55,
-    "display picture (conversion stage)": 57.42,
-    "mesh passes (colour, and the depth pass on the processor route)": 31.11,
-    "readback copy": 2.25,
-    "splat colours (relit on the processor)": 5.55,
-    "splat layer on its own: upload, raster and readback": 44.8,
-    "splat sort": 1.09,
-    "whole render call": 103.72,
-    "compositing the layers and the rest on the processor": 27.81
+    "card: first submit to the last pixels mapped": 28.03,
+    "display picture (conversion stage)": 57.87,
+    "mesh passes (colour, and the depth pass on the processor route)": 30.93,
+    "readback copy": 1.52,
+    "splat colours (relit on the processor)": 3.18,
+    "splat layer on its own: upload, raster and readback": 34.86,
+    "splat sort": 1.07,
+    "whole render call": 89.32,
+    "compositing the layers and the rest on the processor": 23.53
    },
-   "frame_ms": 103.72
+   "frame_ms": 89.32
   },
   "card": {
    "frames": 30,
    "stages_ms": {
     "card picture used": 1.0,
-    "card: first submit to the last pixels mapped": 20.74,
-    "display picture (conversion stage)": 0.72,
-    "mesh passes (colour, and the depth pass on the processor route)": 23.52,
-    "readback copy": 1.82,
-    "splat colours (relit on the processor)": 4.73,
-    "splat preparation on the card route (sort, colours, buffers)": 6.57,
-    "splat sort": 0.91,
-    "whole render call": 23.87
+    "card: first submit to the last pixels mapped": 18.41,
+    "display picture (conversion stage)": 0.62,
+    "mesh passes (colour, and the depth pass on the processor route)": 21.06,
+    "readback copy": 1.8,
+    "splat colours (relit on the processor)": 3.02,
+    "splat preparation on the card route (sort, colours, buffers)": 4.85,
+    "splat sort": 0.92,
+    "whole render call": 21.41
    },
-   "frame_ms": 23.87
+   "frame_ms": 21.41
   }
  }
 }
