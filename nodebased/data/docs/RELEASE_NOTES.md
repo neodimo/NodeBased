@@ -1,3 +1,12 @@
+# NodeBased 0.43.0-preview.1
+
+Preview build of 0.43.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.43.0 release that follows.
+
+- **Smoke, splats and glass together on the graphics card:** a scene with a smoke puff, Gaussian splats and a glass sphere now plays at full size in the viewport, about 24 frames a second at 1080p on an RTX card.
+- **Render mode settles faster:** the mixed scene settles in about 6 seconds, down from 24.
+- **Glass draws faster:** see-through meshes draw once per material instead of once per triangle.
+- **Hot pour fits in memory:** the full-detail Hot pour refines within memory on the workstation, the A6000 and the laptop, and scrubbing reuses the whitewater setup.
+
 # NodeBased 0.42.1: 3D comps at 24 fps, the Direct picture as a full viewer, Fluids that re-simulate in seconds, and faster 2D playback
 
 ## What changed since 0.41.0
