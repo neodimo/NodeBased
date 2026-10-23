@@ -97,5 +97,38 @@
     "cleaned_up": true
   },
   "full_base_prefix_s": 516.47,
-  "max_process_rss_mb": 16384
+  "max_process_rss_mb": 16384,
+  "memory_probe_attempts": [
+    {
+      "cap": "12 GiB virtual memory with timeout",
+      "configuration": "RTX 3080 Ti, 256^3 liquid / 192^3 steam, unchanged base prefix",
+      "stage": "whitewater",
+      "frame": 55,
+      "peak_process_rss_mb": 9523.5,
+      "peak_card_memory_mb": 9418.0,
+      "peak_process_swap_mb": 0.0,
+      "result": "GPU buffer allocation failed before resource budgeting"
+    },
+    {
+      "cap": "12 GiB virtual memory with timeout",
+      "configuration": "RTX 3080 Ti, frame-60 pour edit, evaluator cache 128 MiB and simulation store 64 MiB",
+      "stage": "liquid_cache",
+      "frame": 62,
+      "peak_process_rss_mb": 9125.7,
+      "peak_card_memory_mb": 8283.0,
+      "peak_process_swap_mb": 0.0,
+      "result": "cleanly stopped at a 158 MiB liquid-grid allocation; virtual-address cap was too restrictive for the 16 GiB RSS acceptance gate"
+    },
+    {
+      "cap": "16 GiB sampled process RSS with timeout",
+      "configuration": "RTX 3080 Ti, frame-60 pour edit, 128 MiB evaluator cache and disk-streamed checkpoints",
+      "stage": "whitewater",
+      "last_checkpoint_frame": 80,
+      "failure_frame": 90,
+      "peak_process_rss_mb": 12628.7,
+      "peak_card_memory_mb": 9821.0,
+      "peak_process_swap_mb": 0.0,
+      "result": "neighbor-list allocation failed; retry-at-half-budget added for follow-up"
+    }
+  ]
 }

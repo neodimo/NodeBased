@@ -1,3 +1,12 @@
+## 2026-10-23 — Lane 6 step A: full-detail Hot pour memory — PARTIAL
+
+- **What was done — evidence:** Added per-stage process RSS, process swap and card-memory sampling to `tools/benchmark_fluid_edit_stages.py --full-only`. Added disk-streamed simulation checkpoints, a 128 MiB evaluator-result cache, whitewater neighbor-list budgeting from live free card memory, deterministic quality reduction with a status line, explicit GPU-buffer release and a half-budget retry after allocation pressure. The 12 GiB virtual-memory cap stopped cleanly; the 16 GiB RSS-capped RTX run completed edited liquid and surface through 120 frames, then whitewater reached frame 80 and failed at frame 90. Stage measurements are in the benchmark JSON and synchronized docs. The latest retry that halves the budget has not yet run at production size.
+- **Tests:** Memory-budget and cache-spill regressions pass. Cache/timeline tests pass on default and llvmpipe; whitewater GPU tests pass on RTX, Radeon and llvmpipe. Knowledge-copy tests pass.
+- **Artifacts:** Commits `6beaa99a` and `97324671` are local on `openclaw/nb-fluids-spike`, not pushed. `benchmarks/hot_pour/full-refinement-memory-rtx-2026-10-23.json` and both `FLUIDS_SPIKE.md` copies are staged locally for the step record. Benchmark scratch at `scratch/nb-lanes/run/big-L6/stepA-retest/cache` is deliberate, generated data and must be deleted before handoff.
+- **State:** PARTIAL. Full whitewater completion, steam stage, Radeon laptop RSS gate and real A6000 measurement are unverified. A6000 appears only as a labelled planning estimate.
+- **Next owner + artifact:** Gonzo reruns `tools/benchmark_fluid_edit_stages.py --adapter default --full-only --edit pour_rate --max-process-rss-mb 16384` from this worktree after the exclusive GPU lock clears, then runs the integrated adapter with `taskset -c 0-3`.
+- **Failure mode:** Whitewater's neighbor-list and GPU-buffer allocation can still fail on RTX even after free-memory sampling; retry at half the point budget is implemented to degrade and continue.
+
 ## 2026-10-23 — continuous mode merge: Lane 3 (Research, GPT-6 Astra) step R6 of 1: 2D compositing on the graphics card: how Nuke, Fusion, Resolve and Flame keep a node graph on the GPU, and what fits NodeBased (integrator tick)
 
 - **What was done:** `main` `2e0a2b9d` -> `70cfa61a` plus this docs commit. Evidence and per-lane commit

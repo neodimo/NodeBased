@@ -1757,6 +1757,29 @@ The initial catcher thumbnail keeps the cup/table composition and defers the exp
 
 Acceleration build, upload and pipeline measurements are subphases within the beauty-render stage; they are listed separately to expose preparation cost and should not be added to the beauty-render total a second time.
 
+### A of 1: full-detail refinement memory (partial, 2026-10-23)
+
+The full-detail memory probe now records process RSS, process swap and card memory per stage. It uses a 128 MiB evaluator result cache, 64 MiB in-memory simulation stores that spill checkpoints to disk, a 16 GiB sampled RSS stop and a 23 GB scratch ceiling. The 256³ liquid / 192³ steam RTX 3080 Ti run completed the 59-frame baseline prefix in 516.47 s. After a frame-60 `pour_rate` edit, the liquid cache and surface stages completed 120 frames. Whitewater reached frame 80; an RTX buffer allocation failed while evaluating frame 90. Steam refinement did not start. The process stayed within the RSS stop and process swap remained zero. Whitewater reduced its sampled neighbor workload under the live free-card budget; a smaller retry on allocation failure is implemented and awaits a production rerun.
+
+| Edited stage | Time | Peak process RSS | Peak card memory | Frames |
+| --- | ---: | ---: | ---: | ---: |
+| Liquid cache | 901.51 s | 16,104.3 MiB | 9,819 MiB | 120 / 120 |
+| Surface | 121.11 s | 10,328.4 MiB | 8,029 MiB | 120 / 120 |
+| Whitewater | — | 12,628.7 MiB | 9,821 MiB | 80 / 120; failed during frame 90 |
+| Steam cache | — | — | — | not started |
+| Cache write, sampled across the run | — | 13,365.3 MiB | 9,821 MiB | — |
+
+The earlier 12 GiB virtual-memory-cap run stopped cleanly at the 158 MiB liquid-grid allocation on frame 62; it did not swap. The pre-budget whitewater attempt stopped at frame 55 after reaching 9,523.5 MiB process RSS and 9,418 MiB card allocation. Attempt details and stage measurements are in `benchmarks/hot_pour/full-refinement-memory-rtx-2026-10-23.json`.
+
+| Adapter | Full-detail status | Memory / time note |
+| --- | --- | --- |
+| RTX 3080 Ti | Partial | Card peak 9,821 MiB; RSS peak 16,104.3 MiB; swap 0 MiB. Whitewater allocation recovery and steam stage remain unverified. |
+| Integrated Radeon laptop stand-in | Unmeasured | The required 16 GiB RSS run with `taskset -c 0-3` remains pending. |
+| RTX A6000 | Estimate only | 48 GB VRAM provides more headroom than the RTX 3080 Ti; planning estimate is 0.8–1.3× RTX stage time. No A6000 run has been measured. |
+
+**State:** PARTIAL. Whitewater budgeting and disk-streamed cache tests pass on CPU/llvmpipe; whitewater GPU tests pass on RTX, Radeon and llvmpipe. Full 120-frame whitewater, steam, the laptop RSS gate and the A6000 estimate remain open.
+
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up

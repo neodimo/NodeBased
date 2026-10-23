@@ -1,3 +1,11 @@
+# Lane 6 — 2026-10-23 step A status (PARTIAL)
+
+The production full-detail Hot pour benchmark now samples process RSS, per-process swap and card memory at each stage, and can stop at a configured resident-memory ceiling. A 12 GiB `ulimit -v` probe records its resource-bound failure cleanly. The 16 GiB RSS-capped RTX run completed the frame-60 edited liquid-cache and surface stages for all 120 frames: 901.51 s / 16,104.3 MiB RSS / 9,819 MiB card for liquid cache; 121.11 s / 10,328.4 MiB RSS / 8,029 MiB card for surface. Process swap stayed at zero. Whitewater reached frame 80 and failed during frame 90 at 12,628.7 MiB RSS / 9,821 MiB card; steam was not started. The full 59-frame baseline prefix took 516.47 s. Measurements and earlier capped attempts are in `benchmarks/hot_pour/full-refinement-memory-rtx-2026-10-23.json`.
+
+Code commits `6beaa99a` and `97324671` remain local on `openclaw/nb-fluids-spike`. Whitewater now reserves up to five percent of live free card memory for its neighbor list, releases each GPU buffer explicitly, streams checkpoints with 64 MiB store budgets and retries allocation failures at half sample count. Targeted whitewater/cache/timeline tests pass on RTX, Radeon and llvmpipe; cache/timeline CPU tests pass on llvmpipe. The exact production retry after the half-budget fallback, full whitewater, steam and the integrated Radeon 16 GiB gate are still unverified. A6000 row is an estimate only. No A6000 run is claimed.
+
+Generated production caches are in `scratch/nb-lanes/run/big-L6/stepA-retest/cache`; delete them before this worktree handoff. Next: Gonzo reruns the benchmark JSON from this worktree with `--max-process-rss-mb 16384` after the GPU lock clears, then runs the laptop stand-in with `taskset -c 0-3`.
+
 # Lane 3 — 2026-10-23 R6 research complete
 
 ## Continuous mode merge: Lane 3 (Research, GPT-6 Astra) (9:45 AM on 2026-10-23 PDT)
