@@ -1,5 +1,25 @@
 ## 2026-10-22 — Lane 6 step B finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:05 PM on 2026-10-22 PDT)
+
+`main` moved `bdeab15c` -> `70126645` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `70126645` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-2156.log`, started 9:56 PM): **Ran 6044 tests in 483.552 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step A of 2: uncached 2D playback overlaps the next frame's work with showing this one.** Commits:
+  - `dcdf5537` Record the played-frame timeline: stages, overlap and gates on four adapters
+  - `1aad6861` Overlap played-frame conversion with the next evaluation, and time each stage of a fresh frame
+  Diff: 21 files changed, 16871 insertions(+), 12 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (9:55 PM on 2026-10-22 PDT)
 
 `main` moved `856fd60d` -> `845df0a6` (lane commits cherry-picked onto main in lane order) and then to this
