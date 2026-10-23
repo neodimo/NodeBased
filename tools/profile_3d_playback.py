@@ -52,7 +52,7 @@ def main():
     width, height = (int(v) for v in args.size.lower().split("x"))
     import tempfile
     tmp = tempfile.TemporaryDirectory(prefix="nb-prof-")
-    splat_path = bench.make_splat_file(args.splats, tmp.name) if args.scene == "mixed" else None
+    splat_path = bench.make_splat_file(args.splats, tmp.name) if args.scene in ("mixed", "mixedglass") else None
     window = Window(agent_name="prof3d-" + uuid.uuid4().hex)
     window.resize(1800, 1100)
     window.move(0, 0)

@@ -12,6 +12,8 @@ Scenes (every camera animates; frame 1 to 240 swings the camera round the scene)
     glass      the furnished room with a liquid-glass sphere: the GPU raster path has no liquid, so Render3D falls
                back to the CPU rasteriser (about 20 s a frame); measured to show that cost, not part of "all"
     mixed      the furnished room plus a 20,000-splat shell under an animated camera
+    mixedglass the mixed scene plus a smoke puff (Plume3D) and a translucent glass sphere: smoke together with splats and a
+               translucent mesh together with splats, both of which the card draws since 10/23 (Lane 4, gaps step A)
     grade      a Render3D of the cube into a Grade into the Viewer, camera animated
 
     # private Xvfb display, real window (what the Playback table in docs/PERFORMANCE.md used)
@@ -48,7 +50,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
-SCENES = ("empty", "cube", "furnished", "glass", "mixed", "grade")
+SCENES = ("empty", "cube", "furnished", "glass", "mixed", "mixedglass", "grade")
 FIELDS = ("adapter", "scene", "size", "backend", "proxy", "fps", "shown", "interval_ms", "render_ms_status", "tier_pictures",
           "fps_at_end_tier", "time_row", "settle_s", "status")
 
@@ -160,6 +162,7 @@ def build_scene(name, width, height, backend, last=240, splat_path=None):
                                   "red": 0.95, "green": 0.75, "blue": 0.4, "material": "pbr", "metallic": 1.0, "pbr_roughness": 0.3})
         add("glass", "Sphere3D", {"sphere_radius": 0.8, "tx": 0.2, "ty": 0.8, "tz": 1.2, "rows": 24, "columns": 48,
                                   **({"material": "liquid", "ior": 1.5} if name == "glass" else
+                                     {"red": 0.9, "green": 0.95, "blue": 0.95, "alpha": 0.35} if name == "mixedglass" else
                                      {"red": 0.9, "green": 0.95, "blue": 0.95})})
         add("box", "Cube3D", {"cube_size": 1.1, "tx": 2.0, "ty": 0.55, "tz": -0.2, "ry": 25, "red": 0.7, "green": 0.1, "blue": 0.1,
                               "material": "pbr", "metallic": 0.0, "pbr_roughness": 0.35})
@@ -167,8 +170,10 @@ def build_scene(name, width, height, backend, last=240, splat_path=None):
                                  "pbr_roughness": 0.0})
         add("shelf", "Card3D", {"card_width": 8, "card_height": 0.6, "ty": 0.06, "tz": -2.4, "rx": -90, "red": 0.6, "green": 0.45, "blue": 0.3})
         add("lamp", "Light3D", {"light_type": "Point", "tx": 0.0, "ty": 4.5, "tz": 0.5, "intensity": 6.0, "shadows": "on"})
-        if name == "mixed":
+        if name in ("mixed", "mixedglass"):
             add("splats", "ReadSplat3D", {"splat_path": str(splat_path), "splat_relight": 1.0, "ty": 0.6, "tz": -1.0})
+        if name == "mixedglass":
+            add("smoke", "Plume3D", {"plume_resolution": 32, "tx": -0.6, "ty": 0.0, "tz": 0.4, "uscale": 2.4})
         _tree(doc, "scene", members)
         _camera(doc, 6.2, 1.6, 0.95, last)
     doc.create("render", "Render3D", render)
@@ -356,7 +361,7 @@ def run_one(args, scene):
     from nodebased.app import Window
     width, height = (int(v) for v in args.size.lower().split("x"))
     with tempfile.TemporaryDirectory(prefix="nb-play-") as tmp:
-        splat_path = make_splat_file(args.splats, tmp) if scene == "mixed" else None
+        splat_path = make_splat_file(args.splats, tmp) if scene in ("mixed", "mixedglass") else None
         window = Window(agent_name="play3d-" + uuid.uuid4().hex)
         window.resize(1800, 1100)
         window.move(0, 0)

@@ -7,8 +7,10 @@ window, then renders it at the size asked (1920 x 1080, one sample, as playback 
     processor   the layer drawn on its own, read back and composited on the processor (``gpu3d.SPLATS_ON_CARD = False``)
 
 and splits a frame into mesh render, splat sort, splat colours, splat upload / raster / readback, compositing the layers,
-readback and the display picture. The scene has no smoke: a volume together with splats is CPU-only (``gpu3d.render`` raises
-Unsupported), so the split has no smoke row. Stage times are medians in milliseconds over the frames after a warm-up.
+readback and the display picture. ``--scene mixedglass`` adds a smoke puff and a translucent glass sphere: before 10/23 smoke together
+with splats raised Unsupported in ``gpu3d.render`` (the CPU drew the frame), so its processor route is the CPU frame, timed once
+(``--cpu-frames``); the card route draws the splat layer between the meshes and the smoke march. Stage times are medians in
+milliseconds over the frames after a warm-up.
 
     PYTHONPATH=. QT_QPA_PLATFORM=offscreen flock /tmp/nb-gpu.lock \\
         python tools/profile_3d_mixed_stages.py --out benchmarks/3d-playback/mixed-stages.json
@@ -32,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
 
-def capture_scene(splats):
+def capture_scene(splats, name="mixed"):
     """(scene, camera, render args) of the mixed scene as a window's Render3D passes them to gpu3d.render."""
     import tests.isolation  # noqa: F401  (keeps the run out of the real Qt settings)
     import benchmark_3d_playback as bench
@@ -53,7 +55,7 @@ def capture_scene(splats):
             window = Window(agent_name="stages-" + uuid.uuid4().hex)
             window.resize(1800, 1100)
             window.show()
-            ops, view = bench.build_scene("mixed", 1920, 1080, "auto", splat_path=path)
+            ops, view = bench.build_scene(name, 1920, 1080, "auto", splat_path=path)
             for op in ops:
                 if op.get("type") == "Render3D":
                     op["params"]["samples"] = 1
@@ -114,6 +116,15 @@ def profile_route(route, scene, camera, rest, kwargs, width, height, frames, vie
     timers.wrap(gpusplat, "prepare_on_card", "splat preparation on the card route (sort, colours, buffers)")
     rows = []
     kwargs = dict(kwargs, samples=1)
+    if route == "processor" and scene.volumes and scene.splats:
+        # smoke together with splats raises Unsupported on this route: Render3D's `auto` backend falls back to the CPU frame
+        gpu3d.SPLATS_ON_CARD = True
+        timers.restore()
+        start = time.perf_counter()
+        scene3d.render(scene, camera, width, height, rest[0], ambient=rest[1], samples=1, volume=kwargs.get("volume"))
+        total = (time.perf_counter() - start) * 1000
+        return {"frames": 1, "stages_ms": {"whole render call": round(total, 2)}, "frame_ms": round(total, 2),
+                "note": "the CPU frame: gpu3d.render raised Unsupported for smoke together with splats"}
     try:
         for index in range(frames + 3):
             angle = index * 0.05
@@ -166,6 +177,8 @@ def main(argv=None):
     parser.add_argument("--splats", type=int, default=20000)
     parser.add_argument("--frames", type=int, default=30)
     parser.add_argument("--adapter", default="default")
+    parser.add_argument("--scene", default="mixed", choices=("mixed", "mixedglass"))
+    parser.add_argument("--routes", default="processor,card")
     parser.add_argument("--out", default="")
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args(argv)
@@ -175,12 +188,12 @@ def main(argv=None):
         os.environ["NODEBASED_ADAPTER"] = args.adapter
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     width, height = (int(v) for v in args.size.lower().split("x"))
-    scene, camera, rest, kwargs = capture_scene(args.splats)
+    scene, camera, rest, kwargs = capture_scene(args.splats, args.scene)
     from nodebased import gpu3d
     view = "ACES 2.0"
-    result = {"scene": "mixed", "size": args.size, "splats": args.splats, "adapter": gpu3d.chosen_adapter_name(),
+    result = {"scene": args.scene, "size": args.size, "splats": args.splats, "adapter": gpu3d.chosen_adapter_name(),
               "routes": {route: profile_route(route, scene, camera, rest, kwargs, width, height, args.frames, view)
-                         for route in ("processor", "card")}}
+                         for route in args.routes.split(",")}}
     text = json.dumps(result, indent=1)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
