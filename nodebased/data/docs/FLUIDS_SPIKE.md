@@ -1230,8 +1230,8 @@ uncached and unpublished. The callback stream is bit-identical to the correspond
 cache tests. `tools/benchmark_fluid_edits.py` builds the 64-cell Hot pour and measures a faster pour velocity, a moved
 cup collider, and changed steam vorticity, including frame-1 time and per-output-stage bake time. It reports solver
 outputs before display presentation; substep internals (transfers, pressure, sparse occupancy, synchronization and
-readback) still need direct instrumentation. No timeline, stale-picture badge, edit-cancellation UI, or 64-cell
-Radeon 8060S measurement is still pending.
+readback) are covered by diagnostic phase profiles below. No timeline, stale-picture badge or edit-cancellation UI
+is included yet.
 
 **64-cell / 120-frame cold-cache references (2026-10-22; superseded for the edit gate).** These first measurements
 started each edited graph with an empty cache, so they include unchanged upstream work and do not represent an artist
@@ -1252,8 +1252,7 @@ largest exposed stage is the named evaluator output, not an internal solver phas
 | Radeon 8060S | Cup moved 5 cm | 0.263 s | 29.88 s | Steam cache, 19.85 s |
 | Radeon 8060S | Steam vorticity +0.4 | 0.247 s | 29.69 s | Steam cache, 20.08 s |
 
-These cold-cache reference values do not decide the re-simulation gate. A cold-cache diagnostic provides internal
-solver phase timing; a warmed per-phase split remains pending. The `--profile-phases` mode adds synchronization and
+These cold-cache reference values do not decide the re-simulation gate. The `--profile-phases` mode adds synchronization and
 inflates wall time. The A6000 is
 unavailable and unmeasured; a planning estimate is
 0.8–1.3× the RTX wall time for the same 64-cell workload, with cache and bandwidth-heavy phases potentially outside
@@ -1275,8 +1274,8 @@ host/setup work at 8.34–9.19 seconds and sparse tile updates at 0.29–0.42 se
 particle-to-grid, grid-to-particle/advection, pressure and transfer copies. Cache-write time is 0.52–1.90 seconds.
 These phase timers force synchronization, so use them to rank costs rather than as gate wall times. The diagnostic
 JSON is `benchmarks/hot_pour/edit-phase-profile-rtx-2026-10-22.json`; the warmed edit JSON is
-`benchmarks/hot_pour/edit-resimulation-warm-rtx-2026-10-22.json`. Cost-reduction and the warmed Radeon gate readings
-were still open at that measurement.
+`benchmarks/hot_pour/edit-resimulation-warm-rtx-2026-10-22.json`. Cost-reduction and warmed Radeon gate readings were
+still open at that measurement.
 
 **Warmed Radeon edit gate readings (2026-10-22).** First solved volume frames took 0.252, 0.256 and 0.055 seconds.
 The pour-velocity and vorticity edits meet the under-30-second 120-frame target; moving the cup takes 32.43 seconds,
@@ -1293,6 +1292,20 @@ pressure and 2.53–3.15 seconds in cache writes across the changed runs; the cu
 whitewater. Liquid particle-to-grid, grid-to-particle/advection and transfer copies are separate in the JSON. These
 are synchronized diagnostic timings. Full data is in `benchmarks/hot_pour/edit-resimulation-warm-integrated-2026-10-22.json`
 and `benchmarks/hot_pour/edit-phase-profile-integrated-2026-10-22.json`.
+
+**Warmed RTX phase diagnostic (2026-10-22).** This separate synchronized run attributes internal solver and cache
+work after the base graph was pre-baked. Its wall times are diagnostic and differ from the unsynchronized gate run.
+
+| Edit | Steam host | Steam pressure | Liquid pressure | Cache writes | Whitewater output stage |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pour velocity ×1.25 | 9.24 s | 3.94 s | 1.28 s | 1.38 s | 3.74 s |
+| Cup moved 5 cm | 8.45 s | 12.34 s | 1.46 s | 1.22 s | 14.29 s |
+| Steam vorticity +0.4 | 8.84 s | 12.21 s | — | 1.25 s | 0.18 s |
+
+The steam host and pressure phases dominate the steam edits; moving the cup also makes whitewater expensive.
+The `--profile-phases` mode synchronizes work and inflates elapsed times, so these figures rank costs rather than
+decide the <30-second gate. Full phase/copy/cache counters are in
+`benchmarks/hot_pour/edit-phase-profile-warm-rtx-2026-10-22.json`.
 
 **Production-size baseline for step B (historical).** The existing Radeon 8060S record for 256 liquid cells, 192 smoke
 cells and 120 frames is 1,940.5 seconds (`benchmarks/hot_pour/radeon-full-bake.json`, 2026-10-08). It is a historical

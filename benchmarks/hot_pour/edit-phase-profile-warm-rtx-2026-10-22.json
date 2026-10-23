@@ -1,0 +1,309 @@
+{
+  "adapter_request": "default",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "grid_cells": 64,
+  "frames": 120,
+  "edits": {
+    "pour_rate": {
+      "base_cache_prep_s": 48.33,
+      "first_frame_s": 0.3268,
+      "stages_s": {
+        "liquid_cache": 3.338,
+        "surface": 4.526,
+        "whitewater": 3.744,
+        "steam_cache": 22.951
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 27.82,
+          "p95": 37.78
+        },
+        "surface": {
+          "mean": 37.71,
+          "p95": 70.95
+        },
+        "whitewater": {
+          "mean": 31.2,
+          "p95": 51.76
+        },
+        "steam_cache": {
+          "mean": 191.26,
+          "p95": 323.56
+        }
+      },
+      "all_stages_s": 34.89,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 63382272,
+          "memory_entries": 242,
+          "disk_bytes": 63578892,
+          "disk_entries": 242,
+          "hits": 1469,
+          "misses": 242,
+          "disk_hits": 0,
+          "writes": 242,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 28450436,
+          "memory_entries": 240,
+          "disk_bytes": 28577459,
+          "disk_entries": 238,
+          "hits": 238,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 238,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1071505920,
+          "memory_entries": 136,
+          "disk_bytes": 3377636182,
+          "disk_entries": 451,
+          "hits": 239,
+          "misses": 480,
+          "disk_hits": 0,
+          "writes": 766,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ],
+      "solver_phases": [
+        {
+          "solver": "liquid",
+          "seconds": {
+            "binning and maintenance totals": 0.9215040777344257,
+            "maintenance": 0.09856389742344618,
+            "particle to grid": 0.15585176390595734,
+            "forces and constraints": 0.14453600882552564,
+            "pressure": 1.2822660082019866,
+            "project": 0.1092765077482909,
+            "extrapolation": 0.2925120748113841,
+            "grid to particle and advection": 0.13452260941267014
+          },
+          "copies": {
+            "host_to_device": 0.15203307243064046,
+            "device_to_host": 0.04786203126423061
+          }
+        },
+        {
+          "solver": "steam",
+          "seconds": {
+            "host": 9.236483126413077,
+            "tiles": 0.4015074360650033,
+            "emit": 0.1095244053285569,
+            "advect": 0.384223461849615,
+            "forces": 0.1325921828392893,
+            "confine": 0.1495934270787984,
+            "setup": 0.15284809609875083,
+            "pressure": 3.937205808935687,
+            "finish": 0.14666127995587885
+          },
+          "copies": {}
+        }
+      ],
+      "cache_write_s": 1.383
+    },
+    "cup_position": {
+      "base_cache_prep_s": 50.58,
+      "first_frame_s": 0.3151,
+      "stages_s": {
+        "liquid_cache": 3.785,
+        "surface": 3.365,
+        "whitewater": 14.287,
+        "steam_cache": 29.175
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 31.54,
+          "p95": 54.73
+        },
+        "surface": {
+          "mean": 28.04,
+          "p95": 33.36
+        },
+        "whitewater": {
+          "mean": 119.06,
+          "p95": 282.73
+        },
+        "steam_cache": {
+          "mean": 243.12,
+          "p95": 291.05
+        }
+      },
+      "all_stages_s": 50.94,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 82590208,
+          "memory_entries": 242,
+          "disk_bytes": 82787629,
+          "disk_entries": 242,
+          "hits": 1469,
+          "misses": 242,
+          "disk_hits": 0,
+          "writes": 242,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 15280214,
+          "memory_entries": 240,
+          "disk_bytes": 15404922,
+          "disk_entries": 236,
+          "hits": 238,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 236,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1073342464,
+          "memory_entries": 136,
+          "disk_bytes": 3657872142,
+          "disk_entries": 476,
+          "hits": 239,
+          "misses": 480,
+          "disk_hits": 0,
+          "writes": 816,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ],
+      "solver_phases": [
+        {
+          "solver": "liquid",
+          "seconds": {
+            "binning and maintenance totals": 0.9387445212341845,
+            "maintenance": 0.0912120237480849,
+            "particle to grid": 0.15984067926183343,
+            "forces and constraints": 0.1519236706662923,
+            "pressure": 1.46277967072092,
+            "project": 0.12484369892627001,
+            "extrapolation": 0.3608145541511476,
+            "grid to particle and advection": 0.15807044878602028
+          },
+          "copies": {
+            "host_to_device": 0.18206405313685536,
+            "device_to_host": 0.076291210250929
+          }
+        },
+        {
+          "solver": "steam",
+          "seconds": {
+            "host": 8.451858875108883,
+            "tiles": 0.34722003526985645,
+            "emit": 0.08197567728348076,
+            "advect": 0.25362716102972627,
+            "forces": 0.06826755427755415,
+            "confine": 0.09432453312911093,
+            "setup": 0.08771714358590543,
+            "pressure": 12.343053514836356,
+            "finish": 0.0945469697471708
+          },
+          "copies": {}
+        }
+      ],
+      "cache_write_s": 1.22
+    },
+    "steam_vorticity": {
+      "base_cache_prep_s": 48.99,
+      "first_frame_s": 0.0817,
+      "stages_s": {
+        "liquid_cache": 0.078,
+        "surface": 0.081,
+        "whitewater": 0.179,
+        "steam_cache": 29.593
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 0.65,
+          "p95": 0.69
+        },
+        "surface": {
+          "mean": 0.68,
+          "p95": 0.69
+        },
+        "whitewater": {
+          "mean": 1.49,
+          "p95": 1.54
+        },
+        "steam_cache": {
+          "mean": 246.61,
+          "p95": 304.89
+        }
+      },
+      "all_stages_s": 30.02,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 40732480,
+          "memory_entries": 121,
+          "disk_bytes": 40830430,
+          "disk_entries": 121,
+          "hits": 1350,
+          "misses": 121,
+          "disk_hits": 0,
+          "writes": 121,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 7365043,
+          "memory_entries": 120,
+          "disk_bytes": 7427349,
+          "disk_entries": 118,
+          "hits": 239,
+          "misses": 120,
+          "disk_hits": 0,
+          "writes": 118,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1073631072,
+          "memory_entries": 137,
+          "disk_bytes": 3651103113,
+          "disk_entries": 476,
+          "hits": 239,
+          "misses": 480,
+          "disk_hits": 0,
+          "writes": 815,
+          "evictions": 0,
+          "rejections": 0
+        }
+      ],
+      "solver_phases": [
+        {
+          "solver": "steam",
+          "seconds": {
+            "host": 8.841859942767769,
+            "tiles": 0.2901283784303814,
+            "emit": 0.08215320203453302,
+            "advect": 0.30229335371404886,
+            "forces": 0.08055739966221154,
+            "confine": 0.09340156242251396,
+            "setup": 0.09083320270292461,
+            "pressure": 12.21021665725857,
+            "finish": 0.1042942339554429
+          },
+          "copies": {}
+        }
+      ],
+      "cache_write_s": 1.248
+    }
+  }
+}
