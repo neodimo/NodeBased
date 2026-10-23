@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the production-size Hot pour re-simulates only what changed (finish 2: the production-size gates) (finish 1) (integrator tick)
+
+- **What was done:** `main` `6ac33bb8` -> `c5b52424` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `c5b52424`: Ran 6121 tests in 486.913 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-23 — Lane 6 step B finish 2 (PARTIAL follow-up)
 
 - **What was done — evidence:** A bounded cross-edit collider-pose cache is already committed at `decbff08`. Follow-up added checkpoint propagation for downstream liquid `ParticleCache3D` and `FluidWhitewater3D` streams. Fresh RTX 3080 Ti production profile (256³ liquid / 192³ steam; frame-60 pour edit) fell from the original 346.208 s to 122.454 s; collider solid voxelization fell from 188.852 s to 24.474 s and surface voxelization from 182.967 s to 21.424 s. A fresh displayed proxy still took 113.494 s, missing the <1 s gate. The profile still records 496 FLIP GPU steps and substantial domain-resize work. Focused surface-cache, fluid node and fluid solver tests passed (112); knowledge tests passed (7); bundled `FLUIDS_SPIKE.md` is byte-identical.

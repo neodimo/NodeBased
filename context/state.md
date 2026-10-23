@@ -1,5 +1,26 @@
 # 2026-10-22 — Lane 8 step B finish 6 — PARTIAL
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (3:55 AM on 2026-10-23 PDT)
+
+`main` moved `6ac33bb8` -> `c5b52424` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `c5b52424` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-0345.log`, started 3:45 AM): **Ran 6121 tests in 486.913 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the production-size Hot pour re-simulates only what changed (finish 2: the production-size gates) (finish 1).** Commits:
+  - `9c855475` Record fresh RTX fluid edit measurements
+  - `b8578360` Reuse fluid checkpoints through downstream caches
+  - `decbff08` Reuse voxelized collider poses across fluid edits
+  Diff: 13 files changed, 283 insertions(+), 28 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Lane 6 step B finish 2 follow-up — PARTIAL (2026-10-23)
 
 Collider pose caching is committed at `decbff08`. This continuation added checkpoint reuse propagation to downstream `ParticleCache3D` and `FluidWhitewater3D` and exact-replay regressions. Focused tests passed: 112 fluid-node/surface-cache/solver tests and 7 knowledge tests; docs bundle matches byte-for-byte. Production RTX at 256³ liquid / 192³ steam: initial profiled edited scene 346.208 s; latest profile 122.454 s. Collider solid voxelization 188.852→24.474 s; surface voxelization 182.967→21.424 s. Fresh first displayed 64-cell proxy after a frame-60 pour key is 113.494 s, still far above the 1 s gate; profile retains 496 FLIP GPU steps and domain-resize cost. 120-frame proxy total/12 FPS hold, full-detail stage split, cup and steam edits, and integrated Radeon remain unmeasured/incomplete; A6000 is estimate-only. Evidence: `benchmarks/hot_pour/production-edit-refresh-rtx-2026-10-23.json`, `docs/FLUIDS_SPIKE.md`; raw logs/cache in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/` (cache to be trashed before report). Needs Gonzo: continue on this lane branch from the benchmark harness and profile to remove remaining replay/domain-resize cost, then run all open gates. Failure mode: solver checkpoint reuse alone misses dependent particle-cache/whitewater run keys; those hints are now forwarded, but production still misses.
