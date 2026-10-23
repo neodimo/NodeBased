@@ -388,6 +388,9 @@ def _full_image_with_params(node, params, frame):
     return pixels
 
 
+RENDER3D_DIRECT = True     # a whole-canvas Render3D target is returned as the renderer's frame, not tiled and reassembled
+
+
 class TileExecutor:
     """Tile-native evaluator that wraps the existing `Evaluator` for fallback."""
 
@@ -664,6 +667,19 @@ class TileExecutor:
                               tile_misses=self.cache.misses, full_frame_fallbacks=1,
                               source_decodes=self.stats["source_decodes"] - decodes_before,
                               region=region)
+
+        node = nodes[target]
+        if (RENDER3D_DIRECT and node["type"] == "Render3D" and not node["disabled"]
+                and (region.x, region.y, region.width, region.height) == (target_bounds.x, target_bounds.y, width, height)):
+            # A Render3D that is the whole target is one picture from the renderer. The generator path below would cut it
+            # into 256-pixel tiles, keep each in the tile cache and copy them back into a new canvas: about 7 ms of a
+            # 1080p played frame (docs/PERFORMANCE.md, "3D playback at the comp's rate"). The pixels are the ones it would have put back.
+            raster = self.evaluator.evaluate_raster(resolved, target, frame=frame, tier=tier)
+            layers = {name: np.asarray(value.pixels, dtype=np.float32) for name, value in (raster.layers or {}).items()}
+            self.stats["source_decodes"] += 1
+            return TileResult(pixels=np.asarray(raster.pixels, dtype=np.float32), canvas_width=region.width,
+                              canvas_height=region.height, tier=tier, tiled=True, tile_hits=0, tile_misses=0,
+                              full_frame_fallbacks=0, source_decodes=1, region=region, layers=layers or None)
 
         output = np.zeros((region.height, region.width, 4), dtype=np.float32)
         output_layers = None

@@ -8697,6 +8697,7 @@ class Window(QMainWindow):
         self.node_errors = {}
         self.preview_queue = PlaybackQueue()
         self.display_cache = DisplayCache(force_float32=self.preferences.display_cache_float32())
+        self.display_cache.background_compaction = True       # a full cache rounds old frames off the preview worker
         # (key, picture) of the last display conversion; see render() in start_preview.
         self._display_memo = None
         self._compact_stop = threading.Event()
@@ -15709,6 +15710,13 @@ class Window(QMainWindow):
             # target and must not count, or the playhead could outrun render capacity that was
             # never actually delivered.
             self.playback_frames_rendered += 1
+            if self.playing and frame is not None and request.display and self.loop_mode != "once":
+                # Ask for the next frame now, before this one is put on screen: the worker renders it while the Qt thread
+                # converts and paints this one (the hand-over was 3 ms of every played 1080p frame, waited for in turn). A
+                # "once" run is left to the end of this handler: the tick that reaches the last frame stops playback.
+                self.playback_tick()
+                if len(self.preview_queue):
+                    self.start_preview()
         # The preview timer is single-shot and a tick that arrives while busy drops its own
         # wakeup, so without this the next queued frame waits for the following tick even though
         # the worker is free. Kicking it here is what lets playback run at the renderer's
@@ -16272,6 +16280,7 @@ class Window(QMainWindow):
             pass
         self.convert_stage.close()
         self.executor.shutdown(wait=True, cancel_futures=True)
+        self.display_cache.close()
         self.queue_panel.timer.stop()
         self.queue_panel.runner.shutdown(wait=False, cancel_futures=True)
         self.job_queue._pool.shutdown(wait=False, cancel_futures=True)

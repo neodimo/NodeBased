@@ -299,7 +299,17 @@ def _unpremultiply(rgb, weight):
         return straight
     cols = np.flatnonzero(covered.any(axis=0))
     box = (slice(rows[0], rows[-1] + 1), slice(cols[0], cols[-1] + 1))
-    np.divide(rgb[box], weight[box], out=straight[box], where=covered[box][..., None])
+    height, width = rows[-1] + 1 - rows[0], cols[-1] + 1 - cols[0]
+    if not THREADED_QUANTIZE or height * width < _QUANTIZE_BELOW:
+        np.divide(rgb[box], weight[box], out=straight[box], where=covered[box][..., None])
+        return straight
+
+    def band(span):
+        part = (slice(rows[0] + span[0], rows[0] + span[1]), box[1])
+        np.divide(rgb[part], weight[part], out=straight[part], where=covered[part][..., None])
+    from .color import _cpu_pool, _CPU_WORKERS
+    bands = min(_CPU_WORKERS, height)
+    list(_cpu_pool.map(band, [(i * height // bands, (i + 1) * height // bands) for i in range(bands)]))
     return straight
 
 
@@ -326,7 +336,7 @@ def _quantize(rgb):
     return out
 
 
-def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None):
+def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None, _cropped=False):
     """Compose a display image over `background` ("black" or "checker").
 
     Frames are premultiplied, so black is a true no-op: transparent regions stay at
@@ -339,11 +349,11 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
     transform (`v ** (1 / gamma)`, sign kept), and the clipping warning tests that same adjusted
     scene-linear value and paints over the displayable buffer only.
     """
-    box = _covered_box(frame, channel, background, look) if CROP_TRANSPARENT else None
+    box = _covered_box(frame, channel, background, look) if CROP_TRANSPARENT and not _cropped else None
     if box is not None:
         # Only the covered rectangle goes through the view transform; every pixel outside it has no coverage and is
         # exactly black in the full-frame path too (display(0) * weight(0)).
-        crop = to_qimage(frame[box], exposure, channel, background, view, look)
+        crop = to_qimage(frame[box], exposure, channel, background, view, look, _cropped=True)
         rgb8 = np.zeros((frame.shape[0], frame.shape[1], 3), np.uint8)
         rows = crop.height()
         view8 = np.frombuffer(crop.constBits(), np.uint8, count=crop.bytesPerLine() * rows).reshape(rows, crop.bytesPerLine())
@@ -356,7 +366,7 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         rgb = frame[..., :3] * (2.0 ** exposure) if exposure else frame[..., :3]
         if channel in ("R", "G", "B"):
             rgb = np.repeat(rgb[..., "RGB".index(channel):"RGB".index(channel) + 1], 3, axis=2)
-        from .color import display_rgb
+        from .color import display_rgb, _GPU_PREFERRED_VIEWS
         # The view transform is nonlinear, so it has to see straight (unassociated) colour;
         # feeding it premultiplied RGB bends every partially transparent pixel. `write_png`
         # has always unpremultiplied first, so the viewer and the exporter used to disagree
@@ -367,7 +377,11 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         gamma = float((look or {}).get("gamma", 1.0))
         if gamma != 1.0:
             straight = np.sign(straight) * np.abs(straight) ** np.float32(1.0 / gamma)
-        shown = display_rgb(straight, view)
+        source = straight
+        if (opaque and gamma == 1.0 and not exposure and channel in ("RGB", "RGBA") and view in _GPU_PREFERRED_VIEWS
+                and frame.dtype == np.float32 and frame.ndim == 3 and frame.shape[2] == 4 and frame.flags.c_contiguous):
+            source = frame      # the card reads RGB out of the RGBA frame itself: no contiguous copy of three channels
+        shown = display_rgb(source, view, owned=True)
         # The view transforms hand back a new array; Linear and Raw hand back their input, which the clipping warning still reads.
         if opaque:
             # weight is 1 everywhere: `shown * weight` is `shown`. A view transform made a new array; Linear and Raw handed
@@ -776,6 +790,31 @@ class Evaluator:
     def remember_sim_preview_state(self, run, frame, state):
         self._sim_preview_ring.put(run, int(frame), state)
 
+    GEOMETRY_MEMO = 128         # geometries remembered by the digest of the node that made them
+
+    def _geometry_of(self, digest, name, node, texture):
+        """The geometry a 3D shape node makes. Only the camera animates in a typical playback, so the same shape is asked for
+        again on every frame: building a 24 x 48 sphere again took 1 to 2 ms, a furnished room's worth 3.6 ms of a played
+        frame. The digest is the node's parameters and inputs, so any edit or animated knob asks for a new one. The arrays are
+        made read-only because the same object is handed out again; that also lets the GPU renderer tell it from another by
+        identity instead of hashing its bytes."""
+        memo = self.__dict__.setdefault("_geometry_memo", OrderedDict())
+        key = (digest, name)
+        geometry = memo.get(key)
+        if geometry is not None:
+            memo.move_to_end(key)
+            return geometry
+        from . import scene3d
+        geometry = scene3d.geometry_from_node(node, None if texture is None else texture.to_display())
+        for field in ("vertices", "triangles", "normals", "uvs"):
+            array = getattr(geometry, field, None)
+            if isinstance(array, np.ndarray):
+                array.flags.writeable = False
+        memo[key] = geometry
+        while len(memo) > self.GEOMETRY_MEMO:
+            memo.popitem(last=False)
+        return geometry
+
     def sim_surface_store(self):
         """Separate bounded cache for extracted liquid meshes; it cannot evict simulation checkpoints."""
         if self._sim_surface_store is None:
@@ -796,6 +835,7 @@ class Evaluator:
         it is a separate, explicit act.
         """
         self.cache.clear()
+        self.__dict__.pop("_geometry_memo", None)
         self.bytes = 0
         self._roto_mattes.clear()
         self._roto_matte_bytes = 0
@@ -1264,9 +1304,8 @@ class Evaluator:
                 if kind in GEOMETRY_TYPES:
                     # A disabled geometry node contributes nothing rather than passing its texture on.
                     texture = values[sources[0]] if sources and sources[0] is not None else None
-                    value = None if node["disabled"] else scene3d.geometry_from_node(
-                        {"type": kind, "params": params, "name": node["name"]},
-                        None if texture is None else texture.to_display())
+                    value = None if node["disabled"] else self._geometry_of(
+                        digest, node["name"], {"type": kind, "params": params, "name": node["name"]}, texture)
                 elif kind == "RigidBody3D":
                     if node["disabled"]:
                         value = None
@@ -1946,7 +1985,9 @@ class Evaluator:
                             from . import gpu3d
                             if gpu3d.available():
                                 try:
-                                    image = gpu3d.render(*args_at, volume=_volume_settings(params), **kwargs)
+                                    from .playback import PLAYING_SPLAT_SEED
+                                    with gpu3d.playing(params.get("pt_seed") == PLAYING_SPLAT_SEED):
+                                        image = gpu3d.render(*args_at, volume=_volume_settings(params), **kwargs)
                                 except Cancelled:
                                     raise
                                 except gpu3d.Unsupported as exc:

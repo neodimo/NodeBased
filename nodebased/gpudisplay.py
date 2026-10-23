@@ -452,21 +452,21 @@ class GpuDisplay:
             self._functions, view, VERTEX_SHADER, FRAGMENT_TEMPLATE)
         self._programs[view] = (program, program_id, input_loc, bound)
 
-    def _ensure_input_texture(self, width, height):
+    def _ensure_input_texture(self, width, height, channels=3):
         from PySide6.QtOpenGL import QOpenGLTexture
-        if self._input_texture is not None and self._input_size == (width, height):
+        if self._input_texture is not None and self._input_size == (width, height, channels):
             return
         if self._input_texture is not None:
             self._input_texture.destroy()
         texture = QOpenGLTexture(QOpenGLTexture.Target.Target2D)
-        texture.setFormat(QOpenGLTexture.TextureFormat.RGB32F)
+        texture.setFormat(QOpenGLTexture.TextureFormat.RGBA32F if channels == 4 else QOpenGLTexture.TextureFormat.RGB32F)
         texture.setSize(width, height)
         texture.allocateStorage()
         texture.setMinificationFilter(QOpenGLTexture.Filter.Nearest)
         texture.setMagnificationFilter(QOpenGLTexture.Filter.Nearest)
         texture.setWrapMode(QOpenGLTexture.WrapMode.ClampToEdge)
         self._input_texture = texture
-        self._input_size = (width, height)
+        self._input_size = (width, height, channels)
 
     def _ensure_fbo(self, width, height):
         from PySide6.QtOpenGL import QOpenGLFramebufferObject, QOpenGLFramebufferObjectFormat
@@ -513,13 +513,19 @@ class GpuDisplay:
         if self._owns_surface:
             self._surface.destroy()
 
-    def render(self, rgb, view):
-        """Apply `view` to straight (unassociated) HxWx3 float32 `rgb`. Returns HxWx3 float32."""
+    def render(self, rgb, view, copy=True):
+        """Apply `view` to straight (unassociated) HxWx3 float32 `rgb`. Returns HxWx3 float32.
+
+        An HxWx4 frame is accepted too and its alpha ignored: a played frame is an RGBA array, and taking its first three
+        channels out into a contiguous copy first cost 6 ms of a 1080p conversion; the shader reads `.rgb` of either.
+        ``copy=False`` returns the persistent readback buffer itself, valid until the next call, for a caller that is done
+        with it at once."""
         self._check_thread()
         rgb = np.ascontiguousarray(rgb, dtype=np.float32)
         height, width = rgb.shape[:2]
+        channels = 4 if rgb.ndim == 3 and rgb.shape[2] == 4 else 3
         if height == 0 or width == 0:
-            return rgb.copy()
+            return rgb[..., :3].copy()
         if not self._context.makeCurrent(self._surface):
             raise GpuUnavailable('makeCurrent failed mid-session')
         try:
@@ -527,12 +533,12 @@ class GpuDisplay:
                 self._build_program(view)
             program, program_id, input_loc, luts = self._programs[view]
 
-            self._ensure_input_texture(width, height)
+            self._ensure_input_texture(width, height, channels)
             self._ensure_fbo(width, height)
 
             from PySide6.QtOpenGL import QOpenGLTexture
             fn = self._functions
-            self._input_texture.setData(QOpenGLTexture.PixelFormat.RGB,
+            self._input_texture.setData(QOpenGLTexture.PixelFormat.RGBA if channels == 4 else QOpenGLTexture.PixelFormat.RGB,
                                          QOpenGLTexture.PixelType.Float32, rgb.tobytes())
 
             self._fbo.bind()
@@ -550,7 +556,7 @@ class GpuDisplay:
             self._fbo.release()
 
             out = np.frombuffer(self._readback, dtype=np.float32).reshape(height, width, 3)
-            return out.copy()
+            return out.copy() if copy else out      # a view: valid until the next render, for a caller that is done with it
         except GpuUnavailable:
             raise
         except Exception as error:
@@ -612,7 +618,7 @@ class ViewportRenderer:
         texture.setMagnificationFilter(QOpenGLTexture.Filter.Nearest)
         texture.setWrapMode(QOpenGLTexture.WrapMode.ClampToEdge)
         self._input_texture = texture
-        self._input_size = (width, height)
+        self._input_size = (width, height, channels)
 
     def draw(self, frame, view, exposure, channel, background, dest_corners, viewport_size):
         """Draw an HxWx4 scene-linear premultiplied frame into the current framebuffer."""

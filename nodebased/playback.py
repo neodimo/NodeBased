@@ -232,6 +232,28 @@ PLAYBACK_SAMPLES = 1
 _SAMPLED_MODES = ("raster", "raytrace")
 
 
+# A Render3D that draws splats together with meshes and a shadowing light is ray traced when it is still (the raster
+# shader has no splat casters), which rebuilds the whole scene on every camera move: 230 ms a frame at one eighth of the
+# resolution. While playing it draws the meshes with the raster shader (their own shadows kept) and the splats as a layer on
+# top, as it does without shadows, and the shadows between splats and meshes come back when playback stops. The playing
+# document says so through `pt_seed`, which only the path tracer reads, so these frames never share a cache entry with
+# the settled picture: the node's digest and the tile executor's both see a different parameter.
+PLAYING_SPLAT_SEED = 2147483646
+
+
+def _has_splats(nodes, start):
+    seen, pending = set(), [start]
+    while pending:
+        key = pending.pop()
+        if key in seen or key not in nodes:
+            continue
+        seen.add(key)
+        if nodes[key].get("type") in ("ReadSplat3D",):
+            return True
+        pending.extend(source for source in (nodes[key].get("inputs") or {}).values() if source)
+    return False
+
+
 def playing_document(document):
     """The document a *playing* request evaluates: every raster or ray-traced Render3D capped at
     ``PLAYBACK_SAMPLES`` samples and, when a GPU adapter exists, off the CPU rasteriser (a ``cpu`` backend plays as
@@ -256,6 +278,9 @@ def playing_document(document):
                 gpu = bool(gpu3d.available())
             if gpu:
                 edits["render_backend"] = "auto"
+        if (params.get("render_mode", "raster") == "raster" and params.get("render_output", "rgba") == "rgba"
+                and params.get("pt_seed") != PLAYING_SPLAT_SEED and _has_splats(nodes, key)):
+            edits["pt_seed"] = PLAYING_SPLAT_SEED
         if edits:
             changed[key] = {**node, "params": {**params, **edits}}
     if not changed:
@@ -345,6 +370,9 @@ class DisplayCache:
     actual edit operations — the key simply stops matching.
     """
 
+    # How many frames the cache may hold beyond its budget while the background thread rounds waiting entries to half-float.
+    OVERSHOOT_FRAMES = 3
+
     def __init__(self, budget_bytes=None, force_float32=False):
         self.budget = cachetier.default_display_memory_bytes() if budget_bytes is None else int(budget_bytes)
         self.force_float32 = bool(force_float32)
@@ -354,8 +382,16 @@ class DisplayCache:
         self._entries: OrderedDict[tuple, tuple[np.ndarray, bool]] = OrderedDict()
         self._residents: dict[tuple, int] = {}
         # Entries stored as the producer's float32 array (see put(lazy=True)) that have not been
-        # rounded to half-float yet. Only the worker thread touches this.
+        # rounded to half-float yet.
         self._pending: set[tuple] = set()
+        # Guards the tables above: the worker puts and gets, the UI thread asks which frames are resident, and the
+        # compaction thread swaps a rounded entry in. Rounding itself runs outside the lock.
+        self._lock = threading.RLock()
+        # On: a put over budget hands the rounding of waiting entries to a background thread instead of doing it inline
+        # (14 ms of every played 1080p frame once the cache was full, docs/PERFORMANCE.md "3D playback at the comp's rate").
+        self.background_compaction = False
+        self._compacting: set[tuple] = set()
+        self._pool = None
 
     @staticmethod
     def identity(document, target, tier):
@@ -400,9 +436,10 @@ class DisplayCache:
         being reported the moment it is gone, and a document edit changes the identity so the
         answer becomes "none" without any invalidation hook to keep in sync.
         """
-        if (identity, STATIC_FRAME) in self._residents:
-            return {int(f) for f in frames}
-        return {int(f) for f in frames if (identity, int(f)) in self._residents}
+        with self._lock:
+            if (identity, STATIC_FRAME) in self._residents:
+                return {int(f) for f in frames}
+            return {int(f) for f in frames if (identity, int(f)) in self._residents}
 
     def get(self, key, region=None, copy=True):
         """Return a copied float32 frame or None.
@@ -417,10 +454,11 @@ class DisplayCache:
         at another; handing it back would paint the old crop at the new position. Regions must
         match exactly. None means "the whole frame" and matches only None.
         """
-        entry = self._entries.get((key, region))
-        if entry is None:
-            return None
-        self._entries.move_to_end((key, region))
+        with self._lock:
+            entry = self._entries.get((key, region))
+            if entry is None:
+                return None
+            self._entries.move_to_end((key, region))
         stored, _is_data = entry
         if not copy and stored.dtype == np.float32:
             return stored
@@ -442,38 +480,102 @@ class DisplayCache:
         if size > self.budget:
             return
         slot = (key, region)
-        existing = self._entries.pop(slot, None)
-        if existing is not None:
-            self.bytes -= existing[0].nbytes
-            self._pending.discard(slot)
-        else:
-            self._residents[key] = self._residents.get(key, 0) + 1
-        self._entries[slot] = (stored, bool(is_data))
-        if pending:
-            self._pending.add(slot)
-        self.bytes += size
-        while self.bytes > self.budget and self._pending:
-            # Rounding a waiting entry to half-float frees half its size, which is cheaper than
-            # losing a whole frame.
-            self._compact_one(next(iter(self._pending)))
-        while self.bytes > self.budget:
-            (evicted_key, evicted_region), evicted = self._entries.popitem(last=False)
-            self._pending.discard((evicted_key, evicted_region))
-            self.bytes -= evicted[0].nbytes
-            remaining = self._residents[evicted_key] - 1
-            if remaining:
-                self._residents[evicted_key] = remaining
+        with self._lock:
+            existing = self._entries.pop(slot, None)
+            if existing is not None:
+                self.bytes -= existing[0].nbytes
+                self._pending.discard(slot)
             else:
-                del self._residents[evicted_key]
+                self._residents[key] = self._residents.get(key, 0) + 1
+            self._entries[slot] = (stored, bool(is_data))
+            if pending:
+                self._pending.add(slot)
+            self.bytes += size
+            if self.bytes > self.budget and self._pending and self.background_compaction:
+                self._compact_in_background()
+                # The frames being rounded still count at full size for a moment: let the cache run over its budget by a few
+                # frames rather than wait for them, and evict only if the rounding cannot keep up.
+                ceiling = self.budget + self.OVERSHOOT_FRAMES * size
+            else:
+                ceiling = self.budget
+                while self.bytes > self.budget and self._pending:
+                    # Rounding a waiting entry to half-float frees half its size, which is cheaper than
+                    # losing a whole frame.
+                    self._compact_one(next(iter(self._pending)))
+            while self.bytes > ceiling:
+                (evicted_key, evicted_region), evicted = self._entries.popitem(last=False)
+                self._pending.discard((evicted_key, evicted_region))
+                self._compacting.discard((evicted_key, evicted_region))
+                self.bytes -= evicted[0].nbytes
+                remaining = self._residents[evicted_key] - 1
+                if remaining:
+                    self._residents[evicted_key] = remaining
+                else:
+                    del self._residents[evicted_key]
 
     def _compact_one(self, slot):
-        entry = self._entries.get(slot)
-        self._pending.discard(slot)
-        if entry is None or entry[0].dtype != np.float32:
+        with self._lock:
+            entry = self._entries.get(slot)
+            self._pending.discard(slot)
+            if entry is None or entry[0].dtype != np.float32:
+                return
+            stored = np.ascontiguousarray(half_safe(entry[0])).astype(np.float16)
+            self.bytes -= entry[0].nbytes - stored.nbytes
+            self._entries[slot] = (stored, entry[1])
+
+    def _compact_in_background(self):
+        """Schedule the rounding of enough waiting entries (oldest first) to bring the cache back under its budget."""
+        excess = self.bytes - self.budget
+        chosen = []
+        for slot, (stored, _is_data) in self._entries.items():       # oldest first
+            if excess <= 0:
+                break
+            if slot not in self._pending:
+                continue
+            excess -= stored.nbytes // 2
+            if slot not in self._compacting:                          # one already on its way counts but is not sent again
+                chosen.append(slot)
+        if not chosen:
             return
-        stored = np.ascontiguousarray(half_safe(entry[0])).astype(np.float16)
-        self.bytes -= entry[0].nbytes - stored.nbytes
-        self._entries[slot] = (stored, entry[1])
+        self._compacting.update(chosen)
+        if self._pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-compact")
+        try:
+            self._pool.submit(self._compact_slots, chosen)
+        except RuntimeError:            # the pool was shut down with the window: do it here
+            self._compacting.difference_update(chosen)
+            for slot in chosen:
+                self._compact_one(slot)
+
+    def _compact_slots(self, slots):
+        for slot in slots:
+            with self._lock:
+                entry = self._entries.get(slot)
+                if entry is None or entry[0].dtype != np.float32:
+                    self._pending.discard(slot)
+                    self._compacting.discard(slot)
+                    continue
+                source = entry[0]
+            stored = np.ascontiguousarray(half_safe(source)).astype(np.float16)       # the cost, outside the lock
+            with self._lock:
+                current = self._entries.get(slot)
+                self._pending.discard(slot)
+                self._compacting.discard(slot)
+                if current is not None and current[0] is source:
+                    self.bytes -= source.nbytes - stored.nbytes
+                    self._entries[slot] = (stored, current[1])
+
+    def drain(self):
+        """Wait until the background rounding that is scheduled has finished (tests, and a window closing)."""
+        pool = self._pool
+        if pool is not None:
+            pool.submit(lambda: None).result()
+
+    def close(self):
+        pool, self._pool = self._pool, None
+        if pool is not None:
+            pool.shutdown(wait=True, cancel_futures=True)
 
     @property
     def has_pending(self):
@@ -491,10 +593,12 @@ class DisplayCache:
         return done
 
     def clear(self):
-        self._pending.clear()
-        self._entries.clear()
-        self._residents.clear()
-        self.bytes = 0
+        with self._lock:
+            self._pending.clear()
+            self._compacting.clear()
+            self._entries.clear()
+            self._residents.clear()
+            self.bytes = 0
 
     def __len__(self):
         return len(self._entries)

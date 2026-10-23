@@ -129,7 +129,12 @@ def to_working(rgba, space, associated=False, *, in_place=False):
 _GPU_PREFERRED_VIEWS = frozenset({'ACES 2.0'})
 
 
-def display_rgb(rgb, view):
+def display_rgb(rgb, view, owned=False):
+    """``rgb`` is straight HxWx3 float32. A GPU view also accepts HxWx4 (alpha ignored; no copy of the first three
+    channels is made); every other path takes the first three channels. Returns HxWx3.
+
+    ``owned``: the caller uses the result at once and drops it, and may write into it, so the card path may hand back its
+    own readback buffer (valid until the next call) instead of a 25 MB copy of it at 1080p."""
     if view in ('Linear', 'Raw'):
         return rgb
     if view not in ('sRGB', 'ACES 2.0'):
@@ -143,9 +148,11 @@ def display_rgb(rgb, view):
         gpu = gpudisplay.get_display()
         if gpu is not None:
             try:
-                return gpu.render(rgb, view)
+                return gpu.render(rgb, view, copy=not owned)
             except gpudisplay.GpuUnavailable:
                 pass  # Falls through to the CPU path below; the failure is already recorded.
+    if rgb.shape[-1] == 4:
+        rgb = rgb[..., :3]
     image = np.array(rgb, dtype=np.float32, copy=True, order='C')
     apply_threaded(display_processor(view), image)
     return image
