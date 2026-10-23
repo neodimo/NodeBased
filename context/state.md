@@ -1,3 +1,7 @@
+# Lane 6 — 2026-10-23 finish 3 status (PARTIAL)
+
+Tiered liquid/whitewater solves now use a dedicated proxy checkpoint store; focused frame-59 reuse, whitewater routing, and knowledge tests pass. RTX production still misses first proxy: 118.782 s / 504 FLIP steps / 1 smoke step on the initial fresh variant; after nested whitewater routing a distinct variant measured 103.014 s / 496 FLIP / 1 smoke. The variants are not a controlled comparison. Full 120-frame timeline and 12 FPS were not run. Evidence and scratch paths are in the newest TASKLOG entry; next owner Gonzo, start with the profile log under `scratch/nb-lanes/run/big-L6/`.
+
 # 2026-10-22 — Lane 8 step B finish 6 — PARTIAL
 
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (3:55 AM on 2026-10-23 PDT)

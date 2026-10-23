@@ -13,6 +13,37 @@ from tests.test_particles_nodes import make, wire
 
 
 class FluidSurfaceCacheTests(unittest.TestCase):
+    def test_proxy_checkpoints_resume_keyed_edit_from_frame_59(self):
+        with tempfile.TemporaryDirectory() as folder:
+            dispatcher = Dispatcher()
+            make(dispatcher, src=("FluidSource3D", {"fluid_type": "liquid", "src_center_y": 0.8,
+                "src_radius": 0.22, "end_frame": 60}),
+                liquid=("FluidLiquidSolver3D", {"division_size": 0.25, "bounds_min_x": -0.6,
+                    "bounds_min_y": 0., "bounds_min_z": -0.6, "bounds_max_x": 0.6,
+                    "bounds_max_y": 1.2, "bounds_max_z": 0.6, "substeps": 1, "particles_per_cell": 1}),
+                cache=("ParticleCache3D", {"cache_memory_mb": 256, "cache_disk_mb": 2048}))
+            wire(dispatcher, "liquid", "fluid", "src")
+            wire(dispatcher, "cache", "particles", "liquid")
+            evaluator = Evaluator(sim=SimCache(root=folder))
+            for frame in range(1, 60):
+                evaluator.evaluate_raster(dispatcher.document, "cache", frame=frame, tier=4, typed=True)
+            old_run = evaluator._fluid_run_history[("liquid", "liquid", 4)]
+            proxy_store = evaluator.sim_proxy_solver_store(256, 2048)
+            self.assertEqual(proxy_store.frames(old_run), list(range(1, 60)))
+
+            edited = dispatcher.document
+            edited["animation"]["curves"]["src"] = {"src_radius": {"interpolation": "constant", "keys": [
+                {"frame": 1, "value": 0.22}, {"frame": 60, "value": 0.24}]}}
+            evaluator.prime_fluid_reuse("liquid", "liquid", 60, tier=4)
+            before_steps = flip3d.SOLVER_STATS["steps"]
+            partial = evaluator.evaluate_raster(edited, "cache", frame=60, tier=4, typed=True)
+            self.assertEqual(flip3d.SOLVER_STATS["steps"] - before_steps, 1)
+            new_run = evaluator._fluid_run_history[("liquid", "liquid", 4)]
+            self.assertEqual(proxy_store.frames(new_run), [59, 60])
+            reference = Evaluator().evaluate_raster(edited, "cache", frame=60, tier=4, typed=True)
+            np.testing.assert_array_equal(partial.positions, reference.positions)
+            np.testing.assert_array_equal(partial.ids, reference.ids)
+
     def test_particle_cache_reuses_changed_liquid_stream_checkpoint(self):
         with tempfile.TemporaryDirectory() as folder:
             dispatcher = Dispatcher()
@@ -133,6 +164,39 @@ class FluidSurfaceCacheTests(unittest.TestCase):
             whitewater_store = evaluator._sim_stores[(256, 2048)]
             self.assertTrue(all(cache is upstream_store for cache in used_stores))
             self.assertIsNot(upstream_store, whitewater_store)
+
+    def test_proxy_whitewater_solves_liquid_in_proxy_checkpoint_store(self):
+        dispatcher = Dispatcher()
+        grid = {"division_size": 0.25, "bounds_min_x": -0.6, "bounds_min_y": 0.0,
+                "bounds_min_z": -0.6, "bounds_max_x": 0.6, "bounds_max_y": 1.2,
+                "bounds_max_z": 0.6, "substeps": 1, "particles_per_cell": 1}
+        make(dispatcher, src=("FluidSource3D", {"fluid_type": "liquid", "src_center_y": 0.8,
+                "src_radius": 0.22, "end_frame": 2}),
+             solver=("FluidLiquidSolver3D", grid),
+             cache=("ParticleCache3D", {"cache_memory_mb": 256, "cache_disk_mb": 2048}),
+             white=("FluidWhitewater3D", {"cache_memory_mb": 256, "cache_disk_mb": 2048,
+                                            "max_particles": 12}))
+        wire(dispatcher, "solver", "fluid", "src")
+        wire(dispatcher, "cache", "particles", "solver")
+        wire(dispatcher, "white", "particles", "cache")
+
+        with tempfile.TemporaryDirectory() as folder:
+            evaluator = Evaluator(sim=SimCache(root=folder))
+            original = flip3d.solve_frame
+            used_stores = []
+
+            def record_store(stream, frame, cache, cancel=None):
+                used_stores.append(cache)
+                return original(stream, frame, cache, cancel)
+
+            with mock.patch.object(flip3d, "solve_frame", side_effect=record_store):
+                evaluator.evaluate_raster(dispatcher.document, "white", frame=2, tier=4, typed=True)
+
+            proxy_store = evaluator.sim_proxy_solver_store(256, 2048)
+            self.assertTrue(used_stores)
+            self.assertTrue(all(cache is proxy_store for cache in used_stores))
+            run = evaluator._fluid_run_history[("liquid", "solver", 4)]
+            self.assertEqual(proxy_store.frames(run), [1, 2])
 
 
 if __name__ == "__main__":

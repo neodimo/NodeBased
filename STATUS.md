@@ -1,3 +1,7 @@
+# Lane 6 step B finish 3 — proxy checkpoint reuse (PARTIAL, 2026-10-23 4:11 AM PDT)
+
+Tier-4 liquid proxy frames now have a dedicated exact checkpoint store; tiered whitewater and its nested liquid solve use proxy checkpoints. Focused frame-59/60 bit-identical reuse and whitewater-store regressions pass. RTX production first proxy remains 103.014 s with 496 FLIP and 1 smoke step on a distinct variant, above the <1 s gate. The 120-frame/12 FPS, full-detail split, cup/steam and integrated Radeon gates remain open; A6000 is estimate-only. Evidence and remaining replay investigation are recorded in the newest TASKLOG entry. Needs Gonzo: resolve remaining FLIP replay and smoke cost, then complete the production matrix.
+
 # Lane 6 step B finish 2 — PARTIAL (2026-10-23)
 
 Collider pose cache committed at `decbff08`; follow-up forwards checkpoint reuse into downstream particle and whitewater caches. 112 focused fluid tests and 7 knowledge tests pass; bundled docs compare byte-identical. RTX 3080 Ti 256³/192³: profiled scene evaluation 346.208 s before → 122.454 s after; collider solid voxelization 188.852 → 24.474 s; fresh first displayed 64-cell proxy 113.494 s. The <1 s first-proxy, full 120-frame/12 FPS, full-detail stage split, cup/steam and integrated Radeon gates remain open. A6000 is estimate-only. See JSON, docs, and TASKLOG. Needs Gonzo: continue remaining replay/domain-resize optimization and production matrix.

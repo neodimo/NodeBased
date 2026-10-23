@@ -100,7 +100,8 @@ def prime_reuse(evaluator, doc, checkpoint_frame):
             old_run = evaluator._fluid_run_history.get((kind, str(solver_id), tier))
             cached_through = []
             if old_run is not None:
-                for cache in (*evaluator._sim_stores.values(), *evaluator._sim_preview_stores.values()):
+                for cache in (*evaluator._sim_stores.values(), *evaluator._sim_preview_stores.values(),
+                              *evaluator._sim_proxy_solver_stores.values()):
                     frames = cache.frames(old_run)
                     present = [frame for frame in frames if frame < checkpoint_frame]
                     if present:
@@ -203,12 +204,16 @@ def main():
             prime_reuse(evaluator, doc, checkpoint_frame)
             first_frame = EDIT_FRAME if checkpoint_frame is not None else 1
             started = time.perf_counter()
+            from nodebased import flip3d, fluid3d
+            steps_before = (flip3d.SOLVER_STATS["steps"], fluid3d.SOLVER_STATS["steps"])
             if args.profile_first:
                 profiler = cProfile.Profile()
                 scene = profiler.runcall(evaluator.evaluate_raster, doc, "scene", frame=first_frame,
                                          tier=4, typed=True)
                 profiler.print_stats(sort="cumulative")
-                print(f"profiled edited first frame {edit} at frame {first_frame}; stopping by request",
+                print(f"profiled edited first frame {edit} at frame {first_frame}; "
+                      f"solver-step delta flip={flip3d.SOLVER_STATS['steps'] - steps_before[0]} "
+                      f"smoke={fluid3d.SOLVER_STATS['steps'] - steps_before[1]}; stopping by request",
                       flush=True)
                 return
             scene = evaluator.evaluate_raster(doc, "scene", frame=first_frame, tier=4, typed=True)
@@ -216,18 +221,22 @@ def main():
             renderer.render(scene, camera, max(1, -(-args.play_width // 4)),
                             max(1, -(-args.play_height // 4)), (0.02, 0.02, 0.025, 1.0), ambient=0.2)
             first_elapsed = time.perf_counter() - started
+            solver_steps = {"flip": flip3d.SOLVER_STATS["steps"] - steps_before[0],
+                            "smoke": fluid3d.SOLVER_STATS["steps"] - steps_before[1]}
             row = result["edits"].setdefault(edit, {})
             row.update({"adapter": result["adapter"], "keyed_at_frame": EDIT_FRAME,
                         "first_changed_frame": checkpoint_frame or 1,
                         "first_proxy_frame": first_frame,
                         "proxy_first_frame_s": round(first_elapsed, 4),
+                        "first_proxy_solver_steps": solver_steps,
                         "edit_commands": commands,
                         "proxy_frames": {}})
             checkpoint(args.json, result)
             if args.first_only:
                 row["first_proxy_display_measured"] = True
                 checkpoint(args.json, result)
-                print(f"{edit}: first displayed proxy frame {first_elapsed:.3f}s", flush=True)
+                print(f"{edit}: first displayed proxy frame {first_elapsed:.3f}s; "
+                      f"solver steps {solver_steps}", flush=True)
                 return
             times = []
             for frame in range(1, args.frames + 1):

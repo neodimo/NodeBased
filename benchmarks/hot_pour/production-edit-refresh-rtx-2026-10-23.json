@@ -75,5 +75,33 @@
       "delta": 0.38,
       "keyed_frame": 60
     }
+  },
+  "proxy_checkpoint_followup": {
+    "date": "2026-10-23",
+    "adapter": "NVIDIA GeForce RTX 3080 Ti",
+    "liquid_cells": 256,
+    "smoke_cells": 192,
+    "edit": "pour_rate keyed at frame 60",
+    "proxy_solver_checkpoints": "dedicated proxy-solver-v1 namespace; exact frames persisted through frame 59",
+    "regression": "test_proxy_checkpoints_resume_keyed_edit_from_frame_59 passes; one solver step after frame-60 edit and bit-identical clean replay",
+    "fresh_first_proxy_s": 118.7816,
+    "fresh_first_proxy_solver_steps": {
+      "flip": 504,
+      "smoke": 1
+    },
+    "profiled_first_proxy_s": 120.355,
+    "profiled_solver_steps": {
+      "flip": 504,
+      "smoke": 1
+    },
+    "profile_observation": "cProfile attributes dominant replay to nested liquid solving through the full-detail store; one smoke proxy frame also remains expensive",
+    "nested_whitewater_proxy_store_fix": "implemented and focused regression passes",
+    "post_fix_first_proxy_variant_s": 103.014,
+    "post_fix_first_proxy_variant_solver_steps": {
+      "flip": 496,
+      "smoke": 1
+    },
+    "post_fix_variant_note": "distinct source delta and warmed cache; not a controlled before/after comparison",
+    "gate": "miss: first displayed proxy must be under 1 s; 120-frame timeline and 12 FPS scrub not run"
   }
 }

@@ -712,6 +712,7 @@ class Evaluator:
         self._sim_memory = simcache.SimCache(enabled=False)
         self._sim_stores = {}
         self._sim_preview_stores = {}
+        self._sim_proxy_solver_stores = {}
         self._sim_preview_ring = simcache.PreviewFrameRing(neighbor_frames=3)
         self.preview_direction = 1
         self._sim_surface_store = None
@@ -803,6 +804,21 @@ class Evaluator:
                                       disk_budget=budget << 20, enabled=enabled,
                                       profile=None if self.sim_template is None else self.sim_template.profile)
             self._sim_preview_stores[key] = store
+        return store
+
+    def sim_proxy_solver_store(self, memory_mb, disk_mb):
+        """Keep exact, per-frame proxy solver checkpoints outside full-detail cache eviction."""
+        from . import simcache
+        key = (int(memory_mb), int(disk_mb))
+        store = self._sim_proxy_solver_stores.get(key)
+        if store is None:
+            template = self.sim_template
+            enabled = bool(template is not None and template.enabled and template.root is not None and key[1] > 0)
+            root = (template.root / "proxy-solver-v1" / f"{key[0]}-{key[1]}" if enabled else None)
+            store = simcache.SimCache(root=root, memory_budget=key[0] << 20,
+                                      disk_budget=key[1] << 20, enabled=enabled,
+                                      profile=None if template is None else template.profile)
+            self._sim_proxy_solver_stores[key] = store
         return store
 
     def sim_preview_state(self, store, run, frame, doc):
@@ -1541,7 +1557,12 @@ class Evaluator:
                                 if state is not None:
                                     display_tier = 4
                             if state is None:
-                                state = particles.solve_frame(stream, frame, store, cancel)
+                                # The reduced-resolution solver is a separate run from the
+                                # authored cache. Preserve its exact per-frame anchors so a
+                                # keyed edit can resume from the preceding proxy frame.
+                                proxy_solver_store = self.sim_proxy_solver_store(
+                                    params["cache_memory_mb"], params["cache_disk_mb"])
+                                state = particles.solve_frame(stream, frame, proxy_solver_store, cancel)
                                 state = flip3d.preview_state(state, stream, tier)
                                 preview_store.put(preview_run, int(frame), state)
                                 self.remember_sim_preview_state(preview_run, frame, state)
@@ -1644,13 +1665,18 @@ class Evaluator:
                         else:
                             self._fluid_run_history[history_key] = run
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        solver_store = (self.sim_proxy_solver_store(params["cache_memory_mb"],
+                                                                    params["cache_disk_mb"])
+                                        if tier > 1 else store)
                         liquid_store = store
                         particles_node = nodes.get(node["inputs"].get("particles"))
                         if particles_node is not None and particles_node.get("type") == "ParticleCache3D" \
                                 and not particles_node.get("disabled", False):
                             cache_params = particles_node.get("params", {})
-                            liquid_store = self.sim_store(cache_params.get("cache_memory_mb", 256),
-                                                          cache_params.get("cache_disk_mb", 2048))
+                            liquid_budgets = (cache_params.get("cache_memory_mb", 256),
+                                              cache_params.get("cache_disk_mb", 2048))
+                            liquid_store = (self.sim_proxy_solver_store(*liquid_budgets)
+                                            if tier > 1 else self.sim_store(*liquid_budgets))
                         preview_store = self.sim_preview_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         def initial_whitewater(seed):
                             return _whitewater_cache_state(white_solver.initial_state(seed))
@@ -1676,7 +1702,7 @@ class Evaluator:
                             solved = None
                             display_tier = 1
                         if solved is None:
-                            solved = simcache.solve_to_frame(store, run, int(frame), fluid.start_frame, 1,
+                            solved = simcache.solve_to_frame(solver_store, run, int(frame), fluid.start_frame, 1,
                                                              int(params["seed"]), initial_whitewater,
                                                              whitewater_step, cancel, reuse_from=reuse_from)
                             if tier > 1:
