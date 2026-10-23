@@ -14,19 +14,23 @@
     "pour_rate": {
       "full_detail_stage_s": {
         "liquid_cache": 901.51,
-        "surface": 121.11
+        "surface": 121.11,
+        "whitewater": null,
+        "steam_cache": null
       },
       "full_detail_stage_frames": {
         "liquid_cache": {
-          "mean_ms": 7512.61,
-          "p95_ms": 14841.1
+          "frames": 120
         },
         "surface": {
-          "mean_ms": 1009.29,
-          "p95_ms": 2453.58
+          "frames": 120
         },
         "whitewater": {
-          "last_frame": 80
+          "last_checkpoint_frame": 80,
+          "failure_frame": 90
+        },
+        "steam_cache": {
+          "status": "not started in cold run"
         }
       },
       "full_detail_memory_peaks": {
@@ -34,12 +38,6 @@
           "peak_process_rss_mb": 16104.3,
           "peak_process_swap_mb": 0.0,
           "peak_card_memory_mb": 9819.0,
-          "card_memory_scope": "process allocation"
-        },
-        "cache_write": {
-          "peak_process_rss_mb": 13365.3,
-          "peak_process_swap_mb": 0.0,
-          "peak_card_memory_mb": 9821.0,
           "card_memory_scope": "process allocation"
         },
         "surface": {
@@ -53,50 +51,49 @@
           "peak_process_swap_mb": 0.0,
           "peak_card_memory_mb": 9821.0,
           "card_memory_scope": "process allocation"
+        },
+        "cache_write": {
+          "peak_process_rss_mb": 13365.3,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 9821.0,
+          "card_memory_scope": "process allocation"
         }
       }
     }
   },
   "full_base_prefix_memory_peaks": {
     "cache_write": {
-      "peak_process_rss_mb": 6462.5,
+      "peak_process_rss_mb": 1376.4,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 4630.0,
+      "peak_card_memory_mb": 203.0,
       "card_memory_scope": "process allocation"
     },
     "liquid_cache": {
-      "peak_process_rss_mb": 2555.9,
+      "peak_process_rss_mb": 389.4,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 1490.0,
+      "peak_card_memory_mb": 203.0,
       "card_memory_scope": "process allocation"
     },
     "surface": {
-      "peak_process_rss_mb": 2927.2,
+      "peak_process_rss_mb": 1194.3,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 2262.0,
+      "peak_card_memory_mb": 203.0,
       "card_memory_scope": "process allocation"
     },
     "whitewater": {
-      "peak_process_rss_mb": 5604.2,
+      "peak_process_rss_mb": 1315.5,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 4352.0,
+      "peak_card_memory_mb": 203.0,
       "card_memory_scope": "process allocation"
     },
     "steam_cache": {
-      "peak_process_rss_mb": 7230.5,
+      "peak_process_rss_mb": 1336.5,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 4630.0,
+      "peak_card_memory_mb": 203.0,
       "card_memory_scope": "process allocation"
     }
   },
-  "memory_probe_failure": {
-    "edit": "pour_rate",
-    "stage": "whitewater",
-    "frame": 90,
-    "error": "GPUValidationError: Validation Error\n\nCaused by:\n  In wgpuDeviceCreateBuffer\n    Not enough memory left.",
-    "cleaned_up": true
-  },
-  "full_base_prefix_s": 516.47,
+  "full_base_prefix_s": 17.68,
   "max_process_rss_mb": 16384,
   "memory_probe_attempts": [
     {
@@ -130,5 +127,20 @@
       "peak_process_swap_mb": 0.0,
       "result": "neighbor-list allocation failed; retry-at-half-budget added for follow-up"
     }
-  ]
+  ],
+  "recovery_attempt": {
+    "cache_warm": true,
+    "completed": {
+      "whitewater": "120/120",
+      "steam_cache": "70/120"
+    },
+    "whitewater_incremental_stage_s": 195.69,
+    "whitewater_peak_process_rss_mb": 3590.7,
+    "whitewater_peak_card_memory_mb": 3595.0,
+    "steam_cache_peak_process_rss_mb": 6094.1,
+    "steam_cache_peak_card_memory_mb": 4682.0,
+    "process_swap_mb": 0.0,
+    "whitewater_status_line": "reduced neighbor evaluation from 696,967 to 131,072 under the live card-memory budget",
+    "stop": "600-second timeout during steam at frame 70"
+  }
 }

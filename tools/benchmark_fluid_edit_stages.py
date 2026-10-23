@@ -57,6 +57,12 @@ def enforce_process_rss_cap(limit_mb):
         raise MemoryError(f"process RSS {current:.1f} MiB exceeded the {float(limit_mb):.0f} MiB cap")
 
 
+def begin_memory_probe(result, process_cap_mb):
+    """Reset stale stop metadata when appending measurements from a fresh probe attempt."""
+    result.pop("memory_probe_failure", None)
+    result["max_process_rss_mb"] = process_cap_mb
+
+
 def card_memory_mb(adapter):
     """Current process/card allocation where the driver exposes it."""
     if adapter == "default":
@@ -324,7 +330,7 @@ def main():
         "frames": args.frames, "edit_frame": EDIT_FRAME,
         "max_process_rss_mb": args.max_process_rss_mb,
         "proxy_resolution_cells": 64, "viewport": [args.play_width, args.play_height], "edits": {}})
-    result["max_process_rss_mb"] = args.max_process_rss_mb
+    begin_memory_probe(result, args.max_process_rss_mb)
     edit_names = list(EDITS) if args.edit == "all" else [args.edit]
     restore_cache_probe, cache_write_peak = install_cache_write_probe(args.adapter)
 

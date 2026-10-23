@@ -37,6 +37,12 @@ class FluidEditMemoryTests(unittest.TestCase):
         self.assertEqual(sample.result()["peak_card_memory_mb"], None)
         self.assertEqual(sample.result()["card_memory_scope"], "unavailable")
 
+    def test_new_probe_clears_a_prior_failure_marker(self):
+        previous = {"memory_probe_failure": {"frame": 90}}
+        benchmark.begin_memory_probe(previous, 16384)
+        self.assertNotIn("memory_probe_failure", previous)
+        self.assertEqual(previous["max_process_rss_mb"], 16384)
+
     def test_whitewater_over_budget_selects_bounded_deterministic_sample_and_status(self):
         from nodebased.fluid_gpu_whitewater import (_budgeted_sample_indices, neighbor_lists,
                                                     NeighborListBudgetExceeded)

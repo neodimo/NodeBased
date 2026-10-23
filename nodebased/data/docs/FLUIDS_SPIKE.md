@@ -1759,26 +1759,25 @@ Acceleration build, upload and pipeline measurements are subphases within the be
 
 ### A of 1: full-detail refinement memory (partial, 2026-10-23)
 
-The full-detail memory probe now records process RSS, process swap and card memory per stage. It uses a 128 MiB evaluator result cache, 64 MiB in-memory simulation stores that spill checkpoints to disk, a 16 GiB sampled RSS stop and a 23 GB scratch ceiling. The 256³ liquid / 192³ steam RTX 3080 Ti run completed the 59-frame baseline prefix in 516.47 s. After a frame-60 `pour_rate` edit, the liquid cache and surface stages completed 120 frames. Whitewater reached frame 80; an RTX buffer allocation failed while evaluating frame 90. Steam refinement did not start. The process stayed within the RSS stop and process swap remained zero. Whitewater reduced its sampled neighbor workload under the live free-card budget; a smaller retry on allocation failure is implemented and awaits a production rerun.
+The full-detail memory probe records process RSS, process swap and card memory per stage. It uses a 128 MiB evaluator result cache, 64 MiB in-memory simulation stores that spill checkpoints to disk, a 16 GiB sampled RSS stop and a 23 GB scratch ceiling. The 256³ liquid / 192³ steam RTX 3080 Ti run completed the 59-frame baseline prefix in 516.47 s. After a frame-60 `pour_rate` edit, the cold liquid and surface stages completed all 120 frames. Cold whitewater reached frame 80 and hit a GPU buffer allocation failure during frame 90; steam had not started. A subsequent warm-cache retry completed whitewater through frame 120 after reporting that neighbor evaluation was reduced from 696,967 to 131,072. Steam reached frame 70 before the 600-second timeout. The warm retry's stage timings are incremental and are not cold full-stage totals. Swap remained zero.
 
-| Edited stage | Time | Peak process RSS | Peak card memory | Frames |
+| Edited stage | Cold time | Cold peak process RSS | Cold peak card memory | Cold completion |
 | --- | ---: | ---: | ---: | ---: |
 | Liquid cache | 901.51 s | 16,104.3 MiB | 9,819 MiB | 120 / 120 |
 | Surface | 121.11 s | 10,328.4 MiB | 8,029 MiB | 120 / 120 |
 | Whitewater | — | 12,628.7 MiB | 9,821 MiB | 80 / 120; failed during frame 90 |
-| Steam cache | — | — | — | not started |
-| Cache write, sampled across the run | — | 13,365.3 MiB | 9,821 MiB | — |
+| Steam cache | — | — | — | not started in cold run |
+| Cache write | — | 13,365.3 MiB | 9,821 MiB | — |
 
-The earlier 12 GiB virtual-memory-cap run stopped cleanly at the 158 MiB liquid-grid allocation on frame 62; it did not swap. The pre-budget whitewater attempt stopped at frame 55 after reaching 9,523.5 MiB process RSS and 9,418 MiB card allocation. Attempt details and stage measurements are in `benchmarks/hot_pour/full-refinement-memory-rtx-2026-10-23.json`.
+The warm retry completed whitewater at an incremental 195.69 s, peaking at 3,590.7 MiB process RSS and 3,595 MiB card memory. Steam reached frame 70 with peaks of 6,094.1 MiB RSS and 4,682 MiB card memory. Both runs reported zero process swap. The JSON records both attempts and the 12 GiB cap attempts.
 
 | Adapter | Full-detail status | Memory / time note |
 | --- | --- | --- |
-| RTX 3080 Ti | Partial | Card peak 9,821 MiB; RSS peak 16,104.3 MiB; swap 0 MiB. Whitewater allocation recovery and steam stage remain unverified. |
-| Integrated Radeon laptop stand-in | Unmeasured | The required 16 GiB RSS run with `taskset -c 0-3` remains pending. |
-| RTX A6000 | Estimate only | 48 GB VRAM provides more headroom than the RTX 3080 Ti; planning estimate is 0.8–1.3× RTX stage time. No A6000 run has been measured. |
+| RTX 3080 Ti | Partial | Cold RSS peak 16,104.3 MiB; card peak 9,821 MiB; swap 0 MiB. Warm whitewater completed; steam stopped at frame 70 on timeout. |
+| Integrated Radeon laptop stand-in | Unmeasured | Required 16 GiB RSS run with `taskset -c 0-3` remains pending. |
+| RTX A6000 | Estimate only | 48 GB VRAM offers more headroom; 0.8–1.3× RTX stage time is a planning estimate, not measured. |
 
-**State:** PARTIAL. Whitewater budgeting and disk-streamed cache tests pass on CPU/llvmpipe; whitewater GPU tests pass on RTX, Radeon and llvmpipe. Full 120-frame whitewater, steam, the laptop RSS gate and the A6000 estimate remain open.
-
+**State:** PARTIAL. Whitewater budgeting and disk-streamed cache tests pass on CPU/llvmpipe; whitewater GPU tests pass on RTX, Radeon and llvmpipe. Full 120-frame steam, the laptop RSS gate and A6000 measurement remain open.
 
 ## K2 rigid bodies — finish 1
 
