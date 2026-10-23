@@ -616,6 +616,10 @@ class NextFrameBeforeHandOverTests(Base):
         w.signals.finished.disconnect()
         w.signals.finished.connect(ready)
         w.playback_proxy.setChecked(False)
+        # The early start is the serial path's: with the played-frame pipeline (10/22) the worker is freed when a frame
+        # is evaluated, before its "ready", which test_playback_pipeline covers. Hold this one to the serial path.
+        w.pipeline_playback = False
+        self.addCleanup(setattr, w, "pipeline_playback", True)
         w.toggle_playback(True)
         self.assertTrue(wait_until(lambda: log.count("show") >= 6, timeout=20))
         w.toggle_playback(False)
