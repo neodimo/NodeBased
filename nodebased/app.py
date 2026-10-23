@@ -9710,8 +9710,7 @@ class Window(QMainWindow):
         start = (not self.playing) if checked is None else bool(checked)
         if start == self.playing:
             return
-        fluid_project = any(node.get("type") == "FluidSurface3D"
-                            for node in self.dispatcher.document.get("nodes", {}).values())
+        fluid_project = self._view_uses_fluid(self.dispatcher.document)
         stopping_proxy = not start and (self.proxy.currentData() != 1
                                         or self.playback_auto_proxy_index is not None)
         self.playing = start
@@ -9801,6 +9800,7 @@ class Window(QMainWindow):
                     self.request_preview(tier_override=2)
                 else:
                     self.request_preview(tier_override=1)
+            self._queue_next_fluid_bake_frame(getattr(self, "_fluid_edit_bake", None))
 
     def playback_tick(self):
         """Follow the wall clock when rendering can keep up. When it can't, Nuke-style fallback:
@@ -10917,11 +10917,24 @@ class Window(QMainWindow):
             fluid_edit = (fluid_view
                           and self._command_changes_fluid_simulation(self.dispatcher.document, command))
             if fluid_edit:
+                checkpoint = self._fluid_checkpoint_frame(self.dispatcher.document, command)
+                if checkpoint is not None:
+                    _nodes, simulation_ids = self._fluid_simulation_scope(self.dispatcher.document)
+                    for solver_id in simulation_ids:
+                        if self.dispatcher.document["nodes"][solver_id].get("type") == "FluidSolver3D":
+                            self.evaluator.prime_fluid_reuse("smoke", solver_id, checkpoint, tier=1)
+                            self.evaluator.prime_fluid_reuse("smoke", solver_id, checkpoint, tier=4)
+                        elif self.dispatcher.document["nodes"][solver_id].get("type") == "FluidLiquidSolver3D":
+                            self.evaluator.prime_fluid_reuse("liquid", solver_id, checkpoint, tier=1)
+                            self.evaluator.prime_fluid_reuse("liquid", solver_id, checkpoint, tier=4)
                 self._set_fluid_stale(True)
-            self.request_preview(progressive=not self.playing)
             if fluid_edit:
                 self._begin_fluid_edit_bake()
-            elif fluid_view:
+                if checkpoint is not None and getattr(self, "fluid_bake_status", None) is not None:
+                    self.fluid_bake_status.setText(f"SIM UPDATE · re-bake from frame {checkpoint}")
+            self.request_preview(progressive=not self.playing and not fluid_edit,
+                                 tier_override=4 if fluid_edit else None)
+            if not fluid_edit and fluid_view:
                 from . import fluid_edits
                 text = fluid_edits.status_text(self.dispatcher.document, command)
                 label = getattr(self, "fluid_bake_status", None)
@@ -10988,6 +11001,51 @@ class Window(QMainWindow):
         return command.get("id") in simulation_ids
 
     @staticmethod
+    def _fluid_checkpoint_frame(document, command):
+        """Earliest affected frame for an animated fluid input edit, if safely identifiable."""
+        op = command.get("op")
+        if op in {"set_key", "delete_key"}:
+            frame = command.get("frame")
+        elif op == "set_curve":
+            curve = command.get("curve") or {}
+            keys = curve.get("keys", ()) if isinstance(curve, dict) else ()
+            frames = [item.get("frame") for item in keys if isinstance(item, dict)]
+            frame = min(frames) if frames else None
+        else:
+            return None
+        if frame is None:
+            return None
+        nodes, simulation_ids = Window._fluid_simulation_scope(document)
+        changed_id = command.get("id")
+        node = nodes.get(changed_id, {})
+        from . import fluid_edits
+        if node.get("type") in {"FluidSource3D", "FluidForce3D"} \
+                and fluid_edits.knob_class(node["type"], command.get("param")) == "from-frame":
+            return max(1, int(frame))
+        if changed_id not in simulation_ids:
+            return None
+
+        def ancestors(roots):
+            found, stack = set(), list(roots)
+            while stack:
+                key = stack.pop()
+                if key in found or key not in nodes:
+                    continue
+                found.add(key)
+                stack.extend(source for source in nodes[key].get("inputs", {}).values() if source is not None)
+            return found
+
+        for key in simulation_ids:
+            collider = nodes[key]
+            if collider.get("type") != "FluidCollide3D" or not collider.get("params", {}).get("animated"):
+                continue
+            geometry = collider.get("inputs", {}).get("geometry")
+            if changed_id in ancestors([geometry]):
+                # Collider velocity for frame N-1 samples geometry at N to derive its motion.
+                return max(1, int(frame) - 1)
+        return None
+
+    @staticmethod
     def _view_uses_fluid(document):
         target = document.get("view")
         if target is None:
@@ -11049,8 +11107,24 @@ class Window(QMainWindow):
         first, last = int(time_range.get("first", 1)), int(time_range.get("last", 1))
         self._fluid_edit_bake = {"generation": self.generation, "document": document,
                                  "identity": self._fluid_bake_identity(document), "first": first,
-                                 "last": last, "baked": set(), "done": False}
+                                 "last": last, "baked": set(), "proxy_baked": set(),
+                                 "full_baked": set(), "stage": "proxy", "done": False}
         self._set_fluid_stale(True)
+
+    def _queue_next_fluid_bake_frame(self, state):
+        if state is None or state["done"] or self.playing:
+            return
+        stage_key = "proxy_baked" if state["stage"] == "proxy" else "full_baked"
+        next_frame = state["first"]
+        while next_frame in state[stage_key] and next_frame <= state["last"]:
+            next_frame += 1
+        if next_frame > state["last"]:
+            if state["stage"] == "proxy":
+                state["stage"] = "full"
+                self._queue_next_fluid_bake_frame(state)
+            return
+        self.preview_queue.enqueue_background(state["generation"], next_frame, state["document"],
+                                              tier=4 if state["stage"] == "proxy" else 1)
 
     def _advance_fluid_edit_bake(self, request, frame, cancel):
         state = self._fluid_edit_bake
@@ -11060,27 +11134,33 @@ class Window(QMainWindow):
             state["done"] = True
             self.fluid_bake_status.setText("SIM BAKE FAILED")
             return
+        tier = int(getattr(request, "tier", 1))
+        stage_key = "proxy_baked" if tier > 1 else "full_baked"
         if request.display:
             # A visible request solves and checkpoints each earlier simulation frame too.
-            state["baked"].update(range(state["first"], min(request.frame, state["last"]) + 1))
+            state[stage_key].update(range(state["first"], min(request.frame, state["last"]) + 1))
             if request.frame == self.dispatcher.document["time"]["current"]:
                 self._set_fluid_stale(False)
         else:
-            state["baked"].add(request.frame)
+            state[stage_key].add(request.frame)
+        state["baked"].update(state["proxy_baked"])
+        state["baked"].update(state["full_baked"])
         self.frame_slider.set_simulation_frames(state["baked"])
-        count = self._contiguous_fluid_frames(state)
+        count = self._contiguous_fluid_frames({**state, "baked": state[stage_key]})
         total = state["last"] - state["first"] + 1
         if not self._fluid_stale:
-            self.fluid_bake_status.setText(f"SIM {count}/{total}")
-        if count >= total:
+            label = "PROXY" if stage_key == "proxy_baked" else "FULL"
+            self.fluid_bake_status.setText(f"SIM {label} {count}/{total}")
+        if count >= total and state["stage"] == "proxy":
+            state["stage"] = "full"
+            self._queue_next_fluid_bake_frame(state)
+            return
+        if count >= total and state["stage"] == "full":
             state["done"] = True
-            self.fluid_bake_status.setText(f"SIM READY · {count}/{total}")
-            self.fluid_bake_status.setAccessibleName(f"Simulation ready: {count} frames")
+            self.fluid_bake_status.setText(f"SIM READY · FULL {count}/{total}")
+            self.fluid_bake_status.setAccessibleName(f"Simulation full detail ready: {count} frames")
             return
-        if self.playing:
-            return
-        next_frame = state["first"] + count
-        self.preview_queue.enqueue_background(state["generation"], next_frame, state["document"], tier=1)
+        self._queue_next_fluid_bake_frame(state)
 
     def _clamp_to_baked_fluid_frame(self, target):
         state = self._fluid_edit_bake
@@ -14487,6 +14567,9 @@ class Window(QMainWindow):
             self._progressive_generation = None
             self._progressive_document = None
             tier = self.proxy.currentData() if tier_override is None else int(tier_override)
+        bake = getattr(self, "_fluid_edit_bake", None)
+        if bake is not None and not bake["done"]:
+            tier = int(self.proxy.currentData()) if frame in bake["full_baked"] else 4
         self.evaluator.preview_direction = -1 if self.playing and getattr(self, "play_direction", 1) < 0 else 1
         # Playback read-ahead belongs in the independent source-decode pool. Composing future
         # graph frames on this single preview worker can hold the next visible frame behind a

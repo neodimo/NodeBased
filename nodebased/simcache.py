@@ -561,13 +561,25 @@ class SimCache:
 
 
 def solve_to_frame(cache: SimCache, run: str, target_frame: int, start_frame: int,
-                   substeps: int, seed: int, initial_state, step, cancel=None, on_frame=None) -> "State":
+                   substeps: int, seed: int, initial_state, step, cancel=None, on_frame=None,
+                   reuse_from: tuple[str, int] | None = None) -> "State":
     if target_frame < start_frame:
         return initial_state(seed)
+    if reuse_from is not None:
+        old_run, first_changed = reuse_from
+        if target_frame < first_changed:
+            old_state = cache.get(old_run, target_frame)
+            if old_state is not None:
+                return old_state
     cached = cache.get(run, target_frame)
     if cached is not None:
         return cached
     anchor = cache.latest_at_or_before(run, target_frame - 1)
+    if anchor is None and reuse_from is not None:
+        old_run, first_changed = reuse_from
+        anchor = cache.latest_at_or_before(old_run, min(target_frame - 1, first_changed - 1))
+        if anchor is not None:
+            cache.put(run, anchor[0], anchor[1])
     if anchor is None or anchor[0] < start_frame - 1:
         anchor_frame, state = start_frame - 1, initial_state(seed)
     else:

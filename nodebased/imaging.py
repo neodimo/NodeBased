@@ -647,6 +647,8 @@ class Evaluator:
         self._sim_surface_store = None
         self._rigid_solvers = {}
         self._liquid_feedback_versions = {}
+        self._fluid_run_history = {}
+        self._fluid_reuse_hints = {}
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
         self.progress = None
         # Profile (Nuke's in-graph performance probe): one entry per evaluation of a Profile
@@ -660,6 +662,22 @@ class Evaluator:
         pixels = np.asarray(image.to_display() if hasattr(image, "to_display") else image, dtype=np.float32)
         alpha = pixels[..., 3:4]
         return np.where(alpha > 1e-6, pixels[..., :3] / np.maximum(alpha, 1e-6), pixels[..., :3]).astype(np.float32)
+
+    def prime_fluid_reuse(self, kind, solver_id, first_changed, tier=1):
+        """Ask the next changed stream for this solver to reuse its old prefix."""
+        self._fluid_reuse_hints[(kind, str(solver_id), int(tier))] = int(first_changed)
+
+    def _track_fluid_stream(self, kind, solver_id, stream, frame, tier):
+        key = (kind, str(solver_id), int(tier))
+        previous = self._fluid_run_history.get(key)
+        first_changed = self._fluid_reuse_hints.get(key)
+        if previous is not None and previous != stream.run and first_changed is not None:
+            stream.reuse_from = (previous, first_changed)
+            if int(frame) >= first_changed:
+                self._fluid_run_history[key] = stream.run
+                self._fluid_reuse_hints.pop(key, None)
+        else:
+            self._fluid_run_history[key] = stream.run
 
     def _delit_cloud(self, cloud, params, cancel):
         """`cloud` with its intrinsic layer when the node's Delight is on (fitted once per cloud and
@@ -1178,7 +1196,9 @@ class Evaluator:
                     fluid = fluid3d.chain_for(self, doc, key, node, None if slot is None else values[slot], cancel)
                     fingerprint = [fluid.run]
                 elif kind == "FluidSolver3D" and not node["disabled"]:
-                    fluid = fluid3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]])
+                    fluid = fluid3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]],
+                                                  params_override=params, tier=tier)
+                    self._track_fluid_stream("smoke", key, fluid, frame, tier)
                     fingerprint = [fluid.run, frame]
                 elif kind == "FluidCache3D" and not node["disabled"]:
                     fluid = getattr(values[node["inputs"]["volume"]], "stream", None)
@@ -1187,7 +1207,9 @@ class Evaluator:
                     fluid = getattr(values[node["inputs"]["volume"]], "stream", None)
                     fingerprint = [None if fluid is None else fluid.run, frame]
                 elif kind == "FluidLiquidSolver3D" and not node["disabled"]:
-                    fluid = flip3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]])
+                    fluid = flip3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]],
+                                                params_override=params, tier=tier)
+                    self._track_fluid_stream("liquid", key, fluid, frame, tier)
                     fingerprint = [fluid.run, frame, self._liquid_feedback_versions.get(fluid.run, 0)]
                 elif kind == "FluidWhitewater3D" and not node["disabled"]:
                     fluid = getattr(values[node["inputs"]["particles"]], "stream", None)

@@ -920,6 +920,7 @@ class LiquidStream:
         self.chain = chain
         self.params = dict(params)
         self.run = run
+        self.reuse_from = None
         self.fps = float(fps)
         self.start_frame = int(params["start_frame"])
         self.substeps = int(params["substeps"])
@@ -1000,11 +1001,11 @@ def resolve_backend(params, cells):
     return "gpu" if fluid_gpu3d.available() else "cpu"
 
 
-def build_stream(doc, key, node, chain):
+def build_stream(doc, key, node, chain, *, params_override=None, tier=1):
     """The LiquidStream of one FluidLiquidSolver3D node, from the chain wired into it."""
     from . import simcache
-    from .fluid3d import FluidChain, resolution
-    params = node["params"]
+    from .fluid3d import FluidChain, proxy_solver_params, resolution
+    params = proxy_solver_params(node["params"] if params_override is None else params_override, tier)
     shape = resolution(params)
     cells = shape[0] * shape[1] * shape[2]
     if cells > MAX_LIQUID_CELLS:
@@ -1035,7 +1036,8 @@ def solve_frame(stream, frame, cache, cancel=None, on_frame=None):
     from . import simcache
     solver = stream.solver(cancel)
     return simcache.solve_to_frame(cache, stream.run, int(frame), stream.start_frame, stream.substeps, stream.seed,
-                                   solver.initial_state, solver.step, cancel, on_frame)
+                                   solver.initial_state, solver.step, cancel, on_frame,
+                                   reuse_from=stream.reuse_from)
 
 
 def preview_cache_run(run, tier):

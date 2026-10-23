@@ -4,6 +4,7 @@ Registration, typed wiring, the solver's Volume output, forces and colliders thr
 re-solving (counted through `fluid3d.SOLVER_STATS`), invalidation, cancellation, budgets, restart from disk, bypass,
 old documents, and a solved frame drawn by Render3D's raymarch.
 """
+import copy
 import json
 import tempfile
 import threading
@@ -418,6 +419,36 @@ class ColliderNodeTests(unittest.TestCase):
         wire(d, "col", "geometry", "cube")
         wire(d, "sol", "fluid", "col" if collide else "src")
         return d
+
+    def test_keyed_collider_change_reuses_frame_59_and_matches_full_rebake(self):
+        d = self.graph(animated=1)
+        d.document["time"].update(first=1, last=68, current=59)
+        ev = Evaluator()
+        old = at(ev, d, "sol", 58)
+        edited = copy.deepcopy(d.document)
+        edited["animation"]["curves"]["cube"] = {
+            "ty": {"interpolation": "constant", "keys": [
+                {"frame": 1, "value": 1.2}, {"frame": 60, "value": 1.8}]}}
+        previous_full = Evaluator().evaluate_raster(edited, "sol", frame=58, typed=True)
+        np.testing.assert_array_equal(old.density, previous_full.density)
+        ev.prime_fluid_reuse("smoke", "sol", 59)
+        before = fluid3d.SOLVER_STATS["steps"]
+        partial = ev.evaluate_raster(edited, "sol", frame=60, typed=True)
+        self.assertEqual(fluid3d.SOLVER_STATS["steps"] - before, 2)
+        reference = Evaluator().evaluate_raster(edited, "sol", frame=60, typed=True)
+        np.testing.assert_array_equal(partial.density, reference.density)
+        self.assertEqual(old.frame, 58)
+
+    def test_animated_collider_key_reports_checkpoint_before_key(self):
+        from nodebased.app import Window
+        d = self.graph(animated=1)
+        d.document["view"] = "sol"
+        d.document["nodes"]["cube"]["params"]["ty"] = 1.2
+        d.document["animation"]["curves"]["cube"] = {
+            "ty": {"interpolation": "constant", "keys": [
+                {"frame": 1, "value": 1.2}, {"frame": 60, "value": 1.8}]}}
+        self.assertEqual(Window._fluid_checkpoint_frame(d.document, {
+            "op": "set_key", "id": "cube", "param": "ty", "frame": 60}), 59)
 
     def test_the_collider_blocks_the_plume_and_density_stays_out_of_the_solid(self):
         ev = Evaluator()

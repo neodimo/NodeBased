@@ -53,6 +53,35 @@ class SimCacheTests(unittest.TestCase):
             simcache.solve_to_frame(cache_b, "run", 50, 1, 2, 3, initial, step)
             self.assertEqual(calls_b[0], 60)
 
+    def test_changed_suffix_reuses_prior_checkpoint_and_matches_full_rebake(self):
+        cache = simcache.SimCache()
+        calls = [0]
+        initial, step = self.solver(calls)
+        simcache.solve_to_frame(cache, "old-run", 59, 1, 2, 17, initial, step)
+        old_59 = cache.get("old-run", 59)
+        calls[0] = 0
+        published = []
+        partial = simcache.solve_to_frame(
+            cache, "edited-run", 68, 1, 2, 17, initial, step,
+            on_frame=lambda frame, state: published.append(frame), reuse_from=("old-run", 60))
+        self.assertEqual(calls[0], 18)  # only frames 60..68, two steps each
+        self.assertEqual(published, list(range(60, 69)))
+        self.assertEqual(cache.get("edited-run", 59), old_59)
+
+        full = simcache.solve_to_frame(simcache.SimCache(), "reference", 68, 1, 2, 17, initial, step)
+        np.testing.assert_array_equal(partial.arrays["x"], full.arrays["x"])
+
+    def test_changed_suffix_serves_unchanged_frames_from_old_run(self):
+        cache = simcache.SimCache()
+        calls = [0]
+        initial, step = self.solver(calls)
+        expected = simcache.solve_to_frame(cache, "old", 59, 1, 1, 2, initial, step)
+        calls[0] = 0
+        got = simcache.solve_to_frame(cache, "new", 30, 1, 1, 2, initial, step,
+                                      reuse_from=("old", 60))
+        self.assertEqual(got, cache.get("old", 30))
+        self.assertEqual(calls[0], 0)
+
     def test_progressive_frames_match_a_full_bake_bit_for_bit(self):
         full = simcache.solve_to_frame(simcache.SimCache(), "full", 12, 1, 2, 9, *self.solver())
         cache = simcache.SimCache()

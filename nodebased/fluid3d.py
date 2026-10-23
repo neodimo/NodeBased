@@ -1682,6 +1682,7 @@ class FluidStream:
         self.origin = tuple(float(params[f"bounds_min_{a}"]) for a in "xyz")
         self.voxel = float(params["division_size"])
         self.backend = None          # "cpu" or "gpu", set by build_stream
+        self.reuse_from = None       # (old run key, first changed frame), set by the evaluator for keyed edits
         self._solver = None
 
     def solver(self, cancel=None):
@@ -1777,9 +1778,27 @@ def resolve_backend(params, cells, shape=None):
     return "gpu" if cells >= GPU_AUTO_CELLS and fluid_gpu3d.available() else "cpu"
 
 
-def build_stream(doc, key, node, chain):
+def proxy_solver_params(params, tier):
+    """Cap proxy-tier smoke/FLIP solves at a 64-cell longest side while retaining scene bounds."""
+    tier = int(tier)
+    result = dict(params)
+    if tier <= 1:
+        return result
+    dims = resolution(result)
+    cap = max(64, int(math.ceil(max(dims) / tier)))
+    if max(dims) > cap:
+        extent = max(float(result[f"bounds_max_{axis}"]) - float(result[f"bounds_min_{axis}"])
+                     for axis in "xyz")
+        result["division_size"] = max(float(result["division_size"]), extent / cap)
+        if "max_size" in result:
+            result["max_size"] = min(int(result["max_size"]), cap)
+    result["_proxy_tier"] = tier
+    return result
+
+
+def build_stream(doc, key, node, chain, *, params_override=None, tier=1):
     """The FluidStream of one FluidSolver3D node, from the chain wired into it."""
-    params = node["params"]
+    params = proxy_solver_params(node["params"] if params_override is None else params_override, tier)
     shape = resolution(params)
     cells = shape[0] * shape[1] * shape[2]
     if cells > MAX_CELLS:
@@ -1805,7 +1824,8 @@ def solve_frame(stream, frame, cache, cancel=None, on_frame=None):
     """
     solver = stream.solver(cancel)
     return simcache.solve_to_frame(cache, stream.run, int(frame), stream.start_frame, stream.substeps,
-                                   stream.seed, solver.initial_state, solver.step, cancel, on_frame)
+                                   stream.seed, solver.initial_state, solver.step, cancel, on_frame,
+                                   reuse_from=stream.reuse_from)
 
 
 def volume_from_state(state, stream, frame, name=""):

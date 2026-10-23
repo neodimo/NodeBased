@@ -1223,14 +1223,18 @@ These are visual findings only; solver and lighting changes are outside this ste
 
 ### B: edit classes, proxy-first refresh and old-cache stop (partial, 2026-10-22)
 
-The first implementation classifies fluid-node knobs as look-only, time-varying simulation, or
-from-start simulation edits. The artist-facing status now identifies a keyed edit's frame and the
-prior checkpoint boundary, or reports a from-start edit. Classification and the existing progressive
-timeline path pass their focused tests on the RTX 3080 Ti default, CPU and the integrated-adapter
-test harness. This is an initial classification layer: the current baker still solves a changed run
-from its start, so checkpoint reuse from frame 59 is **not implemented or measured**.
+The implementation classifies fluid-node knobs as look-only, time-varying simulation, or from-start
+simulation edits. For an animated collider keyed at frame 60, the evaluator reuses the frame-58
+checkpoint and solves frames 59 and 60; frame 59 must be redone because collider velocity samples
+frame 60. The resulting density matches a full replay bit for bit, and the solver counter records
+two substeps/frames in the one-substep test setup. The artist-facing status reports the selected
+restart frame.
 
-Proxy-first-to-full promotion and the old pre-P4 cache stop path remain unimplemented. No bake above
+Fluid edit refresh now runs a distinct capped proxy simulation stream first, queues a full-detail
+pass afterward, and tracks proxy/full frames separately. At the existing sub-64-cell test grid, the
+proxy and full checkpoint runs remain isolated. This proves scheduling and cache separation; the
+production-rate performance limits remain unmeasured. The old pre-P4 cache stop path remains
+unimplemented. No bake above
 64 cells was started because only 5.7 GB is free while the historical production cache is about
 8.5 GB. The production-size <1-second proxy, 120-frame/<30-second proxy, full-refinement stage
 timings, and 12 FPS playback gates are therefore unmeasured. The 64-cell Hot-pour reference is
