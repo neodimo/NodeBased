@@ -649,6 +649,7 @@ class Evaluator:
         self._liquid_feedback_versions = {}
         self._fluid_run_history = {}
         self._fluid_reuse_hints = {}
+        self.fluid_cache_migration_notice = False
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
         self.progress = None
         # Profile (Nuke's in-graph performance probe): one entry per evaluation of a Profile
@@ -666,6 +667,9 @@ class Evaluator:
     def prime_fluid_reuse(self, kind, solver_id, first_changed, tier=1):
         """Ask the next changed stream for this solver to reuse its old prefix."""
         self._fluid_reuse_hints[(kind, str(solver_id), int(tier))] = int(first_changed)
+
+    def _note_fluid_cache_migration(self, _frame):
+        self.fluid_cache_migration_notice = True
 
     def _track_fluid_stream(self, kind, solver_id, stream, frame, tier):
         key = (kind, str(solver_id), int(tier))
@@ -1596,7 +1600,8 @@ class Evaluator:
                                                       preview_store=preview_store, preview_ring=preview_ring,
                                                       preview_range=(time_range.get("first", frame),
                                                                      time_range.get("last", frame)),
-                                                      preview_direction=self.preview_direction)
+                                                      preview_direction=self.preview_direction,
+                                                      on_cache_migrate=self._note_fluid_cache_migration)
                     link = scene3d.light_link_from_params(params)    # the smoke's light link rides this node
                     if not node["disabled"] and link != scene3d.LIGHT_LINK_ALL and isinstance(value, scene3d.Volume):
                         value = replace(value, light_link=link)

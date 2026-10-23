@@ -565,6 +565,30 @@ class CacheNodeTests(unittest.TestCase):
             straight = at(Evaluator(), d, "sol", 12)
             self.assertEqual(further.density.tobytes(), straight.density.tobytes())
 
+    def test_pre_preview_full_cache_migrates_once_without_solving(self):
+        d = plume()
+        ev = Evaluator()
+        original = at(ev, d, "c", 3)
+        full_store = ev.sim_store(256, 2048)
+        legacy_preview_store = simcache.SimCache(enabled=False)
+        notices = []
+        start = steps()
+
+        migrated = fluid3d.cached_volume(
+            original.stream, 3, full_store, None, "float32", "all", tier=4,
+            preview_store=legacy_preview_store, on_cache_migrate=notices.append)
+        self.assertEqual(steps(), start)
+        self.assertEqual(migrated.proxy_tier, 4)
+        self.assertEqual(notices, [3])
+
+        notices.clear()
+        again = fluid3d.cached_volume(
+            original.stream, 3, full_store, None, "float32", "all", tier=1,
+            preview_store=legacy_preview_store, on_cache_migrate=notices.append)
+        self.assertEqual(steps(), start)
+        self.assertEqual(again.fingerprint(), original.fingerprint())
+        self.assertEqual(notices, [])
+
     def test_budgets_bound_the_stores_and_a_zero_disk_budget_keeps_nothing_on_disk(self):
         with tempfile.TemporaryDirectory() as root:
             d = plume()

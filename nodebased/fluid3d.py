@@ -1964,7 +1964,7 @@ def _fixed_preview_volume_value(state, stream, frame, name="", persistent_textur
 
 
 def cached_volume(stream, frame, store, cancel, precision, channels, name="", tier=1, preview_store=None,
-                  preview_ring=None, preview_range=None, preview_direction=1):
+                  preview_ring=None, preview_range=None, preview_direction=1, on_cache_migrate=None):
     """Read a served volume or its persistent, reduced-resolution display companion."""
     names = CHANNEL_SETS[channels]
     sparse = getattr(stream, "backend", None) == "resident_sparse"
@@ -2000,6 +2000,7 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name="", ti
         run = preview_run
 
     got = store.get(out_run, int(frame))
+    from_legacy_full_cache = got is not None
     if got is None:
         state = solve_frame(stream, frame, store, cancel)
         vol = volume_from_state(state, stream, frame)
@@ -2023,6 +2024,8 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name="", ti
             preview_store.put(preview_run, int(frame), preview)
             if preview_ring is not None:
                 preview_ring.put(preview_run, int(frame), preview)
+            if from_legacy_full_cache and on_cache_migrate is not None:
+                on_cache_migrate(int(frame))
         return full
 
     # First access to an old cache lazily creates its proxy; subsequent scrubs fetch only the
@@ -2031,6 +2034,8 @@ def cached_volume(stream, frame, store, cancel, precision, channels, name="", ti
     preview_store.put(run, int(frame), proxy)
     if preview_ring is not None:
         preview_ring.put(run, int(frame), proxy)
+    if from_legacy_full_cache and on_cache_migrate is not None:
+        on_cache_migrate(int(frame))
     return (_fixed_preview_volume_value(proxy, stream, frame, name, preview_texture_key(frame))
             if proxy.meta.get("preview_artifact")
             else _cached_volume_value(proxy, stream, frame, name, False, store))

@@ -14775,6 +14775,7 @@ class Window(QMainWindow):
                                                    full_width=data.width, full_height=data.height)
                     tile_detail = "  ·  overscan shown"
                 else:
+                    self.evaluator.fluid_cache_migration_notice = False
                     frame = self.evaluator.evaluate(request.document, cancel=cancel,
                                                     frame=request.frame, tier=request.tier)
                     tile_detail = "  ·  full-frame fallback"
@@ -14799,8 +14800,10 @@ class Window(QMainWindow):
                     request, cancel, frame, image, render_region, exposure, channel, background, view, look)
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
+                migration_note = ("  ·  older full-detail fluid cache migrated to preview" if
+                                  self.evaluator.fluid_cache_migration_notice else "")
                 _trace_mark("emit")
-                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}{compare_note}", render_region)
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}{migration_note}{compare_note}", render_region)
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
             except (ValueError, OSError) as error:
