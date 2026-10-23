@@ -62,38 +62,38 @@
     }
   },
   "full_base_prefix_memory_peaks": {
-    "cache_write": {
-      "peak_process_rss_mb": 1376.4,
-      "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 203.0,
-      "card_memory_scope": "process allocation"
-    },
     "liquid_cache": {
-      "peak_process_rss_mb": 389.4,
+      "peak_process_rss_mb": 2555.9,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 203.0,
+      "peak_card_memory_mb": 1490.0,
       "card_memory_scope": "process allocation"
     },
     "surface": {
-      "peak_process_rss_mb": 1194.3,
+      "peak_process_rss_mb": 2927.2,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 203.0,
+      "peak_card_memory_mb": 2262.0,
       "card_memory_scope": "process allocation"
     },
     "whitewater": {
-      "peak_process_rss_mb": 1315.5,
+      "peak_process_rss_mb": 5604.2,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 203.0,
+      "peak_card_memory_mb": 4352.0,
       "card_memory_scope": "process allocation"
     },
     "steam_cache": {
-      "peak_process_rss_mb": 1336.5,
+      "peak_process_rss_mb": 7230.5,
       "peak_process_swap_mb": 0.0,
-      "peak_card_memory_mb": 203.0,
+      "peak_card_memory_mb": 4630.0,
+      "card_memory_scope": "process allocation"
+    },
+    "cache_write": {
+      "peak_process_rss_mb": 6462.5,
+      "peak_process_swap_mb": 0.0,
+      "peak_card_memory_mb": 4630.0,
       "card_memory_scope": "process allocation"
     }
   },
-  "full_base_prefix_s": 17.68,
+  "full_base_prefix_s": 516.47,
   "max_process_rss_mb": 16384,
   "memory_probe_attempts": [
     {
