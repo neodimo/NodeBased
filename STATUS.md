@@ -1,3 +1,11 @@
+# Lane 8 step B finish 5 — PARTIAL (2026-10-22)
+
+Read-ahead entries already carry working-space ACEScg pixels. The pool returned 18 prepared-frame hits in under 0.01 ms; two first-frame misses fell back to synchronous decoding and exceed the 5 ms per-Read target. A dedicated 1080p opaque-alpha conversion measurement improved from a 20.88 ms warmed median to 4.21 ms, with exact pixels. The owned EXR float32 buffer is reused and redundant alpha work is skipped. Raster.fit already returns the original pixel buffer for unchanged bounds; a regression now pins it.
+
+Fresh uncached first-pass 1080p playback: RTX 4.68 fps, Radeon 5.585 fps, llvmpipe 5.643 fps, and four-core integrated laptop stand-in 4.226 fps. The 16/24 fps target and prior 4K 24 fps / one-second recovery gates remain open. JSON and logs are deliberate local scratch under `scratch/nb-lanes/run/`; no benchmark inputs were regenerated.
+
+Pixel and targeted integration tests passed across the three implementation commits. Needs Gonzo: investigate first-frame misses with the playback scheduler owner and continue from `finish5-*.json`. Issue #8 and the lane board are Paused; project status is blocked pending follow-up.
+
 # Lane 8 step B finish 4 — PARTIAL (2026-10-22)
 
 On the 1080p RTX fresh-frame sample, frame 2 evaluation was 152.925 ms. Sampled nodes total 114 ms (Transform 30, Blur 24, Roto 22, Merge 18, Grade 16, ColorCorrect 4), leaving 38.925 ms outside those estimates. A warmed direct evaluator breakdown attributed 66.4 ms to two Read calls, including about 31 ms in input color conversion, plus 9.34 ms in ten Raster.fit calls. This separate direct run suggests Read/decode and format-fit work explain the missing evaluator time, but it is not the same app frame. Lane 2's trace commits were not on main at this finish.
