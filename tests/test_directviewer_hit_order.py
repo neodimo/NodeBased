@@ -64,9 +64,9 @@ def document():
         {"op": "create", "id": "t", "type": "Tracker", "pos": [300, 0]},
         {"op": "connect", "id": "t", "input": "image", "source": "c"},
         {"op": "set_tracks", "id": "t", "tracks": [{"name": "track1", "enabled": 1, "x": 220.0, "y": 140.0}]},
-        {"op": "create", "id": "p", "type": "PlanarTracker", "pos": [300, 100]},
-        {"op": "connect", "id": "p", "input": "image", "source": "c"},
-        {"op": "set_tracks", "id": "p", "tracks": [
+        {"op": "create", "id": "pl", "type": "PlanarTracker", "pos": [300, 100]},
+        {"op": "connect", "id": "pl", "input": "image", "source": "c"},
+        {"op": "set_tracks", "id": "pl", "tracks": [
             {"name": f"corner{i + 1}", "enabled": 1, "x": x, "y": y, "error": 0.0}
             for i, (x, y) in enumerate(PLANAR_CORNERS)]},
         {"op": "create", "id": "x", "type": "Transform", "pos": [450, 0],
@@ -370,7 +370,7 @@ CASES = (
     HandleCase("tracker pattern square", "t", tracker_pattern),
     HandleCase("tracker search square", "t", tracker_search),
     HandleCase("tracker point", "t", tracker_point),
-    HandleCase("planar corner", "p", planar_corner),
+    HandleCase("planar corner", "pl", planar_corner),
     HandleCase("transform centre", "x", transform_centre),
     HandleCase("transform pivot (ctrl)", "x", transform_centre, modifiers=CTRL),
     HandleCase("transform rotate ring", "x", transform_rotate),
@@ -481,7 +481,7 @@ PICK_CASES = (
     PickCase("Survey", "t", "survey_picking", "t", spy="survey_pick"),
     PickCase("PointsTo3D", "t", "track3d_picking", "t", spy="points_to_3d_pick", stays=False),
     PickCase("Tracker point", "t", "tracker_picking", True, stays=False),
-    PickCase("Planar region", "p", "planar_picking", True, stays=False, clicks=4),
+    PickCase("Planar region", "pl", "planar_picking", True, stays=False, clicks=4),
 )
 # Off the pixel edges: a pick floors the scene point, and two surfaces round an exact edge differently.
 PICK_SPOTS = {"empty frame": (500.25, 300.5), "over a tracker point": (220.25, 140.5),
@@ -555,7 +555,7 @@ class PickTests(HitOrderBase):
 
     def test_every_pick_tool_makes_the_same_call_on_both_surfaces(self):
         for case in PICK_CASES:
-            spots = ["empty frame", "over a planar corner"] if case.node == "p" else ["empty frame", "over a tracker point"]
+            spots = ["empty frame", "over a planar corner"] if case.node == "pl" else ["empty frame", "over a tracker point"]
             for spot in spots:
                 for scale in SCALES:
                     for zoom in ZOOMS:
