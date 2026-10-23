@@ -1,6 +1,6 @@
 # Direct picture (experimental GPU viewer slice)
 
-Status: VP1 of 2 plus the VP2a playback work (10/19), the VP2b overlays and readout (10/20), editing on the direct picture (10/20), the paused picture and A/B compare on the card (10/22), and handles and readout that follow the frame plus a docked viewer with a switch to make it the main viewer (10/22), opt-in, default off. The Viewer (a QGraphicsView fed by `Window._show_image`) is unchanged and remains the default, the fallback, the export source and the pixel-sampling source.
+Status: VP1 of 2 plus the VP2a playback work (10/19), the VP2b overlays and readout (10/20), editing on the direct picture (10/20), the paused picture and A/B compare on the card (10/22), handles and readout that follow the frame plus a docked viewer with a switch to make it the main viewer (10/22), and Roto drawing, the zoom keys and a steady picture count (10/22, step D), opt-in, default off. The Viewer (a QGraphicsView fed by `Window._show_image`) is unchanged and remains the default, the fallback, the export source and the pixel-sampling source.
 
 ## What it is
 
@@ -23,7 +23,7 @@ The dock takes the scene-linear float frame instead of the Viewer's 8-bit pictur
 
 ## Known gaps (VP1)
 
-- **Overlays and hit order.** Drawn since VP2b (section below). Paint strokes in progress and the input strip stay on the Viewer; the corner readout (picture size, zoom) and the tier badge are drawn on the card since 10/22. Since 10/20 the direct surface forwards left-button presses, drags and releases to the Viewer's own hit functions ("Editing on the direct picture", below); with the preference off it handles only wheel zoom, middle-drag or Alt-drag pan and double-click fit and forwards nothing (`HitOrderTests` in test_directviewer.py runs in that mode).
+- **Overlays and hit order.** Drawn since VP2b (section below), paint strokes and new Roto points in progress included (10/22). The input strip and the tool prompt banner stay on the Viewer; the corner readout (picture size, zoom) and the tier badge are drawn on the card since 10/22. Since 10/20 the direct surface forwards left-button presses, drags and releases to the Viewer's own hit functions ("Editing on the direct picture", below); with the preference off it handles only wheel zoom, middle-drag or Alt-drag pan and double-click fit and forwards nothing (`HitOrderTests` in test_directviewer.py runs in that mode).
 - **Colour and alpha.** The card runs the view transform itself, playing or paused (below). A view or channel it cannot build, and a picture or A/B pair too large for the card, show the Viewer's 8-bit picture instead. Surface formats other than 8-bit (HDR, wide gamut) are not handled; sRGB-format surfaces re-encode, which the shader undoes once (tested within one code value).
 - **Playback.** While the direct picture plays, the Viewer holds its last picture; the refresh when playback stops repaints it. Paused, the Viewer takes only the picture's place and size ("Paused picture and compare on the card"). The handles and the readout follow the played frame since 10/22 ("Following the frame").
 - **Sampling** is nearest at every zoom, like the Viewer; no mip or filter for strong minification. With the desktop scaled 1.75x, Xwayland stretches the window by the compositor, so on this workstation the glass shows the picture resampled; the numbers above are before that stretch.
@@ -137,7 +137,7 @@ Read these as present return, not light on the glass (see "Latency" above), meas
 
 **Off-site tiers.** `tools/laptop_present_check.py --edit [--preference low-power] --out DIR` runs the same drags through `SetCursorPos` and `mouse_event` on Windows (xdotool elsewhere) and writes the 50th and 95th percentile per handle, the adapter used, the input driver and the gate into `DIR/result.json` under "edit"; `--read DIR` prints it, and `--self-check` covers the record's fields on a synthetic run. The Windows input driver has never been run; no number from the laptop or the A6000 exists.
 
-**What is not routed or not drawn.** Paint-brush strokes, Roto drawing, Tracker picking and planar picking go through the same functions but are not in the hit-order test, and their in-progress marks (stroke, new Roto points, the rubber band) are not drawn on the direct picture, so drawing a new shape is better done on the Viewer for now. The overlay is still not refreshed per played frame while playing.
+**What is not routed or not drawn.** Written 10/20 and out of date: Roto drawing and paint strokes are proven since 10/22 (section "Drawing, zoom keys and a steady picture count"), their marks were drawn by the shared `paint_overlays` all along, and the overlay is refreshed per played frame since 10/22. Tracker picking, planar picking and the pick tools (Cryptomatte, Focus, ZDefocus, Survey, PointsTo3D) go through the same hit functions but are not in a hit-order test; see the parity table.
 
 ## Paused picture and compare on the card (10/22)
 
@@ -226,6 +226,44 @@ All six rows are under 4 ms at the 95th percentile. The overlay moves in 240 of 
 
 **Readiness check for DiMo.** `tools/laptop_present_check.py --matrix` now runs, after the four present-cadence cases, playback with the overlay (`--playback`: the tool above, overlay frozen and following, 1080p and 4K) and the paused edit (`--paused`), so one ten-minute run on the laptop and one on the A6000 answers "can it be the default there"; `--playback` and `--paused` run alone on any machine with a display. `--self-check` covers the new record.
 
+## Drawing, zoom keys and a steady picture count (10/22, step D)
+
+**Roto and RotoPaint drawing.** Presses, drags, releases and keys on the direct picture go to the Viewer's own hit functions, so a Roto shape or a paint stroke drawn there is built by the same code as on the Viewer. `tests/test_directviewer_drawing.py` plays one input sequence through the Viewer's viewport and the direct picture's widget from the same document, at device scale 1.0 and 1.75 and at several zooms, and asserts identical shape and stroke data, one undo entry per shape or stroke, and that the in-progress marks (new points, the rubber band, the brush line) reach the direct picture's overlay. The sequences cover clicking points, dragging a tangent, finishing a shape with Enter, closing it on its first point, Escape, Delete and the tangent keys on selected points (Delete, Shift+Z and Ctrl+A reach them from the direct picture), a paint stroke, and the brush, eraser and clone keys. The marks were always drawn by the shared `paint_overlays`; what was missing was the keys and the proof.
+
+**Zoom keys.** `app.VIEW_KEY_ACTIONS` is the one key map: fit (F, H), 1:1 (Ctrl+1), zoom in (Ctrl+= and Ctrl++) and zoom out (Ctrl+-), with the "?" list read from `app.VIEW_ACTION_KEYS` on both pictures. The Viewer has no separate "frame selection" key, so there is none to carry over. `tests/test_directviewer_keys.py` walks the map, presses each binding on the Viewer and on the direct picture and checks the view moved as the action says; a binding added to the map without an expectation, a help line or a `DirectViewerWidget.view_action` branch fails it, so the direct picture cannot fall behind. Every other key reaches the Viewer's key handler through `Window._direct_key`.
+
+**Why the picture count moved.** Step C counted the pictures the card drew in 10 s with and without the overlay. On the real surface each draw ends in a present, and under the display server the present copies the image back over the eGPU link and blocks the Qt thread for 20 to 94 ms depending on the link and the card's clocks. The number of pictures drawn is the number of presents that fit in the run: 94 to 233 at 1080p between identical runs with no overlay at all. The count is a measure of the present, and the overlay does not move it. The overlay tool now has `--offscreen-card` (the presenter draws into an offscreen texture and skips the present), where every picture handed over is drawn, and `laptop_present_check.py --playback` gates on that pair and records the surface counts as information. It also records the card's power state, clocks and link before and after each run.
+
+**Ten identical runs on the RTX 3080 Ti** (`--feed --offscreen-card --drawing`: a new Roto shape with six points and a moving rubber band under way over the animated triangle's handles, 241 pictures handed over at 24 a second for 10 s, the overlay off and on, in turn, ten times at each size; raw files kept with the step report):
+
+| Picture | Overlay | Pictures drawn, ten runs | On / off ratio | Overlay p95 on the Qt thread (ms), median / largest |
+|---|---|---|---|---|
+| 4K | off | 241 in all ten | | 0.68 / 0.79 |
+| 4K | on | 241 in all ten | 1.000 | 0.71 / 0.75 |
+| 1080p | off | 239 to 242 | | 2.2 / 4.5 |
+| 1080p | on | 239 to 242 | 0.992 to 1.004 | 2.5 / 4.3 |
+
+**Stated tolerance:** with the present out of the measurement the count is 241 of 241 at 4K and within 2 either side of 241 at 1080p, and the overlay costs no pictures: the on/off ratio stays within 0.8 percent. The gate in `laptop_present_check.py` (shown with the overlay at least 0.95 of shown without) holds in all twenty runs. **Gate:** the overlay's Qt-thread time while a Roto shape is drawn during 4K playback is 0.79 ms or less at the 95th percentile in every one of the twenty 4K runs, against 4 ms. At 1080p eighteen of twenty runs are under 4 ms and two reach 4.3 and 4.5 ms with the card idling in a low power state (P3 or P5); the overlay-off runs reach 4.5 ms as well, so those values belong to the card's clocks and the gate (set at 4K) is not claimed for 1080p under a low-clock card.
+
+
+## Viewer against Direct picture: what still differs (parity check, 10/22)
+
+| Viewer does | Direct picture | Notes |
+|---|---|---|
+| Pan, wheel zoom, double-click fit, zoom keys, the "?" list | Same | Shared key map, tested |
+| Roto, RotoPaint, paint strokes, handles | Same | Tested against the Viewer, section above |
+| Tracker, planar and pick tools (Cryptomatte, Focus, ZDefocus, Survey, PointsTo3D) | Reach the same hit functions | Not in a hit-order test |
+| Input strip (A/B, channels, display, gain, gamma, ROI, fit) | Laid out above the card | The Viewer's own widget |
+| Tool prompt banner | Not drawn on the card | Viewer only |
+| Pixel readout, A/B wipe, compare | On the card | Pixel values read from the frame array |
+| Colour picking, export | Viewer is the source | Stays so |
+| 8-bit sRGB output | HDR and wide-gamut surfaces not handled | Needs surface-format selection |
+| Wayland | Falls back to the Viewer | Needs a rendercanvas release |
+| Windows and macOS, hybrid laptop | Not run | Field kit exists |
+| Strong minification | Nearest sampling, no mip | Same as the Viewer |
+
+Recommendation: the Direct picture does everything an artist does in the Viewer on this workstation, so the remaining question is the laptop and the A6000 run (`laptop_present_check.py --matrix`); leave the default off until those numbers exist. The rows above are listed and not built in this step.
+
 ## Can the direct picture become the default Viewer? (decision memo, 10/20, updated 10/22)
 
 **Answer: not yet, and the default is not flipped.** Everyday pan, zoom, playback to 4K, the overlays, the readout, editing, a paused edit with an A/B compare, and a dock that is part of the saved layout all work on this workstation's three adapters, and a switch puts it in the Viewer's place today. What stays open, with the evidence that closes each:
@@ -234,7 +272,7 @@ All six rows are under 4 ms at the 95th percentile. The overlay moves in 240 of 
 - **Native Wayland.** rendercanvas 2.7.2 builds only X11 surface ids, so a Wayland-default desktop falls back to the Viewer. Closes with: a rendercanvas/wgpu release with a Wayland surface, then the same three checks on a Wayland session.
 - **HDR and wide-gamut surfaces.** The shader writes 8-bit-range values and undoes sRGB re-encoding. Closes with: surface-format selection in the presenter and a `test_carddisplay` agreement test on a 10-bit target, after the laptop numbers show which surface the panel gives.
 
-Also open, one line each: a real-screen run at 4K on the eGPU link (Xvfb copies every presented image back over USB4; closes with an interactive session on a real display, which the field kit's laptop and A6000 runs also cover); the Radeon on a real display (Xvfb has no DRI3 for it); resample under desktop scaling (needs the Wayland surface); drawing a new Roto shape, picking a Tracker or planar point and paint strokes show their in-progress marks on the Viewer only (closes with those marks in `paint_overlays`' deferred recording and a hit-order test for them); the 3D view takes the Viewer's dock back; the zoom keys and "1:1 pixels" act on the Viewer's view, not the card's; no mip or filter for strong minification; latency to photons is unmeasured on every machine.
+Also open, one line each: a real-screen run at 4K on the eGPU link (Xvfb copies every presented image back over USB4; closes with an interactive session on a real display, which the field kit's laptop and A6000 runs also cover); the Radeon on a real display (Xvfb has no DRI3 for it); resample under desktop scaling (needs the Wayland surface); picking a Tracker or planar point is not in a hit-order test (see the parity table); the 3D view takes the Viewer's dock back; no mip or filter for strong minification; latency to photons is unmeasured on every machine.
 
 Closed since 10/20: **click editing** for every handle kind in the hit-order test; **overlays and readout follow the frame** (section above); the **paused picture and compare** on the card (section "Paused picture and compare on the card"); **the dock is part of the saved layout** and a **switch** makes it the main viewer.
 
