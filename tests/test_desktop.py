@@ -1693,6 +1693,7 @@ class PlaybackProxyToggleTests(unittest.TestCase):
     def test_measured_slow_playback_drops_one_tier_and_restores_artist_choice(self):
         w = self.window
         w.toggle_playback(True)
+        w._adapt_warm = 0       # the first frames of a play are cold and say nothing about the rate (test_3d_playback_rate)
         request = FrameRequest(w.generation, w.dispatcher.document['time']['current'], True,
                                copy.deepcopy(w.dispatcher.document), tier=w.proxy.currentData(),
                                playing=True)

@@ -631,6 +631,78 @@ class NextFrameBeforeHandOverTests(Base):
         self.assertTrue(sum(turns) >= len(turns) - 2, turns)
 
 
+class PlaybackTierAdaptationTests(Base):
+    """The automatic playback tier ignores cold frames, steps down when frames miss the rate and climbs back when they have room."""
+
+    def start(self, fps=24.0):
+        w = self.open_window((1280, 720))
+        w.set_time(first=1, last=240, current=1, fps=fps)
+        w.playback_proxy.setChecked(True)
+        w.playing = True
+        w._adapt_floor_tier = 1
+        w._adapt_warm = w.ADAPT_WARM_FRAMES
+        w._adapt_headroom = 0
+        return w
+
+    def frame(self, w, ms):
+        from types import SimpleNamespace
+        return w._adapt_playback_proxy(SimpleNamespace(tier=int(w.proxy.currentData() or 1)), ms)
+
+    def test_cold_frames_do_not_move_the_tier(self):
+        w = self.start()
+        self.assertEqual([self.frame(w, 900), self.frame(w, 400)], [False, False])
+        self.assertEqual(int(w.proxy.currentData()), 1)
+        self.assertTrue(self.frame(w, 400))
+        self.assertEqual(int(w.proxy.currentData()), 2)
+        w.playing = False
+
+    def test_each_new_tier_gets_one_cold_frame_and_a_miss_steps_down_again(self):
+        w = self.start()
+        w._adapt_warm = 0
+        self.assertTrue(self.frame(w, 60))
+        self.assertFalse(self.frame(w, 300))            # the first frame at the new tier: not counted
+        self.assertTrue(self.frame(w, 60))
+        self.assertEqual(int(w.proxy.currentData()), 4)
+        w.playing = False
+
+    def test_the_tier_climbs_back_after_a_run_of_frames_with_room_and_stops_at_the_floor(self):
+        w = self.start()
+        w._adapt_warm = 0
+        self.assertTrue(self.frame(w, 60))
+        self.assertTrue(self.frame(w, 60) is False)      # cold frame at tier 2
+        results = [self.frame(w, 10) for _ in range(w.ADAPT_UP_FRAMES)]
+        self.assertTrue(results[-1])
+        self.assertEqual(int(w.proxy.currentData()), 1)
+        for _ in range(3 * w.ADAPT_UP_FRAMES):
+            self.assertFalse(self.frame(w, 5))           # already at the floor: nothing above it
+        self.assertEqual(int(w.proxy.currentData()), 1)
+        w.playing = False
+
+    def test_frames_without_enough_room_keep_the_tier_and_a_slow_one_resets_the_count(self):
+        w = self.start()
+        w._adapt_warm = 0
+        self.assertTrue(self.frame(w, 60))
+        self.frame(w, 10)
+        for _ in range(3 * w.ADAPT_UP_FRAMES):
+            self.assertFalse(self.frame(w, 30))          # inside the frame time but over 1/2.5 of it
+        for _ in range(w.ADAPT_UP_FRAMES - 1):
+            self.frame(w, 10)
+        self.assertFalse(self.frame(w, 35))              # resets the run
+        for _ in range(w.ADAPT_UP_FRAMES - 1):
+            self.assertFalse(self.frame(w, 10))
+        self.assertEqual(int(w.proxy.currentData()), 2)
+        w.playing = False
+
+    def test_a_tier_the_artist_chose_is_left_alone(self):
+        w = self.start()
+        w.proxy.setCurrentIndex(w.proxy.findData(2))
+        w._adapt_warm = 0
+        for ms in (500, 500, 5, 5):
+            self.assertFalse(self.frame(w, ms))
+        self.assertEqual(int(w.proxy.currentData()), 2)
+        w.playing = False
+
+
 class TimeRowTierTests(Base):
     """The time row says which resolution tier is on screen while playing."""
 

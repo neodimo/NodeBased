@@ -8802,6 +8802,11 @@ class Window(QMainWindow):
         # Set only while playback has auto-switched the proxy combo away from an artist's
         # explicit "Full" choice; holds the index to restore on stop. See toggle_playback.
         self.playback_auto_proxy_index = None
+        # Automatic playback tier (`_adapt_playback_proxy`): frames to ignore while pipelines and caches are cold, the run of
+        # frames with room to spare, and the lowest tier it may climb back to (the one the source's size chose at the start).
+        self._adapt_warm = 0
+        self._adapt_headroom = 0
+        self._adapt_floor_tier = 1
         # Frame the properties panel was last built for. Animated knobs read their value at the
         # playhead, so the panel has to be rebuilt when that moves; this is how the rebuild is
         # kept to actual frame changes. See refresh_animated_panel.
@@ -9799,6 +9804,9 @@ class Window(QMainWindow):
                                     break
                 except Exception:
                     pass
+            self._adapt_floor_tier = int(self.proxy.currentData() or 1)
+            self._adapt_warm = self.ADAPT_WARM_FRAMES
+            self._adapt_headroom = 0
             # One precise wakeup per target frame is enough: playback_tick follows the monotonic
             # clock and bounds the playhead to completed renders. Waking twice per frame (500/fps)
             # adds UI/event-loop work without improving picture cadence, and the overhead costs
@@ -9889,16 +9897,45 @@ class Window(QMainWindow):
     def _schedule_playback_tick(self, fps):
         self.playback_timer.start(self._next_playback_interval_ms(fps))
 
+    # Automatic playback tier. The first frames of a play and of each new tier build pipelines, targets and caches, so they say
+    # nothing about the rate: a 3D comp dropped from full size to one eighth on its cold first frames and stayed there.
+    ADAPT_WARM_FRAMES = 2
+    # A tier is climbed back when frames have taken under 1/ADAPT_UP_FACTOR of the frame time for ADAPT_UP_FRAMES in a row: a
+    # tier up costs two to three times the pixels, so the room has to hold that.
+    ADAPT_UP_FACTOR = 2.5
+    ADAPT_UP_FRAMES = 12
+
     def _adapt_playback_proxy(self, request, elapsed_ms):
-        """Lower an automatic playback tier when the measured render misses the chosen fps."""
+        """Lower an automatic playback tier when the measured render misses the chosen fps, and climb back one tier (never above
+        the one playback started at) when frames have had room to spare for a while."""
         if (not self.playing or not self.playback_proxy.isChecked()
                 or int(request.tier) != int(self.proxy.currentData() or 1)):
             return False
-        fps = max(1.0, float(self.dispatcher.document["time"].get("fps", 24.0)))
-        if float(elapsed_ms) <= 1000.0 / fps:
+        if self._adapt_warm > 0:
+            self._adapt_warm -= 1
             return False
-        original_index = self.playback_auto_proxy_index
+        fps = max(1.0, float(self.dispatcher.document["time"].get("fps", 24.0)))
+        budget = 1000.0 / fps
         current_tier = int(self.proxy.currentData() or 1)
+        if float(elapsed_ms) <= budget:
+            if (self.playback_auto_proxy_index is not None and current_tier > self._adapt_floor_tier
+                    and float(elapsed_ms) * self.ADAPT_UP_FACTOR < budget):
+                self._adapt_headroom += 1
+                if self._adapt_headroom >= self.ADAPT_UP_FRAMES:
+                    previous = max(tier for tier in PROXY_TIERS if tier < current_tier)
+                    index = self.proxy.findData(previous)
+                    if index >= 0:
+                        self._adapt_headroom = 0
+                        self._adapt_warm = 1
+                        self.proxy.setCurrentIndex(index)
+                        self.statusBar().showMessage(f"Playback proxy 1/{previous}: room to spare at {fps:g} fps")
+                        self.update_realtime_light()
+                        return True
+            else:
+                self._adapt_headroom = 0
+            return False
+        self._adapt_headroom = 0
+        original_index = self.playback_auto_proxy_index
         if original_index is None:
             # Preserve an explicit proxy choice; adaptation owns only the artist's Full choice.
             if current_tier != 1:
@@ -9911,6 +9948,7 @@ class Window(QMainWindow):
         if next_index < 0:
             return False
         self.playback_auto_proxy_index = original_index
+        self._adapt_warm = 1
         self.proxy.setCurrentIndex(next_index)
         self.statusBar().showMessage(
             f"Playback proxy 1/{next_tier}: adapting to {fps:g} fps target")
