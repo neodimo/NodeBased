@@ -180,6 +180,21 @@ class FullMixFastPathTests(unittest.TestCase):
         np.testing.assert_array_equal(result, source)
 
 
+class MaskedMergeMemoryTrafficTests(unittest.TestCase):
+    def test_over_reuses_output_buffers_and_preserves_pixels(self):
+        rng = np.random.default_rng(806)
+        a = rng.random((7, 9, 4), dtype=np.float32)
+        b = rng.random((7, 9, 4), dtype=np.float32)
+        mask = rng.random((7, 9, 4), dtype=np.float32)
+        expected = a * mask[..., 3:4] + b * (1.0 - a[..., 3:4] * mask[..., 3:4])
+        with patch("nodebased.imaging.np.multiply", wraps=np.multiply) as multiply, patch(
+                "nodebased.imaging.np.add", wraps=np.add) as add:
+            actual = Evaluator._merge_gated("over", a, b, 1.0, mask)
+        self.assertEqual(multiply.call_count, 3)
+        self.assertEqual(add.call_count, 1)
+        np.testing.assert_array_equal(actual, expected)
+
+
 class GradeInPlaceTests(unittest.TestCase):
     def test_reduced_temporaries_preserve_grade_pixels(self):
         source = np.random.default_rng(804).random((11, 13, 4), dtype=np.float32)

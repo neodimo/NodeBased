@@ -4766,10 +4766,16 @@ class Evaluator:
         """
         if mask is not None and mask.shape[:2] != b.shape[:2]:
             raise ValueError("Merge mask must match the merged format")
-        gate = np.float32(mix) if mask is None else np.float32(mix) * mask[..., 3:4]
+        gate = (np.float32(mix) if mask is None else
+                mask[..., 3:4] if mix == 1.0 else np.float32(mix) * mask[..., 3:4])
         if op == "over":
             # Keep the v0.3.0 mix behaviour byte-identical: scale A by mix, then standard over.
-            return a * gate + b * (1 - (a[..., 3:4] * gate))
+            foreground = np.multiply(a, gate)
+            remaining = np.multiply(a[..., 3:4], gate)
+            np.subtract(1.0, remaining, out=remaining)
+            background = np.multiply(b, remaining)
+            np.add(foreground, background, out=foreground)
+            return foreground
         full = Evaluator._merge_op(op, a, b)
         return full * gate + b * (1 - gate)
 
