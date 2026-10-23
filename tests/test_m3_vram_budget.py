@@ -98,6 +98,7 @@ CAMERA_C = s.Camera(s.Transform3D(s.Vec3(0, 2, 14)))
 # figure * 1.3 (30% headroom), the same convention tests/test_memory_ceiling_gate.py already uses.
 BUDGET_A_RAYTRACE = int(72_661_856 * 1.3)
 BUDGET_B_PATHTRACE = int(146_403_416 * 1.3)
+BUDGET_B_RASTER = int(73_340_252 * 1.3)    # 10/23: smoke + splats on the raster card path, RTX 3080 Ti measurement
 BUDGET_C_RASTER = int(32_156_984 * 1.3)
 BUDGET_C_PATHTRACE = int(72_355_936 * 1.3)
 BUDGET_C_RAYTRACE = int(103_863_104 * 1.3)
@@ -131,12 +132,18 @@ class VramBudgetGateTests(unittest.TestCase):
         except gpu3d.Unsupported as exc:
             self.skipTest(f'path-traced smoke+splats unavailable on this adapter: {exc}')
 
-    def test_smoke_and_splats_refuses_on_raster_and_raytrace(self):
+    def test_smoke_and_splats_render_on_raster_and_refuse_on_raytrace(self):
+        # Since 10/23 (Lane 4, smoke and splats on the card) the raster path composites smoke with the splat layer
+        # on the card, inside the same budget as the other raster scenes; raytrace still leaves it to the CPU.
         scene = smoke_splat_scene()
-        for mode in ('raster', 'raytrace'):
-            with self.subTest(mode=mode):
-                with self.assertRaisesRegex(gpu3d.Unsupported, 'CPU-only'):
-                    gpu3d.render(scene, CAMERA_B, 64, 64, mode=mode)
+        try:
+            gpumemory.render_bounded(gpu3d.render, scene, CAMERA_B, 64, 64, mode='raster',
+                                     tracker=self.tracker, budget_bytes=BUDGET_B_RASTER,
+                                     renderer_name='raster viewport', scene_label='256-cubed smoke + splats')
+        except gpu3d.Unsupported as exc:
+            self.skipTest(f'smoke+splats raster unavailable on this adapter: {exc}')
+        with self.assertRaisesRegex(gpu3d.Unsupported, 'CPU-only'):
+            gpu3d.render(scene, CAMERA_B, 64, 64, mode='raytrace')
 
     def test_pbr_hdri_raster_stays_under_budget(self):
         scene = pbr_hdri_scene()
