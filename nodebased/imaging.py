@@ -7404,17 +7404,17 @@ class Evaluator:
             src_box = Region(0, 0, w, h)
         if dst_box is None:
             dst_box = src_box
-        # Identity shortcut: when every parameter is at its default and the filter is nearest,
-        # copy the source. Keeps existing v0.3.0 pixel data bit-identical for upgrade-default nodes.
+        # Identity shortcut: every supported filter samples the original pixel centers exactly
+        # when the geometry is unchanged, so avoid building a resampling grid for default nodes.
         extras = params or {}
         if (translate_x == 0 and translate_y == 0 and (rotate % 360.0) == 0
-                and scale == 1 and center_x == 0 and center_y == 0 and filter == "nearest"
+                and scale == 1 and center_x == 0 and center_y == 0
                 and not any(extras.get(name, default) != default for name, default in
                             (("skew_x", 0.0), ("skew_y", 0.0), ("invert", 0),
                              ("clamp", 0), ("black_outside", 0)))
                 and extras.get("scale_mode", "uniform") == "uniform"
-                and dst_box == src_box):
-            return src.copy()
+                and filter in ("nearest", "bilinear", "cubic") and dst_box == src_box):
+            return src
         p = dict(params or {}, translate_x=translate_x, translate_y=translate_y,
                  rotate=rotate, scale=scale, center_x=center_x, center_y=center_y)
         integer_translation = (

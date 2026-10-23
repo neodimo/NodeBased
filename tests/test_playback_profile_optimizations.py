@@ -64,6 +64,15 @@ class SmallRadiusBlurTests(unittest.TestCase):
 
 
 class TranslationTransformTests(unittest.TestCase):
+    def test_identity_cubic_transform_copies_without_resampling(self):
+        source = np.random.default_rng(1206).random((11, 17, 4), dtype=np.float32)
+        with patch("nodebased.imaging.Evaluator._resample_cubic_separable",
+                   side_effect=AssertionError("identity transform should skip cubic sampling")):
+            actual = Evaluator._transform(source, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+                                          "cubic", params={"filter": "cubic"})
+        self.assertIs(actual, source)
+        np.testing.assert_array_equal(actual, source)
+
     def test_integer_translation_copies_pixels_without_resampling(self):
         rng = np.random.default_rng(1207)
         source = rng.random((13, 17, 4), dtype=np.float32)
