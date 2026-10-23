@@ -15,6 +15,7 @@ import numpy as np
 from PySide6.QtGui import QImage, QImageReader
 
 from . import cachetier
+from . import gpupicture
 from . import groups
 from . import metadata
 from . import shapes
@@ -365,6 +366,10 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
     transform (`v ** (1 / gamma)`, sign kept), and the clipping warning tests that same adjusted
     scene-linear value and paints over the displayable buffer only.
     """
+    if not _cropped and CARD_PICTURE:
+        made = gpupicture.take(frame, exposure, channel, background, view, look)       # a played 3D frame's picture, made by the render card
+        if made is not None:
+            return made
     box = _covered_box(frame, channel, background, look) if CROP_TRANSPARENT and not _cropped else None
     if box is not None:
         # Only the covered rectangle goes through the view transform; every pixel outside it has no coverage and is

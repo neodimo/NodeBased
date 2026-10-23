@@ -307,6 +307,11 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     if hasattr(playback_trace, "stage_table"):         # a checkout from before the stage table still runs the tool
         table, jobs, _ = playback_trace.stage_table(events)
     result["worker_jobs"] = jobs
+    try:
+        from nodebased import gpupicture
+        result["card_pictures"] = dict(gpupicture.counters)      # pictures the render card made / the conversion stage took
+    except ImportError:
+        pass
     result["stage_p50_ms"] = {row["stage"]: row["p50_ms"] for row in sorted(table, key=lambda r: -r["p50_ms"])}
     waits = getattr(getattr(playback_trace, "stage_table", None), "series", {}).get("submit to gpu_done", [])
     if waits:

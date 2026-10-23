@@ -16,7 +16,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from . import scene3d, raytrace
+from . import gpupicture, raytrace, scene3d
 from .playback_trace import mark as _mark
 
 log = logging.getLogger(__name__)
@@ -1641,9 +1641,11 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             rows = height*samples
             bands = [(i * rows // volume_bands, (i + 1) * rows // volume_bands) for i in range(volume_bands)]
         _cancel(cancel)
+        state['picture_rgba'] = None
         result = _render(state, scene, camera, width*samples, height*samples,
                          background, ambient, output, cancel, triangles, shadow_prepared, bvh_data, bands=bands,
                          volume=volume if volumes else None)
+        picture, state['picture_rgba'] = state['picture_rgba'], None     # made beside this frame, valid while nothing changes it
         if scene.splats and output in gpusplat.DATA_OUTPUTS:
             _splat_data_pass(state, scene, camera, width, height, result, output, cancel)
         elif scene.splats:
@@ -1661,9 +1663,10 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 mesh_depth, lighting=lighting, cancel=cancel)
             result[..., :3] = splat_rgb + (1-splat_alpha[..., None])*result[..., :3]
             result[..., 3] = splat_alpha + (1-splat_alpha)*result[..., 3]
-        if output == 'rgba' and (any(getattr(e, 'visible_to_camera', False) for e in environments) or any(
+        visible_background = output == 'rgba' and (any(getattr(e, 'visible_to_camera', False) for e in environments) or any(
                 light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0
-                for light in scene.lights)):
+                for light in scene.lights))
+        if visible_background:
             # Y1 of 2 finish (2), the "background image" part: a `visible_to_camera` Environment
             # replaces the flat background on camera rays that hit nothing, exactly like
             # `scene3d._visible_background` -- reused directly (not reimplemented) on this GPU
@@ -1680,6 +1683,9 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if samples > 1:
         result = scene3d.box_resolve(result, samples)
     result.flags.writeable = False
+    if (picture is not None and output == 'rgba' and samples == 1 and not scene.splats and not visible_background
+            and picture.shape[:2] == result.shape[:2]):
+        gpupicture.register(result, gpupicture.armed_view(), picture)
     _mark('resolve_done')
     return result
 
@@ -2125,11 +2131,20 @@ def _frame_targets(state, width, height, fmt):
         while len(held) >= 3:
             held.pop(next(iter(held)))
         held[key] = (device.create_texture(size=(width, height, 1), format=fmt,
-                                           usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC),
+                                           usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC
+                                           | wgpu.TextureUsage.TEXTURE_BINDING),
                      device.create_texture(size=(width, height, 1), format='depth32float',
                                            usage=wgpu.TextureUsage.RENDER_ATTACHMENT))
     target, depth = held[key]
     return target.create_view(), depth.create_view(), target
+
+
+def _card_finishes_frame(scene):
+    """True when nothing is drawn over the card's mesh frame afterwards (a splat layer, a visible environment or area light):
+    only then is the picture made beside it the frame's picture. A scene with splats made the splat layer 5 times slower when the
+    picture's 8 MB of readback memory was allocated beside it (mixed scene 7.3 to 2.8 fps, 10/23), and its picture is thrown away anyway."""
+    return not scene.splats and not any(getattr(e, 'visible_to_camera', False) for e in getattr(scene, 'environments', ())) \
+        and not any(light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0 for light in scene.lights)
 
 
 def _render_resident(state, scene, camera, width, height, bg, ambient, output, cancel, shadow_triangles, shadow_data, bias,
@@ -2179,8 +2194,16 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     def keep(resource):
         held.append(resource)
         return resource
-    staging = _staging_buffer(state, stride*max(y1-y0 for y0, y1 in bands), keep)
+    # The display picture of a played frame (nodebased/gpupicture.py) is made by one more pass in the last band's submission and
+    # read back through the same buffer, after the float rows.
+    picture_view = (gpupicture.armed_view() if output == 'rgba' and not data and not bg.any() and _card_finishes_frame(scene)
+                    else None)
+    recorder = gpupicture.prepare(state, picture_view, width, height) if picture_view is not None else None
+    float_bytes = stride*max(y1-y0 for y0, y1 in bands)
+    picture_offset = (float_bytes + 255)//256*256
+    staging = _staging_buffer(state, picture_offset + (recorder.bytes if recorder is not None else 0), keep)
     result = np.empty((height, width, 4), 'f4')
+    state['picture_rgba'] = None
     try:
         for y0, y1 in bands:
             _cancel(cancel)
@@ -2205,6 +2228,9 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                 rp.end()
             encoder.copy_texture_to_buffer({'texture': target, 'origin': (0, y0, 0)},
                 {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))
+            fused = recorder is not None and y1 == bands[-1][1]
+            if fused:
+                recorder.record(encoder, target_view, staging, picture_offset)
             _cancel(cancel)
             _mark('submit')
             device.queue.submit([encoder.finish()])
@@ -2212,6 +2238,8 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
             _mark('gpu_done')
             try:
                 _copy_band(staging, result, y0, y1, dtype, stride, width)
+                if fused:
+                    state['picture_rgba'] = recorder.read(staging)
             finally:
                 staging.unmap()
             _mark('readback_done')

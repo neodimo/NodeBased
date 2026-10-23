@@ -44,6 +44,7 @@ from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_descr
 from . import radialcommands
 from . import graphlook
 from . import gpu3d
+from . import gpupicture
 from .playback_trace import mark as _trace_mark, mark_frame as _trace_frame
 from . import guigc
 from . import lensview
@@ -14786,8 +14787,20 @@ class Window(QMainWindow):
                 raise Cancelled()
             self.signals.progress.emit((request, cancel), stage, float(fraction), dict(info))
         def work():
-            with self.render_progress_router.handler(report if request.display else None):
-                render()
+            # A played frame whose picture is `to_qimage`'s plain case: the render card makes the 8-bit picture in the frame's own
+            # submission (nodebased/gpupicture.py) and the conversion stage takes it instead of converting the float frame.
+            plain = (request.display and request.playing and self.pipeline_playback and not exposure
+                     and channel in ("RGB", "RGBA") and background != "checker"
+                     and not look.get("zebra") and float(look.get("gamma", 1.0)) == 1.0
+                     and compare_model.active_b(request.document)[1] is None)
+            if plain:
+                gpupicture.arm(view)
+            try:
+                with self.render_progress_router.handler(report if request.display else None):
+                    render()
+            finally:
+                if plain:
+                    gpupicture.disarm()
         def render():
             start = time.perf_counter()
             _trace_mark("worker_start")
