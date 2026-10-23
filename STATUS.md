@@ -4,7 +4,9 @@
 
 **Finding (measured):** disabling the pool costs about 38 ms in node evaluation and about 4 ms in display conversion, reducing the fresh rate around 20%. The latest 4.68 fps finish-5 result is not reproducible on current main with the pool active: the three on-runs average 5.50 fps, overlapping the prior 5.63 baseline within observed run spread. That older single run also recorded 18 pool hits but had no lane-stage timeline, so the cause of its low reading cannot be isolated. The evidence does not support read-ahead or threaded color ingest as the cause; there is no read-ahead code change to make from this A/B. Lane 2's timeline documents shared CPU/interpreter and memory-bandwidth cost from overlapping evaluation and display conversion (node evaluation 137 -> 150 ms; display conversion 40 -> 55 ms) while frame interval improves through overlap.
 
-Part 1 result and table committed before work on initial-frame misses. No playback scheduler, Viewer, or Direct picture changes are included in this part.
+**Transform follow-up:** the largest fresh-frame stage is node evaluation. Its sampled frame-2 leaders were Transform 28 ms and Roto 26 ms. The horizontal fractional Transform made an unnecessary full-frame copy when its integer vertical rows needed no crop or padding; reusing the horizontal result cut the standalone 1080p median from 24.918 to 23.933 ms (3.95%), with exact repeated pixels. `tests.test_playback_profile_optimizations`, `tests.test_boundingbox` and `tests.test_tileexec` pass (76 tests). Evidence is in `scratch/nb-lanes/run/finish6-transform-{before,after}.log` and `tests-L8-finish6-transform.log`.
+
+Part 1 A/B table is committed; part 2 queues the cold current-frame Reads before the first preview request without changing timer cadence. The playback-start and Read-ahead integration tests pass. No Viewer or Direct picture changes are included.
 
 # Lane 8 step B finish 5 — PARTIAL (2026-10-22)
 

@@ -64,6 +64,19 @@ class SmallRadiusBlurTests(unittest.TestCase):
 
 
 class TranslationTransformTests(unittest.TestCase):
+    def test_integer_row_fit_reuses_pixels_when_crop_and_pad_are_noops(self):
+        image = np.random.default_rng(2240).random((7, 11, 4), dtype=np.float32)
+        actual = Evaluator._fit_integer_rows(image, 0, image.shape[0])
+        self.assertIs(actual, image)
+        np.testing.assert_array_equal(actual, image)
+
+        cropped = Evaluator._fit_integer_rows(image, 2, 4)
+        np.testing.assert_array_equal(cropped, image[2:6])
+        padded = Evaluator._fit_integer_rows(image, -2, 11)
+        expected = np.zeros((11, 11, 4), dtype=np.float32)
+        expected[2:9] = image
+        np.testing.assert_array_equal(padded, expected)
+
     def test_identity_cubic_transform_copies_without_resampling(self):
         source = np.random.default_rng(1206).random((11, 17, 4), dtype=np.float32)
         with patch("nodebased.imaging.Evaluator._resample_cubic_separable",

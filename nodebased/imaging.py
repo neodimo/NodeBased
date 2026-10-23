@@ -7570,6 +7570,19 @@ class Evaluator:
         return result
 
     @staticmethod
+    def _fit_integer_rows(image, first_source_row, output_height):
+        """Crop/pad rows for an integer unit-step vertical map without copying a no-op fit."""
+        if first_source_row == 0 and output_height == image.shape[0]:
+            return image
+        result = np.zeros((output_height, image.shape[1], image.shape[2]), dtype=np.float32)
+        source_y0 = max(0, first_source_row)
+        source_y1 = min(image.shape[0], first_source_row + output_height)
+        if source_y1 > source_y0:
+            dest_y0 = source_y0 - first_source_row
+            result[dest_y0:dest_y0 + source_y1 - source_y0] = image[source_y0:source_y1]
+        return result
+
+    @staticmethod
     def _resample_cubic_separable(src, sx, sy, clamp=False):
         """Separable Catmull-Rom sampling for axis-aligned translation-only transforms."""
         def weight(distance):
@@ -7615,15 +7628,8 @@ class Evaluator:
         )
 
         def fit_integer_rows(image):
-            """Crop/pad rows for a unit-step integer vertical map without resampling."""
             first_source_row = int(sy[0])
-            result = np.zeros((sy.size, image.shape[1], image.shape[2]), dtype=np.float32)
-            source_y0 = max(0, first_source_row)
-            source_y1 = min(src.shape[0], first_source_row + sy.size)
-            if source_y1 > source_y0:
-                dest_y0 = source_y0 - first_source_row
-                result[dest_y0:dest_y0 + source_y1 - source_y0] = image[source_y0:source_y1]
-            return result
+            return Evaluator._fit_integer_rows(image, first_source_row, sy.size)
 
         if not clamp and integer_vertical_mapping and sx.ndim == 1 and sx.size:
             # A pure horizontal translation has unit-spaced source coordinates. The generic
