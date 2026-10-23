@@ -283,6 +283,15 @@ class ScalarResolutionTests(unittest.TestCase):
 
 
 class RasteriseTests(unittest.TestCase):
+    def test_coverage_batches_subscanlines_instead_of_python_per_line_searches(self):
+        from unittest.mock import patch
+        points = square(4, 4, 20, 20)["points"]
+        with patch("nodebased.roto.np.nonzero", side_effect=AssertionError(
+                "batched coverage must not search crossings in a Python subscanline loop")):
+            matte = roto.coverage(points, 24, 24)
+        self.assertEqual(float(matte[12, 12]), 1.0)
+        self.assertEqual(float(matte[0, 0]), 0.0)
+
     def test_a_hard_square_covers_exactly_its_area(self):
         matte = roto.rasterise([square(16, 16, 48, 48)], 64, 64)
         self.assertEqual(matte.shape, (64, 64, 4))

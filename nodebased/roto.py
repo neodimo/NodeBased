@@ -123,20 +123,47 @@ def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
     ox, oy = map(int, origin)
     first_row = max(0, int(math.floor(top.min() - oy)))
     last_row = min(height, int(math.ceil(bottom.max() - oy)) + 1)
-    for row in range(first_row, last_row):
-        accumulator = matte[row]
-        for sub in range(SUBSAMPLES):
-            scanline = oy + row + (sub + 0.5) / SUBSAMPLES
-            hit = (top <= scanline) & (scanline < bottom)
-            if not hit.any():
-                continue
-            crossings = ax[hit] + (scanline - ay[hit]) * slope[hit]
-            winding = direction[hit]
-            order = np.argsort(crossings, kind="stable")
-            crossings, winding = crossings[order], winding[order]
-            running = np.cumsum(winding)
-            for index in np.nonzero(running[:-1] != 0)[0]:
-                _add_span(accumulator, crossings[index] - ox, crossings[index + 1] - ox)
+    # Resolve a small band of sub-scanlines together. The former nested Python loops did one
+    # mask, sort and winding walk per sub-scanline; an animated roto shape repeats that work for
+    # every playback frame even when its topology is unchanged.
+    band_rows = 16
+    for row0 in range(first_row, last_row, band_rows):
+        row1 = min(last_row, row0 + band_rows)
+        local_rows = np.repeat(np.arange(row0, row1, dtype=np.int32), SUBSAMPLES)
+        scanlines = (oy + local_rows.astype(np.float64)
+                     + (np.tile(np.arange(SUBSAMPLES, dtype=np.float64), row1-row0) + 0.5) / SUBSAMPLES)
+        hits = (top[None, :] <= scanlines[:, None]) & (scanlines[:, None] < bottom[None, :])
+        crossings = ax[None, :] + (scanlines[:, None] - ay[None, :]) * slope[None, :]
+        crossings[~hits] = np.inf
+        order = np.argsort(crossings, axis=1, kind="stable")
+        sorted_x = np.take_along_axis(crossings, order, axis=1)
+        sorted_hits = np.take_along_axis(hits, order, axis=1)
+        sorted_winding = np.take_along_axis(
+            np.broadcast_to(direction, crossings.shape), order, axis=1)
+        sorted_winding[~sorted_hits] = 0
+        inside = np.cumsum(sorted_winding, axis=1)[:, :-1] != 0
+        left = np.clip(sorted_x[:, :-1] - ox, 0.0, float(width))
+        right = np.clip(sorted_x[:, 1:] - ox, 0.0, float(width))
+        valid = inside & (right > left) & (left < width)
+        line_index, interval_index = np.where(valid)
+        if line_index.size == 0:
+            continue
+        x0, x1 = left[line_index, interval_index], right[line_index, interval_index]
+        first, last = np.floor(x0).astype(np.intp), np.floor(x1).astype(np.intp)
+        # Each scanline contributes fractional edge pixels and a run of full pixels. Store the
+        # latter as a difference array so all spans in a band are accumulated in vectorized C.
+        partial = np.zeros((len(local_rows), width), dtype=np.float64)
+        run_delta = np.zeros((len(local_rows), width + 1), dtype=np.float64)
+        same = first == last
+        start_values = np.where(same, x1 - x0, first + 1 - x0)
+        np.add.at(partial, (line_index, first), start_values)
+        end_mask = ~same & (last < width)
+        np.add.at(partial, (line_index[end_mask], last[end_mask]), x1[end_mask] - last[end_mask])
+        full = first + 1 < last
+        np.add.at(run_delta, (line_index[full], first[full] + 1), 1.0)
+        np.add.at(run_delta, (line_index[full], last[full]), -1.0)
+        scan_coverage = partial + np.cumsum(run_delta[:, :width], axis=1)
+        matte[row0:row1] = scan_coverage.reshape(row1-row0, SUBSAMPLES, width).sum(axis=1)
     return (matte / SUBSAMPLES).astype(np.float32)
 
 
