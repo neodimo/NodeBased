@@ -24,6 +24,11 @@ Scenes (every camera animates; frame 1 to 240 swings the camera round the scene)
 
     python tools/benchmark_3d_playback.py --self-check      # offscreen, tiny, a few seconds
 
+``--proxy on`` plays as the app ships, with "Proxy while playing" checked: a frame that misses the comp's rate steps the picture
+down a resolution tier (the JSON then says how many pictures were drawn at each tier, the rate at the tier playback ended on and what
+the time row read). After the run the tool stops playback and waits for the full-quality picture: ``settle_s`` is the time from the
+stop to that picture on screen. Without ``--proxy`` it plays at the size set, the raw cost.
+
 ``--adapter NAME`` runs on the adapter whose name contains NAME (RTX, Radeon, llvmpipe), as NODEBASED_ADAPTER does. ``--backend auto|gpu|cpu`` sets Render3D's ``render_backend`` (the node's own default is
 ``cpu``). ``--field`` prints one JSON object of the fields worth pasting back from another machine.
 ``--stages`` also records the per-stage timeline (see ``nodebased.playback_trace``) when the build has it.

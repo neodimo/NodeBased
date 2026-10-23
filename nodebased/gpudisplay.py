@@ -34,8 +34,10 @@ from functools import lru_cache
 import numpy as np
 
 _GL_RGBA32F = 0x8814
+_GL_RGBA8 = 0x8058
 _GL_RGB = 0x1907
 _GL_FLOAT = 0x1406
+_GL_UNSIGNED_BYTE = 0x1401
 _GL_TRIANGLES = 0x0004
 _GL_PACK_ALIGNMENT = 0x0D05
 
@@ -423,6 +425,9 @@ class GpuDisplay:
             self._fbo = None
             self._fbo_size = None
             self._readback = None
+            self._fbo8 = None
+            self._fbo8_size = None
+            self._readback8 = None
             self._vao = None
             self._init_vao()
         finally:
@@ -489,6 +494,65 @@ class GpuDisplay:
         self._functions.glPixelStorei(_GL_PACK_ALIGNMENT, 1)
         self._readback = bytearray(width * height * 3 * 4)
 
+    def _ensure_fbo8(self, width, height):
+        from PySide6.QtOpenGL import QOpenGLFramebufferObject, QOpenGLFramebufferObjectFormat
+        if self._fbo8 is not None and self._fbo8_size == (width, height):
+            return
+        if self._fbo8 is not None:
+            self._fbo8.release()
+        fbo_format = QOpenGLFramebufferObjectFormat()
+        fbo_format.setInternalTextureFormat(_GL_RGBA8)
+        fbo = QOpenGLFramebufferObject(width, height, fbo_format)
+        if not fbo.isValid():
+            raise GpuUnavailable('QOpenGLFramebufferObject (8-bit) is not valid')
+        self._fbo8 = fbo
+        self._fbo8_size = (width, height)
+        self._readback8 = bytearray(width * height * 3)
+
+    def render_image(self, rgba, view):
+        """The finished 8-bit picture of an opaque, scene-linear HxWx4 float32 frame: `view` applied by the card, quantised by
+        the card (a float to normalised-byte conversion rounds to nearest, as `imaging.to_qimage` does with its
+        ``* 255 + 0.5``), and read back as 3 bytes a pixel, a quarter of the float readback. Returns an RGB888 QImage."""
+        self._check_thread()
+        from PySide6.QtGui import QImage
+        rgba = np.ascontiguousarray(rgba, dtype=np.float32)
+        height, width = rgba.shape[:2]
+        if rgba.ndim != 3 or rgba.shape[2] != 4 or height == 0 or width == 0:
+            raise GpuUnavailable('render_image takes a non-empty HxWx4 frame')
+        if not self._context.makeCurrent(self._surface):
+            raise GpuUnavailable('makeCurrent failed mid-session')
+        try:
+            if view not in self._programs:
+                self._build_program(view)
+            program, program_id, input_loc, luts = self._programs[view]
+            self._ensure_input_texture(width, height, 4)
+            self._ensure_fbo8(width, height)
+            from PySide6.QtOpenGL import QOpenGLTexture
+            fn = self._functions
+            self._input_texture.setData(QOpenGLTexture.PixelFormat.RGBA, QOpenGLTexture.PixelType.Float32, rgba.tobytes())
+            self._fbo8.bind()
+            fn.glViewport(0, 0, width, height)
+            fn.glBindVertexArray(self._vao)
+            fn.glUseProgram(program_id)
+            self._input_texture.bind(0)
+            fn.glUniform1i(input_loc, 0)
+            for loc, qt_texture, unit in luts:
+                qt_texture.bind(unit)
+                fn.glUniform1i(loc, unit)
+            fn.glDrawArrays(_GL_TRIANGLES, 0, 3)
+            fn.glPixelStorei(_GL_PACK_ALIGNMENT, 1)
+            fn.glReadPixels(0, 0, width, height, _GL_RGB, _GL_UNSIGNED_BYTE, self._readback8)
+            self._fbo8.release()
+            # The triangle maps the first uploaded row to the first row read back, as in `render`: no flip.
+            return QImage(memoryview(self._readback8), width, height, width * 3,
+                          QImage.Format.Format_RGB888).copy()
+        except GpuUnavailable:
+            raise
+        except Exception as error:
+            raise GpuUnavailable(str(error)) from error
+        finally:
+            self._context.doneCurrent()
+
     def _destroy(self):
         self._check_thread()
         if not self._context.makeCurrent(self._surface):
@@ -504,6 +568,9 @@ class GpuDisplay:
             if self._fbo is not None:
                 self._fbo.release()
                 self._fbo = None
+            if getattr(self, '_fbo8', None) is not None:
+                self._fbo8.release()
+                self._fbo8 = None
             if self._vao is not None:
                 vao = np.array([self._vao], dtype=np.uint32)
                 self._functions.glDeleteVertexArrays(1, vao)
@@ -618,7 +685,7 @@ class ViewportRenderer:
         texture.setMagnificationFilter(QOpenGLTexture.Filter.Nearest)
         texture.setWrapMode(QOpenGLTexture.WrapMode.ClampToEdge)
         self._input_texture = texture
-        self._input_size = (width, height, channels)
+        self._input_size = (width, height)
 
     def draw(self, frame, view, exposure, channel, background, dest_corners, viewport_size):
         """Draw an HxWx4 scene-linear premultiplied frame into the current framebuffer."""

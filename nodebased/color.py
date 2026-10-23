@@ -148,7 +148,7 @@ def display_rgb(rgb, view, owned=False):
         gpu = gpudisplay.get_display()
         if gpu is not None:
             try:
-                return gpu.render(rgb, view, copy=not owned)
+                return gpu.render(rgb, view, copy=False) if owned else gpu.render(rgb, view)
             except gpudisplay.GpuUnavailable:
                 pass  # Falls through to the CPU path below; the failure is already recorded.
     if rgb.shape[-1] == 4:

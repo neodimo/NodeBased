@@ -277,7 +277,8 @@ class DisplayConversionTests(unittest.TestCase):
             def render(self, rgb, view, copy=True):
                 seen.append(rgb.shape)
                 return np.ascontiguousarray(rgb[..., :3])
-        with unittest.mock.patch.object(gpudisplay, "get_display", return_value=Card()):
+        with unittest.mock.patch.object(gpudisplay, "get_display", return_value=Card()), \
+                unittest.mock.patch.object(imaging, "CARD_PICTURE", False):
             fast = imaging.to_qimage(frame, view="ACES 2.0")
         self.assertEqual(seen, [frame.shape])
         with unittest.mock.patch.object(gpudisplay, "get_display", return_value=None):
@@ -286,7 +287,8 @@ class DisplayConversionTests(unittest.TestCase):
         self.assertEqual(fast.size(), cpu.size())
         # anything that changes the colour first keeps the three-channel input
         seen.clear()
-        with unittest.mock.patch.object(gpudisplay, "get_display", return_value=Card()):
+        with unittest.mock.patch.object(gpudisplay, "get_display", return_value=Card()), \
+                unittest.mock.patch.object(imaging, "CARD_PICTURE", False):
             imaging.to_qimage(frame, exposure=1.0, view="ACES 2.0")
             imaging.to_qimage(frame, view="ACES 2.0", look={"gamma": 2.0})
         self.assertEqual(seen, [frame.shape[:2] + (3,)] * 2)
@@ -307,6 +309,47 @@ class DisplayConversionTests(unittest.TestCase):
         np.testing.assert_array_equal(four, three)
         again = display.render(np.ascontiguousarray(frame[..., :3]), "ACES 2.0")      # the texture changes back
         np.testing.assert_array_equal(again, three)
+
+    def test_the_card_makes_the_8_bit_picture_of_an_opaque_frame_within_one_level_of_the_cpu_quantise(self):
+        from PySide6.QtWidgets import QApplication
+        from nodebased import gpudisplay
+        QApplication.instance() or QApplication([])
+        gpudisplay.reset_for_testing()
+        self.addCleanup(gpudisplay.reset_for_testing)
+        if gpudisplay.get_display(force=True) is None:
+            self.skipTest(f"no GPU display context: {gpudisplay.status()}")
+        frame = self.frame(size=(72, 128))
+        frame[..., :3] *= 1.5
+        frame[0, :4, :3] = ((-0.5, 0.2, 0.9), (30.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1e-6, 1e-6, 1e-6))      # out of range and dark
+        calls = []
+        real = imaging._card_picture
+        with unittest.mock.patch.object(imaging, "_card_picture", side_effect=lambda *a: calls.append(1) or real(*a)):
+            card = imaging.to_qimage(frame, view="ACES 2.0")
+        self.assertEqual(len(calls), 1)
+        with unittest.mock.patch.object(imaging, "CARD_PICTURE", False):
+            cpu = imaging.to_qimage(frame, view="ACES 2.0")
+        self.assertEqual((card.width(), card.height(), card.format()), (cpu.width(), cpu.height(), cpu.format()))
+
+        def pixels(image):
+            return np.frombuffer(image.constBits(), np.uint8, count=image.bytesPerLine() * image.height()).reshape(
+                image.height(), image.bytesPerLine())[:, :image.width() * 3].astype(int)
+        difference = np.abs(pixels(card) - pixels(cpu))
+        self.assertLessEqual(int(difference.max()), 1)
+        self.assertLess(float((difference > 0).mean()), 0.02)
+
+    def test_a_frame_with_any_translucency_or_an_edited_look_does_not_go_to_the_card_picture(self):
+        translucent = self.frame(alpha=0.5)
+        with unittest.mock.patch.object(imaging, "_card_picture", return_value=None) as card:
+            imaging.to_qimage(translucent, view="ACES 2.0")
+            imaging.to_qimage(self.frame(), exposure=1.0, view="ACES 2.0")
+            imaging.to_qimage(self.frame(), view="ACES 2.0", look={"gamma": 2.0})
+            imaging.to_qimage(self.frame(), view="ACES 2.0", background="checker")
+            imaging.to_qimage(self.frame(), view="ACES 2.0", channel="G")
+            imaging.to_qimage(self.frame(), view="sRGB")
+        card.assert_not_called()
+        with unittest.mock.patch.object(imaging, "_card_picture", return_value=None) as card:
+            imaging.to_qimage(self.frame(), view="ACES 2.0")
+        card.assert_called_once()
 
     def test_a_large_frame_is_quantized_on_the_pool(self):
         from nodebased import color

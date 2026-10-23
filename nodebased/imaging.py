@@ -313,6 +313,22 @@ def _unpremultiply(rgb, weight):
     return straight
 
 
+CARD_PICTURE = True          # an opaque frame's 8-bit picture is made by the card (view transform and quantise) when it can
+
+
+def _card_picture(frame, view):
+    """The RGB888 QImage the display card makes of an opaque scene-linear frame, or None when there is no card on this thread.
+    Only the 8-bit picture comes back (6 MB at 1080p, against 25 MB of float colour and the quantise on the CPU)."""
+    from . import gpudisplay
+    display = gpudisplay.get_display()
+    if display is None:
+        return None
+    try:
+        return display.render_image(frame, view)
+    except gpudisplay.GpuUnavailable:
+        return None
+
+
 def _quantize(rgb):
     """``clip(rgb, 0, 1) * 255 + 0.5`` cast to uint8, in place on ``rgb`` (which the caller owns). Large frames go through
     the display worker pool in row bands: the four full-frame passes were about 14 ms of a 1080p conversion on one thread."""
@@ -371,10 +387,16 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         # feeding it premultiplied RGB bends every partially transparent pixel. `write_png`
         # has always unpremultiplied first, so the viewer and the exporter used to disagree
         # on exactly those pixels. Same order here: divide out alpha, transform, re-associate.
-        weight = np.clip(alpha, 0, 1)
-        opaque = OPAQUE_SHORTCUT and bool(weight.min() >= 1.0)
-        straight = rgb if opaque else _unpremultiply(rgb, weight)
+        opaque = OPAQUE_SHORTCUT and bool(alpha.min() >= 1.0)
         gamma = float((look or {}).get("gamma", 1.0))
+        if (opaque and CARD_PICTURE and gamma == 1.0 and not exposure and channel in ("RGB", "RGBA") and background != "checker"
+                and not (look or {}).get("zebra") and view in _GPU_PREFERRED_VIEWS and frame.dtype == np.float32
+                and frame.ndim == 3 and frame.shape[2] == 4 and frame.flags.c_contiguous):
+            picture = _card_picture(frame, view)
+            if picture is not None:
+                return picture
+        weight = np.clip(alpha, 0, 1)
+        straight = rgb if opaque else _unpremultiply(rgb, weight)
         if gamma != 1.0:
             straight = np.sign(straight) * np.abs(straight) ** np.float32(1.0 / gamma)
         source = straight
