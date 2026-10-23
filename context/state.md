@@ -1,5 +1,28 @@
 # 2026-10-22 — Lane 6 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (6:05 PM on 2026-10-22 PDT)
+
+`main` moved `f4aecaab` -> `68d134e1` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `68d134e1` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1755.log`, started 5:55 PM): **Ran 5981 tests in 483.532 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step A of 2: an edit to the Hot pour shows its re-simulated first frames within a second (finish 1).** Commits:
+  - `7ba33188` Show progressive fluid edit bake status in timeline
+  Diff: 11 files changed, 386 insertions(+), 24 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (finish 1).** Commits:
+  - `8decf97c` Fix cold-pass playback benchmark accounting
+  Diff: 1 file changed, 41 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The artist-facing edit-bake timeline is wired in the lane worktree: amber marks track solved simulation frames independently of display-cache marks; stale output remains labeled until the edited playhead frame appears; only one background frame is queued at a time; and forward playback is bounded to contiguous solved frames. A newer preview signals cancellation of in-flight work. Cache identity and edit invalidation use the viewed solver dependency chain. UI tests and documentation checks pass, as do prior CPU and llvmpipe solver checks. No solver-cost reduction was verified; the Radeon cup move remains 32.43 s, above the 30 s gate. Production-size refresh was not started: only 5.7 GB is free versus an approximately 8.5 GB historical cache. Real-display QA and measured <50 ms cancellation remain open. Artifacts and exact next-owner handoff are in the Lane 6 finish 1 entry in `TASKLOG.md` and `docs/FLUIDS_SPIKE.md`.
 
 ## 2026-10-22 — Lane 6 step B finish 3 (PARTIAL)

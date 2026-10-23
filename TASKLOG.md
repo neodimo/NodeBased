@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step A of 2: an edit to the Hot pour shows its re-simulated first frames within a second (finish 1), Lane 8 (2D parity B, GPT-6 Luna) step A of 2: find where 2D comp playback's time goes on a real comp, commit the profile, and remove the biggest costs (finish 1) (integrator tick)
+
+- **What was done:** `main` `f4aecaab` -> `68d134e1` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `68d134e1`: Ran 5981 tests in 483.532 s, OK (skipped=32), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 6 step A finish 1 (PARTIAL)
 
 - **What was done — evidence:** The timeline now shows the active simulation bake separately from ordinary display-cache marks. The previous picture stays visible with a stale indicator until the edited playhead frame replaces it. One background frame is queued at a time; forward playback stays within the contiguous solved range. A newer preview replaces queued work and signals active evaluation cancellation. The simulation identity is limited to the viewed solver dependency scope, so unrelated camera/light edits do not restart the bake.
