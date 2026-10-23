@@ -1908,6 +1908,13 @@ class DecodeAheadPlaybackTests(unittest.TestCase):
     for the same tick-vs-content-change distinction `PlaybackQueue.replace` already draws."""
 
     def setUp(self):
+        # Since 10/22 the window leaves decode-ahead off on a machine with four CPUs or fewer (it cost the 4-core
+        # laptop stand-in throughput), which includes GitHub's runners. These tests are about the pool's behaviour,
+        # so they ask for it explicitly, the way a measured deployment would.
+        from unittest.mock import patch
+        held = patch.dict(os.environ, {'NODEBASED_DECODE_AHEAD_WORKERS': '2'})
+        held.start()
+        self.addCleanup(held.stop)
         self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
         self.window = Window(agent_name=self.endpoint)
         self.window.show()
