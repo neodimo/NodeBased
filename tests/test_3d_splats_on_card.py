@@ -117,10 +117,102 @@ class SplatsOnTheCard(unittest.TestCase):
         self.assertIsNone(gpupicture.take(frame, 0.0, 'RGB', 'black', 'ACES 2.0', None))
 
     def test_translucent_meshes_still_hide_the_splats_behind_them(self):
-        # a translucent card is not in the mesh pass's depth buffer; the ray tracer's layer merge takes such scenes
-        sc = scene(many(250, 3), geometries=(card(0.0, alpha=.5),))
+        # the translucent card is not in the mesh pass's depth buffer; the splat layer is drawn in two parts around it
+        sc = scene(spread(70, 3), geometries=(card(0.0, alpha=.5),))
         expected = np.asarray(s.render(sc, s.Camera(), W, H, (0, 0, 0, 0), samples=1))
         np.testing.assert_allclose(render_with(sc, True), expected, atol=ON_CARD_TOLERANCE, rtol=0)
+
+
+def spread(count, seed):
+    """Small splats scattered through a box that crosses the glass: few overlap, so the two orders a pixel's splats can be drawn
+    in (centre depth on the card, plane depth in the ray tracer's merge) give the same picture."""
+    rng = np.random.default_rng(seed)
+    sh = np.zeros((count, 1, 3))
+    sh[:, 0] = (rng.uniform(.1, .9, (count, 3)) - .5) / splats.C0
+    return splats.SplatCloud(rng.uniform(-1, 1, (count, 3)) * (1.6, 1.1, 1.0), rng.uniform(.05, .1, (count, 3)) * (1, 1, .1),
+                             np.tile((1.0, 0, 0, 0), (count, 1)), rng.uniform(.5, .95, count), sh, 0, colorspace='linear')
+
+
+def glass_cases():
+    """The splat layer behind and in front of translucent meshes: the cloud both sides of the glass, two discs, glass over a wall."""
+    cloud = spread(70, 3)
+    return {'a cloud both sides of a glass card': scene(cloud, geometries=(card(0.0, alpha=.5),)),
+            'a cloud behind a glass card': scene(cloud, geometries=(card(1.6, alpha=.5),)),
+            'a cloud in front of a glass card': scene(cloud, geometries=(card(-1.5, alpha=.5),)),
+            'a disc behind and a disc in front': scene(disc((0, 0, 1.0), (.9, .2, .1)), disc((.3, 0, -1.0), (.1, .9, .2)),
+                                                       geometries=(card(0.0, alpha=.5),)),
+            'glass over a wall': scene(cloud, geometries=(card(-1.0), card(0.0, alpha=.4, colour=(.9, .9, .2)))),
+            'a slanted glass card': scene(cloud, geometries=(card(0.0, alpha=.5, yaw=.7),)),
+            # a splat between two glass surfaces of one pixel counts as behind the nearer one (the card orders against the nearest
+            # translucent surface only), so the cards here have the whole cloud on one side of them
+            'two glass cards in front of the cloud': scene(cloud, geometries=(card(1.6, alpha=.3, colour=(.9, .2, .2)),
+                                                                              card(2.2, alpha=.3, colour=(.2, .2, .9)))),
+            'two glass cards behind the cloud': scene(cloud, geometries=(card(-1.4, alpha=.3, colour=(.9, .2, .2)),
+                                                                         card(-2.0, alpha=.3, colour=(.2, .2, .9))))}
+
+
+@unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
+class SplatsAroundTranslucentMeshesOnTheCard(unittest.TestCase):
+    """A played frame draws the splats behind the glass before it (the glass tints them) and the splats in front of it after it,
+    in one submission pair, ordered per pixel by a second depth buffer of the glass. A stopped frame takes the ray tracer's layer
+    merge, which is the reference here."""
+
+    def ray_traced(self, sc):
+        return np.asarray(gpu3d.render(sc, s.Camera(), W, H, mode='raytrace'))
+
+    def test_the_layer_never_comes_back_to_the_processor_and_the_ray_tracer_is_not_used(self):
+        for name, sc in glass_cases().items():
+            with self.subTest(case=name), unittest.mock.patch.object(gpusplat, 'render_layer', side_effect=AssertionError(
+                    'the splat layer was read back')), unittest.mock.patch.object(gpu3d, 'render', wraps=gpu3d.render) as call:
+                frame = render_with(sc, True)
+            self.assertEqual(frame.shape, (H, W, 4))
+            modes = [c.kwargs.get('mode') for c in call.call_args_list]
+            self.assertNotIn('raytrace', modes, 'the frame went to the ray tracer')
+
+    def test_the_card_frame_agrees_with_the_ray_tracers_layer_merge(self):
+        for name, sc in glass_cases().items():
+            with self.subTest(case=name):
+                expected, actual = self.ray_traced(sc), render_with(sc, True)
+                self.assertGreater(float(expected[..., 3].max()), .3, 'the case must draw something')
+                np.testing.assert_allclose(actual, expected, atol=ON_CARD_TOLERANCE, rtol=0)
+
+    def test_a_dense_cloud_agrees_apart_from_the_order_of_overlapping_splats(self):
+        # the merge draws a pixel's overlapping splats by plane depth and the card by centre depth, glass or no glass (a ray-traced
+        # frame with an invisible glass card differs from the plain splat raster by the same amount): same coverage, same mean colour
+        sc = scene(many(250, 3), geometries=(card(0.0, alpha=.5),))
+        expected, actual = self.ray_traced(sc), render_with(sc, True)
+        np.testing.assert_allclose(actual[..., 3], expected[..., 3], atol=ON_CARD_TOLERANCE, rtol=0)
+        self.assertLess(float(np.abs(actual - expected).mean()), 1e-2)
+
+    def test_the_old_order_drew_every_splat_over_the_glass(self):
+        # a splat behind a glass card must be tinted by it: a red disc behind a half-opaque blue card is not pure red
+        sc = scene(disc((0, 0, -1.0), (1, 0, 0), opacity=.99, size=.8), geometries=(card(0.0, colour=(0, 0, 1), alpha=.5),))
+        centre = (H // 2, W // 2)
+        behind = render_with(sc, True)
+        self.assertGreater(float(behind[centre][2]), .15, 'the glass did not tint the splat behind it')
+        in_front = render_with(scene(disc((0, 0, 1.0), (1, 0, 0), opacity=.99, size=.8),
+                                     geometries=(card(0.0, colour=(0, 0, 1), alpha=.5),)), True)
+        self.assertLess(float(in_front[centre][2]), .05, 'the glass tinted a splat in front of it')
+        self.assertGreater(float(in_front[centre][0]), .9)
+
+    def test_a_stopped_frame_and_a_frame_the_card_cannot_take_use_the_ray_tracer(self):
+        sc = glass_cases()['a cloud both sides of a glass card']
+        with unittest.mock.patch.object(gpu3d, 'SPLATS_ON_CARD', True):
+            stopped = np.asarray(gpu3d.render(sc, s.Camera(), W, H))
+        np.testing.assert_array_equal(stopped, self.ray_traced(sc))
+        with gpu3d.playing(True):
+            coloured = np.asarray(gpu3d.render(sc, s.Camera(), W, H, background=(.1, .1, .1, 1.0)))
+        np.testing.assert_allclose(coloured, np.asarray(gpu3d.render(sc, s.Camera(), W, H, background=(.1, .1, .1, 1.0), mode='raytrace')),
+                                   atol=ON_CARD_TOLERANCE, rtol=0)
+
+    def test_scenes_without_translucent_meshes_do_not_draw_the_glass_depth(self):
+        state = gpu3d._state(None)
+        state.pop('glass_depth', None)
+        render_with(scene(many(100, 3), geometries=(card(0.0),)), True)
+        self.assertFalse(state.get('glass_depth'))
+        render_with(scene(many(100, 3), geometries=(card(0.0, alpha=.5),)), True)
+        self.assertTrue(state.get('glass_depth'))
+
 
     def test_a_splat_only_scene_and_a_scene_with_splats_all_behind_the_camera_still_render(self):
         only = scene(many(100, 5))

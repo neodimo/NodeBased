@@ -451,13 +451,18 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
             resource.destroy()
 
 
-def prepare_on_card(state, instances, camera, width, height, depth_view, *, lighting=None, cancel=None, keep=None):
+def prepare_on_card(state, instances, camera, width, height, depth_view, *, lighting=None, cancel=None, keep=None,
+                    glass_view=None):
     """The splat layer drawn straight onto the mesh frame the card is already holding, in the same submission: nothing is
     read back and the mesh depth never leaves the card. `depth_view` is the mesh pass's own depth buffer (non-linear, as
     the raster shader writes it: far*(z-near)/((far-near)*z)); the splat shader turns it into the camera-forward distance
-    the layer compares. Returns `record(encoder, colour_view)`, which projects the splats and blends them over `colour_view`
-    (premultiplied over), or None when no splat is in front of the camera. Call with the GPU lock held; `keep` registers
-    the resources to destroy after the submission."""
+    the layer compares. Returns `record(encoder, colour_view, between=None)`, which projects the splats and blends them over
+    `colour_view` (premultiplied over), or None when no splat is in front of the camera. Call with the GPU lock held; `keep`
+    registers the resources to destroy after the submission.
+
+    `glass_view` is a second depth buffer holding the nearest translucent mesh surface of each pixel. With it the layer is drawn
+    in two parts around `between(encoder)`, which records the translucent meshes: the splats behind the glass first (the glass
+    then tints them), the splats in front of it after it (nothing tints them)."""
     plan = _plan(state, instances, camera, width, height, None, lighting, cancel, None)
     if plan is None:
         return None
@@ -465,20 +470,31 @@ def prepare_on_card(state, instances, camera, width, height, depth_view, *, ligh
     t = perf_counter()
     project, uniform, output, indices, bind = _stage(state, plan, camera, width, height, keep)
     render = _depth_pipeline(state)
-    params = np.array([camera.near, camera.far, 0, 0], 'f4')
-    limits_uniform = keep(device.create_buffer_with_data(data=params, usage=state['wgpu'].BufferUsage.UNIFORM))
-    group = device.create_bind_group(layout=render.get_bind_group_layout(0), entries=[
-        dict(binding=0, resource={'buffer': uniform}), dict(binding=1, resource={'buffer': output}),
-        dict(binding=2, resource={'buffer': indices}), dict(binding=3, resource=depth_view),
-        dict(binding=4, resource={'buffer': limits_uniform})])
+    modes = (1, 2) if glass_view is not None else (0,)
+    groups = []
+    for mode in modes:
+        params = np.array([camera.near, camera.far, mode, 0], 'f4')
+        limits_uniform = keep(device.create_buffer_with_data(data=params, usage=state['wgpu'].BufferUsage.UNIFORM))
+        groups.append(device.create_bind_group(layout=render.get_bind_group_layout(0), entries=[
+            dict(binding=0, resource={'buffer': uniform}), dict(binding=1, resource={'buffer': output}),
+            dict(binding=2, resource={'buffer': indices}), dict(binding=3, resource=depth_view),
+            dict(binding=4, resource={'buffer': limits_uniform}),
+            dict(binding=5, resource=glass_view if glass_view is not None else depth_view)]))
     last_timings['upload_ms'] = plan['upload_ms'] + (perf_counter()-t)*1000
     count = len(plan['order'])
 
-    def record(encoder, colour_view):
-        project(encoder)
+    def draw(encoder, colour_view, group):
         rp = encoder.begin_render_pass(color_attachments=[dict(view=colour_view, resolve_target=None,
             clear_value=(0,0,0,0), load_op='load', store_op='store')])
         rp.set_pipeline(render); rp.set_bind_group(0, group); rp.draw(6, count, 0, 0); rp.end()
+
+    def record(encoder, colour_view, between=None):
+        project(encoder)
+        draw(encoder, colour_view, groups[0])
+        if glass_view is not None:
+            if between is not None:
+                between(encoder)
+            draw(encoder, colour_view, groups[1])
     return record
 
 
@@ -487,12 +503,24 @@ _DEPTH_RENDER = _RENDER.replace(
     '@group(0) @binding(3) var mesh: texture_depth_2d;\n'
     'struct Planes { near: f32, far: f32, pad0: f32, pad1: f32 };\n'
     '@group(0) @binding(4) var<uniform> planes: Planes;\n'
+    '@group(0) @binding(5) var glass: texture_depth_2d;\n'
     '// The mesh pass writes far*(z-near)/((far-near)*z); this is z, the camera-forward distance, back (infinity where nothing was drawn).\n'
     'fn mesh_z(xy: vec2<i32>) -> f32 {\n'
     ' let d = textureLoad(mesh, xy, 0);\n'
     ' if (d >= 1.0) { return 3.0e38; }\n'
     ' return planes.near*planes.far/(planes.far - d*(planes.far-planes.near));\n'
-    '}').replace('textureLoad(mesh,vec2<i32>(v.position.xy),0).x', 'mesh_z(vec2<i32>(v.position.xy))')
+    '}\n'
+    '// The nearest translucent surface of the pixel, in the same units (infinity where there is none).\n'
+    'fn glass_z(xy: vec2<i32>) -> f32 {\n'
+    ' let d = textureLoad(glass, xy, 0);\n'
+    ' if (d >= 1.0) { return 3.0e38; }\n'
+    ' return planes.near*planes.far/(planes.far - d*(planes.far-planes.near));\n'
+    '}').replace(
+    'if (zp >= textureLoad(mesh,vec2<i32>(v.position.xy),0).x) { discard; }',
+    'let xy = vec2<i32>(v.position.xy);\n'
+    ' if (zp >= mesh_z(xy)) { discard; }\n'
+    ' // planes.pad0: 0 draws every splat, 1 only the ones behind the nearest translucent surface, 2 only the ones in front of it\n'
+    ' if (planes.pad0 > 0.5) { let behind = zp > glass_z(xy); if (behind != (planes.pad0 < 1.5)) { discard; } }')
 
 
 def _depth_pipeline(state):

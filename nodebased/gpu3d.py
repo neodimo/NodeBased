@@ -1068,7 +1068,9 @@ def _view_rows(camera):
 
 
 def _pipeline(state, data, phase, bvh=False, smoke=False, hold=False):
-    """`hold`: the variant that draws holdout triangles in the beauty's first pass, replacing what is under them with zero."""
+    """`hold`: the variant that draws holdout triangles in the beauty's first pass, replacing what is under them with zero.
+    `phase` 0 draws the opaque triangles, 1 the translucent ones, 2 the data passes, 3 writes the depth of the translucent ones only
+    (the glass depth the splat layer is ordered against)."""
     key = (data, phase, bvh, smoke, hold)
     if key in state['pipelines']:
         return state['pipelines'][key]
@@ -1082,6 +1084,8 @@ def _pipeline(state, data, phase, bvh=False, smoke=False, hold=False):
             '// VOLUME_SHADOW', 'if (!shadow_off) { transmission *= volume_transmission(v.world, lights[i], u32(i)); }')
     module = device.create_shader_module(code=code)
     target = {'format': 'rgba32float' if data else state['format']}
+    if phase == 3:
+        target['write_mask'] = 0      # the translucent meshes' depth only: the colour stays as it is
     if not data:
         blend = ({'src_factor': 'zero', 'dst_factor': 'zero', 'operation': 'add'} if hold else
                  {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'})
@@ -1094,7 +1098,7 @@ def _pipeline(state, data, phase, bvh=False, smoke=False, hold=False):
             {'array_stride': 152, 'step_mode': 'vertex', 'attributes': attributes}]},
         primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
         depth_stencil={'format': 'depth32float', 'depth_write_enabled': phase != 1, 'depth_compare': 'less'},
-        fragment={'module': module, 'entry_point': 'fs', 'constants': {'PASS': phase}, 'targets': [target]})
+        fragment={'module': module, 'entry_point': 'fs', 'constants': {'PASS': 1 if phase == 3 else phase}, 'targets': [target]})
     state['pipelines'][key] = pipeline
     return pipeline
 
@@ -1470,8 +1474,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if (volumes and scene.geometries and len(scene.volumes) > 4 and volume is not None and volume.shadow_density > 0
             and any(light.shadows and light.intensity > 0 for light in scene.lights)):
         raise Unsupported('smoke shadows on meshes from more than four volumes are CPU-only')
-    if volumes and (mode == 'raytrace' or scene.splats):
-        raise Unsupported('volumes drawn with the ray tracer or together with splats are CPU-only')
+    if volumes and mode == 'raytrace':
+        raise Unsupported('volumes drawn with the ray tracer are CPU-only')
     environments = getattr(scene, 'environments', ())
     if environments and scene.geometries and len(environments) > 1:
         # Y1 of 2 finish (2): a mesh lit by a single Environment shades in the GPU raster path
@@ -1541,6 +1545,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 state, scene, camera, width, height, background, ambient, output, samples, cancel=cancel)
     if output == 'rgba' and any(g.material == 'liquid' for g in scene.geometries):
         raise Unsupported('the raster approximation of liquid surfaces is CPU-only (the ray tracer does them on the GPU)')
+    glass_on_card = False
     if scene.splats:
         if output != 'rgba' and output not in ('depth', 'position', 'object_id'):
             raise Unsupported('splat data passes other than depth, position and object_id, and the `splats` output, '
@@ -1552,8 +1557,12 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             # (the two give identical results), so the GPU path is the ray tracer's layer recording merged with
             # the splat tiles (`gpurt_render`, `gpusplat.LayeredResolve`). Camera-projected geometry stays on the
             # CPU: the ray-traced branch raises for it.
-            return render(scene, camera, width, height, background, ambient, samples, output,
-                          cancel, adapter, mode='raytrace')
+            # A played frame takes the card route instead (`_render_resident` draws the splat layer in two parts around the
+            # translucent meshes); the ray tracer keeps every stopped frame, and a played one the card could not take.
+            if not (is_playing() and SPLATS_ON_CARD):
+                return render(scene, camera, width, height, background, ambient, samples, output,
+                              cancel, adapter, mode='raytrace')
+            glass_on_card = True
         # The raster shader has no splat casters, so shadow work that involves splats (meshes shadowing
         # relit or caught splats, splats shadowing meshes and each other) goes to the ray tracer, whose
         # opaque-mesh result equals the raster one.
@@ -1645,7 +1654,18 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         state['picture_rgba'] = None
         state['splats_on_card'] = False
         splat_job = None
-        if (scene.splats and output == 'rgba' and SPLATS_ON_CARD and not volumes and not any(
+        if volumes and scene.splats:
+            # Smoke together with splats (the CPU draws the smoke over the meshes and splats, cut at the mesh depth): the splat layer
+            # goes onto the card between the mesh passes and the smoke march. A shadow of the smoke on relit or shadow-catching
+            # splats, a frame in several bands or the old readback route stay with the CPU.
+            smoke_shades_splats = (volume.shadow_density > 0 and any(light.shadows and light.intensity > 0 for light in scene.lights)
+                                   and any(getattr(i, 'relight', 0) > 0 or getattr(i, 'shadow_catch', 0) > 0 for i in scene.splats))
+            if (not SPLATS_ON_CARD or len(bands) != 1 or smoke_shades_splats or any(
+                    getattr(e, 'visible_to_camera', False) for e in environments) or any(
+                    light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0 for light in scene.lights)):
+                raise Unsupported('smoke together with splats is drawn on the card only in one band, without smoke shadows on relit '
+                                  'splats and without a visible environment or area light; the CPU draws the rest')
+        if (scene.splats and output == 'rgba' and SPLATS_ON_CARD and not any(
                 getattr(e, 'visible_to_camera', False) for e in environments) and not any(
                 light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0 for light in scene.lights)):
             # The splat layer drawn over the meshes on the card, in the mesh frame's own submission (`gpusplat.prepare_on_card`)
@@ -1659,7 +1679,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         splats_drawn = state.pop('splats_on_card', False)
         if scene.splats and output in gpusplat.DATA_OUTPUTS:
             _splat_data_pass(state, scene, camera, width, height, result, output, cancel)
-        elif scene.splats and not splats_drawn:
+        elif scene.splats and not splats_drawn and not glass_on_card:
             mesh_depth = None
             if scene.geometries:
                 depth = _render(state, scene, camera, width*samples, height*samples,
@@ -1691,6 +1711,10 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             scene3d._visible_background(scene, width*samples, height*samples, result, depth, view_eye,
                                         view_matrix, focal, (width*samples)/(height*samples),
                                         float(np.clip(background[3], 0, 1)))
+    if glass_on_card and not splats_drawn:
+        # The card could not take the translucent meshes with the splats (several bands, a coloured background, a mesh held back
+        # from the resident path): the ray tracer's layer merge makes the frame.
+        return render(scene, camera, width, height, background, ambient, samples, output, cancel, adapter, mode='raytrace')
     if samples > 1:
         result = scene3d.box_resolve(result, samples)
     result.flags.writeable = False
@@ -2165,6 +2189,19 @@ def _frame_targets(state, width, height, fmt):
     return target.create_view(), depth.create_view(), target
 
 
+def _glass_depth(state, width, height):
+    """The depth buffer of the translucent meshes' nearest surfaces (see `_render_resident`), kept between renders."""
+    wgpu, device = state['wgpu'], state['device']
+    held = state.setdefault('glass_depth', {})
+    key = (width, height)
+    if key not in held:
+        while len(held) >= 2:
+            held.pop(next(iter(held))).destroy()
+        held[key] = device.create_texture(size=(width, height, 1), format='depth32float',
+                                          usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.TEXTURE_BINDING)
+    return held[key].create_view()
+
+
 def _card_finishes_frame(scene, splats_drawn=False):
     """True when nothing is drawn over the card's mesh frame afterwards (a splat layer, a visible environment or area light):
     only then is the picture made beside it the frame's picture. A scene with splats made the splat layer 5 times slower when the
@@ -2222,9 +2259,11 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     def keep(resource):
         held.append(resource)
         return resource
-    # The mesh depth is the pass's own depth buffer, which holds the opaque surfaces only: a scene with translucent
-    # meshes takes the depth pass of the splat layer's old route.
-    splats_here = (splat_job is not None and not data and len(bands) == 1 and not runs_by_pass[1] and not bg.any())
+    # The mesh depth is the pass's own depth buffer, which holds the opaque surfaces only. A scene with translucent meshes also
+    # draws their nearest surface into a second depth buffer, and the splat layer is drawn in two parts around the translucent
+    # pass: the splats behind the glass first (the glass tints them), the ones in front of it after.
+    splats_here = (splat_job is not None and not data and len(bands) == 1 and not bg.any())
+    glass = splats_here and bool(runs_by_pass[1])
     state['splats_on_card'] = splats_here
     # The display picture of a played frame (nodebased/gpupicture.py) is made by one more pass in the last band's submission and
     # read back through the same buffer, after the float rows.
@@ -2241,23 +2280,29 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
             _cancel(cancel)
             rows = y1-y0
             encoder = device.create_command_encoder()
-            for pass_number, (pipeline, groups, env_group) in enumerate(passes):
+            def mesh_pass(encoder, pass_number, pipeline, groups, env_group, depth_target=None):
                 rp = encoder.begin_render_pass(color_attachments=[{'view': target_view,
                     'resolve_target': None, 'clear_value': (0, 0, 0, 0),
                     'load_op': 'clear' if pass_number == 0 else 'load', 'store_op': 'store'}],
-                    depth_stencil_attachment={'view': depth_view, 'depth_clear_value': 1.0,
-                        'depth_load_op': 'clear' if pass_number == 0 else 'load', 'depth_store_op': 'store'})
+                    depth_stencil_attachment={'view': depth_view if depth_target is None else depth_target, 'depth_clear_value': 1.0,
+                        'depth_load_op': 'clear' if pass_number == 0 or depth_target is not None else 'load', 'depth_store_op': 'store'})
                 rp.set_scissor_rect(0, y0, width, rows)
                 rp.set_pipeline(pipeline)
                 rp.set_bind_group(2, env_group)
                 rp.set_vertex_buffer(0, res['vertices'])
                 bound = None
-                for first, count, material in runs_by_pass[pass_number]:
+                for first, count, material in runs_by_pass[0 if pass_number == 0 else 1]:
                     if bound != material:
                         rp.set_bind_group(0, groups[material])
                         bound = material
                     rp.draw(count, 1, first, 0)
                 rp.end()
+            for pass_number, (pipeline, groups, env_group) in enumerate(passes):
+                if glass and pass_number == 1:
+                    glass_view = _glass_depth(state, width, height)
+                    mesh_pass(encoder, 1, *_resident_binds(state, res, 3), depth_target=glass_view)     # their depth, no colour
+                    continue            # the translucent meshes themselves are drawn between the two parts of the splat layer
+                mesh_pass(encoder, pass_number, pipeline, groups, env_group)
             if splats_here:
                 # The card starts on the meshes now; the processor prepares the splat layer (order, colours, buffers: 8 ms
                 # at 20,000 relit splats) while it draws, and the layer goes out in a second submission over the same frame.
@@ -2265,10 +2310,13 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                 _mark('submit')
                 device.queue.submit([encoder.finish()])
                 splat_layer = gpusplat.prepare_on_card(state, splat_job[0], camera, width, height, depth_view,
-                                                       lighting=splat_job[1], cancel=cancel, keep=keep)
+                                                       lighting=splat_job[1], cancel=cancel, keep=keep,
+                                                       glass_view=glass_view if glass else None)
                 encoder = device.create_command_encoder()
                 if splat_layer is not None:
-                    splat_layer(encoder, target_view)
+                    splat_layer(encoder, target_view, (lambda enc: mesh_pass(enc, 1, *passes[1])) if glass else None)
+                elif glass:
+                    mesh_pass(encoder, 1, *passes[1])
             encoder.copy_texture_to_buffer({'texture': target, 'origin': (0, y0, 0)},
                 {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))
             fused = recorder is not None and y1 == bands[-1][1]
@@ -2528,6 +2576,18 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                     if run_count:
                         rp.draw(3*run_count, 1, run_start, 0)
                 rp.end()
+            if splat_job is not None and has_volumes and not data and len(bands) == 1:
+                # The meshes go out first; the processor prepares the splat layer while the card draws them, and the layer is
+                # drawn over the meshes (reading their depth) before the smoke is marched over both.
+                from . import gpusplat
+                _mark('submit')
+                device.queue.submit([encoder.finish()])
+                splat_layer = gpusplat.prepare_on_card(state, splat_job[0], camera, width, height, depth_view,
+                                                       lighting=splat_job[1], cancel=cancel, keep=keep)
+                encoder = device.create_command_encoder()
+                if splat_layer is not None:
+                    splat_layer(encoder, target_view)
+                state['splats_on_card'] = True
             if volume_pass is not None:
                 _cancel(cancel)
                 rp = encoder.begin_render_pass(color_attachments=[{'view': target_view, 'resolve_target': None,
@@ -2539,7 +2599,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))
             # A submitted band cannot be interrupted; cancellation bounds the next submission.
             _cancel(cancel)
-            _mark('submit')
+            if not state.get('splats_on_card'):
+                _mark('submit')
             device.queue.submit([encoder.finish()])
             staging.map_sync(wgpu.MapMode.READ)
             _mark('gpu_done')
