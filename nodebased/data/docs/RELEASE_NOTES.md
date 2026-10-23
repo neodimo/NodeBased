@@ -1,3 +1,45 @@
+# NodeBased 0.42.1: 3D comps at 24 fps, the Direct picture as a full viewer, Fluids that re-simulate in seconds, and faster 2D playback
+
+## What changed since 0.41.0
+
+0.42.0 was tagged but never published: its package build failed tests that needed a real graphics card on the cloud build machine. Those tests now skip cleanly there, and everything from 0.42.0 is in this release.
+
+- **3D playback at the comp's rate.** Under an animated camera at 1080p, the cube and the furnished room play at 24 fps at full
+  size on the RTX 3080 Ti, the Radeon and a four-core laptop stand-in (the furnished room was 2 to 12 fps). The card now makes
+  the display picture itself, so converting a frame for the screen takes under 1 ms where it took 26 ms. The heavy mesh-and-splat
+  scene plays at a reduced size and refines to the full picture about 2 s after you stop. The time row names the size shown
+  and says "real time" only when the rate holds.
+- **Render mode settles in seconds.** Render mode stops sampling where the picture is already clean. The furnished room
+  settles in 3 s (was 8) and the mixed mesh-and-splat scene in 24 s (was 82). The mixed scene's first look arrives in about
+  0.6 s.
+- **The Direct picture does everything the Viewer does on this workstation.** Edit handles, Roto and RotoPaint drawing, paint
+  strokes, Tracker and planar picking, and every pick tool (Cryptomatte, Focus, ZDefocus, Survey, PointsTo3D) behave exactly as
+  in the Viewer, and tests prove it. All the Viewer's zoom keys work. Paused frames, edits and refinement go to the card as
+  floats. The A/B compare modes and the wipe line run on the card. Handles and the pixel readout follow playback. The dock is
+  saved with the workspace layout and can be switched to be the main viewer, and opening the 3D view puts it beside the
+  picture. Zoomed out, the Direct picture averages pixels where it used to skip them. It stays off by default.
+- **Faster uncached 2D playback.** The next frame computes while the current one is shown. Source images are read and
+  colour-converted ahead of time, and EXR colour conversion is about 5 times faster. A realistic 1080p comp plays fresh frames
+  at about 5.7 fps on the RTX (was 3.5). A 4K comp drops to a lower tier while it plays and returns to full resolution about
+  a second after you stop. Stopping playback no longer blanks the Viewer.
+- **Live pictures while you drag.** Roto, RotoPaint, Tracker and Transform drags show a picture within a third of a second,
+  scrubbing shows a first picture in a quarter second, and paint strokes only reprocess what they touch.
+- **Fluids at interactive speed.** The full-HD Hot pour settles in about 7 s on the RTX and 6 s on the laptop stand-in (was
+  68 s), with soft steam, the pour reaching the cup and a soft table shadow. After an edit to the pour, the cup or the steam,
+  the first re-simulated frame appears in under 0.2 s and the timeline fills as frames bake. A new edit cancels the old bake
+  within 25 ms. Look-only knobs never re-bake, a change keyed at a frame re-bakes from that frame, and every edit shows a
+  low-res version first, then sharpens. Older caches convert once without re-simulating.
+
+## Known limits
+
+- All timings come from this workstation. The laptop, the A6000 and Windows have not been measured.
+- Uncached 2D playback is still well short of 24 fps. The nodes themselves now take about 170 ms of every frame, and moving
+  them to the graphics card is the next decision.
+- The mixed mesh-and-splat scene plays at full size at about 8 fps. At the comp's rate it uses a reduced size.
+- The Direct picture is not the default viewer yet: it needs the laptop and A6000 runs, and it has no native Wayland or HDR
+  surface. Zoomed out, the Viewer still skips pixels, so the two look different at 1:4 and 1:8.
+- Fluids: the production-size timings for edit re-simulation have not been measured.
+
 # NodeBased 0.42.0: 3D comps at 24 fps, the Direct picture as a full viewer, Fluids that re-simulate in seconds, and faster 2D playback
 
 ## What changed since 0.41.0
