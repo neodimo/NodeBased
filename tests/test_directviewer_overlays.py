@@ -208,7 +208,9 @@ class RegionAndMaskParityTests(OverlayParityBase):
         self.settle()
         view, physical, exact = self.pin_view(1.0)
         one = {"text": "x 1 y 2", "buffer": "", "rgba": (0.5, 0.5, 0.5, 1.0)}
-        two = dict(one, text="x 3 y 2")
+        # The swatch changes as well as the text: on the Windows CI runner two readouts
+        # that differ only in text painted the same pixels although their recordings differ (likely no fonts offscreen).
+        two = dict(one, text="x 3 y 2", rgba=(0.9, 0.1, 0.1, 1.0))
         first = self.viewer.render_overlay(view, physical, exact, readout=one, probe=True)
         self.assertIsInstance(first, QImage)
         self.assertIs(self.viewer.render_overlay(view, physical, exact, readout=one, probe=True), dv.SAME_OVERLAY)
