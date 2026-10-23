@@ -105,7 +105,9 @@ def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
     Non-zero winding, so a self-intersecting shape fills the way every other package fills it and
     a hole is drawn by winding a sub-loop the other way.
     """
-    matte = np.zeros((height, width), dtype=np.float64)
+    # Coverage is ultimately stored as float32 in the RGBA matte. Keep the band accumulators
+    # in that format too: the full-frame float64 plane needlessly doubles memory traffic here.
+    matte = np.zeros((height, width), dtype=np.float32)
     polyline = _flatten_cached(points, flattened_cache)
     if polyline.shape[0] < 3:
         return matte.astype(np.float32)
@@ -152,8 +154,8 @@ def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
         first, last = np.floor(x0).astype(np.intp), np.floor(x1).astype(np.intp)
         # Each scanline contributes fractional edge pixels and a run of full pixels. Store the
         # latter as a difference array so all spans in a band are accumulated in vectorized C.
-        partial = np.zeros((len(local_rows), width), dtype=np.float64)
-        run_delta = np.zeros((len(local_rows), width + 1), dtype=np.float64)
+        partial = np.zeros((len(local_rows), width), dtype=np.float32)
+        run_delta = np.zeros((len(local_rows), width + 1), dtype=np.float32)
         same = first == last
         start_values = np.where(same, x1 - x0, first + 1 - x0)
         np.add.at(partial, (line_index, first), start_values)
@@ -162,8 +164,9 @@ def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
         full = first + 1 < last
         np.add.at(run_delta, (line_index[full], first[full] + 1), 1.0)
         np.add.at(run_delta, (line_index[full], last[full]), -1.0)
-        scan_coverage = partial + np.cumsum(run_delta[:, :width], axis=1)
-        matte[row0:row1] = scan_coverage.reshape(row1-row0, SUBSAMPLES, width).sum(axis=1)
+        scan_coverage = partial + np.cumsum(run_delta[:, :width], axis=1, dtype=np.float32)
+        matte[row0:row1] = scan_coverage.reshape(row1-row0, SUBSAMPLES, width).sum(
+            axis=1, dtype=np.float32)
     return (matte / SUBSAMPLES).astype(np.float32)
 
 

@@ -283,6 +283,18 @@ class ScalarResolutionTests(unittest.TestCase):
 
 
 class RasteriseTests(unittest.TestCase):
+    def test_fractional_coverage_retains_antialiased_edge_pixels(self):
+        points = [
+            {"x": 1.25, "y": 1.5, "in_x": 0, "in_y": 0, "out_x": 0, "out_y": 0},
+            {"x": 6.75, "y": 2.25, "in_x": 0, "in_y": 0, "out_x": 0, "out_y": 0},
+            {"x": 4.5, "y": 7.75, "in_x": 0, "in_y": 0, "out_x": 0, "out_y": 0},
+        ]
+        matte = roto.coverage(points, 9, 9)
+        self.assertEqual(matte.dtype, np.float32)
+        np.testing.assert_allclose(
+            matte[[1, 6, 7], [1, 4, 4]],
+            [0.27354166, 0.94329548, 0.26130682], atol=2e-7)
+
     def test_coverage_batches_subscanlines_instead_of_python_per_line_searches(self):
         from unittest.mock import patch
         points = square(4, 4, 20, 20)["points"]
