@@ -43,7 +43,7 @@ from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_descr
 from . import radialcommands
 from . import graphlook
 from . import gpu3d
-from .playback_trace import mark as _trace_mark
+from .playback_trace import mark as _trace_mark, mark_frame as _trace_frame
 from . import guigc
 from . import lensview
 from .graphcorner import GraphCorner
@@ -58,7 +58,7 @@ from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
 from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
-from .playback import PlaybackQueue, DisplayCache, STATIC_FRAME, playing_document
+from .playback import PlaybackQueue, DisplayCache, ConversionStage, STATIC_FRAME, playing_document
 from .queuepanel import QueuePanel, create_default_queue
 from . import pipeline
 from .motion import MotionAnimator
@@ -8017,6 +8017,9 @@ class Graph(PanZoomView):
 
 class PreviewSignals(QObject):
     finished = Signal(object, object, object, str, object)
+    # The worker has finished evaluating a played frame and is free for the next one; the picture for it
+    # follows on `finished` once the conversion stage has built it: (payload).
+    evaluated = Signal(object)
     # A stand-in picture shown while the real one renders: (payload, image, status, scale, region).
     interim = Signal(object, object, str, int, object)
     # A finished node thumbnail: (node id, thumbnail key, image).
@@ -8693,6 +8696,12 @@ class Window(QMainWindow):
         self._display_memo = None
         self._compact_stop = threading.Event()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
+        # While a comp plays, the finished frame goes to this stage to be turned into a picture and the worker
+        # starts the next frame at once (docs/PERFORMANCE.md "Lane 2 playback pipeline"). `False` restores the
+        # one-thread order: evaluate, convert, show, then the next frame.
+        self.pipeline_playback = True
+        self.convert_stage = ConversionStage(lambda job: job(), on_exit=gpudisplay.release_convert_display)
+        self._staged_cancels = []
         # QOffscreenSurface must be created on the GUI thread; the QOpenGLContext bound to
         # it is built lazily on nodebased-preview (the single worker thread above) on its
         # first display request and used only from that thread afterward. See the design
@@ -8751,6 +8760,7 @@ class Window(QMainWindow):
         self._generate_progress_text = {}
         self.signals = PreviewSignals()
         self.signals.finished.connect(self.preview_ready)
+        self.signals.evaluated.connect(self.preview_evaluated)
         self.signals.interim.connect(self.preview_interim)
         self.signals.progress.connect(self.preview_progress)
         self.signals.thumbnail.connect(self.thumbnail_ready)
@@ -9748,6 +9758,7 @@ class Window(QMainWindow):
             self.playback_elapsed_frames = 0
             self._playback_next_deadline = None
             self.playback_dropped_frames = 0
+            self.convert_stage.reset_count()
             self.playback_frames_rendered = 0
             self.playback_shown_times.clear()
             self.update_realtime_light()
@@ -9780,6 +9791,11 @@ class Window(QMainWindow):
         else:
             self.playback_timer.stop()
             self.preview_queue.cancel()
+            self._cancel_staged()
+            # The transport runs a frame ahead of the picture while the next frame evaluates: on stop the
+            # picture catches up with the playhead (a cached frame is instant) instead of lagging it by one.
+            catch_up = (self.pipeline_playback and not fluid_project and self.playback_auto_proxy_index is None
+                        and getattr(self, "_displayed_frame", None) not in (None, self.dispatcher.document["time"]["current"]))
             if self.playback_auto_proxy_index is not None:
                 if fluid_project:
                     self.proxy.blockSignals(True)
@@ -9789,6 +9805,8 @@ class Window(QMainWindow):
                     self.proxy.setCurrentIndex(self.playback_auto_proxy_index)
                 self.playback_auto_proxy_index = None
             self.update_realtime_light()
+            if catch_up:
+                QTimer.singleShot(0, self._catch_up_picture)
             if fluid_project:
                 if stopping_proxy:
                     full_index = self.proxy.findData(1)
@@ -9844,7 +9862,10 @@ class Window(QMainWindow):
         period = 1.0 / max(1.0, float(fps))
         if self._playback_next_deadline is None:
             self._playback_next_deadline = now + period
-        else:
+        elif now >= self._playback_next_deadline - 0.0005:
+            # Only a wakeup that reached its deadline moves it on. A tick called early (a frame finished
+            # between wakeups) must leave it where it is, or every early call pushes the next picture a
+            # whole frame period further out.
             self._playback_next_deadline += period
         return max(1, math.ceil((self._playback_next_deadline - now) * 1000.0))
 
@@ -14617,6 +14638,7 @@ class Window(QMainWindow):
             # just made irrelevant. See decodepool.py -- a job already dispatched to OIIO still
             # runs to completion, but its result is discarded rather than stored.
             self.decode_pool.bump_epoch()
+            self._cancel_staged()
         self.preview_queue.replace(self.generation, frame, snapshot, future,
                                    tier=tier, viewport=viewport,
                                    playing=self.playing,
@@ -14637,6 +14659,7 @@ class Window(QMainWindow):
         # The normal 35 ms coalescing window is useful for paused property edits. A live drag
         # already has its own gesture cadence and needs the first coarse picture promptly.
         self.timer.start(0 if self.playing or live_preview else 35)
+        _trace_frame("request", self.generation)
 
     def start_preview(self):
         if self.busy:
@@ -14665,6 +14688,35 @@ class Window(QMainWindow):
         def render():
             start = time.perf_counter()
             _trace_mark("worker_start")
+            _trace_frame("start", request.generation)
+            def stage_conversion(pixels, build_image, status_of, region):
+                """Played frame: build its picture on the conversion stage and free this worker for the next
+                frame. The stage emits `finished`; a frame it replaced before converting it is a counted drop."""
+                def job():
+                    try:
+                        if cancel.is_set():
+                            raise Cancelled()
+                        _trace_mark("convert_begin")
+                        _trace_frame("convert_begin", request.generation)
+                        image = build_image()
+                        _trace_frame("convert_end", request.generation)
+                        elapsed = (time.perf_counter() - start) * 1000
+                        _trace_mark("emit")
+                        _trace_frame("emit", request.generation)
+                        self.signals.finished.emit((request, cancel), pixels, image, status_of(elapsed), region)
+                    except Cancelled:
+                        self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
+                    except Exception as error:
+                        self.signals.finished.emit(
+                            (request, cancel), None, None,
+                            f"Internal error while converting ({type(error).__name__}: {error}). "
+                            "This is a NodeBased bug, not a problem with the graph.", None)
+                self._staged_cancels.append(cancel)
+                # One frame converts while one waits at most: a frame that costs nothing to evaluate (a display
+                # cache hit) must not run ahead of the conversion and have its neighbours dropped.
+                self.convert_stage.wait_for_room(cancel.is_set)
+                self.convert_stage.submit(job)
+                self.signals.evaluated.emit((request, cancel))
             try:
                 target = request.document.get("view")
                 render_region = None
@@ -14730,6 +14782,20 @@ class Window(QMainWindow):
                         memo = self._display_memo
                         if memo is not None and memo[0] == memo_key:
                             image = memo[1]
+                        elif self._pipelines(request):
+                            proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
+                            def build_cached(pixels=cached_or_cropped, key=memo_key):
+                                picture = to_qimage(pixels, exposure, channel,
+                                                    background=background, view=view, look=look)
+                                self._display_memo = (key, picture)
+                                return picture
+                            stage_conversion(
+                                cached_or_cropped, build_cached,
+                                lambda elapsed, w=width, h=height, proxy=proxy: (
+                                    f"{w * request.tier} × {h * request.tier}{proxy}  ·  "
+                                    f"{elapsed:.0f} ms  ·  display cache hit  ·  display {gpudisplay.status()}"),
+                                render_region)
+                            return
                         else:
                             image = to_qimage(cached_or_cropped, exposure, channel,
                                               background=background, view=view, look=look)
@@ -14753,6 +14819,7 @@ class Window(QMainWindow):
                     # below. The stand-in is display-only: it never becomes `self.frame`.
                     self._offer_cached_proxy(request, cancel, target, view, exposure, channel,
                                              background, look)
+                _trace_frame("eval_begin", request.generation)
                 if tiled:
                     tile_result = self.tile_executor.compose_region(request.document, target, render_region,
                                                                      frame=request.frame,
@@ -14779,6 +14846,7 @@ class Window(QMainWindow):
                     frame = self.evaluator.evaluate(request.document, cancel=cancel,
                                                     frame=request.frame, tier=request.tier)
                     tile_detail = "  ·  full-frame fallback"
+                _trace_frame("eval_end", request.generation)
                 if cancel.is_set():
                     raise Cancelled()
                 # A picture that is the same on every frame is kept at full precision, so showing
@@ -14790,9 +14858,26 @@ class Window(QMainWindow):
                                        lazy=True)
                 _trace_mark("cache_put")
                 direct = request.display and self._direct_linear_for(request, view, frame)
+                if request.display and not direct and self._pipelines(request):
+                    proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
+                    def build_fresh(pixels=frame, key=(display_key, region_key, exposure, channel, background,
+                                                       view, look, None)):
+                        picture = to_qimage(pixels, exposure, channel, background=background, view=view, look=look)
+                        self._display_memo = (key, picture)
+                        return picture
+                    stage_conversion(
+                        frame, build_fresh,
+                        lambda elapsed, pixels=frame, proxy=proxy, detail=tile_detail: (
+                            f"{pixels.shape[1] * request.tier} × {pixels.shape[0] * request.tier}{proxy}  ·  "
+                            f"{elapsed:.0f} ms{detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / "
+                            f"{self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}"),
+                        render_region)
+                    return
+                _trace_frame("convert_begin", request.generation)
                 image = (carddisplay.LazyPicture(frame, exposure, channel, background, view, look) if direct
                          else to_qimage(frame, exposure, channel, background=background, view=view, look=look)
                          if request.display else None)
+                _trace_frame("convert_end", request.generation)
                 if request.display and not direct:
                     self._display_memo = ((display_key, region_key, exposure, channel, background,
                                            view, look, None), image)
@@ -14803,6 +14888,7 @@ class Window(QMainWindow):
                 migration_note = ("  ·  older full-detail fluid cache migrated to preview" if
                                   self.evaluator.fluid_cache_migration_notice else "")
                 _trace_mark("emit")
+                _trace_frame("emit", request.generation)
                 self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}{migration_note}{compare_note}", render_region)
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
@@ -14817,6 +14903,45 @@ class Window(QMainWindow):
                     f"Internal error while evaluating ({type(error).__name__}: {error}). "
                     "This is a NodeBased bug, not a problem with the graph.", None)
         self.executor.submit(work)
+
+    def _catch_up_picture(self):
+        """After a stop: show the frame at the playhead if the picture on screen is an earlier one."""
+        current = self.dispatcher.document["time"]["current"]
+        if (not self.playing and self.pipeline_playback
+                and getattr(self, "_displayed_frame", None) not in (None, current)):
+            self.request_preview()
+
+    def _pipelines(self, request):
+        """Runs on the worker. True when this played frame's picture is built on the conversion stage. A compare
+        buffer is built on the worker with the frame, so it keeps the one-thread order."""
+        return (self.pipeline_playback and request.display and request.playing
+                and compare_model.active_b(request.document)[1] is None)
+
+    def _cancel_staged(self):
+        """A seek, an edit or stop: pictures still waiting on the conversion stage belong to the old content."""
+        staged, self._staged_cancels = self._staged_cancels, []
+        for cancel in staged:
+            cancel.set()
+        self.convert_stage.discard()
+
+    def preview_evaluated(self, payload):
+        """Qt thread. A played frame is evaluated: the worker is free, so the next frame starts now while this
+        one is converted and shown. Everything else about the frame waits for `preview_ready`."""
+        request, cancel = payload
+        _trace_mark("evaluated")
+        cancel.released = True
+        self.preview_queue.finish(cancel)
+        self.busy = False
+        if request.display and request.playing and not cancel.is_set():
+            self.playback_frames_rendered += 1
+        if self.playing and len(self.preview_queue):
+            self.timer.start(0)
+        if len(self.preview_queue):
+            self.start_preview()
+        elif self.playing and request.display and request.playing and not cancel.is_set():
+            self.playback_tick()
+            if len(self.preview_queue):
+                self.start_preview()
 
     def _direct_linear_for(self, request, view, frame=None):
         """Runs on the worker. True when this frame goes to the direct viewer as floats and skips
@@ -15524,12 +15649,18 @@ class Window(QMainWindow):
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload
+        _trace_frame("ready_begin", request.generation)
         fallback = re.search(r"fallback: ([^·]+)", status)
         self.viewer.roi_fallback_label = ("ROI (" + ", ".join(
             f"{name.strip()}: full frame" for name in fallback.group(1).split(",")) + ")") if fallback else ""
         extras = self.compare_results.pop((request.generation, request.frame), None)
-        self.preview_queue.finish(cancel)
-        self.busy = False
+        released = getattr(cancel, "released", False)     # preview_evaluated already freed the worker
+        if released:
+            if cancel in self._staged_cancels:
+                self._staged_cancels.remove(cancel)
+        else:
+            self.preview_queue.finish(cancel)
+            self.busy = False
         if request.display and self._write_job is None:
             self.render_progress.hide()
         if frame is None and not cancel.is_set():
@@ -15541,7 +15672,7 @@ class Window(QMainWindow):
                 "target": request.document.get("view"), "message": status,
                 "timestamp": time.time(),
             })
-        if request.display and request.playing and not cancel.is_set():
+        if request.display and request.playing and not cancel.is_set() and not released:
             # The pacing signal playback_tick bounds the playhead against: a completed attempt
             # (success or evaluation error) is one frame's worth of render capacity spent, so the
             # transport may advance by one more. A cancelled request never finished its own
@@ -15583,10 +15714,11 @@ class Window(QMainWindow):
         if request.display and (fresh or catching_up or live_preview) and not abandoned:
             if self.playing:
                 status += (f"  ·  ahead {len(self.preview_queue)}/{self.preview_queue.max_prefetch}"
-                           f"  ·  dropped {self.playback_dropped_frames}")
+                           f"  ·  dropped {self.playback_dropped_frames + self.convert_stage.dropped}")
             self.frame = frame
             self.frame_b = extras["frame_b"] if extras is not None and frame is not None else None
             self.frame_generation = request.generation
+            self._displayed_frame = request.frame
             self.statusBar().showMessage(status)
             self.viewer_info.setText(status if frame is not None else "Evaluation error")
             if frame is not None:
@@ -15596,6 +15728,7 @@ class Window(QMainWindow):
                                  extras["image_b"] if extras is not None else None,
                                  generation=request.generation)
                 _trace_mark("handover")
+                _trace_frame("shown", request.generation)
             else:
                 self._viewer_parked = False
                 self.viewer.scene().clear()
@@ -15633,7 +15766,7 @@ class Window(QMainWindow):
         if len(self.preview_queue):
             self.start_preview()
         else:
-            if self.playing and request.display and request.playing and not cancel.is_set():
+            if self.playing and request.display and request.playing and not cancel.is_set() and not released:
                 # A played frame just finished. The transport tick that wanted the next one may have fired while this
                 # one rendered (and found nothing to advance to), so look at the clock now instead of waiting up to a
                 # whole frame interval for the next tick: a 78 ms frame at 24 fps otherwise costs 83 or 125 ms.
@@ -16107,6 +16240,7 @@ class Window(QMainWindow):
             self.executor.submit(gpudisplay.shutdown).result(timeout=5)
         except Exception:
             pass
+        self.convert_stage.close()
         self.executor.shutdown(wait=True, cancel_futures=True)
         self.queue_panel.timer.stop()
         self.queue_panel.runner.shutdown(wait=False, cancel_futures=True)

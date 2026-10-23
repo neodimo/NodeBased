@@ -199,6 +199,11 @@ _surface = None
 _instance = None
 _failed_reason = None
 _owner_prefix = None
+# The playback conversion stage (playback.ConversionStage) converts finished frames on a thread of its
+# own so the preview worker can evaluate the next frame. That thread keeps its own context: a context
+# is thread-affine, and sharing the worker's would put the conversion back on the evaluator's thread.
+CONVERT_THREAD_PREFIX = 'nodebased-convert'
+_convert_instance = None
 
 
 def context_format():
@@ -275,6 +280,9 @@ def get_display(force=False):
     if _failed_reason is not None and not force:
         return None
     if (_owner_prefix is not None and not force
+            and threading.current_thread().name.startswith(CONVERT_THREAD_PREFIX)):
+        return _get_convert_display()
+    if (_owner_prefix is not None and not force
             and not threading.current_thread().name.startswith(_owner_prefix)):
         # Not the owning thread: never build (or use) the context here. The caller takes the
         # CPU path, which is exact, so only speed differs.
@@ -298,6 +306,26 @@ def get_display(force=False):
     return _instance
 
 
+def _get_convert_display():
+    """The conversion stage's own `GpuDisplay`, built on first use from that thread."""
+    global _convert_instance
+    if _failed_reason is not None:
+        return None
+    with _lock:
+        if _convert_instance is not None and _convert_instance._thread is not threading.current_thread():
+            if _convert_instance._thread.is_alive():
+                return None
+            _convert_instance = None
+        if _convert_instance is None:
+            try:
+                # Its own surface as well: two threads must not hold one drawable current at once.
+                _convert_instance = GpuDisplay(None)
+            except Exception:
+                # Only this thread loses the card; the worker's context and the CPU path are unaffected.
+                return None
+        return _convert_instance
+
+
 def _release_instance():
     global _instance
     with _lock:
@@ -307,6 +335,20 @@ def _release_instance():
             instance._destroy()
         except GpuUnavailable:
             pass
+
+
+def release_convert_display():
+    """Release the conversion stage's context. Call on that stage's thread, which owns it."""
+    global _convert_instance
+    with _lock:
+        instance = _convert_instance
+        if instance is None or instance._thread is not threading.current_thread():
+            return
+        _convert_instance = None
+    try:
+        instance._destroy()
+    except GpuUnavailable:
+        pass
 
 
 def shutdown():

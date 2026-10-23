@@ -65,6 +65,9 @@ def run_window(args):
     if args.cache_mode == 'uncached':
         os.environ['NODEBASED_DISK_CACHE'] = '0'
     sys.path.insert(0, str(ROOT))
+    # Settings stay out of the real NodeBased.conf: a run that left the Direct picture dock open in the saved layout
+    # made the next run open it, and the next benchmark measured a different display path (10/22).
+    import tests.isolation  # noqa: F401
     from PySide6.QtCore import QTimer, Qt
     from PySide6.QtWidgets import QApplication
     import numpy as np
@@ -78,7 +81,7 @@ def run_window(args):
     from nodebased import media, imaging
     from nodebased.playback import DisplayCache
     from nodebased.tileexec import TileRegion, SUPPORTED_TILED_KINDS, _all_ancestors
-    from nodebased import groups
+    from nodebased import groups, playback_trace
 
     events=[]; shown=[]; statuses=[]; displayed_tiers=[]; post_stop_full_ms=[]; stop_requested_at=[None]
     worker_profiles=[]; sample_counts={'qt':{},'worker':{}}; node_samples={}; node_costs={}; sample_period_ms=2.0
@@ -142,6 +145,7 @@ def run_window(args):
         app.processEvents()
         if not win._direct_linear_on:
             raise RuntimeError('Direct picture did not become active')
+    win.pipeline_playback = not args.no_pipeline
     win.proxy.setCurrentIndex(win.proxy.findData(1))
     # Keep the HD gate full resolution. At UHD, exercise automatic proxy playback and full-res
     # restoration on stop, which are part of the production playback contract.
@@ -230,8 +234,10 @@ def run_window(args):
         t=time.perf_counter(); result=original_put(*a,**kw); mark('cache_put',elapsed_ms=round((time.perf_counter()-t)*1000,3),bytes=win.display_cache.bytes); return result
     win.display_cache.put=put
     original_qimage=app_module.to_qimage
+    eight_bit=[]
     def qimage(*a,**kw):
-        t=time.perf_counter(); image=original_qimage(*a,**kw); mark('display_conversion',elapsed_ms=round((time.perf_counter()-t)*1000,3)); return image
+        t=time.perf_counter(); image=original_qimage(*a,**kw); mark('display_conversion',elapsed_ms=round((time.perf_counter()-t)*1000,3),thread=threading.current_thread().name)
+        eight_bit.append(t); return image
     app_module.to_qimage=qimage
     original_media_read=media.read_media_raster
     def read_media(*a,**kw):
@@ -262,6 +268,8 @@ def run_window(args):
     def begin():
         sample_start[0]=time.perf_counter(); sample_stop[0]=sample_start[0]+args.seconds
         mark('playback_start',mode=args.cache_mode,adapter=args.adapter)
+        playback_trace.enable()
+        eight_bit.clear()
         win.toggle_playback(True)
         mark('playback_tier_selected',tier=int(win.proxy.currentData() or 1),automatic=win.playback_proxy.isChecked())
         sample_timer = QTimer(win)
@@ -271,6 +279,7 @@ def run_window(args):
         sample_timer.start(round(args.seconds*1000))
     def finish():
         stop_requested_at[0]=time.perf_counter()
+        mark('transport_state_at_stop',playing=win.playing,timer_active=win.playback_timer.isActive(),busy=win.busy,queued=len(win.preview_queue),rendered=win.playback_frames_rendered,elapsed=win.playback_elapsed_frames,current=win.dispatcher.document['time']['current'],stage_idle=win.convert_stage.idle)
         # toggle_playback owns cancellation and queues the full-resolution still after restoring
         # an automatic proxy. Cancelling again here would also cancel that required refinement.
         win.toggle_playback(False); win.timer.stop()
@@ -284,6 +293,8 @@ def run_window(args):
     QTimer.singleShot(300,begin)
     app.exec()
     sampler.join()
+    trace_events=playback_trace.disable()
+    frame_rows=playback_trace.frame_timeline(trace_events)
     # Stop time is the acceptance-window boundary. The worker may finish in-flight frames while
     # draining below, but those tail pictures are outside the measured playback interval.
     measured_shown=[row for row in shown if sample_start[0] <= row[0] <= sample_stop[0]]
@@ -322,7 +333,19 @@ def run_window(args):
                               'samples':samples,'estimated_ms':round(samples*sample_period_ms,3)})
         mark('node_profile',frame=frame_no,node=node_id,kind=kind,path=path,samples=samples,
              estimated_ms=round(samples*sample_period_ms,3),fallback_reason=fallback_reason if path=='full-frame fallback' else None)
-    result={'case':args.case,'resolution':f'{args.width}x{args.height}','duration_s':args.seconds,
+    trace_origin_mono=min((e[0] for e in trace_events),default=0.0)
+    # trace times are time.monotonic() ms from the first mark; the window bounds are perf_counter on the same clock
+    offset_ms=(trace_origin_mono-trace_origin)*1000
+    in_window=[r for r in frame_rows if sample_start_ms is not None and sample_start_ms <= r['points_ms']['shown']+offset_ms <= sample_stop_ms]
+    handoff=[(r['points_ms']['shown']-r['points_ms']['convert_end']) for r in in_window if 'convert_end' in r['points_ms']]
+    frame_summary=playback_trace.frame_summary(in_window)
+    measured_intervals=[(measured_shown[i][0]-measured_shown[i-1][0])*1000 for i in range(1,len(measured_shown))]
+    result={'case':args.case,'pipeline':not args.no_pipeline,'direct_picture':bool(args.direct_picture),
+        'display_conversions_8bit':len([t for t in eight_bit if sample_start[0] <= t <= sample_stop[0]]),
+        'frames_dropped_counted':win.playback_dropped_frames+win.convert_stage.dropped,
+        'conversion_stage_drops':win.convert_stage.dropped,
+        'handoff_ms':{'p50':percentile(handoff,50),'p95':percentile(handoff,95),'n':len(handoff)},
+        'fresh_frame_timeline':{'summary':frame_summary,'measured_mean_interval_ms':(sum(measured_intervals)/len(measured_intervals)) if measured_intervals else None,'frames':in_window},'resolution':f'{args.width}x{args.height}','duration_s':args.seconds,
         'cache_mode':args.cache_mode,'adapter':args.adapter,'force_adapter':args.force_adapter,
         'disk_cache_enabled':disk.enabled,
         'frames_displayed':len(measured_shown),'achieved_fps':round(len(measured_shown)/args.seconds,3),
@@ -340,10 +363,13 @@ def run_window(args):
         'disk_cache_stats':{'hits':disk.hits,'misses':disk.misses,'writes':disk.writes}}
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
+    if args.timeline_output:
+        pathlib.Path(args.timeline_output).parent.mkdir(parents=True,exist_ok=True)
+        pathlib.Path(args.timeline_output).write_text(json.dumps({k:result[k] for k in ('case','pipeline','direct_picture','adapter','force_adapter','resolution','cache_mode','duration_s','achieved_fps','first_pass_fps','frame_interval_ms','handoff_ms','frames_dropped_counted','conversion_stage_drops','display_conversions_8bit','fresh_frame_timeline')},indent=1)+'\n')
     win.close()
     field_keys=('adapter','resolution','playback_proxy_enabled','playback_tiers','achieved_fps',
                 'first_pass_fps','post_stop_full_resolution_ms','status_line')
-    summary_keys=('case','resolution','cache_mode','adapter','achieved_fps','frames_displayed',
+    summary_keys=('case','pipeline','direct_picture','display_conversions_8bit','frames_dropped_counted','handoff_ms','resolution','cache_mode','adapter','achieved_fps','frames_displayed',
                   'first_pass_fps','playback_tiers','displayed_tiers','post_stop_full_resolution_ms',
                   'frame_interval_ms','worker_to_handoff_ms','status_line')
     print(json.dumps({k:result[k] for k in (field_keys if args.field else summary_keys)}))
@@ -363,6 +389,8 @@ def main():
                    help='uncached disables persistent evaluator results; cached prewarms displayed frames')
     p.add_argument('--adapter',default='unknown')
     p.add_argument('--force-adapter',choices=('default','integrated','cpu'),default='default')
+    p.add_argument('--no-pipeline',action='store_true',help='restore the one-thread order: evaluate, convert, show, then the next frame')
+    p.add_argument('--timeline-output',type=pathlib.Path,help='write only the per-frame stage timeline (compact JSON) here')
     p.add_argument('--direct-picture',action='store_true',
                    help='route finished linear frames through the optional Direct picture viewer')
     p.add_argument('--case',default='1080p')

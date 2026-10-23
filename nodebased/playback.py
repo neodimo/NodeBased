@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import threading
+import time
 
 import numpy as np
 
@@ -115,6 +116,109 @@ class PlaybackQueue:
 
     def __len__(self):
         return len(self._items)
+
+
+class ConversionStage:
+    """One thread that turns finished frames into pictures while the evaluator works on the next.
+
+    Playback used to evaluate a frame, convert it for the display and only then start the next
+    evaluation, so a frame cost the sum of the two. The evaluator now hands each finished frame to
+    this stage and moves on. The stage keeps the newest frame waiting and nothing older: a frame
+    that is still waiting when a newer one arrives is dropped and counted, never shown late, and
+    frames are converted in the order they were submitted, so a picture can only be shown once and
+    never after a newer one.
+
+    ``convert(job)`` runs on the stage's thread. ``dropped`` is read under the same lock that
+    counts it, so the Qt thread can show it in the time row.
+    """
+
+    def __init__(self, convert, name="nodebased-convert", on_exit=None):
+        self._convert = convert
+        self._on_exit = on_exit
+        self._condition = threading.Condition()
+        self._pending = None
+        self._closed = False
+        self._working = False
+        self._dropped = 0
+        self.converted = 0
+        self.dropped_jobs = []
+        self._thread = threading.Thread(target=self._run, name=name, daemon=True)
+        self._thread.start()
+
+    @property
+    def dropped(self):
+        with self._condition:
+            return self._dropped
+
+    @property
+    def idle(self):
+        with self._condition:
+            return self._pending is None and not self._working
+
+    def wait_for_room(self, abort=lambda: False, timeout=2.0):
+        """Block the caller until no frame is waiting (the stage has taken it up) or `abort()` is true.
+        Returns False when it gave up waiting. The evaluator calls this so it never gets more than one
+        frame ahead of the conversion; a frame that is dropped anyway is only ever a deliberate drop."""
+        deadline = time.monotonic() + timeout
+        with self._condition:
+            while self._pending is not None and not self._closed and not abort():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._condition.wait(min(0.02, remaining))
+            return self._pending is None
+
+    def submit(self, job):
+        with self._condition:
+            if self._closed:
+                return False
+            if self._pending is not None:
+                self._dropped += 1
+                self.dropped_jobs.append(self._pending)
+            self._pending = job
+            self._condition.notify()
+        return True
+
+    def discard(self):
+        """Forget the waiting frame (playback stopped or the content changed). Counted as a drop."""
+        with self._condition:
+            if self._pending is not None:
+                self._dropped += 1
+                self.dropped_jobs.append(self._pending)
+                self._pending = None
+
+    def reset_count(self):
+        with self._condition:
+            self._dropped = 0
+            self.dropped_jobs = []
+
+    def close(self):
+        with self._condition:
+            self._closed = True
+            self._pending = None
+            self._condition.notify()
+        self._thread.join(timeout=2.0)
+
+    def _run(self):
+        while True:
+            with self._condition:
+                while self._pending is None and not self._closed:
+                    self._condition.wait()
+                if self._closed:
+                    break
+                job, self._pending = self._pending, None
+                self._working = True
+                self._condition.notify_all()
+            try:
+                self._convert(job)
+                self.converted += 1
+            except Exception:       # the converter reports its own failures through the job
+                pass
+            finally:
+                with self._condition:
+                    self._working = False
+        if self._on_exit is not None:
+            self._on_exit()
 
 
 PRESENTATION_FIELDS = ("pos", "name", "label", "thumbnail")
