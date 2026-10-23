@@ -202,20 +202,20 @@ costs are estimates; the paired JSON profiles preserve the timeline and sampling
 | 1080p / integrated laptop stand-in (four CPUs, 2× Qt scale) | 2.3 fps (historical) |
 | 4K / llvmpipe | 0.4 → 0.5 fps (historical) |
 
-Finish-2 follow-up (10-second uncached runs, unique fresh-frame pass): 1080p reached 7.277 fps on
-the RTX 3080 Ti in the final node-optimization run, 5.390 fps on llvmpipe, and 3.473 fps on the
-four-CPU / 2×-scale laptop stand-in. The RTX result remains below the 16 fps intermediate gate;
-the laptop result remains below 12 fps. A 4K llvmpipe run enabled automatic playback proxying and
-showed tiers 1, 2, 4 and 8 in the viewer status, at 2.512 fps; the full-resolution still arrived
-1,417 ms after stop. These measurements establish the current fallback behavior and leave the
-RTX 4K gate open pending its card-locked run. JSON evidence is in the matching `L8-finish-*1022.json`
-files under the lane run directory.
+Finish-2 follow-up (10-second uncached runs, unique fresh-frame pass): the final node-optimization
+run reached 7.277 fps on the RTX 3080 Ti; the fresh llvmpipe and four-CPU / 2×-scale laptop runs
+reached 5.215 and 3.422 fps. The RTX result remains below the 16 fps intermediate gate; the laptop
+result remains below 12 fps. A 4K llvmpipe run enabled automatic playback proxying and showed tiers
+1, 2, 4 and 8 in the viewer status, at 2.512 fps; the full-resolution still arrived 1,417 ms after
+stop. These measurements establish the current fallback behavior and leave the RTX 4K gate open
+pending its card-locked run. JSON evidence is in the matching `L8-finish-*1022.json` files under the
+lane run directory.
 
 | Finish-2 follow-up (uncached first pass) | Rate | Other gate evidence |
 |---|---:|---|
 | 1080p / RTX 3080 Ti | 7.277 fps | 16 fps intermediate: open |
-| 1080p / llvmpipe | 5.390 fps | Diagnostic only |
-| 1080p / laptop stand-in (four CPUs, 2× scale) | 3.473 fps | 12 fps target: open |
+| 1080p / llvmpipe | 5.215 fps | Diagnostic only |
+| 1080p / laptop stand-in (four CPUs, 2× scale) | 3.422 fps | 12 fps target: open |
 | 4K / llvmpipe with automatic proxy | 2.512 fps | Tiers 1, 2, 4 and 8; full still after 1,417 ms |
 
 For the unreachable 48 GB A6000 workstation, run `python tools/benchmark_2d_playback.py --size
