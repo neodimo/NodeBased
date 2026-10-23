@@ -1,5 +1,29 @@
 # Lane 6 — 2026-10-23 finish 4 status (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (6:55 AM on 2026-10-23 PDT)
+
+`main` moved `24be048a` -> `18a53f59` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `18a53f59` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-0643.log`, started 6:43 AM): **Ran 6139 tests in 487.685 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 1: the mixed mesh and splat scene plays at 24 fps at full size.** Commits:
+  - `7dd5f1ec` Mixed scene at full size: cloud normals worked out once, gates on the RTX, Radeon, laptop stand-in and llvmpipe, docs with the stage timeline and the readback-buffer finding (step A, parts 3 and 4)
+  - `305b91a0` Mixed mesh and splat scene on the card: the splat layer is drawn over the meshes in the mesh frame's own submission, reads the mesh depth buffer, gets a card display picture; the readback buffer a played frame keeps is released before a ray-traced render; stage timeline tool and timeline (step A, parts 1 and 2)
+  Diff: 40 files changed, 2988 insertions(+), 92 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the production-size Hot pour re-simulates only what changed (finish 4: the steam asks the liquid at the proxy tier).** Commits:
+  - `9a0962c4` fix(fluid): keep steam geometry sampling at proxy tier
+  Diff: 10 files changed, 187 insertions(+), 14 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Lane 6 step B finish 4 — steam uses liquid proxy tier
 
 At `openclaw/nb-fluids-spike`, fluid geometry-track providers and digest lookahead now use the evaluator's requested tier. Tier-4 liquid point clouds produce a bounded proxy surface for steam emission/collision. Same-pose animated collider composition preserves mask/system identity across frames, enabling the resident FLIP path's upload identity reuse. Regressions verify zero tier-1 surface requests during tier-4 steam evaluation and stable same-pose solid composition.

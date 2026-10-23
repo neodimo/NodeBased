@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 1: the mixed mesh and splat scene plays at 24 fps at full size, Lane 6 (Fluids, GPT-6 Luna) step B of 2: the production-size Hot pour re-simulates only what changed (finish 4: the steam asks the liquid at the proxy tier) (integrator tick)
+
+- **What was done:** `main` `24be048a` -> `18a53f59` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `18a53f59`: Ran 6139 tests in 487.685 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-23 — Lane 6 finish 4: steam uses the liquid proxy tier — PARTIAL
 
 - **Why:** The production profile showed the tier-4 steam solver sampling its animated liquid geometry at tier 1, replaying hundreds of full-detail FLIP steps before the preview appeared.
