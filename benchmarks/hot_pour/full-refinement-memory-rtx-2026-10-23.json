@@ -1,0 +1,37 @@
+{
+  "adapter_request": "default",
+  "adapter": "NVIDIA GeForce RTX 3080 Ti",
+  "liquid_cells": 256,
+  "smoke_cells": 192,
+  "frames": 120,
+  "edit_frame": 60,
+  "proxy_resolution_cells": 64,
+  "viewport": [
+    1920,
+    1080
+  ],
+  "edits": {},
+  "full_base_prefix_memory_peaks": {
+    "liquid_cache": {
+      "peak_process_rss_mb": 1330.9,
+      "peak_card_memory_mb": 203.0,
+      "card_memory_scope": "process allocation"
+    },
+    "surface": {
+      "peak_process_rss_mb": 1926.3,
+      "peak_card_memory_mb": 203.0,
+      "card_memory_scope": "process allocation"
+    },
+    "whitewater": {
+      "peak_process_rss_mb": 9523.5,
+      "peak_card_memory_mb": 9418.0,
+      "card_memory_scope": "process allocation"
+    }
+  },
+  "memory_probe_failure": {
+    "stage": "whitewater",
+    "frame": 55,
+    "error": "GPUValidationError: Validation Error\n\nCaused by:\n  In wgpuDeviceCreateBuffer\n    Not enough memory left.",
+    "cleaned_up": true
+  }
+}

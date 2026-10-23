@@ -10,19 +10,94 @@ import math
 import os
 import pstats
 import statistics
+import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from benchmark_fluid_edits import EDITS, STAGES
 from benchmark_hot_pour import build_document, force_adapter
 
 MAX_SCRATCH_BYTES = 23_000_000_000
 EDIT_FRAME = 60
+
+
+def process_rss_mb():
+    """Current resident process memory, in MiB (Linux benchmark host)."""
+    try:
+        for line in Path("/proc/self/status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) / 1024.0
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def card_memory_mb(adapter):
+    """Current process/card allocation where the driver exposes it."""
+    if adapter == "default":
+        try:
+            out = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory",
+                                  "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=3)
+            for line in out.stdout.splitlines():
+                pid, used = (part.strip() for part in line.split(","))
+                if int(pid) == os.getpid():
+                    return float(used)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+    if adapter == "integrated":
+        total = 0
+        found = False
+        for card in Path("/sys/class/drm").glob("card[0-9]"):
+            device = card / "device"
+            try:
+                if (device / "vendor").read_text().strip() == "0x1002":
+                    total += int((device / "mem_info_vram_used").read_text())
+                    found = True
+            except (OSError, ValueError):
+                continue
+        return total / 2**20 if found else None
+    return None
+
+
+class StageMemoryPeak:
+    """Sample process RSS and driver card usage while one benchmark stage runs."""
+    def __init__(self, adapter):
+        self.adapter = adapter
+        self.host_peak = 0.0
+        self.card_peak = None
+        self.done = threading.Event()
+        self.thread = threading.Thread(target=self._sample, daemon=True)
+
+    def _sample(self):
+        while not self.done.is_set():
+            rss = process_rss_mb()
+            if rss is not None:
+                self.host_peak = max(self.host_peak, rss)
+            card = card_memory_mb(self.adapter)
+            if card is not None:
+                self.card_peak = max(self.card_peak or 0.0, card)
+            self.done.wait(0.2)
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_exc):
+        self.done.set()
+        self.thread.join(timeout=1)
+
+    def result(self):
+        return {"peak_process_rss_mb": round(self.host_peak, 1),
+                "peak_card_memory_mb": None if self.card_peak is None else round(self.card_peak, 1),
+                "card_memory_scope": "process allocation" if self.adapter == "default" else
+                                     "adapter VRAM in use" if self.adapter == "integrated" else "unavailable"}
 
 
 def directory_bytes(path: Path) -> int:
@@ -138,6 +213,33 @@ def check_scratch(workdir):
     return size
 
 
+def install_cache_write_probe(adapter):
+    """Track peak memory during cache writes and return a restore callback and metrics getter."""
+    from nodebased import simcache
+
+    original = simcache.SimCache._write_disk_locked
+    peak = {"peak_process_rss_mb": 0.0, "peak_card_memory_mb": None,
+            "card_memory_scope": "process allocation" if adapter == "default" else
+                                 "adapter VRAM in use" if adapter == "integrated" else "unavailable"}
+
+    def probed(store, key, state):
+        with StageMemoryPeak(adapter) as sample:
+            result = original(store, key, state)
+        values = sample.result()
+        peak["peak_process_rss_mb"] = max(peak["peak_process_rss_mb"], values["peak_process_rss_mb"])
+        if values["peak_card_memory_mb"] is not None:
+            peak["peak_card_memory_mb"] = max(peak["peak_card_memory_mb"] or 0.0,
+                                               values["peak_card_memory_mb"])
+        return result
+
+    simcache.SimCache._write_disk_locked = probed
+
+    def restore():
+        simcache.SimCache._write_disk_locked = original
+
+    return restore, lambda: dict(peak)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adapter", choices=("default", "integrated", "cpu"), required=True)
@@ -191,6 +293,7 @@ def main():
         "frames": args.frames, "edit_frame": EDIT_FRAME,
         "proxy_resolution_cells": 64, "viewport": [args.play_width, args.play_height], "edits": {}})
     edit_names = list(EDITS) if args.edit == "all" else [args.edit]
+    restore_cache_probe, cache_write_peak = install_cache_write_probe(args.adapter)
 
     if args.proxy_only or not args.full_only:
         # Keep a solved, unedited prefix so the interactive edit begins at a realistic checkpoint.
@@ -326,12 +429,37 @@ def main():
     if args.full_only or not args.proxy_only:
         # Tier 1 gets the matching unchanged prefix once; subsequent keyed variants can reuse it.
         warm_started = time.perf_counter()
+        result["full_base_prefix_memory_peaks"] = {}
+        result["full_base_prefix_memory_peaks"]["cache_write"] = cache_write_peak()
         for stage in STAGES:
-            for frame in range(1, EDIT_FRAME):
-                evaluator.evaluate_raster(base_doc, stage, frame=frame, tier=1, typed=True)
-                if frame % 10 == 0:
-                    print(f"base full {stage} frame {frame}/{EDIT_FRAME - 1}", flush=True)
-                check_scratch(args.workdir)
+            failed_frame = None
+            with StageMemoryPeak(args.adapter) as sample:
+                try:
+                    for frame in range(1, EDIT_FRAME):
+                        failed_frame = frame
+                        evaluator.evaluate_raster(base_doc, stage, frame=frame, tier=1, typed=True)
+                        if frame % 10 == 0:
+                            result["full_base_prefix_memory_peaks"][stage] = sample.result()
+                            result["full_base_prefix_memory_peaks"]["cache_write"] = cache_write_peak()
+                            checkpoint(args.json, result)
+                            print(f"base full {stage} frame {frame}/{EDIT_FRAME - 1}", flush=True)
+                        check_scratch(args.workdir)
+                except Exception as exc:
+                    result["full_base_prefix_memory_peaks"][stage] = sample.result()
+                    result["full_base_prefix_memory_peaks"]["cache_write"] = cache_write_peak()
+                    result["memory_probe_failure"] = {
+                        "stage": stage, "frame": failed_frame,
+                        "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+                        "cleaned_up": True,
+                    }
+                    checkpoint(args.json, result)
+                    print(f"memory probe stopped cleanly at base {stage} frame {failed_frame}: "
+                          f"{type(exc).__name__}: {str(exc)[:160]}", flush=True)
+                    restore_cache_probe()
+                    return 2
+            result["full_base_prefix_memory_peaks"][stage] = sample.result()
+            result["full_base_prefix_memory_peaks"]["cache_write"] = cache_write_peak()
+            checkpoint(args.json, result)
         result["full_base_prefix_s"] = round(time.perf_counter() - warm_started, 2)
         checkpoint(args.json, result)
 
@@ -342,22 +470,46 @@ def main():
             row = result["edits"].setdefault(edit, {})
             row["full_detail_stage_s"] = {}
             row["full_detail_stage_frames"] = {}
+            row["full_detail_memory_peaks"] = {}
             for stage in STAGES:
                 frame_times = []
-                for frame in range(1, args.frames + 1):
-                    started = time.perf_counter()
-                    evaluator.evaluate_raster(doc, stage, frame=frame, tier=1, typed=True)
-                    elapsed = time.perf_counter() - started
-                    frame_times.append(elapsed)
-                    if frame % 10 == 0:
-                        print(f"{edit}: full {stage} frame {frame}/{args.frames}, {elapsed:.2f}s", flush=True)
-                    check_scratch(args.workdir)
+                failed_frame = None
+                with StageMemoryPeak(args.adapter) as sample:
+                    try:
+                        for frame in range(1, args.frames + 1):
+                            failed_frame = frame
+                            started = time.perf_counter()
+                            evaluator.evaluate_raster(doc, stage, frame=frame, tier=1, typed=True)
+                            elapsed = time.perf_counter() - started
+                            frame_times.append(elapsed)
+                            if frame % 10 == 0:
+                                row["full_detail_memory_peaks"][stage] = sample.result()
+                                row["full_detail_memory_peaks"]["cache_write"] = cache_write_peak()
+                                row["full_detail_stage_frames"].setdefault(stage, {})["last_frame"] = frame
+                                checkpoint(args.json, result)
+                                print(f"{edit}: full {stage} frame {frame}/{args.frames}, {elapsed:.2f}s", flush=True)
+                            check_scratch(args.workdir)
+                    except Exception as exc:
+                        row["full_detail_memory_peaks"][stage] = sample.result()
+                        row["full_detail_memory_peaks"]["cache_write"] = cache_write_peak()
+                        result["memory_probe_failure"] = {
+                            "edit": edit, "stage": stage, "frame": failed_frame,
+                            "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+                            "cleaned_up": True,
+                        }
+                        checkpoint(args.json, result)
+                        print(f"memory probe stopped cleanly at {edit} {stage} frame {failed_frame}: "
+                              f"{type(exc).__name__}: {str(exc)[:160]}", flush=True)
+                        restore_cache_probe()
+                        return 2
+                row["full_detail_memory_peaks"][stage] = sample.result()
                 row["full_detail_stage_s"][stage] = round(sum(frame_times), 2)
                 row["full_detail_stage_frames"][stage] = {
                     "mean_ms": round(statistics.fmean(frame_times) * 1000, 2),
                     "p95_ms": round(percentile(frame_times, 0.95) * 1000, 2),
                 }
                 checkpoint(args.json, result)
+            row["full_detail_memory_peaks"]["cache_write"] = cache_write_peak()
             row["full_detail_total_s"] = round(sum(row["full_detail_stage_s"].values()), 2)
             row["full_detail_cache_bytes"] = check_scratch(args.workdir)
             checkpoint(args.json, result)
@@ -366,7 +518,8 @@ def main():
                   flush=True)
 
     checkpoint(args.json, result)
+    restore_cache_probe()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main() or 0)
