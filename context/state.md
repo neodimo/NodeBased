@@ -1,5 +1,29 @@
 ## 2026-10-22 — Lane 6 step B finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (11:05 PM on 2026-10-22 PDT)
+
+`main` moved `58d04045` -> `da227d67` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `da227d67` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-2255.log`, started 10:55 PM): **Ran 6055 tests in 503.305 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step B of 2: the Direct picture's last gaps on this workstation: picking points, and filtered minification.** Commits:
+  - `9a8ad4f6` Minify bench: adapter choice and draw counts; Radeon and llvmpipe cost recorded
+  - `31c1842e` Hit-order fixture: the planar tracker is node pl, so the drawing tests' RotoPaint p is untouched
+  - `a25372cb` Direct picture docs: picking, filtered minification (agreement and cost on the RTX), the 3D view beside the picture; parity table and memo list only what needs another machine or release
+  - `b48748d6` Direct picture as the main viewer: the 3D view opens beside it instead of covering it, and 2D tabs the two together again
+  - `98a9cbcb` Direct picture: zoomed out the card filters (a pixel averages the display values of the texels it covers, up to 8 x 8) and matches the processor path within 2/255 at 1:2, 1:4, 1:6 and 1:8; nearest from 1.35 texels a pixel up, on both the float and the 8-bit paths
+  - `0356289b` Hit-order test: planar corner drags and every pick tool (Cryptomatte, Focus, ZDefocus, Survey, PointsTo3D, Tracker point, Planar region) click the same on the Viewer and the direct picture, over handles and empty frame, Escape included
+  Diff: 12 files changed, 1059 insertions(+), 26 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:05 PM on 2026-10-22 PDT)
 
 `main` moved `bdeab15c` -> `70126645` (lane commits cherry-picked onto main in lane order) and then to this
