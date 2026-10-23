@@ -44,8 +44,26 @@ def percentile(values, q):
     return round(float(__import__('numpy').percentile(values, q)), 3) if values else None
 
 
+def first_unique_pass(rows):
+    """Return the first frame traversal, collapsing duplicate handoffs of one frame."""
+    result=[]; seen=set()
+    for row in rows:
+        frame=row[1]
+        if frame in seen:
+            if result and frame == result[-1][1]:
+                continue
+            break
+        seen.add(frame); result.append(row)
+    return result
+
+
 def run_window(args):
     os.environ['QT_QPA_PLATFORM'] = 'xcb'
+    # A cold playback measurement must not inherit reusable per-node results from the
+    # persistent user disk cache. Keep RAM caching intact, so static intermediates can still be
+    # reused across distinct frames, but force cold graph nodes to be computed in this run.
+    if args.cache_mode == 'uncached':
+        os.environ['NODEBASED_DISK_CACHE'] = '0'
     sys.path.insert(0, str(ROOT))
     from PySide6.QtCore import QTimer, Qt
     from PySide6.QtWidgets import QApplication
@@ -116,7 +134,13 @@ def run_window(args):
     # Xvfb's backing-store paint path is also unstable with sustained full-resolution updates.
     # Evaluation, display conversion and the UI-thread handoff remain active; only rasterizing
     # the already-handed-off widgets is disabled, which is outside this lane's measured boundary.
-    win.setUpdatesEnabled(False)
+    if not args.direct_picture:
+        win.setUpdatesEnabled(False)
+    else:
+        win.set_direct_viewer(True)
+        app.processEvents()
+        if not win._direct_linear_on:
+            raise RuntimeError('Direct picture did not become active')
     win.proxy.setCurrentIndex(win.proxy.findData(1))
     win.playback_proxy.setChecked(False)  # measure full-resolution evaluation; automatic proxying changes the gate
     win.show_thumbnails=False
@@ -176,6 +200,13 @@ def run_window(args):
              nodes=[{'node':r['node'],'path':r['path'],'tile_evaluations':r['tile_evaluations'],'elapsed_ms':round(r['elapsed_ms'],3)} for r in node_costs.values() if r['frame']==int(kw.get('frame') or 0)])
         return result
     win.tile_executor.compose_region=compose
+    disk=win.evaluator.disk
+    original_disk_get_raster=disk.get_raster
+    def disk_get_raster(digest):
+        t=time.perf_counter(); raster=original_disk_get_raster(digest)
+        mark('disk_cache_lookup',elapsed_ms=round((time.perf_counter()-t)*1000,3),hit=raster is not None)
+        return raster
+    disk.get_raster=disk_get_raster
     original_evaluate=win.evaluator.evaluate
     def evaluate(document,target=None,*a,**kw):
         frame=int(kw.get('frame',document.get('time',{}).get('current',1)))
@@ -247,10 +278,7 @@ def run_window(args):
     # The comp fixture is a short loop. Report the first pass through unique frames separately
     # from later repeats, which can legitimately hit the display cache and would overstate the
     # uncached gate if folded into one average.
-    cold_pass=[]; seen_frames=set()
-    for row in measured_shown:
-        if row[1] in seen_frames: break
-        seen_frames.add(row[1]); cold_pass.append(row)
+    cold_pass=first_unique_pass(measured_shown)
     cold_pass_seconds=(cold_pass[-1][0]-sample_start[0]) if cold_pass else 0.0
     cold_pass_fps=(len(cold_pass)/cold_pass_seconds) if cold_pass_seconds > 0 else None
     intervals=[(measured_shown[i][0]-measured_shown[i-1][0])*1000 for i in range(1,len(measured_shown))]
@@ -278,13 +306,15 @@ def run_window(args):
              estimated_ms=round(samples*sample_period_ms,3),fallback_reason=fallback_reason if path=='full-frame fallback' else None)
     result={'case':args.case,'resolution':f'{args.width}x{args.height}','duration_s':args.seconds,
         'cache_mode':args.cache_mode,'adapter':args.adapter,'force_adapter':args.force_adapter,
+        'disk_cache_enabled':disk.enabled,
         'frames_displayed':len(measured_shown),'achieved_fps':round(len(measured_shown)/args.seconds,3),
         'first_pass_frames':len(cold_pass),'first_pass_fps':round(cold_pass_fps,3) if cold_pass_fps else None,
         'frame_interval_ms':{'p50':percentile(intervals,50),'p95':percentile(intervals,95),'p99':percentile(intervals,99)},
         'worker_to_handoff_ms':{'p50':percentile(frame_times,50),'p95':percentile(frame_times,95),'p99':percentile(frame_times,99)},
         'status_line':statuses[-1] if statuses else win.statusBar().currentMessage(),
         'per_node':sorted(profiled_nodes,key=lambda row:row['estimated_ms'],reverse=True),'timeline':events,
-        'sampling_profile':sample_counts,'worker_call_profiles':worker_profiles}
+        'sampling_profile':sample_counts,'worker_call_profiles':worker_profiles,
+        'disk_cache_stats':{'hits':disk.hits,'misses':disk.misses,'writes':disk.writes}}
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
     win.close()
@@ -301,9 +331,12 @@ def main():
     p.add_argument('--plate-pattern'); p.add_argument('--background-pattern')
     p.add_argument('--output',type=pathlib.Path,default=pathlib.Path('playback.json'))
     p.add_argument('--seconds',type=float,default=10.0)
-    p.add_argument('--cache-mode',choices=('uncached','cached'),default='uncached')
+    p.add_argument('--cache-mode',choices=('uncached','cached'),default='uncached',
+                   help='uncached disables persistent evaluator results; cached prewarms displayed frames')
     p.add_argument('--adapter',default='unknown')
     p.add_argument('--force-adapter',choices=('default','integrated','cpu'),default='default')
+    p.add_argument('--direct-picture',action='store_true',
+                   help='route finished linear frames through the optional Direct picture viewer')
     p.add_argument('--case',default='1080p')
     p.add_argument('--display',default=os.environ.get('DISPLAY'))
     a=p.parse_args()
@@ -312,6 +345,7 @@ def main():
         from nodebased.core import load_document
         d=load_document(FIXTURE); assert d['view']=='colorcorrect' and d['time']['last']==48
         assert len(d['nodes'])==8 and len(d['node_data']['roto']['shapes'])==1
+        assert first_unique_pass([(0,1),(1,1),(2,2),(3,3),(4,1)]) == [(0,1),(2,2),(3,3)]
         print(json.dumps({'self_check':'ok','fixture_nodes':len(d['nodes']),'frames':48})); return
     if a.generate_inputs:
         w,h=(1920,1080) if a.size=='1080p' else (3840,2160)
