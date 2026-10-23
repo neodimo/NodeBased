@@ -269,5 +269,55 @@ class PlaybackPipelineWindowTests(unittest.TestCase):
         self.assertAlmostEqual(summary["accounted_interval_ms"], summary["interval_ms"], delta=0.5)
 
 
+class RecordedTimelineTests(unittest.TestCase):
+    """The committed 10/22 timelines (docs/PERFORMANCE.md, Lane 2 playback pipeline)."""
+
+    @staticmethod
+    def load(name):
+        import json
+        import pathlib
+        path = pathlib.Path(__file__).resolve().parents[1] / "benchmarks" / "2d-playback" / f"pipeline-1022-{name}.timeline.json"
+        return json.loads(path.read_text())
+
+    NAMES = [f"{mode}-{target}" for mode in ("serial", "pipe")
+             for target in ("rtx-1", "rtx-2", "radeon", "llvmpipe", "laptop", "direct-rtx")]
+
+    def test_the_stages_add_up_to_the_measured_frame_interval_within_five_percent(self):
+        for name in self.NAMES:
+            accounting = self.load(name)["accounting"]
+            self.assertLessEqual(abs(accounting["difference_percent"]), 5.0, name)
+            self.assertGreaterEqual(accounting["fresh_frames_in_first_pass"], 30, name)
+
+    def test_pipelined_rtx_frame_interval_is_below_evaluation_plus_conversion(self):
+        for name in ("pipe-rtx-1", "pipe-rtx-2"):
+            data = self.load(name)
+            summary = data["fresh_frame_timeline"]["summary"]
+            stages = summary["stages_ms"]
+            self.assertLess(summary["accounted_interval_ms"],
+                            stages["node evaluation"] + stages["display conversion"] - 40.0, name)
+            self.assertGreater(summary["overlap_ms"], 40.0, name)
+            self.assertLess(data["handoff_ms"]["p50"], 10.0, name)
+        for name in ("serial-rtx-1", "serial-rtx-2"):
+            self.assertEqual(self.load(name)["fresh_frame_timeline"]["summary"]["overlap_ms"], 0.0)
+
+    def test_the_fresh_rate_gain_on_the_rtx_is_recorded(self):
+        before = (self.load("serial-rtx-1")["first_pass_fps"] + self.load("serial-rtx-2")["first_pass_fps"]) / 2
+        after = (self.load("pipe-rtx-1")["first_pass_fps"] + self.load("pipe-rtx-2")["first_pass_fps"]) / 2
+        self.assertGreater(after / before, 1.15)
+
+    def test_direct_picture_runs_built_no_8bit_picture(self):
+        for name in ("serial-direct-rtx", "pipe-direct-rtx"):
+            self.assertEqual(self.load(name)["display_conversions_8bit"], 0)
+
+    def test_the_reduction_tool_reproduces_a_recorded_accounting(self):
+        from tools.timeline_2d_playback import reduce
+        raw = {"case": "x", "timeline": [
+            {"stage": "ui_handoff", "t_ms": 1000.0 + 150.0 * i, "frame": i + 1, "presented": True} for i in range(5)],
+            "fresh_frame_timeline": {"summary": {"accounted_interval_ms": 151.0, "stages_ms": {}}, "frames": []}}
+        out = reduce(raw)
+        self.assertEqual(out["accounting"]["measured_first_pass_interval_ms"], 150.0)
+        self.assertEqual(out["accounting"]["difference_percent"], 0.67)
+
+
 if __name__ == "__main__":
     unittest.main()

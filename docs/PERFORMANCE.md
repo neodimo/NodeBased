@@ -364,6 +364,82 @@ At 175 percent (`QT_SCALE_FACTOR=1.75`, 1400x780 window): 205 nodes drag at 41 r
 
 Still slow: a pan with most of a 500-node graph in view (27 ms a paint: mostly Qt drawing a few hundred items and sockets, plus about 3 ms for the minimap, which redraws every node on each scroll), and wheel zoom, where every zoom step redraws the cached pictures at the new scale.
 
+## Lane 2 step notes
+
+### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)
+
+Before, one worker evaluated a played frame, built its 8-bit picture, handed it to the Qt thread and only then
+started the next frame, so a frame cost the sum of those. Now the worker puts the finished float frame on a
+conversion stage (`playback.ConversionStage`: one thread, with a display context of its own because the ACES
+transform runs on a thread-bound OpenGL context) and starts the next evaluation as soon as the stage has taken the
+frame. The stage keeps one frame waiting; the evaluator waits for that slot rather than racing ahead, so a cheap
+frame (a display-cache hit) is never evaluated only to be replaced. A frame that is replaced or discarded (playback
+stopped, an edit, a seek) is counted and added to the `dropped` figure in the time row; pictures are shown in
+request order and a request is shown at most once. After a stop, the picture catches up with the playhead, which
+runs one frame ahead of the picture while a frame converts.
+
+With the Direct picture on, the worker already hands the window the float frame and the card does the view
+transform, so no 8-bit picture is built (counted: zero `to_qimage` calls in the 10-second Direct runs below). That
+path is unchanged. Letting the worker start the next frame before the Direct picture's draw on the Qt thread
+segfaulted the Xvfb benchmark (cause not found; the draw would then overlap the worker's graphics-card work on a
+display with no DRI3), so that overlap is not shipped.
+
+`Window.pipeline_playback = False` restores the one-thread order; the benchmark option `--no-pipeline` does the same.
+
+**Where a fresh frame's time goes.** `tools/benchmark_2d_playback.py` records a mark per request at each stage
+(`nodebased/playback_trace.py`), uncached realistic comp at 1080p, disk cache off, a picture counted only after the
+Viewer accepts its request generation. Mean over the 48 fresh frames, RTX 3080 Ti (two runs each agree within 1 ms
+per stage; shown: run 1), milliseconds:
+
+| Stage | One thread (before) | Pipelined (after) |
+|---|---:|---:|
+| Request to worker, and setup | 0.6 | 0.6 |
+| Node evaluation | 137.0 | 150.1 |
+| Waiting for conversion (cache put, stage pickup) | 0.1 | 0.4 |
+| Display conversion (`to_qimage`) | 40.4 | 55.2 |
+| Hand-off to the Qt queue and delivery | 0.4 | 0.5 |
+| Viewer present | 2.7 | 3.9 |
+| **One frame, request to shown** | **181.1** | **210.7** |
+| Transport wait before the request | 2.5 | 0.0 |
+| Overlap with the previous picture | 0.0 | 56.9 |
+| **Frame interval = frame - overlap + wait** | **183.6** | **153.8** |
+| Interval measured separately (benchmark's Viewer-accept stamps, first pass) | 183.9 | 157.3 |
+
+The parts add up to the measured interval within 0.05 to 3.2 percent in all twelve runs (`accounting` in each
+timeline file). One frame now takes longer from request to picture (conversion and evaluation share memory
+bandwidth and the interpreter, which cost evaluation 13 ms and conversion 15 ms), and the frame interval is
+shorter because 57 ms of each frame's tail overlaps the next evaluation. Node evaluation is now 98 percent of the
+interval: the remaining 24 fps gap is the node and read cost, which Lane 8 owns.
+
+**Gates, uncached realistic comp, 1080p, 10-second runs, first pass through the 48 fresh frames.**
+
+| Adapter | One thread | Pipelined | Gain | Handoff p50 (built picture to Viewer accepted) | Whole run, 10 s |
+|---|---:|---:|---:|---:|---:|
+| RTX 3080 Ti (two runs) | 5.32 and 5.34 fps | 6.50 and 6.48 fps | +22 percent | 4.3 ms | 6.9 to 10.2 fps |
+| Radeon 8060S (`integrated`) | 5.52 fps | 6.43 fps | +17 percent | 4.3 ms | 7.5 to 9.9 fps |
+| llvmpipe (`cpu`) | 5.55 fps | 6.60 fps | +19 percent | 3.3 ms | 7.7 to 11.0 fps |
+| Laptop stand-in (`integrated`, four CPUs, 2x scale) | 3.86 fps | 4.18 fps | +8 percent | 3.3 ms | 3.8 to 4.1 fps |
+| RTX 3080 Ti, Direct picture on Xvfb | 4.75 fps | 4.82 fps | none | 2.8 ms | 4.6 to 4.8 fps |
+
+- Gate met on the RTX: the frame interval is no longer the sum of evaluation and display (154 ms against 205 ms for
+  evaluation plus conversion), the hand-off is 4.3 ms median (limit 10 ms), and the fresh rate rose 22 percent.
+- Not met: 24 fps. Evaluation alone takes 137 to 150 ms a frame, so one frame is bounded near 6.5 to 7 fps whatever
+  the display does. The conversion no longer costs anything on the interval; what remains is Lane 8's.
+- The laptop stand-in gains little: four CPUs run evaluation (232 ms) and the CPU conversion (69 ms) at once.
+  It stays under its 12 fps target.
+- The Direct picture on Xvfb is slower than the Viewer path because presenting to Xvfb copies each frame on the
+  Qt thread (about 21 ms, see "Direct viewer display transform" above), and the pipeline has nothing to overlap there. A real screen is not
+  measured.
+- Estimate for the 48 GB A6000 workstation (not measured; it is unavailable): playback there is bounded the same
+  way, so with evaluation near 140 to 150 ms on a CPU like this one, expect about 6 to 7 fps fresh, with conversion
+  hidden. A faster CPU raises it in proportion; the card makes no difference to this comp's nodes.
+- One conversion-stage drop is counted in each pipelined run: the frame waiting when playback stopped.
+
+Evidence: `benchmarks/2d-playback/pipeline-1022-{serial,pipe}-{rtx-1,rtx-2,radeon,llvmpipe,laptop,direct-rtx}.timeline.json`
+(per-frame marks, stage means, overlap and the accounting check); regenerate one from a raw benchmark result with
+`tools/timeline_2d_playback.py`. The runs used private Qt settings (earlier runs wrote the real settings file and left
+the Direct picture dock open for the next run, which changed what was measured).
+
 ## Lane 4 step notes
 
 ### 3D playback profile and fixes (10/22)
