@@ -88,6 +88,14 @@ class IngestTests(unittest.TestCase):
 
 
 class RasterTests(unittest.TestCase):
+    def test_fit_of_unchanged_data_window_reuses_pixels_exactly(self):
+        pixels = np.random.default_rng(506).random((5, 7, 4), dtype=np.float32)
+        data = Region(-2, 3, 7, 5)
+        raster = Raster(pixels, data, Region(0, 0, 16, 12))
+        result = raster.fit(data)
+        self.assertIs(result, pixels)
+        np.testing.assert_array_equal(result, pixels)
+
     def test_fit_places_pixels_by_coordinate_and_zero_fills_the_rest(self):
         raster = Raster(np.full((2, 2, 4), 0.5, np.float32), Region(3, 1, 2, 2), Region(0, 0, 6, 6))
         placed = raster.fit(Region(0, 0, 6, 6))
