@@ -656,13 +656,15 @@ class ViewportLabelTests(unittest.TestCase):
         def broken(*args):
             raise ValueError("no particles")
         widget = self.widget(broken)
-        widget.grab()
-        # Wait with Qt events running: the job's wait() returns False at once while the job is idle with nothing
-        # pending, which it is until the widget's request reaches it through the event loop (a loaded suite, 10/22-23).
+        # Wait for the outcome, painting as the interface would: the job's "failed" phase is brief, because the paint that
+        # sees it leaves Render mode and cancels the job (phase back to "idle"). Polling for the phase raced with any paint
+        # the job's update signal caused (10/22 and 10/23 in loaded suites).
         from tests.waiting import wait_until
-        self.assertTrue(wait_until(lambda: widget._progressive_job._phase == "failed", timeout=30))
-        widget.grab()
-        self.assertFalse(widget.render_mode)
+
+        def fell_back():
+            widget.grab()
+            return not widget.render_mode
+        self.assertTrue(wait_until(fell_back, timeout=30), f"still in Render mode; job phase {widget._progressive_job._phase!r}")
         self.assertIn("no particles", widget.status)
         self.assertEqual(widget.render_note, "")
 
