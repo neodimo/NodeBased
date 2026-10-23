@@ -1,0 +1,83 @@
+{
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "picture": "3840x2160 rgba16float",
+ "runs": 1,
+ "gate_ms": 1.0,
+ "worst_extra_median_ms": 29.586,
+ "worst_extra_max_ms": 29.586,
+ "gate_met": false,
+ "rows": [
+  {
+   "surface": "1920x1080",
+   "view": "sRGB",
+   "zoom": "1:2",
+   "filtered_ms_median": 8.685,
+   "nearest_ms_median": 2.085,
+   "extra_ms_median": 6.599,
+   "extra_ms_max": 6.599,
+   "extra_ms_runs": [
+    6.599
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "sRGB",
+   "zoom": "1:4",
+   "filtered_ms_median": 7.619,
+   "nearest_ms_median": 1.141,
+   "extra_ms_median": 6.477,
+   "extra_ms_max": 6.477,
+   "extra_ms_runs": [
+    6.477
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "sRGB",
+   "zoom": "1:8",
+   "filtered_ms_median": 8.467,
+   "nearest_ms_median": 1.02,
+   "extra_ms_median": 7.447,
+   "extra_ms_max": 7.447,
+   "extra_ms_runs": [
+    7.447
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "ACES 2.0",
+   "zoom": "1:2",
+   "filtered_ms_median": 30.853,
+   "nearest_ms_median": 7.4,
+   "extra_ms_median": 23.453,
+   "extra_ms_max": 23.453,
+   "extra_ms_runs": [
+    23.453
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "ACES 2.0",
+   "zoom": "1:4",
+   "filtered_ms_median": 29.771,
+   "nearest_ms_median": 2.72,
+   "extra_ms_median": 27.051,
+   "extra_ms_max": 27.051,
+   "extra_ms_runs": [
+    27.051
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "ACES 2.0",
+   "zoom": "1:8",
+   "filtered_ms_median": 31.035,
+   "nearest_ms_median": 1.449,
+   "extra_ms_median": 29.586,
+   "extra_ms_max": 29.586,
+   "extra_ms_runs": [
+    29.586
+   ]
+  }
+ ]
+}

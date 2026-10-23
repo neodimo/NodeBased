@@ -23,16 +23,26 @@ p.add_argument("out")
 p.add_argument("--runs", type=int, default=10, help="repeat the whole measurement this many times")
 p.add_argument("--size", default="3840x2160", help="the picture")
 p.add_argument("--gate-ms", type=float, default=1.0)
+p.add_argument("--adapter", choices=("default", "integrated", "cpu"), default="default",
+               help="the card to measure: the app's default (discrete), the integrated GPU, or llvmpipe")
+p.add_argument("--surfaces", default="1920x1080,3840x2160")
+p.add_argument("--warm", type=int, default=60, help="draws before timing (the card's clocks come up)")
+p.add_argument("--draws", type=int, default=40, help="draws in one timed batch")
+p.add_argument("--batches", type=int, default=5, help="timed batches; the best is the figure")
 args = p.parse_args()
 
 from PySide6.QtWidgets import QApplication
 APP = QApplication.instance() or QApplication([])
+if args.adapter != "default":            # what force-adapter.py does: the app's default adapter becomes the named kind
+    from nodebased import gpu3d
+    _state = gpu3d._state
+    gpu3d._state = lambda choice=None: _state(args.adapter if (choice or "default") == "default" else choice)
 from nodebased import carddisplay, directviewer as dv
 from tests.test_carddisplay import card_adapter
 from tests.test_directviewer import FakeContext
 
 WIDTH, HEIGHT = (int(x) for x in args.size.split("x"))
-SURFACES = ((1920, 1080), (3840, 2160))
+SURFACES = tuple(tuple(int(v) for v in item.split("x")) for item in args.surfaces.split(","))
 ZOOMS = (0.5, 0.25, 0.125)
 VIEWS = ("sRGB", "ACES 2.0")
 CAP = "0.35), 1.0, 8.0)"
@@ -53,16 +63,16 @@ def draw_ms(presenter, view, settings, frame, surface, zoom):
     presenter.offer_linear(frame, settings, (0, 0, WIDTH, HEIGHT), (0, 0, WIDTH, HEIGHT))
     presenter.draw((WIDTH / 2, HEIGHT / 2, zoom), surface)
     presenter.wait_idle()
-    for _ in range(60):
+    for _ in range(args.warm):
         presenter.draw((WIDTH / 2, HEIGHT / 2, zoom), surface)
     presenter.wait_idle()
     best = None
-    for _ in range(5):
+    for _ in range(args.batches):
         started = time.perf_counter()
-        for _ in range(40):
+        for _ in range(args.draws):
             presenter.draw((WIDTH / 2, HEIGHT / 2, zoom), surface)
         presenter.wait_idle()
-        took = (time.perf_counter() - started) / 40 * 1000.0
+        took = (time.perf_counter() - started) / args.draws * 1000.0
         best = took if best is None else min(best, took)
     return best
 

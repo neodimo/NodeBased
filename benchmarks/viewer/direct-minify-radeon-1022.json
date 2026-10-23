@@ -1,0 +1,95 @@
+{
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "picture": "3840x2160 rgba16float",
+ "runs": 3,
+ "gate_ms": 1.0,
+ "worst_extra_median_ms": 1.543,
+ "worst_extra_max_ms": 1.651,
+ "gate_met": false,
+ "rows": [
+  {
+   "surface": "1920x1080",
+   "view": "sRGB",
+   "zoom": "1:2",
+   "filtered_ms_median": 0.388,
+   "nearest_ms_median": 0.354,
+   "extra_ms_median": 0.04,
+   "extra_ms_max": 0.045,
+   "extra_ms_runs": [
+    0.04,
+    0.035,
+    0.045
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "sRGB",
+   "zoom": "1:4",
+   "filtered_ms_median": 0.63,
+   "nearest_ms_median": 0.114,
+   "extra_ms_median": 0.516,
+   "extra_ms_max": 0.521,
+   "extra_ms_runs": [
+    0.478,
+    0.521,
+    0.516
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "sRGB",
+   "zoom": "1:8",
+   "filtered_ms_median": 1.583,
+   "nearest_ms_median": 0.081,
+   "extra_ms_median": 1.502,
+   "extra_ms_max": 1.629,
+   "extra_ms_runs": [
+    1.424,
+    1.502,
+    1.629
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "ACES 2.0",
+   "zoom": "1:2",
+   "filtered_ms_median": 0.748,
+   "nearest_ms_median": 0.363,
+   "extra_ms_median": 0.377,
+   "extra_ms_max": 0.402,
+   "extra_ms_runs": [
+    0.377,
+    0.402,
+    0.361
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "ACES 2.0",
+   "zoom": "1:4",
+   "filtered_ms_median": 0.903,
+   "nearest_ms_median": 0.135,
+   "extra_ms_median": 0.748,
+   "extra_ms_max": 0.784,
+   "extra_ms_runs": [
+    0.748,
+    0.741,
+    0.784
+   ]
+  },
+  {
+   "surface": "1920x1080",
+   "view": "ACES 2.0",
+   "zoom": "1:8",
+   "filtered_ms_median": 1.616,
+   "nearest_ms_median": 0.093,
+   "extra_ms_median": 1.543,
+   "extra_ms_max": 1.651,
+   "extra_ms_runs": [
+    1.47,
+    1.543,
+    1.651
+   ]
+  }
+ ]
+}
