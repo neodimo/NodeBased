@@ -194,6 +194,15 @@ class GradeInPlaceTests(unittest.TestCase):
                 np.testing.assert_array_equal(actual, expected)
         np.testing.assert_array_equal(source, before)
 
+    def test_neutral_multiply_does_not_stream_the_rgb_frame_again(self):
+        source = np.random.default_rng(805).random((11, 13, 4), dtype=np.float32)
+        with patch("nodebased.imaging.np.multiply", wraps=np.multiply) as multiply:
+            actual = Evaluator._grade(source, {"exposure": 0.3, "multiply": 1.0, "offset": 0.0})
+        expected = source.copy()
+        expected[..., :3] *= 2.0 ** 0.3
+        self.assertEqual(multiply.call_count, 1)
+        np.testing.assert_array_equal(actual, expected)
+
 
 class CheckerGenerationTests(unittest.TestCase):
     def test_checker_outputs_match_on_full_frame_and_tiled_source_paths(self):

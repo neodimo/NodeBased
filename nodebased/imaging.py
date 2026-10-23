@@ -6975,7 +6975,10 @@ class Evaluator:
         frame = image.copy()
         rgb = frame[..., :3]
         np.multiply(rgb, 2.0 ** p["exposure"], out=rgb)
-        np.multiply(rgb, p["multiply"], out=rgb)
+        # A neutral multiply is common in animated exposure-only grades. Avoid streaming the
+        # whole RGB frame through memory a second time for the identity operation.
+        if p["multiply"] != 1.0:
+            np.multiply(rgb, p["multiply"], out=rgb)
         if p["offset"] != 0.0:
             np.add(rgb, frame[..., 3:4] * p["offset"], out=rgb)
         return frame
