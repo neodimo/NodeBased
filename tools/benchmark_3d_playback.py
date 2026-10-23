@@ -50,6 +50,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
+SMOKE_SCALE = 1.2    # the puff of "mixedglass", in metres across (the plume is a unit cube); 2.4 costs about 20 ms more a frame on the RTX 3080 Ti
 SCENES = ("empty", "cube", "furnished", "glass", "mixed", "mixedglass", "grade")
 FIELDS = ("adapter", "scene", "size", "backend", "proxy", "fps", "shown", "interval_ms", "render_ms_status", "tier_pictures",
           "fps_at_end_tier", "time_row", "settle_s", "status")
@@ -173,7 +174,7 @@ def build_scene(name, width, height, backend, last=240, splat_path=None):
         if name in ("mixed", "mixedglass"):
             add("splats", "ReadSplat3D", {"splat_path": str(splat_path), "splat_relight": 1.0, "ty": 0.6, "tz": -1.0})
         if name == "mixedglass":
-            add("smoke", "Plume3D", {"plume_resolution": 32, "tx": -0.6, "ty": 0.0, "tz": 0.4, "uscale": 2.4})
+            add("smoke", "Plume3D", {"plume_resolution": 32, "tx": -0.6, "ty": 0.0, "tz": 0.4, "uscale": SMOKE_SCALE})
         _tree(doc, "scene", members)
         _camera(doc, 6.2, 1.6, 0.95, last)
     doc.create("render", "Render3D", render)

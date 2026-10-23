@@ -1613,9 +1613,6 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             from . import gpuvolume, volumerender
             volume = volume if volume is not None else volumerender.VolumeSettings()
             gpuvolume.check(state, scene, volume)
-            lit_lights = sum(light.intensity > 0 for light in scene.lights)
-            volume_bands = gpuvolume.band_plan(state, gpuvolume.work_estimate(
-                scene, camera, width*samples, height*samples, volume, lit_lights, triangles), height*samples)
         if scene.splats:
             from . import gpusplat
             reason = (gpusplat.check_data_capability(state) if output in gpusplat.DATA_OUTPUTS
@@ -1646,6 +1643,13 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 last_shadow_path = 'bvh'
                 levels = math.log2(triangles+2)
                 work = width * height * samples**2 * shadow_count * 16 * levels + 16 * triangles * levels
+        if volumes:
+            # The meshes' shadows on the smoke cost a walk of the triangle tree per lit sample (sixteen box tests a level) when the
+            # raster shadows use the tree, else a test of every triangle: the work the frame is cut into bands by.
+            lit_lights = sum(light.intensity > 0 for light in scene.lights)
+            tree_cost = 16 * math.log2(triangles + 2) if last_shadow_path == 'bvh' else triangles
+            volume_bands = gpuvolume.band_plan(state, gpuvolume.work_estimate(
+                scene, camera, width*samples, height*samples, volume, lit_lights, tree_cost), height*samples)
         bands = _band_plan(state, work, last_shadow_path, height*samples)
         if volume_bands > len(bands):
             rows = height*samples
@@ -1678,6 +1682,9 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                          volume=volume if volumes else None, splat_job=splat_job)
         picture, state['picture_rgba'] = state['picture_rgba'], None     # made beside this frame, valid while nothing changes it
         splats_drawn = state.pop('splats_on_card', False)
+        if volumes and scene.splats and not splats_drawn:
+            # the smoke is over the splat layer, which only the card route composites in that order
+            raise Unsupported('smoke together with splats is drawn only on the card route; the CPU draws this frame')
         if scene.splats and output in gpusplat.DATA_OUTPUTS:
             _splat_data_pass(state, scene, camera, width, height, result, output, cancel)
         elif scene.splats and not splats_drawn and not glass_on_card:
@@ -1978,12 +1985,12 @@ OPAQUE_ALPHA = np.float32(0.999)        # the shader's PASS 0 / PASS 1 split of 
 
 
 def _resident_ok(scene, output, volume):
-    """True when the scene can be drawn from resident buffers: nothing depends on the camera but the uniform."""
+    """True when the scene can be drawn from resident buffers: nothing depends on the camera but the uniform. Smoke is drawn after
+    the meshes from the volume's own cached textures, so a scene with volumes is resident too (it took 1.3 s a frame on the
+    per-frame path, the meshes' packing and upload, and 22 ms on this one: the mixed scene with a smoke puff, 10/23)."""
     if not RESIDENT:
         return False
     if output in _PARTICLE_OUTPUT_MODES and getattr(scene, 'particles', ()):
-        return False
-    if volume is not None and output == 'rgba' and getattr(scene, 'volumes', ()):
         return False
     drawn = 0
     for geometry in scene.geometries:
@@ -2147,11 +2154,12 @@ def _build_resident(state, scene, order, key, light_data, area_lights_data, area
     return res
 
 
-def _resident_binds(state, res, phase):
-    """(pipeline, per-material bind groups, environment bind group) for one pass; rebuilt when the pipeline cache was reset."""
+def _resident_binds(state, res, phase, smoke=False):
+    """(pipeline, per-material bind groups, environment bind group) for one pass; rebuilt when the pipeline cache was reset.
+    `smoke`: the variant that reads the volumes' density for their shadows on the meshes (group 1 is bound by the caller)."""
     bvh = bool(res['bvh'])
-    pipeline = _pipeline(state, phase == 2, phase, bvh, False)
-    held = res['binds'].get(phase)
+    pipeline = _pipeline(state, phase == 2, phase, bvh, smoke)
+    held = res['binds'].get((phase, smoke) if smoke else phase)
     if held is not None and held[0] is pipeline:
         return held
     device = state['device']
@@ -2168,8 +2176,9 @@ def _resident_binds(state, res, phase):
     env_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(2), entries=[
         {'binding': 0, 'resource': {'buffer': env_buffer}}, {'binding': 1, 'resource': env_atlas},
         {'binding': 2, 'resource': env_sampler}])
-    res['binds'][phase] = (pipeline, groups, env_group)
-    return res['binds'][phase]
+    slot = (phase, smoke) if smoke else phase
+    res['binds'][slot] = (pipeline, groups, env_group)
+    return res['binds'][slot]
 
 
 def _frame_targets(state, width, height, fmt):
@@ -2212,7 +2221,7 @@ def _card_finishes_frame(scene, splats_drawn=False):
 
 
 def _render_resident(state, scene, camera, width, height, bg, ambient, output, cancel, shadow_triangles, shadow_data, bias,
-                     bvh_data, bands, splat_job=None):
+                     bvh_data, bands, splat_job=None, volume=None):
     """`_render` for a scene `_resident_ok` accepts: the same passes over resident buffers. `splat_job` (the splat instances
     and their lighting) asks for the splat layer to be drawn over the meshes in the same submission (`gpusplat.prepare_on_card`);
     `state['splats_on_card']` says afterwards whether it was."""
@@ -2246,13 +2255,17 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     device.queue.write_buffer(res['uniform'], 0, params)
     fmt = 'rgba32float' if data else state['format']
     target_view, depth_view, target = _frame_targets(state, width, height, fmt)
+    has_volumes = volume is not None and output == 'rgba' and bool(getattr(scene, 'volumes', ()))
+    # The smoke shadows the meshes: the shadowed lights' rays are marched through the volumes' density (gpuvolume).
+    smoke = bool(has_volumes and shadow_triangles and volume.shadow_density > 0
+                 and any(light.shadows and light.intensity > 0 for light in scene.lights))
     if data:
         # One pass over every triangle, depth tested: the order does not matter.
         runs_by_pass = [res['everything']]
         passes = [_resident_binds(state, res, 2)]
     else:
         runs_by_pass = [res['opaque'], _translucent_runs(res['translucent'], eye, view) if res['translucent'] else []]
-        passes = [_resident_binds(state, res, 0)] + ([_resident_binds(state, res, 1)] if runs_by_pass[1] else [])
+        passes = [_resident_binds(state, res, 0, smoke)] + ([_resident_binds(state, res, 1, smoke)] if runs_by_pass[1] else [])
     _mark('upload_done')
     dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
     stride = ((width*4*dtype.itemsize+255)//256)*256
@@ -2263,9 +2276,22 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     # The mesh depth is the pass's own depth buffer, which holds the opaque surfaces only. A scene with translucent meshes also
     # draws their nearest surface into a second depth buffer, and the splat layer is drawn in two parts around the translucent
     # pass: the splats behind the glass first (the glass tints them), the ones in front of it after.
-    splats_here = (splat_job is not None and not data and len(bands) == 1 and not bg.any())
+    splats_here = (splat_job is not None and not data
+                   and ((len(bands) == 1 and not bg.any()) or has_volumes))      # a smoke march in bands: the background goes under the finished frame
     glass = splats_here and bool(runs_by_pass[1])
     state['splats_on_card'] = splats_here
+    used = set()
+    light_order = [light for light, *_ in lights]
+    smoke_groups = []
+    volume_pass = None
+    if has_volumes:
+        from . import gpuvolume
+        if smoke:
+            smoke_groups = [gpuvolume.mesh_shadow_group(state, binds[0], scene, volume, used, keep, light_order) for binds in passes]
+        volume_pass = gpuvolume.prepare(state, scene, camera, width, height, ambient, volume, res['lights'], len(lights),
+                                        bool(scene.lights), depth_view, keep, target=fmt, used=used, shadow_buffer=res['shadow'],
+                                        shadow_count=shadow_triangles, shadow_bias=bias, light_order=light_order,
+                                        bvh=[entry['resource']['buffer'] for entry in res['bvh']] if res['bvh'] else None)
     # The display picture of a played frame (nodebased/gpupicture.py) is made by one more pass in the last band's submission and
     # read back through the same buffer, after the float rows.
     picture_view = (gpupicture.armed_view() if output == 'rgba' and not data and not bg.any()
@@ -2276,6 +2302,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     staging = _staging_buffer(state, picture_offset + (recorder.bytes if recorder is not None else 0), keep)
     result = np.empty((height, width, 4), 'f4')
     state['picture_rgba'] = None
+    splat_layer = False            # a frame with smoke in several bands prepares its splat layer once: False until then, then it or None
     try:
         for y0, y1 in bands:
             _cancel(cancel)
@@ -2289,6 +2316,8 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                         'depth_load_op': 'clear' if pass_number == 0 or depth_target is not None else 'load', 'depth_store_op': 'store'})
                 rp.set_scissor_rect(0, y0, width, rows)
                 rp.set_pipeline(pipeline)
+                if smoke_groups and depth_target is None:
+                    rp.set_bind_group(1, smoke_groups[pass_number])
                 rp.set_bind_group(2, env_group)
                 rp.set_vertex_buffer(0, res['vertices'])
                 bound = None
@@ -2308,16 +2337,29 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                 # The card starts on the meshes now; the processor prepares the splat layer (order, colours, buffers: 8 ms
                 # at 20,000 relit splats) while it draws, and the layer goes out in a second submission over the same frame.
                 from . import gpusplat
-                _mark('submit')
-                device.queue.submit([encoder.finish()])
-                splat_layer = gpusplat.prepare_on_card(state, splat_job[0], camera, width, height, depth_view,
-                                                       lighting=splat_job[1], cancel=cancel, keep=keep,
-                                                       glass_view=glass_view if glass else None)
-                encoder = device.create_command_encoder()
-                if splat_layer is not None:
-                    splat_layer(encoder, target_view, (lambda enc: mesh_pass(enc, 1, *passes[1])) if glass else None)
+                split = {'rows': (y0, rows)} if len(bands) > 1 else {}
+                between = (lambda enc: mesh_pass(enc, 1, *passes[1])) if glass else None
+                if splat_layer is False:
+                    _mark('submit')
+                    device.queue.submit([encoder.finish()])
+                    splat_layer = gpusplat.prepare_on_card(state, splat_job[0], camera, width, height, depth_view,
+                                                           lighting=splat_job[1], cancel=cancel, keep=keep,
+                                                           glass_view=glass_view if glass else None)
+                    encoder = device.create_command_encoder()
+                    if splat_layer is not None:
+                        splat_layer(encoder, target_view, between, **split)
+                    elif glass:
+                        mesh_pass(encoder, 1, *passes[1])
+                elif splat_layer is not None:
+                    splat_layer(encoder, target_view, between, project_now=False, **split)
                 elif glass:
                     mesh_pass(encoder, 1, *passes[1])
+            if volume_pass is not None:
+                rp = encoder.begin_render_pass(color_attachments=[{'view': target_view, 'resolve_target': None,
+                    'clear_value': (0, 0, 0, 0), 'load_op': 'load', 'store_op': 'store'}])
+                rp.set_scissor_rect(0, y0, width, rows)
+                volume_pass.record(rp)
+                rp.end()
             encoder.copy_texture_to_buffer({'texture': target, 'origin': (0, y0, 0)},
                 {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))
             fused = recorder is not None and y1 == bands[-1][1]
@@ -2407,7 +2449,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         bg[:] = 0
     if _resident_ok(scene, output, volume):
         return _render_resident(state, scene, camera, width, height, bg, ambient, output, cancel, shadow_triangles,
-                                shadow_data, bias, bvh_data, bands, splat_job)
+                                shadow_data, bias, bvh_data, bands, splat_job, volume)
     eye, focal, vertices, queue, materials = _prepare(scene, camera, width, height, cancel)
     _mark('scene_ready')
     _cancel(cancel)
@@ -2507,7 +2549,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             volume_pass = gpuvolume.prepare(state, scene, camera, width, height, ambient, volume, light_buffer,
                                             len(lights), bool(scene.lights), depth.create_view(), keep, target=fmt, used=used,
                                             shadow_buffer=shadow_buffer, shadow_count=shadow_triangles, shadow_bias=bias,
-                                            light_order=[light for light, *_ in lights])
+                                            light_order=[light for light, *_ in lights],
+                                            bvh=[entry['resource']['buffer'] for entry in bvh_entries] if bvh_entries else None)
         target_view, depth_view = target.create_view(), depth.create_view()
         _mark('upload_done')
         dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')

@@ -79,6 +79,7 @@ struct Vol {
 @group(0) @binding(2) var depth_tex: %(DEPTH_TYPE)s;
 struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(0) @binding(3) var<storage, read> triangles: array<Triangle>;
+%(BVH_DECL)s
 @group(1) @binding(0) var<uniform> vol: Vol;
 @group(1) @binding(1) var density: texture_3d<f32>;
 @group(1) @binding(2) var velocity_tex: texture_3d<f32>;
@@ -251,6 +252,24 @@ fn shadow_tau(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
 }
 // Meshes between a smoke sample and a light (scene3d._volume_occluders): hard shadows, two-sided
 // Moller-Trumbore over every mesh triangle, material alpha only; `direction.w` is the light's Shadows switch.
+fn tri_transmission(j: u32, p: vec3<f32>, ray: vec3<f32>, limit: f32, near_bias: f32, bit: u32, positional: f32) -> f32 {
+    let tri = triangles[j];
+    if (excl_bit(u32(tri.e1.w), bit)) { return 1.0; }   // light linking: a mesh that excludes the light casts no shadow from it
+    let h = cross(ray, tri.e2.xyz);
+    let det = dot(h, tri.e1.xyz);
+    if (abs(det) > 1e-10) {
+        let inverse = 1.0 / det;
+        let delta = p - tri.v0.xyz;
+        let u = dot(delta, h) * inverse;
+        let q = cross(delta, tri.e1.xyz);
+        let v = dot(ray, q) * inverse;
+        let t = dot(tri.e2.xyz, q) * inverse;
+        if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 && t > near_bias && (positional == 0.0 || t < limit)) {
+            return 1.0 - tri.v0.w;
+        }
+    }
+    return 1.0;
+}
 fn scene_shadow(p: vec3<f32>, light: Light, bit: u32) -> f32 {
     let count = u32(params.scene.y);
     if (light.direction.w <= 0.0 || count == 0u) { return 1.0; }
@@ -263,22 +282,9 @@ fn scene_shadow(p: vec3<f32>, light: Light, bit: u32) -> f32 {
         ray = delta / max(limit, 1e-8);
     }
     var transmission = 1.0;
+%(BVH_SHADOW)s
     for (var j = 0u; j < count; j += 1u) {
-        let tri = triangles[j];
-        if (excl_bit(u32(tri.e1.w), bit)) { continue; }   // light linking: a mesh that excludes the light casts no shadow from it
-        let h = cross(ray, tri.e2.xyz);
-        let det = dot(h, tri.e1.xyz);
-        if (abs(det) > 1e-10) {
-            let inverse = 1.0 / det;
-            let delta = p - tri.v0.xyz;
-            let u = dot(delta, h) * inverse;
-            let q = cross(delta, tri.e1.xyz);
-            let v = dot(ray, q) * inverse;
-            let t = dot(tri.e2.xyz, q) * inverse;
-            if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 && t > near_bias && (light.position.w == 0.0 || t < limit)) {
-                transmission *= 1.0 - tri.v0.w;
-            }
-        }
+        transmission *= tri_transmission(j, p, ray, limit, near_bias, bit, light.position.w);
     }
     return transmission;
 }
@@ -465,6 +471,57 @@ struct MotionOut { @location(0) position: vec4<f32>, @location(1) velocity: vec4
 '''
 
 # The control passes read a view-depth image (scene3d.render's depth buffer, inf where empty) uploaded as r32float.
+# The meshes' shadows on the smoke walk gpu3d's packed triangle tree (the one the raster shader uses above its triangle threshold)
+# instead of testing every triangle at every lit sample: 1.2 s of a 1080p frame of the mixed scene with a smoke puff on the RTX 3080 Ti
+# (4,440 triangles, brute force) became tens of milliseconds.
+_BVH_DECL = """
+struct BvhNode { lo: vec3<f32>, left: i32, hi: vec3<f32>, right: i32,
+                 offset: u32, count: u32, pad0: u32, pad1: u32 };
+@group(0) @binding(4) var<storage, read> bvh_nodes: array<BvhNode>;
+@group(0) @binding(5) var<storage, read> prim_order: array<u32>;
+fn box_hit(node: BvhNode, origin: vec3<f32>, ray: vec3<f32>, limit: f32, near_bias: f32) -> bool {
+    var near = near_bias;
+    var far = limit;
+    for (var axis = 0u; axis < 3u; axis += 1u) {
+        if (ray[axis] == 0.0) {
+            if (origin[axis] < node.lo[axis] || origin[axis] > node.hi[axis]) { return false; }
+        } else {
+            let a = (node.lo[axis] - origin[axis]) / ray[axis];
+            let b = (node.hi[axis] - origin[axis]) / ray[axis];
+            near = max(near, min(a, b));
+            far = min(far, max(a, b));
+            if (near > far) { return false; }
+        }
+    }
+    return true;
+}
+"""
+_BVH_SHADOW = """
+    if (arrayLength(&bvh_nodes) > 0u) {
+    var stack: array<u32, 64>;
+    stack[0] = 0u;
+    var size = 1u;
+    var box_limit = 3.402823e38;
+    if (light.position.w > 0.0) { box_limit = limit; }
+    loop {
+        if (size == 0u) { break; }
+        size -= 1u;
+        let node = bvh_nodes[stack[size]];
+        if (!box_hit(node, p, ray, box_limit, near_bias)) { continue; }
+        if (node.count > 0u) {
+            for (var k = 0u; k < node.count; k += 1u) {
+                transmission *= tri_transmission(prim_order[node.offset + k], p, ray, limit, near_bias, bit, light.position.w);
+            }
+        } else {
+            stack[size] = u32(node.left);
+            stack[size + 1u] = u32(node.right);
+            size += 2u;
+        }
+    }
+    return transmission;
+    }
+"""
+
 _DEPTH_VIEW = ('texture_2d<f32>',
                'let raw = textureLoad(depth_tex, pixel, 0).r;\n'
                '    if (raw < 3.0e37) { t_mesh = raw * ray_length; }')
@@ -558,9 +615,10 @@ def _samplers(single_tile=False):
     return ''.join(pieces)
 
 
-def _shader_code(depth_type, depth_load, single_tile=False):
+def _shader_code(depth_type, depth_load, single_tile=False, bvh=False):
     from . import volumerender as vr
     return _SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load, 'SAMPLERS': _samplers(single_tile),
+                      'BVH_DECL': _BVH_DECL if bvh else '', 'BVH_SHADOW': _BVH_SHADOW if bvh else '',
                       'FIRE_KNOTS': vr.FIRE_KNOTS, 'FIRE_K_LOW': repr(vr.FIRE_K_LOW),
                       'FIRE_K_SPAN': repr(math.log(vr.FIRE_K_HIGH / vr.FIRE_K_LOW)),
                       'FIRE_TOP': repr(float(vr.FIRE_KNOTS - 1)), 'FIRE_LAST': vr.FIRE_KNOTS - 2}
@@ -820,13 +878,13 @@ def fire_light_view(state, volume, settings, used):
     return _field(state, ('dummy', 'rgba32float'), lambda: (_ONE['rgba32float'], 'rgba32float'), used), None
 
 
-def pipeline(state, target, samples=1, multisampled_depth=False):
-    key = ('volume', target, samples, multisampled_depth)
+def pipeline(state, target, samples=1, multisampled_depth=False, bvh=False):
+    key = ('volume', target, samples, multisampled_depth) + (('bvh',) if bvh else ())
     if key in state['pipelines']:
         return state['pipelines'][key]
     device = state['device']
     depth_type, depth_load = _DEPTH_MULTI if multisampled_depth else _DEPTH_SINGLE
-    module = device.create_shader_module(code=_shader_code(depth_type, depth_load, adapter_kind(state) == 'cpu'))
+    module = device.create_shader_module(code=_shader_code(depth_type, depth_load, adapter_kind(state) == 'cpu', bvh))
     blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
     state['pipelines'][key] = device.create_render_pipeline(
         layout='auto',
@@ -897,11 +955,11 @@ class Prepared:
 
 def prepare(state, scene, camera, width, height, ambient, settings, light_buffer, light_count, lit,
             depth_view, keep, *, target, samples=1, multisampled_depth=False, used=None, pipe=None, pass_flags=0,
-            shadow_buffer=None, shadow_count=0, shadow_bias=0.0, light_order=None):
+            shadow_buffer=None, shadow_count=0, shadow_bias=0.0, light_order=None, bvh=None):
     """Upload (cached) the density textures and build the bind groups for a frame's volumes, far to near.
 
     `light_buffer` is the gpu3d light table (20 floats per light, intensity folded into the colour);
-    `light_order` is the light table's order, for light linking (the scene's non-area lights by default); `keep` registers a per-frame resource for destruction; `depth_view` is the depth attachment's texture
+    `light_order` is the light table's order, for light linking (the scene's non-area lights by default); `bvh` is the pair of buffers (nodes, primitive order) of gpu3d's packed triangle tree for the meshes' shadows on the smoke (a brute-force walk of the triangle table without it); `keep` registers a per-frame resource for destruction; `depth_view` is the depth attachment's texture
     view created with TEXTURE_BINDING usage."""
     wgpu, device = state['wgpu'], state['device']
     volumes = _volumes(scene)
@@ -927,7 +985,7 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
                   1.0 if settings.fire_intensity > 0 else 0.0)
     if settings.fire_intensity > 0:
         params[13:, :3] = volumerender.fire_table(settings)
-    pipe = pipe if pipe is not None else pipeline(state, target, samples, multisampled_depth)
+    pipe = pipe if pipe is not None else pipeline(state, target, samples, multisampled_depth, bvh=bvh is not None and bool(shadow_count))
     params_buffer = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
     group0 = device.create_bind_group(layout=pipe.get_bind_group_layout(0), entries=[
         {'binding': 0, 'resource': {'buffer': params_buffer}},
@@ -936,7 +994,9 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
             {'binding': 1, 'resource': {'buffer': light_buffer}},
             # The mesh triangle table the raster shadows use (gpu3d._shadow_data); a zero triangle when there is none.
             {'binding': 3, 'resource': {'buffer': shadow_buffer if shadow_buffer is not None else keep(
-                device.create_buffer_with_data(data=np.zeros((1, 12), 'f4'), usage=wgpu.BufferUsage.STORAGE))}}]))
+                device.create_buffer_with_data(data=np.zeros((1, 12), 'f4'), usage=wgpu.BufferUsage.STORAGE))}}]) + (
+        [{'binding': 4 + i, 'resource': {'buffer': buffer}} for i, buffer in enumerate(bvh)]
+        if bvh is not None and shadow_count else []))
     eye64 = eye.astype(np.float64)
     order = sorted(volumes, key=lambda v: -float(np.linalg.norm(
         (np.asarray(v.matrix, np.float64) @ np.append((np.array(v.origin) + np.array(v.shape) * v.voxel_size / 2), 1.0))[:3]
