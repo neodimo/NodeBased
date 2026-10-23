@@ -1,3 +1,7 @@
+# 2026-10-22 — Lane 8 step B finish 6 — PARTIAL
+
+RTX read-ahead A/B on the Lane 2 pipeline: 5.504 fps mean on vs 4.588 off (three 10-second runs each). The finish-5 4.68 fps one-off is not reproduced on; cause remains undetermined. Play-start cold Reads are queued before preview submission, with 59 focused tests passing. Final uncached first-pass rates: RTX 5.701, Radeon 5.680, llvmpipe 6.749, four-core integrated stand-in 4.272 fps. RTX timeline: node evaluation 167.914 ms (largest stage), display conversion 76.477 ms. Transform no-op row fitting now returns the original image; isolated median improved 3.95% with exact pixels; 76 targeted tests pass. 1080p/4K gates remain open. Standard benchmark warms frame 1 before playback, so first-frame cold-miss latency remains unverified. Local evidence and handoff are in the newest `TASKLOG.md` entry.
+
 ## 2026-10-22 — Lane 6 step B finish 1 (PARTIAL)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (11:05 PM on 2026-10-22 PDT)
