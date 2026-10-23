@@ -45,6 +45,7 @@ NO_MOD, CTRL, SHIFT, ALT = (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.
 SCALES = (1.0, 1.75)
 ZOOMS = (0.5, 1.0, 3.0)
 PAN_PX = (47, -31)          # how far the handle sits from the surface centre, in logical pixels
+PLANAR_CORNERS = ((420.0, 60.0), (560.0, 70.0), (550.0, 200.0), (410.0, 190.0))
 NEAR_MISS_PX = 6            # a press this far from the handle is still inside every tolerance
 
 
@@ -63,6 +64,11 @@ def document():
         {"op": "create", "id": "t", "type": "Tracker", "pos": [300, 0]},
         {"op": "connect", "id": "t", "input": "image", "source": "c"},
         {"op": "set_tracks", "id": "t", "tracks": [{"name": "track1", "enabled": 1, "x": 220.0, "y": 140.0}]},
+        {"op": "create", "id": "p", "type": "PlanarTracker", "pos": [300, 100]},
+        {"op": "connect", "id": "p", "input": "image", "source": "c"},
+        {"op": "set_tracks", "id": "p", "tracks": [
+            {"name": f"corner{i + 1}", "enabled": 1, "x": x, "y": y, "error": 0.0}
+            for i, (x, y) in enumerate(PLANAR_CORNERS)]},
         {"op": "create", "id": "x", "type": "Transform", "pos": [450, 0],
          "params": {"center_x": 320.0, "center_y": 180.0, "rotate": 8.0, "scale": 0.8,
                     "translate_x": 12.0, "translate_y": -9.0}},
@@ -277,6 +283,10 @@ def tracker_point(window):
     return scene(window, 220.0, 140.0)
 
 
+def planar_corner(window):
+    return scene(window, *PLANAR_CORNERS[2])
+
+
 def transform_geometry(window):
     p = window.dispatcher.document["nodes"]["x"]["params"]
     corners = handles2d.box_corners(WIDTH, HEIGHT, p["translate_x"], p["translate_y"], p["rotate"],
@@ -360,6 +370,7 @@ CASES = (
     HandleCase("tracker pattern square", "t", tracker_pattern),
     HandleCase("tracker search square", "t", tracker_search),
     HandleCase("tracker point", "t", tracker_point),
+    HandleCase("planar corner", "p", planar_corner),
     HandleCase("transform centre", "x", transform_centre),
     HandleCase("transform pivot (ctrl)", "x", transform_centre, modifiers=CTRL),
     HandleCase("transform rotate ring", "x", transform_rotate),
@@ -454,6 +465,115 @@ class HitOrderTests(HitOrderBase):
                     _, via_direct, _, _ = self.run_surface(case, self.widget, zoom, scale, (70, 0))
                     self.assertIsNone(numbers_close(via_viewer["document"], via_direct["document"]))
                     self.assertEqual(via_viewer["undo"], via_direct["undo"])
+
+
+class PickCase:
+    """One pick tool: the Viewer flag that switches it on, what a click calls, and whether it stays on."""
+    def __init__(self, name, node, flag, value, spy=None, stays=True, clicks=1):
+        self.name, self.node, self.flag, self.value = name, node, flag, value
+        self.spy, self.stays, self.clicks = spy, stays, clicks
+
+
+PICK_CASES = (
+    PickCase("Cryptomatte", "t", "crypto_picking", "t", spy="crypto_pick"),
+    PickCase("Focus", "t", "focus_picking", "t", spy="focus_pick"),
+    PickCase("ZDefocus", "t", "zdefocus_picking", "t", spy="zdefocus_pick"),
+    PickCase("Survey", "t", "survey_picking", "t", spy="survey_pick"),
+    PickCase("PointsTo3D", "t", "track3d_picking", "t", spy="points_to_3d_pick", stays=False),
+    PickCase("Tracker point", "t", "tracker_picking", True, stays=False),
+    PickCase("Planar region", "p", "planar_picking", True, stays=False, clicks=4),
+)
+# Off the pixel edges: a pick floors the scene point, and two surfaces round an exact edge differently.
+PICK_SPOTS = {"empty frame": (500.25, 300.5), "over a tracker point": (220.25, 140.5),
+              "over a planar corner": (PLANAR_CORNERS[0][0] + 0.25, PLANAR_CORNERS[0][1] + 0.5)}
+
+
+class PickTests(HitOrderBase):
+    """Each pick tool is switched on and clicked at the same pixel through the Viewer and through the direct
+    picture: the call it makes (key and pixel), the document, the flags it leaves and the cursor must match,
+    including when the click lands on a tracker point or a planar corner, which the pick must win over."""
+    FLAGS = ("crypto_picking", "focus_picking", "zdefocus_picking", "survey_picking", "track3d_picking",
+             "tracker_picking", "planar_picking", "planar_pick_key")
+
+    def arm(self, case):
+        self.show_node(case.node)
+        self.viewer.planar_pick_points = []
+        setattr(self.viewer, case.flag, case.value)
+        if case.flag == "planar_picking":
+            self.viewer.planar_pick_key = case.node
+
+    def state(self, calls):
+        v = self.viewer
+        return {"calls": list(calls), "document": copy.deepcopy(self.window.dispatcher.document),
+                "flags": {flag: getattr(v, flag) for flag in self.FLAGS},
+                "planar_points": [list(point) for point in v.planar_pick_points],
+                "drags": (v.tracker_drag is None, v.planar_drag is None, v.roto_drawing, v.wipe_drag is None),
+                "tracker_selected": getattr(self.window, "_tracker_selected_index", None),
+                "tracker_seed": copy.deepcopy(getattr(self.window, "_tracker_seed", None)),
+                "undo": len(self.window.dispatcher.undo_stack) - self.base_undo}
+
+    def click_through(self, case, surface, spot, zoom, scale, offset):
+        self.arm(case)
+        before = copy.deepcopy(self.window.dispatcher.document)
+        calls = []
+        patches = []
+        if case.spy:
+            patches.append(unittest.mock.patch.object(
+                self.window, case.spy, side_effect=lambda *args: calls.append(list(args))))
+        for patch in patches:
+            patch.start()
+        try:
+            x, y = PICK_SPOTS[spot]
+            with self.viewer.hit_surface(zoom):
+                handle = scene(self.window, x, y)
+            start = self.place_surfaces(handle, zoom, scale) + QPoint(*offset)
+            target = surface.viewport() if surface is self.viewer else surface
+            cursors = []
+            for index in range(case.clicks):
+                point = start + QPoint(34 * (index in (1, 2)), 34 * (index in (2, 3)))
+                QTest.mousePress(target, Qt.MouseButton.LeftButton, NO_MOD, point)
+                cursors.append((self.viewer.cursor().shape(), self.widget.cursor().shape()))
+                QTest.mouseRelease(target, Qt.MouseButton.LeftButton, NO_MOD, point)
+                APP.processEvents()
+            after = self.state(calls)
+            after["cursors"] = cursors
+        finally:
+            for patch in patches:
+                patch.stop()
+        # Escape from the same surface ends picking the same way.
+        QTest.keyClick(target if surface is not self.viewer else self.viewer, Qt.Key.Key_Escape)
+        APP.processEvents()
+        after["after_escape"] = {flag: getattr(self.viewer, flag) for flag in self.FLAGS}
+        after["after_escape"]["points"] = list(self.viewer.planar_pick_points)
+        while len(self.window.dispatcher.undo_stack) > self.base_undo:
+            self.window.command({"op": "undo"})
+        self.window.dispatcher.document.update(copy.deepcopy(before))
+        self.window._tracker_seed = None
+        for flag in self.FLAGS:
+            setattr(self.viewer, flag, None if flag != "tracker_picking" and flag != "planar_picking" else False)
+        return after
+
+    def test_every_pick_tool_makes_the_same_call_on_both_surfaces(self):
+        for case in PICK_CASES:
+            spots = ["empty frame", "over a planar corner"] if case.node == "p" else ["empty frame", "over a tracker point"]
+            for spot in spots:
+                for scale in SCALES:
+                    for zoom in ZOOMS:
+                        for offset in ((0, 0), (NEAR_MISS_PX, 0)):
+                            label = f"{case.name}, {spot}, scale {scale}, zoom {zoom}, offset {offset}"
+                            with self.subTest(label):
+                                via_viewer = self.click_through(case, self.viewer, spot, zoom, scale, offset)
+                                via_direct = self.click_through(case, self.widget, spot, zoom, scale, offset)
+                                self.assertIsNone(numbers_close(via_viewer, {**via_direct, "cursors": via_viewer["cursors"]}), label)
+                                for viewer_cursor, direct_cursor in via_direct["cursors"]:
+                                    self.assertEqual(direct_cursor, viewer_cursor, f"{label}: cursor")
+                                if case.spy:
+                                    self.assertEqual(len(via_viewer["calls"]), case.clicks, f"{label}: the Viewer picked")
+                                self.assertTrue(via_direct["drags"][0] and via_direct["drags"][1], f"{label}: pick won")
+                                still_on = via_direct["flags"][case.flag]
+                                self.assertEqual(bool(still_on), case.stays, f"{label}: picking stays on = {case.stays}")
+                                self.assertFalse(any(via_direct["after_escape"][flag] for flag in self.FLAGS
+                                                     if flag != "planar_pick_key"), f"{label}: Escape ends picking")
 
 
 class ProxyViewportTests(HitOrderBase):
