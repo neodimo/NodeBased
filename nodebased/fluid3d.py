@@ -904,6 +904,7 @@ class Smoke3D:
         self.colliders = list(colliders)
         self.replace_buoyancy = bool(replace_buoyancy)
         self._systems = {}
+        self._system_sources = {}
 
     # -- simcache API -------------------------------------------------------------------------------
     def initial_state(self, seed=0) -> State:
@@ -1007,6 +1008,7 @@ class Smoke3D:
             changed = True
         if changed:
             self._systems.clear()
+            self._system_sources.clear()
 
     def _resize_active_domain(self, state, frame=None, include_sources=False):
         """Fit smoke/fuel to whole 8-cell tiles while preserving every world-space sample."""
@@ -1105,14 +1107,14 @@ class Smoke3D:
                 cached = self._systems["none"] = (None, None, self._system(None, "none"))
             return cached
         animated = any(c.animated for c in self.colliders)
-        key = (int(frame), int(substep)) if animated else 0
+        poses = [collider.mask(self, frame, substep, self.substeps) for collider in self.colliders]
+        key = ("pose", tuple((id(mask), id(vel)) for mask, vel in poses)) if animated else 0
         cached = self._systems.get(key)
         if cached is not None:
             return cached
         solid = np.zeros(self.shape, bool)
         velocity = None
-        for collider in self.colliders:
-            mask, vel = collider.mask(self, frame, substep, self.substeps)
+        for mask, vel in poses:
             solid |= mask
             if vel is not None:
                 if velocity is None:
@@ -1123,7 +1125,9 @@ class Smoke3D:
         result = (solid, velocity, self._system(solid, key))
         if len(self._systems) > 8:
             self._systems.clear()
+            self._system_sources.clear()
         self._systems[key] = result
+        self._system_sources[key] = tuple(poses)
         return result
 
     def _system(self, solid, key):
@@ -1573,7 +1577,7 @@ def _geo_track_cacheable(doc, source_key):
     return True
 
 
-def _geo_track_signature(evaluator, doc, source_key):
+def _geo_track_signature(evaluator, doc, source_key, tier=1):
     """A frame-independent graph signature shared by playback snapshots of the same document."""
     nodes = doc.get("nodes", {})
     todo, seen = [source_key], set()
@@ -1587,6 +1591,7 @@ def _geo_track_signature(evaluator, doc, source_key):
     time_data = doc.get("time", {})
     payload = {
         "nodes": {key: nodes[key] for key in sorted(seen)},
+        "tier": int(tier),
         "time": {key: time_data[key] for key in ("first", "last", "fps") if key in time_data},
         "curves": {key: value for key, value in doc.get("animation", {}).get("curves", {}).items()
                    if key in seen},
@@ -1596,7 +1601,25 @@ def _geo_track_signature(evaluator, doc, source_key):
     return hashlib.blake2b(encoded, digest_size=16).hexdigest()
 
 
-def _geo_track(evaluator, doc, source_key, cancel, start, animated):
+def _proxy_particle_bounds_triangles(value):
+    """A bounded proxy surface for tiered liquid point clouds used by fluid tracks."""
+    positions = np.asarray(getattr(value, "positions", ()), dtype=np.float64).reshape(-1, 3)
+    if not len(positions):
+        return np.zeros((0, 3, 3), np.float64)
+    sizes = getattr(value, "sizes", None)
+    pad = 0.0 if sizes is None or not len(sizes) else float(np.max(sizes)) * 0.5
+    lo, hi = positions.min(axis=0) - pad, positions.max(axis=0) + pad
+    hi = np.maximum(hi, lo + max(pad * 2.0, 1e-6))
+    x0, y0, z0 = lo
+    x1, y1, z1 = hi
+    vertices = np.array(((x0,y0,z0),(x1,y0,z0),(x1,y1,z0),(x0,y1,z0),
+                         (x0,y0,z1),(x1,y0,z1),(x1,y1,z1),(x0,y1,z1)))
+    faces = ((0,2,1),(0,3,2),(4,5,6),(4,6,7),(0,1,5),(0,5,4),
+             (1,2,6),(1,6,5),(2,3,7),(2,7,6),(3,0,4),(3,4,7))
+    return vertices[np.asarray(faces)]
+
+
+def _geo_track(evaluator, doc, source_key, cancel, start, animated, tier=1):
     """(GeometryTrack, digest) of the geometry wired into a fluid node. A static track is sampled once at
     `start` (like ParticleBounce3D); an animated one is sampled per frame and identified by the digests over the
     document's time range."""
@@ -1608,8 +1631,8 @@ def _geo_track(evaluator, doc, source_key, cancel, start, animated):
     cache_key = None
     signature = None
     if _geo_track_cacheable(doc, source_key):
-        signature = _geo_track_signature(evaluator, doc, source_key)
-        cache_key = (signature, source_key, int(start), bool(animated), first, last)
+        signature = _geo_track_signature(evaluator, doc, source_key, tier)
+        cache_key = (signature, source_key, int(start), bool(animated), first, last, int(tier))
         tracks = getattr(evaluator, "_fluid_geo_tracks", None)
         if tracks is None:
             tracks = evaluator._fluid_geo_tracks = OrderedDict()
@@ -1626,22 +1649,24 @@ def _geo_track(evaluator, doc, source_key, cancel, start, animated):
         return value
 
     def provider(frame):
-        geometry = evaluator.evaluate_raster(doc, source_key, cancel, frame=int(frame), typed=True)
+        geometry = evaluator.evaluate_raster(doc, source_key, cancel, frame=int(frame), tier=tier, typed=True)
+        if hasattr(geometry, "positions") and hasattr(geometry, "proxy_tier"):
+            return _proxy_particle_bounds_triangles(geometry)
         return collider_triangles(geometry)
     if not animated:
-        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=start, typed=True, return_digest=True,
+        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=start, tier=tier, typed=True, return_digest=True,
                                               digest_only=True)
         return remember((GeometryTrack(provider, False, start, digest), digest))
     h = hashlib.sha256()
     for frame in range(first, last + 1):
-        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=frame, typed=True, return_digest=True,
+        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=frame, tier=tier, typed=True, return_digest=True,
                                               digest_only=True)
         h.update(str(digest).encode())
     digest = h.hexdigest()
     return remember((GeometryTrack(provider, True, start, digest), digest))
 
 
-def chain_for(evaluator, doc, key, node, incoming, cancel=None):
+def chain_for(evaluator, doc, key, node, incoming, cancel=None, tier=1):
     """The FluidChain a FluidSource3D, FluidForce3D or FluidCollide3D node produces. `incoming` is the chain
     wired into it (None for a source or an unwired slot)."""
     from .core import SPECS
@@ -1659,7 +1684,7 @@ def chain_for(evaluator, doc, key, node, incoming, cancel=None):
         track = None
         if emit_from in ("surface", "volume") and node["inputs"].get("geo") is not None:
             track, digest = _geo_track(evaluator, doc, node["inputs"]["geo"], cancel, int(params["start_frame"]),
-                                       bool(params["src_inherit_velocity"]) or bool(params.get("animated", 0)))
+                                       bool(params["src_inherit_velocity"]) or bool(params.get("animated", 0)), tier)
             identity["geo"] = digest
 
         def params_at(frame):
@@ -1697,7 +1722,7 @@ def chain_for(evaluator, doc, key, node, incoming, cancel=None):
         # start frame); an animated one is sampled per frame and interpolated per substep (Collider.mask), and its
         # digest hashes the whole document time range so any edited keyframe abandons the run, as for particles'
         # ParticleBounce3D.animated (docs/SIMULATION.md, "Bounce and collisions (animated)")
-        track, digest = _geo_track(evaluator, doc, geo, cancel, int(doc.get("time", {}).get("first", 1)), moving)
+        track, digest = _geo_track(evaluator, doc, geo, cancel, int(doc.get("time", {}).get("first", 1)), moving, tier)
         identity["geo"], identity["animated"] = digest, moving
         return base.then(identity, collider=Collider(track, moving))
     raise ValueError(f"not a fluid chain node: {kind}")

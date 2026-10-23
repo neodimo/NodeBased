@@ -103,5 +103,67 @@
     },
     "post_fix_variant_note": "distinct source delta and warmed cache; not a controlled before/after comparison",
     "gate": "miss: first displayed proxy must be under 1 s; 120-frame timeline and 12 FPS scrub not run"
+  },
+  "finish4_steam_proxy_tier": {
+    "date": "2026-10-23",
+    "adapter": "NVIDIA GeForce RTX 3080 Ti",
+    "configuration": {
+      "liquid_cells": 256,
+      "steam_cells": 192,
+      "frames": 120,
+      "edit_frame": 60,
+      "proxy_resolution_cells": 64,
+      "edit": "pour_rate"
+    },
+    "provider": "steam geometry requests the same proxy tier as the active solve; tier-4 particle geometry uses its bounded point-cloud extent for the proxy surface",
+    "first_fresh_edit_frame": {
+      "seconds": 0.375,
+      "solver_steps": {
+        "flip_proxy": 16,
+        "smoke_proxy": 1,
+        "tier1_flip": 0
+      },
+      "includes_proxy_scene_draw": true
+    },
+    "timeline": {
+      "frames_completed": 120,
+      "wall_seconds": 30.64,
+      "mean_fps": 3.92,
+      "p95_frame_ms": 336.14,
+      "max_frame_ms": 1083.9,
+      "holds_12_fps": false
+    },
+    "warmed_cache_sample_ms": {
+      "frame_60": {
+        "evaluation": 68.08,
+        "draw": 55.13,
+        "total": 123.21
+      },
+      "frame_61": {
+        "evaluation": 4.15,
+        "draw": 6.49,
+        "total": 10.64
+      },
+      "frame_70": {
+        "evaluation": 4.31,
+        "draw": 6.32,
+        "total": 10.63
+      },
+      "frame_120": {
+        "evaluation": 124.48,
+        "draw": 6.47,
+        "total": 130.95
+      }
+    },
+    "regressions": [
+      "tests.test_fluid_surface_cache.FluidSurfaceCacheTests.test_proxy_steam_geometry_sampling_never_requests_tier_one_liquid",
+      "tests.test_fluid3d.ColliderTests.test_resident_solid_composition_reuses_an_identical_animated_pose"
+    ],
+    "raw_evidence": [
+      "scratch/nb-lanes/run/big-L6/f4-first/run.log",
+      "scratch/nb-lanes/run/big-L6/f4-first/timeline.log",
+      "scratch/nb-lanes/run/big-L6/f4-first/split-profile.log"
+    ],
+    "gate": "PARTIAL: first fresh proxy is under 1 s with zero tier-1 FLIP steps; complete 120-frame measurement exists, but sequential timeline scrub averages 3.92 FPS and misses 12 FPS."
   }
 }

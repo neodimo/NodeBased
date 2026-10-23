@@ -211,6 +211,16 @@ class ColliderTests(unittest.TestCase):
         finally:
             fluid3d.clear_collider_voxel_cache()
 
+    def test_resident_solid_composition_reuses_an_identical_animated_pose(self):
+        triangles = box_triangles((6.0, 8.0, 6.0), (18.0, 20.0, 18.0))
+        track = fluid3d.GeometryTrack(lambda _frame: triangles, animated=True, start_frame=1)
+        solver = fluid3d.Smoke3D(self.PARAMS, colliders=[fluid3d.Collider(track, animated=True)])
+        first = solver._solid_for(1, 0)
+        same_pose = solver._solid_for(2, 0)
+        self.assertIs(first[0], same_pose[0])
+        self.assertIs(first[1], same_pose[1])
+        self.assertIs(first[2], same_pose[2])
+
     def run_with_box(self, frames=45):
         collider = box_collider((6.0, 14.0, 6.0), (18.0, 18.0, 18.0))
         return solve(self.PARAMS, frames, colliders=[collider])

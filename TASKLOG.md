@@ -1,3 +1,14 @@
+## 2026-10-23 — Lane 6 finish 4: steam uses the liquid proxy tier — PARTIAL
+
+- **Why:** The production profile showed the tier-4 steam solver sampling its animated liquid geometry at tier 1, replaying hundreds of full-detail FLIP steps before the preview appeared.
+- **What landed — evidence:** Fluid geometry tracks now propagate the evaluator's requested tier into both provider evaluation and digest lookahead. Tiered liquid point clouds provide a bounded proxy surface for steam emission and collision. Same-pose animated collider masks now retain a stable composed-solid identity, allowing the resident FLIP upload path to reuse it. A regression counts surface evaluation tiers and fails if tier-4 steam requests tier 1; another verifies same-pose solid/mask/system identity.
+- **Tests:** Imaging/fluid-node/surface-cache/CPU fluid modules pass; resident GPU solver module passes on the RTX 3080 Ti; knowledge-copy tests pass and bundled docs are byte-identical.
+- **Production evidence:** RTX 3080 Ti, 256³ liquid / 192³ steam, pour-rate key at frame 60: fresh first displayed proxy 0.375 s including drawing, with 16 proxy FLIP steps and one proxy steam step. The 120-frame proxy pass completed in 30.64 s (3.92 FPS; p95 336.14 ms; maximum 1,083.9 ms), so the 12 FPS scrub gate misses. The full-resolution refinement split and integrated Radeon were not measured.
+- **Artifacts:** Code, tests, production JSON, mirrored docs, and this note are in the lane worktree. Raw evidence logs are deliberate scratch under `scratch/nb-lanes/run/big-L6/f4-first/`; the >1 GB generated cache is deleted before handoff. Not pushed.
+- **State:** PARTIAL. The <1 s first-proxy gate and 120-frame completion pass; the 12 FPS timeline scrub gate remains open.
+- **Next owner + concrete artifact:** Needs Gonzo: optimize the sequential proxy timeline using `tools/benchmark_fluid_edit_stages.py` and the `finish4_steam_proxy_tier` record in `benchmarks/hot_pour/production-edit-refresh-rtx-2026-10-23.json`; then measure the full-resolution refinement split and integrated Radeon if still in scope.
+- **Failure mode:** Geometry track providers defaulted to tier 1 even when their downstream steam solver was tier 4. Surface preview output is a point cloud, so the tiered track now converts its bounds to a small proxy surface while full-detail geometry continues through the original path.
+
 ## 2026-10-23 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the production-size Hot pour re-simulates only what changed (finish 3: the proxy starts from a checkpoint) (integrator tick)
 
 - **What was done:** `main` `17358279` -> `98fbab28` plus this docs commit. Evidence and per-lane commit

@@ -13,6 +13,49 @@ from tests.test_particles_nodes import make, wire
 
 
 class FluidSurfaceCacheTests(unittest.TestCase):
+    def test_proxy_steam_geometry_sampling_never_requests_tier_one_liquid(self):
+        dispatcher = Dispatcher()
+        make(dispatcher,
+             liquid_src=("FluidSource3D", {"fluid_type": "liquid", "src_center_y": 0.6,
+                                            "src_radius": 0.2, "end_frame": 1}),
+             liquid=("FluidLiquidSolver3D", {"division_size": 0.5, "bounds_min_x": -1.0,
+                    "bounds_min_y": 0.0, "bounds_min_z": -1.0, "bounds_max_x": 1.0,
+                    "bounds_max_y": 1.5, "bounds_max_z": 1.0, "substeps": 1,
+                    "particles_per_cell": 1}),
+             liquid_cache=("ParticleCache3D", {"cache_memory_mb": 16, "cache_disk_mb": 32}),
+             surface=("FluidSurface3D", {}),
+             steam_src=("FluidSource3D", {"fluid_type": "smoke", "fluid_emit_from": "surface",
+                    "src_density": 0.2, "end_frame": 1, "animated": 1}),
+             steam_collide=("FluidCollide3D", {"animated": 1}),
+             steam=("FluidSolver3D", {"division_size": 0.5, "bounds_min_x": -1.0,
+                    "bounds_min_y": 0.0, "bounds_min_z": -1.0, "bounds_max_x": 1.0,
+                    "bounds_max_y": 1.5, "bounds_max_z": 1.0, "auto_resize": 1,
+                    "padding": 1, "max_size": 32}))
+        wire(dispatcher, "liquid", "fluid", "liquid_src")
+        wire(dispatcher, "liquid_cache", "particles", "liquid")
+        wire(dispatcher, "surface", "particles", "liquid_cache")
+        wire(dispatcher, "steam_src", "geo", "surface")
+        wire(dispatcher, "steam_collide", "fluid", "steam_src")
+        wire(dispatcher, "steam_collide", "geometry", "surface")
+        wire(dispatcher, "steam", "fluid", "steam_collide")
+
+        evaluator = Evaluator()
+        original = evaluator.evaluate_raster
+        surface_tiers = []
+
+        def record_tier(doc, target=None, *args, **kwargs):
+            if target == "surface":
+                surface_tiers.append(int(kwargs.get("tier", 1)))
+            return original(doc, target, *args, **kwargs)
+
+        with mock.patch.object(evaluator, "evaluate_raster", side_effect=record_tier):
+            evaluator.evaluate_raster(dispatcher.document, "steam", frame=1, tier=4, typed=True)
+
+        self.assertTrue(surface_tiers)
+        tier_one_solves = surface_tiers.count(1)
+        self.assertEqual(tier_one_solves, 0, f"tier-1 liquid geometry requests: {surface_tiers}")
+        self.assertTrue(all(tier == 4 for tier in surface_tiers), surface_tiers)
+
     def test_proxy_checkpoints_resume_keyed_edit_from_frame_59(self):
         with tempfile.TemporaryDirectory() as folder:
             dispatcher = Dispatcher()

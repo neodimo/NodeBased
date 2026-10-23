@@ -1309,7 +1309,8 @@ class Evaluator:
                 fluid = None
                 if kind in fluid3d.CHAIN_KINDS:
                     slot = node["inputs"].get("fluid")
-                    fluid = fluid3d.chain_for(self, doc, key, node, None if slot is None else values[slot], cancel)
+                    fluid = fluid3d.chain_for(self, doc, key, node, None if slot is None else values[slot], cancel,
+                                              tier=tier)
                     fingerprint = [fluid.run]
                 elif kind == "FluidSolver3D" and not node["disabled"]:
                     fluid = fluid3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]],

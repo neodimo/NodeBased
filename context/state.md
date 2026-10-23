@@ -1,3 +1,11 @@
+# Lane 6 — 2026-10-23 finish 4 status (PARTIAL)
+
+## Lane 6 step B finish 4 — steam uses liquid proxy tier
+
+At `openclaw/nb-fluids-spike`, fluid geometry-track providers and digest lookahead now use the evaluator's requested tier. Tier-4 liquid point clouds produce a bounded proxy surface for steam emission/collision. Same-pose animated collider composition preserves mask/system identity across frames, enabling the resident FLIP path's upload identity reuse. Regressions verify zero tier-1 surface requests during tier-4 steam evaluation and stable same-pose solid composition.
+
+Measured on RTX 3080 Ti at 256³ liquid / 192³ steam: fresh frame-60 pour edit first proxy 0.375 s including draw; 16 proxy FLIP steps and 1 proxy smoke step. The full proxy timeline completed 120 frames in 30.64 s (3.92 FPS, p95 336.14 ms, max 1,083.9 ms), missing the 12 FPS scrub target. Full-resolution refinement split and integrated Radeon are unmeasured. Evidence JSON: `benchmarks/hot_pour/production-edit-refresh-rtx-2026-10-23.json`; raw logs: workspace scratch `scratch/nb-lanes/run/big-L6/f4-first/`. Targeted CPU, RTX-resident GPU, and knowledge-copy tests pass. Needs Gonzo: continue the scrub optimization from the finish4 JSON and harness; review/integrate after exact-commit gates.
+
 # Lane 6 — 2026-10-23 finish 3 status (PARTIAL)
 
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (4:35 AM on 2026-10-23 PDT)

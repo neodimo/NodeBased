@@ -185,6 +185,7 @@ class Liquid3D:
         self.forces = list(forces)
         self.colliders = list(colliders)
         self._systems = {}
+        self._system_sources = {}
         self.stats = {"cg_iterations": 0, "particles": 0}
 
     # -- simcache API -------------------------------------------------------------------------------
