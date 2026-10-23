@@ -1,3 +1,9 @@
+## 2026-10-22 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the production-size Hot pour re-simulates only what changed (finish 1), Lane 8 (2D parity B, GPT-6 Luna) step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 3) (integrator tick)
+
+- **What was done:** `main` `65b02101` -> `1bf22fad` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `1bf22fad`: Ran 6023 tests in 481.994 s, OK (skipped=32), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-22 — Lane 6 step B finish 1 (PARTIAL)
 
 - **What was done — evidence:** A key at frame 60 restarts the fluid simulation from checkpoint 58 and solves frames 59–60; the changed result matches a complete replay bit for bit. The bake runs the 64-cell-capped proxy stream first, then full detail with isolated caches and per-frame promotion. An existing full-detail cache now supplies its proxy and full-detail view without additional solver steps, and the preview migration note appears once.

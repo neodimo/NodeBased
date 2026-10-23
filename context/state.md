@@ -1,5 +1,35 @@
 ## 2026-10-22 — Lane 6 step B finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (8:15 PM on 2026-10-22 PDT)
+
+`main` moved `65b02101` -> `1bf22fad` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `1bf22fad` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1022-1957.log`, started 7:57 PM): **Ran 6023 tests in 481.994 s, OK (skipped=32), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step B of 2: the production-size Hot pour re-simulates only what changed (finish 1).** Commits:
+  - `24de5a29` Fluid stop test: the marker feeds the viewed node (the half-surface stop follows the viewed graph since 23963a80)
+  - `76909cbf` Record fluid adapter gate results
+  - `36634c68` Document fluid edit cache finish
+  - `1bc56588` Migrate legacy fluid caches without solving
+  - `23963a80` Reuse fluid checkpoints and stage proxy refresh
+  Diff: 13 files changed, 338 insertions(+), 62 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step B of 2: the realistic comp plays uncached at 24 fps at 1080p, and the 4K comp plays progressively (finish 3).** Commits:
+  - `aa1f91af` Record Lane 8 finish 3 partial node profile
+  - `48cf3116` Reuse Merge Over output buffer
+  - `ca666ec6` Skip neutral Grade evaluation pass
+  - `f71609d5` Reduce Roto coverage accumulation memory traffic
+  Diff: 5 files changed, 54 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done — evidence:** A key at frame 60 restarts the fluid simulation from checkpoint 58 and solves frames 59–60; the changed result matches a complete replay bit for bit. The bake runs the 64-cell-capped proxy stream first, then full detail with isolated caches and per-frame promotion. An existing full-detail cache now supplies its proxy and full-detail view without additional solver steps, and the preview migration note appears once.
 - **Artifacts:** Code and regression test in commit `1bc56588`; step A checkpoint/proxy implementation in `23963a80`; updated `docs/FLUIDS_SPIKE.md` and byte-identical bundled copy. Adapter logs are local scratch in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`.
 - **State:** PARTIAL. The focused suite passes on RTX 3080 Ti, CPU/llvmpipe, and integrated Radeon 8060S; the docs parity check passes. The old-cache regression asserts zero additional solve steps and one migration callback. Production first-frame, 120-frame, full-refinement, and playback performance gates remain unmeasured. Production baking remains prohibited with 5.4 GB free against an 8.5 GB historical cache.
