@@ -1,4 +1,10 @@
-# Lane 6 step A of 2 — PARTIAL; waiting for integration (2026-10-22, 5:47 PM PDT)
+# Lane 6 step A finish 2 — PARTIAL (2026-10-22, 6:33 PM PDT)
+
+The bounded Radeon 64-cell cup-move re-bake is 28.34 s after the Hot pour steam cache was reduced to half-precision density+temperature; the paired full-channel measurement was 29.06 s. Three cancellation trials pass under 50 ms on both RTX 3080 Ti (21.443 ms worst) and Radeon 8060S (0.535 ms worst). Focused GPU, rigid, Hot pour, cache, surface and documentation checks pass. Real-display QA remains unverified in this headless session. The production-size bake is deferred to step B as directed; available space is 5.7 GB against an 8.50 GB historical cache. Evidence and handoff are in `TASKLOG.md` and `docs/FLUIDS_SPIKE.md`.
+
+## Previous status — finish 1
+
+Lane 6 step A of 2 was PARTIAL. Progressive timeline, stale state and cancellation signaling were committed; solver-cost reduction, Radeon cup-move gate, measured cancellation latency, display QA and production-size refresh remained open.
 
 Complete-frame solver callbacks, Hot pour edit profiles, and artist-facing progressive timeline/stale state/cancellation wiring are committed. UI regressions plus CPU and llvmpipe simulation checks pass. First solved volume frames remain under 0.31 s on RTX and Radeon. The Radeon cup-move bake takes 32.43 s, 2.43 s over the 30 s target; no cost-reducing change is verified. A new production-size bake is deferred because 5.7 GB is free while the historical cache occupies about 8.5 GB. Real-display QA and measured <50 ms worker cancellation remain open; see `TASKLOG.md` and `docs/FLUIDS_SPIKE.md`.
 

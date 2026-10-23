@@ -1,10 +1,19 @@
 import unittest
+import threading
 import numpy as np
+from nodebased.cancellation import Cancelled
 from nodebased.rigid3d import RigidBody3D, RigidSolver3D, liquid_reaction
 from nodebased.scene3d import ParticleInstance
 
 
 class RigidSolverReferenceTests(unittest.TestCase):
+    def test_thread_event_cancels_incremental_solver(self):
+        event = threading.Event()
+        event.set()
+        solver = RigidSolver3D([RigidBody3D(position=(0, 2, 0))], substeps=1)
+        with self.assertRaises(Cancelled):
+            solver.solve_frame(1, event)
+
     def test_box_falls_to_floor_and_sleeps_at_half_height(self):
         body = RigidBody3D(size=(1, 1, 1), position=(0, 3, 0), restitution=0.0)
         solver = RigidSolver3D([body], substeps=8, sleep_frames=0.25)

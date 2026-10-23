@@ -882,8 +882,8 @@
       "params": {
         "cache_memory_mb": 1024,
         "cache_disk_mb": 65536,
-        "cache_precision": "float32",
-        "cache_channels": "all",
+        "cache_precision": "float16",
+        "cache_channels": "density_temperature",
         "light_link": "all",
         "light_link_list": ""
       },

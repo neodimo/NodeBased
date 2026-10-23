@@ -1,0 +1,90 @@
+{
+  "adapter_request": "integrated",
+  "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+  "grid_cells": 64,
+  "frames": 120,
+  "cache_disk_limits_mb": {
+    "ParticleCache3D": 150,
+    "FluidWhitewater3D": 100,
+    "FluidCache3D": 600
+  },
+  "cache_memory_mb": null,
+  "smoke_iterations": null,
+  "cache_precision": null,
+  "cache_channels": null,
+  "whitewater_max_particles": null,
+  "edits": {
+    "cup_position": {
+      "base_cache_prep_s": 27.64,
+      "first_frame_s": 0.2377,
+      "stages_s": {
+        "liquid_cache": 2.265,
+        "surface": 2.976,
+        "whitewater": 4.402,
+        "steam_cache": 18.456
+      },
+      "first_output": "steam cache frame 1; display presentation is not instrumented",
+      "stage_frame_ms": {
+        "liquid_cache": {
+          "mean": 18.87,
+          "p95": 32.82
+        },
+        "surface": {
+          "mean": 24.8,
+          "p95": 29.13
+        },
+        "whitewater": {
+          "mean": 36.68,
+          "p95": 77.97
+        },
+        "steam_cache": {
+          "mean": 153.8,
+          "p95": 177.02
+        }
+      },
+      "whitewater_particles_last_frame": 2106,
+      "all_stages_s": 28.34,
+      "cache_stores": [
+        {
+          "enabled": true,
+          "memory_bytes": 83043904,
+          "memory_entries": 242,
+          "disk_bytes": 83241306,
+          "disk_entries": 242,
+          "hits": 1469,
+          "misses": 242,
+          "disk_hits": 0,
+          "writes": 242,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 14831191,
+          "memory_entries": 240,
+          "disk_bytes": 14955850,
+          "disk_entries": 236,
+          "hits": 238,
+          "misses": 240,
+          "disk_hits": 0,
+          "writes": 236,
+          "evictions": 0,
+          "rejections": 0
+        },
+        {
+          "enabled": true,
+          "memory_bytes": 1072698534,
+          "memory_entries": 242,
+          "disk_bytes": 621377618,
+          "disk_entries": 133,
+          "hits": 239,
+          "misses": 480,
+          "disk_hits": 0,
+          "writes": 712,
+          "evictions": 579,
+          "rejections": 0
+        }
+      ]
+    }
+  }
+}

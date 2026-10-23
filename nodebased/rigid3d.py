@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from itertools import combinations
 import numpy as np
+from .cancellation import Cancelled
 
 
 _BOX_VERTICES = np.array([(x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)], dtype=np.float64)
@@ -433,7 +434,10 @@ class RigidSolver3D:
         for _f in range(start + 1, frame + 1):
             for _ in range(self.substeps):
                 if cancel is not None:
-                    cancel.check()
+                    if hasattr(cancel, "check"):
+                        cancel.check()
+                    elif cancel.is_set():
+                        raise Cancelled()
                 self._step(dt)
             self._frames[_f] = self.snapshot()
         if frame == 0 and frame not in self._frames:

@@ -1,0 +1,39 @@
+{
+  "adapter_request": "default",
+  "trials": [
+    {
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "cancel_after_step_entry_ms": 5.0,
+      "worker_stop_ms": 21.443,
+      "new_edit_first_frame_s": 0.1605,
+      "cancelled": true,
+      "new_edit_started": true,
+      "target_ms": 50.0
+    },
+    {
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "cancel_after_step_entry_ms": 5.0,
+      "worker_stop_ms": 0.554,
+      "new_edit_first_frame_s": 0.0165,
+      "cancelled": true,
+      "new_edit_started": true,
+      "target_ms": 50.0
+    },
+    {
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "cancel_after_step_entry_ms": 5.0,
+      "worker_stop_ms": 0.206,
+      "new_edit_first_frame_s": 0.0159,
+      "cancelled": true,
+      "new_edit_started": true,
+      "target_ms": 50.0
+    }
+  ],
+  "worker_stop_ms": {
+    "count": 3,
+    "median": 0.554,
+    "worst": 21.443
+  },
+  "cancel_target_ms": 50.0,
+  "all_trials_pass": true
+}

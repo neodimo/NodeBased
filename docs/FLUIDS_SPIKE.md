@@ -1239,13 +1239,34 @@ non-displayed render at a time behind the current visible preview. Each finished
 the ordinary display-cache marks; a newer preview replaces the queue and sets the in-flight cancellation event.
 Forward playback is bounded to the contiguous solved prefix and resumes baking after playback stops. The current
 edited playhead picture clears the stale label when it replaces the old one. CPU UI/state tests cover stale progress,
-ordered frame enqueueing and cancellation replacement. Real-display visual QA and the <50 ms cancellation gate
-remain unmeasured.
+ordered frame enqueueing and cancellation replacement. Real-display visual QA remains unmeasured.
+
+**Finish 2 cost and cancellation (2026-10-22):** the Hot pour steam cache stores half-precision density and
+temperature, the fields consumed by this shot with volume motion blur disabled. On the 64-cell, 120-frame Radeon
+cup-move harness, with the same bounded per-node disk caps and warmed upstream caches, the full-chain time moved
+from 29.06 s (float32/all channels) to 28.34 s (half/density+temperature). This is a 0.72 s improvement in one
+measurement; timing variation may account for part of the difference. The optimized run is under the 30 s gate.
+Its first solved steam frame was 0.238 s; viewport presentation is outside this measurement. The 2 GB cache cap
+limits were 150 MB for particles, 100 MB for whitewater, 600 MB for steam, 300 MB for surface mesh and three
+256 MB preview stores (1,918 MB maximum). The bounded baseline/optimized JSONs are in `benchmarks/hot_pour/`.
+
+The superseded-worker harness starts a FLIP substep, sets the same thread event used by preview replacement 5 ms
+after substep entry, and times until the worker raises cancellation. Three trials each passed the 50 ms gate:
+
+| Adapter | Median stop | Worst stop | New edit first frame, worst |
+| --- | ---: | ---: | ---: |
+| RTX 3080 Ti | 0.554 ms | 21.443 ms | 0.161 s |
+| Radeon 8060S | 0.278 ms | 0.535 ms | 0.167 s |
+
+These are direct solver-worker measurements; they do not measure display scheduling. Cancellation checks now run
+between resident GPU stages, and the rigid pre-simulation accepts the queue's `threading.Event` signal. An initial
+repeat harness reused the same resident solver key and failed to instrument later trials; each recorded trial now
+uses a unique run identity. Real-display QA remains with Gonzo.
 
 **64-cell / 120-frame cold-cache references (2026-10-22; superseded for the edit gate).** These first measurements
 started each edited graph with an empty cache, so they include unchanged upstream work and do not represent an artist
 editing an already-baked comp. The harness now pre-bakes the base graph and reuses unchanged cache keys; warmed edit
-measurements are being regenerated. The first-frame column below is time to solve and cache the first
+measurements are documented below. The first-frame column is time to solve and cache the first
 steam volume frame; viewport presentation is not measured. The full-bake column walks all four output stages. The
 largest exposed stage is the named evaluator output, not an internal solver phase.
 
@@ -1286,9 +1307,10 @@ JSON is `benchmarks/hot_pour/edit-phase-profile-rtx-2026-10-22.json`; the warmed
 `benchmarks/hot_pour/edit-resimulation-warm-rtx-2026-10-22.json`. Cost-reduction and warmed Radeon gate readings were
 still open at that measurement.
 
-**Warmed Radeon edit gate readings (2026-10-22).** First solved volume frames took 0.252, 0.256 and 0.055 seconds.
-The pour-velocity and vorticity edits meet the under-30-second 120-frame target; moving the cup takes 32.43 seconds,
-missing it by 2.43 seconds.
+**Warmed Radeon edit gate readings before finish 2 (2026-10-22).** First solved volume frames took 0.252, 0.256 and
+0.055 seconds. The pour-velocity and vorticity edits meet the under-30-second 120-frame target; moving the cup takes
+32.43 seconds, missing it by 2.43 seconds. Finish 2 changes the Hot pour cache payload and remeasures the cup edit
+below.
 
 | Edit | Base-cache preparation | First solved volume | Edit-only 120-frame stages | Largest output stage |
 | --- | ---: | ---: | ---: | --- |
@@ -1321,12 +1343,12 @@ cells and 120 frames is 1,940.5 seconds (`benchmarks/hot_pour/radeon-full-bake.j
 baseline; this step did not regenerate the production cache because the record's cache data is 8.50 GB while the host
 had 5.7 GB free. A fresh production-size edit bake remains to be timed when sufficient scratch space is available.
 
-Current gate state: first solved volume frames are under one second on RTX and Radeon, although viewport presentation
-is not measured. The progressive timeline, stale label, single-frame background queue and playback bound are wired;
-real-display QA and the 50 ms worker-stop gate are unmeasured. The Radeon cup move still misses its bake gate. No
-cost-reducing change has been verified. Phase evidence identifies pressure/host work, cache writes and cup-move
-whitewater as optimization candidates. A fresh production-size bake is blocked by insufficient free disk; the A6000
-estimate remains unmeasured.
+**Current gate state after finish 2:** first solved volume frames are under one second on RTX and Radeon, although
+viewport presentation is not measured. The progressive timeline, stale label, single-frame background queue and
+playback bound are wired. Radeon cup movement is 28.34 seconds in the bounded optimized run, under its 30-second
+target. Three cancellation trials pass under 50 ms on both RTX and Radeon. Real-display QA remains unverified. The
+production-size bake remains deferred to step B because the historical cache is 8.50 GB and only 5.7 GB was free;
+the A6000 estimate remains unmeasured.
 
 ### S1: the Hot pour in a rendered shot (finish 1)
 

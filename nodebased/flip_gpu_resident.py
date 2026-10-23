@@ -1166,7 +1166,11 @@ class GpuLiquid3D(Liquid3D):
         if self._cancelled():
             raise Cancelled()
         self._sync_domain(state)
+        if self._cancelled():
+            raise Cancelled()
         self._release_grid()
+        if self._cancelled():
+            raise Cancelled()
         flip3d.SOLVER_STATS["steps"] += 1
         ctx = self.ctx
         p, dt = self.params, self.dt
@@ -1176,16 +1180,22 @@ class GpuLiquid3D(Liquid3D):
         if int(p.get("auto_resize", 0)):
             self._alloc()
             self._fit_domain(state, frame, resident)
+            if self._cancelled():
+                raise Cancelled()
         g = self._alloc()
         bins = self._bins
         if not resident:
             self._upload(state)
+            if self._cancelled():
+                raise Cancelled()
         n_a = self._n_slots
         cur = self._cur
         meta = dict(state.meta)
         next_id = int(meta.get("next_id", 0))
         solid, svel, _unused = self._solid_for(frame, substep)
         self._put_solid(g, solid, svel)
+        if self._cancelled():
+            raise Cancelled()
         rng = np.random.default_rng((int(seed) & 0x7FFFFFFF, int(frame) & 0x7FFFFFFF, int(substep), 1))
         c_tail, d_tail = self._common()
         ncells = g.n
@@ -1196,8 +1206,12 @@ class GpuLiquid3D(Liquid3D):
         bins.ensure(n_a)
         bins.begin()
         bins.count(self._sets[cur], 0, n_a, (c_tail, d_tail))
+        if self._cancelled():
+            raise Cancelled()
         started = time.perf_counter()
         fresh = self._emit_new(frame, substep, solid, rng, self._counts_at)
+        if self._cancelled():
+            raise Cancelled()
         m = 0 if fresh is None else len(fresh[0])
         if m:
             self._ensure_set(cur, n_a + m)
@@ -1216,15 +1230,25 @@ class GpuLiquid3D(Liquid3D):
             return self._commit_empty(state, meta, next_id, frame)
         A = self._sets[cur]
         bins.sort(A, n, (c_tail, d_tail))
+        if self._cancelled():
+            raise Cancelled()
         maxper = int(self.max_per_cell)
         ctx.dispatch("lq_cellstats", {"offsets": bins.offsets, "order": bins.order, "part": A, "cnt2": g.cnt2,
                                       "vsum": g.vsum}, _u(a=grid_a[:3] + (ncells,), b=(maxper,)), _lin(ncells))
+        if self._cancelled():
+            raise Cancelled()
         ctx.dispatch("lq_gapneed", {"cnt2": g.cnt2, "solid": g.solid, "need": g.need, "newcnt": g.newcnt},
                      _u(a=self.shape + (ncells,), b=(0, MIN_PER_CELL)), _lin(ncells))
+        if self._cancelled():
+            raise Cancelled()
         _scan(ctx, g.need, g.needoff, g.bsum, ncells)
         _scan(ctx, g.newcnt, g.newoff, g.bsum, ncells)
+        if self._cancelled():
+            raise Cancelled()
         ctx.dispatch("lq_totals", {"offsets": bins.offsets, "needoff": g.needoff, "newoff": g.newoff,
                                    "totals": g.totals}, _u(a=self.shape + (ncells,)), ("wg", (1, 1, 1)))
+        if self._cancelled():
+            raise Cancelled()
         need_total, n_final, live = (int(v) for v in ctx.read(g.totals, 12).view(np.uint32))
         # before: particles in the grid as maintenance starts, this substep's emission included
         self.maintenance = {"before": int(n), "emitted": int(m), "topped_up": int(need_total),
@@ -1245,6 +1269,8 @@ class GpuLiquid3D(Liquid3D):
                                    "newoff": g.newoff, "dst": W},
                      _u(a=self.shape + (ncells,), b=(next_id, 0, (int(seed) & 0x7FFFFFFF) * 31 + int(frame),
                                                      int(substep) * 977 + 13), c=c_tail, d=d_tail), _lin(ncells))
+        if self._cancelled():
+            raise Cancelled()
         next_id += need_total
         self._mark("maintenance")
 
@@ -1261,6 +1287,8 @@ class GpuLiquid3D(Liquid3D):
             ctx.dispatch(f"lq_p2g_{name}", {"part": W, "offs": g.newoff, "tmask": g.tmask, "grid": g.f[axis],
                                             "old": g.old[axis], "valid": g.valid_old[axis]},
                          _u(a=self.shape, c=c_tail, d=d_tail), _lin(threads))
+            if self._cancelled():
+                raise Cancelled()
         self._mark("particle to grid")
 
         # ---- forces and constraints

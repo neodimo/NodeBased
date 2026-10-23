@@ -215,6 +215,12 @@ class HotPourPresetTests(unittest.TestCase):
         kinds = [n["type"] for n in d.document["nodes"].values()]
         for kind in ("FluidWhitewater3D", "RigidSolver3D", "FluidSurface3D", "FluidCache3D", "Cylinder3D"):
             self.assertIn(kind, kinds)
+        steam_cache = next(n["params"] for n in d.document["nodes"].values()
+                           if n["type"] == "FluidCache3D")
+        self.assertEqual(steam_cache["cache_precision"], "float16")
+        self.assertEqual(steam_cache["cache_channels"], "density_temperature")
+        render = next(n["params"] for n in d.document["nodes"].values() if n["type"] == "Render3D")
+        self.assertEqual(render["volume_motion_blur"], 0.0)
         # spout, surface-tension liquid and steam are connected: the smoke reads the liquid's surface twice
         steam_source = next(n for n in d.document["nodes"].values()
                             if n["type"] == "FluidSource3D" and n["params"]["fluid_emit_from"] == "surface")

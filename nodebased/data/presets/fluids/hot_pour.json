@@ -496,7 +496,9 @@
       "type": "FluidCache3D",
       "params": {
         "cache_memory_mb": 1024,
-        "cache_disk_mb": 65536
+        "cache_disk_mb": 65536,
+        "cache_precision": "float16",
+        "cache_channels": "density_temperature"
       }
     },
     {

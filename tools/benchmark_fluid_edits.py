@@ -22,6 +22,7 @@ EDITS = {
     "steam_vorticity": (("steam", "vorticity", 0.4),),
 }
 STAGES = ("liquid_cache", "surface", "whitewater", "steam_cache")
+BOUNDED_DISK_MB = {"ParticleCache3D": 150, "FluidWhitewater3D": 100, "FluidCache3D": 600}
 
 
 def _profile_factories():
@@ -59,7 +60,9 @@ def _profile_factories():
     return solvers, counters
 
 
-def measure(adapter, cells, frames, workdir, profile_phases=False):
+def measure(adapter, cells, frames, workdir, profile_phases=False, only_edit=None, cache_mb=None,
+            cache_memory_mb=None, whitewater_max_particles=None, smoke_iterations=None,
+            cache_precision=None, cache_channels=None):
     from nodebased import gpu3d, simcache
     from nodebased.imaging import Evaluator
 
@@ -67,20 +70,47 @@ def measure(adapter, cells, frames, workdir, profile_phases=False):
     args = SimpleNamespace(liquid_cells=cells, smoke_cells=cells, frames=frames,
                            liquid_pressure="resident", smoke_pressure="resident_sparse", spout_height=0.62)
     results = {"adapter_request": adapter, "adapter": gpu3d._state()["info"].get("device"),
-               "grid_cells": cells, "frames": frames, "edits": {}}
-    for edit, changes in EDITS.items():
+               "grid_cells": cells, "frames": frames,
+               "cache_disk_limits_mb": BOUNDED_DISK_MB if cache_mb is None else "uniform",
+               "cache_memory_mb": cache_memory_mb, "smoke_iterations": smoke_iterations,
+               "cache_precision": cache_precision, "cache_channels": cache_channels,
+               "whitewater_max_particles": whitewater_max_particles, "edits": {}}
+    edits = {only_edit: EDITS[only_edit]} if only_edit else EDITS
+    for edit, changes in edits.items():
         profiled_solvers.clear()
         if profile_phases:
             profile_counters["cache_write_s"] = 0.0
         case_dir = workdir / edit
         case_dir.mkdir(parents=True, exist_ok=True)
-        os.environ["NODEBASED_SIM_CACHE_MB"] = "400000"
+        # Bound this harness to <2 GB of on-disk cache: one shared simulation store,
+        # its reduced-preview store, and a separate bounded surface-mesh store.
+        total_disk_limit = sum(BOUNDED_DISK_MB.values()) + 300 + 3 * 256
+        if cache_mb is not None:
+            total_disk_limit = 3 * cache_mb + 300 + 3 * 256
+        if total_disk_limit > 2000:
+            raise ValueError("cache caps exceed the 2 GB scratch policy")
+        os.environ["NODEBASED_SIM_CACHE_MB"] = str(cache_mb or 600)
         os.environ["XDG_CACHE_HOME"] = str(case_dir / "xdg")
         store = simcache.SimCache(root=case_dir / "simcache", memory_budget=512 << 20,
-                                  disk_budget=1024 << 20)
+                                  disk_budget=300 << 20)
         evaluator = Evaluator(sim=store)
         dispatcher = build_document(args)
         doc = dispatcher.document
+        for node in doc["nodes"].values():
+            if "cache_disk_mb" in node.get("params", {}):
+                if cache_memory_mb is not None:
+                    node["params"]["cache_memory_mb"] = cache_memory_mb
+                node["params"]["cache_disk_mb"] = (cache_mb if cache_mb is not None
+                                                     else BOUNDED_DISK_MB.get(node.get("type"), 100))
+            if (whitewater_max_particles is not None
+                    and node.get("type") == "FluidWhitewater3D"):
+                node["params"]["max_particles"] = int(whitewater_max_particles)
+            if smoke_iterations is not None and node.get("type") == "FluidSolver3D":
+                node["params"]["max_iterations"] = int(smoke_iterations)
+            if cache_precision is not None and node.get("type") == "FluidCache3D":
+                node["params"]["cache_precision"] = cache_precision
+            if cache_channels is not None and node.get("type") == "FluidCache3D":
+                node["params"]["cache_channels"] = cache_channels
         baseline_started = time.perf_counter()
         for stage in STAGES:
             for frame in range(1, frames + 1):
@@ -101,8 +131,10 @@ def measure(adapter, cells, frames, workdir, profile_phases=False):
         for stage in STAGES:
             stage_times = []
             for frame in range(1, frames + 1):
-                dt, _ = _timed(evaluator.evaluate_raster, doc, target=stage, frame=frame, typed=True)
+                dt, value = _timed(evaluator.evaluate_raster, doc, target=stage, frame=frame, typed=True)
                 stage_times.append(dt)
+                if stage == "whitewater" and frame == frames and hasattr(value, "positions"):
+                    record["whitewater_particles_last_frame"] = int(len(value.positions))
             record["stages_s"][stage] = round(sum(stage_times), 3)
             record.setdefault("stage_frame_ms", {})[stage] = {
                 "mean": round(statistics.fmean(stage_times) * 1000, 2),
@@ -139,9 +171,28 @@ def main():
     parser.add_argument("--json", required=True)
     parser.add_argument("--profile-phases", action="store_true",
                         help="enable solver phase timers; their synchronization makes wall time slower")
+    parser.add_argument("--edit", choices=tuple(EDITS), help="measure only this edit")
+    parser.add_argument("--cache-mb", type=int,
+                        help="uniform per-store disk cap (default: per-node bounded caps below 2 GB total)")
+    parser.add_argument("--cache-memory-mb", type=int,
+                        help="override graph per-node memory budgets (default: use Hot pour values)")
+    parser.add_argument("--whitewater-max-particles", type=int,
+                        help="override the Hot pour foam/spray/bubble cap for a measured optimization")
+    parser.add_argument("--smoke-iterations", type=int,
+                        help="override the Hot pour steam solver iteration cap")
+    parser.add_argument("--cache-precision", choices=("float32", "float16"),
+                        help="override the served volume cache precision")
+    parser.add_argument("--cache-channels", choices=("density", "density_temperature",
+                                                        "density_temperature_velocity", "all"),
+                        help="override the served volume cache channel set")
     args = parser.parse_args()
     force_adapter(args.adapter)
-    result = measure(args.adapter, args.cells, args.frames, Path(args.workdir), args.profile_phases)
+    if (args.cache_mb is not None and (args.cache_mb < 128 or args.cache_mb > 300)) or \
+            (args.cache_memory_mb is not None and (args.cache_memory_mb < 1024 or args.cache_memory_mb > 8192)):
+        parser.error("cache caps exceed the bounded harness policy")
+    result = measure(args.adapter, args.cells, args.frames, Path(args.workdir), args.profile_phases,
+                     args.edit, args.cache_mb, args.cache_memory_mb, args.whitewater_max_particles,
+                     args.smoke_iterations, args.cache_precision, args.cache_channels)
     target = Path(args.json)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(result, indent=2) + "\n")

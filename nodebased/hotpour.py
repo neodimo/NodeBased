@@ -148,10 +148,12 @@ def hot_pour_ops(liquid_cells=FULL_LIQUID_CELLS, smoke_cells=FULL_SMOKE_CELLS, f
         "auto_resize": 1, "padding": 8, "max_size": smoke_cells, "pressure": smoke_pressure,
         "max_iterations": 60, "cooling_rate": 0.12, "dissipation": 0.1, "vorticity": 0.4})
     connect("steam", "fluid", "steam_table")
-    # The steam cache stores both solver checkpoints and the served sparse output frames.
-    # The 24-GiB budget evicted outputs during 120-frame playback; the full working set
-    # measures about 50 GB, so leave headroom for all checkpoints and outputs together.
-    create("steam_cache", "FluidCache3D", {"cache_memory_mb": 1024, "cache_disk_mb": 65536})
+    # The shot uses density and temperature only; its default volume motion blur is off.
+    # Half precision and the smaller channel set cut the 64-cell collider-edit bake below
+    # the laptop target while retaining the fields the volume renderer consumes here.
+    create("steam_cache", "FluidCache3D", {"cache_memory_mb": 1024, "cache_disk_mb": 65536,
+                                              "cache_precision": "float16",
+                                              "cache_channels": "density_temperature"})
     connect("steam_cache", "volume", "steam")
 
     # ---- the picture

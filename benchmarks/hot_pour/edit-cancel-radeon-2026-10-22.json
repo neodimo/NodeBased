@@ -1,0 +1,39 @@
+{
+  "adapter_request": "integrated",
+  "trials": [
+    {
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "cancel_after_step_entry_ms": 5.0,
+      "worker_stop_ms": 0.535,
+      "new_edit_first_frame_s": 0.167,
+      "cancelled": true,
+      "new_edit_started": true,
+      "target_ms": 50.0
+    },
+    {
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "cancel_after_step_entry_ms": 5.0,
+      "worker_stop_ms": 0.237,
+      "new_edit_first_frame_s": 0.0136,
+      "cancelled": true,
+      "new_edit_started": true,
+      "target_ms": 50.0
+    },
+    {
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "cancel_after_step_entry_ms": 5.0,
+      "worker_stop_ms": 0.278,
+      "new_edit_first_frame_s": 0.0162,
+      "cancelled": true,
+      "new_edit_started": true,
+      "target_ms": 50.0
+    }
+  ],
+  "worker_stop_ms": {
+    "count": 3,
+    "median": 0.278,
+    "worst": 0.535
+  },
+  "cancel_target_ms": 50.0,
+  "all_trials_pass": true
+}
