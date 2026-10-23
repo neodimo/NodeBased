@@ -1,5 +1,27 @@
 # Lane 3 — 2026-10-23 R6 research complete
 
+## Continuous mode merge: Lane 3 (Research, GPT-6 Astra) (9:45 AM on 2026-10-23 PDT)
+
+`main` moved `2e0a2b9d` -> `70cfa61a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `70cfa61a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-0935.log`, started 9:35 AM): **Ran 6140 tests in 481.325 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 3 (Research, GPT-6 Astra), step R6 of 1: 2D compositing on the graphics card: how Nuke, Fusion, Resolve and Flame keep a node graph on the GPU, and what fits NodeBased.** Commits:
+  - `cbbe9f03` docs(radar): publish R6 GPU compositing decision and durable handoff
+  - `accfe53a` docs(briefs): propose measured resident 2D spike and gated follow-ups
+  - `2377ad4c` docs(research): map resident 2D islands to evaluator and viewer contracts
+  - `4b5d5324` docs(research): source production GPU compositing mechanisms for R6
+  Diff: 11 files changed, 1428 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The four-part documentation-only GPU 2D compositing sweep is complete on `openclaw/nb-research`,
 based on main snapshot `2e0a2b9d`. See `docs/GPU_2D_COMPOSITING.md` for dated production evidence,
 `docs/GPU_2D_PLAN.md` for current code boundaries, estimates and pixel/adapter gates, and the

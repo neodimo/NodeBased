@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 3 (Research, GPT-6 Astra) step R6 of 1: 2D compositing on the graphics card: how Nuke, Fusion, Resolve and Flame keep a node graph on the GPU, and what fits NodeBased (integrator tick)
+
+- **What was done:** `main` `2e0a2b9d` -> `70cfa61a` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `70cfa61a`: Ran 6140 tests in 481.325 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-23 — Lane 3 R6: GPU-resident 2D compositing decision package — DONE
 
 - **What was done — evidence:** Read the assigned brief and standing rules; fast-forwarded this research worktree to main snapshot `2e0a2b9d`. Added a dated, source-backed survey of Nuke 16/17/Blink, Fusion/Resolve, Flame, Natron/OpenFX, Copernicus and TouchDesigner; mapped the actual 2D evaluator, tile executor, decode pool and display code; wrote exactly three ranked runnable implementation briefs; added the radar sweep and its top next-look priority. Four documentation parts are in separate lane commits. No application code or GPU execution.
