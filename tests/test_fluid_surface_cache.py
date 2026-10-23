@@ -13,6 +13,69 @@ from tests.test_particles_nodes import make, wire
 
 
 class FluidSurfaceCacheTests(unittest.TestCase):
+    def test_particle_cache_reuses_changed_liquid_stream_checkpoint(self):
+        with tempfile.TemporaryDirectory() as folder:
+            dispatcher = Dispatcher()
+            make(dispatcher, src=("FluidSource3D", {"fluid_type": "liquid", "src_center_y": 0.8,
+                "src_radius": 0.22, "end_frame": 2}),
+                liquid=("FluidLiquidSolver3D", {"division_size": 0.25, "bounds_min_x": -0.6,
+                    "bounds_min_y": 0., "bounds_min_z": -0.6, "bounds_max_x": 0.6,
+                    "bounds_max_y": 1.2, "bounds_max_z": 0.6, "substeps": 1, "particles_per_cell": 1}),
+                cache=("ParticleCache3D", {"cache_memory_mb": 256, "cache_disk_mb": 2048}))
+            wire(dispatcher, "liquid", "fluid", "src")
+            wire(dispatcher, "cache", "particles", "liquid")
+            evaluator = Evaluator(sim=SimCache(root=folder))
+            evaluator.evaluate_raster(dispatcher.document, "cache", frame=1, typed=True)
+            old_run = evaluator._fluid_run_history[("liquid", "liquid", 1)]
+            edited = dispatcher.document
+            edited["animation"]["curves"]["src"] = {"src_radius": {"interpolation": "constant", "keys": [
+                {"frame": 1, "value": 0.22}, {"frame": 2, "value": 0.24}]}}
+            evaluator.prime_fluid_reuse("liquid", "liquid", 2)
+            from nodebased import simcache
+            original_solve = simcache.solve_to_frame
+            reuse_arguments = []
+            def record_reuse(*args, **kwargs):
+                reuse_arguments.append(kwargs.get("reuse_from"))
+                return original_solve(*args, **kwargs)
+            with mock.patch.object(simcache, "solve_to_frame", side_effect=record_reuse):
+                partial = evaluator.evaluate_raster(edited, "cache", frame=2, typed=True)
+            self.assertIn((old_run, 2), reuse_arguments)
+            reference = Evaluator().evaluate_raster(edited, "cache", frame=2, typed=True)
+            np.testing.assert_array_equal(partial.positions, reference.positions)
+            np.testing.assert_array_equal(partial.ids, reference.ids)
+
+    def test_whitewater_edit_reuses_checkpoint_and_matches_full_replay(self):
+        with tempfile.TemporaryDirectory() as folder:
+            dispatcher = Dispatcher()
+            make(dispatcher, src=("FluidSource3D", {"fluid_type": "liquid", "src_center_y": 0.8,
+                "src_radius": 0.22, "end_frame": 2}),
+                liquid=("FluidLiquidSolver3D", {"division_size": 0.25, "bounds_min_x": -0.6,
+                    "bounds_min_y": 0., "bounds_min_z": -0.6, "bounds_max_x": 0.6,
+                    "bounds_max_y": 1.2, "bounds_max_z": 0.6, "substeps": 1, "particles_per_cell": 1}),
+                white=("FluidWhitewater3D", {"max_particles": 12}))
+            wire(dispatcher, "liquid", "fluid", "src")
+            wire(dispatcher, "white", "particles", "liquid")
+            evaluator = Evaluator(sim=SimCache(root=folder))
+            evaluator.evaluate_raster(dispatcher.document, "white", frame=1, typed=True)
+            old_whitewater_run = evaluator._fluid_run_history[("whitewater", "white", 1)]
+            edited = dispatcher.document
+            edited["animation"]["curves"]["src"] = {"src_radius": {"interpolation": "constant", "keys": [
+                {"frame": 1, "value": 0.22}, {"frame": 2, "value": 0.24}]}}
+            evaluator.prime_fluid_reuse("liquid", "liquid", 2)
+            evaluator.prime_fluid_reuse("whitewater", "white", 2)
+            from nodebased import simcache
+            original_solve = simcache.solve_to_frame
+            reuse_arguments = []
+            def record_reuse(*args, **kwargs):
+                reuse_arguments.append(kwargs.get("reuse_from"))
+                return original_solve(*args, **kwargs)
+            with mock.patch.object(simcache, "solve_to_frame", side_effect=record_reuse):
+                partial = evaluator.evaluate_raster(edited, "white", frame=2, typed=True)
+            self.assertIn((old_whitewater_run, 2), reuse_arguments)
+            reference = Evaluator().evaluate_raster(edited, "white", frame=2, typed=True)
+            np.testing.assert_array_equal(partial.positions, reference.positions)
+            np.testing.assert_array_equal(partial.whitewater_type, reference.whitewater_type)
+
     def test_mesh_state_roundtrip_preserves_geometry_attributes(self):
         geometry = scene3d.Geometry(
             vertices=np.array(((0, 0, 0), (1, 0, 0), (0, 1, 0)), np.float32),

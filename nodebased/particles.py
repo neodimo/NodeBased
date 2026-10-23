@@ -1115,7 +1115,8 @@ def extend_stream(stream, doc, key, node, evaluator=None, cancel=None):
 def solve_frame(stream, frame, cache, cancel=None):
     """The solved `simcache.State` at `frame`, from `cache` where possible."""
     return simcache.solve_to_frame(cache, stream.run, int(frame), stream.start_frame, stream.substeps,
-                                   stream.seed, stream.emitter.initial_state, stream.emitter.step, cancel)
+                                   stream.seed, stream.emitter.initial_state, stream.emitter.step, cancel,
+                                   reuse_from=getattr(stream, "reuse_from", None))
 
 
 def instance_from_state(state, stream, frame):

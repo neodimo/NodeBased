@@ -18,12 +18,13 @@
   "checkpoint_frame": 60,
   "measurements": {
     "profiled_first_edited_scene_evaluation_s": 346.208,
-    "first_proxy_display_time_s": null,
+    "first_proxy_display_time_s": 113.494,
     "proxy_timeline_last_completed_frame": 70,
     "proxy_timeline_frame_70_s": 16.487,
     "proxy_120_frames_s": null,
     "full_detail_stage_split_s": null,
-    "scrub_12fps_holds": false
+    "scrub_12fps_holds": false,
+    "profiled_first_edited_scene_evaluation_s_after_pose_cache": 122.454
   },
   "profile_top_costs_s": {
     "simcache_solve_to_frame": 316.292,
@@ -32,9 +33,32 @@
     "voxelize_surface": 182.967
   },
   "notes": [
-    "The first edited scene-evaluation timing was collected under cProfile and excludes proxy conversion and viewport rendering; it is a diagnostic, not a first-displayed-frame timing.",
-    "The timeline pass was stopped after frame 70 to keep this lane step within its bounded run window. The 120-frame proxy total and full-detail stage split were not completed.",
-    "Cup move, steam edit, integrated Radeon and A6000 are unmeasured.",
+    "Fresh RTX 3080 Ti first-proxy retest used a new pour key value at frame 60 over the cached 59-frame production prefix; first displayed proxy was 113.494 s, still above the <1 s gate.",
+    "The pose cache reduced profiled solid voxelization from 188.852 s to 24.474 s, and surface voxelization from 182.967 s to 21.424 s. The edited-scene profile fell from 346.208 s to 122.454 s, but solver/downstream replay remains dominant.",
+    "The 120-frame proxy total, full-detail stage split, cup move, steam edit and integrated Radeon gates remain incomplete or unmeasured. The proxy timeline reached frame 70 in the earlier run; frame 70 took 16.487 s.",
     "A6000 estimate: 0.8-1.3x RTX wall time for the same proxy workload, based on the existing 64-cell planning range; unmeasured and not a production full-detail estimate."
-  ]
+  ],
+  "profile_top_costs_s_after_pose_cache": {
+    "liquid_solver_and_downstream_replay": 120.441,
+    "collider_mask_voxelize_solid": 24.474,
+    "voxelize_surface": 21.424
+  },
+  "before_after": {
+    "profiled_edited_scene_evaluation_s": {
+      "before": 346.208,
+      "after_pose_cache_and_downstream_checkpoint_hints": 122.454
+    },
+    "collider_solid_voxelization_s": {
+      "before": 188.852,
+      "after_pose_cache": 24.474
+    },
+    "first_proxy_display_s": {
+      "after_collider_pose_cache": 137.4836,
+      "after_downstream_checkpoint_changes": 113.494
+    },
+    "notes": [
+      "Before/after cProfile values are scene evaluation only and exclude proxy conversion and viewport render.",
+      "First-proxy values are wall-clock from a fresh frame-60 edited run and include the 64-cell proxy render."
+    ]
+  }
 }

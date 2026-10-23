@@ -1,5 +1,9 @@
 # 2026-10-22 — Lane 8 step B finish 6 — PARTIAL
 
+## Lane 6 step B finish 2 follow-up — PARTIAL (2026-10-23)
+
+Collider pose caching is committed at `decbff08`. This continuation added checkpoint reuse propagation to downstream `ParticleCache3D` and `FluidWhitewater3D` and exact-replay regressions. Focused tests passed: 112 fluid-node/surface-cache/solver tests and 7 knowledge tests; docs bundle matches byte-for-byte. Production RTX at 256³ liquid / 192³ steam: initial profiled edited scene 346.208 s; latest profile 122.454 s. Collider solid voxelization 188.852→24.474 s; surface voxelization 182.967→21.424 s. Fresh first displayed 64-cell proxy after a frame-60 pour key is 113.494 s, still far above the 1 s gate; profile retains 496 FLIP GPU steps and domain-resize cost. 120-frame proxy total/12 FPS hold, full-detail stage split, cup and steam edits, and integrated Radeon remain unmeasured/incomplete; A6000 is estimate-only. Evidence: `benchmarks/hot_pour/production-edit-refresh-rtx-2026-10-23.json`, `docs/FLUIDS_SPIKE.md`; raw logs/cache in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/` (cache to be trashed before report). Needs Gonzo: continue on this lane branch from the benchmark harness and profile to remove remaining replay/domain-resize cost, then run all open gates. Failure mode: solver checkpoint reuse alone misses dependent particle-cache/whitewater run keys; those hints are now forwarded, but production still misses.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (2:55 AM on 2026-10-23 PDT)
 
 `main` moved `8b40b385` -> `7c3fe7d6` (lane commits cherry-picked onto main in lane order) and then to this

@@ -1632,6 +1632,17 @@ class Evaluator:
                                                                     getattr(fluid.chain, "colliders", ()))
                         run = simcache.run_key(fluid.run, {"kind": "FluidWhitewater3D", "params": params,
                                                            "format": 1})
+                        history_key = ("whitewater", str(key), int(tier))
+                        previous_run = self._fluid_run_history.get(history_key)
+                        first_changed = self._fluid_reuse_hints.get(history_key)
+                        reuse_from = None
+                        if previous_run is not None and previous_run != run and first_changed is not None:
+                            reuse_from = (previous_run, first_changed)
+                            if int(frame) >= first_changed:
+                                self._fluid_run_history[history_key] = run
+                                self._fluid_reuse_hints.pop(history_key, None)
+                        else:
+                            self._fluid_run_history[history_key] = run
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         liquid_store = store
                         particles_node = nodes.get(node["inputs"].get("particles"))
@@ -1667,7 +1678,7 @@ class Evaluator:
                         if solved is None:
                             solved = simcache.solve_to_frame(store, run, int(frame), fluid.start_frame, 1,
                                                              int(params["seed"]), initial_whitewater,
-                                                             whitewater_step, cancel)
+                                                             whitewater_step, cancel, reuse_from=reuse_from)
                             if tier > 1:
                                 solved = flip3d.preview_state(solved, fluid, tier)
                                 preview_store.put(preview_run, int(frame), solved)

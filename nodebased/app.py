@@ -11047,6 +11047,10 @@ class Window(QMainWindow):
                         elif self.dispatcher.document["nodes"][solver_id].get("type") == "FluidLiquidSolver3D":
                             self.evaluator.prime_fluid_reuse("liquid", solver_id, checkpoint, tier=1)
                             self.evaluator.prime_fluid_reuse("liquid", solver_id, checkpoint, tier=4)
+                    for node_id in self._fluid_view_scope(self.dispatcher.document)[1]:
+                        if _nodes[node_id].get("type") == "FluidWhitewater3D":
+                            self.evaluator.prime_fluid_reuse("whitewater", node_id, checkpoint, tier=1)
+                            self.evaluator.prime_fluid_reuse("whitewater", node_id, checkpoint, tier=4)
                 self._set_fluid_stale(True)
             if fluid_edit:
                 self._begin_fluid_edit_bake()
@@ -11062,7 +11066,7 @@ class Window(QMainWindow):
                     label.setText(text)
 
     @staticmethod
-    def _fluid_simulation_scope(document):
+    def _fluid_view_scope(document):
         target = document.get("view")
         if target is None:
             return {}, set()
@@ -11082,10 +11086,23 @@ class Window(QMainWindow):
                 stack.extend(source for source in nodes[key].get("inputs", {}).values() if source is not None)
             return result
 
-        visible = ancestors([target])
+        return nodes, ancestors([target])
+
+    @staticmethod
+    def _fluid_simulation_scope(document):
+        nodes, visible = Window._fluid_view_scope(document)
+        if not visible:
+            return nodes, set()
         solvers = [key for key in visible if nodes[key].get("type") in
                    ("FluidSolver3D", "FluidLiquidSolver3D")]
-        return nodes, ancestors(solvers)
+        result, stack = set(), list(solvers)
+        while stack:
+            key = stack.pop()
+            if key in result or key not in nodes:
+                continue
+            result.add(key)
+            stack.extend(source for source in nodes[key].get("inputs", {}).values() if source is not None)
+        return nodes, result
 
     @staticmethod
     def _fluid_bake_identity(document):

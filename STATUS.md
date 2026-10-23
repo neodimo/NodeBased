@@ -1,6 +1,6 @@
-# Lane 6 step B finish 2 — collider voxelization optimization (active, 2026-10-23 2:57 AM PDT)
+# Lane 6 step B finish 2 — PARTIAL (2026-10-23)
 
-Base is merged at `ce168b62`. Scope is the committed PARTIAL report's left-outs, with focus on reusing collider voxelization across frames and edit streams. Current diagnosis: `Collider.mask` keys per-frame results locally, so repeated identical cup transforms re-voxelize. I am adding a bounded content-keyed cache plus exact-result/call-count regression, then will rerun the RTX proxy first-frame gate. Production runs stay under the shared lock and scratch limit; generated caches will be trashed after capture.
+Collider pose cache committed at `decbff08`; follow-up forwards checkpoint reuse into downstream particle and whitewater caches. 112 focused fluid tests and 7 knowledge tests pass; bundled docs compare byte-identical. RTX 3080 Ti 256³/192³: profiled scene evaluation 346.208 s before → 122.454 s after; collider solid voxelization 188.852 → 24.474 s; fresh first displayed 64-cell proxy 113.494 s. The <1 s first-proxy, full 120-frame/12 FPS, full-detail stage split, cup/steam and integrated Radeon gates remain open. A6000 is estimate-only. See JSON, docs, and TASKLOG. Needs Gonzo: continue remaining replay/domain-resize optimization and production matrix.
 
 # Lane 8 step B finish 6 — active (2026-10-22)
 

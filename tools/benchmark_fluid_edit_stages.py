@@ -93,9 +93,27 @@ def prime_reuse(evaluator, doc, checkpoint_frame):
         return
     nodes, solver_ids = Window._fluid_simulation_scope(doc)
     for solver_id in solver_ids:
+        if nodes[solver_id]["type"] not in ("FluidSolver3D", "FluidLiquidSolver3D"):
+            continue
         kind = "smoke" if nodes[solver_id]["type"] == "FluidSolver3D" else "liquid"
+        for tier in (1, 4):
+            old_run = evaluator._fluid_run_history.get((kind, str(solver_id), tier))
+            cached_through = []
+            if old_run is not None:
+                for cache in (*evaluator._sim_stores.values(), *evaluator._sim_preview_stores.values()):
+                    frames = cache.frames(old_run)
+                    present = [frame for frame in frames if frame < checkpoint_frame]
+                    if present:
+                        cached_through.append(max(present))
+            print(f"reuse {kind}/{solver_id} tier {tier}: old stream {'present' if old_run else 'missing'}, "
+                  f"checkpoint frames found {cached_through}", flush=True)
         evaluator.prime_fluid_reuse(kind, solver_id, checkpoint_frame, tier=1)
         evaluator.prime_fluid_reuse(kind, solver_id, checkpoint_frame, tier=4)
+    _visible_nodes, visible = Window._fluid_view_scope(doc)
+    for node_id in visible:
+        if nodes[node_id].get("type") == "FluidWhitewater3D":
+            for tier in (1, 4):
+                evaluator.prime_fluid_reuse("whitewater", node_id, checkpoint_frame, tier=tier)
 
 
 def capped_nodes(doc):

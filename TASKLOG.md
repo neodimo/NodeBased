@@ -1,3 +1,11 @@
+## 2026-10-23 — Lane 6 step B finish 2 (PARTIAL follow-up)
+
+- **What was done — evidence:** A bounded cross-edit collider-pose cache is already committed at `decbff08`. Follow-up added checkpoint propagation for downstream liquid `ParticleCache3D` and `FluidWhitewater3D` streams. Fresh RTX 3080 Ti production profile (256³ liquid / 192³ steam; frame-60 pour edit) fell from the original 346.208 s to 122.454 s; collider solid voxelization fell from 188.852 s to 24.474 s and surface voxelization from 182.967 s to 21.424 s. A fresh displayed proxy still took 113.494 s, missing the <1 s gate. The profile still records 496 FLIP GPU steps and substantial domain-resize work. Focused surface-cache, fluid node and fluid solver tests passed (112); knowledge tests passed (7); bundled `FLUIDS_SPIKE.md` is byte-identical.
+- **Artifacts:** Code/test/harness/docs/JSON are in this worktree; production measurements are committed to `benchmarks/hot_pour/production-edit-refresh-rtx-2026-10-23.json`. Raw logs and generated cache are under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`; generated cache was moved to trash before handoff. No push.
+- **State:** PARTIAL. Still missing a passing <1 s first proxy, complete 120-frame proxy timings and 12 FPS hold, full-detail per-stage timing, cup-move and steam-edit production runs, and integrated Radeon runs. A6000 remains an unmeasured estimate only.
+- **Next owner + concrete artifact:** Needs Gonzo: continue from `tools/benchmark_fluid_edit_stages.py` and the updated production JSON/profile; isolate the remaining FLIP replay/domain-resize work, then run the listed RTX and integrated production gates.
+- **Failure mode:** Having a downstream `FluidLiquidSolver3D` checkpoint did not mean the edited picture would reuse it: `ParticleCache3D` and whitewater have distinct run keys and could replay a large prefix. Reuse hints now reach both; remaining production replay still dominates, so the fix is not yet a gate pass.
+
 ## 2026-10-23 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step B of 2: the production-size Hot pour re-simulates only what changed (finish 2: the production-size gates) (integrator tick)
 
 - **What was done:** `main` `8b40b385` -> `7c3fe7d6` plus this docs commit. Evidence and per-lane commit
