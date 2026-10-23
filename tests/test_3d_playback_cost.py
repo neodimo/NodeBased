@@ -305,10 +305,14 @@ class TransportPacingTests(WindowPlaybackRequestTests):
         cancel = threading.Event()
         w.busy = True
         frame = np.zeros((36, 64, 4), np.float32)
-        with unittest.mock.patch.object(w, "start_preview") as start:
+        queued = []
+
+        def start_preview():                     # the real one takes the queued frame; record what it would have started
+            queued.extend(w.preview_queue._items)
+            w.preview_queue._items.clear()
+        with unittest.mock.patch.object(w, "start_preview", side_effect=start_preview) as start:
             w.preview_ready((request, cancel), frame, imaging.to_qimage(frame), "64 x 36  -  5 ms")
         start.assert_called_once()
-        queued = list(w.preview_queue._items)
         self.assertEqual([item.frame for item in queued if item.display], [origin + 1])
         w.toggle_playback(False)
 
