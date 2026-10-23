@@ -1,0 +1,1 @@
+{"scene": "mixed", "adapter": "NVIDIA GeForce RTX 3080 Ti", "fps": 23.92, "interval_ms": {"n": 143, "p50": 41.87, "p95": 45.17, "p99": 49.7, "max": 50.0, "mean": 40.69}, "status": "Evaluating frame 145\u2026"}

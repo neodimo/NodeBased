@@ -80,6 +80,11 @@ def parse_args(argv=None):
                         "the picture down a tier); off: play at the size set, the raw cost (default)")
     p.add_argument("--settle-wait", type=float, default=30.0, help="seconds to wait after stopping for the full-quality picture")
     p.add_argument("--smoke-scale", type=float, default=0.0, help="\"mixedglass\": the puff's size in metres (default SMOKE_SCALE)")
+    p.add_argument("--first-seconds", type=float, default=0.0,
+                   help="record the start: seconds from opening the scene to the first picture, every frame interval of the first N seconds "
+                        "of playback (3 is the lane's number) and the pipeline and buffer builds that fall in them; --replay repeats the "
+                        "playback from frame 1 in the same process (warm)")
+    p.add_argument("--replay", action="store_true", help="with --first-seconds: stop, rewind to frame 1 and play the first seconds again (warm)")
     p.add_argument("--first-frame-wait", type=float, default=120.0,
                    help="seconds to wait for the stopped first frame before playing (0: play at once; \"mixedglass\" needs it, its stopped "
                         "frame is the processor's, which is refused at 1080p)")
@@ -226,6 +231,111 @@ def check_shown_picture(window):
     return {"checked": True, "max_difference_levels": int(np.abs(rows(shown) - rows(expected)).max())}
 
 
+
+class BuildTrace:
+    """Times every pipeline, shader module, buffer and texture the renderer asks the card for, and every queue upload, while
+    installed (monkeypatches the wgpu device and queue classes; the product code is not touched)."""
+    NAMES = {"GPUDevice": ("create_render_pipeline", "create_compute_pipeline", "create_shader_module", "create_buffer",
+                           "create_buffer_with_data", "create_texture"),
+             "GPUQueue": ("write_buffer", "write_texture")}
+
+    def __init__(self):
+        self.rows = []            # (monotonic start, kind, milliseconds, bytes)
+        self.saved = []
+
+    def install(self):
+        from wgpu.backends import wgpu_native
+        for class_name, names in self.NAMES.items():
+            cls = getattr(wgpu_native, class_name)
+            for name in names:
+                original = getattr(cls, name)
+                self.saved.append((cls, name, original))
+
+                def wrapper(this, *args, _o=original, _n=name, **kwargs):
+                    started = time.monotonic()
+                    try:
+                        return _o(this, *args, **kwargs)
+                    finally:
+                        size = 0
+                        data = kwargs.get("data", args[0] if _n == "create_buffer_with_data" and args else None)
+                        if _n == "write_buffer":
+                            data = kwargs.get("data", args[2] if len(args) > 2 else None)
+                        if _n == "create_buffer":
+                            size = int(kwargs.get("size", args[0] if args else 0) or 0)
+                        elif data is not None:
+                            try:
+                                size = memoryview(data).nbytes
+                            except TypeError:
+                                size = 0
+                        self.rows.append((started, _n, (time.monotonic() - started) * 1000, size))
+                setattr(cls, name, wrapper)
+        return self
+
+    def remove(self):
+        for cls, name, original in self.saved:
+            setattr(cls, name, original)
+        self.saved = []
+
+    def within(self, begin, end):
+        """Per kind: count, total milliseconds, total bytes, and the single slowest call, for builds between two monotonic times."""
+        out = {}
+        for started, kind, ms, size in self.rows:
+            if begin <= started <= end:
+                row = out.setdefault(kind, {"count": 0, "total_ms": 0.0, "bytes": 0, "slowest_ms": 0.0})
+                row["count"] += 1
+                row["total_ms"] += ms
+                row["bytes"] += size
+                row["slowest_ms"] = max(row["slowest_ms"], ms)
+        return {k: {kk: round(vv, 2) if isinstance(vv, float) else vv for kk, vv in v.items()} for k, v in out.items()}
+
+
+def first_seconds_report(times, start, span, budget_ms, events, builds):
+    """The first ``span`` seconds of one playback: when the pictures came, the frame intervals, and what each slow frame
+    spent its time on (the stage marks and the builds that fell inside it)."""
+    from nodebased import playback_trace
+    inside = [t for t in times if start <= t <= start + span]
+    intervals = [(b - a) * 1000 for a, b in zip(inside, inside[1:])]
+    report = {
+        "span_s": span, "shown": len(inside), "fps": round(len(inside) / span, 2),
+        "first_picture_after_play_ms": round((inside[0] - start) * 1000, 1) if inside else None,
+        "frame_budget_ms": round(budget_ms, 1),
+        "shown_at_ms": [round((t - start) * 1000, 1) for t in inside],
+        "intervals_ms": [round(v, 1) for v in intervals],
+        "interval_max_ms": round(max(intervals), 1) if intervals else None,
+        "intervals_over_2x_budget": sum(1 for v in intervals if v > 2 * budget_ms),
+    }
+    # frames of the worker, in order, with their stage durations and the builds that fell inside each
+    frames, current = [], None
+    for stamp, _thread, label in events:
+        if label == "worker_start":
+            current = {"worker_start": stamp}
+            frames.append(current)
+        elif current is not None:
+            current.setdefault(label, stamp)
+            if label in ("submit", "gpu_done", "readback_done"):
+                current[label] = stamp
+    rows = []
+    for number, f in enumerate(frames):
+        if not (start <= f["worker_start"] <= start + span) or "handover" not in f:
+            continue
+        marks = [(n, f[n]) for n in ("worker_start", "render_begin", "scene_ready", "upload_done", "submit", "gpu_done", "readback_done",
+                                    "resolve_done", "put_begin", "cache_put", "emit", "handover") if n in f]
+        stages = {f"{a} to {b}": round((tb - ta) * 1000, 1) for (a, ta), (b, tb) in zip(marks, marks[1:])}
+        row = {"frame": number, "start_ms": round((f["worker_start"] - start) * 1000, 1),
+               "whole_ms": round((f["handover"] - f["worker_start"]) * 1000, 1), "stages_ms": stages}
+        if builds is not None:
+            row["builds"] = builds.within(f["worker_start"], f["handover"])
+        rows.append(row)
+    report["worker_frames"] = rows
+    worst = sorted(rows, key=lambda r: -r["whole_ms"])[:5]
+    report["slowest_worker_frames"] = [{"frame": r["frame"], "start_ms": r["start_ms"], "whole_ms": r["whole_ms"],
+                                        "top_stage": max(r["stages_ms"], key=r["stages_ms"].get) if r["stages_ms"] else "",
+                                        "builds": r.get("builds", {})} for r in worst]
+    if builds is not None:
+        report["builds"] = builds.within(start, start + span)
+    return report
+
+
 def run_scene(window, app, scene, args, splat_path, width, height):
     import re
     from nodebased import gpu3d
@@ -237,6 +347,8 @@ def run_scene(window, app, scene, args, splat_path, width, height):
             time.sleep(0.001)
 
     ops, view = build_scene(scene, width, height, args.backend, splat_path=splat_path)
+    builds = BuildTrace().install() if args.first_seconds else None
+    t_open = time.monotonic()
     if args.samples:
         for op in ops:
             if op.get("type") == "Render3D":
@@ -262,10 +374,19 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     window.signals.finished.connect(ready)
     if args.view:
         window.display_view.setCurrentText(args.view)
+    t_view = time.monotonic()
     window.agent_command({"op": "view", "id": view})
     t0 = time.perf_counter()
     while (window.busy or len(window.preview_queue)) and time.perf_counter() - t0 < args.first_frame_wait:
         spin(0.05)
+    first_picture = None
+    if args.first_seconds:
+        later = [t for t, _tier in shown_tiers if t >= t_view]
+        first_picture = {"scene_build_s": round(t_view - t_open, 3),
+                         "open_to_first_picture_s": round(later[0] - t_open, 3) if later else None,
+                         "view_to_first_picture_s": round(later[0] - t_view, 3) if later else None,
+                         "view_to_ready_s": round(time.perf_counter() - t0, 3),
+                         "builds_before_first_picture": builds.within(t_open, later[0]) if later else {}}
     warm_ms = None
     window.playback_shown_times.clear()
     shown_before = len(window.playback_shown_times)
@@ -284,17 +405,46 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     window.toggle_playback(True)
     start = time.monotonic()
     statuses = []
+    first_times = None
     while time.monotonic() - start < args.seconds:
         spin(0.1)
         statuses.append(window.statusBar().currentMessage())
+        if args.first_seconds and first_times is None and time.monotonic() - start >= args.first_seconds + 0.5:
+            first_times = list(window.playback_shown_times)
     elapsed = time.monotonic() - start
     playing_tier = int(window.proxy.currentData() or 1)
     picture_check = check_shown_picture(window)
     window.toggle_playback(False)
     stopped = time.monotonic()
     events = playback_trace.disable()
+    cold = None
+    if args.first_seconds:
+        cold = first_seconds_report(first_times or list(window.playback_shown_times), start, args.first_seconds, 1000.0 / args.fps, events, builds)
+        cold["first_picture"] = first_picture
     if args.events:
         Path(args.events).write_text(json.dumps(events))
+    main_times = list(window.playback_shown_times)
+    warm = None
+    if args.first_seconds and args.replay:
+        # Warm: the pipelines, buffers and caches the first pass built are resident. Rewind to frame 1 and play the first seconds again.
+        spin(0.5)
+        window.set_time(current=1)
+        waited = time.perf_counter()
+        while (window.busy or len(window.preview_queue)) and time.perf_counter() - waited < args.first_frame_wait:
+            spin(0.05)
+        window.playback_shown_times.clear()
+        playback_trace.enable()
+        window.toggle_playback(True)
+        warm_start = time.monotonic()
+        warm_times = None
+        while time.monotonic() - warm_start < args.first_seconds + 0.5:
+            spin(0.1)
+        warm_times = list(window.playback_shown_times)
+        window.toggle_playback(False)
+        warm = first_seconds_report(warm_times, warm_start, args.first_seconds, 1000.0 / args.fps, playback_trace.disable(), builds)
+        stopped = time.monotonic()
+    if builds is not None:
+        builds.remove()
     settle_s, settle_status = None, ""
     deadline = stopped + args.settle_wait
     while time.monotonic() < deadline:
@@ -307,7 +457,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     if settle_s is None:
         settle_status = window.statusBar().currentMessage()
     spin(0.3)
-    times = [t for t in list(window.playback_shown_times) if start <= t <= start + elapsed]
+    times = [t for t in main_times if start <= t <= start + elapsed]
     intervals = [(b - a) * 1000 for a, b in zip(times, times[1:])]
     status = next((s for s in reversed(statuses) if s), "")
     render_ms = [int(m.group(1)) for m in (re.search(r"(\d+) ms", s) for s in statuses if s) if m]
@@ -342,6 +492,10 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     result["worker_jobs"] = jobs
     if hasattr(playback_trace, "frame_summary"):     # Lane 2's per-frame stage marks: how the stages add up to the interval and how much overlaps
         result["frame_timeline"] = playback_trace.frame_summary(playback_trace.frame_timeline(events))
+    if cold is not None:
+        result["first_seconds"] = {"cold": cold}
+        if warm is not None:
+            result["first_seconds"]["warm"] = warm
     result["picture_check"] = picture_check
     try:
         from nodebased import gpupicture

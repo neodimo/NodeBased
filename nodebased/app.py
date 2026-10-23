@@ -60,7 +60,7 @@ from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
 from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
-from .playback import PlaybackQueue, DisplayCache, ConversionStage, STATIC_FRAME, playing_document
+from .playback import PlaybackQueue, DisplayCache, ConversionStage, STATIC_FRAME, playing_document, first_look_document
 from .queuepanel import QueuePanel, create_default_queue
 from . import pipeline
 from .motion import MotionAnimator
@@ -14707,6 +14707,8 @@ class Window(QMainWindow):
         bake = getattr(self, "_fluid_edit_bake", None)
         if bake is not None and not bake["done"]:
             tier = int(self.proxy.currentData()) if frame in bake["full_baked"] else 4
+        if not self.playing and self._progressive_target is not None and tier != self._progressive_target:
+            snapshot = first_look_document(snapshot)       # a coarse draft of the progressive preview: splats with meshes on the card
         self.evaluator.preview_direction = -1 if self.playing and getattr(self, "play_direction", 1) < 0 else 1
         # Playback read-ahead belongs in the independent source-decode pool. Composing future
         # graph frames on this single preview worker can hold the next visible frame behind a

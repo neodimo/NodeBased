@@ -288,6 +288,29 @@ def playing_document(document):
     return {**document, "nodes": {**nodes, **changed}}
 
 
+def first_look_document(document):
+    """The document a first-look *draft* evaluates (the coarse tiers of a progressive preview that are not the tier the artist
+    selected). A Render3D that draws splats with meshes takes the card route the playback tier takes: the raster shader for
+    the meshes and the splats as a layer over them, without the shadows between the two (and without the smoke's shadow on
+    relit splats). When it is still, the exact picture comes from the ray tracer or, with smoke, from the processor, which
+    took 7 s for the smoke, splats and glass scene before anything showed. The draft says so through `pt_seed` as the playing
+    document does, so it never shares a cache entry with the exact picture, and the selected tier's own request carries the
+    document unchanged: the settled picture is the same as before. Returns ``document`` itself when nothing needs changing."""
+    nodes = document.get("nodes", {})
+    changed = {}
+    for key, node in nodes.items():
+        if node.get("type") != "Render3D":
+            continue
+        params = node.get("params", {})
+        if (params.get("render_mode", "raster") == "raster" and params.get("render_output", "rgba") == "rgba"
+                and params.get("render_backend", "cpu") != "cpu" and params.get("pt_seed") != PLAYING_SPLAT_SEED
+                and _has_splats(nodes, key)):
+            changed[key] = {**node, "params": {**params, "pt_seed": PLAYING_SPLAT_SEED}}
+    if not changed:
+        return document
+    return {**document, "nodes": {**nodes, **changed}}
+
+
 # Node kinds whose output is a pure function of their parameters and inputs: no file sequence, no
 # simulation, no per-frame state. This is an allow-list on purpose. A kind that is missing from it
 # is treated as time-dependent, which only costs speed; a kind wrongly listed here would freeze

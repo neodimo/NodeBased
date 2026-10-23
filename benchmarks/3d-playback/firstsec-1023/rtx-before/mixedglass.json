@@ -1,0 +1,82 @@
+{
+ "scene": "mixedglass",
+ "size": [
+  1920,
+  1080
+ ],
+ "backend": "auto",
+ "view": "ACES 2.0",
+ "seconds": 6.05,
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "platform": "xcb",
+ "display": ":160",
+ "comp_fps": 24.0,
+ "shown": 0,
+ "fps": 0.0,
+ "interval_ms": {
+  "n": 0
+ },
+ "render_ms_status": {
+  "n": 0
+ },
+ "dropped": 0,
+ "status": "Rendering splats  \u00b7  0%  \u00b7  roughly 2 s in total",
+ "proxy": "off",
+ "tier_at_end": 1,
+ "tier_pictures": {},
+ "time_row": "real time",
+ "settle_s": null,
+ "settle_status": "Rendering splats  \u00b7  0%  \u00b7  roughly 2 s in total",
+ "worker_jobs": 0,
+ "frame_timeline": {},
+ "first_seconds": {
+  "cold": {
+   "span_s": 3.0,
+   "shown": 0,
+   "fps": 0.0,
+   "first_picture_after_play_ms": null,
+   "frame_budget_ms": 41.7,
+   "shown_at_ms": [],
+   "intervals_ms": [],
+   "interval_max_ms": null,
+   "intervals_over_2x_budget": 0,
+   "worker_frames": [],
+   "slowest_worker_frames": [],
+   "builds": {},
+   "first_picture": {
+    "scene_build_s": 0.011,
+    "open_to_first_picture_s": 7.113,
+    "view_to_first_picture_s": 7.102,
+    "view_to_ready_s": 120.031,
+    "builds_before_first_picture": {
+     "create_texture": {
+      "count": 1,
+      "total_ms": 12.52,
+      "bytes": 0,
+      "slowest_ms": 12.52
+     }
+    }
+   }
+  },
+  "warm": {
+   "span_s": 3.0,
+   "shown": 0,
+   "fps": 0.0,
+   "first_picture_after_play_ms": null,
+   "frame_budget_ms": 41.7,
+   "shown_at_ms": [],
+   "intervals_ms": [],
+   "interval_max_ms": null,
+   "intervals_over_2x_budget": 0,
+   "worker_frames": [],
+   "slowest_worker_frames": [],
+   "builds": {}
+  }
+ },
+ "picture_check": {
+  "checked": true,
+  "max_difference_levels": 0
+ },
+ "card_pictures": {},
+ "stage_p50_ms": {}
+}
