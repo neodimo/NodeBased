@@ -46,6 +46,14 @@ class SmallRadiusBlurTests(unittest.TestCase):
                 np.testing.assert_array_equal(Evaluator._box_blur_axis(frame, 5, axis),
                                               self.reference(frame, 5, axis))
 
+    def test_small_radius_path_does_not_zero_fill_its_accumulator(self):
+        frame = np.random.default_rng(28).random((13, 17, 4), dtype=np.float32)
+        expected = self.reference(frame, 2, axis=1)
+        with patch("nodebased.imaging.np.zeros_like", side_effect=AssertionError(
+                "small-radius blur should seed from its first edge-padded sample")):
+            actual = Evaluator._box_blur_axis(frame, 2, axis=1)
+        np.testing.assert_allclose(actual, expected, rtol=2e-6, atol=2e-7)
+
 
 class TranslationTransformTests(unittest.TestCase):
     def test_integer_translation_copies_pixels_without_resampling(self):

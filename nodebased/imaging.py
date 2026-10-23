@@ -4391,11 +4391,14 @@ class Evaluator:
             pad = [(0, 0)] * frame.ndim
             pad[axis] = (r, r)
             padded = np.pad(frame, pad, mode="edge")
-            result = np.zeros_like(frame)
-            for offset in range(2 * r + 1):
+            result = np.empty_like(frame)
+            window = [slice(None)] * frame.ndim
+            window[axis] = slice(0, n)
+            np.copyto(result, padded[tuple(window)])
+            for offset in range(1, 2 * r + 1):
                 window = [slice(None)] * frame.ndim
                 window[axis] = slice(offset, offset + n)
-                result += padded[tuple(window)]
+                np.add(result, padded[tuple(window)], out=result)
             result *= np.float32(1.0 / (2 * r + 1))
             return result
         pad = [(0, 0)] * frame.ndim
