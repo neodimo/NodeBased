@@ -312,7 +312,9 @@ def render_layer(state, instances, camera, width, height, mesh_depth=None, *,
                        lighting, cancel, budget_bytes)
 
 
-def _render(state, instances, camera, width, height, mesh_depth, lighting, cancel, budget_bytes):
+def _plan(state, instances, camera, width, height, mesh_depth, lighting, cancel, budget_bytes):
+    """Everything a splat layer needs from the processor before the card draws it: the checks, the back-to-front order
+    and the per-instance colours. None when no splat is in front of the camera (the layer is empty)."""
     _check(cancel)
     if width <= 0 or height <= 0:
         raise ValueError('Render dimensions must be positive')
@@ -320,8 +322,7 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
         raise ValueError('mesh_depth must have shape (height, width)')
     instances = [i if hasattr(i, 'cloud') else SplatInstance(*i) for i in instances]
     n = sum(len(i.cloud) for i in instances)
-    device, wgpu = state['device'], state['wgpu']
-    limits = device.limits
+    limits = state['device'].limits
     cap = min(GPU_SPLAT_MEMORY_CAP, limits['max-buffer-size'], limits['max-storage-buffer-binding-size'])
     if budget_bytes is not None:
         cap = min(cap, budget_bytes)
@@ -332,9 +333,8 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
         raise ValueError(f'GPU splat render needs about {needed/1024**2:.1f} MiB for {n:,} splats, '
                          f'more than the adapter allows ({cap/1024**2:.1f} MiB): lower '
                          'the splat count, or use the CPU renderer')
-    zeros = lambda: (np.zeros((height,width,3),'f4'), np.zeros((height,width),'f4'))
     if not n:
-        return zeros()
+        return None
     reason = check_capability(state)
     if reason:
         raise gpu3d.Unsupported(reason)
@@ -343,61 +343,59 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
     keys, entries, static_upload_ms, eye, basis, order = _geometry_and_order(state, instances, camera, cancel)
     _check(cancel)
     if not len(order):
-        return zeros()
+        return None
     appearances, upload_ms = _appearances(state, instances, keys, entries, eye, basis, camera, width, height,
                                           lighting, cancel)
-    t = perf_counter(); resources = []
-    def keep(resource):
-        resources.append(resource); return resource
+    return dict(n=n, entries=entries, eye=eye, basis=basis, order=order, appearances=appearances,
+                upload_ms=static_upload_ms + upload_ms)
+
+
+def _stage(state, plan, camera, width, height, keep):
+    """The card's side of a plan: buffers, bind groups of the projection pass and the uniform the draw reads. Returns
+    (record_projection(encoder), uniform, projected output, order indices)."""
+    device, wgpu = state['device'], state['wgpu']
+    limits = device.limits
+    n, entries, order, appearances, eye, basis = (plan[k] for k in ('n', 'entries', 'order', 'appearances', 'eye', 'basis'))
     def buffer(data, usage):
         return keep(device.create_buffer_with_data(data=data, usage=usage))
-    try:
-        storage = wgpu.BufferUsage.STORAGE
-        combined = keep(device.create_buffer(size=n*64, usage=storage | wgpu.BufferUsage.COPY_DST))
-        output = keep(device.create_buffer(size=n*80, usage=storage))
-        indices = buffer(order,storage)
-        groups = (len(order)+63)//64
-        gx = min(groups,limits['max-compute-workgroups-per-dimension'])
-        gy = (groups+gx-1)//gx
-        if gy > limits['max-compute-workgroups-per-dimension']:
+    storage = wgpu.BufferUsage.STORAGE
+    combined = keep(device.create_buffer(size=n*64, usage=storage | wgpu.BufferUsage.COPY_DST))
+    output = keep(device.create_buffer(size=n*80, usage=storage))
+    indices = buffer(order,storage)
+    groups = (len(order)+63)//64
+    gx = min(groups,limits['max-compute-workgroups-per-dimension'])
+    gy = (groups+gx-1)//gx
+    if gy > limits['max-compute-workgroups-per-dimension']:
+        raise gpu3d.Unsupported('GPU splat dispatch exceeds adapter limits')
+    tan = np.tan(np.deg2rad(camera.fov)/2); focal = height/(2*tan)
+    params = np.zeros((6,4),'f4'); params[:3,:3] = basis; params[3,:3] = eye
+    params[4] = width,height,focal,focal
+    params[5] = tan*width/height,tan,len(order),gx
+    uniform = buffer(params,wgpu.BufferUsage.UNIFORM)
+    compute, _render_pipeline = _pipelines(state)
+    def bind(pipeline, buffers, texture=None):
+        bound = [dict(binding=i,resource={'buffer':b}) for i,b in enumerate(buffers)]
+        if texture is not None:
+            bound.append(dict(binding=len(buffers),resource=texture))
+        return device.create_bind_group(layout=pipeline.get_bind_group_layout(0),entries=bound)
+    compute_groups = []
+    base = 0
+    for appearance, degree, srgb, size, dynamic in appearances:
+        if dynamic:
+            appearance = buffer(appearance,storage)
+        count = (size+63)//64
+        sx = min(count,limits['max-compute-workgroups-per-dimension'])
+        sy = (count+sx-1)//sx
+        if sy > limits['max-compute-workgroups-per-dimension']:
             raise gpu3d.Unsupported('GPU splat dispatch exceeds adapter limits')
-        tan = np.tan(np.deg2rad(camera.fov)/2); focal = height/(2*tan)
-        params = np.zeros((6,4),'f4'); params[:3,:3] = basis; params[3,:3] = eye
-        params[4] = width,height,focal,focal
-        params[5] = tan*width/height,tan,len(order),gx
-        uniform = buffer(params,wgpu.BufferUsage.UNIFORM)
-        mesh = keep(device.create_texture(size=(width,height,1),format='r32float',
-            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
-        depth = np.full((height,width),np.inf,'f4') if mesh_depth is None else np.ascontiguousarray(mesh_depth,'f4')
-        device.queue.write_texture({'texture':mesh},depth,{'bytes_per_row':width*4,'rows_per_image':height},(width,height,1))
-        target = keep(device.create_texture(size=(width,height,1),format=state['format'],
-            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
-        compute, render = _pipelines(state)
-        def bind(pipeline, buffers, texture=None):
-            entries = [dict(binding=i,resource={'buffer':b}) for i,b in enumerate(buffers)]
-            if texture is not None:
-                entries.append(dict(binding=len(buffers),resource=texture.create_view()))
-            return device.create_bind_group(layout=pipeline.get_bind_group_layout(0),entries=entries)
-        compute_groups = []
-        base = 0
-        for appearance, degree, srgb, size, dynamic in appearances:
-            if dynamic:
-                appearance = buffer(appearance,storage)
-            count = (size+63)//64
-            sx = min(count,limits['max-compute-workgroups-per-dimension'])
-            sy = (count+sx-1)//sx
-            if sy > limits['max-compute-workgroups-per-dimension']:
-                raise gpu3d.Unsupported('GPU splat dispatch exceeds adapter limits')
-            local = params.copy()
-            local[0,3], local[1,3], local[3,3] = degree, srgb, base
-            local[5,2:] = size, sx
-            ub = buffer(local,wgpu.BufferUsage.UNIFORM)
-            compute_groups.append((bind(compute,[ub,combined,appearance,output]),sx,sy))
-            base += size
-        rg = bind(render,[uniform,output,indices],mesh)
-        last_timings['upload_ms'] = static_upload_ms + upload_ms + (perf_counter()-t)*1000
-        t = perf_counter()
-        encoder = device.create_command_encoder(); offset = 0
+        local = params.copy()
+        local[0,3], local[1,3], local[3,3] = degree, srgb, base
+        local[5,2:] = size, sx
+        ub = buffer(local,wgpu.BufferUsage.UNIFORM)
+        compute_groups.append((bind(compute,[ub,combined,appearance,output]),sx,sy))
+        base += size
+    def project(encoder):
+        offset = 0
         for entry in entries:
             size = len(entry[1])*64
             encoder.copy_buffer_to_buffer(entry[2],0,combined,offset,size); offset += size
@@ -406,9 +404,35 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
             cp.set_bind_group(0,cg)
             cp.dispatch_workgroups(sx,sy,1)
         cp.end()
+    return project, uniform, output, indices, bind
+
+
+def _render(state, instances, camera, width, height, mesh_depth, lighting, cancel, budget_bytes):
+    width, height = int(width), int(height)
+    plan = _plan(state, instances, camera, width, height, mesh_depth, lighting, cancel, budget_bytes)
+    if plan is None:
+        return np.zeros((height,width,3),'f4'), np.zeros((height,width),'f4')
+    device, wgpu = state['device'], state['wgpu']
+    t = perf_counter(); resources = []
+    def keep(resource):
+        resources.append(resource); return resource
+    try:
+        project, uniform, output, indices, bind = _stage(state, plan, camera, width, height, keep)
+        mesh = keep(device.create_texture(size=(width,height,1),format='r32float',
+            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+        depth = np.full((height,width),np.inf,'f4') if mesh_depth is None else np.ascontiguousarray(mesh_depth,'f4')
+        device.queue.write_texture({'texture':mesh},depth,{'bytes_per_row':width*4,'rows_per_image':height},(width,height,1))
+        target = keep(device.create_texture(size=(width,height,1),format=state['format'],
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
+        _compute, render = _pipelines(state)
+        rg = bind(render,[uniform,output,indices],mesh.create_view())
+        last_timings['upload_ms'] = plan['upload_ms'] + (perf_counter()-t)*1000
+        t = perf_counter()
+        encoder = device.create_command_encoder()
+        project(encoder)
         rp = encoder.begin_render_pass(color_attachments=[dict(view=target.create_view(),resolve_target=None,
             clear_value=(0,0,0,0),load_op='clear',store_op='store')])
-        rp.set_pipeline(render); rp.set_bind_group(0,rg); rp.draw(6,len(order),0,0); rp.end()
+        rp.set_pipeline(render); rp.set_bind_group(0,rg); rp.draw(6,len(plan['order']),0,0); rp.end()
         dtype = np.dtype('f4' if state['format'] == 'rgba32float' else 'f2')
         stride = ((width*4*dtype.itemsize+255)//256)*256
         staging = keep(device.create_buffer(size=stride*height,usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
@@ -425,6 +449,64 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
     finally:
         for resource in reversed(resources):
             resource.destroy()
+
+
+def prepare_on_card(state, instances, camera, width, height, depth_view, *, lighting=None, cancel=None, keep=None):
+    """The splat layer drawn straight onto the mesh frame the card is already holding, in the same submission: nothing is
+    read back and the mesh depth never leaves the card. `depth_view` is the mesh pass's own depth buffer (non-linear, as
+    the raster shader writes it: far*(z-near)/((far-near)*z)); the splat shader turns it into the camera-forward distance
+    the layer compares. Returns `record(encoder, colour_view)`, which projects the splats and blends them over `colour_view`
+    (premultiplied over), or None when no splat is in front of the camera. Call with the GPU lock held; `keep` registers
+    the resources to destroy after the submission."""
+    plan = _plan(state, instances, camera, width, height, None, lighting, cancel, None)
+    if plan is None:
+        return None
+    device = state['device']
+    t = perf_counter()
+    project, uniform, output, indices, bind = _stage(state, plan, camera, width, height, keep)
+    render = _depth_pipeline(state)
+    params = np.array([camera.near, camera.far, 0, 0], 'f4')
+    limits_uniform = keep(device.create_buffer_with_data(data=params, usage=state['wgpu'].BufferUsage.UNIFORM))
+    group = device.create_bind_group(layout=render.get_bind_group_layout(0), entries=[
+        dict(binding=0, resource={'buffer': uniform}), dict(binding=1, resource={'buffer': output}),
+        dict(binding=2, resource={'buffer': indices}), dict(binding=3, resource=depth_view),
+        dict(binding=4, resource={'buffer': limits_uniform})])
+    last_timings['upload_ms'] = plan['upload_ms'] + (perf_counter()-t)*1000
+    count = len(plan['order'])
+
+    def record(encoder, colour_view):
+        project(encoder)
+        rp = encoder.begin_render_pass(color_attachments=[dict(view=colour_view, resolve_target=None,
+            clear_value=(0,0,0,0), load_op='load', store_op='store')])
+        rp.set_pipeline(render); rp.set_bind_group(0, group); rp.draw(6, count, 0, 0); rp.end()
+    return record
+
+
+_DEPTH_RENDER = _RENDER.replace(
+    '@group(0) @binding(3) var mesh: texture_2d<f32>;',
+    '@group(0) @binding(3) var mesh: texture_depth_2d;\n'
+    'struct Planes { near: f32, far: f32, pad0: f32, pad1: f32 };\n'
+    '@group(0) @binding(4) var<uniform> planes: Planes;\n'
+    '// The mesh pass writes far*(z-near)/((far-near)*z); this is z, the camera-forward distance, back (infinity where nothing was drawn).\n'
+    'fn mesh_z(xy: vec2<i32>) -> f32 {\n'
+    ' let d = textureLoad(mesh, xy, 0);\n'
+    ' if (d >= 1.0) { return 3.0e38; }\n'
+    ' return planes.near*planes.far/(planes.far - d*(planes.far-planes.near));\n'
+    '}').replace('textureLoad(mesh,vec2<i32>(v.position.xy),0).x', 'mesh_z(vec2<i32>(v.position.xy))')
+
+
+def _depth_pipeline(state):
+    """The splat draw that reads the mesh pass's depth buffer directly (`prepare_on_card`)."""
+    key = '_gpusplat_depth_pipeline'
+    if key not in state:
+        device = state['device']
+        module = device.create_shader_module(code=_DEPTH_RENDER)
+        blend = dict(src_factor='one', dst_factor='one-minus-src-alpha', operation='add')
+        state[key] = device.create_render_pipeline(layout='auto', vertex=dict(module=module, entry_point='vs', buffers=[]),
+            primitive=dict(topology='triangle-list', cull_mode='none'),
+            fragment=dict(module=module, entry_point='fs', targets=[dict(format=state['format'],
+                blend=dict(color=blend, alpha=blend))]))
+    return state[key]
 
 
 # ---------------------------------------------------------------------------------------------------------

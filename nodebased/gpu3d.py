@@ -1509,6 +1509,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         from . import gpurt_render
         with _lock:
             state = _state(adapter)
+            _release_staging(state)
             reason = gpurt_render.check_capability(state)
             if reason is not None:
                 raise Unsupported(reason)
@@ -1642,13 +1643,23 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             bands = [(i * rows // volume_bands, (i + 1) * rows // volume_bands) for i in range(volume_bands)]
         _cancel(cancel)
         state['picture_rgba'] = None
+        state['splats_on_card'] = False
+        splat_job = None
+        if (scene.splats and output == 'rgba' and SPLATS_ON_CARD and not volumes and not any(
+                getattr(e, 'visible_to_camera', False) for e in environments) and not any(
+                light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0 for light in scene.lights)):
+            # The splat layer drawn over the meshes on the card, in the mesh frame's own submission (`gpusplat.prepare_on_card`)
+            lighting = ((scene.lights, ambient, None, _splat_extras(scene, ambient, None, cancel)) if any(
+                getattr(i, 'relight', 0) > 0 for i in scene.splats) else None)
+            splat_job = (scene.splats, lighting)
         result = _render(state, scene, camera, width*samples, height*samples,
                          background, ambient, output, cancel, triangles, shadow_prepared, bvh_data, bands=bands,
-                         volume=volume if volumes else None)
+                         volume=volume if volumes else None, splat_job=splat_job)
         picture, state['picture_rgba'] = state['picture_rgba'], None     # made beside this frame, valid while nothing changes it
+        splats_drawn = state.pop('splats_on_card', False)
         if scene.splats and output in gpusplat.DATA_OUTPUTS:
             _splat_data_pass(state, scene, camera, width, height, result, output, cancel)
-        elif scene.splats:
+        elif scene.splats and not splats_drawn:
             mesh_depth = None
             if scene.geometries:
                 depth = _render(state, scene, camera, width*samples, height*samples,
@@ -1683,7 +1694,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if samples > 1:
         result = scene3d.box_resolve(result, samples)
     result.flags.writeable = False
-    if (picture is not None and output == 'rgba' and samples == 1 and not scene.splats and not visible_background
+    if (picture is not None and output == 'rgba' and samples == 1 and (splats_drawn or not scene.splats) and not visible_background
             and picture.shape[:2] == result.shape[:2]):
         gpupicture.register(result, gpupicture.armed_view(), picture)
     _mark('resolve_done')
@@ -1891,6 +1902,20 @@ def release_staging(state=None):
 STAGING_KEEP_BYTES = 256 * 1024 * 1024      # the readback buffer a state holds on to between renders
 
 
+STAGING_RELEASE_BYTES = 16 * 1024 * 1024
+
+
+def _release_staging(state):
+    """Let go of the readback buffer a played frame kept, before a ray-traced render. With a mapped-read buffer of 24 MB or more alive
+    (a played 1080p frame and its 8 MB display picture), the ray tracer's own band readbacks on the RTX 3080 Ti took 3.2 times as long
+    (the stop's full-quality picture of the mixed scene: 1.7 s with 16 MB held, 5.5 s with 25 MB, 10/23); a played frame makes it again
+    in one allocation. Call with the GPU lock held."""
+    held = state.get('staging')
+    if held is not None and held.size > STAGING_RELEASE_BYTES:
+        held.destroy()
+        state['staging'] = None
+
+
 def _staging_buffer(state, size, keep):
     """The MAP_READ buffer a render reads its pixels back through. Creating and destroying one per render cost
     209 ms for the 133 MB of a 1080p picture drawn at 2 samples (docs/PERFORMANCE.md, Lane 4 playback profile), so a
@@ -1922,6 +1947,7 @@ def _staging_buffer(state, size, keep):
 # passes depend on the camera.
 
 RESIDENT = True      # off: every frame packs and uploads its scene again (the comparison tests use it)
+SPLATS_ON_CARD = True      # a splat layer is drawn over the resident meshes on the card; False: the layer comes back to the processor
 RESIDENT_SCENES = 2  # a scene that also draws a depth pass for its splats keeps one entry for each of the two passes
 OPAQUE_ALPHA = np.float32(0.999)        # the shader's PASS 0 / PASS 1 split of `source.a`
 
@@ -2134,22 +2160,24 @@ def _frame_targets(state, width, height, fmt):
                                            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC
                                            | wgpu.TextureUsage.TEXTURE_BINDING),
                      device.create_texture(size=(width, height, 1), format='depth32float',
-                                           usage=wgpu.TextureUsage.RENDER_ATTACHMENT))
+                                           usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.TEXTURE_BINDING))
     target, depth = held[key]
     return target.create_view(), depth.create_view(), target
 
 
-def _card_finishes_frame(scene):
+def _card_finishes_frame(scene, splats_drawn=False):
     """True when nothing is drawn over the card's mesh frame afterwards (a splat layer, a visible environment or area light):
     only then is the picture made beside it the frame's picture. A scene with splats made the splat layer 5 times slower when the
     picture's 8 MB of readback memory was allocated beside it (mixed scene 7.3 to 2.8 fps, 10/23), and its picture is thrown away anyway."""
-    return not scene.splats and not any(getattr(e, 'visible_to_camera', False) for e in getattr(scene, 'environments', ())) \
+    return (splats_drawn or not scene.splats) and not any(getattr(e, 'visible_to_camera', False) for e in getattr(scene, 'environments', ())) \
         and not any(light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0 for light in scene.lights)
 
 
 def _render_resident(state, scene, camera, width, height, bg, ambient, output, cancel, shadow_triangles, shadow_data, bias,
-                     bvh_data, bands):
-    """`_render` for a scene `_resident_ok` accepts: the same passes over resident buffers."""
+                     bvh_data, bands, splat_job=None):
+    """`_render` for a scene `_resident_ok` accepts: the same passes over resident buffers. `splat_job` (the splat instances
+    and their lighting) asks for the splat layer to be drawn over the meshes in the same submission (`gpusplat.prepare_on_card`);
+    `state['splats_on_card']` says afterwards whether it was."""
     wgpu, device = state['wgpu'], state['device']
     order = link_order(scene)
     lights, light_data, area, area_lights_data, area_samples_data = _light_tables(scene)
@@ -2194,10 +2222,14 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     def keep(resource):
         held.append(resource)
         return resource
+    # The mesh depth is the pass's own depth buffer, which holds the opaque surfaces only: a scene with translucent
+    # meshes takes the depth pass of the splat layer's old route.
+    splats_here = (splat_job is not None and not data and len(bands) == 1 and not runs_by_pass[1] and not bg.any())
+    state['splats_on_card'] = splats_here
     # The display picture of a played frame (nodebased/gpupicture.py) is made by one more pass in the last band's submission and
     # read back through the same buffer, after the float rows.
-    picture_view = (gpupicture.armed_view() if output == 'rgba' and not data and not bg.any() and _card_finishes_frame(scene)
-                    else None)
+    picture_view = (gpupicture.armed_view() if output == 'rgba' and not data and not bg.any()
+                    and _card_finishes_frame(scene, state['splats_on_card']) else None)
     recorder = gpupicture.prepare(state, picture_view, width, height) if picture_view is not None else None
     float_bytes = stride*max(y1-y0 for y0, y1 in bands)
     picture_offset = (float_bytes + 255)//256*256
@@ -2226,13 +2258,25 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                         bound = material
                     rp.draw(count, 1, first, 0)
                 rp.end()
+            if splats_here:
+                # The card starts on the meshes now; the processor prepares the splat layer (order, colours, buffers: 8 ms
+                # at 20,000 relit splats) while it draws, and the layer goes out in a second submission over the same frame.
+                from . import gpusplat
+                _mark('submit')
+                device.queue.submit([encoder.finish()])
+                splat_layer = gpusplat.prepare_on_card(state, splat_job[0], camera, width, height, depth_view,
+                                                       lighting=splat_job[1], cancel=cancel, keep=keep)
+                encoder = device.create_command_encoder()
+                if splat_layer is not None:
+                    splat_layer(encoder, target_view)
             encoder.copy_texture_to_buffer({'texture': target, 'origin': (0, y0, 0)},
                 {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))
             fused = recorder is not None and y1 == bands[-1][1]
             if fused:
                 recorder.record(encoder, target_view, staging, picture_offset)
             _cancel(cancel)
-            _mark('submit')
+            if not splats_here:
+                _mark('submit')
             device.queue.submit([encoder.finish()])
             staging.map_sync(wgpu.MapMode.READ)
             _mark('gpu_done')
@@ -2293,7 +2337,7 @@ def _upload_materials(wgpu, device, keep, materials, cancel):
     return dummy_view, textures
 
 
-def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None, volume=None):
+def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None, volume=None, splat_job=None):
     wgpu, device = state['wgpu'], state['device']
     data = output in scene3d.DATA_OUTPUTS
     if bands is None:
@@ -2314,7 +2358,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         bg[:] = 0
     if _resident_ok(scene, output, volume):
         return _render_resident(state, scene, camera, width, height, bg, ambient, output, cancel, shadow_triangles,
-                                shadow_data, bias, bvh_data, bands)
+                                shadow_data, bias, bvh_data, bands, splat_job)
     eye, focal, vertices, queue, materials = _prepare(scene, camera, width, height, cancel)
     _mark('scene_ready')
     _cancel(cancel)
