@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from nodebased.imaging import Evaluator
+from nodebased.imaging import Evaluator, Region
 
 
 class SmallRadiusBlurTests(unittest.TestCase):
@@ -114,6 +114,40 @@ class TranslationTransformTests(unittest.TestCase):
                                               0.0, 0.0, "cubic", params=params)
             with self.subTest(frame=frame, translate_x=translate_x):
                 np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=1e-6)
+
+    def test_horizontal_transform_roi_skips_repeated_full_frame_resampling(self):
+        rng = np.random.default_rng(226)
+        source = rng.random((19, 27, 4), dtype=np.float32)
+        src_box = Region(0, 0, 27, 19)
+        # Blur asks its upstream Transform for a 2-pixel halo on every side. That made the
+        # vertical coordinate vector longer than the source and disabled the contiguous x path.
+        dst_box = Region(-2, -2, 31, 23)
+        params = {"translate_x": 1.37, "translate_y": 0.0, "rotate": 0.0,
+                  "scale": 1.0, "center_x": 0.0, "center_y": 0.0,
+                  "scale_mode": "uniform", "skew_x": 0.0, "skew_y": 0.0,
+                  "clamp": 0, "black_outside": 0}
+        forward = Evaluator._transform_forward_matrix(params)
+        inverse = np.linalg.inv(forward)
+        gx, gy = np.meshgrid(np.arange(dst_box.width, dtype=np.float32) + dst_box.x + 0.5,
+                             np.arange(dst_box.height, dtype=np.float32) + dst_box.y + 0.5)
+        sx = inverse[0, 0] * gx + inverse[0, 1] * gy + inverse[0, 2] - 0.5 - src_box.x
+        sy = inverse[1, 0] * gx + inverse[1, 1] * gy + inverse[1, 2] - 0.5 - src_box.y
+        expected = Evaluator._resample(source, sx, sy, "cubic")
+        calls = []
+        original = Evaluator._resample_cubic_separable
+
+        def count_resamples(*args, **kwargs):
+            calls.append((args[0].shape, args[1].shape, args[2].shape))
+            return original(*args, **kwargs)
+
+        with patch("nodebased.imaging.Evaluator._resample_cubic_separable",
+                   side_effect=count_resamples), patch(
+                       "nodebased.imaging.np.take", side_effect=AssertionError(
+                           "horizontal ROI transform should use contiguous cubic slices")):
+            actual = Evaluator._transform(source, 1.37, 0.0, 0.0, 1.0, 0.0, 0.0, "cubic",
+                                          src_box=src_box, dst_box=dst_box, params=params)
+        self.assertEqual(calls, [((19, 27, 4), (31,), (23,))])
+        np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=1e-6)
 
 
 class ColorCorrectIdentityTests(unittest.TestCase):

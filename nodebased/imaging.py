@@ -7463,14 +7463,27 @@ class Evaluator:
                     result += scratch
             return result
 
-        horizontal_only = (sy.shape == (src.shape[0],) and np.array_equal(
-            sy, np.arange(src.shape[0], dtype=np.float32)))
-        if not clamp and horizontal_only and sx.ndim == 1 and sx.size:
+        integer_vertical_mapping = (
+            sy.ndim == 1 and sy.size > 0 and float(sy[0]).is_integer()
+            and np.array_equal(sy, np.float32(sy[0]) + np.arange(sy.size, dtype=np.float32))
+        )
+
+        def fit_integer_rows(image):
+            """Crop/pad rows for a unit-step integer vertical map without resampling."""
+            first_source_row = int(sy[0])
+            result = np.zeros((sy.size, image.shape[1], image.shape[2]), dtype=np.float32)
+            source_y0 = max(0, first_source_row)
+            source_y1 = min(src.shape[0], first_source_row + sy.size)
+            if source_y1 > source_y0:
+                dest_y0 = source_y0 - first_source_row
+                result[dest_y0:dest_y0 + source_y1 - source_y0] = image[source_y0:source_y1]
+            return result
+
+        if not clamp and integer_vertical_mapping and sx.ndim == 1 and sx.size:
             # A pure horizontal translation has unit-spaced source coordinates. The generic
-            # separable path gathers four complete float frames with np.take, then multiplies
-            # and accumulates each gathered frame. For this common case, each tap is a contiguous
-            # shifted view of the source, so accumulate directly into the output and avoid those
-            # four full-frame gather buffers.
+            # separable path gathers four full frames for x, then another four for y. For this
+            # case each x tap is a contiguous shifted view and the integer y map is only a
+            # crop/pad, even when a downstream node requests an overscan halo.
             base = np.floor(sx).astype(np.int32)
             linear_base = base[0] + np.arange(sx.size, dtype=np.int32)
             if np.array_equal(base, linear_base):
@@ -7503,13 +7516,12 @@ class Evaluator:
                             np.multiply(sample, factor, out=weighted)
                             np.add(destination, weighted, out=destination)
                     initialized = True
-                return result
+                return fit_integer_rows(result)
 
         horizontal = axis_sample(src, sx, axis=1)
-        # The common animated Transform case moves only horizontally. When y maps each
-        # destination row to the same source row, the vertical cubic pass is an exact identity.
-        if horizontal_only:
-            return horizontal
+        # Integer-offset y mappings need only crop/pad rows; cubic filtering is an exact identity.
+        if integer_vertical_mapping:
+            return fit_integer_rows(horizontal)
         return axis_sample(horizontal, sy, axis=0)
 
     @staticmethod
