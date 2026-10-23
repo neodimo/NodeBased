@@ -36,7 +36,8 @@
     "Fresh RTX 3080 Ti first-proxy retest used a new pour key value at frame 60 over the cached 59-frame production prefix; first displayed proxy was 113.494 s, still above the <1 s gate.",
     "The pose cache reduced profiled solid voxelization from 188.852 s to 24.474 s, and surface voxelization from 182.967 s to 21.424 s. The edited-scene profile fell from 346.208 s to 122.454 s, but solver/downstream replay remains dominant.",
     "The 120-frame proxy total, full-detail stage split, cup move, steam edit and integrated Radeon gates remain incomplete or unmeasured. The proxy timeline reached frame 70 in the earlier run; frame 70 took 16.487 s.",
-    "A6000 estimate: 0.8-1.3x RTX wall time for the same proxy workload, based on the existing 64-cell planning range; unmeasured and not a production full-detail estimate."
+    "A6000 estimate: 0.8-1.3x RTX wall time for the same proxy workload, based on the existing 64-cell planning range; unmeasured and not a production full-detail estimate.",
+    "The production harness pour_rate edit was run with fresh src_vel_y deltas (+0.36 for displayed-frame timing and +0.38 for profiling) so neither result reused a prior edited frame-60 cache entry."
   ],
   "profile_top_costs_s_after_pose_cache": {
     "liquid_solver_and_downstream_replay": 120.441,
@@ -60,5 +61,19 @@
       "Before/after cProfile values are scene evaluation only and exclude proxy conversion and viewport render.",
       "First-proxy values are wall-clock from a fresh frame-60 edited run and include the 64-cell proxy render."
     ]
+  },
+  "measured_variants": {
+    "first_proxy_display": {
+      "node": "spout",
+      "parameter": "src_vel_y",
+      "delta": 0.36,
+      "keyed_frame": 60
+    },
+    "profile": {
+      "node": "spout",
+      "parameter": "src_vel_y",
+      "delta": 0.38,
+      "keyed_frame": 60
+    }
   }
 }
