@@ -740,10 +740,26 @@ What the timelines showed, largest first:
 - **Before the first picture** (every scene): the first render pipeline 114 ms, its shader module 14 ms, a 38 ms texture upload, and for
   the mixed scenes 370 to 735 buffer creations (about 110 ms): 0.5 to 0.7 s from open to first picture in all.
 - **In the first played frames:** the display pass of the card picture (2 shader modules, 1 pipeline, 8 ms) was built by the first played frame.
-- **The card's idle clock.** After 3 s or more without work the RTX drops to its idle clock (210 MHz, P8); the first played frames
-  then take 2 to 4 times as long on the card (46 to 95 ms against 14 to 25) for about 150 to 300 ms. A probe frame of the heavy scene costs
-  185 ms warm and 427 to 464 ms after a 3 s pause. A trickle of work (a 256x144 to 1280x720 frame every 30 to 100 ms for 6 s) did not hold
-  the clock up. This one is the driver's, outside what the application can change.
+- **A frame slot lost in the middle of playback (finish pass).** The smoke, splats and glass card frame fills 40 of the 41.7 ms, so the
+  moment a played frame finishes decides whether its successor is requested at once. `_next_playback_interval_ms` moves the transport's
+  deadline on when a wakeup arrives within 0.5 ms of it, but `playback_tick` counted elapsed frames by truncation: a wakeup 0.06 ms short of
+  the frame boundary (ticks log, `ticks*.json` in the lane run directory: elapsed 10.999 frames) moved the deadline and left the playhead,
+  and the next request waited a whole slot, an 82 to 85 ms gap. Nine of twelve cold 3 s runs of the scene showed one or more of them
+  (23.0 to 23.7 fps between pictures when one was there); none of sixteen runs after the change did. The other three scenes finish with more room before
+  their deadline, so a wakeup rarely lands in that window.
+- **The card's idle clock.** After about 3.5 s without work the RTX drops to its idle clock (210 MHz, P8). A saturating load then needs
+  about 330 ms to bring it back (a compute probe that takes 14 ms at the idle clock takes 3 ms after the jump, which comes 335 ms into the
+  load, measured after a 6 s pause). The first played frames take 2 to 4 times as long for that time: 94 to 105 ms for a frame that costs
+  24 ms. With play pressed after 4 s of rest every scene shows one interval of 89 to 154 ms (cube 101, furnished 128, mixed 89, smoke and
+  glass 154). The smoke, splats and glass scene meets it in practice: its exact picture is 100 s of processor work, the card idles
+  meanwhile, and a press of play after it reads 20.8 to 22.9 fps with a 159 to 164 ms interval and 2 to 3 frames the playhead skipped.
+  The Radeon and the laptop stand-in do not show it. The application cannot keep the clock up cheaply: a frame of 256x144 to 1280x720
+  every 30 to 100 ms did not, and neither did a compute dispatch of 2 to 5 ms every 20 to 50 ms from a thread of its own (tried 10/23
+  with `nvidia-smi` sampling at 0.1 s: the clock fell within 3.5 to 6 s of the last real work, and a longer run did not change that). A
+  burst of load when the play button is pressed would get the few tens of milliseconds of a click at most, against the 330 ms the clock
+  needs, and none from the space bar. What is left is a choice about cost, Gonzo's call: render the first 8 or so played
+  frames of an idle card one resolution down (the picture is soft for about a third of a second), or hold the clock with a load of 20 to
+  30 percent of the card (its power and heat for every second of the hold, on a laptop too).
 
 What changed:
 
@@ -755,37 +771,41 @@ What changed:
   retires a job when it is done. `compose_region` passes its cancel event to the evaluator on all of its full-frame paths.
 - A picture before playback builds the card picture's display pass (`gpupicture.warm`, armed through `arm_warm` for stopped display frames),
   so the first played frame creates no shader module or pipeline.
+- `Window.playback_tick` counts a wakeup within `PLAYBACK_TICK_SLACK` (0.5 ms, the same slack `_next_playback_interval_ms` moves its
+  deadline on from) as on the frame boundary, so a deadline that moved on always advances the playhead. The first-seconds report also lists
+  the frames the playhead skipped (`frames_skipped`).
 
-First picture and first 3 s of playback at 1080p ("Proxy while playing" off, play pressed at the first picture, cold; "between" is the
-rate between the first and last picture of the 3 s, "worst" the longest interval in them; budget 41.7 ms, twice that 83.3 ms):
+First picture and first 3 s of playback at 1080p ("Proxy while playing" off, play pressed at the first picture, cold app; "between" is the
+rate between the first and last picture of the 3 s, "worst" the longest interval in them; budget 41.7 ms, twice that 83.3 ms; runs of
+the finish pass in `benchmarks/3d-playback/firstsec-1023/*-fix-*`, 10/23):
 
 | Adapter | cube | furnished | mixed | mixedglass |
 |---|---|---|---|---|
-| RTX 3080 Ti, first picture, before | 0.56 s | 0.53 s | 0.70 s | 7.11 s |
-| RTX 3080 Ti, first picture, now | 0.57 s | 0.59 s | 0.65 s | 0.68 s |
-| RTX, first 3 s now: between / worst | 24.0 / 44 ms | 24.2 / 46 ms | 24.2 / 50 ms | 23.7 / 83.5 ms |
-| RTX, play pressed after the card idled 3 s: between / worst | 24.3 / 65 ms | 24.0 / 108 ms | 24.6 / 85 ms | 22.7 / 124 ms |
-| Radeon 8060S, first picture; between / worst | 0.52 s; 24.0 / 45 ms | 0.53 s; 24.1 / 47 ms | 0.58 s; 24.1 / 50 ms | 0.60 s; 24.0 / 48 ms |
-| Laptop stand-in (Radeon, 4 CPUs, 2x scale), first picture; between / worst | 0.52 s; 24.0 / 46 ms | 0.54 s; 24.1 / 45 ms | 0.59 s; 24.1 / 45 ms | 0.63 s; 23.7 / 74 ms |
-| llvmpipe, first picture; between / worst | 0.47 s; 24.4 / 55 ms | 0.55 s; 3.2 / 369 ms | 0.67 s; 2.5 / 445 ms | 0.98 s; under 2 pictures in 3 s |
+| RTX 3080 Ti, first picture, before the step | 0.56 s | 0.53 s | 0.70 s | 7.11 s |
+| RTX 3080 Ti, first picture, now | 0.58 s | 0.60 s | 0.67 s | 0.70 s |
+| RTX, first 3 s, card warm: between / worst | 24.0 / 45 ms | 24.2 / 46 ms | 24.1 / 48 ms | 24.0 / 53 ms |
+| RTX, play pressed after the scene settled: between / worst | 24.0 / 47 ms | 24.0 / 45 ms | 24.1 / 54 ms | 23.9 / 47 ms, first picture 230 ms after the press |
+| RTX, play pressed after the card idled 4 s: between / worst | 24.8 / 101 ms | 25.3 / 128 ms | 24.7 / 89 ms | 23.0 / 154 ms |
+| Radeon 8060S, first picture; between / worst | 0.51 s; 24.0 / 45 ms | 0.56 s; 24.1 / 45 ms | 0.59 s; 24.1 / 49 ms | 0.60 s; 24.0 / 46 ms |
+| Laptop stand-in (Radeon, 4 CPUs, 2x scale), first picture; between / worst | 0.52 s; 24.0 / 46 ms | 0.56 s; 24.1 / 46 ms | 0.60 s; 24.1 / 47 ms | 0.61 s; 24.1 / 52 ms |
+| llvmpipe, first picture; between / worst | 0.48 s; 24.4 / 50 ms | 0.54 s; 3.2 / 357 ms | 0.66 s; 2.5 / 435 ms | 0.98 s; under 2 pictures in 3 s |
 
-Before this step the mixedglass run on the RTX never started playing inside the tool's two-minute wait (`rtx-before/mixedglass.json`:
-no picture shown in 6 s of playback). The first played picture comes 27 to 64 ms after the press when the card is warm (before: 87 to 173
-ms for the three scenes that played). Warm replays (rewind, play again after 5 s or more of rest) show the idle-clock ramp on the RTX: worst
-interval 46, 45, 80 and 200 ms for the four scenes; the Radeon 46, 45, 45 and 80 ms, the laptop stand-in 46, 47, 47 and 86 ms.
+Before the step the mixedglass run on the RTX never started playing inside the tool's two-minute wait (`rtx-before/mixedglass.json`: no
+picture shown in 6 s of playback). The first played picture comes 25 to 60 ms after the press when the card is warm (before: 87 to 173 ms for
+the three scenes that played). Warm replays (rewind after the exact picture settled, play again) on the RTX: worst interval 45, 47, 50 and
+164 ms for the four scenes (the last after 100 s of processor work with the card idle); the Radeon 44, 47, 45 and 48 ms; the laptop stand-in
+46, 49, 55 and 52 ms.
 
-Held on the RTX: first picture under 1 s for all four scenes (0.57 to 0.68 s, cold, warm card); no pipeline or shader built by the first
-played frames (the tests below); 24 fps between pictures in the first 3 s for the cube, furnished room and mixed scene when play is
-pressed at the first picture or after the scene has settled, with no interval over 50 ms. Not held: mixedglass reads 23.7 fps between
-pictures with one interval of 83.5 ms (0.2 ms over twice the budget) when play is pressed at the first picture, and 23.3 fps with a 100 ms
-interval when pressed after the scene settled; after the card has idled 3 s the worst intervals are 65, 108, 85 and 124 ms. All of those
-frames wait on the card's idle clock above. Radeon and laptop stand-in hold the first picture and the rate (the laptop's mixedglass: 23.7
-fps between, worst 74 ms cold and 86 ms warm). llvmpipe plays the cube at rate and the other scenes at the software renderer's own speed,
-as before.
+Held on the RTX: first picture under 1 s for all four scenes (0.58 to 0.70 s, cold); no pipeline or shader built by the first played frames
+(the tests below); 24.0 fps or better between pictures in the first 3 s for all four scenes with no interval over 54 ms and no frame
+skipped, when play is pressed at the first picture or after the scene has settled. The Radeon and the laptop stand-in hold the same, for
+all four scenes, cold and warm. llvmpipe plays the cube at rate and the other scenes at the software renderer's own speed, as before.
+Not held: with the RTX idle for 4 s before the press the first two played frames wait on the card's idle clock (the bullet above), one
+interval of 89 to 154 ms in every scene.
 
 Tests (`tests/test_first_second.py`; each fails without its change): the draft documents and the window's progressive tiers; a draft of
 smoke, splats and glass is drawn on the card (the processor rasteriser is not called) and the exact picture still is the processor's; the
 direct Render3D path stops on a set cancel event; the queue cancels every running job; the worker retires its jobs; a picture before
 playback builds the display pass so the first played frames create no shader or pipeline; the played frames of smoke, splats and glass
-rebuild no pipeline the first picture built. Run on the RTX, the Radeon and llvmpipe with the splat, volume and glass agreement tests
+rebuild no pipeline the first picture built. `PlaybackTickKeepsItsSlot` (finish pass): a tick 0.06 ms before a frame boundary advances the playhead, one 2 ms before waits, and the deadline and the tick share the slack constant. Run on the RTX, the Radeon and llvmpipe with the splat, volume and glass agreement tests
 (`tests-L4-agree-*.log` in the lane run directory), each run under `flock -w 1800 /tmp/nb-gpu.lock` with a timeout.
