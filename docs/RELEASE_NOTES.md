@@ -1,3 +1,53 @@
+# NodeBased 0.43.2-preview.1
+
+Preview build of 0.43.2: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.43.2 release that follows.
+
+## What changed since 0.42.1
+
+- **Smoke, splats and glass in one scene on the graphics card.** A scene mixing a smoke puff, Gaussian splats and a glass
+  sphere now plays from resident buffers at about 34 ms a frame at 1080p on the RTX 3080 Ti (it took 1.3 s). The splat layer
+  is drawn between the mesh passes and the smoke march, and around glass in two parts ordered by the nearest see-through
+  surface, so splats seen through glass and smoke in front of splats both come out right. The mixed mesh-and-splat scene
+  draws the splats in the mesh frame's own submission and reads its depth.
+- **Glass draws faster.** See-through meshes draw from a far-to-near vertex buffer, one draw per material instead of one per
+  triangle. The glass scene plays at 40.7 ms a frame at 1080p on the RTX (was 44).
+- **Render mode settles in a quarter of the time.** The mixed scene settles in 6 s (was 24): path tracer stacks are sized to
+  the scene and smoke shadows meshes through the ray tracer's tree.
+- **First picture in under a second.** The coarse steps of a progressive preview now draw splats with meshes on the card. The
+  smoke, splats and glass scene shows its first picture in 0.64 s at 1080p on the RTX (was 7.1 s); all four test scenes come
+  up in 0.58 to 0.70 s.
+- **Playback at full rate from the first second.** All four test scenes play at 24 frames a second from the first picture,
+  with no gap over 54 ms, on the RTX, the Radeon and the laptop stand-in. Pressing play while a slow still render is running
+  cancels it and starts playback at once (it used to wait for that render, up to about 100 s). The first played frame builds
+  no new shader or pipeline. A playback clock slip that dropped a whole frame in roughly every third 3 s of playback is fixed.
+- **Fluids: whitewater refinement stays inside a card-memory budget.** Full-detail whitewater refines under a live memory
+  budget and retries with less neighbour work instead of running out; scrubbing reuses the whitewater setup, and steam
+  sampling stays at the preview size while you scrub.
+- **The app names the graphics card it runs on, and why.** On a machine with an integrated and a discrete card, Automatic
+  prefers the discrete card; when a Settings or environment choice picked it instead, the reason says so. The card and
+  the reason show in the status pill and on the Settings page.
+- **A laptop and workstation check in one command.** `tools/laptop_scene_check.py` plays the four 3D test scenes at 1080p
+  on the card the app chooses and on the other card, warm and after a 4 s rest, and writes a short result to paste back.
+- **Faster readback.** A rendered 1080p float picture is copied out of the card by up to four threads: 2.7 to 3.1 ms down
+  to 2.1 to 2.7 ms on the RTX, the Radeon and the laptop stand-in.
+- **Shorter stall on the first frames after the RTX rests.** The late frames come from the card's idle link to the
+  processor (a 33 MB readback takes 84 ms idle, 12 ms awake). Play pressed after a rest now draws its first frames at
+  half size while the link wakes. The cube scene holds 54 ms (7 of 8 runs); the other scenes still show one 59 to 85 ms
+  interval when the frame size switches back. The Radeon and the stand-in need no ramp.
+- The 3D scene benchmark tools gained the smoke, splats and glass scene, and preview builds can now be published as
+  pre-releases (`vX.Y.Z-preview.N`).
+
+## Known limits
+
+- After the RTX has idled about 4 seconds, the first played frames still show one gap of 59 to 85 ms in the furnished room,
+  mixed and smoke scenes. Steady playback afterwards holds 24 fps.
+- All timings come from this workstation (RTX 3080 Ti, Radeon, a four-core laptop stand-in, software renderer). The real laptop,
+  the A6000 and Windows have not been measured; the check command above is how they will be.
+- Fluids: the full-detail Hot pour has not yet completed every stage under memory limits; steam and the laptop and A6000
+  memory checks are still open.
+- Uncached 2D playback is still well short of 24 fps; moving the nodes to the graphics card is the next decision.
+- The Direct picture is still off by default.
+
 # NodeBased 0.43.1
 
 ## What changed since 0.42.1
