@@ -308,7 +308,7 @@ class PlaybackTickKeepsItsSlot(unittest.TestCase):
             playback_frames_rendered=rendered, play_direction=1, loop_mode="loop", _fluid_edit_bake=None,
             _realtime_light_updated=1000.0 + now_ms / 1000.0, playing=True, PLAYBACK_TICK_SLACK=app_module.Window.PLAYBACK_TICK_SLACK,
             update_realtime_light=lambda: None, set_time=unittest.mock.Mock(), toggle_playback=unittest.mock.Mock(),
-            _schedule_playback_tick=unittest.mock.Mock())
+            _schedule_playback_tick=unittest.mock.Mock(), _clock_ramp=None)
         return app_module, window
 
     def tick_at(self, now_ms, rendered=6):
