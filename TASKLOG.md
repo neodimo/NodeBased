@@ -1,3 +1,11 @@
+# Lane 6 step A finish 1 — full-detail refinement memory (PARTIAL, 2026-10-23)
+
+- **What was done — evidence:** A fresh RTX 3080 Ti run completed edited liquid and surface, then failed at whitewater frame 91 (16,174.4 MiB peak RSS, 9,821 MiB card allocation, zero swap). Warm-cache retry completed liquid, surface, whitewater and steam through frame 120; neighbor evaluation was reduced from 696,541 to 131,072. Retry total was 585.44 s; peak RSS 9,659.9 MiB, card allocation 5,706 MiB, zero swap. The integrated Radeon 8060S laptop stand-in completed all four stages under taskset CPUs 0–3 in 1,167.77 s, with 13,990.7 MiB peak RSS and zero swap.
+- **Artifacts:** RTX and integrated JSON evidence and synchronized docs are committed in this worktree. Production caches were deleted after measurement. No push.
+- **State:** PARTIAL only for direct A6000 measurement; this host exposes the RTX 3080 Ti, and no other connected device or SSH host is configured. A labelled 0.8–1.3× warm-RTX estimate remains in the docs. CPU/llvmpipe streaming, fluid-cache and timeline checks pass; knowledge-copy validation passes.
+- **Next owner + concrete artifact:** Gonzo: if the direct A6000 measurement is still required, run `tools/benchmark_fluid_edit_stages.py --adapter default --full-only --edit pour_rate --max-process-rss-mb 16384` on the A6000 host; save its JSON under `benchmarks/hot_pour/` and refresh both `FLUIDS_SPIKE.md` copies.
+- **Failure mode:** The first cold RTX whitewater attempt can exhaust the card buffer despite staying below process RSS and card-capacity gates; warm rerun with the adaptive neighbor budget completed all stages.
+
 ## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 2: 3D scenes hold full rate from the first second, and the first picture comes up fast (finish 1) (integrator tick)
 
 - **What was done:** `main` `2d19239d` -> `a2387bf8` plus this docs commit. Evidence and per-lane commit

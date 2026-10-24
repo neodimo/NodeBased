@@ -13,52 +13,68 @@
   "edits": {
     "pour_rate": {
       "full_detail_stage_s": {
-        "liquid_cache": 901.51,
-        "surface": 121.11,
-        "whitewater": null,
-        "steam_cache": null
+        "liquid_cache": 15.3,
+        "surface": 15.52,
+        "whitewater": 169.14,
+        "steam_cache": 385.48
       },
       "full_detail_stage_frames": {
         "liquid_cache": {
-          "frames": 120
+          "frames": 120,
+          "mean_ms": 127.47,
+          "p95_ms": 423.97
         },
         "surface": {
-          "frames": 120
+          "frames": 120,
+          "mean_ms": 129.3,
+          "p95_ms": 311.15
         },
         "whitewater": {
-          "last_checkpoint_frame": 80,
-          "failure_frame": 90
+          "frames": 120,
+          "mean_ms": 1409.46,
+          "p95_ms": 6414.58
         },
         "steam_cache": {
-          "status": "not started in cold run"
+          "frames": 120,
+          "mean_ms": 3212.37,
+          "p95_ms": 7871.41
         }
       },
       "full_detail_memory_peaks": {
         "liquid_cache": {
-          "peak_process_rss_mb": 16104.3,
+          "peak_process_rss_mb": 1017.6,
           "peak_process_swap_mb": 0.0,
-          "peak_card_memory_mb": 9819.0,
-          "card_memory_scope": "process allocation"
-        },
-        "surface": {
-          "peak_process_rss_mb": 10328.4,
-          "peak_process_swap_mb": 0.0,
-          "peak_card_memory_mb": 8029.0,
-          "card_memory_scope": "process allocation"
-        },
-        "whitewater": {
-          "peak_process_rss_mb": 12628.7,
-          "peak_process_swap_mb": 0.0,
-          "peak_card_memory_mb": 9821.0,
+          "peak_card_memory_mb": 203.0,
           "card_memory_scope": "process allocation"
         },
         "cache_write": {
-          "peak_process_rss_mb": 13365.3,
+          "peak_process_rss_mb": 9081.4,
           "peak_process_swap_mb": 0.0,
-          "peak_card_memory_mb": 9821.0,
+          "peak_card_memory_mb": 5200.0,
+          "card_memory_scope": "process allocation"
+        },
+        "surface": {
+          "peak_process_rss_mb": 1118.3,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 203.0,
+          "card_memory_scope": "process allocation"
+        },
+        "whitewater": {
+          "peak_process_rss_mb": 3372.6,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 3595.0,
+          "card_memory_scope": "process allocation"
+        },
+        "steam_cache": {
+          "peak_process_rss_mb": 9659.9,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 5706.0,
           "card_memory_scope": "process allocation"
         }
-      }
+      },
+      "full_detail_total_s": 585.44,
+      "full_detail_cache_bytes": 17479491885,
+      "completed_run_condition": "warm-cache retry after a cold whitewater allocation failure; all changed-stage outputs completed 120/120"
     }
   },
   "full_base_prefix_memory_peaks": {
@@ -142,5 +158,140 @@
     "process_swap_mb": 0.0,
     "whitewater_status_line": "reduced neighbor evaluation from 696,967 to 131,072 under the live card-memory budget",
     "stop": "600-second timeout during steam at frame 70"
+  },
+  "warm_base_prefix_s": 15.84,
+  "cold_failure_attempt": {
+    "adapter": "NVIDIA GeForce RTX 3080 Ti",
+    "process_rss_cap_mb": 16384,
+    "card_memory_capacity_mb": 12288,
+    "full_detail_stage_s": {
+      "liquid_cache": 890.04,
+      "surface": 113.36
+    },
+    "full_detail_stage_frames": {
+      "liquid_cache": {
+        "mean_ms": 7416.96,
+        "p95_ms": 14968.44
+      },
+      "surface": {
+        "mean_ms": 944.68,
+        "p95_ms": 2285.16
+      },
+      "whitewater": {
+        "last_frame": 90
+      }
+    },
+    "full_detail_memory_peaks": {
+      "liquid_cache": {
+        "peak_process_rss_mb": 16174.4,
+        "peak_process_swap_mb": 0.0,
+        "peak_card_memory_mb": 9819.0,
+        "card_memory_scope": "process allocation"
+      },
+      "cache_write": {
+        "peak_process_rss_mb": 13371.7,
+        "peak_process_swap_mb": 0.0,
+        "peak_card_memory_mb": 9821.0,
+        "card_memory_scope": "process allocation"
+      },
+      "surface": {
+        "peak_process_rss_mb": 10359.1,
+        "peak_process_swap_mb": 0.0,
+        "peak_card_memory_mb": 7773.0,
+        "card_memory_scope": "process allocation"
+      },
+      "whitewater": {
+        "peak_process_rss_mb": 12808.1,
+        "peak_process_swap_mb": 0.0,
+        "peak_card_memory_mb": 9821.0,
+        "card_memory_scope": "process allocation"
+      }
+    },
+    "failure": {
+      "edit": "pour_rate",
+      "stage": "whitewater",
+      "frame": 91,
+      "error": "GPUValidationError: Validation Error\n\nCaused by:\n  In wgpuDeviceCreateBuffer\n    Not enough memory left.",
+      "cleaned_up": true
+    },
+    "process_swap_mb": 0.0
+  },
+  "adapter_runs": {
+    "integrated_laptop_standin": {
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "cpu_affinity": "taskset -c 0-3",
+      "process_rss_cap_mb": 16384,
+      "full_base_prefix_s": 256.01,
+      "full_detail_stage_s": {
+        "liquid_cache": 707.19,
+        "surface": 112.11,
+        "whitewater": 44.91,
+        "steam_cache": 303.56
+      },
+      "full_detail_total_s": 1167.77,
+      "full_detail_stage_frames": {
+        "liquid_cache": {
+          "frames": 120,
+          "mean_ms": 5893.29,
+          "p95_ms": 11854.01
+        },
+        "surface": {
+          "frames": 120,
+          "mean_ms": 934.25,
+          "p95_ms": 1936.37
+        },
+        "whitewater": {
+          "frames": 120,
+          "mean_ms": 374.22,
+          "p95_ms": 851.11
+        },
+        "steam_cache": {
+          "frames": 120,
+          "mean_ms": 2529.7,
+          "p95_ms": 5957.43
+        }
+      },
+      "full_detail_memory_peaks": {
+        "liquid_cache": {
+          "peak_process_rss_mb": 13990.7,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 2015.4,
+          "card_memory_scope": "adapter VRAM in use"
+        },
+        "cache_write": {
+          "peak_process_rss_mb": 13248.3,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 2032.2,
+          "card_memory_scope": "adapter VRAM in use"
+        },
+        "surface": {
+          "peak_process_rss_mb": 7236.5,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 1791.8,
+          "card_memory_scope": "adapter VRAM in use"
+        },
+        "whitewater": {
+          "peak_process_rss_mb": 7755.7,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 1791.9,
+          "card_memory_scope": "adapter VRAM in use"
+        },
+        "steam_cache": {
+          "peak_process_rss_mb": 13545.3,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 1920.5,
+          "card_memory_scope": "adapter VRAM in use"
+        }
+      },
+      "process_swap_mb": 0.0
+    },
+    "a6000_estimate": {
+      "status": "labelled estimate; not measured",
+      "basis": "0.8\u20131.3\u00d7 the measured warm-cache RTX 3080 Ti stage times",
+      "relative_factor": [
+        0.8,
+        1.3
+      ]
+    }
   }
 }

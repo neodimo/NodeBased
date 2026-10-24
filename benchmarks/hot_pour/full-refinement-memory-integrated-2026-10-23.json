@@ -1,0 +1,109 @@
+{
+  "adapter_request": "integrated",
+  "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+  "liquid_cells": 256,
+  "smoke_cells": 192,
+  "frames": 120,
+  "edit_frame": 60,
+  "max_process_rss_mb": 16384,
+  "proxy_resolution_cells": 64,
+  "viewport": [
+    1920,
+    1080
+  ],
+  "edits": {
+    "pour_rate": {
+      "full_detail_stage_s": {
+        "liquid_cache": 707.19,
+        "surface": 112.11,
+        "whitewater": 44.91,
+        "steam_cache": 303.56
+      },
+      "full_detail_stage_frames": {
+        "liquid_cache": {
+          "mean_ms": 5893.29,
+          "p95_ms": 11854.01
+        },
+        "surface": {
+          "mean_ms": 934.25,
+          "p95_ms": 1936.37
+        },
+        "whitewater": {
+          "mean_ms": 374.22,
+          "p95_ms": 851.11
+        },
+        "steam_cache": {
+          "mean_ms": 2529.7,
+          "p95_ms": 5957.43
+        }
+      },
+      "full_detail_memory_peaks": {
+        "liquid_cache": {
+          "peak_process_rss_mb": 13990.7,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 2015.4,
+          "card_memory_scope": "adapter VRAM in use"
+        },
+        "cache_write": {
+          "peak_process_rss_mb": 13248.3,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 2032.2,
+          "card_memory_scope": "adapter VRAM in use"
+        },
+        "surface": {
+          "peak_process_rss_mb": 7236.5,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 1791.8,
+          "card_memory_scope": "adapter VRAM in use"
+        },
+        "whitewater": {
+          "peak_process_rss_mb": 7755.7,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 1791.9,
+          "card_memory_scope": "adapter VRAM in use"
+        },
+        "steam_cache": {
+          "peak_process_rss_mb": 13545.3,
+          "peak_process_swap_mb": 0.0,
+          "peak_card_memory_mb": 1920.5,
+          "card_memory_scope": "adapter VRAM in use"
+        }
+      },
+      "full_detail_total_s": 1167.77,
+      "full_detail_cache_bytes": 17211654347
+    }
+  },
+  "full_base_prefix_memory_peaks": {
+    "cache_write": {
+      "peak_process_rss_mb": 5982.5,
+      "peak_process_swap_mb": 0.0,
+      "peak_card_memory_mb": 2032.2,
+      "card_memory_scope": "adapter VRAM in use"
+    },
+    "liquid_cache": {
+      "peak_process_rss_mb": 2174.4,
+      "peak_process_swap_mb": 0.0,
+      "peak_card_memory_mb": 1855.3,
+      "card_memory_scope": "adapter VRAM in use"
+    },
+    "surface": {
+      "peak_process_rss_mb": 2522.5,
+      "peak_process_swap_mb": 0.0,
+      "peak_card_memory_mb": 1855.7,
+      "card_memory_scope": "adapter VRAM in use"
+    },
+    "whitewater": {
+      "peak_process_rss_mb": 2984.7,
+      "peak_process_swap_mb": 0.0,
+      "peak_card_memory_mb": 1823.6,
+      "card_memory_scope": "adapter VRAM in use"
+    },
+    "steam_cache": {
+      "peak_process_rss_mb": 6232.3,
+      "peak_process_swap_mb": 0.0,
+      "peak_card_memory_mb": 2032.2,
+      "card_memory_scope": "adapter VRAM in use"
+    }
+  },
+  "full_base_prefix_s": 256.01
+}

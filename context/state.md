@@ -1,3 +1,7 @@
+# Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
+
+Fresh RTX cold refinement completed edited liquid and surface but hit a whitewater card-allocation failure during frame 91. With warm caches, all four edited stages completed through frame 120 after whitewater reduced neighbor evaluation. A separate Radeon 8060S laptop-stand-in run under `taskset -c 0-3` completed all four stages under the 16 GiB RSS cap. Swap stayed at zero. The remaining direct A6000 measurement cannot run here: only the RTX 3080 Ti is attached and no remote host is configured; the docs contain a labelled estimate. See the newest TASKLOG entry and paired benchmark JSONs.
+
 # Lane 6 — 2026-10-23 step A full-detail refinement memory (PARTIAL)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (6:45 PM on 2026-10-23 PDT)

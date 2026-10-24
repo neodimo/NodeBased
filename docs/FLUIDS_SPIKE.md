@@ -1757,27 +1757,22 @@ The initial catcher thumbnail keeps the cup/table composition and defers the exp
 
 Acceleration build, upload and pipeline measurements are subphases within the beauty-render stage; they are listed separately to expose preparation cost and should not be added to the beauty-render total a second time.
 
-### A of 1: full-detail refinement memory (partial, 2026-10-23)
+### A of 1: full-detail refinement memory (finish 1, partial, 2026-10-23)
 
-The full-detail memory probe records process RSS, process swap and card memory per stage. It uses a 128 MiB evaluator result cache, 64 MiB in-memory simulation stores that spill checkpoints to disk, a 16 GiB sampled RSS stop and a 23 GB scratch ceiling. The 256³ liquid / 192³ steam RTX 3080 Ti run completed the 59-frame baseline prefix in 516.47 s. After a frame-60 `pour_rate` edit, the cold liquid and surface stages completed all 120 frames. Cold whitewater reached frame 80 and hit a GPU buffer allocation failure during frame 90; steam had not started. A subsequent warm-cache retry completed whitewater through frame 120 after reporting that neighbor evaluation was reduced from 696,967 to 131,072. Steam reached frame 70 before the 600-second timeout. The warm retry's stage timings are incremental and are not cold full-stage totals. Swap remained zero.
+The full-detail harness records process RSS, process swap and card memory per stage. It uses a 128 MiB evaluator result cache, 64 MiB in-memory simulation stores that spill checkpoints to disk, a 16 GiB sampled RSS stop and a 23 GB scratch ceiling. The frame-60 `pour_rate` edit was tested at 256³ liquid / 192³ steam.
 
-| Edited stage | Cold time | Cold peak process RSS | Cold peak card memory | Cold completion |
-| --- | ---: | ---: | ---: | ---: |
-| Liquid cache | 901.51 s | 16,104.3 MiB | 9,819 MiB | 120 / 120 |
-| Surface | 121.11 s | 10,328.4 MiB | 8,029 MiB | 120 / 120 |
-| Whitewater | — | 12,628.7 MiB | 9,821 MiB | 80 / 120; failed during frame 90 |
-| Steam cache | — | — | — | not started in cold run |
-| Cache write | — | 13,365.3 MiB | 9,821 MiB | — |
+A fresh RTX run completed liquid and surface through frame 120, then hit a card-buffer allocation failure during whitewater frame 91. Its peak process RSS was 16,174.4 MiB, card allocation 9,821 MiB, and swap 0. A warm-cache retry then completed all four edited stages through frame 120; whitewater reduced neighbor work from 696,541 to 131,072. The measured retry times were liquid 15.30 s, surface 15.52 s, whitewater 169.14 s and steam 385.48 s (585.44 s total). Retry peaks were 9,659.9 MiB RSS and 5,706 MiB card allocation, with zero swap. These retry times include warm-cache reuse; the fresh cold liquid and surface timings were 890.04 s and 113.36 s.
 
-The warm retry completed whitewater at an incremental 195.69 s, peaking at 3,590.7 MiB process RSS and 3,595 MiB card memory. Steam reached frame 70 with peaks of 6,094.1 MiB RSS and 4,682 MiB card memory. Both runs reported zero process swap. The JSON records both attempts and the 12 GiB cap attempts.
+| Adapter / run | Liquid | Surface | Whitewater | Steam | Peak RSS | Peak card memory | Swap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| RTX 3080 Ti, cold attempt | 890.04 s | 113.36 s | stopped at frame 90 | not started | 16,174.4 MiB | 9,821 MiB | 0 MiB |
+| RTX 3080 Ti, warm completion | 15.30 s | 15.52 s | 169.14 s | 385.48 s | 9,659.9 MiB | 5,706 MiB | 0 MiB |
+| Radeon 8060S laptop stand-in, 4 CPU cores | 707.19 s | 112.11 s | 44.91 s | 303.56 s | 13,990.7 MiB | 2,032.2 MiB adapter use | 0 MiB |
+| RTX A6000 | **Estimate only** | **Estimate only** | **Estimate only** | **Estimate only** | — | 48 GB capacity | — |
 
-| Adapter | Full-detail status | Memory / time note |
-| --- | --- | --- |
-| RTX 3080 Ti | Partial | Cold RSS peak 16,104.3 MiB; card peak 9,821 MiB; swap 0 MiB. Warm whitewater completed; steam stopped at frame 70 on timeout. |
-| Integrated Radeon laptop stand-in | Unmeasured | Required 16 GiB RSS run with `taskset -c 0-3` remains pending. |
-| RTX A6000 | Estimate only | 48 GB VRAM offers more headroom; 0.8–1.3× RTX stage time is a planning estimate, not measured. |
+The laptop run completed every changed stage through 120/120 using `taskset -c 0-3`, within the 16 GiB RSS stop. For the A6000, the planning estimate is 0.8–1.3× the completed warm-cache RTX stage times; this machine has no A6000 attached or connected, so the estimate is not a measurement. Full stage data and the cold failure details are in `benchmarks/hot_pour/full-refinement-memory-rtx-2026-10-23.json` and `benchmarks/hot_pour/full-refinement-memory-integrated-2026-10-23.json`.
 
-**State:** PARTIAL. Whitewater budgeting and disk-streamed cache tests pass on CPU/llvmpipe; whitewater GPU tests pass on RTX, Radeon and llvmpipe. Full 120-frame steam, the laptop RSS gate and A6000 measurement remain open.
+**State:** PARTIAL. RTX warm-cache and integrated laptop runs completed all edited stages with no swap; the fresh RTX attempt still exposed a whitewater allocation failure before the adaptive warm retry. CPU/llvmpipe memory, streaming, fluid-cache and timeline checks pass. The A6000 estimate is labelled; direct A6000 measurement is unavailable on this host.
 
 ## K2 rigid bodies — finish 1
 
