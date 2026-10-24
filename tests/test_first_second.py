@@ -15,6 +15,7 @@ for its first picture because the exact picture comes from the processor; each t
 and the draft documents in `Window.request_preview`."""
 import copy
 import os
+import pathlib
 import unittest
 import unittest.mock
 import uuid
@@ -289,6 +290,51 @@ class FirstFramesBuildNothingNew(unittest.TestCase):
             moved = replace(CAMERA, transform=replace(CAMERA.transform, position=s.Vec3(position.x + .02 * step, position.y, position.z)))
             self.render(scene, moved, playing=True, volume=SETTINGS, ambient=.2)
         self.assertEqual(pipeline_builds(self.trace), [], "the first frames after a cold start rebuilt pipelines the scene had built")
+
+
+
+class PlaybackTickKeepsItsSlot(unittest.TestCase):
+    """`_next_playback_interval_ms` moves its deadline on from a wakeup up to `PLAYBACK_TICK_SLACK` short of it, so the tick that
+    wakeup runs must count that frame boundary as reached. Without it a tick 0.06 ms early moved the deadline and left the playhead,
+    and the smoke, splats and glass scene (a frame fills 40 of the 41.7 ms) lost one slot, an 84 ms gap, in about every third
+    3 s of playback (10/23)."""
+
+    def stub(self, now_ms, rendered):
+        from types import SimpleNamespace
+        from nodebased import app as app_module
+        window = SimpleNamespace(
+            dispatcher=SimpleNamespace(document={"time": {"first": 1, "last": 100, "current": 8, "fps": 24.0}}),
+            playback_origin_time=1000.0, playback_origin_frame=5, playback_elapsed_frames=3, playback_dropped_frames=0,
+            playback_frames_rendered=rendered, play_direction=1, loop_mode="loop", _fluid_edit_bake=None,
+            _realtime_light_updated=1000.0 + now_ms / 1000.0, playing=True, PLAYBACK_TICK_SLACK=app_module.Window.PLAYBACK_TICK_SLACK,
+            update_realtime_light=lambda: None, set_time=unittest.mock.Mock(), toggle_playback=unittest.mock.Mock(),
+            _schedule_playback_tick=unittest.mock.Mock())
+        return app_module, window
+
+    def tick_at(self, now_ms, rendered=6):
+        app_module, window = self.stub(now_ms, rendered)
+        with unittest.mock.patch.object(app_module.time, "monotonic", return_value=1000.0 + now_ms / 1000.0):
+            app_module.Window.playback_tick(window)
+        return window
+
+    def test_a_tick_a_few_hundredths_of_a_millisecond_before_the_boundary_advances_the_playhead(self):
+        boundary = 4 * 1000.0 / 24.0               # the fourth frame boundary, 166.67 ms after play
+        window = self.tick_at(boundary - 0.06)
+        self.assertEqual(window.playback_elapsed_frames, 4)
+        window.set_time.assert_called_once()
+        self.assertEqual(window.set_time.call_args.kwargs["current"], 9)      # origin 5 + 4 frames
+
+    def test_a_tick_further_before_the_boundary_waits_for_it(self):
+        boundary = 4 * 1000.0 / 24.0
+        window = self.tick_at(boundary - 2.0)
+        self.assertEqual(window.playback_elapsed_frames, 3)
+        window.set_time.assert_not_called()
+
+    def test_the_deadline_and_the_tick_agree_on_the_slack(self):
+        from nodebased import app as app_module
+        self.assertEqual(app_module.Window.PLAYBACK_TICK_SLACK, 0.0005)
+        source = pathlib.Path(app_module.__file__).read_text(encoding="utf-8")
+        self.assertIn("self._playback_next_deadline - self.PLAYBACK_TICK_SLACK", source)
 
 
 if __name__ == "__main__":

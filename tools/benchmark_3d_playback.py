@@ -418,12 +418,13 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     window.toggle_playback(True)
     start = time.monotonic()
     statuses = []
-    first_times = None
+    first_times = first_dropped = None
     while time.monotonic() - start < args.seconds:
         spin(0.1)
         statuses.append(window.statusBar().currentMessage())
         if args.first_seconds and first_times is None and time.monotonic() - start >= args.first_seconds + 0.5:
             first_times = list(window.playback_shown_times)
+            first_dropped = window.playback_dropped_frames
     elapsed = time.monotonic() - start
     playing_tier = int(window.proxy.currentData() or 1)
     picture_check = check_shown_picture(window)
@@ -434,6 +435,7 @@ def run_scene(window, app, scene, args, splat_path, width, height):
     if args.first_seconds:
         cold = first_seconds_report(first_times or list(window.playback_shown_times), start, args.first_seconds, 1000.0 / args.fps, events, builds)
         cold["first_picture"] = first_picture
+        cold["frames_skipped"] = first_dropped if first_dropped is not None else window.playback_dropped_frames     # the playhead jumped over these
     if args.events:
         Path(args.events).write_text(json.dumps(events))
     main_times = list(window.playback_shown_times)
@@ -453,8 +455,10 @@ def run_scene(window, app, scene, args, splat_path, width, height):
         while time.monotonic() - warm_start < args.first_seconds + 0.5:
             spin(0.1)
         warm_times = list(window.playback_shown_times)
+        warm_dropped = window.playback_dropped_frames
         window.toggle_playback(False)
         warm = first_seconds_report(warm_times, warm_start, args.first_seconds, 1000.0 / args.fps, playback_trace.disable(), builds)
+        warm["frames_skipped"] = warm_dropped
         stopped = time.monotonic()
     if builds is not None:
         builds.remove()

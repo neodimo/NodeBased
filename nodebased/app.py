@@ -9874,7 +9874,10 @@ class Window(QMainWindow):
         identical to plain wall-clock-following."""
         time_range = self.dispatcher.document["time"]
         _trace_mark("tick")
-        elapsed_frames = int((time.monotonic() - self.playback_origin_time) * time_range["fps"])
+        # A wakeup within PLAYBACK_TICK_SLACK of the frame boundary counts as on it: `_next_playback_interval_ms` moves its deadline
+        # on from that close, so a tick 0.06 ms short of the boundary that did not advance the playhead lost the whole slot (10/23:
+        # one 84 ms gap in about every third 3 s of the smoke, splats and glass scene, whose frame fills 40 of the 41.7 ms).
+        elapsed_frames = int((time.monotonic() - self.playback_origin_time + self.PLAYBACK_TICK_SLACK) * time_range["fps"])
         advanced = elapsed_frames - self.playback_elapsed_frames
         if advanced > 1:
             self.playback_dropped_frames += advanced - 1
@@ -9898,13 +9901,15 @@ class Window(QMainWindow):
         elif self.playing:
             self._schedule_playback_tick(float(time_range["fps"]))
 
+    PLAYBACK_TICK_SLACK = 0.0005
+
     def _next_playback_interval_ms(self, fps):
         """Keep precise one-shot timer wakeups on the frame-rate's fractional phase."""
         now = time.monotonic()
         period = 1.0 / max(1.0, float(fps))
         if self._playback_next_deadline is None:
             self._playback_next_deadline = now + period
-        elif now >= self._playback_next_deadline - 0.0005:
+        elif now >= self._playback_next_deadline - self.PLAYBACK_TICK_SLACK:
             # Only a wakeup that reached its deadline moves it on. A tick called early (a frame finished
             # between wakeups) must leave it where it is, or every early call pushes the next picture a
             # whole frame period further out.
