@@ -1,5 +1,28 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (12:05 AM on 2026-10-24 PDT)
+
+`main` moved `132df25e` -> `0badef1e` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `0badef1e` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-2355.log`, started 11:55 PM): **Ran 6216 tests in 485.541 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step B of 2: the four 3D scenes re-measured on the integrated card and the laptop stand-in, and the biggest cost there removed.** Commits:
+  - `d4fa9097` Hybrid laptop adapter tests skip when the test runner forces the default adapter (step B, part 6)
+  - `7cd760bd` Laptop step B, parts 1, 4 and 5: the four 3D scenes re-measured on the RTX, the Radeon and the laptop stand-in (timelines, readback numbers, scene check run on the stand-in), and the card's idle-clock attempt written down with its probes and five-run comparisons (a burst of compute plus a lower tier did not cut the late first frames; not in the product); docs and bundled copy (step B)
+  - `20bc23a6` Readback: a rendered 1080p float picture is copied out of the mapped card buffer by up to four threads (half the processors the process may use), 2.7 to 3.1 ms down to 2.1 to 2.7 ms on the RTX, the Radeon and the laptop stand-in, the one stage the timelines of all four test scenes share; the copy is tested for the same rows in the same places with padded rows, short bands and a single row (step B, part 2)
+  - `d3969f1d` Laptop check: tools/laptop_scene_check.py runs the four 3D scenes at 1080p on the card the app chooses and on the other kind of card, warm and after a 4 s rest, and writes a short result.txt to paste back; run here on the stand-in and in a test on the software renderer; field test guide updated (step B, part 4)
+  - `17042128` Graphics adapter on a hybrid machine: the app names the card it runs on and why (Automatic prefers a discrete card over the integrated one, a Settings or environment choice says who asked, a hidden discrete card is said to be missing); the reason is the top bar pill's last tooltip line and the Settings page's note; tested with a faked laptop list of integrated, discrete and software cards (step B, part 3)
+  Diff: 103 files changed, 218450 insertions(+), 11 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (9:25 PM on 2026-10-23 PDT)
 
 `main` moved `8dc0a3b1` -> `5b810c54` (lane commits cherry-picked onto main in lane order) and then to this

@@ -1,3 +1,9 @@
+## 2026-10-24 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step B of 2: the four 3D scenes re-measured on the integrated card and the laptop stand-in, and the biggest cost there removed (integrator tick)
+
+- **What was done:** `main` `132df25e` -> `0badef1e` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `0badef1e`: Ran 6216 tests in 485.541 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-23 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step A of 1: the full-detail Hot pour refines within memory on all three machines (finish 1) (integrator tick)
 
 - **What was done:** `main` `8dc0a3b1` -> `5b810c54` plus this docs commit. Evidence and per-lane commit
