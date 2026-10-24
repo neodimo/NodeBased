@@ -139,6 +139,10 @@ class HybridLaptop(unittest.TestCase):
             self.opened = True
             return HybridLaptop.Device()
 
+    def setUp(self):
+        if gpu3d._state.__name__ != '_state':        # run/force-adapter.py swaps in a state function that ignores the faked list
+            self.skipTest('the default adapter is forced by the test runner; the unforced run covers the choice')
+
     def _open(self, preference='', adapters=None):
         import wgpu
         adapters = adapters or [self.Opener('Intel(R) Iris(R) Xe Graphics', 'IntegratedGPU'), self.Opener('llvmpipe', 'CPU'),
