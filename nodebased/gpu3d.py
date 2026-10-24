@@ -207,6 +207,46 @@ def adapter_warning(chosen_name, adapters=None):
     return f"{chosen_name}: a discrete adapter is available, Settings \u2192 Graphics adapter"
 
 
+def adapter_preference_source():
+    """Where the preference named by `adapter_preference` comes from: 'environment', 'settings' or '' (Automatic)."""
+    if os.environ.get(ADAPTER_ENV, '').strip():
+        return 'environment'
+    return 'settings' if adapter_preference() else ''
+
+
+def adapter_choice(chosen_name=None, adapters=None, preference=None, source=None):
+    """Which adapter the app runs on and why, in words an artist can read: a dict of `name`, `type` and `reason`.
+    On a hybrid laptop that lists a discrete card next to the integrated one, Automatic picks the discrete card;
+    when only the integrated card is listed the reason says so (Windows hides the discrete one from an application
+    it has not been told to give it to)."""
+    adapters = enumerate_adapters() if adapters is None else adapters
+    name = chosen_name if chosen_name is not None else chosen_adapter_name()
+    chosen = next((a for a in adapters if a['name'] == name), None)
+    kind = chosen['type'] if chosen else ''
+    preference = adapter_preference() if preference is None else preference
+    source = (adapter_preference_source() if source is None else source) if preference else ''
+    wanted = (preference or '').strip().lower()
+    others = []         # the other graphics cards; the same card listed again through OpenGL ('<name>/PCIe/SSE2') is not one
+    for a in adapters:
+        if a['type'] in ('discrete', 'integrated') and not (a['name'].startswith(name) or name.startswith(a['name'])) \
+                and a['name'] not in others:
+            others.append(a['name'])
+    if wanted and wanted != 'automatic' and wanted in name.lower():
+        where = 'the NODEBASED_ADAPTER setting' if source == 'environment' else 'Settings \u2192 Graphics adapter'
+        reason = f'chosen in {where}'
+    elif wanted and wanted != 'automatic':
+        reason = f'{preference!r} matches no adapter on this machine, so the best one was chosen automatically'
+    elif not chosen:
+        reason = 'the graphics driver chose it'
+    elif kind == 'discrete':
+        reason = 'Automatic: a discrete graphics card is preferred' + (f' over {", ".join(others)}' if others else '')
+    elif kind == 'integrated':
+        reason = 'Automatic: the only graphics card this application can see; a discrete card is not listed'
+    else:
+        reason = 'Automatic: no graphics card is available, so the processor draws'
+    return dict(name=name, type=kind, reason=reason)
+
+
 ADAPTER_WARNING_HELP = ('A discrete graphics card is installed but this application is not using it. Its speed depends '
                         'on the workload and connection. Pick it in Settings '
                         '\u2192 Graphics adapter (takes effect after a restart). If the card is not listed, Windows is hiding '

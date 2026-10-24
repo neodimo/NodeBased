@@ -117,5 +117,86 @@ class TopBarWarning(unittest.TestCase):
         self.assertIn('restart', dialog.graphics_adapter_note.text().lower())
 
 
+class HybridLaptop(unittest.TestCase):
+    """A hybrid laptop lists the integrated card, the discrete card and a software renderer: the device the app really
+    opens is the discrete card, and the artist is told which card it is and why (10/23, Lane 4 step B, part 3)."""
+
+    class Device:
+        limits = {'max-texture-dimension-2d': 8192}
+        _nb_memory_tracker = object()
+
+        def create_texture(self, **_):
+            return mock.Mock()
+
+    class Opener(Fake):
+        def __init__(self, name, kind):
+            super().__init__(name, kind)
+            self.limits['max-storage-buffers-per-shader-stage'] = 8
+            self.features = {'float32-blendable'}
+            self.opened = False
+
+        def request_device_sync(self, **_):
+            self.opened = True
+            return HybridLaptop.Device()
+
+    def _open(self, preference='', adapters=None):
+        import wgpu
+        adapters = adapters or [self.Opener('Intel(R) Iris(R) Xe Graphics', 'IntegratedGPU'), self.Opener('llvmpipe', 'CPU'),
+                                self.Opener('NVIDIA GeForce RTX 4070 Laptop GPU', 'DiscreteGPU')]
+        env = {k: v for k, v in os.environ.items() if k != gpu3d.ADAPTER_ENV}
+        if preference:
+            env[gpu3d.ADAPTER_ENV] = preference
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(gpu3d, '_states', {}), mock.patch.object(gpu3d, '_errors', {}), \
+                mock.patch.object(gpu3d, '_adapter_logged', []), mock.patch.dict(gpu3d._adapter_cache, clear=True), \
+                mock.patch.object(wgpu.gpu, 'enumerate_adapters_sync', lambda: list(adapters)), \
+                mock.patch.object(gpu3d, 'adapter_preference', gpu3d.adapter_preference):
+            state = gpu3d._state()
+            return adapters, state, gpu3d.adapter_choice()
+
+    def test_the_discrete_card_is_the_one_opened(self):
+        adapters, state, choice = self._open()
+        self.assertEqual(state['info']['device'], 'NVIDIA GeForce RTX 4070 Laptop GPU')
+        self.assertEqual([a.opened for a in adapters], [False, False, True])
+
+    def test_the_reason_names_the_card_and_what_it_was_preferred_over(self):
+        _, _, choice = self._open()
+        self.assertEqual(choice['name'], 'NVIDIA GeForce RTX 4070 Laptop GPU')
+        self.assertEqual(choice['type'], 'discrete')
+        self.assertIn('discrete graphics card is preferred', choice['reason'])
+        self.assertIn('Intel(R) Iris(R) Xe Graphics', choice['reason'])
+        self.assertNotIn('llvmpipe', choice['reason'])
+
+    def test_the_same_card_listed_again_through_opengl_is_not_another_card(self):
+        adapters = [self.Opener('Intel(R) Iris(R) Xe Graphics', 'IntegratedGPU'), self.Opener('NVIDIA GeForce RTX 4070 Laptop GPU', 'DiscreteGPU'),
+                    self.Opener('NVIDIA GeForce RTX 4070 Laptop GPU/PCIe/SSE2', 'Unknown')]
+        _, _, choice = self._open(adapters=adapters)
+        self.assertEqual(choice['name'], 'NVIDIA GeForce RTX 4070 Laptop GPU')
+        self.assertTrue(choice['reason'].endswith('over Intel(R) Iris(R) Xe Graphics'), choice['reason'])
+
+    def test_a_named_card_is_opened_and_the_reason_says_who_asked(self):
+        adapters, state, choice = self._open('iris')
+        self.assertEqual(state['info']['device'], 'Intel(R) Iris(R) Xe Graphics')
+        self.assertIn('NODEBASED_ADAPTER', choice['reason'])
+
+    def test_windows_hiding_the_discrete_card_is_said(self):
+        _, state, choice = self._open(adapters=[self.Opener('Intel(R) Iris(R) Xe Graphics', 'IntegratedGPU')])
+        self.assertEqual(choice['type'], 'integrated')
+        self.assertIn('a discrete card is not listed', choice['reason'])
+
+    def test_the_pill_and_the_settings_page_show_the_reason(self):
+        from PySide6.QtWidgets import QApplication
+        from nodebased.app import ProjectSettingsDialog
+        from nodebased.topbar import GpuPill
+        QApplication.instance() or QApplication([])
+        _, _, choice = self._open()
+        pill = GpuPill()
+        pill.set_state(choice['name'], 12, reason=choice['reason'])
+        self.assertIn('Why this adapter: ' + choice['reason'], pill.toolTip())
+        dialog = ProjectSettingsDialog(copy.deepcopy(DEFAULT_SETTINGS), adapters=summaries(LAPTOP), adapter_now=choice)
+        self.assertIn(choice['reason'], dialog.graphics_adapter_note.text())
+        self.assertIn('NVIDIA GeForce RTX 4070', dialog.graphics_adapter_note.text())
+
+
 if __name__ == '__main__':
     unittest.main()

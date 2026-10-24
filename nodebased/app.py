@@ -8043,7 +8043,7 @@ class ProjectSettingsDialog(QDialog):
 
     def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
                  max_panels=5, cache_float32=False, auto_3d=False,
-                 adapters=(), graphics_adapter="", graph_opengl=False, direct_edit=True):
+                 adapters=(), graphics_adapter="", graph_opengl=False, direct_edit=True, adapter_now=None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -8112,7 +8112,11 @@ class ProjectSettingsDialog(QDialog):
         self.graphics_adapter.setCurrentIndex(max(0, index))
         self.graphics_adapter.setToolTip("Which graphics card renders the 3D views. Takes effect after you restart "
                                          "NodeBased. The NODEBASED_ADAPTER environment variable (part of a name) overrides this.")
-        self.graphics_adapter_note = QLabel("Takes effect after restarting NodeBased")
+        note = "Takes effect after restarting NodeBased"
+        if adapter_now and adapter_now.get("name"):
+            note = f"Using {adapter_now['name']}: {adapter_now['reason']}. {note}"
+        self.graphics_adapter_note = QLabel(note)
+        self.graphics_adapter_note.setWordWrap(True)
         self.graphics_adapter_note.setObjectName("graphics-adapter-note")
         interface.addRow("Graphics adapter", self.graphics_adapter)
         interface.addRow("", self.graphics_adapter_note)
@@ -11333,6 +11337,7 @@ class Window(QMainWindow):
                                        cache_float32=self.preferences.display_cache_float32(),
                                        auto_3d=self.preferences.viewer_auto_3d(),
                                        adapters=gpu3d.enumerate_adapters(),
+                                       adapter_now=gpu3d.adapter_choice(),
                                        graphics_adapter=self.preferences.graphics_adapter(),
                                        graph_opengl=self.preferences.graph_opengl(),
                                        direct_edit=self.preferences.direct_edit())
@@ -15856,7 +15861,8 @@ class Window(QMainWindow):
                 name = gpu3d.chosen_adapter_name() or gpudisplay.adapter_name()
                 warning = gpu3d.adapter_warning(name)
                 self.topbar.set_gpu(name, self.last_frame_ms, gpu=gpudisplay.status() == "GPU",
-                                    warning=warning, help_text=gpu3d.ADAPTER_WARNING_HELP if warning else "")
+                                    warning=warning, help_text=gpu3d.ADAPTER_WARNING_HELP if warning else "",
+                                    reason=gpu3d.adapter_choice(name)["reason"])
             self.update_status_summary(request.frame)
         current = self.dispatcher.document["time"]["current"]
         # Outside playback the rule stays strict: a result is displayable only if it is still the

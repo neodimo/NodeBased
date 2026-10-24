@@ -254,10 +254,11 @@ class GpuPill(QFrame):
         self.warning = False
         self.set_state("", None, gpu=False)
 
-    def set_state(self, adapter, frame_ms, gpu=True, warning=None, help_text=""):
+    def set_state(self, adapter, frame_ms, gpu=True, warning=None, help_text="", reason=""):
         """`adapter` is the display adapter name ('' when unknown), `frame_ms` the last frame's
         time in milliseconds or None before the first frame. `warning` replaces the name with a
-        message (amber) when a faster adapter exists; `help_text` goes into the tooltip."""
+        message (amber) when a faster adapter exists; `help_text` goes into the tooltip; `reason` says why the
+        adapter was chosen (Automatic prefers a discrete card, Settings, the environment) and is the tooltip's last line."""
         self._adapter = warning or adapter or ("GPU" if gpu else "CPU")
         self._frame_ms = frame_ms
         self.warning = bool(warning)
@@ -266,6 +267,8 @@ class GpuPill(QFrame):
         self._tooltip = (f"{warning}\n{help_text}" if warning else
                          f"{self._adapter}: display adapter and the last frame time" if gpu
                          else "No GPU display adapter in use; the CPU is drawing the viewer")
+        if reason:
+            self._tooltip += f"\nWhy this adapter: {reason}"
         self.setToolTip(self._tooltip)
         self._refresh()
 
@@ -359,8 +362,8 @@ class TopBar(QWidget):
         self.saved_dot.set_color(TOKENS["acc"] if saved else TOKENS["tx2"])
         self.saved_dot.setToolTip("Saved" if saved else "Unsaved changes")
 
-    def set_gpu(self, adapter, frame_ms, gpu=True, warning=None, help_text=""):
-        self.gpu_pill.set_state(adapter, frame_ms, gpu, warning, help_text)
+    def set_gpu(self, adapter, frame_ms, gpu=True, warning=None, help_text="", reason=""):
+        self.gpu_pill.set_state(adapter, frame_ms, gpu, warning, help_text, reason)
         self._fit()      # a longer adapter name or time may no longer fit
         self._announce_floor()
 
