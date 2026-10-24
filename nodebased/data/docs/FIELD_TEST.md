@@ -213,6 +213,26 @@ to drag the wipe line 25 times and times each step to the first frame that shows
 move times against the 50 ms limit, the Viewer-against-direct figures and the saving. Run it on the A6000 machine the same way. Bring back the
 whole `laptop-paused` folder; nothing is claimed for either machine until its own `result.json` exists.
 
+## 3D scene check (the Windows laptop and the A6000 machine, six minutes)
+
+One command plays the four test scenes (cube, furnished room, mixed room with splats, smoke with splats and glass) at 1080p in the real
+window and writes a short file to paste back. For each scene it records the time to the first picture, the pictures a second over the first
+3 s of playback, the longest gap between two pictures (the limit is 54 ms at 24 a second), and the same longest gap when play is pressed after
+the card has rested 4 s (a discrete card lowers its clock when idle). When the machine lists a discrete and an integrated card it runs both:
+first the card the application chooses (the file says which and why), then the other. It uses the field-kit Python and changes no setting.
+Connect power, close other GPU work, and leave the window alone while it runs:
+
+```powershell
+python tools\laptop_scene_check.py --self-check        # a few seconds on the software renderer; proves the script runs, measures nothing
+python tools\laptop_scene_check.py                     # about six minutes per card; writes scene-check\result.txt and result.json
+python tools\laptop_scene_check.py --quick             # cube and furnished room only
+python tools\laptop_scene_check.py --read scene-check  # print an earlier run's summary on any machine
+```
+
+Paste back `scene-check\result.txt` (under 40 lines) and keep `scene-check\result.json`. The runs play as the application ships, with "Proxy
+while playing" on; `--proxy off` plays at the size set, the raw cost. Nothing is claimed for the Windows laptop or the A6000 machine until its
+own `result.txt` exists.
+
 ## What the A6000 lets us test that the 3080 Ti cannot
 
 The A6000 is the same Ampere generation as the 3080 Ti, with a similar amount of raw speed, so most per-frame numbers should land close.
