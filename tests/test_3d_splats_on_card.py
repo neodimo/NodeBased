@@ -12,10 +12,15 @@ import numpy as np
 
 import tests.isolation  # noqa: F401
 from nodebased import gpu3d, gpupicture, gpusplat, imaging, scene3d as s, splats
+from tests import gpu_precision
 from tests.test_3d_card_picture import reference, rows_of
 
 W, H = 64, 48
 ON_CARD_TOLERANCE = 6e-3        # half-float blending: the two routes round at different places (the layer's own, then the sum)
+# An adapter without float32-blendable blends the whole picture in half float too, so the routes round once more
+# each (0.43.0 Windows build, 10/23 10:45 PM: one pixel of 12,288 off by 6.4e-3 on the CI's software adapter).
+if gpu_precision.half_float_target():
+    ON_CARD_TOLERANCE *= 2
 
 
 def disc(position, colour, opacity=.9, size=.9):
