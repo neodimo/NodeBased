@@ -1,5 +1,6 @@
 """tools/laptop_scene_check.py: the one command DiMo runs on the Windows laptop and the A6000 machine (Lane 4, 10/23, step B part 4).
 The summary and the verdict are tested on canned run files; one real run on the software renderer proves the command end to end."""
+import importlib.util
 import json
 import os
 import pathlib
@@ -70,6 +71,7 @@ class Summary(unittest.TestCase):
         self.assertLess(len(text.splitlines()), 40)       # short enough to paste into a message
 
 
+@unittest.skipUnless(importlib.util.find_spec("wgpu") is not None, "wgpu is not installed: the self-check renders a real scene")
 class EndToEnd(unittest.TestCase):
     def test_the_command_runs_a_scene_and_writes_the_result_files(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -1,5 +1,6 @@
 """Which graphics adapter the app runs on: ranking, the Settings choice, the environment override and the warning."""
 import copy
+import importlib.util
 import os
 import unittest
 from unittest import mock
@@ -140,6 +141,8 @@ class HybridLaptop(unittest.TestCase):
             return HybridLaptop.Device()
 
     def setUp(self):
+        if importlib.util.find_spec('wgpu') is None:    # the conformance runners install no wgpu; the faked list still patches wgpu.gpu
+            self.skipTest('wgpu is not installed')
         if gpu3d._state.__name__ != '_state':        # run/force-adapter.py swaps in a state function that ignores the faked list
             self.skipTest('the default adapter is forced by the test runner; the unforced run covers the choice')
 
