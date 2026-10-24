@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 2: 3D scenes hold full rate from the first second, and the first picture comes up fast (integrator tick)
+
+- **What was done:** `main` `8c6e2d2d` -> `7b69adb1` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `7b69adb1`: Ran 6193 tests in 482.396 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 1: smoke and see-through objects with splats stay on the card, and Render mode settles the mixed scene faster (resume 1), Lane 6 (Fluids, GPT-6 Luna) step A of 1: the full-detail Hot pour refines within memory on all three machines (integrator tick)
 
 - **What was done:** `main` `eed3dca0` -> `58b1f6aa` plus this docs commit. Evidence and per-lane commit

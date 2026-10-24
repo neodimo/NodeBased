@@ -1,5 +1,27 @@
 # Lane 6 — 2026-10-23 step A full-detail refinement memory (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (5:25 PM on 2026-10-23 PDT)
+
+`main` moved `8c6e2d2d` -> `7b69adb1` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7b69adb1` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-1708.log`, started 5:08 PM): **Ran 6193 tests in 482.396 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 2: 3D scenes hold full rate from the first second, and the first picture comes up fast.** Commits:
+  - `ec756237` First second of a 3D scene: timelines, first-picture and first-3-seconds numbers on the RTX, Radeon, laptop stand-in and llvmpipe; docs and bundled copy (step A, part 4)
+  - `383702fe` A picture before playback builds the display pass the played frames use: the first played frame creates no shader or pipeline (step A, part 3)
+  - `b9e7256e` Pressing play cancels the stopped-frame render still running: Render3D's direct tile path passes its cancel event on, and the preview queue cancels every job it has taken and not retired (step A, part 2)
+  - `9625513f` First picture: the coarse tiers of a progressive preview draw splats with meshes on the card (smoke, splats and glass scene 7.1 s to 0.64 s at 1080p on the RTX); the playback tool records the first seconds and the card builds in them (step A, part 1)
+  Diff: 37 files changed, 117198 insertions(+), 19 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (12:39 PM on 2026-10-23 PDT)
 
 `main` moved `eed3dca0` -> `58b1f6aa` (lane commits cherry-picked onto main in lane order) and then to this
