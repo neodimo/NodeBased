@@ -1,0 +1,39 @@
+{
+ "scene": "mixed",
+ "size": "1920x1080",
+ "splats": 20000,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "routes": {
+  "processor": {
+   "frames": 30,
+   "stages_ms": {
+    "card picture used": 0.0,
+    "card: first submit to the last pixels mapped": 13.73,
+    "display picture (conversion stage)": 58.31,
+    "mesh passes (colour, and the depth pass on the processor route)": 16.44,
+    "readback copy": 1.86,
+    "splat colours (relit on the processor)": 3.9,
+    "splat layer on its own: upload, raster and readback": 24.18,
+    "splat sort": 1.08,
+    "whole render call": 68.39,
+    "compositing the layers and the rest on the processor": 27.77
+   },
+   "frame_ms": 68.39
+  },
+  "card": {
+   "frames": 30,
+   "stages_ms": {
+    "card picture used": 1.0,
+    "card: first submit to the last pixels mapped": 7.82,
+    "display picture (conversion stage)": 0.41,
+    "mesh passes (colour, and the depth pass on the processor route)": 9.76,
+    "readback copy": 1.55,
+    "splat colours (relit on the processor)": 2.93,
+    "splat preparation on the card route (sort, colours, buffers)": 4.03,
+    "splat sort": 0.91,
+    "whole render call": 9.92
+   },
+   "frame_ms": 9.92
+  }
+ }
+}

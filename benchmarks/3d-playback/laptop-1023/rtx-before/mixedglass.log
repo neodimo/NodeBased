@@ -1,0 +1,1 @@
+{"scene": "mixedglass", "adapter": "NVIDIA GeForce RTX 3080 Ti", "fps": 23.63, "interval_ms": {"n": 141, "p50": 41.56, "p95": 49.13, "p99": 54.75, "max": 55.08, "mean": 41.97}, "status": "Evaluating frame 145\u2026"}

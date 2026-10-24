@@ -809,3 +809,85 @@ direct Render3D path stops on a set cancel event; the queue cancels every runnin
 playback builds the display pass so the first played frames create no shader or pipeline; the played frames of smoke, splats and glass
 rebuild no pipeline the first picture built. `PlaybackTickKeepsItsSlot` (finish pass): a tick 0.06 ms before a frame boundary advances the playhead, one 2 ms before waits, and the deadline and the tick share the slack constant. Run on the RTX, the Radeon and llvmpipe with the splat, volume and glass agreement tests
 (`tests-L4-agree-*.log` in the lane run directory), each run under `flock -w 1800 /tmp/nb-gpu.lock` with a timeout.
+
+### The four 3D scenes on the integrated tier, the adapter choice and the card's idle clock (10/23, step B of the laptop step)
+
+Question: the Windows laptop (Iris Xe and an RTX 4070, hybrid) is the machine where the app felt sluggish. It has not been measured; the laptop
+stand-in is the Radeon 8060S on `taskset -c 0-3` with `QT_SCALE_FACTOR=2` on this workstation. This section re-measures the four scenes (cube,
+furnished room, mixed room with 20,000 splats, smoke with splats and glass) at 1080p on the RTX, the Radeon and the stand-in with the playback
+tool of step A (`--first-seconds 3 --replay --play-at first`, "Proxy while playing" off, so the rows are the raw cost), names the largest cost on
+the integrated tier, and reports what was and was not done about the card's idle clock. Numbers: `benchmarks/3d-playback/laptop-1023/{rtx,radeon,laptop}-{before,after}/<scene>.json`
+(`before` is main at c1e55032, `after` this step); the stage timelines of the Radeon are in `stages/`.
+
+First picture and first 3 s of playback after this step ("between" is the rate between the first and last picture, "worst" the longest interval
+in the first 3 s cold and warm; budget 41.7 ms):
+
+| Adapter | cube | furnished | mixed | mixedglass |
+|---|---|---|---|---|
+| RTX 3080 Ti | 0.57 s; 24.0 fps; worst 45 / 47 ms | 0.58 s; 24.2 fps; worst 45 / 45 ms | 0.64 s; 24.1 fps; worst 46 / 45 ms | 0.71 s; 24.0 fps; worst 54 / 96 ms |
+| Radeon 8060S | 0.52 s; 24.1 fps; worst 45 / 46 ms | 0.54 s; 24.3 fps; worst 45 / 46 ms | 0.59 s; 24.2 fps; worst 50 / 45 ms | 0.60 s; 24.2 fps; worst 49 / 52 ms |
+| Laptop stand-in | 0.52 s; 24.1 fps; worst 45 / 46 ms | 0.54 s; 24.2 fps; worst 45 / 50 ms | 0.59 s; 24.2 fps; worst 44 / 47 ms | 0.60 s; 24.1 fps; worst 55 / 50 ms |
+| Laptop stand-in, whole 6 s run | 24.02 fps, p95 44.0 ms | 24.02 fps, p95 44.0 ms | 23.99 fps, p95 44.4 ms | 24.00 fps, p95 48.6 ms |
+
+The RTX mixedglass warm 96 ms is the replay after the scene's 100 s processor picture, with the card idle for that time (the idle clock below). The
+stand-in's mixedglass 55 ms is one interval above the 54 ms limit in the cold run; the slowest frames of that scene are the ones whose wait on the
+card is 31 to 34 ms against a median of 14 ms (`submit to gpu_done` in `slowest_worker_frames`; the Radeon also draws the display, `shared_card_suspected`).
+
+**The largest cost on the integrated tier.** Stage medians of a played frame on the stand-in, before the step, in ms (the render worker's frame;
+the Qt thread's hand-over comes on top):
+
+| Scene | whole frame | scene evaluation | GPU render and wait | readback copy | hand-over to the display |
+|---|---|---|---|---|---|
+| cube | 10.6 (25 percent of 41.7) | 1.2 | 1.6 | 2.8 | 3.1 |
+| furnished | 19.2 (46 percent) | 1.7 | 9.4 | 3.0 | 3.0 |
+| mixed | 19.4 (47 percent) | 2.0 | 9.6 | 2.7 | 3.0 |
+| mixedglass | 25.9 (62 percent) | 2.1 | 14.3 | 2.7 | 3.0 |
+
+The cube and the furnished room already held 24 fps on the stand-in, cold and warm, before this step (and so did the mixed scenes); the frame leaves
+38 to 75 percent of the budget free. The cost all four scenes share, and the largest of the cube, is the readback copy: one NumPy copy of the 33 MB
+float picture out of the mapped card buffer took 2.7 to 3.1 ms on the RTX, the Radeon and the stand-in alike. Copying plain memory of that size takes
+1.2 ms in one thread and 0.75 ms in two, so the mapping limits it. `gpu3d._copy_band` now copies a band of 4 MB or more in slices of rows on up to four
+threads (half the processors the process may use, `READBACK_PARTS`; NumPy lets go of the GIL for a copy this size). Readback copy, stage median before
+and after: stand-in 2.79, 2.99, 2.73, 2.73 ms became 2.37, 2.35, 2.22, 2.20 ms; Radeon 2.70, 2.94, 2.80, 2.81 became 2.08, 2.21, 2.14, 2.15; RTX 2.77, 2.89, 2.78,
+3.14 became 2.24, 2.25, 2.18, 2.72. The whole worker frame fell by 0 to 1.0 ms (stand-in 10.57, 19.22, 19.43, 25.86 became 10.53, 18.88, 19.32, 24.86), which is
+the gain; the rates did not change because they were at 24.0 already. The next cost for the three heavier scenes is the card's render (9.4 to 14.3 ms on
+the Radeon) and, on the Qt thread, the 3.0 to 3.5 ms hand-over; neither was touched. The Iris Xe is several times slower than the Radeon 8060S, so on the
+laptop the render would be the cost that decides, and "Proxy while playing" is what keeps its rate; nothing here measures the laptop.
+Test: `tests/test_readback_copy.py` (same rows in the same places with padded rows, short bands and a single row; big bands split and small ones not).
+
+**Adapter choice on a hybrid machine.** `gpu3d.rank_adapters` puts a discrete card first, then integrated, virtual and software ones, and the same card listed
+again through OpenGL after its Vulkan entry. `gpu3d.adapter_choice()` now says why the card in use was chosen: "Automatic: a discrete graphics card is preferred over
+Intel(R) Iris(R) Xe Graphics", "chosen in Settings → Graphics adapter", "chosen in the NODEBASED_ADAPTER setting", "'x' matches no adapter on this machine, so the best one was chosen automatically", or,
+when only the integrated card is listed, "Automatic: the only graphics card this application can see; a discrete card is not listed" (Windows hides the discrete card from an
+application it has not been told to give it to; the amber pill and `ADAPTER_WARNING_HELP` already describe the per-application Windows setting). The reason is the last line of the
+top bar pill's tooltip and the note under Settings → Graphics adapter. Tests (`tests/test_graphics_adapter.py`, class `HybridLaptop`): a faked list of an integrated card, a
+software renderer and a discrete card opens only the discrete card; the reason names the card and what it was preferred over; the same card listed through OpenGL is not another card; a named card is opened
+and the reason says who asked; a list with the integrated card alone says the discrete card is not listed; the pill and the Settings page show the reason. This machine's own list is the same
+shape (RTX, Radeon, llvmpipe, the RTX again through OpenGL) and the app chooses the RTX.
+
+**The laptop check.** `python tools/laptop_scene_check.py` (field test guide, "3D scene check") runs the four scenes at 1080p as the application ships (Proxy while playing on) on the card the
+application chooses and then on the other kind of card, each warm and with play pressed 4 s after the first picture, and writes `result.txt` (under 40 lines, to paste back) and `result.json`.
+Run here on the stand-in (`benchmarks/3d-playback/laptop-1023/scene-check-standin/result.txt`): the Radeon holds all four scenes with no interval over 54 ms warm or after the rest (45 to 52 ms);
+on the RTX with four processors the cube, furnished room and mixed scene show 61, 90 and 91 ms after the rest, and the smoke, splats and glass scene plays 74 percent of its pictures at a lower resolution
+because the proxy steps down on the four processors. `tests/test_laptop_scene_check.py` tests the summary and verdict on canned runs and runs the command once on the software renderer.
+
+**The first frames after the card idles: not done.** After about 3.5 s without work the RTX drops to its idle clock and needs 0.25 to 0.6 s of saturating load to climb back, in steps
+(210 MHz, a middle state near 585 MHz, then 1.8 to 2.0 GHz). A frame of the probe's cube-like scene takes 14 ms at the full clock and 85 ms at the idle one. Play pressed after a 4 s rest, "Proxy while playing" on, five cold runs
+per scene (`idle-start-base.json`): worst interval cube 66 to 114 ms, furnished 53 to 89, mixed 89 to 94, smoke, splats and glass 94 to 203; over the first 3 s the pictures were late by 114, 117, 172 and
+186 ms in sum (median, beyond the 41.7 ms budget). Measured in a standalone probe (`clock-ramp-probes/`, the cube-like card scene, 14 ms at full clock) and in the window:
+
+- Lower-resolution frames at 24 a second do not raise the clock. A half-size frame is 5 to 6 ms at the full clock and 23 ms at the idle one, which fits the budget and loads the card too little. Played at
+  half size for 0.45 s and then at full size, the window showed intervals of 53, 119 and 92 ms at the switch (the full frames took 85 to 119 ms at the idle clock).
+- A short burst of back-to-back compute dispatches (3 ms each, on a thread of its own, stopping when the dispatch time had stopped falling) brought the clock up in 0.2 to 0.6 s, through the middle state, while
+  frames were drawn at half size. In the probe the switch to full size was clean in 7 of 8 runs. In the window, five cold runs per scene (`idle-start-ramp-attempt.json`) gave worst intervals cube 54 to 90 ms
+  (one run clean), furnished 68 to 76, mixed 70 to 79, smoke, splats and glass 68 to 77, and the sum of lateness over the first 3 s was 160, 137, 160 and 167 ms: no better than without it (114, 117, 172, 186).
+  The frames drawn beside the burst carry its jitter (intervals of 49 to 75 ms), 14 to 59 pictures at half size were shown, and in about half of the runs the full-size frames after the burst were still in the middle state (60 ms) and
+  showed an 85 ms interval at the switch. A burst that fills the memory as well as the arithmetic, a second device for the burst (the real frames then waited 100 to 140 ms for the card's scheduler), a longer burst (1.2 s) and a different
+  moment for the switch did not change that.
+- The attempt is not in the product: it has the same lateness as the plain idle clock plus softer first pictures, a burst on the card and a thread in the render path. The gate of this part (no interval over 54 ms after a 4 s rest on the RTX) is not met.
+  Probe logs, the burst code and the five-run summaries are kept in `benchmarks/3d-playback/laptop-1023/`.
+
+Left for Gonzo's decision: accept the late first frames of a play after a rest of 4 s or more on a discrete card (a single stutter of 0.1 to 0.3 s, the scenes at the RTX only), or hold the clock with a load of 20 to
+30 percent of the card (its power and heat for every second of the hold, on a laptop too); the measured middle path does not remove the stutter. The Radeon and the stand-in do not show it.
+
+Tests of this step run on the RTX, the Radeon and llvmpipe with the splat, volume and glass agreement tests, each under `flock -w 1800 /tmp/nb-gpu.lock` with a timeout (`tests-L4b-agree-*.log` in the lane run directory).

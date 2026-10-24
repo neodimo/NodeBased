@@ -1,0 +1,19 @@
+NodeBased 3D scene check, 2026-10-23 10:12 PM
+Linux-7.2.7-ogc1.1.fc44.x86_64-x86_64-with-glibc2.43
+  card: NVIDIA GeForce RTX 3080 Ti (discrete, Vulkan)
+  card: AMD Radeon 8060S Graphics (RADV STRIX_HALO) (integrated, Vulkan)
+  card: llvmpipe (LLVM 22.1.8, 256 bits) (software, Vulkan)
+  card: NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2 (Unknown, OpenGL)
+The app chooses NVIDIA GeForce RTX 3080 Ti: Automatic: a discrete graphics card is preferred over AMD Radeon 8060S Graphics (RADV STRIX_HALO)
+
+On NVIDIA GeForce RTX 3080 Ti (1920x1080, pictures a second between the first and last of the first 3 s; longest gap, warm and after a 4 s rest; gate 54 ms):
+  cube: first picture 0.614 s, 24.04 fps, gap 44.3 ms, after a rest 61.3 ms, whole run 23.91 fps: 61.3 ms gap after a rest
+  furnished room: first picture 0.601 s, 24.1 fps, gap 47.1 ms, after a rest 89.5 ms, whole run 23.94 fps: 89.5 ms gap after a rest
+  mixed (room + splats): first picture 0.693 s, 24.1 fps, gap 51.6 ms, after a rest 91.0 ms, whole run 23.92 fps: 91.0 ms gap after a rest
+  smoke, splats, glass: first picture 1.431 s, 24.23 fps, gap 47.6 ms, after a rest 56.0 ms, whole run 23.85 fps, 74 percent of the pictures at a lower resolution: 56.0 ms gap after a rest
+
+On AMD Radeon 8060S Graphics (RADV STRIX_HALO) (1920x1080, pictures a second between the first and last of the first 3 s; longest gap, warm and after a 4 s rest; gate 54 ms):
+  cube: first picture 0.511 s, 24.12 fps, gap 44.5 ms, after a rest 44.9 ms, whole run 23.98 fps: OK
+  furnished room: first picture 0.541 s, 24.2 fps, gap 45.2 ms, after a rest 45.8 ms, whole run 23.94 fps: OK
+  mixed (room + splats): first picture 0.58 s, 24.14 fps, gap 45.4 ms, after a rest 52.0 ms, whole run 23.98 fps: OK
+  smoke, splats, glass: first picture 0.607 s, 24.11 fps, gap 51.4 ms, after a rest 50.4 ms, whole run 23.98 fps: OK

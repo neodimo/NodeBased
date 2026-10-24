@@ -1,0 +1,31 @@
+{
+ "scene": "mixedglass",
+ "size": "1920x1080",
+ "splats": 20000,
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "routes": {
+  "processor": {
+   "frames": 1,
+   "stages_ms": {
+    "whole render call": 123602.6
+   },
+   "frame_ms": 123602.6,
+   "note": "the CPU frame: gpu3d.render raised Unsupported for smoke together with splats; timed at 1920 x 1080"
+  },
+  "card": {
+   "frames": 30,
+   "stages_ms": {
+    "card picture used": 1.0,
+    "card: first submit to the last pixels mapped": 12.39,
+    "display picture (conversion stage)": 0.58,
+    "mesh passes (colour, and the depth pass on the processor route)": 15.89,
+    "readback copy": 1.96,
+    "splat colours (relit on the processor)": 3.06,
+    "splat preparation on the card route (sort, colours, buffers)": 4.22,
+    "splat sort": 0.93,
+    "whole render call": 17.2
+   },
+   "frame_ms": 17.2
+  }
+ }
+}

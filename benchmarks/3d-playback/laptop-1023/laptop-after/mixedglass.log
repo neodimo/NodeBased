@@ -1,0 +1,1 @@
+{"scene": "mixedglass", "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)", "fps": 24.0, "interval_ms": {"n": 144, "p50": 41.93, "p95": 48.59, "p99": 53.39, "max": 55.27, "mean": 41.56}, "status": "1920 \u00d7 1080  \u00b7  22 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 0"}

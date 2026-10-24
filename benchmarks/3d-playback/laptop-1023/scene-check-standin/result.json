@@ -1,0 +1,347 @@
+{
+ "machine": {
+  "platform": "Linux-7.2.7-ogc1.1.fc44.x86_64-x86_64-with-glibc2.43",
+  "python": "3.12.13",
+  "when": "2026-10-23 10:12 PM",
+  "adapters": [
+   {
+    "name": "NVIDIA GeForce RTX 3080 Ti",
+    "type": "discrete",
+    "backend": "Vulkan",
+    "driver": "615.71.09"
+   },
+   {
+    "name": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+    "type": "integrated",
+    "backend": "Vulkan",
+    "driver": "Mesa 26.2.2"
+   },
+   {
+    "name": "llvmpipe (LLVM 22.1.8, 256 bits)",
+    "type": "software",
+    "backend": "Vulkan",
+    "driver": "Mesa 26.2.2 (LLVM 22.1.8)"
+   },
+   {
+    "name": "NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2",
+    "type": "Unknown",
+    "backend": "OpenGL",
+    "driver": "3.3.0 NVIDIA 615.71.09"
+   }
+  ],
+  "chosen": {
+   "name": "NVIDIA GeForce RTX 3080 Ti",
+   "type": "discrete",
+   "reason": "Automatic: a discrete graphics card is preferred over AMD Radeon 8060S Graphics (RADV STRIX_HALO)"
+  }
+ },
+ "args": {
+  "size": "1920x1080",
+  "seconds": 6.0,
+  "proxy": "on"
+ },
+ "runs": [
+  {
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "size": "1920x1080",
+   "scenes": [
+    {
+     "scene": "cube",
+     "warm": {
+      "reduced_percent": 0,
+      "scene": "cube",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "proxy": "on",
+      "first_picture_s": 0.614,
+      "between_fps": 24.04,
+      "worst_ms": 44.3,
+      "worst_warm_ms": 44.6,
+      "skipped": 0,
+      "fps_whole_run": 23.91,
+      "interval_p95_ms": 43.7,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "rested": {
+      "reduced_percent": 0,
+      "scene": "cube",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "proxy": "on",
+      "first_picture_s": 0.576,
+      "between_fps": 24.31,
+      "worst_ms": 61.3,
+      "worst_warm_ms": 45.0,
+      "skipped": 0,
+      "fps_whole_run": 23.98,
+      "interval_p95_ms": 45.64,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "verdict": "61.3 ms gap after a rest"
+    },
+    {
+     "scene": "furnished",
+     "warm": {
+      "reduced_percent": 0,
+      "scene": "furnished",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "proxy": "on",
+      "first_picture_s": 0.601,
+      "between_fps": 24.1,
+      "worst_ms": 47.1,
+      "worst_warm_ms": 50.6,
+      "skipped": 0,
+      "fps_whole_run": 23.94,
+      "interval_p95_ms": 44.46,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "rested": {
+      "reduced_percent": 0,
+      "scene": "furnished",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "proxy": "on",
+      "first_picture_s": 0.6,
+      "between_fps": 24.56,
+      "worst_ms": 89.5,
+      "worst_warm_ms": 46.7,
+      "skipped": 0,
+      "fps_whole_run": 23.92,
+      "interval_p95_ms": 45.35,
+      "tier_pictures": {
+       "1": 145
+      }
+     },
+     "verdict": "89.5 ms gap after a rest"
+    },
+    {
+     "scene": "mixed",
+     "warm": {
+      "reduced_percent": 0,
+      "scene": "mixed",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "proxy": "on",
+      "first_picture_s": 0.693,
+      "between_fps": 24.1,
+      "worst_ms": 51.6,
+      "worst_warm_ms": 50.0,
+      "skipped": 0,
+      "fps_whole_run": 23.92,
+      "interval_p95_ms": 49.46,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "rested": {
+      "reduced_percent": 0,
+      "scene": "mixed",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "proxy": "on",
+      "first_picture_s": 0.656,
+      "between_fps": 24.66,
+      "worst_ms": 91.0,
+      "worst_warm_ms": 78.9,
+      "skipped": 0,
+      "fps_whole_run": 23.89,
+      "interval_p95_ms": 49.41,
+      "tier_pictures": {
+       "1": 145
+      }
+     },
+     "verdict": "91.0 ms gap after a rest"
+    },
+    {
+     "scene": "mixedglass",
+     "warm": {
+      "reduced_percent": 74,
+      "scene": "mixedglass",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "proxy": "on",
+      "first_picture_s": 1.431,
+      "between_fps": 24.23,
+      "worst_ms": 47.6,
+      "worst_warm_ms": 89.3,
+      "skipped": 0,
+      "fps_whole_run": 23.85,
+      "interval_p95_ms": 44.87,
+      "tier_pictures": {
+       "1": 37,
+       "2": 107
+      }
+     },
+     "rested": {
+      "reduced_percent": 94,
+      "scene": "mixedglass",
+      "adapter": "NVIDIA GeForce RTX 3080 Ti",
+      "proxy": "on",
+      "first_picture_s": 0.676,
+      "between_fps": 24.04,
+      "worst_ms": 56.0,
+      "worst_warm_ms": 92.2,
+      "skipped": 0,
+      "fps_whole_run": 23.19,
+      "interval_p95_ms": 46.91,
+      "tier_pictures": {
+       "1": 9,
+       "2": 131
+      }
+     },
+     "verdict": "56.0 ms gap after a rest"
+    }
+   ]
+  },
+  {
+   "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "size": "1920x1080",
+   "scenes": [
+    {
+     "scene": "cube",
+     "warm": {
+      "reduced_percent": 0,
+      "scene": "cube",
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "proxy": "on",
+      "first_picture_s": 0.511,
+      "between_fps": 24.12,
+      "worst_ms": 44.5,
+      "worst_warm_ms": 45.3,
+      "skipped": 0,
+      "fps_whole_run": 23.98,
+      "interval_p95_ms": 44.4,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "rested": {
+      "reduced_percent": 0,
+      "scene": "cube",
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "proxy": "on",
+      "first_picture_s": 0.515,
+      "between_fps": 23.99,
+      "worst_ms": 44.9,
+      "worst_warm_ms": 45.0,
+      "skipped": 0,
+      "fps_whole_run": 24.08,
+      "interval_p95_ms": 44.52,
+      "tier_pictures": {
+       "1": 145
+      }
+     },
+     "verdict": "OK"
+    },
+    {
+     "scene": "furnished",
+     "warm": {
+      "reduced_percent": 0,
+      "scene": "furnished",
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "proxy": "on",
+      "first_picture_s": 0.541,
+      "between_fps": 24.2,
+      "worst_ms": 45.2,
+      "worst_warm_ms": 46.4,
+      "skipped": 0,
+      "fps_whole_run": 23.94,
+      "interval_p95_ms": 44.65,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "rested": {
+      "reduced_percent": 0,
+      "scene": "furnished",
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "proxy": "on",
+      "first_picture_s": 0.569,
+      "between_fps": 23.96,
+      "worst_ms": 45.8,
+      "worst_warm_ms": 48.9,
+      "skipped": 0,
+      "fps_whole_run": 23.92,
+      "interval_p95_ms": 44.16,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "verdict": "OK"
+    },
+    {
+     "scene": "mixed",
+     "warm": {
+      "reduced_percent": 0,
+      "scene": "mixed",
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "proxy": "on",
+      "first_picture_s": 0.58,
+      "between_fps": 24.14,
+      "worst_ms": 45.4,
+      "worst_warm_ms": 45.6,
+      "skipped": 0,
+      "fps_whole_run": 23.98,
+      "interval_p95_ms": 44.46,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "rested": {
+      "reduced_percent": 0,
+      "scene": "mixed",
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "proxy": "on",
+      "first_picture_s": 0.589,
+      "between_fps": 24.05,
+      "worst_ms": 52.0,
+      "worst_warm_ms": 46.4,
+      "skipped": 0,
+      "fps_whole_run": 23.92,
+      "interval_p95_ms": 44.54,
+      "tier_pictures": {
+       "1": 144
+      }
+     },
+     "verdict": "OK"
+    },
+    {
+     "scene": "mixedglass",
+     "warm": {
+      "reduced_percent": 0,
+      "scene": "mixedglass",
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "proxy": "on",
+      "first_picture_s": 0.607,
+      "between_fps": 24.11,
+      "worst_ms": 51.4,
+      "worst_warm_ms": 52.5,
+      "skipped": 0,
+      "fps_whole_run": 23.98,
+      "interval_p95_ms": 48.51,
+      "tier_pictures": {
+       "1": 145
+      }
+     },
+     "rested": {
+      "reduced_percent": 0,
+      "scene": "mixedglass",
+      "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+      "proxy": "on",
+      "first_picture_s": 0.634,
+      "between_fps": 23.95,
+      "worst_ms": 50.4,
+      "worst_warm_ms": 49.2,
+      "skipped": 0,
+      "fps_whole_run": 24.04,
+      "interval_p95_ms": 50.42,
+      "tier_pictures": {
+       "1": 145
+      }
+     },
+     "verdict": "OK"
+    }
+   ]
+  }
+ ]
+}

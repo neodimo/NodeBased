@@ -1,0 +1,128 @@
+# The burst and rest bookkeeping of the 10/23 clock-ramp attempt (not in the product), excerpted from nodebased/gpu3d.py.
+_busy = []             # (start, end) of the stretches the app waited on the card for a render, newest last
+_BUSY_KEEP = 128
+
+
+def _card_busy(start):
+    """Note that a render waited on the card from `start` (time.monotonic()) until now."""
+    _busy.append((start, time.monotonic()))
+    del _busy[:-_BUSY_KEEP]
+
+
+def card_rest_seconds():
+    """Seconds since a render last waited on the card (the app's own use of it); None before the first. A card that has had nothing
+    to do for about 3.5 s lowers its clock, so this is how long the clock has had to fall."""
+    return max(0.0, time.monotonic() - _busy[-1][1]) if _busy else None
+
+
+def card_clock_idles(choice='default'):
+    """True for a card whose clock falls to an idle state when it has no work (a discrete card): the first frames
+    after a rest are slow while the clock climbs back (about 330 ms of load after 3.5 s idle on the RTX 3080 Ti)."""
+    state = _states.get(choice)
+    return bool(state) and _kind_of(state['info']) == 'discretegpu'
+
+
+_BURST_WGSL = '''
+@group(0) @binding(0) var<storage, read_write> sink: array<vec4<f32>>;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+    var x = f32(id.x) * 0.0001 + 0.5;
+    for (var i = 0u; i < 128u; i = i + 1u) { x = fma(x, 0.999, 0.0013); x = x - floor(x) * 0.5 + 0.25; }
+    // The memory clock of the card climbs on traffic, not on arithmetic: stride through 64 MB as well.
+    for (var k = 0u; k < 24u; k = k + 1u) {
+        let at = (id.x * 257u + k * 65537u) & 4194303u;
+        sink[at] = sink[at] * 0.5 + vec4<f32>(x);
+    }
+}
+'''
+BURST_BUFFER_BYTES = 4194304 * 16
+CLOCK_BURST_MIN_S = 0.4        # the RTX climbs back in 0.25 to 0.4 s of load, through a middle state; stopping at the first drop left it there
+CLOCK_BURST_PLATEAU_S = 1.2    # a burst whose dispatches have stopped getting faster by this time is done
+CLOCK_BURST_MAX_S = 1.5        # the longest a burst runs
+CLOCK_BURST_CHUNK_S = 0.003    # one burst dispatch; a render waits at most this long for the card
+_burst = {'thread': None}
+
+
+def clock_warming():
+    """True while a `warm_clock` burst is running."""
+    thread = _burst['thread']
+    return thread is not None and thread.is_alive()
+
+
+def warm_clock(max_seconds=CLOCK_BURST_MAX_S, choice='default'):
+    """Bring a discrete card's idle clock back up with a short burst of compute (a one-off for the start of playback, not a hold):
+    back-to-back dispatches of about 3 ms run on a thread of their own, so the card is saturated while played frames of a lower
+    resolution go through the same queue, each waiting for at most the dispatch in front of it. The burst stops once the clock has
+    climbed (`_clock_is_up`, after at least CLOCK_BURST_MIN_S) or after `max_seconds`. Returns the thread, or None when one is
+    running already or the card is not one whose clock idles."""
+    if clock_warming() or not card_clock_idles(choice):
+        return None
+    state = _states[choice]
+    thread = threading.Thread(target=_burst_run, args=(state, float(max_seconds)), name='nb-clock-burst', daemon=True)
+    _burst['thread'] = thread
+    thread.start()
+    return thread
+
+
+def _burst_run(state, max_seconds):
+    """The burst thread: back-to-back compute dispatches on the card's queue (no GPU lock: the burst owns its buffers and pipeline, and
+    the queue serialises it with the renders, each of which waits for at most the dispatch in front of it). Stops when the time
+    a dispatch takes has stopped falling after it has fallen (the clock is up), or after `max_seconds`."""
+    try:
+        wgpu, device = state['wgpu'], state['device']
+        groups = 256
+        with _lock:         # the device's bookkeeping (the memory tracker) is not for two threads at once
+            sink = device.create_buffer(size=BURST_BUFFER_BYTES, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
+            probe = device.create_buffer(size=4, usage=wgpu.BufferUsage.MAP_READ | wgpu.BufferUsage.COPY_DST)
+            module = device.create_shader_module(code=_BURST_WGSL)
+            pipeline = device.create_compute_pipeline(layout='auto', compute={'module': module, 'entry_point': 'main'})
+            bind = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[{'binding': 0, 'resource': {'buffer': sink}}])
+        begin = time.monotonic()
+        end = begin + max_seconds
+        calibrating, series, trace = True, [], []
+        _burst['log'] = trace       # the last burst's (seconds, ms, workgroups) per dispatch, for the benchmarks
+        while time.monotonic() < end:
+            started = time.monotonic()
+            encoder = device.create_command_encoder()
+            pass_ = encoder.begin_compute_pass()
+            pass_.set_pipeline(pipeline)
+            pass_.set_bind_group(0, bind)
+            pass_.dispatch_workgroups(groups)
+            pass_.end()
+            encoder.copy_buffer_to_buffer(sink, 0, probe, 0, 4)
+            device.queue.submit([encoder.finish()])
+            probe.map_sync(wgpu.MapMode.READ)
+            probe.unmap()
+            now = time.monotonic()
+            took = now - started
+            trace.append((round(now - begin, 3), round(took * 1000, 2), groups))
+            if calibrating:         # the first dispatch also pays the card's one-off costs: size the next ones for the chunk length
+                calibrating = False
+                groups = int(max(16, min(65536, groups * CLOCK_BURST_CHUNK_S / max(took, 1e-4))))
+                continue
+            series.append((now - begin, took / groups))
+            if now - begin >= CLOCK_BURST_MIN_S and _clock_is_up(series):
+                break
+        with _lock:
+            for resource in (sink, probe):
+                resource.destroy()
+    except Exception as exc:       # a burst is an optimisation; any failure leaves the frames to wait for the clock
+        log.info('graphics card clock burst stopped: %s', exc)
+
+
+def _clock_is_up(series):
+    """`series` is (seconds since the burst began, seconds a dispatch took per workgroup). The clock is up when the dispatches have
+    become 2.5 times faster than the first ones and the last 100 ms have not got faster still; a card that stops improving short of
+    that (a laptop card with a lower top clock) counts as up after CLOCK_BURST_PLATEAU_S."""
+    first = [v for t, v in series if t <= series[0][0] + 0.06]
+    last = [v for t, v in series if t >= series[-1][0] - 0.1]
+    earlier = [v for t, v in series if series[-1][0] - 0.25 <= t < series[-1][0] - 0.1]
+    if len(first) < 3 or len(last) < 3 or len(earlier) < 3:
+        return False
+    top = sorted(first)[len(first) // 2]
+    now, before = sorted(last)[len(last) // 2], sorted(earlier)[len(earlier) // 2]
+    if now < 0.93 * before:
+        return False
+    return now <= 0.4 * top or series[-1][0] >= CLOCK_BURST_PLATEAU_S
+
+

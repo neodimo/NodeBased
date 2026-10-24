@@ -1,0 +1,1 @@
+{"scene": "mixed", "adapter": "NVIDIA GeForce RTX 3080 Ti", "fps": 23.99, "interval_ms": {"n": 143, "p50": 41.13, "p95": 49.22, "p99": 88.06, "max": 88.96, "mean": 41.08}, "status": "1920 \u00d7 1080  \u00b7  25 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 1"}

@@ -1,0 +1,1 @@
+{"scene": "cube", "adapter": "NVIDIA GeForce RTX 3080 Ti", "fps": 24.02, "interval_ms": {"n": 145, "p50": 41.74, "p95": 43.92, "p99": 44.64, "max": 46.53, "mean": 41.65}, "status": "1920 \u00d7 1080  \u00b7  20 ms  \u00b7  tiles 0 hit/0 miss  \u00b7  cache 4018.4 / 4041 MiB  \u00b7  display GPU  \u00b7  ahead 0/3  \u00b7  dropped 0"}

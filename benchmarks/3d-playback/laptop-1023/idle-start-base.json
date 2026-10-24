@@ -1,0 +1,218 @@
+{
+ "cube": {
+  "runs": [
+   {
+    "file": "cube-1.json",
+    "max_ms": 112.4,
+    "over54": 2,
+    "excess_ms": 112.6,
+    "first_picture_s": 0.571,
+    "between": 24.81,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "cube-2.json",
+    "max_ms": 99.8,
+    "over54": 1,
+    "excess_ms": 45.8,
+    "first_picture_s": 0.585,
+    "between": 24.8,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "cube-3.json",
+    "max_ms": 114.0,
+    "over54": 3,
+    "excess_ms": 127.9,
+    "first_picture_s": 0.561,
+    "between": 24.34,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "cube-4.json",
+    "max_ms": 111.1,
+    "over54": 2,
+    "excess_ms": 59.0,
+    "first_picture_s": 0.562,
+    "between": 24.83,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "cube-5.json",
+    "max_ms": 66.1,
+    "over54": 4,
+    "excess_ms": 33.1,
+    "first_picture_s": 0.578,
+    "between": 24.72,
+    "low_res_pictures": 13
+   }
+  ],
+  "worst_ms": 114.0,
+  "median_max_ms": 111.1,
+  "runs_clean": 0,
+  "n": 5,
+  "total_over54": 12
+ },
+ "furnished": {
+  "runs": [
+   {
+    "file": "furnished-1.json",
+    "max_ms": 89.0,
+    "over54": 2,
+    "excess_ms": 63.4,
+    "first_picture_s": 0.589,
+    "between": 25.28,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "furnished-2.json",
+    "max_ms": 88.5,
+    "over54": 3,
+    "excess_ms": 99.5,
+    "first_picture_s": 0.588,
+    "between": 24.55,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "furnished-3.json",
+    "max_ms": 53.2,
+    "over54": 0,
+    "excess_ms": 0,
+    "first_picture_s": 0.586,
+    "between": 25.27,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "furnished-4.json",
+    "max_ms": 88.6,
+    "over54": 2,
+    "excess_ms": 56.2,
+    "first_picture_s": 0.598,
+    "between": 24.57,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "furnished-5.json",
+    "max_ms": 76.3,
+    "over54": 1,
+    "excess_ms": 22.3,
+    "first_picture_s": 0.58,
+    "between": 25.24,
+    "low_res_pictures": 0
+   }
+  ],
+  "worst_ms": 89.0,
+  "median_max_ms": 88.5,
+  "runs_clean": 1,
+  "n": 5,
+  "total_over54": 8
+ },
+ "mixed": {
+  "runs": [
+   {
+    "file": "mixed-1.json",
+    "max_ms": 91.1,
+    "over54": 3,
+    "excess_ms": 99.0,
+    "first_picture_s": 0.649,
+    "between": 24.66,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "mixed-2.json",
+    "max_ms": 94.4,
+    "over54": 2,
+    "excess_ms": 66.7,
+    "first_picture_s": 0.653,
+    "between": 24.61,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "mixed-3.json",
+    "max_ms": 89.0,
+    "over54": 2,
+    "excess_ms": 64.3,
+    "first_picture_s": 0.654,
+    "between": 24.68,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "mixed-4.json",
+    "max_ms": 90.4,
+    "over54": 2,
+    "excess_ms": 71.1,
+    "first_picture_s": 0.646,
+    "between": 24.68,
+    "low_res_pictures": 0
+   },
+   {
+    "file": "mixed-5.json",
+    "max_ms": 92.5,
+    "over54": 4,
+    "excess_ms": 127.9,
+    "first_picture_s": 0.691,
+    "between": 24.29,
+    "low_res_pictures": 0
+   }
+  ],
+  "worst_ms": 94.4,
+  "median_max_ms": 91.1,
+  "runs_clean": 0,
+  "n": 5,
+  "total_over54": 13
+ },
+ "mixedglass": {
+  "runs": [
+   {
+    "file": "mixedglass-1.json",
+    "max_ms": 185.6,
+    "over54": 1,
+    "excess_ms": 131.6,
+    "first_picture_s": 0.669,
+    "between": 25.25,
+    "low_res_pictures": 38
+   },
+   {
+    "file": "mixedglass-2.json",
+    "max_ms": 119.1,
+    "over54": 2,
+    "excess_ms": 119.2,
+    "first_picture_s": 0.661,
+    "between": 24.74,
+    "low_res_pictures": 65
+   },
+   {
+    "file": "mixedglass-3.json",
+    "max_ms": 167.9,
+    "over54": 1,
+    "excess_ms": 113.9,
+    "first_picture_s": 0.677,
+    "between": 24.95,
+    "low_res_pictures": 48
+   },
+   {
+    "file": "mixedglass-4.json",
+    "max_ms": 203.2,
+    "over54": 2,
+    "excess_ms": 149.6,
+    "first_picture_s": 0.674,
+    "between": 23.75,
+    "low_res_pictures": 61
+   },
+   {
+    "file": "mixedglass-5.json",
+    "max_ms": 93.6,
+    "over54": 1,
+    "excess_ms": 39.6,
+    "first_picture_s": 0.663,
+    "between": 24.15,
+    "low_res_pictures": 53
+   }
+  ],
+  "worst_ms": 203.2,
+  "median_max_ms": 167.9,
+  "runs_clean": 0,
+  "n": 5,
+  "total_over54": 7
+ }
+}
