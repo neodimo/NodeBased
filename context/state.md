@@ -1,5 +1,25 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (2:15 AM on 2026-10-24 PDT)
+
+`main` moved `f172aa42` -> `b5a07e2f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `b5a07e2f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1024-0205.log`, started 2:05 AM): **Ran 6245 tests in 537.667 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step B of 2: the four 3D scenes re-measured on the integrated card and the laptop stand-in, and the biggest cost there removed (finish 1).** Commits:
+  - `c656fa32` Test stub for the playback tick carries the clock ramp attribute (step B finish, part 5)
+  - `8534aa2d` First played frames after the RTX rests: the card's link to the processor, not its shader clock, is most of the late frames (a 33 MB readback takes 84 ms on the idle link, 12 ms up), so a play pressed after a rest draws half-size frames each followed by a copy that fills the rest of the frame's time, holds the last few so the switch back to the chosen size does not lengthen an interval, and tapers the copies off; the cube holds 54 ms (7 of 8 runs), the furnished room, mixed scene and smoke scene still show one switch interval of 59 to 85 ms (first-full-frame scene packing), the Radeon and stand-in take no ramp (step B finish, part 5)
+  Diff: 14 files changed, 1093 insertions(+), 72 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (12:05 AM on 2026-10-24 PDT)
 
 `main` moved `132df25e` -> `0badef1e` (lane commits cherry-picked onto main in lane order) and then to this
