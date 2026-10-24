@@ -1951,15 +1951,49 @@ def _environment_resources(state, keep, environments):
     return env_buffer, atlas_texture.create_view(), sampler
 
 
+def _cpus():
+    """The processors this process may run on (a laptop stand-in pinned with taskset reports its four, not the machine's thirty-two)."""
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:
+        return os.cpu_count() or 1
+
+
+READBACK_MIN_BYTES = 4 * 1024 * 1024      # a band smaller than this is copied by the calling thread alone
+READBACK_PARTS = max(1, min(4, _cpus() // 2))      # threads that copy one band: half the processors, at most four
+_readback_pool = {}
+
+
+def _readback_threads():
+    if 'pool' not in _readback_pool:
+        from concurrent.futures import ThreadPoolExecutor
+        _readback_pool['pool'] = ThreadPoolExecutor(max_workers=max(1, READBACK_PARTS - 1), thread_name_prefix='nb-readback')
+    return _readback_pool['pool']
+
+
 def _copy_band(staging, result, y0, y1, dtype, stride, width):
-    """Copy rows y0..y1 of a mapped staging buffer into ``result`` with one NumPy copy straight from the mapping.
+    """Copy rows y0..y1 of a mapped staging buffer into ``result`` with NumPy copies straight from the mapping.
     ``read_mapped()`` copies by default, into a Python bytearray with the GIL held (33 ms of the Qt thread's
     time at 1080p in a playing window, on top of the copy NumPy makes next); the view is dropped before returning
-    so the caller can unmap."""
+    so the caller can unmap. A band of 4 MB or more is copied in READBACK_PARTS slices of rows by as many threads
+    (NumPy lets go of the GIL for a copy this size): the 33 MB of a 1080p float picture took 2.7 to 3.0 ms in one
+    thread on every adapter, the one stage the timelines of all four test scenes share (10/23, Lane 4 step B)."""
     rows = y1 - y0
     view = staging.read_mapped(copy=False)
-    raw = np.frombuffer(view, dtype, count=rows*stride//dtype.itemsize)
-    result[y0:y1] = raw.reshape(rows, stride//dtype.itemsize)[:, :width*4].reshape(rows, width, 4)
+    raw = np.frombuffer(view, dtype, count=rows*stride//dtype.itemsize).reshape(rows, stride//dtype.itemsize)
+
+    def part(a, b):
+        result[y0 + a:y0 + b] = raw[a:b, :width*4].reshape(b - a, width, 4)
+    parts = READBACK_PARTS if rows * width * 4 * dtype.itemsize >= READBACK_MIN_BYTES else 1
+    if parts <= 1 or rows < parts:
+        part(0, rows)
+    else:
+        step = -(-rows // parts)
+        pool = _readback_threads()
+        futures = [pool.submit(part, a, min(rows, a + step)) for a in range(step, rows, step)]
+        part(0, step)
+        for future in futures:
+            future.result()
     del raw, view
 
 
