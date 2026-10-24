@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 2: 3D scenes hold full rate from the first second, and the first picture comes up fast (finish 1) (integrator tick)
+
+- **What was done:** `main` `2d19239d` -> `a2387bf8` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `a2387bf8`: Ran 6196 tests in 486.034 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-23 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 2: 3D scenes hold full rate from the first second, and the first picture comes up fast (integrator tick)
 
 - **What was done:** `main` `8c6e2d2d` -> `7b69adb1` plus this docs commit. Evidence and per-lane commit

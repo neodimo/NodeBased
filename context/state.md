@@ -1,5 +1,25 @@
 # Lane 6 — 2026-10-23 step A full-detail refinement memory (PARTIAL)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (6:45 PM on 2026-10-23 PDT)
+
+`main` moved `2d19239d` -> `a2387bf8` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a2387bf8` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-1835.log`, started 6:35 PM): **Ran 6196 tests in 486.034 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 2: 3D scenes hold full rate from the first second, and the first picture comes up fast (finish 1).** Commits:
+  - `99448d47` First second of a 3D scene, finish pass: the idle-clock ramp measured (330 ms of saturating load; no low-duty heartbeat held it), the lost frame slot explained, and the RTX, Radeon, laptop stand-in and llvmpipe numbers re-recorded with the tick fix; docs and bundled copy (step A finish)
+  - `06b28583` Playback: a tick up to half a millisecond short of a frame boundary advances the playhead, so the deadline it moves on does not cost a whole frame slot (smoke, splats and glass scene: the 84 ms gap in about every third 3 s of playback is gone); the first-seconds report counts frames the playhead skipped (step A finish, part 2)
+  Diff: 29 files changed, 102832 insertions(+), 59 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (5:25 PM on 2026-10-23 PDT)
 
 `main` moved `8c6e2d2d` -> `7b69adb1` (lane commits cherry-picked onto main in lane order) and then to this
