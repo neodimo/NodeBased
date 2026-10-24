@@ -1,4 +1,5 @@
 import os
+import sys
 import unittest
 import unittest.mock
 import uuid
@@ -152,10 +153,16 @@ def make_presenter(size=(160, 120), adapter=None, fill_thread=False):
     kind = {"discrete": "discretegpu", "integrated": "integratedgpu", "cpu": "cpu"}.get(os.environ.get("NB_TEST_ADAPTER", ""))
     if kind:   # run the pixel tests on one named adapter: NB_TEST_ADAPTER=integrated|cpu|discrete
         adapters = [a for a in adapters if gpu3d._kind_of(a.info) == kind] or adapters
+    first = adapter or adapters[0]
+    if sys.platform.startswith("linux") and first.info.get("backend_type") == "OpenGL" and gpu3d._kind_of(first.info) == "cpu":
+        # GitHub's Linux runners offer only llvmpipe through EGL, where wgpu-hal 29's GLES backend panics on
+        # wgpuBufferRelease (EGL BadAccess) and aborts the whole batch: 0.43.0 and twice on 0.43.1, 10/24.
+        # Windows (WARP) and every real card here still run these tests.
+        raise unittest.SkipTest("the Direct viewer's card tests abort on wgpu's software OpenGL backend (EGL BadAccess)")
     context = FakeContext(size)
     # The pixel tests fill the staging buffer inline so a draw right after an offer shows it;
     # StagingRingTests run the filler thread.
-    presenter = dv.RetainedPresenter(context, adapter=adapter or adapters[0], fill_thread=fill_thread)
+    presenter = dv.RetainedPresenter(context, adapter=first, fill_thread=fill_thread)
     return presenter, context
 
 
