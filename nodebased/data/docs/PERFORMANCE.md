@@ -747,19 +747,13 @@ What the timelines showed, largest first:
   and the next request waited a whole slot, an 82 to 85 ms gap. Nine of twelve cold 3 s runs of the scene showed one or more of them
   (23.0 to 23.7 fps between pictures when one was there); none of sixteen runs after the change did. The other three scenes finish with more room before
   their deadline, so a wakeup rarely lands in that window.
-- **The card's idle clock.** After about 3.5 s without work the RTX drops to its idle clock (210 MHz, P8). A saturating load then needs
-  about 330 ms to bring it back (a compute probe that takes 14 ms at the idle clock takes 3 ms after the jump, which comes 335 ms into the
-  load, measured after a 6 s pause). The first played frames take 2 to 4 times as long for that time: 94 to 105 ms for a frame that costs
-  24 ms. With play pressed after 4 s of rest every scene shows one interval of 89 to 154 ms (cube 101, furnished 128, mixed 89, smoke and
-  glass 154). The smoke, splats and glass scene meets it in practice: its exact picture is 100 s of processor work, the card idles
-  meanwhile, and a press of play after it reads 20.8 to 22.9 fps with a 159 to 164 ms interval and 2 to 3 frames the playhead skipped.
-  The Radeon and the laptop stand-in do not show it. The application cannot keep the clock up cheaply: a frame of 256x144 to 1280x720
-  every 30 to 100 ms did not, and neither did a compute dispatch of 2 to 5 ms every 20 to 50 ms from a thread of its own (tried 10/23
-  with `nvidia-smi` sampling at 0.1 s: the clock fell within 3.5 to 6 s of the last real work, and a longer run did not change that). A
-  burst of load when the play button is pressed would get the few tens of milliseconds of a click at most, against the 330 ms the clock
-  needs, and none from the space bar. What is left is a choice about cost, Gonzo's call: render the first 8 or so played
-  frames of an idle card one resolution down (the picture is soft for about a third of a second), or hold the clock with a load of 20 to
-  30 percent of the card (its power and heat for every second of the hold, on a laptop too).
+- **The card's idle state.** After about 3.5 s without work the RTX drops to its idle clock (210 MHz, P8) and its link to the processor
+  to PCIe generation 1 of 4. With play pressed after 4 s of rest every scene showed one to three intervals of 60 to 154 ms (cube 101, furnished
+  128, mixed 89, smoke and glass 154), and the smoke, splats and glass scene met it in practice: its exact picture is 100 s of processor work,
+  the card idles meanwhile, and a press of play after it read 20.8 to 22.9 fps with a 159 to 164 ms interval and 2 to 3 frames the playhead
+  skipped. The Radeon and the laptop stand-in do not show it. Step A measured the shader clock (a compute probe 14 ms at the idle clock, 3 ms
+  after 335 ms of load), found no cheap way to hold it, and left a choice about cost to Gonzo; step B's finish pass found that the link, not the
+  shader clock, is most of the cost, and what it does about it is written under "The first frames after the card idles" in the step B section.
 
 What changed:
 
@@ -800,8 +794,8 @@ Held on the RTX: first picture under 1 s for all four scenes (0.58 to 0.70 s, co
 (the tests below); 24.0 fps or better between pictures in the first 3 s for all four scenes with no interval over 54 ms and no frame
 skipped, when play is pressed at the first picture or after the scene has settled. The Radeon and the laptop stand-in hold the same, for
 all four scenes, cold and warm. llvmpipe plays the cube at rate and the other scenes at the software renderer's own speed, as before.
-Not held: with the RTX idle for 4 s before the press the first two played frames wait on the card's idle clock (the bullet above), one
-interval of 89 to 154 ms in every scene.
+Not held: with the RTX idle for 4 s before the press the first played frames wait on the card's idle state (the bullet above), one
+to three intervals of 60 to 154 ms in every scene; see the step B section for the half-size ramp that shortens it.
 
 Tests (`tests/test_first_second.py`; each fails without its change): the draft documents and the window's progressive tiers; a draft of
 smoke, splats and glass is drawn on the card (the processor rasteriser is not called) and the exact picture still is the processor's; the
@@ -871,23 +865,39 @@ Run here on the stand-in (`benchmarks/3d-playback/laptop-1023/scene-check-standi
 on the RTX with four processors the cube, furnished room and mixed scene show 61, 90 and 91 ms after the rest, and the smoke, splats and glass scene plays 74 percent of its pictures at a lower resolution
 because the proxy steps down on the four processors. `tests/test_laptop_scene_check.py` tests the summary and verdict on canned runs and runs the command once on the software renderer.
 
-**The first frames after the card idles: not done.** After about 3.5 s without work the RTX drops to its idle clock and needs 0.25 to 0.6 s of saturating load to climb back, in steps
-(210 MHz, a middle state near 585 MHz, then 1.8 to 2.0 GHz). A frame of the probe's cube-like scene takes 14 ms at the full clock and 85 ms at the idle one. Play pressed after a 4 s rest, "Proxy while playing" on, five cold runs
-per scene (`idle-start-base.json`): worst interval cube 66 to 114 ms, furnished 53 to 89, mixed 89 to 94, smoke, splats and glass 94 to 203; over the first 3 s the pictures were late by 114, 117, 172 and
-186 ms in sum (median, beyond the 41.7 ms budget). Measured in a standalone probe (`clock-ramp-probes/`, the cube-like card scene, 14 ms at full clock) and in the window:
+**The first frames after the card idles (finish pass): the cube holds the gate, the other three scenes are shorter but not under it.** The first pass of this step
+tried to bring the RTX's idle clock up with a burst of compute and lower-resolution frames, and measured no gain (`idle-start-base.json`, `idle-start-ramp-attempt.json`, the probes
+in `clock-ramp-probes/`). The finish pass found the actual cost. After a rest of 3.5 s the card's link to the processor drops to PCIe generation 1 (`nvidia-smi` shows
+generation 1 of 4 at idle; this workstation's RTX is also on a x2 USB4 link), and the readback of a 33 MB float picture takes 84 ms instead of 12; the first two or three full-size played
+frames are that readback. The link climbs back by itself, in stages, after about 0.65 s of traffic that keeps it busy (`clock-ramp-probes/link_probe.py` and
+`link_probe2.py`, log `link_probes_1024.log`): 33 MB copies back to back 84 ms, then 12 ms after 0.85 s; 8 MB copies every 42 ms (53 percent of the link) 22 ms, then 11.6
+after 0.6 s (a middle stage); 16 MB every 42 ms (all of it) 42 ms, then 6 after 0.7 s (the top); 2 and 4 MB every 42 ms nothing. A compute burst raises the shader clock but not the link,
+which is why the first pass's burst did nothing for the frames. In a played frame the stage after a half-busy link costs 51 ms per 33 MB for three frames until the driver sees the link full,
+and the top stage steps down again about 1.5 s after the copies that raised it stop.
 
-- Lower-resolution frames at 24 a second do not raise the clock. A half-size frame is 5 to 6 ms at the full clock and 23 ms at the idle one, which fits the budget and loads the card too little. Played at
-  half size for 0.45 s and then at full size, the window showed intervals of 53, 119 and 92 ms at the switch (the full frames took 85 to 119 ms at the idle clock).
-- A short burst of back-to-back compute dispatches (3 ms each, on a thread of its own, stopping when the dispatch time had stopped falling) brought the clock up in 0.2 to 0.6 s, through the middle state, while
-  frames were drawn at half size. In the probe the switch to full size was clean in 7 of 8 runs. In the window, five cold runs per scene (`idle-start-ramp-attempt.json`) gave worst intervals cube 54 to 90 ms
-  (one run clean), furnished 68 to 76, mixed 70 to 79, smoke, splats and glass 68 to 77, and the sum of lateness over the first 3 s was 160, 137, 160 and 167 ms: no better than without it (114, 117, 172, 186).
-  The frames drawn beside the burst carry its jitter (intervals of 49 to 75 ms), 14 to 59 pictures at half size were shown, and in about half of the runs the full-size frames after the burst were still in the middle state (60 ms) and
-  showed an 85 ms interval at the switch. A burst that fills the memory as well as the arithmetic, a second device for the burst (the real frames then waited 100 to 140 ms for the card's scheduler), a longer burst (1.2 s) and a different
-  moment for the switch did not change that.
-- The attempt is not in the product: it has the same lateness as the plain idle clock plus softer first pictures, a burst on the card and a thread in the render path. The gate of this part (no interval over 54 ms after a 4 s rest on the RTX) is not met.
-  Probe logs, the burst code and the five-run summaries are kept in `benchmarks/3d-playback/laptop-1023/`.
+What it does now (`nodebased/cardclock.py`, `gpu3d.start_clock_ramp`, `Window._start_clock_ramp`): a play pressed with "Proxy while playing" on, the artist's tier at Full, a Render3D in the comp and a
+discrete card the app has not used for 3 s draws its first frames at half size (`CLOCK_RAMP_TIER`: 8 MB, 22 ms on the idle link, on time). Each of those frames is followed by a copy to the processor, sized to fill 80 percent of the
+rest of the frame's time at the speed the frame's own readback showed (at most 16 MB, in buffers the card keeps: destroying one stalled every thread on the device for 87 to 135 ms), so the link is full
+and climbs in the 0.6 to 0.8 s it takes. When a frame's readback has become fast (the last two under 0.35 of the first three, after 0.35 s, or at 1.5 s whatever it showed), the last few frames at the lower size are held a little longer than the one before
+(the first frame at the chosen size arrives longer after its start than a half-size frame does: three times what the half size took, plus the time it spends packing its scene again; each hold at most 10 ms more than the one before, 60 ms at most), the chosen
+tier is put back without a new request (a request cancels the frame in flight and cost 135 ms), and the extra copies taper off over 2 s. Nothing is held during a rest and a warm card is left alone; the extra traffic is the first 1 to 3.5 s of a play after a rest.
+Integrated and software adapters never take this path, so the Radeon and the stand-in play as before.
 
-Left for Gonzo's decision: accept the late first frames of a play after a rest of 4 s or more on a discrete card (a single stutter of 0.1 to 0.3 s, the scenes at the RTX only), or hold the clock with a load of 20 to
-30 percent of the card (its power and heat for every second of the hold, on a laptop too); the measured middle path does not remove the stutter. The Radeon and the stand-in do not show it.
+Play pressed 4 s after the first picture, "Proxy while playing" on, 1080p, first 3 s, cold app, longest interval in ms (`idle-ramp-1024/rtx-ramp.json`, `idle-start-base.json` is the same measurement before):
 
-Tests of this step run on the RTX, the Radeon and llvmpipe with the splat, volume and glass agreement tests, each under `flock -w 1800 /tmp/nb-gpu.lock` with a timeout (`tests-L4b-agree-*.log` in the lane run directory).
+| Adapter, scene | before: worst of 5 runs | after: runs, longest interval of each |
+|---|---|---|
+| RTX cube | 66 to 114 | 8 runs: 49 to 54 (7 under 54) |
+| RTX furnished | 53 to 89 | 5 runs: 59 to 73 |
+| RTX mixed | 89 to 94 | 5 runs: 70 to 85 |
+| RTX smoke, splats and glass | 94 to 203 | 3 runs: 76 to 78 |
+| Radeon, all four scenes | 45 to 52 | 12 runs: 44 to 52 and one 94 (furnished, 1.6 s in, a single hiccup that the ramp cannot cause: this card takes no ramp) |
+| Laptop stand-in, all four scenes | 45 to 55 | 12 runs: 45 to 52 |
+
+The cube holds the gate (no interval over 54 ms; one run in eight reaches 54.4). The other three RTX scenes still show one interval at the switch (59 to 85 ms) and, for the smoke scene, four of 70 to 76 ms at the start.
+Cause of the switch interval: the first full-size frame packs and uploads the scene for the playing document again (12 ms for the furnished room, 40 ms and more for the mixed scene with its 20,000 splats),
+because the scene the half-size frames drew is not the one it draws; the hold covers the time the readback and the render take at the larger size but not that, and a hold that covered it would make the frames longer than the
+frame time. Cause of the smoke scene's start: its frames are bound by the card's shader clock (a half-size frame is 52 ms on the idle clock, 14 ms on the raised one), which only a compute load raises, and a compute load beside the played frames lengthened them
+(first pass). Left: pack the playing document's scene at the chosen size while the half-size frames run (the evaluator caches a scene per tier, so this wants the scene evaluation shared between tiers), and for the smoke scene a lower first tier than half.
+
+Tests of the ramp (`tests/test_card_clock.py`, each fails without the part it names): the link-up decision on canned frame times (a middle stage is not up, a fast frame before the minimum time is not enough, a card that never speeds up counts as up at 1.5 s); the extra copy fills the rest of the frame's time at the readback's speed, is never over 16 MB, is not sent for a frame that fills its time, keeps its buffers for the next ramp and ends quietly on a failing card; the holds grow in steps and count the scene's packing time and the cap; the copies taper off and stop; a ramp exists only for a discrete card that has rested; the window draws half size on a rested card, leaves a warm card, "Proxy while playing" off, an artist's own tier and a comp without a 3D render alone, puts the tier back without a new request, leaves the lowered frames out of the automatic tier, and a stop gives the tier back. Tests of this step run on the RTX, the Radeon and llvmpipe with the splat, volume and glass agreement tests, each under `flock -w 1800 /tmp/nb-gpu.lock` with a timeout (`tests-L4c-agree-*.log` in the lane run directory).

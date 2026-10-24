@@ -92,6 +92,9 @@ from .decodepool import DecodeAheadPool
 from .tileexec import TileExecutor
 from .tiles import TileCache, TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
+
+# The tier the first played frames after the graphics card has rested are drawn at while its clock climbs (`Window._start_clock_ramp`).
+CLOCK_RAMP_TIER = 2
 from .raster import Raster
 from .artisttools import CacheInspectorPanel, SliceView
 from . import cachecontext
@@ -8813,6 +8816,8 @@ class Window(QMainWindow):
         # Automatic playback tier (`_adapt_playback_proxy`): frames to ignore while pipelines and caches are cold, the run of
         # frames with room to spare, and the lowest tier it may climb back to (the one the source's size chose at the start).
         self._adapt_warm = 0
+        self._clock_ramp = None            # the `cardclock.Ramp` of this play (`_start_clock_ramp`), until the frames are back at full size
+        self._clock_ramp_lowered = False
         self._adapt_headroom = 0
         self._adapt_floor_tier = 1
         self._adapt_recent = []
@@ -9821,6 +9826,7 @@ class Window(QMainWindow):
             self._adapt_recent = []
             self._adapt_up_frames = self.ADAPT_UP_FRAMES
             self._adapt_climbed_from = None
+            self._start_clock_ramp()
             # One precise wakeup per target frame is enough: playback_tick follows the monotonic
             # clock and bounds the playhead to completed renders. Waking twice per frame (500/fps)
             # adds UI/event-loop work without improving picture cadence, and the overhead costs
@@ -9828,6 +9834,10 @@ class Window(QMainWindow):
             self._schedule_playback_tick(float(time_range["fps"]))
             self.request_preview()
         else:
+            if self._clock_ramp is not None:
+                self._clock_ramp.finish()
+            self._clock_ramp = None
+            self._clock_ramp_lowered = False
             self.playback_timer.stop()
             self.preview_queue.cancel()
             self._cancel_staged()
@@ -9866,6 +9876,41 @@ class Window(QMainWindow):
                     self.request_preview(tier_override=1)
             self._queue_next_fluid_bake_frame(getattr(self, "_fluid_edit_bake", None))
 
+    def _start_clock_ramp(self):
+        """Play pressed after the discrete card has rested: its clocks and link are down, and reading a full-size picture back takes
+        four to seven times as long until they climb (the first two or three played frames 60 to 150 ms apart on the RTX 3080 Ti).
+        The first frames are drawn at half size instead (`CLOCK_RAMP_TIER`: a readback of 8 MB, which fits a frame and keeps the
+        link busy enough to climb), and `_end_clock_ramp` draws the chosen tier again once a frame's readback has become fast."""
+        self._clock_ramp = None
+        self._clock_ramp_lowered = False
+        if (not self.playback_proxy.isChecked() or self.proxy.currentData() != 1 or self.playback_auto_proxy_index is not None
+                or not any(node.get("type") == "Render3D" for node in self.dispatcher.document.get("nodes", {}).values())):
+            return
+        index = self.proxy.findData(CLOCK_RAMP_TIER)
+        ramp = (gpu3d.start_clock_ramp(1.0 / max(1.0, float(self.dispatcher.document['time'].get('fps', 24.0))))
+                if index >= 0 else None)
+        if ramp is None:
+            return
+        self._clock_ramp = ramp
+        self._clock_ramp_lowered = True
+        self.playback_auto_proxy_index = self.proxy.currentIndex()
+        self.proxy.setCurrentIndex(index)
+
+    def _end_clock_ramp(self):
+        """The card is up (`cardclock.Ramp.switch`): the next frame is drawn at the tier the artist chose. The tier is put back without
+        a new request, which would cancel the frame in flight and cost the picture it was drawing."""
+        self._clock_ramp = None
+        self._clock_ramp_lowered = False
+        index = self.playback_auto_proxy_index
+        if index is not None and self.proxy.currentData() == CLOCK_RAMP_TIER:
+            self.playback_auto_proxy_index = None
+            self._adapt_warm = 1
+            self._adapt_recent = []
+            self.proxy.blockSignals(True)
+            self.proxy.setCurrentIndex(index)
+            self.proxy.blockSignals(False)
+            self.update_realtime_light()
+
     def playback_tick(self):
         """Follow the wall clock when rendering can keep up. When it can't, Nuke-style fallback:
         the playhead may only sit at an offset from playback_origin_frame equal to how many
@@ -9878,6 +9923,8 @@ class Window(QMainWindow):
         identical to plain wall-clock-following."""
         time_range = self.dispatcher.document["time"]
         _trace_mark("tick")
+        if self._clock_ramp is not None and self._clock_ramp.switch:
+            self._end_clock_ramp()
         # A wakeup within PLAYBACK_TICK_SLACK of the frame boundary counts as on it: `_next_playback_interval_ms` moves its deadline
         # on from that close, so a tick 0.06 ms short of the boundary that did not advance the playhead lost the whole slot (10/23:
         # one 84 ms gap in about every third 3 s of the smoke, splats and glass scene, whose frame fills 40 of the 41.7 ms).
@@ -9946,6 +9993,8 @@ class Window(QMainWindow):
     def _adapt_playback_proxy(self, request, elapsed_ms):
         """Lower an automatic playback tier when the measured renders miss the chosen fps, and climb back one tier (never above
         the one playback started at) when frames have had room to spare for a while."""
+        if self._clock_ramp_lowered:
+            return False
         if (not self.playing or not self.playback_proxy.isChecked()
                 or int(request.tier) != int(self.proxy.currentData() or 1)):
             return False

@@ -1,0 +1,118 @@
+{
+ "radeon": {
+  "cube": [
+   {
+    "max_ms": 44.8,
+    "over54": 0
+   },
+   {
+    "max_ms": 43.8,
+    "over54": 0
+   },
+   {
+    "max_ms": 44.7,
+    "over54": 0
+   }
+  ],
+  "furnished": [
+   {
+    "max_ms": 94.3,
+    "over54": 1
+   },
+   {
+    "max_ms": 47.6,
+    "over54": 0
+   },
+   {
+    "max_ms": 46.4,
+    "over54": 0
+   }
+  ],
+  "mixed": [
+   {
+    "max_ms": 50.6,
+    "over54": 0
+   },
+   {
+    "max_ms": 47.7,
+    "over54": 0
+   },
+   {
+    "max_ms": 51.6,
+    "over54": 0
+   }
+  ],
+  "mixedglass": [
+   {
+    "max_ms": 46.5,
+    "over54": 0
+   },
+   {
+    "max_ms": 45.8,
+    "over54": 0
+   },
+   {
+    "max_ms": 49.6,
+    "over54": 0
+   }
+  ]
+ },
+ "standin": {
+  "cube": [
+   {
+    "max_ms": 45.6,
+    "over54": 0
+   },
+   {
+    "max_ms": 45.2,
+    "over54": 0
+   },
+   {
+    "max_ms": 44.6,
+    "over54": 0
+   }
+  ],
+  "furnished": [
+   {
+    "max_ms": 47.2,
+    "over54": 0
+   },
+   {
+    "max_ms": 47.4,
+    "over54": 0
+   },
+   {
+    "max_ms": 48.2,
+    "over54": 0
+   }
+  ],
+  "mixed": [
+   {
+    "max_ms": 49.9,
+    "over54": 0
+   },
+   {
+    "max_ms": 51.7,
+    "over54": 0
+   },
+   {
+    "max_ms": 50.7,
+    "over54": 0
+   }
+  ],
+  "mixedglass": [
+   {
+    "max_ms": 49.9,
+    "over54": 0
+   },
+   {
+    "max_ms": 48.4,
+    "over54": 0
+   },
+   {
+    "max_ms": 50.2,
+    "over54": 0
+   }
+  ]
+ }
+}

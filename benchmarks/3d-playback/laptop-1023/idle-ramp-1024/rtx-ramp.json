@@ -1,0 +1,227 @@
+{
+ "cube": {
+  "runs": [
+   {
+    "file": "cube-1.json",
+    "max_ms": 51.5,
+    "over54": 0,
+    "excess_ms": 0,
+    "first_picture_s": 0.609,
+    "between": 24.11,
+    "low_res_pictures": 19
+   },
+   {
+    "file": "cube-2.json",
+    "max_ms": 52.1,
+    "over54": 0,
+    "excess_ms": 0,
+    "first_picture_s": 0.566,
+    "between": 24.04,
+    "low_res_pictures": 18
+   },
+   {
+    "file": "cube-3.json",
+    "max_ms": 48.7,
+    "over54": 0,
+    "excess_ms": 0,
+    "first_picture_s": 0.592,
+    "between": 23.99,
+    "low_res_pictures": 22
+   },
+   {
+    "file": "cube-4.json",
+    "max_ms": 54.4,
+    "over54": 1,
+    "excess_ms": 0.4,
+    "first_picture_s": 0.595,
+    "between": 24.0,
+    "low_res_pictures": 19
+   },
+   {
+    "file": "cube-5.json",
+    "max_ms": 53.3,
+    "over54": 0,
+    "excess_ms": 0,
+    "first_picture_s": 0.583,
+    "between": 24.12,
+    "low_res_pictures": 19
+   },
+   {
+    "file": "cube-6.json",
+    "max_ms": 50.5,
+    "over54": 0,
+    "excess_ms": 0,
+    "first_picture_s": 0.566,
+    "between": 24.0,
+    "low_res_pictures": 22
+   },
+   {
+    "file": "cube-7.json",
+    "max_ms": 51.2,
+    "over54": 0,
+    "excess_ms": 0,
+    "first_picture_s": 0.595,
+    "between": 24.11,
+    "low_res_pictures": 19
+   },
+   {
+    "file": "cube-8.json",
+    "max_ms": 49.3,
+    "over54": 0,
+    "excess_ms": 0,
+    "first_picture_s": 0.567,
+    "between": 23.99,
+    "low_res_pictures": 21
+   }
+  ],
+  "worst_ms": 54.4,
+  "median_max_ms": 51.35,
+  "runs_clean": 7,
+  "n": 8,
+  "total_over54": 1
+ },
+ "furnished": {
+  "runs": [
+   {
+    "file": "furnished-1.json",
+    "max_ms": 72.9,
+    "over54": 4,
+    "excess_ms": 36.2,
+    "first_picture_s": 0.597,
+    "between": 24.22,
+    "low_res_pictures": 20
+   },
+   {
+    "file": "furnished-2.json",
+    "max_ms": 67.9,
+    "over54": 4,
+    "excess_ms": 18.2,
+    "first_picture_s": 0.594,
+    "between": 24.23,
+    "low_res_pictures": 16
+   },
+   {
+    "file": "furnished-3.json",
+    "max_ms": 58.8,
+    "over54": 2,
+    "excess_ms": 6.1,
+    "first_picture_s": 0.617,
+    "between": 24.23,
+    "low_res_pictures": 20
+   },
+   {
+    "file": "furnished-4.json",
+    "max_ms": 62.4,
+    "over54": 2,
+    "excess_ms": 11.9,
+    "first_picture_s": 0.606,
+    "between": 24.25,
+    "low_res_pictures": 12
+   },
+   {
+    "file": "furnished-5.json",
+    "max_ms": 65.8,
+    "over54": 2,
+    "excess_ms": 15.6,
+    "first_picture_s": 0.587,
+    "between": 24.46,
+    "low_res_pictures": 20
+   }
+  ],
+  "worst_ms": 72.9,
+  "median_max_ms": 65.8,
+  "runs_clean": 0,
+  "n": 5,
+  "total_over54": 14
+ },
+ "mixed": {
+  "runs": [
+   {
+    "file": "mixed-1.json",
+    "max_ms": 69.9,
+    "over54": 2,
+    "excess_ms": 17.5,
+    "first_picture_s": 0.66,
+    "between": 24.23,
+    "low_res_pictures": 12
+   },
+   {
+    "file": "mixed-2.json",
+    "max_ms": 73.5,
+    "over54": 2,
+    "excess_ms": 24.9,
+    "first_picture_s": 0.646,
+    "between": 24.19,
+    "low_res_pictures": 14
+   },
+   {
+    "file": "mixed-3.json",
+    "max_ms": 84.9,
+    "over54": 2,
+    "excess_ms": 32.8,
+    "first_picture_s": 0.645,
+    "between": 24.19,
+    "low_res_pictures": 13
+   },
+   {
+    "file": "mixed-4.json",
+    "max_ms": 81.9,
+    "over54": 2,
+    "excess_ms": 30.9,
+    "first_picture_s": 0.655,
+    "between": 24.2,
+    "low_res_pictures": 13
+   },
+   {
+    "file": "mixed-5.json",
+    "max_ms": 70.0,
+    "over54": 3,
+    "excess_ms": 17.2,
+    "first_picture_s": 0.66,
+    "between": 24.2,
+    "low_res_pictures": 14
+   }
+  ],
+  "worst_ms": 84.9,
+  "median_max_ms": 73.5,
+  "runs_clean": 0,
+  "n": 5,
+  "total_over54": 11
+ },
+ "mixedglass": {
+  "runs": [
+   {
+    "file": "mixedglass-1.json",
+    "max_ms": 76.2,
+    "over54": 6,
+    "excess_ms": 111.1,
+    "first_picture_s": 0.677,
+    "between": 23.48,
+    "low_res_pictures": 79
+   },
+   {
+    "file": "mixedglass-2.json",
+    "max_ms": 75.7,
+    "over54": 3,
+    "excess_ms": 25.3,
+    "first_picture_s": 0.666,
+    "between": 23.92,
+    "low_res_pictures": 89
+   },
+   {
+    "file": "mixedglass-3.json",
+    "max_ms": 77.6,
+    "over54": 6,
+    "excess_ms": 94.3,
+    "first_picture_s": 0.705,
+    "between": 23.11,
+    "low_res_pictures": 87
+   }
+  ],
+  "worst_ms": 77.6,
+  "median_max_ms": 76.2,
+  "runs_clean": 0,
+  "n": 3,
+  "total_over54": 15
+ }
+}

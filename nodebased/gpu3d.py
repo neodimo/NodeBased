@@ -12,11 +12,12 @@ import logging
 import math
 import os
 import threading
+import time
 from dataclasses import replace
 
 import numpy as np
 
-from . import gpupicture, raytrace, scene3d
+from . import cardclock, gpupicture, raytrace, scene3d
 from .playback_trace import mark as _mark
 
 log = logging.getLogger(__name__)
@@ -312,6 +313,16 @@ def _state(choice=None):
             reason = f'wgpu unavailable ({choice}): {type(exc).__name__}: {exc}'
             _errors[choice] = reason
             raise RuntimeError(reason) from exc
+
+
+def start_clock_ramp(budget):
+    """A `cardclock.Ramp` for a play that starts now, when the card the app renders on is one whose clocks and link fall at rest and the app
+    has not used it for `cardclock.REST_SECONDS`; None otherwise (no card yet, an integrated or software one, or a card that is warm)."""
+    state = _states.get('default')
+    rest = cardclock.rest_seconds()
+    if not state or rest is None or rest < cardclock.REST_SECONDS or not cardclock.clock_idles(state['info']):
+        return None
+    return cardclock.Ramp(budget)
 
 
 def available():
@@ -2337,8 +2348,10 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     held = state.setdefault('residents', {})
     res = held.get(key)
     if res is None:
+        built = time.monotonic()
         res = _build_resident(state, scene, order, key, light_data, area_lights_data, area_samples_data, shadow_data,
                               bvh_data, shadow_triangles, cancel)
+        cardclock.note_build(time.monotonic() - built)
         held[key] = res
         while len(held) > RESIDENT_SCENES:          # oldest first (insertion order)
             held.pop(next(iter(held)))
@@ -2475,15 +2488,19 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
             _cancel(cancel)
             if not splats_here:
                 _mark('submit')
+            submitted = time.monotonic()
             device.queue.submit([encoder.finish()])
             staging.map_sync(wgpu.MapMode.READ)
             _mark('gpu_done')
+            cardclock.note_busy()
+            waited = time.monotonic() - submitted
             try:
                 _copy_band(staging, result, y0, y1, dtype, stride, width)
                 if fused:
                     state['picture_rgba'] = recorder.read(staging)
             finally:
                 staging.unmap()
+            cardclock.after_frame(state, rows * stride, waited)
             _mark('readback_done')
             _cancel(cancel)
     finally:
@@ -2756,13 +2773,17 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             _cancel(cancel)
             if not state.get('splats_on_card'):
                 _mark('submit')
+            submitted = time.monotonic()
             device.queue.submit([encoder.finish()])
             staging.map_sync(wgpu.MapMode.READ)
             _mark('gpu_done')
+            cardclock.note_busy()
+            waited = time.monotonic() - submitted
             try:
                 _copy_band(staging, result, y0, y1, dtype, stride, width)
             finally:
                 staging.unmap()
+            cardclock.after_frame(state, rows * stride, waited)
             _mark('readback_done')
             _cancel(cancel)
         if not data and bg.any():
