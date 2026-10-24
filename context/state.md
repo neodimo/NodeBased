@@ -1,5 +1,24 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (9:25 PM on 2026-10-23 PDT)
+
+`main` moved `8dc0a3b1` -> `5b810c54` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `5b810c54` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1023-2105.log`, started 9:05 PM): **Ran 6196 tests in 485.912 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step A of 1: the full-detail Hot pour refines within memory on all three machines (finish 1).** Commits:
+  - `d4f2db7c` docs(fluid): record complete refinement memory gates
+  Diff: 6 files changed, 313 insertions(+), 51 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Fresh RTX cold refinement completed edited liquid and surface but hit a whitewater card-allocation failure during frame 91. With warm caches, all four edited stages completed through frame 120 after whitewater reduced neighbor evaluation. A separate Radeon 8060S laptop-stand-in run under `taskset -c 0-3` completed all four stages under the 16 GiB RSS cap. Swap stayed at zero. The remaining direct A6000 measurement cannot run here: only the RTX 3080 Ti is attached and no remote host is configured; the docs contain a labelled estimate. See the newest TASKLOG entry and paired benchmark JSONs.
 
 # Lane 6 — 2026-10-23 step A full-detail refinement memory (PARTIAL)

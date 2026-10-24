@@ -1,3 +1,9 @@
+## 2026-10-23 — continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) step A of 1: the full-detail Hot pour refines within memory on all three machines (finish 1) (integrator tick)
+
+- **What was done:** `main` `8dc0a3b1` -> `5b810c54` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `5b810c54`: Ran 6196 tests in 485.912 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 # Lane 6 step A finish 1 — full-detail refinement memory (PARTIAL, 2026-10-23)
 
 - **What was done — evidence:** A fresh RTX 3080 Ti run completed edited liquid and surface, then failed at whitewater frame 91 (16,174.4 MiB peak RSS, 9,821 MiB card allocation, zero swap). Warm-cache retry completed liquid, surface, whitewater and steam through frame 120; neighbor evaluation was reduced from 696,541 to 131,072. Retry total was 585.44 s; peak RSS 9,659.9 MiB, card allocation 5,706 MiB, zero swap. The integrated Radeon 8060S laptop stand-in completed all four stages under taskset CPUs 0–3 in 1,167.77 s, with 13,990.7 MiB peak RSS and zero swap.
