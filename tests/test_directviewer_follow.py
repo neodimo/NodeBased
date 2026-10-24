@@ -73,6 +73,10 @@ class OverlayRingTests(unittest.TestCase):
         self.presenter.paint_deferred(dv.DeferredOverlay(picture, self.hints), key, SIZE, 1.0)
 
     def settle(self):
+        # The picture too: after recover() the retained picture is filled again on the worker thread, and
+        # a draw before that fill lands shows black (10/23 4:55 PM, red under the parallel suite's load).
+        if self.presenter.ring is not None:
+            self.presenter.ring.wait()
         self.presenter.overlay_ring.wait()
 
     def shown(self):
