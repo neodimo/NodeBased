@@ -7,6 +7,7 @@ rounded area heuristic rather than hardware derivative-based LOD.
 """
 from __future__ import annotations
 
+import collections
 import hashlib
 import logging
 import math
@@ -1417,18 +1418,51 @@ def _shadow_data(scene, count, limit, cancel):
 
 
 HASH_BYTES = 16 << 20      # arrays over this are told apart by identity (a hash of 16 MB costs about 15 ms)
+DIGEST_MEMO_BYTES = 128 << 20      # read-only arrays whose content hash is remembered (the memo keeps them alive)
+
+_digests = collections.OrderedDict()      # id(array) -> (array, key), least recently asked first
+_digests_lock = threading.Lock()
+
+
+def _can_change(array):
+    """True when something else can still write the array's bytes: it, or an array it is a view of, is writeable."""
+    while isinstance(array, np.ndarray):
+        if array.flags.writeable:
+            return True
+        array = array.base
+    return False
+
+
+def _content_key(array):
+    return ('hash', array.shape, array.dtype.str, hashlib.blake2b(np.ascontiguousarray(array), digest_size=16).digest())
 
 
 def _array_key(array):
-    """What tells one array from another in a cache key. The Evaluator builds a scene's geometry again for every frame, so the
-    arrays of an unchanged mesh are new objects each time: a writeable array is identified by a hash of its bytes (about 0.2 ms
-    for a few thousand triangles). A read-only array, or one too big to hash on every frame, by itself (the cache entry keeps it
-    alive, so the identity stays unique)."""
+    """What tells one array from another in a cache key: its content. The Evaluator builds a scene's geometry again for every frame
+    and for every proxy tier, so the arrays of an unchanged mesh are new objects: a writeable array is identified by a hash of its
+    bytes (about 0.2 ms for a few thousand triangles). A read-only array (the Evaluator hands the same one out for as long as the
+    node is unchanged) is hashed once and remembered by its identity, so a frame costs a dictionary lookup, and the half-size and
+    full-size scenes of a play that returns to its chosen size after the card rested, which are two sets of arrays with the same
+    content, share one pack. An array that something else can still write (a read-only view of a writeable one) is hashed every time,
+    and one too big to hash on every frame is told by identity (the cache entry keeps it alive, so the identity stays unique)."""
     if array is None:
         return 0
-    if not array.flags.writeable or array.nbytes > HASH_BYTES:
+    if array.nbytes > HASH_BYTES:
         return ('id', id(array))
-    return ('hash', array.shape, array.dtype.str, hashlib.blake2b(np.ascontiguousarray(array), digest_size=16).digest())
+    if _can_change(array):
+        return _content_key(array)
+    with _digests_lock:
+        held = _digests.get(id(array))
+        if held is not None and held[0] is array:
+            _digests.move_to_end(id(array))
+            return held[1]
+    key = _content_key(array)
+    with _digests_lock:
+        _digests[id(array)] = (array, key)
+        total = sum(entry[0].nbytes for entry in _digests.values())
+        while total > DIGEST_MEMO_BYTES and len(_digests) > 1:
+            total -= _digests.popitem(last=False)[1][0].nbytes
+    return key
 
 
 def _shadow_key(scene):
