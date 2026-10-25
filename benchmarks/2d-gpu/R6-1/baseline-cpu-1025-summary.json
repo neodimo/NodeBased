@@ -1,0 +1,422 @@
+{
+ "runs": [
+  {
+   "case": "cpu-48-rtx3080ti-1",
+   "adapter": "rtx3080ti",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.06,
+   "total_duration_ms": 7549.735,
+   "mean_interval_ms": 159.42,
+   "interval_ms": {
+    "n": 46,
+    "mean": 159.42,
+    "p50": 158.967,
+    "p95": 174.631,
+    "p99": 177.01,
+    "max": 177.598
+   },
+   "first_picture_latency_ms": 216.433,
+   "latency_ms": {
+    "n": 47,
+    "mean": 179.979,
+    "p50": 177.676,
+    "p95": 199.868,
+    "p99": 218.262,
+    "max": 219.82
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 152.968,
+    "p50": 151.598,
+    "p95": 171.421,
+    "p99": 182.22,
+    "max": 189.647
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 20.219,
+    "p50": 19.456,
+    "p95": 24.986,
+    "p99": 38.797,
+    "max": 49.9
+   },
+   "frames_dropped_counted": 12
+  },
+  {
+   "case": "cpu-48-rtx3080ti-2",
+   "adapter": "rtx3080ti",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.254,
+   "total_duration_ms": 7187.985,
+   "mean_interval_ms": 150.945,
+   "interval_ms": {
+    "n": 46,
+    "mean": 150.945,
+    "p50": 147.97,
+    "p95": 179.345,
+    "p99": 188.836,
+    "max": 192.978
+   },
+   "first_picture_latency_ms": 244.534,
+   "latency_ms": {
+    "n": 47,
+    "mean": 173.311,
+    "p50": 166.967,
+    "p95": 217.958,
+    "p99": 258.54,
+    "max": 270.471
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 145.19,
+    "p50": 143.044,
+    "p95": 167.99,
+    "p99": 207.406,
+    "max": 238.685
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 20.402,
+    "p50": 18.252,
+    "p95": 34.598,
+    "p99": 57.583,
+    "max": 71.548
+   },
+   "frames_dropped_counted": 17
+  },
+  {
+   "case": "cpu-48-rtx3080ti-3",
+   "adapter": "rtx3080ti",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.772,
+   "total_duration_ms": 7042.155,
+   "mean_interval_ms": 148.707,
+   "interval_ms": {
+    "n": 46,
+    "mean": 148.707,
+    "p50": 148.248,
+    "p95": 162.849,
+    "p99": 165.363,
+    "max": 167.068
+   },
+   "first_picture_latency_ms": 201.649,
+   "latency_ms": {
+    "n": 47,
+    "mean": 168.004,
+    "p50": 165.903,
+    "p95": 190.056,
+    "p99": 201.561,
+    "max": 201.649
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 143.169,
+    "p50": 141.598,
+    "p95": 159.915,
+    "p99": 168.022,
+    "max": 171.224
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 18.821,
+    "p50": 18.197,
+    "p95": 24.011,
+    "p99": 36.431,
+    "max": 45.72
+   },
+   "frames_dropped_counted": 6
+  },
+  {
+   "case": "cpu-240-rtx3080ti-1",
+   "adapter": "rtx3080ti",
+   "backend": "cpu",
+   "frames_in_first_pass": 240,
+   "fresh_frames_traced": 240,
+   "first_pass_fps": 9.005,
+   "total_duration_ms": 26718.297,
+   "mean_interval_ms": 110.889,
+   "interval_ms": {
+    "n": 239,
+    "mean": 110.889,
+    "p50": 102.205,
+    "p95": 156.358,
+    "p99": 166.341,
+    "max": 169.887
+   },
+   "first_picture_latency_ms": 215.882,
+   "latency_ms": {
+    "n": 240,
+    "mean": 127.733,
+    "p50": 118.942,
+    "p95": 176.273,
+    "p99": 196.021,
+    "max": 215.882
+   },
+   "node_evaluation_ms": {
+    "n": 240,
+    "mean": 103.423,
+    "p50": 95.774,
+    "p95": 151.168,
+    "p99": 164.515,
+    "max": 185.617
+   },
+   "display_conversion_ms": {
+    "n": 240,
+    "mean": 17.718,
+    "p50": 17.259,
+    "p95": 21.842,
+    "p99": 25.724,
+    "max": 55.972
+   },
+   "frames_dropped_counted": 60
+  },
+  {
+   "case": "cpu-240-rtx3080ti-2",
+   "adapter": "rtx3080ti",
+   "backend": "cpu",
+   "frames_in_first_pass": 240,
+   "fresh_frames_traced": 240,
+   "first_pass_fps": 9.012,
+   "total_duration_ms": 26696.211,
+   "mean_interval_ms": 110.847,
+   "interval_ms": {
+    "n": 239,
+    "mean": 110.847,
+    "p50": 101.871,
+    "p95": 157.18,
+    "p99": 167.41,
+    "max": 176.2
+   },
+   "first_picture_latency_ms": 203.672,
+   "latency_ms": {
+    "n": 240,
+    "mean": 127.982,
+    "p50": 118.504,
+    "p95": 178.205,
+    "p99": 203.271,
+    "max": 219.954
+   },
+   "node_evaluation_ms": {
+    "n": 240,
+    "mean": 103.438,
+    "p50": 95.856,
+    "p95": 150.852,
+    "p99": 165.061,
+    "max": 180.743
+   },
+   "display_conversion_ms": {
+    "n": 240,
+    "mean": 18.022,
+    "p50": 17.451,
+    "p95": 22.832,
+    "p99": 32.703,
+    "max": 50.446
+   },
+   "frames_dropped_counted": 65
+  },
+  {
+   "case": "cpu-240-rtx3080ti-3",
+   "adapter": "rtx3080ti",
+   "backend": "cpu",
+   "frames_in_first_pass": 240,
+   "fresh_frames_traced": 240,
+   "first_pass_fps": 9.032,
+   "total_duration_ms": 26639.709,
+   "mean_interval_ms": 110.577,
+   "interval_ms": {
+    "n": 239,
+    "mean": 110.577,
+    "p50": 101.98,
+    "p95": 155.176,
+    "p99": 166.931,
+    "max": 174.293
+   },
+   "first_picture_latency_ms": 211.882,
+   "latency_ms": {
+    "n": 240,
+    "mean": 127.594,
+    "p50": 118.49,
+    "p95": 179.937,
+    "p99": 203.247,
+    "max": 217.583
+   },
+   "node_evaluation_ms": {
+    "n": 240,
+    "mean": 103.293,
+    "p50": 95.629,
+    "p95": 150.167,
+    "p99": 166.481,
+    "max": 180.186
+   },
+   "display_conversion_ms": {
+    "n": 240,
+    "mean": 17.809,
+    "p50": 17.273,
+    "p95": 24.494,
+    "p99": 31.649,
+    "max": 56.089
+   },
+   "frames_dropped_counted": 67
+  },
+  {
+   "case": "cpu-48-radeon8060s-1",
+   "adapter": "radeon8060s",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.765,
+   "total_duration_ms": 7050.219,
+   "mean_interval_ms": 148.935,
+   "interval_ms": {
+    "n": 46,
+    "mean": 148.935,
+    "p50": 149.031,
+    "p95": 161.278,
+    "p99": 163.583,
+    "max": 164.741
+   },
+   "first_picture_latency_ms": 199.191,
+   "latency_ms": {
+    "n": 47,
+    "mean": 167.99,
+    "p50": 165.881,
+    "p95": 186.769,
+    "p99": 205.706,
+    "max": 211.255
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 142.319,
+    "p50": 141.467,
+    "p95": 161.1,
+    "p99": 171.671,
+    "max": 177.028
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 19.132,
+    "p50": 18.363,
+    "p95": 22.981,
+    "p99": 42.59,
+    "max": 54.053
+   },
+   "frames_dropped_counted": 4
+  },
+  {
+   "case": "cpu-48-llvmpipe-1",
+   "adapter": "llvmpipe",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.679,
+   "total_duration_ms": 7129.131,
+   "mean_interval_ms": 150.553,
+   "interval_ms": {
+    "n": 46,
+    "mean": 150.553,
+    "p50": 150.318,
+    "p95": 164.675,
+    "p99": 174.703,
+    "max": 175.967
+   },
+   "first_picture_latency_ms": 203.693,
+   "latency_ms": {
+    "n": 47,
+    "mean": 168.841,
+    "p50": 166.781,
+    "p95": 193.945,
+    "p99": 204.913,
+    "max": 205.952
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 143.251,
+    "p50": 143.414,
+    "p95": 165.592,
+    "p99": 175.767,
+    "max": 180.21
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 18.526,
+    "p50": 18.235,
+    "p95": 21.545,
+    "p99": 37.55,
+    "max": 47.795
+   },
+   "frames_dropped_counted": 6
+  }
+ ],
+ "groups": {
+  "cpu-48-rtx3080ti": {
+   "passes": 3,
+   "first_pass_fps": [
+    6.06,
+    6.254,
+    6.772
+   ],
+   "first_pass_fps_median": 6.254,
+   "interval_p95_ms": [
+    174.631,
+    179.345,
+    162.849
+   ],
+   "node_evaluation_median_ms": [
+    151.598,
+    143.044,
+    141.598
+   ]
+  },
+  "cpu-240-rtx3080ti": {
+   "passes": 3,
+   "first_pass_fps": [
+    9.005,
+    9.012,
+    9.032
+   ],
+   "first_pass_fps_median": 9.012,
+   "interval_p95_ms": [
+    156.358,
+    157.18,
+    155.176
+   ],
+   "node_evaluation_median_ms": [
+    95.774,
+    95.856,
+    95.629
+   ]
+  },
+  "cpu-48-radeon8060s": {
+   "passes": 1,
+   "first_pass_fps": [
+    6.765
+   ],
+   "first_pass_fps_median": 6.765,
+   "interval_p95_ms": [
+    161.278
+   ],
+   "node_evaluation_median_ms": [
+    141.467
+   ]
+  },
+  "cpu-48-llvmpipe": {
+   "passes": 1,
+   "first_pass_fps": [
+    6.679
+   ],
+   "first_pass_fps_median": 6.679,
+   "interval_p95_ms": [
+    164.675
+   ],
+   "node_evaluation_median_ms": [
+    143.414
+   ]
+  }
+ }
+}
