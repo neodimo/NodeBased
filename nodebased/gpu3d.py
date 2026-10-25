@@ -17,7 +17,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from . import cardclock, gpupicture, raytrace, scene3d
+from . import cardclock, glguard, gpupicture, raytrace, scene3d
 from .playback_trace import mark as _mark
 
 log = logging.getLogger(__name__)
@@ -186,12 +186,23 @@ def _summary(adapter):
                 backend=str(info.get('backend_type', 'unknown')), driver=str(info.get('description') or 'unknown'))
 
 
+def _raw_adapters():
+    """wgpu's adapters, enumerated once per process through `glguard.GATE` and kept alive. Every enumeration makes
+    wgpu's OpenGL context current on the calling thread, and dropping an adapter does the same; a second thread
+    doing either while another holds it aborts the process (glguard), so no code here enumerates twice."""
+    import wgpu
+    with glguard.GATE:
+        if _adapter_cache.get('raw_of') is not wgpu:     # a different (test double) library is a different enumeration
+            _adapter_cache['raw'] = list(wgpu.gpu.enumerate_adapters_sync())
+            _adapter_cache['raw_of'] = wgpu
+        return list(_adapter_cache['raw'])
+
+
 def enumerate_adapters():
     """Every adapter wgpu can see, best first, as plain dicts (name, type, backend, driver); cached. [] without wgpu."""
     if 'list' not in _adapter_cache:
         try:
-            import wgpu
-            _adapter_cache['list'] = [_summary(a) for a in rank_adapters(wgpu.gpu.enumerate_adapters_sync())]
+            _adapter_cache['list'] = [_summary(a) for a in rank_adapters(_raw_adapters())]
         except Exception:
             _adapter_cache['list'] = []
     return _adapter_cache['list']
@@ -274,18 +285,19 @@ def _state(choice=None):
             import wgpu
             if choice == 'default':
                 try:
-                    adapter = select_adapter(list(wgpu.gpu.enumerate_adapters_sync()), adapter_preference())
+                    adapter = select_adapter(_raw_adapters(), adapter_preference())
                 except Exception as exc:       # an enumeration that fails is the same as one that finds nothing
                     log.warning('could not enumerate graphics adapters (%s); asking for high performance', exc)
                     adapter = None
                 if adapter is None:
-                    adapter = wgpu.gpu.request_adapter_sync(power_preference='high-performance')
+                    with glguard.GATE:
+                        adapter = wgpu.gpu.request_adapter_sync(power_preference='high-performance')
                 if not _adapter_logged and enumerate_adapters():
                     _adapter_logged.append(True)
                     _log_adapters(enumerate_adapters(), _name_of(adapter.info))
             else:
                 target = {'discrete': 'discretegpu', 'integrated': 'integratedgpu', 'cpu': 'cpu'}[choice]
-                adapter = next((a for a in wgpu.gpu.enumerate_adapters_sync()
+                adapter = next((a for a in _raw_adapters()
                                 if str(a.info.get('adapter_type', '')).lower().replace('_', '').replace(' ', '') == target), None)
             if adapter is None:
                 raise RuntimeError(f'no {choice} adapter')

@@ -1,5 +1,4 @@
 import os
-import sys
 import unittest
 import unittest.mock
 import uuid
@@ -13,6 +12,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
 
 from nodebased import directviewer as dv
+from nodebased import glguard
 from tests.waiting import wait_until
 
 try:
@@ -48,6 +48,7 @@ def stub_surface():
     stack = contextlib.ExitStack()
     stack.enter_context(unittest.mock.patch.object(dv, "surface_problem", return_value=("", False)))
     stack.enter_context(unittest.mock.patch.object(dv, "native_window_alive", return_value=True))
+    stack.enter_context(unittest.mock.patch.object(dv, "check_display_possible"))    # a runner with only OpenGL would refuse
     stack.enter_context(unittest.mock.patch.object(QRenderWidget, "get_wgpu_context", return_value=None))
     return stack
 
@@ -153,16 +154,15 @@ def make_presenter(size=(160, 120), adapter=None, fill_thread=False):
     kind = {"discrete": "discretegpu", "integrated": "integratedgpu", "cpu": "cpu"}.get(os.environ.get("NB_TEST_ADAPTER", ""))
     if kind:   # run the pixel tests on one named adapter: NB_TEST_ADAPTER=integrated|cpu|discrete
         adapters = [a for a in adapters if gpu3d._kind_of(a.info) == kind] or adapters
-    first = adapter or adapters[0]
-    if sys.platform.startswith("linux") and first.info.get("backend_type") == "OpenGL" and gpu3d._kind_of(first.info) == "cpu":
-        # GitHub's Linux runners offer only llvmpipe through EGL, where wgpu-hal 29's GLES backend panics on
-        # wgpuBufferRelease (EGL BadAccess) and aborts the whole batch: 0.43.0 and twice on 0.43.1, 10/24.
-        # Windows (WARP) and every real card here still run these tests.
-        raise unittest.SkipTest("the Direct viewer's card tests abort on wgpu's software OpenGL backend (EGL BadAccess)")
     context = FakeContext(size)
     # The pixel tests fill the staging buffer inline so a draw right after an offer shows it;
     # StagingRingTests run the filler thread.
-    presenter = dv.RetainedPresenter(context, adapter=first, fill_thread=fill_thread)
+    try:
+        presenter = dv.RetainedPresenter(context, adapter=adapter or adapters[0], fill_thread=fill_thread)
+    except glguard.Refused as exc:
+        # GitHub's Linux runners offer only llvmpipe through OpenGL, which the product refuses on Linux (glguard:
+        # wgpu-hal's shared EGL context aborted the 0.43.0 and 0.43.1 package builds). OpenGLGuardTests prove the refusal.
+        raise unittest.SkipTest(str(exc))
     return presenter, context
 
 
@@ -439,6 +439,7 @@ class SurfaceGuardTests(unittest.TestCase):
         problem = ["the window has no area (minimised or hidden)", False]
         with unittest.mock.patch.object(dv, "surface_problem", side_effect=lambda *a: tuple(problem)), \
                 unittest.mock.patch.object(dv, "native_window_alive", return_value=True), \
+                unittest.mock.patch.object(dv, "check_display_possible"), \
                 unittest.mock.patch.object(widget, "get_wgpu_context", return_value=None), \
                 unittest.mock.patch.object(dv, "RetainedPresenter", StubPresenter):
             self.assertFalse(widget.submit(checker_image(), (0, 0, 64, 48), generation=3))
@@ -565,7 +566,10 @@ class SrgbSurfaceTests(unittest.TestCase):
         from nodebased import gpu3d
         adapter = gpu3d.rank_adapters(list(wgpu.gpu.enumerate_adapters_sync()))[0]
         context = FakeContext((160, 120), fmt="rgba8unorm-srgb")
-        presenter = dv.RetainedPresenter(context, adapter=adapter, fill_thread=False)
+        try:
+            presenter = dv.RetainedPresenter(context, adapter=adapter, fill_thread=False)
+        except glguard.Refused as exc:
+            self.skipTest(str(exc))
         self.addCleanup(presenter.lose_device)
         presenter.offer(checker_image(), (0, 0, 64, 48), (0, 0, 64, 48), 1)
         presenter.draw((32.0, 24.0, 2.0), (160, 120))
@@ -625,8 +629,11 @@ class AdapterChoiceTests(unittest.TestCase):
     def test_windows_asks_d3d12_first_and_vulkan_is_the_switch(self):
         self.assertEqual(dv.backend_order("", platform="win32"), ["D3D12", None])
         self.assertEqual(dv.backend_order("vulkan", platform="win32"), ["Vulkan", None])
-        self.assertEqual(dv.backend_order("", platform="linux"), [None])
         self.assertEqual(dv.backend_order("auto", platform="win32"), [None])
+        # Linux asks Vulkan alone: "auto" would make wgpu enumerate its OpenGL adapters, which can abort the process.
+        self.assertEqual(dv.backend_order("", platform="linux"), ["Vulkan"])
+        self.assertEqual(dv.backend_order("vulkan", platform="linux"), ["Vulkan"])
+        self.assertEqual(dv.backend_order("auto", platform="linux"), [None])
 
     def test_selection_records_the_backend_asked_for_and_what_failed(self):
         import wgpu
@@ -641,7 +648,7 @@ class AdapterChoiceTests(unittest.TestCase):
                 raise RuntimeError("no D3D12 here")
             return nv
         with unittest.mock.patch.object(wgpu.gpu, "request_adapter_sync", fake):
-            adapter, selection = dv.choose_display_adapter(self.Context(), preference="", backend="d3d12")
+            adapter, selection = dv.choose_display_adapter(self.Context(), preference="", backend="d3d12", platform="win32")
         self.assertIs(adapter, nv)
         self.assertEqual(seen[:4], ["D3D12"] * 4)
         self.assertIsNone(seen[4])
@@ -657,6 +664,120 @@ class AdapterChoiceTests(unittest.TestCase):
         with unittest.mock.patch.object(wgpu.gpu, "request_adapter_sync", lambda canvas=None, **k: (_ for _ in ()).throw(RuntimeError("no"))):
             with self.assertRaises(RuntimeError):
                 dv.pick_display_adapter(self.Context(), preference="")
+
+
+class OpenGLGuardTests(unittest.TestCase):
+    """On Linux the Direct picture never touches an OpenGL adapter (glguard): wgpu-hal's GLES backend shares one EGL
+    context between all its adapters, a second thread asking for it makes eglMakeCurrent answer BadAccess, and the
+    unwrap on that aborts the process (0.43.0 and 0.43.1 package builds; tools/repro_gl_egl_race.py). These tests
+    use stand-in adapters, so they run on a runner with no card at all and prove the refusal is a normal exception."""
+
+    GL = {"device": "llvmpipe (LLVM 22.1.8, 256 bits)", "adapter_type": "CPU", "backend_type": "OpenGL"}
+    VK = {"device": "llvmpipe (LLVM 22.1.8, 256 bits)", "adapter_type": "CPU", "backend_type": "Vulkan"}
+
+    class Adapter:
+        def __init__(self, info):
+            self.info = dict(info)
+
+        def __getattr__(self, name):
+            raise AssertionError(f"the adapter was touched ({name}) before the refusal")
+
+    class Context:
+        def get_preferred_format(self, adapter):
+            raise AssertionError("the surface format was asked for before the refusal")
+
+    def test_an_opengl_adapter_is_refused_on_linux_only(self):
+        with self.assertRaises(glguard.Refused) as caught:
+            glguard.refuse_adapter(self.GL, platform="linux")
+        self.assertIsInstance(caught.exception, RuntimeError)       # the dock's existing handler catches Exception
+        for word in ("llvmpipe", "OpenGL", "Vulkan"):
+            self.assertIn(word, str(caught.exception))
+        glguard.refuse_adapter(self.VK, platform="linux")
+        glguard.refuse_adapter(self.GL, platform="win32")
+        glguard.refuse_adapter(self.GL, platform="darwin")
+
+    def test_a_machine_with_nothing_but_opengl_is_refused_before_any_request(self):
+        gl, vk = {"name": "a", "backend": "OpenGL"}, {"name": "b", "backend": "Vulkan"}
+        with self.assertRaises(glguard.Refused) as caught:
+            glguard.refuse_gl_only([gl, dict(gl, name="c")], platform="linux")
+        self.assertIn("Vulkan driver", str(caught.exception))
+        glguard.refuse_gl_only([gl, vk], platform="linux")      # any Vulkan adapter lets the request go ahead
+        glguard.refuse_gl_only([], platform="linux")            # nothing listed: wgpu is absent, the normal error says so
+        glguard.refuse_gl_only([gl], platform="win32")
+
+    def test_the_presenter_refuses_an_opengl_adapter_before_anything_exists(self):
+        with unittest.mock.patch.object(glguard, "affected", return_value=True):
+            with self.assertRaises(glguard.Refused):
+                dv.RetainedPresenter(self.Context(), adapter=self.Adapter(self.GL), fill_thread=False)
+
+    def test_display_adapter_requests_ask_vulkan_alone_and_a_gl_only_machine_gets_a_plain_refusal(self):
+        seen = []
+
+        def nothing(context, backend, kwargs):
+            seen.append(backend)
+            raise RuntimeError("no adapter for this backend")
+        with unittest.mock.patch.object(dv, "_request", nothing):
+            with self.assertRaises(glguard.Refused) as caught:
+                dv.choose_display_adapter(self.Context(), preference="", backend="", platform="linux")
+        self.assertEqual(set(seen), {"Vulkan"})                     # never "auto": that would enumerate OpenGL
+        self.assertIn("only offers OpenGL", str(caught.exception))
+
+    def test_an_opengl_answer_to_an_auto_request_is_refused_too(self):
+        answer = self.Adapter(self.GL)
+        with unittest.mock.patch.object(dv, "_request", lambda context, backend, kwargs: answer):
+            with self.assertRaises(glguard.Refused):
+                dv.choose_display_adapter(self.Context(), preference="", backend="auto", platform="linux")
+
+    def test_a_vulkan_adapter_is_still_chosen_on_linux(self):
+        answer = self.Adapter(self.VK)
+        with unittest.mock.patch.object(dv, "_request", lambda context, backend, kwargs: answer):
+            adapter, selection = dv.choose_display_adapter(self.Context(), preference="", backend="", platform="linux")
+        self.assertIs(adapter, answer)
+        self.assertEqual(selection["requested_backends"], ["Vulkan"])
+
+    def test_the_check_before_the_surface_looks_at_the_adapters_and_the_card_the_app_draws_on(self):
+        gl, vk = {"name": "a", "backend": "OpenGL"}, {"name": "b", "backend": "Vulkan"}
+        dv.check_display_possible([gl, vk], platform="linux")
+        dv.check_display_possible([gl], platform="win32")
+        with self.assertRaises(glguard.Refused):
+            dv.check_display_possible([gl], platform="linux")
+        # The app already draws its 3D views on an OpenGL adapter: making the surface or asking for a Vulkan
+        # adapter now could take the EGL context from the thread that is rendering, so the card is not started.
+        from nodebased import gpu3d
+        with unittest.mock.patch.dict(gpu3d._states, {"default": {"info": dict(self.GL)}}):
+            with self.assertRaises(glguard.Refused):
+                dv.check_display_possible([gl, vk], platform="linux")
+
+    @needs_wgpu
+    def test_the_dock_fails_with_the_reason_and_makes_no_surface_on_a_gl_only_machine(self):
+        from nodebased import gpu3d
+        widget = dv.make_widget()
+        self.addCleanup(widget.close)
+        failures = []
+        widget.failed.connect(failures.append)
+        made = unittest.mock.Mock(side_effect=AssertionError("no surface may be made"))
+        gl_only = [{"name": "llvmpipe", "type": "software", "backend": "OpenGL", "driver": "Mesa"}]
+        with unittest.mock.patch.object(dv, "surface_problem", return_value=("", False)), \
+                unittest.mock.patch.object(dv, "native_window_alive", return_value=True), \
+                unittest.mock.patch.object(glguard, "affected", return_value=True), \
+                unittest.mock.patch.object(gpu3d, "enumerate_adapters", return_value=gl_only), \
+                unittest.mock.patch.object(widget, "get_wgpu_context", made), \
+                unittest.mock.patch.object(dv, "RetainedPresenter", made):
+            self.assertFalse(widget.submit(checker_image(), (0, 0, 64, 48)))
+        made.assert_not_called()
+        self.assertIsNone(widget.presenter)
+        self.assertTrue(failures and failures[0].startswith("direct viewer could not start: "))
+        self.assertIn("Vulkan", failures[0])
+
+    @needs_wgpu
+    def test_a_real_opengl_adapter_here_is_refused_without_the_process_dying(self):
+        import wgpu
+        gl = [a for a in wgpu.gpu.enumerate_adapters_sync() if glguard.is_opengl(a.info)]
+        if not gl or not glguard.affected():
+            self.skipTest("no OpenGL adapter on Linux here")
+        for adapter in gl:
+            with self.assertRaises(glguard.Refused):
+                dv.RetainedPresenter(FakeContext((64, 48)), adapter=adapter, fill_thread=True)
 
 
 class WindowSwitchTests(unittest.TestCase):

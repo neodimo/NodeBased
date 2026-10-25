@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 
 from nodebased import carddisplay
 from nodebased import directviewer as dv
+from nodebased import glguard
 from nodebased.imaging import to_qimage
 from tests.test_directviewer import FakeContext, needs_wgpu
 
@@ -70,7 +71,10 @@ class CardDisplayAgreementTests(unittest.TestCase):
         cls.frames = test_frames()
         cls.size = (96, 64)
         cls.context = FakeContext(cls.size)
-        cls.presenter = dv.RetainedPresenter(cls.context, adapter=adapter, overlay=False, fill_thread=False)
+        try:
+            cls.presenter = dv.RetainedPresenter(cls.context, adapter=adapter, overlay=False, fill_thread=False)
+        except glguard.Refused as exc:      # an OpenGL-only Linux machine: the Direct picture refuses it (glguard)
+            raise unittest.SkipTest(str(exc))
 
     @classmethod
     def tearDownClass(cls):
@@ -155,7 +159,10 @@ class CardCompareAgreementTests(unittest.TestCase):
         cls.pairs = pair_frames()
         cls.size = (96, 64)
         cls.context = FakeContext(cls.size)
-        cls.presenter = dv.RetainedPresenter(cls.context, adapter=adapter, overlay=False, fill_thread=False)
+        try:
+            cls.presenter = dv.RetainedPresenter(cls.context, adapter=adapter, overlay=False, fill_thread=False)
+        except glguard.Refused as exc:      # an OpenGL-only Linux machine: the Direct picture refuses it (glguard)
+            raise unittest.SkipTest(str(exc))
 
     @classmethod
     def tearDownClass(cls):

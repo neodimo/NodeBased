@@ -42,6 +42,8 @@ import time
 
 import numpy as np
 
+from . import glguard
+
 ENV = "NODEBASED_DIRECT_VIEWER"
 ADAPTER_ENV = "NODEBASED_DIRECT_ADAPTER"
 BACKEND_ENV = "NODEBASED_DIRECT_BACKEND"
@@ -320,31 +322,50 @@ def backend_order(choice=None, platform=None):
     `choice` (or NODEBASED_DIRECT_BACKEND): d3d12, vulkan or auto. On Windows the default is D3D12
     first (W1, docs/WINDOWS_HYBRID_PRESENTATION.md: one presentation API with DXGI's documented
     hybrid flip path), with Vulkan the measured alternative; wgpu's own default there is Vulkan.
-    Elsewhere the default is auto. A named backend that offers nothing falls back to auto."""
+    On Linux the default is Vulkan alone: asking for "auto" would make wgpu enumerate its OpenGL adapters
+    too, and OpenGL there can abort the process (glguard). Elsewhere the default is auto. A named backend
+    that offers nothing falls back to auto, except on Linux, where that fallback would be OpenGL."""
     choice = (choice if choice is not None else os.environ.get(BACKEND_ENV, "")).strip().lower()
     if not choice:
-        choice = "d3d12" if (platform or sys.platform) == "win32" else "auto"
+        choice = "d3d12" if (platform or sys.platform) == "win32" else "vulkan" if glguard.affected(platform) else "auto"
     named = {"d3d12": "D3D12", "dx12": "D3D12", "vulkan": "Vulkan"}.get(choice)
+    if named and glguard.affected(platform):
+        return [named]
     return [named, None] if named else [None]
 
 
 def _request(context, backend, kwargs):
     """One surface-filtered request, with wgpu-py's WGPU_BACKEND_TYPE set for the call only."""
     import wgpu
-    saved = os.environ.get("WGPU_BACKEND_TYPE")
-    try:
-        if backend is not None:
-            os.environ["WGPU_BACKEND_TYPE"] = backend
-        return wgpu.gpu.request_adapter_sync(canvas=context, **kwargs)
-    finally:
-        if backend is not None:
-            if saved is None:
-                os.environ.pop("WGPU_BACKEND_TYPE", None)
-            else:
-                os.environ["WGPU_BACKEND_TYPE"] = saved
+    with glguard.GATE:       # one request at a time: an unselected adapter is dropped inside it, on this thread
+        saved = os.environ.get("WGPU_BACKEND_TYPE")
+        try:
+            if backend is not None:
+                os.environ["WGPU_BACKEND_TYPE"] = backend
+            return wgpu.gpu.request_adapter_sync(canvas=context, **kwargs)
+        finally:
+            if backend is not None:
+                if saved is None:
+                    os.environ.pop("WGPU_BACKEND_TYPE", None)
+                else:
+                    os.environ["WGPU_BACKEND_TYPE"] = saved
 
 
-def choose_display_adapter(context, preference=None, backend=None):
+def check_display_possible(adapters=None, platform=None):
+    """Raise `glguard.Refused` before any surface, adapter request or device exists when this machine can only
+    present through OpenGL on Linux, or when the application already draws on an OpenGL adapter there (a second
+    thread making the EGL context current at the same time would abort the process). `adapters` are
+    `gpu3d.enumerate_adapters()` dicts; a machine with Vulkan, Windows and macOS pass."""
+    if not glguard.affected(platform):
+        return
+    from . import gpu3d
+    state = getattr(gpu3d, "_states", {}).get("default")
+    if state and glguard.is_opengl(state.get("info", {})):
+        glguard.refuse_adapter(state["info"], platform)
+    glguard.refuse_gl_only(gpu3d.enumerate_adapters() if adapters is None else adapters, platform)
+
+
+def choose_display_adapter(context, preference=None, backend=None, platform=None):
     """(adapter, selection): an adapter wgpu reports as able to present to this window's surface.
 
     `get_preferred_format` alone proves nothing: on a display server without DRI3 it answers for an
@@ -360,8 +381,8 @@ def choose_display_adapter(context, preference=None, backend=None):
     requests = {"integrated": [dict(power_preference="low-power")], "cpu": [dict(force_fallback_adapter=True)]}.get(
         wanted, [dict(power_preference="high-performance")])
     requests += [dict(power_preference="high-performance"), dict(power_preference="low-power"), dict(force_fallback_adapter=True)]
-    order = backend_order(backend)
-    attempts, found = [], None
+    order = backend_order(backend, platform)
+    attempts, found, refused = [], None, None
     for wanted_backend in order:
         for kwargs in requests:
             label = ", ".join(f"{k}={v}" for k, v in kwargs.items()) + f", backend={wanted_backend or 'auto'}"
@@ -369,6 +390,12 @@ def choose_display_adapter(context, preference=None, backend=None):
                 adapter = _request(context, wanted_backend, kwargs)
             except Exception as exc:
                 attempts.append({"request": label, "error": str(exc)})
+                continue
+            try:
+                glguard.refuse_adapter(adapter.info, platform)
+            except glguard.Refused as exc:                  # never reached with the Linux default order; "auto" can get here
+                attempts.append({"request": label, "error": str(exc)})
+                refused = exc
                 continue
             attempts.append({"request": label, "device": gpu3d._name_of(adapter.info),
                              "backend": adapter.info.get("backend_type", "")})
@@ -380,8 +407,12 @@ def choose_display_adapter(context, preference=None, backend=None):
         if found is not None:
             break
     if found is None:
-        raise RuntimeError("no adapter can present to this window: " + "; ".join(
-            f"{a['request']}: {a['error']}" for a in attempts))
+        if refused is not None:
+            raise refused
+        detail = "; ".join(f"{a['request']}: {a['error']}" for a in attempts)
+        if glguard.affected(platform):      # Vulkan alone was asked for; say what that means for the person, not wgpu's words
+            raise glguard.Refused(f"{glguard.NO_VULKAN} ({detail})")
+        raise RuntimeError("no adapter can present to this window: " + detail)
     name, got_backend = gpu3d._name_of(found.info), found.info.get("backend_type", "")
     notes = []
     if wanted_kind and gpu3d._kind_of(found.info) != wanted_kind:
@@ -902,6 +933,8 @@ class RetainedPresenter:
     """Owns the device, the retained picture texture and the two pipelines; draws into the surface."""
 
     def __init__(self, context, adapter=None, preference=None, overlay=True, fill_thread=True, notify=None):
+        if adapter is not None:
+            glguard.refuse_adapter(adapter.info)     # an OpenGL adapter on Linux: refused before anything exists
         import wgpu
         self.overlay = overlay
         self.fill_thread = fill_thread
@@ -914,6 +947,7 @@ class RetainedPresenter:
         if adapter is None:
             adapter, self.selection = choose_display_adapter(context, preference)
             self.selection_note = self.selection["note"]
+        glguard.refuse_adapter(adapter.info)         # before the format, the device or any buffer exists
         fmt = context.get_preferred_format(adapter)
         self.adapter = adapter
         self.adapter_info = dict(adapter.info)
@@ -1807,6 +1841,7 @@ def make_widget(parent=None):
             self._retry = None
             self._window_id = int(self.winId())
             try:
+                check_display_possible()                 # before the surface exists: making it already touches OpenGL's context
                 self.presenter = RetainedPresenter(self.get_wgpu_context(), notify=self.filled.emit)
             except Exception as exc:
                 self._fail(f"direct viewer could not start: {exc}")
