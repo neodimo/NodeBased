@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Write the Nuke reference pack: the fixture images, one `.nk` script per fixture case, and the script that renders them.
+"""Write the Nuke reference pack: the fixture images, one Python script per fixture case, and the script that renders them.
 
-There is no Nuke on the machine that builds this tool, so nothing here is run against Nuke; the scripts are written from
-Nuke's documented script syntax and need a first look by someone with a licence (see "Caveats" in the generated README).
-Rendered output is never committed: render into a folder outside the repository.
+Each case is a Python file that builds its small graph (Read nodes for the fixtures, the node under test, a 32-bit float
+EXR Write) and calls `nuke.execute` on the Write. They run in Nuke's terminal mode (`nuke -t case.py`), which is what
+Nuke Non-commercial allows: command-line renders accept only encrypted `.nknc` scripts, the Python API keeps at most 10
+nodes reachable per script (so each case holds the handles `nuke.nodes.X(...)` returns and never looks a node up by name),
+and rendered output is limited to 1920x1080. The fixtures are tiny.
+
+The first run of Nuke Non-commercial on a machine needs the one-time Foundry sign-in; until then `render_all.sh` reports
+every case as failed with the licence message in the case's log.
 
     python tools/make_nuke_reference_pack.py PACK_DIR              # writes PACK_DIR/{fixtures,scripts,render_all.sh,MANIFEST.json,README.txt}
-    PACK_DIR/render_all.sh RENDER_DIR                              # on a machine with Nuke: nuke -x on every script, 32-bit float EXRs into RENDER_DIR
+    NUKE=/path/to/nuke-nc.sh PACK_DIR/render_all.sh RENDER_DIR     # nuke -t on every script, 32-bit float EXRs into RENDER_DIR
     python tools/audit_nuke_fidelity.py --reference-dir RENDER_DIR # score NodeBased against the renders
 
 `compare_case` and `load_render` below are the loader the scorer uses: per channel, the maximum absolute error and the worst pixel.
@@ -34,33 +39,51 @@ CHANNELS = "RGBA"
 
 
 # ------------------------------------------------------------------------------------------------------------- the pack
-def _knob_value(value):
+def _knob_statement(knob, value):
+    """The Python line that sets one knob of the node under test. Tcl-style lists ('{{0.5 1 2} {0 1 0}}') go through
+    fromScript, which is how Nuke reads an array knob from text; everything else through setValue."""
     if isinstance(value, bool):
-        return "true" if value else "false"
+        return f"node[{knob!r}].setValue({value!r})"
     if isinstance(value, float):
-        return repr(value)
-    return str(value)
+        return f"node[{knob!r}].setValue({value!r})"
+    if str(value).lstrip().startswith("{"):
+        return f"node[{knob!r}].fromScript({str(value)!r})"
+    return f"node[{knob!r}].setValue({str(value)!r})"
 
 
-def nk_script(case):
-    """One `.nk` script: Read nodes for the fixtures (raw, so no colour transform), the node under test, a 32-bit float Write."""
-    lines = ["#! nuke", "version 17.0 v5", "Root {", " inputs 0", " first_frame 1", " last_frame 1", " fps 24", "}"]
-    for name in reversed(case.nuke_inputs):                      # Nuke input 0 must be on top of the stack
-        lines += ["Read {", " inputs 0",
-                  f' file "[file dirname [value root.name]]/../fixtures/{name}.exr"',
-                  " first 1", " last 1", " origfirst 1", " origlast 1", " raw true", f" name R_{name}", "}"]
-    lines += [f"{case.nuke_class} {{", f" inputs {len(case.nuke_inputs)}"]
-    for knob, value in case.nuke_knobs:
-        lines.append(f" {knob} {_knob_value(value)}")
-    lines += [" name T", "}"]
-    lines += ["Write {", f' file "[getenv NB_RENDER_DIR]/{case.id}.exr"', " file_type exr", ' datatype "32 bit float"',
-              " compression none", " raw true", " name W", "}"]
+def py_script(case):
+    """One case as a Python file for `nuke -t`: Read nodes for the fixtures (raw, so no colour transform), the node
+    under test with its knobs and inputs, a 32-bit float EXR Write, and `nuke.execute` on it."""
+    lines = ["# One case of the NodeBased fidelity pack, written by tools/make_nuke_reference_pack.py. Run: nuke -t THIS_FILE",
+             f"# {case.id}: {case.nuke}  ({case.source})",
+             "import os", "import sys", "import nuke", "",
+             "try:",
+             "    here = os.path.dirname(os.path.abspath(__file__))",
+             "except NameError:                      # nuke -t may run the file without defining __file__",
+             "    here = os.path.dirname(os.path.abspath(sys.argv[0]))",
+             "fixtures = os.path.join(here, os.pardir, 'fixtures')",
+             "out_dir = os.environ['NB_RENDER_DIR']",
+             "",
+             "# Non-commercial Nuke reaches at most 10 nodes per script from Python, so every node is kept as the handle",
+             "# nuke.nodes.X() returns; nothing is looked up with nuke.toNode or nuke.allNodes.",
+             "nuke.root()['first_frame'].setValue(1)", "nuke.root()['last_frame'].setValue(1)"]
+    for name in dict.fromkeys(case.nuke_inputs):
+        lines.append(f"read_{name} = nuke.nodes.Read(file=os.path.join(fixtures, {name + '.exr'!r}).replace(os.sep, '/'), "
+                     "first=1, last=1, origfirst=1, origlast=1, raw=True)")
+    lines.append(f"node = nuke.nodes.{case.nuke_class}()")
+    lines += [_knob_statement(knob, value) for knob, value in case.nuke_knobs]
+    lines += [f"node.setInput({index}, read_{name})" for index, name in enumerate(case.nuke_inputs)]
+    lines += [f"write = nuke.nodes.Write(file=os.path.join(out_dir, {case.id + '.exr'!r}).replace(os.sep, '/'), "
+              "file_type='exr', datatype='32 bit float', compression='none', raw=True)",
+              "write.setInput(0, node)",
+              "nuke.execute(write, 1, 1)"]
     return "\n".join(lines) + "\n"
 
 
 RENDER_ALL = """#!/bin/sh
-# Render every script of the pack with Nuke, one frame each, into the folder given as the first argument.
-# NUKE selects the executable (default: nuke). Use a licensed render-capable install; -x executes the Write node.
+# Render every script of the pack with Nuke's terminal mode, one frame each, into the folder given as the first argument.
+# NUKE selects the executable (default: nuke); for Nuke Non-commercial point it at the wrapper that adds --nc.
+# `nuke -t` runs a Python file, which Non-commercial allows; `nuke -x` would need an encrypted .nknc script instead.
 set -u
 out="${1:?usage: render_all.sh RENDER_DIR}"
 nuke="${NUKE:-nuke}"
@@ -68,9 +91,10 @@ here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$out"
 export NB_RENDER_DIR="$(cd "$out" && pwd)"
 failed=0
-for script in "$here"/scripts/*.nk; do
-    id="$(basename "$script" .nk)"
-    if "$nuke" -x "$script" 1,1 >"$out/$id.log" 2>&1; then
+for script in "$here"/scripts/*.py; do
+    id="$(basename "$script" .py)"
+    rm -f "$out/$id.exr"
+    if "$nuke" -t "$script" </dev/null >"$out/$id.log" 2>&1 && [ -s "$out/$id.exr" ]; then
         echo "rendered $id"
     else
         echo "FAILED   $id (see $out/$id.log)" >&2
@@ -83,15 +107,20 @@ echo "$failed script(s) failed"
 
 README = """Nuke reference pack for tools/audit_nuke_fidelity.py
 
-What it is: {n} cases. Each is a small graph (fixture images -> one Nuke node -> a 32-bit float EXR), built from the same
-fixtures and the same knob values the audit's formula cases use. Rendering them with Nuke gives the 'pixel truth' column.
+What it is: {n} cases. Each is a small Python script (fixture images -> one Nuke node -> a 32-bit float EXR), built from the
+same fixtures and the same knob values the audit's formula cases use. Rendering them with Nuke gives the 'pixel truth' column.
 
-To render (on a machine with Nuke 17):   ./render_all.sh RENDER_DIR
+To render (Nuke 17, terminal mode):   NUKE=/path/to/nuke ./render_all.sh RENDER_DIR
+  Nuke Non-commercial: NUKE is the wrapper that runs `Nuke17.0 --nc`. The first run on a machine asks for the one-time
+  Foundry sign-in; until that is done every case fails and its log says "No tokens found".
 To score:   python tools/audit_nuke_fidelity.py --reference-dir RENDER_DIR
 
 Caveats
-- This pack was written without access to Nuke. The scripts use Nuke's documented .nk syntax but have not been opened in Nuke.
-  If a script fails, the log next to its render says why; fix the generator (tools/make_nuke_reference_pack.py), not the render.
+- Non-commercial limits that shaped the scripts: only `nuke -t` Python files run (command-line renders accept encrypted .nknc
+  scripts only), at most 10 nodes per script can be reached from Python (each script keeps the handles nuke.nodes.X returns),
+  and output is capped at 1920x1080.
+- The scripts use Nuke's documented Python API; the first render on a machine is the first time they run. If a script fails, the
+  log next to its render says why; fix the generator (tools/make_nuke_reference_pack.py), not the render.
 - Read and Write are set to raw, so no colour transform touches the numbers. Check the first EXR of a Merge case against
   fixtures/A.exr and fixtures/B.exr by eye before trusting the rest.
 - Input order follows Nuke's: input 0 is B on Merge, Keymix; input 1 is A; the mask is the last input.
@@ -111,7 +140,7 @@ def write_pack(pack):
         digests[name] = hashlib.sha256(np.ascontiguousarray(arr, np.float32).tobytes()).hexdigest()
     manifest = {"size": [W, H], "fixtures": digests, "tolerance": TOLERANCE, "cases": []}
     for case in CASES:
-        (pack / "scripts" / f"{case.id}.nk").write_text(nk_script(case), encoding="utf-8")
+        (pack / "scripts" / f"{case.id}.py").write_text(py_script(case), encoding="utf-8")
         manifest["cases"].append({"id": case.id, "nuke": case.nuke, "nuke_class": case.nuke_class,
                                   "nuke_knobs": [[k, v] for k, v in case.nuke_knobs], "nuke_inputs": list(case.nuke_inputs),
                                   "nodebased_kind": case.nb_kind, "nodebased_params": case.nb_params, "source": case.source})

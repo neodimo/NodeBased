@@ -275,28 +275,51 @@ class FormulaCaseTests(unittest.TestCase):
 
 
 class ReferencePackTests(unittest.TestCase):
-    def test_pack_writes_a_script_per_case_and_a_render_script(self):
+    def test_pack_writes_a_python_script_per_case_and_a_render_script(self):
         with tempfile.TemporaryDirectory() as tmp:
             n = pack.write_pack(tmp)
             root = Path(tmp)
             self.assertEqual(n, len(cases.CASES))
-            self.assertEqual(len(list((root / "scripts").glob("*.nk"))), n)
+            self.assertEqual(len(list((root / "scripts").glob("*.py"))), n)
+            self.assertEqual(len(list((root / "scripts").glob("*.nk"))), 0)
             for name in ("A", "B", "mask"):
                 self.assertTrue((root / "fixtures" / f"{name}.exr").exists())
             render = root / "render_all.sh"
             self.assertTrue(render.stat().st_mode & stat.S_IXUSR)
-            self.assertIn("nuke", render.read_text())
-            self.assertIn("NB_RENDER_DIR", render.read_text())
+            text = render.read_text()
+            self.assertIn("-t", text)                       # terminal mode: the only render path Non-commercial Nuke allows
+            self.assertIn("scripts/*.py", text)
+            self.assertNotIn(" -x ", text)
+            self.assertIn("NB_RENDER_DIR", text)
+            self.assertNotIn("/home/", text)
             manifest = json.loads((root / "MANIFEST.json").read_text())
             self.assertEqual({c["id"] for c in manifest["cases"]}, {c.id for c in cases.CASES})
-            script = (root / "scripts" / "merge_plus.nk").read_text()
-            self.assertIn("Merge2 {", script)
-            self.assertIn("operation plus", script)
-            self.assertIn("inputs 2", script)
-            self.assertLess(script.index("R_A"), script.index("R_B"))             # B is created last so it is Nuke input 0
+            script = (root / "scripts" / "merge_plus.py").read_text()
+            self.assertIn("nuke.nodes.Merge2()", script)
+            self.assertIn("node['operation'].setValue('plus')", script)
+            self.assertLess(script.index("node.setInput(0, read_B)"), script.index("node.setInput(1, read_A)"))   # B is Nuke input 0
             self.assertIn("32 bit float", script)
-            self.assertIn("raw true", script)
+            self.assertIn("raw=True", script)
+            self.assertIn("nuke.execute(write, 1, 1)", script)
             self.assertNotIn("/home/", script)
+
+    def test_every_case_script_compiles_and_stays_inside_the_non_commercial_node_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pack.write_pack(tmp)
+            for path in sorted((Path(tmp) / "scripts").glob("*.py")):
+                text = path.read_text()
+                with self.subTest(case=path.stem):
+                    compile(text, str(path), "exec")
+                    self.assertLessEqual(text.count("nuke.nodes."), 10)
+                    self.assertNotIn("toNode", text.replace("nuke.toNode or nuke.allNodes", ""))
+                    self.assertNotIn("allNodes(", text)
+                    self.assertIn("nuke.execute(write, 1, 1)", text)
+
+    def test_array_knobs_go_through_fromScript_and_plain_ones_through_setValue(self):
+        script = pack.py_script(next(c for c in cases.CASES if c.nuke_class == "ColorMatrix"))
+        self.assertIn("node['matrix'].fromScript('{{0.5 1 2} {0 1 0} {0.25 0 1}}')", script)
+        script = pack.py_script(next(c for c in cases.CASES if c.nuke_class == "Grade"))
+        self.assertIn("node['black_clamp'].setValue(False)", script)
 
     def test_loader_scores_a_perfect_render_a_perturbed_one_and_a_missing_one(self):
         from nodebased.media import write_exr

@@ -3,7 +3,7 @@
 A case is one node, one set of knob values, and the fixture images it reads. It carries two things the ruler needs:
 
 * the NodeBased side: kind, params and input fixtures, run on the evaluator's own kernel (`Evaluator._kernel`);
-* the Nuke side: the node class, knob values and input order, written out as a `.nk` script by the reference pack.
+* the Nuke side: the node class, knob values and input order, written out as a Python script for `nuke -t` by the reference pack.
 
 Where the Nuke 17.0 Reference Guide states what a node computes, `expected` implements that statement and the audit
 compares NodeBased against it. `source` says where the statement comes from: "guide" (the guide's text), or
@@ -140,8 +140,8 @@ def merge_reference(op, a, b):
 class Case:
     id: str
     nuke: str                                  # key in docs/parity/nuke_nodes.json
-    nuke_class: str                            # node class in a .nk script
-    nuke_knobs: tuple                          # ((knob, value), ...) in .nk spelling
+    nuke_class: str                            # node class, as in nuke.nodes.CLASS
+    nuke_knobs: tuple                          # ((knob, value), ...) in Nuke spelling (floats, bools, enum words, or a Tcl-style list string)
     nuke_inputs: tuple                         # fixture names by Nuke input index (0 first)
     nb_kind: str
     nb_params: Optional[dict]                  # None: NodeBased has no knob that can express this setting
