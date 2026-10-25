@@ -1,3 +1,5 @@
+
+
 ## 2026-10-25 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step A of 1: the Direct picture never crashes the app on a Linux machine whose only graphics path is OpenGL (integrator tick)
 
 - **What was done:** `main` `f3d28485` -> `c349d81d` plus this docs commit. Evidence and per-lane commit
