@@ -1,3 +1,9 @@
+## 2026-10-25 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step A of 1: NodeBased starts extremely fast, measured from launch to a usable window (integrator tick)
+
+- **What was done:** `main` `695b5b96` -> `8e547ad6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `8e547ad6`: Ran 6259 tests in 489.964 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 
 
 ## 2026-10-25 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step A of 1: the Direct picture never crashes the app on a Linux machine whose only graphics path is OpenGL (integrator tick)

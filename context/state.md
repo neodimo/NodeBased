@@ -1,5 +1,28 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:35 AM on 2026-10-25 PDT)
+
+`main` moved `695b5b96` -> `8e547ad6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `8e547ad6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1025-0627.log`, started 6:27 AM): **Ran 6259 tests in 489.964 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step A of 1: NodeBased starts extremely fast, measured from launch to a usable window.** Commits:
+  - `ea900985` Start-up: an informational start-up benchmark on the CI runners (non-blocking, uploaded with the other artifacts); the benchmark's JSON carries its label and creates its folder
+  - `879b82c0` Start-up, documented: docs/STARTUP.md (milestones, method, before and after for the source run, the packaged folder and the AppImage on three adapters, cold and warm, with a typical project; the py-spy cost table; what each change is worth; first use of what is no longer built at start; the guards; what is left), tools/profile_startup.py (py-spy samples totalled under named code), the first-use benchmark opens a typical project too, a pointer from docs/PERFORMANCE.md (bundled copy in step), TASKLOG and STATUS
+  - `38708fea` Start-up, finishing: the packaged build leaves setuptools out (PyInstaller's run-time hook imported it, with distutils, packaging, email, http and ssl, in front of every launch: 45 ms), a pointer resting on the 3D button or a 3D tab, or a project with 3D nodes, loads wgpu on a thread so the first switch to 3D is 521 ms again (747 ms without it; 514 ms before this round), the adapter helper process is ended with the application, and the launch trace lists the files the process mapped (full suite 6298 tests OK)
+  - `5314a115` The application opens in a third of the time: the window is interactive 321 ms after launch (was 794 ms) offscreen and 383 ms (was 845 ms) on an X server with software GL, warm, on this workstation. The graphics adapter list no longer runs on the GUI thread in front of the first picture (it is made by a process of its own after the picture: wgpu's cffi header parsing and driver probe cost 230 ms, and a thread would risk the EGL abort); the theme is applied once before the window exists instead of restyling the built window (130 ms); the 3D viewport, conditioning queue (and its stores), material preview, generative pipeline, pyte terminal, HTTP stack and the 3D scene modules load when first used; the first picture starts before the window is shown, with OpenColorIO and the image reader loaded beside the window's construction; the view menu's list, the shelf's font metrics and the window's event filter stop paying per event (full suite 6294 tests OK)
+  - `83ffa9e1` Start-up milestones and a launch benchmark: nodebased/startuptrace.py stamps python entered, imports done, QApplication, window built, shown, first paint, first picture, idle loop and an accepted node click on the monotonic clock, and tools/benchmark_startup.py spawns the real app (source or packaged, offscreen, Xvfb or native display, any wgpu adapter, cold or warm, empty or typical project) and reports them; measurement only, no behaviour change (full suite 6259 tests OK)
+  Diff: 26 files changed, 1975 insertions(+), 55 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (3:35 AM on 2026-10-25 PDT)
 
 `main` moved `f3d28485` -> `c349d81d` (lane commits cherry-picked onto main in lane order) and then to this
