@@ -367,6 +367,104 @@ At 175 percent (`QT_SCALE_FACTOR=1.75`, 1400x780 window): 205 nodes drag at 41 r
 
 Still slow: a pan with most of a 500-node graph in view (27 ms a paint: mostly Qt drawing a few hundred items and sockets, plus about 3 ms for the minimap, which redraws every node on each scroll), and wheel zoom, where every zoom step redraws the cached pictures at the new scale.
 
+## Lane 8 step notes
+
+### R6-1: the realistic comp with Grade, Transform, Blur and Merge resident on the GPU (10/25, step A of 3)
+
+Research spike R6-1 (`briefs/proposed/R6-1-resident-four-node-spike.md`, plan in [GPU 2D plan](GPU_2D_PLAN.md)). Step A
+delivers the baseline and harness, the opt-in island and a first pixel check. The full pixel gate set, the
+`tools/benchmark_gpu2d.py` modes and the go/no-go are steps B and C; nothing here is a gate pass.
+
+**What exists.** `nodebased/gpu2d.py` runs Grade, Transform, Blur and Merge as float32 compute passes on one wgpu device.
+`Evaluator.gpu2d` is `None` by default (every node on the CPU kernels, nothing changes); setting it to a `GPU2D` makes a
+Grade, Transform or Blur whose readers are all island nodes a deferred, pixel-less node, and the island's exit node (the
+Merge in the realistic comp) runs the whole chain on the device and reads back once for the CPU ColorCorrect. Each node has
+one small parameter-mapping function (`map_grade`, `map_blur`, `map_transform`, `map_merge`), so a new Nuke knob is a change to
+that mapping plus a CPU fallback. Anything the device cannot run (Blur radius above 4, Transform motion blur, a Merge
+operation without a kernel, an unwired Merge input, mismatched display windows, a window over the byte budget, non-finite
+pixels, a lost device) is a counted, reported CPU boundary that evaluates the node on the existing CPU kernels; every
+case where the CPU raises an error is left to the CPU so the error stays the CPU's. `tools/benchmark_2d_playback.py --backend gpu2d`
+selects it (`cpu` is the default); `--frame-range N` extends the fixture to N frames, `--warmup-frames` runs sacrificial frames
+before a GPU run, and each result file carries an `environment` record (revision, fixture and variant hashes, hardware, drivers,
+command).
+
+**Counters** (`GPU2D.counters`, per island in the benchmark result): uploads and bytes, downloads and bytes, intermediate
+readbacks (must be 0), submissions, dispatches, buffer allocations, pool hits, live and peak bytes, cold shader setup, and the
+time spent uploading, encoding, waiting for the passes (`gpu_ms`) and reading back. `gpu_ms` is submit until a 16-byte flags
+readback returns, which happens after every pass has finished (this wgpu build's queue work-done callback fails with a ctype
+error, so enqueue time is not used and no GPU timestamps are taken yet). Masks cross the bus as their alpha plane only.
+
+**Baseline: CPU nodes, this revision** (`benchmarks/2d-gpu/R6-1/baseline-cpu-1025-*.json`; uncached, disk cache off,
+pipelined playback, 1080p full resolution, private Xvfb with software OpenGL, first pass through the fresh frames only;
+fixture `tests/fixtures/playback_comp.nbcomp` sha256 `697f157a...bca8f`; sources from
+`tools/benchmark_2d_playback.py --generate-inputs $NB_RUN/plates --size 1080p --frames 240`, 480 files, hashes in
+`inputs-1080p-240.sha256`, list digest `ee66e89a...dae6e4`; revision `6c1fd46f`):
+
+| Run | Passes | Fresh fps | Interval mean (ms) | p50 / p95 / p99 (ms) | Node evaluation median (ms) | First picture (ms) |
+|---|---:|---|---:|---|---|---:|
+| 48 frames, RTX 3080 Ti | 3 | 6.06, 6.25, 6.77 | 148.7 to 159.4 | 148 to 159 / 163 to 179 / 165 to 189 | 141.6 to 151.6 | 202 to 245 |
+| 240 frames, RTX 3080 Ti | 3 | 9.01, 9.01, 9.03 | 110.6 to 110.9 | 102 / 155 to 157 / 166 to 167 | 95.6 to 95.9 | 204 to 216 |
+| 48 frames, Radeon 8060S | 1 | 6.77 | 148.9 | 149 / 161 / 164 | 141.5 | 199 |
+| 48 frames, llvmpipe | 1 | 6.68 | 150.6 | 150 / 165 / 175 | 143.4 | 204 |
+
+All 48 and all 240 fresh frames were accepted in every pass. **The 240-frame variant is easier than the 48-frame comp.** The
+curves hold their last key's value after frame 48 (endpoint hold), so from frame 49 the Transform is a whole-pixel translate of
+18 and takes the CPU's copy shortcut; only the plates differ. Node evaluation falls from about 143 ms to about 96 ms and the fresh
+rate rises to 9 fps for that reason, not because the CPU got faster. The sustained gate is therefore not comparable with the 48-frame
+numbers until the extension animates the translation too (a Gonzo decision; the brief allows only curve extrapolation).
+
+**First pixel check** (`tools/check_gpu2d_fixture.py`, evidence `pixels-fixture-1080p-*-1025.json`): 11 fixture frames (1, 2, 6, 12,
+18, 24, 30, 36, 42, 47, 48), the Merge output and the ColorCorrect output, GPU against the CPU at full 1080p; the gate is
+`abs(gpu - cpu) <= 2e-5 + 2e-5 * abs(cpu)` on every finite channel.
+
+| Adapter | Max abs error | Mean | p99 | Worst gate ratio (limit 1) |
+|---|---:|---:|---:|---:|
+| RTX 3080 Ti | 2.4e-7 | 1.0e-9 | 6e-8 | 0.0079 |
+| Radeon 8060S | 3.0e-7 | 1.0e-9 | 6e-8 | 0.0093 |
+| llvmpipe | 2.4e-7 | 1.0e-9 | 6e-8 | 0.0079 |
+
+Every frame: data and display windows equal to the CPU's, one download, zero intermediate readbacks, four nodes on the device,
+no CPU boundary. `tests/test_gpu2d.py` (38 tests: mapping, windows, fallbacks without a device; Grade, Blur, Transform, Merge
+kernels, the chain, counters, non-finite input, over-budget, device loss and cancellation with one) passes on all three adapters.
+
+**First island playback, preliminary** (one or two passes of the 48-frame run per adapter, not gate runs;
+`island-smoke-1025-summary.json`): the island itself works end to end through the real window.
+
+| Adapter | Fresh fps (CPU nodes, same adapter) | Island total, median (ms) | Passes (ms) | Upload (ms) | Readback (ms) | Node evaluation median (ms) |
+|---|---|---:|---:|---:|---:|---:|
+| Radeon 8060S | 13.3 and 12.9 (6.77) | 14.1 and 13.5 | 5.5 and 5.7 | 5.1 and 4.7 | 2.5 and 2.5 | 68.9 and 69.9 (141.5) |
+| RTX 3080 Ti | 5.0 and 5.4 (6.06 to 6.77) | 161 and 94 | 12.0 and 3.0 | 105 and 75 | 43 and 14 | 207 and 155 (141.6 to 151.6) |
+
+The island is not the slow part on either card; the passes take 3 to 12 ms. On the integrated Radeon, which shares memory with the
+processor, the whole island takes 14 ms and playback doubles. On this workstation's RTX 3080 Ti the picture is the opposite:
+**host to device transfer dominates.** `benchmarks/2d-gpu/R6-1/transfer-rates-1025.json`: one 33 MB frame uploads at 1.0 GB/s (33 ms)
+and reads back at 2.9 GB/s (11.6 ms) on the RTX, against 19 and 23 GB/s on the Radeon; the card sits behind a PCI link currently at
+5 GT/s by 2 lanes (maximum 16 GT/s by 16), which is this machine's external enclosure, not what a desktop slot or the Windows laptop
+will do. The island sends the plate, the background and the Roto matte's alpha plane (66 MB per frame) and reads back 33 MB, so the
+transfers alone are 100 ms or more here, which is why the RTX is slower than the CPU nodes in this setup. Whether the RTX row can
+pass its 20 ms (four nodes) and 30 ms (uploads, nodes and readback) gates is therefore a statement about the link, to be decided on a
+desktop-class RTX and on the RTX 4070 laptop (unverified; Gonzo owns those runs).
+
+**Findings recorded for steps B and C.**
+
+- Cubic Transform with rotation or scale, next to a very bright pixel: the device differs from the CPU by up to 2.5e-5 at one pixel
+  when a 50.0 pixel sits beside values near 0.4 (the pixel gate is 2e-5). Against an exact float64 evaluation the CPU is off by 8e-6
+  and the device by 1.7e-5; both are float32 weight rounding amplified by the neighbour. The translation-only cubic path the fixture
+  uses is exact to 2.4e-7. Pinned in `test_known_limit_cubic_rotation_next_to_an_extreme_hdr_value`; step B decides between a
+  more careful weight evaluation and a CPU boundary for that case. No tolerance was widened.
+- CPU behaviour reproduced on purpose: `Transform` with `clamp` on and a whole-pixel vertical map zero-pads the rows the source does
+  not cover (`_resample_cubic_separable` crops and pads rows), where the general path replicates the edge. The device copies that.
+  Needs Lane 2 to say whether the CPU path is intended.
+- Blur is validated for radii 1 to 4 (the CPU's own float32 shifted sum); wider radii use float64 cumulative sums on the CPU and stay
+  on the CPU until the float32 accumulation is measured (step B).
+- Remaining after the island: the node stage still holds the Read decodes, the Roto matte and the CPU ColorCorrect (about 55 ms of the
+  Radeon's 69 ms), and the 8-bit display conversion; closing 24 fps needs those as well.
+
+Rerun: `python tools/benchmark_2d_playback.py --plate-pattern "$NB_RUN/plates/plate.%04d.exr" --background-pattern "$NB_RUN/plates/background.%04d.exr" --size 1080p --cache-mode uncached --display :N --backend gpu2d --seconds 12 --output run.json`
+on a private X display, then `python tools/summarize_2d_playback.py run.json`; the pixel check is
+`python tools/check_gpu2d_fixture.py --inputs "$NB_RUN/plates" --size 1080p --frames 1 24 48 --adapter default`; tests with
+`python /path/force-adapter.py integrated|cpu tests.test_gpu2d` for the other two adapters.
+
 ## Lane 2 step notes
 
 ### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)

@@ -398,6 +398,17 @@ class IslandTests(DeviceTestCase):
             self.assertEqual(result.data, cpu.data)
             self.assertLessEqual(gate_ratio(result.pixels, cpu.pixels), 1.0, f"translate {translate_x} radius {radius}")
 
+    def test_a_mask_crosses_the_bus_as_its_alpha_plane_only(self):
+        source, matte = self.data.image(32, 24), self.data.matte(32, 24)
+        before = self.backend.counters.snapshot()
+        self.run_gpu("Grade", params("Grade", exposure=0.2, mix=0.5), [source, matte])
+        delta = gpu2d.Counters.delta(self.backend.counters.snapshot(), before)
+        self.assertEqual(delta["upload_bytes"], 32 * 24 * 16 + 32 * 24 * 4)
+
+    def test_one_raster_used_as_an_image_and_as_a_mask_is_uploaded_for_each_use(self):
+        both = self.data.matte(32, 24)
+        self.assert_matches("Grade", params("Grade", exposure=0.2, mix=0.5), [both, both])
+
     def test_a_cached_source_is_uploaded_once(self):
         source = self.data.image(32, 24)
         key = "test-gpu2d-cache-key"

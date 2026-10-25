@@ -1,0 +1,35 @@
+{
+ "note": "33,177,600-byte (one 1080p RGBA float32 frame) host to device write_buffer and device to host copy plus map, median of 15 back-to-back and 10 after 150 ms idle; RTX 3080 Ti PCI link at the time of the run in rtx_pci_link",
+ "rtx_pci_link": {
+  "current_link_speed": "5.0 GT/s PCIe",
+  "current_link_width": "2",
+  "max_link_speed": "16.0 GT/s PCIe",
+  "max_link_width": "16"
+ },
+ "adapters": [
+  {
+   "device": "NVIDIA GeForce RTX 3080 Ti",
+   "upload_33MB_back_to_back_ms": {
+    "call": 32.4,
+    "complete": 33.02
+   },
+   "readback_33MB_back_to_back_ms": 11.61,
+   "upload_33MB_after_150ms_idle_ms": 33.04,
+   "readback_33MB_after_150ms_idle_ms": 12.1,
+   "upload_GBps_back_to_back": 1.0,
+   "readback_GBps_back_to_back": 2.86
+  },
+  {
+   "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "upload_33MB_back_to_back_ms": {
+    "call": 1.12,
+    "complete": 1.6
+   },
+   "readback_33MB_back_to_back_ms": 1.33,
+   "upload_33MB_after_150ms_idle_ms": 3.99,
+   "readback_33MB_after_150ms_idle_ms": 3.81,
+   "upload_GBps_back_to_back": 20.74,
+   "readback_GBps_back_to_back": 24.95
+  }
+ ]
+}

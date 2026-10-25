@@ -31,7 +31,7 @@
    "counters": {
     "runs": 1,
     "uploads": 3,
-    "upload_bytes": 99532800,
+    "upload_bytes": 74649600,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33647376,
@@ -42,12 +42,12 @@
     "frees": 0,
     "pool_hits": 1,
     "nonfinite_fallbacks": 0,
-    "pipeline_compiles": 6,
-    "shader_compile_ms": 38.85003899631556,
-    "upload_ms": 8.526364996214397,
-    "encode_ms": 47.71767200145405,
-    "gpu_ms": 36.33114600961562,
-    "readback_ms": 4.084045998752117,
+    "pipeline_compiles": 7,
+    "shader_compile_ms": 40.474372974131256,
+    "upload_ms": 7.765860005747527,
+    "encode_ms": 40.818501001922414,
+    "gpu_ms": 35.10309000557754,
+    "readback_ms": 4.424668994033709,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -55,8 +55,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 235937824,
-    "peak_bytes": 235937824
+    "live_bytes": 210772000,
+    "peak_bytes": 210772000
    }
   },
   {
@@ -75,7 +75,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33647376,
@@ -88,10 +88,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 7.356226997217163,
-    "encode_ms": 7.648729995707981,
-    "gpu_ms": 4.910742994979955,
-    "readback_ms": 1.9087620021309704,
+    "upload_ms": 7.7772799850208685,
+    "encode_ms": 0.30717102345079184,
+    "gpu_ms": 4.203535005217418,
+    "readback_ms": 1.7720080068102106,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -99,8 +99,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 336649264,
-    "peak_bytes": 336649264
+    "live_bytes": 286317616,
+    "peak_bytes": 286317616
    }
   },
   {
@@ -119,7 +119,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33595344,
@@ -132,10 +132,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.164536003372632,
-    "encode_ms": 4.497564994380809,
-    "gpu_ms": 5.71294900146313,
-    "readback_ms": 1.7115880036726594,
+    "upload_ms": 4.653121985029429,
+    "encode_ms": 0.17086502339225262,
+    "gpu_ms": 6.42825999238994,
+    "readback_ms": 2.440227006445639,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -143,8 +143,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 437312560,
-    "peak_bytes": 437312560
+    "live_bytes": 361815088,
+    "peak_bytes": 361815088
    }
   },
   {
@@ -163,23 +163,23 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33508624,
     "intermediate_readbacks": 0,
     "submissions": 2,
     "dispatches": 9,
-    "allocations": 3,
+    "allocations": 4,
     "frees": 0,
-    "pool_hits": 7,
+    "pool_hits": 6,
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.18357401213143,
-    "encode_ms": 4.4141769903944805,
-    "gpu_ms": 6.149813998490572,
-    "readback_ms": 4.873714002314955,
+    "upload_ms": 4.508046986302361,
+    "encode_ms": 0.28731102065648884,
+    "gpu_ms": 5.862516991328448,
+    "readback_ms": 5.6479630002286285,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -187,8 +187,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 437312560,
+    "peak_bytes": 437312560
    }
   },
   {
@@ -207,23 +207,23 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33421904,
     "intermediate_readbacks": 0,
     "submissions": 2,
     "dispatches": 9,
-    "allocations": 0,
+    "allocations": 2,
     "frees": 0,
-    "pool_hits": 9,
+    "pool_hits": 7,
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.181843003607355,
-    "encode_ms": 4.358678997959942,
-    "gpu_ms": 6.010179000440985,
-    "readback_ms": 1.5665520040784031,
+    "upload_ms": 4.755299989483319,
+    "encode_ms": 0.25019102031365037,
+    "gpu_ms": 6.8882460036547855,
+    "readback_ms": 2.2939430054975674,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -231,8 +231,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -251,7 +251,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33387216,
@@ -264,10 +264,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 3.9890689949970692,
-    "encode_ms": 4.162544995779172,
-    "gpu_ms": 5.969420002656989,
-    "readback_ms": 1.8786340078804642,
+    "upload_ms": 4.426659012096934,
+    "encode_ms": 0.16174498887266964,
+    "gpu_ms": 5.9292450023349375,
+    "readback_ms": 1.9891109986929223,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -275,8 +275,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -295,7 +295,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33421904,
@@ -308,10 +308,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.121716003282927,
-    "encode_ms": 4.282451001927257,
-    "gpu_ms": 4.314740013796836,
-    "readback_ms": 1.8428849871270359,
+    "upload_ms": 4.4566579890670255,
+    "encode_ms": 0.17695501446723938,
+    "gpu_ms": 5.515886005014181,
+    "readback_ms": 1.8628050020197406,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -319,8 +319,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -339,7 +339,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33491280,
@@ -352,10 +352,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 3.971900005126372,
-    "encode_ms": 4.15795500157401,
-    "gpu_ms": 5.728967997129075,
-    "readback_ms": 1.5734929911559448,
+    "upload_ms": 4.400409001391381,
+    "encode_ms": 0.18451499636285007,
+    "gpu_ms": 5.763458990259096,
+    "readback_ms": 1.84572501166258,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -363,8 +363,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -383,7 +383,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33578000,
@@ -396,10 +396,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.205393008305691,
-    "encode_ms": 4.377158998977393,
-    "gpu_ms": 6.20235399401281,
-    "readback_ms": 1.9177619979018345,
+    "upload_ms": 4.5304349914658815,
+    "encode_ms": 0.2076439996017143,
+    "gpu_ms": 5.400861002271995,
+    "readback_ms": 1.792155992006883,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -407,8 +407,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -427,7 +427,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33647376,
@@ -440,10 +440,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.594880985678174,
-    "encode_ms": 4.743037992739119,
-    "gpu_ms": 5.82465500338003,
-    "readback_ms": 1.8317250069230795,
+    "upload_ms": 4.517795008723624,
+    "encode_ms": 0.16832599067129195,
+    "gpu_ms": 5.7591090007917956,
+    "readback_ms": 1.7748380050761625,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -451,8 +451,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -471,7 +471,7 @@
    "counters": {
     "runs": 1,
     "uploads": 3,
-    "upload_bytes": 99532800,
+    "upload_bytes": 74649600,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33647376,
@@ -484,10 +484,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 3.9472909993492067,
-    "encode_ms": 4.085627006134018,
-    "gpu_ms": 5.956351000349969,
-    "readback_ms": 1.7860069929156452,
+    "upload_ms": 5.192796990741044,
+    "encode_ms": 0.17829400894697756,
+    "gpu_ms": 6.476328009739518,
+    "readback_ms": 3.4723169956123456,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -495,8 +495,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -515,7 +515,7 @@
    "counters": {
     "runs": 1,
     "uploads": 3,
-    "upload_bytes": 99532800,
+    "upload_bytes": 74649600,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33647376,
@@ -528,10 +528,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 3.92666099651251,
-    "encode_ms": 4.0604779933346435,
-    "gpu_ms": 5.669759993907064,
-    "readback_ms": 1.897802998428233,
+    "upload_ms": 4.646393019356765,
+    "encode_ms": 0.17031397146638483,
+    "gpu_ms": 6.052979995729402,
+    "readback_ms": 1.9311930082039908,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -539,8 +539,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -559,7 +559,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33647376,
@@ -572,10 +572,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.227972007356584,
-    "encode_ms": 4.3835689866682515,
-    "gpu_ms": 5.750816999352537,
-    "readback_ms": 1.544864004245028,
+    "upload_ms": 4.631564006558619,
+    "encode_ms": 0.16516399045940489,
+    "gpu_ms": 5.707290998543613,
+    "readback_ms": 1.8166959926020354,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -583,8 +583,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -603,7 +603,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33595344,
@@ -616,10 +616,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 16.371588993933983,
-    "encode_ms": 16.592612009844743,
-    "gpu_ms": 6.570612007635646,
-    "readback_ms": 3.1912349950289354,
+    "upload_ms": 4.448938008863479,
+    "encode_ms": 0.19476500165183097,
+    "gpu_ms": 5.6563120015198365,
+    "readback_ms": 1.8095069972332567,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -627,8 +627,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -647,7 +647,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33508624,
@@ -660,10 +660,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.6140420163283125,
-    "encode_ms": 4.867183990427293,
-    "gpu_ms": 6.0034189955331385,
-    "readback_ms": 2.033099008258432,
+    "upload_ms": 4.536185006145388,
+    "encode_ms": 0.17150500207208097,
+    "gpu_ms": 5.805927998153493,
+    "readback_ms": 1.8143359920941293,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -671,8 +671,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -691,7 +691,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33421904,
@@ -704,10 +704,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.209453007206321,
-    "encode_ms": 4.374028998427093,
-    "gpu_ms": 5.9274520026519895,
-    "readback_ms": 1.7753470019670203,
+    "upload_ms": 4.508957019424997,
+    "encode_ms": 0.185253971721977,
+    "gpu_ms": 5.367012010538019,
+    "readback_ms": 1.7716269940137863,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -715,8 +715,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -735,7 +735,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33387216,
@@ -748,10 +748,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.177095019258559,
-    "encode_ms": 4.359708997071721,
-    "gpu_ms": 5.845834006322548,
-    "readback_ms": 1.6271609929390252,
+    "upload_ms": 4.488987004151568,
+    "encode_ms": 0.17949500761460513,
+    "gpu_ms": 5.442729001515545,
+    "readback_ms": 1.7383789963787422,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -759,8 +759,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -779,7 +779,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33421904,
@@ -792,10 +792,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.140576013014652,
-    "encode_ms": 4.296120008802973,
-    "gpu_ms": 6.161155004519969,
-    "readback_ms": 1.456256999517791,
+    "upload_ms": 4.4726360065396875,
+    "encode_ms": 0.18474599346518517,
+    "gpu_ms": 5.453617995954119,
+    "readback_ms": 1.8053970125038177,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -803,8 +803,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -823,7 +823,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33491280,
@@ -836,10 +836,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.161705001024529,
-    "encode_ms": 4.328029986936599,
-    "gpu_ms": 5.897862007259391,
-    "readback_ms": 1.4978159888414666,
+    "upload_ms": 4.518557005212642,
+    "encode_ms": 0.1764740009093657,
+    "gpu_ms": 5.68515200575348,
+    "readback_ms": 1.8800139951054007,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -847,8 +847,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -867,7 +867,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33578000,
@@ -880,10 +880,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.124917992157862,
-    "encode_ms": 4.3480189924594015,
-    "gpu_ms": 5.541314007132314,
-    "readback_ms": 1.5676430048188195,
+    "upload_ms": 4.513946987572126,
+    "encode_ms": 0.17105400911532342,
+    "gpu_ms": 5.295023001963273,
+    "readback_ms": 2.039158993284218,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -891,8 +891,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -911,7 +911,7 @@
    "counters": {
     "runs": 1,
     "uploads": 4,
-    "upload_bytes": 99580944,
+    "upload_bytes": 74697744,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33647376,
@@ -924,10 +924,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.335081001045182,
-    "encode_ms": 4.5030149922240525,
-    "gpu_ms": 6.126906009740196,
-    "readback_ms": 1.6633909981464967,
+    "upload_ms": 4.391680005937815,
+    "encode_ms": 0.17721499898470938,
+    "gpu_ms": 5.699380999431014,
+    "readback_ms": 1.9571020093280822,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -935,8 +935,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   },
   {
@@ -955,7 +955,7 @@
    "counters": {
     "runs": 1,
     "uploads": 3,
-    "upload_bytes": 99532800,
+    "upload_bytes": 74649600,
     "upload_cache_hits": 0,
     "downloads": 1,
     "download_bytes": 33647376,
@@ -968,10 +968,10 @@
     "nonfinite_fallbacks": 0,
     "pipeline_compiles": 0,
     "shader_compile_ms": 0.0,
-    "upload_ms": 4.141095996601507,
-    "encode_ms": 4.2714620067272335,
-    "gpu_ms": 5.526663997443393,
-    "readback_ms": 1.5824830043129623,
+    "upload_ms": 4.174765999778174,
+    "encode_ms": 0.16576600319240242,
+    "gpu_ms": 5.682222006726079,
+    "readback_ms": 1.6377409920096397,
     "cpu_boundaries": [],
     "nodes_on_gpu": {
      "Grade": 1,
@@ -979,8 +979,8 @@
      "Blur": 1,
      "Merge": 1
     },
-    "live_bytes": 504421424,
-    "peak_bytes": 504421424
+    "live_bytes": 479255600,
+    "peak_bytes": 479255600
    }
   }
  ],

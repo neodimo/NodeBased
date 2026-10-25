@@ -289,12 +289,13 @@ class DeviceImage:
 
     It owns a counted buffer lease and never converts to numpy implicitly: ``GPU2D.download``
     is the only way back to the host."""
-    __slots__ = ("buffer", "data", "display", "epoch", "nbytes", "key", "meta", "verified")
+    __slots__ = ("buffer", "data", "display", "epoch", "nbytes", "key", "meta", "verified", "plane")
 
     def __init__(self, buffer, data, display, epoch, nbytes, key=None):
         self.buffer, self.data, self.display = buffer, data, display
         self.epoch, self.nbytes, self.key, self.meta = epoch, nbytes, key, None
         self.verified = False       # scanned for NaN/inf and used by a finished island
+        self.plane = False          # only the alpha plane is resident (a mask input)
 
 
 class DeferredImage:
@@ -322,6 +323,18 @@ def inherited_meta(kind, inputs):
 # WGSL
 
 
+def _fetch_alpha(name, region):
+    """Like _fetch for a mask uploaded as its alpha plane only (one float per pixel): every gate in this
+    module reads nothing but the mask's alpha, so the other three planes never cross the bus."""
+    return f"""
+fn fetch_{name}(ax: i32, ay: i32) -> f32 {{
+    let lx = ax - p.{region}.x; let ly = ay - p.{region}.y;
+    if (lx < 0 || ly < 0 || lx >= p.{region}.z || ly >= p.{region}.w) {{ return 0.0; }}
+    return {name}[u32(ly) * u32(p.{region}.z) + u32(lx)];
+}}
+"""
+
+
 def _fetch(name, region):
     return f"""
 fn fetch_{name}(ax: i32, ay: i32) -> vec4<f32> {{
@@ -345,7 +358,7 @@ struct Params {
 _GATE = """
 fn gated(source: vec4<f32>, filtered: vec4<f32>, ax: i32, ay: i32) -> vec4<f32> {
     if (p.i0.x != 0) {
-        let g = fetch_mask(ax, ay).w * p.f1.w;
+        let g = fetch_mask(ax, ay) * p.f1.w;
         return filtered * g + source * (1.0 - g);
     }
     if (p.i0.y != 0) {
@@ -358,7 +371,7 @@ fn gated(source: vec4<f32>, filtered: vec4<f32>, ax: i32, ay: i32) -> vec4<f32> 
 
 _BINDINGS_3 = """
 @group(0) @binding(0) var<storage, read> src: array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read> mask: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> mask: array<f32>;
 @group(0) @binding(2) var<storage, read_write> out: array<vec4<f32>>;
 @group(0) @binding(3) var<uniform> p: Params;
 """
@@ -372,7 +385,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 """
 
 # i0 = (has_mask, blend, identity/aux, aux2); f0 = (gain, multiply, offset, _); f1 = (_, _, _, mix)
-_GRADE = _PRELUDE + _BINDINGS_3 + _fetch("src", "r0") + _fetch("mask", "rm") + _GATE + _MAIN_HEAD + """
+_GRADE = _PRELUDE + _BINDINGS_3 + _fetch("src", "r0") + _fetch_alpha("mask", "rm") + _GATE + _MAIN_HEAD + """
     let s = fetch_src(ax, ay);
     var f = s;
     if (p.i0.z == 0) {
@@ -408,11 +421,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 _BLUR_V = _PRELUDE + """
 @group(0) @binding(0) var<storage, read> src: array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read> mask: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> mask: array<f32>;
 @group(0) @binding(2) var<storage, read_write> out: array<vec4<f32>>;
 @group(0) @binding(3) var<uniform> p: Params;
 @group(0) @binding(4) var<storage, read> orig: array<vec4<f32>>;
-""" + _fetch("orig", "r1") + _fetch("mask", "rm") + _GATE + """
+""" + _fetch("orig", "r1") + _fetch_alpha("mask", "rm") + _GATE + """
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let w = p.r0.z; let h = p.r0.w;
@@ -433,7 +446,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 # i1 lives in rm? No: filter and shift ride in r1 = (filter, shift_x, shift_y, _).
 _TRANSFORM = _PRELUDE + _BINDINGS_3 + """
 @group(0) @binding(4) var<storage, read> tbl: array<f32>;
-""" + _fetch("src", "r0") + _fetch("mask", "rm") + _GATE + """
+""" + _fetch("src", "r0") + _fetch_alpha("mask", "rm") + _GATE + """
 fn tap(ix: i32, iy: i32, clamped: bool) -> vec4<f32> {
     let sw = p.r0.z; let sh = p.r0.w;
     if (clamped) {
@@ -556,11 +569,11 @@ fn merge_op(op: i32, a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
 # Merge: A=src, B=b, mask. r0=A window, r1=B window, rm=mask window. i0 = (has_mask, _, op, _), f1.w = mix.
 _MERGE = _PRELUDE + """
 @group(0) @binding(0) var<storage, read> src: array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read> mask: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> mask: array<f32>;
 @group(0) @binding(2) var<storage, read_write> out: array<vec4<f32>>;
 @group(0) @binding(3) var<uniform> p: Params;
 @group(0) @binding(4) var<storage, read> b_img: array<vec4<f32>>;
-""" + _fetch("src", "r0") + _fetch("mask", "rm") + """
+""" + _fetch("src", "r0") + _fetch_alpha("mask", "rm") + """
 fn fetch_b(ax: i32, ay: i32) -> vec4<f32> {
     let lx = ax - p.r1.x; let ly = ay - p.r1.y;
     if (lx < 0 || ly < 0 || lx >= p.r1.z || ly >= p.r1.w) { return vec4<f32>(0.0); }
@@ -578,7 +591,7 @@ fn fetch_b(ax: i32, ay: i32) -> vec4<f32> {
     }
     var gate = mix;
     if (has_mask) {
-        let m = fetch_mask(ax, ay).w;
+        let m = fetch_mask(ax, ay);
         gate = select(mix * m, m, mix == 1.0);
     }
     if (op == 0) {
@@ -607,7 +620,18 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 """
 
-_SHADERS = {"grade": _GRADE, "blur_h": _BLUR_H, "blur_v": _BLUR_V, "transform": _TRANSFORM,
+_SCAN_PLANE = _PRELUDE + """
+@group(0) @binding(0) var<storage, read> src: array<f32>;
+@group(0) @binding(1) var<storage, read_write> flags: array<atomic<u32>>;
+@group(0) @binding(2) var<uniform> p: Params;
+@compute @workgroup_size(64, 1, 1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (gid.x >= u32(p.i0.x)) { return; }
+    if ((bitcast<u32>(src[gid.x]) & 0x7f800000u) == 0x7f800000u) { atomicOr(&flags[0], 1u); }
+}
+"""
+
+_SHADERS = {"scan_plane": _SCAN_PLANE, "grade": _GRADE, "blur_h": _BLUR_H, "blur_v": _BLUR_V, "transform": _TRANSFORM,
             "merge": _MERGE, "scan": _SCAN}
 
 
@@ -795,8 +819,12 @@ class GPU2D:
 
     # -- uploads -----------------------------------------------------------------------------
 
-    def upload(self, raster, key=None):
-        """A resident copy of ``raster`` (kept for reuse under ``key`` while the cache budget allows)."""
+    def upload(self, raster, key=None, plane=False):
+        """A resident copy of ``raster`` (kept for reuse under ``key`` while the cache budget allows).
+
+        ``plane`` uploads only the alpha channel, one float per pixel: that is all a mask input is ever read for."""
+        if key is not None:
+            key = (key, plane)
         if key is not None and key in self._inputs:
             image = self._inputs.pop(key)
             if image.epoch == self.epoch:
@@ -805,7 +833,7 @@ class GPU2D:
                 return image
             self._input_bytes -= image.nbytes
         started = time.perf_counter()
-        pixels = np.ascontiguousarray(raster.pixels, dtype=np.float32)
+        pixels = np.ascontiguousarray(raster.pixels[..., 3] if plane else raster.pixels, dtype=np.float32)
         buffer, nbytes = self._acquire(pixels.nbytes)
         self.device.queue.write_buffer(buffer, 0, pixels)
         self.counters.uploads += 1
@@ -813,6 +841,7 @@ class GPU2D:
         self.counters.upload_ms += (time.perf_counter() - started) * 1000
         image = DeviceImage(buffer, raster.data, raster.display, self.epoch, nbytes, key)
         image.meta = getattr(raster, "meta", None)
+        image.plane = plane
         if key is not None:
             self._inputs[key] = image
             self._input_bytes += nbytes
@@ -862,6 +891,11 @@ class GPU2D:
                 raise DeviceLost(str(exc)) from exc
 
     @staticmethod
+    def _is_mask(kind, slot):
+        """Mask inputs (read only for their alpha): Merge's third input, the second of the filters."""
+        return slot == (2 if kind == "Merge" else 1)
+
+    @staticmethod
     def _check(cancel):
         if cancel is not None and cancel.is_set():
             from .cancellation import Cancelled
@@ -872,6 +906,7 @@ class GPU2D:
         self._check(cancel)
         self._fixed_buffers()
         encode_started = time.perf_counter()
+        upload_before = counters.upload_ms
         slots, slot_data, passes = [], [], []
         held = []                          # upload scratch and outputs returned to the pool at the end
 
@@ -895,11 +930,11 @@ class GPU2D:
             raise Unsupported("nothing staged")
         keymap, last_use = {}, {}
         for index, node in enumerate(order):
-            for item, key in zip(node.inputs, node.keys):
+            for slot, (item, key) in enumerate(zip(node.inputs, node.keys)):
                 if item is not None:
                     last_use[id(item)] = index
                     if isinstance(item, Raster) and key is not None:
-                        keymap[id(item)] = key
+                        keymap[(id(item), self._is_mask(node.kind, slot))] = key
         resident, fresh_inputs, tables = {}, [], {}
         outputs = []
         try:
@@ -908,12 +943,13 @@ class GPU2D:
             # output is allocated: a write is applied before the whole command buffer runs, so it
             # must never land in a buffer an earlier pass of this island has already released.
             for node in order:
-                for item in node.inputs:
-                    if item is not None and not isinstance(item, DeferredImage) and id(item) not in resident:
-                        image = self.upload(item, keymap.get(id(item)))
+                for slot, item in enumerate(node.inputs):
+                    plane = self._is_mask(node.kind, slot)
+                    if item is not None and not isinstance(item, DeferredImage) and (id(item), plane) not in resident:
+                        image = self.upload(item, keymap.get((id(item), plane)), plane)
                         if image.epoch != self.epoch:
                             raise StaleImage("resident image from an earlier device epoch")
-                        resident[id(item)] = image
+                        resident[(id(item), plane)] = image
                         if image.key is None:
                             held.append((image.buffer, image.nbytes))
                         if not image.verified:
@@ -929,7 +965,8 @@ class GPU2D:
 
             for index, node in enumerate(order):
                 self._check(cancel)
-                ins = [None if item is None else resident[id(item)] for item in node.inputs]
+                ins = [None if item is None else resident[id(item) if isinstance(item, DeferredImage) else (id(item), self._is_mask(node.kind, slot))]
+                       for slot, item in enumerate(node.inputs)]
                 out_buffer, out_bytes = self._acquire(node.data.width * node.data.height * 16)
                 out = DeviceImage(out_buffer, node.data, node.display, self.epoch, out_bytes)
                 resident[id(node)] = out
@@ -941,7 +978,8 @@ class GPU2D:
                         self._free(resident[id(item)], outputs)
             final = resident[id(root)]
             self._scan(final, add_params, passes)
-            counters.encode_ms += (time.perf_counter() - encode_started) * 1000
+            # encode_ms is the host time spent building the passes; the uploads inside it are counted in upload_ms.
+            counters.encode_ms += (time.perf_counter() - encode_started) * 1000 - (counters.upload_ms - upload_before)
 
             blob = bytearray(PARAM_SLOT * len(slots))
             for slot, data in zip(slots, slot_data):
@@ -1043,8 +1081,8 @@ class GPU2D:
     def _scan(self, image, add_params, passes):
         n = image.data.width * image.data.height
         slot = add_params(_params(i0=(n, 0, 0, 0)))
-        passes.append((self._pipeline("scan"), [(0, image.buffer, image.nbytes), (1, self._flags, 16)], slot,
-                       (-(-n // 64), 1, 1), 2))
+        passes.append((self._pipeline("scan_plane" if image.plane else "scan"), [(0, image.buffer, image.nbytes), (1, self._flags, 16)],
+                       slot, (-(-n // 64), 1, 1), 2))
 
     def _encode(self, node, ins, out, add_params, passes, table):
         kind, p = node.kind, node.params
