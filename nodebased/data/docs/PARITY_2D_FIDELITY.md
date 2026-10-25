@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 54.5 / 100** (167 nodes scored, rank-weighted; 56.1 counting only the nodes NodeBased has).
+**Overall fidelity: 62.7 / 100** (167 nodes scored, rank-weighted; 64.6 counting only the nodes NodeBased has).
 
-This is the baseline measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts). [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
+This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
 ## How a node is scored
 
@@ -26,13 +26,13 @@ Per node, five components, each a fraction from 0 to 1:
 | Group | Rank-weighted | Plain mean | Nodes |
 |---|---|---|---|
 | Image | 25.4 | 25.1 | 6 |
-| Draw | 30.2 | 30.7 | 17 |
+| Draw | 55.4 | 50.2 | 17 |
 | Time | 56.2 | 53.3 | 13 |
-| Channel | 56.4 | 64.7 | 5 |
-| Color | 57.5 | 59.2 | 34 |
-| Filter | 46.0 | 44.5 | 32 |
-| Keyer | 52.0 | 43.9 | 11 |
-| Merge | 58.0 | 71.6 | 12 |
+| Channel | 87.4 | 81.0 | 5 |
+| Color | 69.3 | 68.5 | 34 |
+| Filter | 59.0 | 54.3 | 32 |
+| Keyer | 54.5 | 46.3 | 11 |
+| Merge | 61.5 | 73.6 | 12 |
 | Transform | 67.8 | 54.1 | 20 |
 | Metadata | 87.1 | 80.8 | 5 |
 | Other | 70.2 | 22.3 | 12 |
@@ -57,13 +57,13 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 25.4 | 10 (7/75) | 100 | 50 | 0 | - | no fixture |
-| 2 | Text | `Text` | supported | 28.3 | 18 (6/41) | 40 | 100 | 0 | - | no fixture |
-| 3 | Rectangle | `Rectangle` | supported | 32.7 | 24 (3/13) | 50 | 100 | 0 | - | no fixture |
-| 4 | Ramp | `Ramp` | supported | 31.8 | 26 (3/10) | 33 | 100 | 0 | - | no fixture |
-| 5 | Radial | `Radial` | supported | 31.6 | 22 (3/14) | 50 | 100 | 0 | - | no fixture |
-| 6 | Noise | `Noise` | supported | 36.0 | 30 (6/26) | 50 | 100 | 0 | - | no fixture |
-| 7 | RotoPaint | `RotoPaint` | supported | 28.1 | 21 (19/88) | - | 100 | 0 | - | no fixture |
+| 1 | Roto | `Roto` | supported | 29.5 | 18 (10/75) | 100 | 50 | 0 | - | no fixture |
+| 2 | Text | `Text` | supported | 63.9 | 38 (12/41) | 79 | 100 | 100 | - | no fixture |
+| 3 | Rectangle | `Rectangle` | supported | 88.6 | 81 (9/13) | 91 | 100 | 100 | - | no fixture |
+| 4 | Ramp | `Ramp` | supported | 92.2 | 89 (9/10) | 83 | 100 | 100 | - | no fixture |
+| 5 | Radial | `Radial` | supported | 84.9 | 74 (9/14) | 91 | 100 | 100 | - | no fixture |
+| 6 | Noise | `Noise` | supported | 76.0 | 60 (12/26) | 80 | 100 | 100 | - | no fixture |
+| 7 | RotoPaint | `RotoPaint` | supported | 41.2 | 27 (22/88) | 100 | 100 | 0 | - | no fixture |
 | 8 | LightWrap | `LightWrap` | supported | 60.8 | 36 (7/27) | 62 | 100 | 100 | - | no fixture |
 | 9 | Grain | `Grain` | supported | 51.7 | 56 (8/14) | 62 | 100 | 0 | - | no fixture |
 | 9 | ScannedGrain | `ScannedGrain` | supported | 20.0 | 0 (0/1) | - | 100 | - | - | no fixture |
@@ -72,8 +72,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 11 | Flare | `Flare` | supported | 27.1 | 7 (3/50) | 33 | 100 | - | - | no fixture |
 | 11 | Glint | `Glint` | supported | 38.4 | 31 (4/13) | 40 | 100 | 17 | - | no fixture |
 | 11 | Sparkles | `Sparkles` | supported | 22.6 | 9 (2/32) | 0 | 100 | - | - | no fixture |
-| 12 | Dither | `Dither` | supported | 48.3 | 50 (2/4) | 25 | 100 | 25 | - | no fixture |
-| 13 | Grid | `Grid` | supported | 38.5 | 30 (4/14) | 67 | 100 | 0 | - | no fixture |
+| 12 | Dither | `Dither` | supported | 66.4 | 50 (2/4) | 67 | 100 | 88 | - | no fixture |
+| 13 | Grid | `Grid` | supported | 89.6 | 83 (10/14) | 92 | 100 | 100 | - | no fixture |
 
 ### Time
 
@@ -98,44 +98,44 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Shuffle | `Shuffle` | supported | 26.0 | 20 (1/6) | - | 50 | - | - | no fixture |
+| 1 | Shuffle | `Shuffle` | supported | 93.3 | 90 (5/6) | 100 | 100 | - | - | no fixture |
 | 2 | ShuffleCopy | `ShuffleCopy` | supported | 100.0 | 100 (4/4) | - | 100 | - | - | no fixture |
 | 3 | Copy | `Copy` | supported | 71.6 | 80 (8/10) | 100 | 100 | 11 | - | no fixture |
-| 4 | ChannelMerge | `ChannelMerge` | supported | 72.7 | 100 (4/4) | 20 | 100 | 17 | - | no fixture |
+| 4 | ChannelMerge | `ChannelMerge` | supported | 86.7 | 100 (4/4) | 50 | 100 | 67 | - | no fixture |
 | 5 | Remove | `Remove` | supported | 53.3 | 25 (1/4) | 50 | 100 | 100 | - | no fixture |
 
 ### Color
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Grade | `Grade` | supported | 29.9 | 20 (2/10) | 100 | 100 | 12 | 0 (0/4) | unmeasured |
-| 2 | ColorCorrect | `ColorCorrect` | supported | 77.9 | 91 (21/23) | 100 | 100 | 12 | - | no fixture |
-| 3 | Invert | `Invert` | supported | 43.8 | 0 (0/1) | 50 | 100 | 25 | 100 (1/1) | unmeasured |
-| 4 | Saturation | `Saturation` | supported | 82.5 | 100 (1/1) | 100 | 100 | 12 | - | no fixture |
-| 5 | Multiply | `Multiply` | supported | 83.8 | 100 (1/1) | 50 | 100 | 25 | 100 (1/1) | unmeasured |
-| 6 | Add | `Add` | supported | 85.4 | 100 (1/1) | 67 | 100 | 25 | 100 (1/1) | unmeasured |
-| 7 | Gamma | `Gamma` | supported | 85.4 | 100 (1/1) | 67 | 100 | 25 | 100 (2/2) | unmeasured |
-| 8 | Clamp | `Clamp` | supported | 58.8 | 50 (4/8) | 83 | 100 | 25 | 67 (2/3) | unmeasured |
-| 9 | HueCorrect | `HueCorrect` | supported | 55.8 | 50 (1/2) | 100 | 100 | 12 | - | no fixture |
-| 10 | ColorLookup | `ColorLookup` | supported | 35.8 | 12 (1/8) | 100 | 100 | 12 | - | no fixture |
-| 11 | Exposure | `Exposure` | supported | 81.8 | 86 (6/7) | 88 | 100 | 25 | 100 (2/2) | unmeasured |
+| 1 | Grade | `Grade` | supported | 41.1 | 20 (2/10) | 100 | 100 | 88 | 0 (0/4) | unmeasured |
+| 2 | ColorCorrect | `ColorCorrect` | supported | 92.9 | 91 (21/23) | 100 | 100 | 88 | - | no fixture |
+| 3 | Invert | `Invert` | supported | 56.7 | 0 (0/1) | 86 | 100 | 88 | 100 (1/1) | unmeasured |
+| 4 | Saturation | `Saturation` | supported | 97.5 | 100 (1/1) | 100 | 100 | 88 | - | no fixture |
+| 5 | Multiply | `Multiply` | supported | 96.7 | 100 (1/1) | 86 | 100 | 88 | 100 (1/1) | unmeasured |
+| 6 | Add | `Add` | supported | 96.9 | 100 (1/1) | 88 | 100 | 88 | 100 (1/1) | unmeasured |
+| 7 | Gamma | `Gamma` | supported | 96.9 | 100 (1/1) | 88 | 100 | 88 | 100 (2/2) | unmeasured |
+| 8 | Clamp | `Clamp` | supported | 68.9 | 50 (4/8) | 91 | 100 | 88 | 67 (2/3) | unmeasured |
+| 9 | HueCorrect | `HueCorrect` | supported | 70.8 | 50 (1/2) | 100 | 100 | 88 | - | no fixture |
+| 10 | ColorLookup | `ColorLookup` | supported | 50.8 | 12 (1/8) | 100 | 100 | 88 | - | no fixture |
+| 11 | Exposure | `Exposure` | supported | 91.6 | 86 (6/7) | 92 | 100 | 88 | 100 (2/2) | unmeasured |
 | 12 | HSVTool | `HSVTool` | partial | 72.8 | 59 (14/25) | 100 | 100 | - | - | no fixture |
-| 13 | ColorMatrix | `ColorMatrix` | supported | 86.9 | 100 (2/2) | 100 | 100 | 12 | 100 (1/1) | unmeasured |
-| 14 | Colorspace | `Colorspace` | supported | 64.7 | 67 (6/9) | 100 | 100 | 12 | - | no fixture |
-| 14 | OCIOColorspace | `OCIOColorspace` | supported | 44.4 | 29 (2/11) | 100 | 100 | 12 | - | no fixture |
+| 13 | ColorMatrix | `ColorMatrix` | supported | 98.1 | 100 (2/2) | 100 | 100 | 88 | 100 (1/1) | unmeasured |
+| 14 | Colorspace | `Colorspace` | supported | 79.7 | 67 (6/9) | 100 | 100 | 88 | - | no fixture |
+| 14 | OCIOColorspace | `OCIOColorspace` | supported | 59.4 | 29 (2/11) | 100 | 100 | 88 | - | no fixture |
 | 14 | OCIODisplay | `OCIODisplay` | supported | 37.6 | 23 (3/17) | 33 | 100 | - | - | no fixture |
-| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 68.5 | 80 (3/4) | 75 | 100 | 12 | - | no fixture |
-| 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 85.0 | 100 (1/1) | 100 | 100 | 25 | - | no fixture |
-| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 50.5 | 40 (4/14) | 100 | 100 | 12 | - | no fixture |
-| 15 | Log2Lin | `Log2Lin` | supported | 69.2 | 80 (4/5) | 80 | 100 | 12 | - | no fixture |
-| 15 | PLogLin | `PLogLin` | supported | 64.7 | 80 (4/5) | 80 | 67 | 12 | - | no fixture |
+| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 85.5 | 80 (3/4) | 90 | 100 | 88 | - | no fixture |
+| 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 97.5 | 100 (1/1) | 100 | 100 | 88 | - | no fixture |
+| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 65.5 | 40 (4/14) | 100 | 100 | 88 | - | no fixture |
+| 15 | Log2Lin | `Log2Lin` | supported | 85.6 | 80 (4/5) | 91 | 100 | 88 | - | no fixture |
+| 15 | PLogLin | `PLogLin` | supported | 81.2 | 80 (4/5) | 91 | 67 | 88 | - | no fixture |
 | 16 | ColorTransfer | - | supported | 0.0 | 0 (0/1) | - | 0 | - | - | no fixture |
 | 16 | MatchGrade | `MatchGrade` | supported | 26.0 | 8 (3/33) | - | 100 | - | - | no fixture |
-| 17 | Expression | `Expression` | supported | 42.9 | 25 (4/16) | 100 | 100 | 14 | - | no fixture |
-| 18 | CrossTalk | `CrossTalk` | supported | 88.6 | 100 (1/1) | 100 | 100 | 43 | - | no fixture |
-| 19 | Posterize | `Posterize` | supported | 80.6 | 100 (1/1) | 67 | 100 | 25 | - | no fixture |
+| 17 | Expression | `Expression` | supported | 57.1 | 25 (4/16) | 100 | 100 | 86 | - | no fixture |
+| 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
+| 19 | Posterize | `Posterize` | supported | 95.8 | 100 (1/1) | 88 | 100 | 88 | - | no fixture |
 | 19 | SoftClip | `SoftClip` | supported | 100.0 | 100 (3/3) | 100 | 100 | - | - | no fixture |
-| 19 | Toe | `Toe` | supported | 49.5 | 50 (1/2) | 50 | 100 | 14 | - | no fixture |
+| 19 | Toe | `Toe` | supported | 68.6 | 50 (1/2) | 86 | 100 | 86 | - | no fixture |
 | 20 | HistEQ | `HistEQ` | supported | 76.9 | 100 (1/1) | - | 100 | 0 | - | no fixture |
 | 20 | Histogram | `Histogram` | supported | 65.1 | 67 (2/3) | 100 | 100 | 14 | - | no fixture |
 | 20 | MinColor | `MinColor` | supported | 15.4 | 0 (0/4) | - | 100 | 0 | - | no fixture |
@@ -147,32 +147,32 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Blur | `Blur` | supported | 36.7 | 25 (1/4) | 50 | 100 | 17 | - | no fixture |
-| 2 | Sharpen | `Sharpen` | supported | 41.9 | 29 (2/7) | 50 | 100 | 33 | - | no fixture |
-| 3 | Erode (filter) | `ErodeFilter` | supported | 83.3 | 100 (2/2) | 100 | 100 | 17 | - | no fixture |
-| 4 | Median | `Median` | supported | 55.6 | 50 (1/2) | 67 | 100 | 33 | - | no fixture |
-| 5 | Glow | `Glow` | supported | 48.3 | 36 (4/11) | 67 | 100 | 33 | - | no fixture |
-| 6 | Soften | `Soften` | supported | 32.1 | 14 (1/7) | 33 | 100 | 33 | - | no fixture |
+| 1 | Blur | `Blur` | supported | 54.4 | 25 (1/4) | 83 | 100 | 83 | - | no fixture |
+| 2 | Sharpen | `Sharpen` | supported | 54.8 | 29 (2/7) | 71 | 100 | 83 | - | no fixture |
+| 3 | Erode (filter) | `ErodeFilter` | supported | 96.7 | 100 (2/2) | 100 | 100 | 83 | - | no fixture |
+| 4 | Median | `Median` | supported | 67.8 | 50 (1/2) | 83 | 100 | 83 | - | no fixture |
+| 5 | Glow | `Glow` | supported | 59.8 | 36 (4/11) | 78 | 100 | 83 | - | no fixture |
+| 6 | Soften | `Soften` | supported | 46.5 | 14 (1/7) | 67 | 100 | 83 | - | no fixture |
 | 7 | DropShadow | `DropShadow` | supported | 48.7 | 56 (5/9) | 20 | 50 | - | - | no fixture |
-| 8 | Defocus | `Defocus` | supported | 51.3 | 40 (2/5) | 75 | 100 | 33 | - | no fixture |
-| 8 | ZDefocus | `ZDefocus` | supported | 41.3 | 27 (8/36) | 50 | 100 | 33 | - | no fixture |
-| 9 | DirBlur | `DirBlur` | supported | 43.1 | 33 (4/12) | 40 | 100 | 33 | - | no fixture |
-| 10 | EdgeBlur | `EdgeBlur` | supported | 38.5 | 22 (2/9) | 50 | 100 | 33 | - | no fixture |
-| 10 | EdgeExtend | `EdgeExtend` | supported | 7.7 | 0 (0/6) | - | 50 | 0 | - | no fixture |
-| 11 | Erode (fast) | `Erode` | supported | 82.2 | 100 (1/1) | 67 | 100 | 33 | - | no fixture |
-| 12 | DegrainSimple | `DegrainSimple` | supported | 73.3 | 100 (3/3) | 25 | 100 | 17 | - | no fixture |
+| 8 | Defocus | `Defocus` | supported | 62.8 | 40 (2/5) | 86 | 100 | 83 | - | no fixture |
+| 8 | ZDefocus | `ZDefocus` | supported | 52.8 | 27 (8/36) | 62 | 100 | 83 | - | no fixture |
+| 9 | DirBlur | `DirBlur` | supported | 56.1 | 33 (4/12) | 62 | 100 | 83 | - | no fixture |
+| 10 | EdgeBlur | `EdgeBlur` | supported | 51.4 | 22 (2/9) | 71 | 100 | 83 | - | no fixture |
+| 10 | EdgeExtend | `EdgeExtend` | supported | 40.0 | 0 (0/6) | 100 | 50 | 100 | - | no fixture |
+| 11 | Erode (fast) | `Erode` | supported | 94.4 | 100 (1/1) | 83 | 100 | 83 | - | no fixture |
+| 12 | DegrainSimple | `DegrainSimple` | supported | 91.7 | 100 (3/3) | 62 | 100 | 83 | - | no fixture |
 | 12 | Denoise | `Denoise` | supported | 18.1 | 6 (2/37) | 50 | 33 | - | - | no fixture |
 | 13 | MotionBlur | `MotionBlur` | supported | 26.4 | 33 (2/6) | 0 | 25 | - | - | no fixture |
 | 13 | MotionBlur2D | `MotionBlur2D` | supported | 63.9 | 75 (3/4) | 33 | 50 | - | - | no fixture |
 | 13 | MotionBlur3D | `MotionBlur3D` | supported | 55.6 | 50 (3/6) | 33 | 100 | - | - | no fixture |
-| 13 | VectorBlur | `VectorBlur` | supported | 37.7 | 29 (4/15) | 40 | 100 | 17 | - | no fixture |
-| 14 | Bilateral | `Bilateral` | supported | 42.4 | 40 (2/5) | 67 | 67 | 17 | - | no fixture |
-| 15 | Convolve | `Convolve` | supported | 30.0 | 0 (0/4) | 100 | 100 | 17 | - | no fixture |
-| 15 | Matrix | `Matrix` | supported | 83.3 | 100 (2/2) | 100 | 100 | 17 | - | no fixture |
-| 16 | BumpBoss | `BumpBoss` | supported | 25.6 | 0 (0/6) | 100 | 67 | 17 | - | no fixture |
-| 16 | EdgeDetect | `EdgeDetect` | supported | 46.1 | 36 (2/7) | 100 | 100 | 0 | - | no fixture |
-| 16 | Emboss | `Emboss` | supported | 35.9 | 18 (2/13) | 67 | 100 | 20 | - | no fixture |
-| 16 | Laplacian | `Laplacian` | supported | 26.7 | 0 (0/4) | 50 | 100 | 33 | - | no fixture |
+| 13 | VectorBlur | `VectorBlur` | supported | 54.0 | 29 (4/15) | 62 | 100 | 83 | - | no fixture |
+| 14 | Bilateral | `Bilateral` | supported | 58.3 | 40 (2/5) | 86 | 67 | 83 | - | no fixture |
+| 15 | Convolve | `Convolve` | supported | 43.3 | 0 (0/4) | 100 | 100 | 83 | - | no fixture |
+| 15 | Matrix | `Matrix` | supported | 96.7 | 100 (2/2) | 100 | 100 | 83 | - | no fixture |
+| 16 | BumpBoss | `BumpBoss` | supported | 38.9 | 0 (0/6) | 100 | 67 | 83 | - | no fixture |
+| 16 | EdgeDetect | `EdgeDetect` | supported | 66.1 | 36 (2/7) | 100 | 100 | 100 | - | no fixture |
+| 16 | Emboss | `Emboss` | supported | 50.1 | 18 (2/13) | 83 | 100 | 80 | - | no fixture |
+| 16 | Laplacian | `Laplacian` | supported | 40.7 | 0 (0/4) | 80 | 100 | 83 | - | no fixture |
 | 17 | Inpaint | `Inpaint` | supported | 10.3 | 0 (0/11) | - | 67 | 0 | - | no fixture |
 | 18 | GodRays | `GodRays` | supported | 37.1 | 30 (3/10) | 33 | 100 | 17 | - | no fixture |
 | 18 | LevelSet | `LevelSet` | supported | 100.0 | 100 (8/8) | 100 | 100 | - | - | no fixture |
@@ -187,7 +187,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 1 | Keyer | `Keyer` | supported | 67.8 | 60 (6/10) | 67 | 100 | - | - | no fixture |
 | 2 | ChromaKeyer | `ChromaKeyer` | supported | 30.0 | 20 (3/16) | 0 | 100 | - | - | no fixture |
 | 3 | Difference | `Difference` | supported | 66.7 | 50 (2/4) | 100 | 100 | - | - | no fixture |
-| 4 | HueKeyer | `HueKeyer` | supported | 40.0 | 50 (2/4) | 0 | 100 | 0 | - | no fixture |
+| 4 | HueKeyer | `HueKeyer` | supported | 66.7 | 50 (2/4) | 50 | 100 | 100 | - | no fixture |
 | 5 | Keylight | `ScreenKeyer` | partial | 56.6 | 43 (12/35) | 92 | 75 | - | - | no fixture |
 | 6 | Primatte | - | missing | 0.0 | 0 (0/26) | - | 0 | 0 | - | no fixture |
 | 6 | Ultimatte | - | missing | 0.0 | 0 (0/60) | - | 0 | - | - | no fixture |
@@ -200,11 +200,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Merge | `Merge` | supported | 45.0 | 11 (1/9) | 100 | 100 | 17 | 72 (21/29) | unmeasured |
+| 1 | Merge | `Merge` | supported | 52.5 | 11 (1/9) | 100 | 100 | 67 | 72 (21/29) | unmeasured |
 | 2 | Premult | `Premult` | supported | 38.9 | 0 (0/2) | - | 100 | 0 | 100 (1/1) | unmeasured |
 | 3 | Unpremult | `Unpremult` | supported | 38.9 | 0 (0/2) | - | 100 | 0 | 100 (1/1) | unmeasured |
 | 4 | Switch | `Switch` | supported | 100.0 | 100 (1/1) | 100 | 100 | - | - | no fixture |
-| 5 | Dissolve | `Dissolve` | supported | 80.0 | 100 (1/1) | 100 | 100 | 0 | - | no fixture |
+| 5 | Dissolve | `Dissolve` | supported | 96.0 | 100 (1/1) | 100 | 100 | 80 | - | no fixture |
 | 6 | KeyMix | `Keymix` | supported | 70.0 | 50 (1/2) | 100 | 100 | 33 | 100 (1/1) | unmeasured |
 | 7 | AddMix | `AddMix` | supported | 46.7 | 0 (0/6) | 100 | 100 | 100 | - | no fixture |
 | 8 | Blend | `Blend` | supported | 93.8 | 100 (2/2) | 83 | 100 | 80 | - | no fixture |
@@ -279,36 +279,36 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
-| 1 | Roto (Draw #1) | `Roto` | 74.60 | 25.4 | primary knobs missing: `output`, `cliptype`, `replace`; 65 secondary knobs missing; sockets missing: `mask`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 2 | Shuffle (Channel #1) | `Shuffle` | 74.00 | 26.0 | primary knobs missing: `fromInput1`, `fromInput2`, `in2`; 2 secondary knobs missing: `out1`, `out2`; sockets missing: `A` |
-| 3 | Grade (Color #1) | `Grade` | 70.12 | 29.9 | primary knobs missing: `blackpoint`, `whitepoint`, `black`, `white`, `gamma`, `reverse`, `black_clamp`, `white_clamp`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, (un)premult invert; formula cases failing: `grade_affine`, `grade_default_clamps`, `grade_levels`, `grade_gamma` |
-| 4 | Read (Image #1) | `Read` | 67.69 | 32.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `format`, `proxy`, `proxy_format`, `first`, `before`, `last` and 8 more; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
-| 5 | Blur (Filter #1) | `Blur` | 63.33 | 36.7 | primary knobs missing: `filter`, `quality`, `crop`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 6 | Merge (Merge #1) | `Merge` | 54.95 | 45.0 | primary knobs missing: `sRGB`, `screen_alpha`, `metainput`, `rangeinput`, `Achannels`, `Bchannels`, `output`, `also_merge`; node chrome missing: mask channel, mask invert, mask inject, mask fringe, bbox handling; formula cases failing: `merge_color-burn`, `merge_color-dodge`, `merge_divide`, `merge_geometric`, `merge_hard-light`, `merge_multiply` and 2 more |
-| 7 | Write (Image #2) | `Write` | 48.36 | 3.3 | primary knobs missing: `proxy`, `frame_mode`, `frame`, `colorspace`, `premultiplied`, `raw`, `views`, `create_directories` and 9 more; 37 secondary knobs missing; node chrome missing: channels selector |
-| 8 | TimeOffset (Time #1) | `TimeOffset` | 44.44 | 55.6 | primary knobs missing: `rounding_mode`, `enable_path_mask`, `mask_patterns`, `inject_mask` |
-| 9 | Text (Draw #2) | `Text` | 35.86 | 28.3 | primary knobs missing: `output`, `premult`, `cliptype`, `replace`, `invert`, `opacity`, `yjustify`, `index` and 7 more; 20 secondary knobs missing; node chrome missing: mask channel, mask invert, mask inject |
-| 10 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 35.00 | 30.0 | primary knobs missing: `_view`, `_screenGain`, `_screenBalance`; 10 secondary knobs missing: `_chromaGain`, `_whitePoint`, `_blackPoint`, `_alphaBias`, `_insideMask` ... |
-| 11 | Keyer (Keyer #1) | `Keyer` | 32.22 | 67.8 | primary knobs missing: `input`, `output`, `combine`, `range` |
-| 12 | Crop (Transform #2) | `Crop` | 32.00 | 36.0 | primary knobs missing: `softness`, `reformat`, `intersect`, `crop` |
-| 13 | Premult (Merge #2) | `Premult` | 30.56 | 38.9 | primary knobs missing: `alpha`, `invert`; node chrome missing: channels selector |
-| 14 | Sharpen (Filter #2) | `Sharpen` | 29.05 | 41.9 | primary knobs missing: `minimum`, `maximum`, `filter`, `quailty`, `crop`; node chrome missing: mask channel, mask invert, mask inject, mask fringe |
-| 15 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
-| 16 | Rectangle (Draw #3) | `Rectangle` | 22.43 | 32.7 | primary knobs missing: `output`, `premult`, `cliptype`, `replace`, `invert`, `opacity`; 4 secondary knobs missing: `ramp`, `p1`, `color0`, `p0`; node chrome missing: mask channel, mask invert, mask inject |
-| 17 | CopyMetaData (Metadata #3) | `CopyMetaData` | 21.33 | 36.0 | primary knobs missing: `mergeMode`, `metadatafilterMode`, `imageMetadatafilter`, `imageMetadatafilterMode` |
-| 18 | FrameHold (Time #2) | `FrameHold` | 21.21 | 57.6 | primary knobs missing: `rounding_mode`, `setToCurrentFrame`; 3 secondary knobs missing: `enable_path_mask`, `mask_patterns`, `inject_mask` |
-| 19 | Unpremult (Merge #3) | `Unpremult` | 20.37 | 38.9 | primary knobs missing: `alpha`, `invert`; node chrome missing: channels selector |
-| 20 | Invert (Color #3) | `Invert` | 18.75 | 43.8 | primary knobs missing: `clamp`; node chrome missing: mask channel, mask invert, mask inject, mask fringe, (un)premult by, (un)premult invert |
-| 21 | Tracker (Transform #3) | `Tracker` | 18.47 | 44.6 | primary knobs missing: `add_track`, `del_tracks`, `select_all`, `average_tracks`; 45 secondary knobs missing |
-| 22 | Retime (Time #3) | `Retime` | 18.26 | 45.2 | primary knobs missing: `input.first_lock`, `input.last_lock`, `reverse`, `output.first_lock`, `output.last_lock`, `before`, `after`, `filter` and 1 more; 1 secondary knob missing: `warp` |
-| 23 | Constant (Image #4) | `Constant` | 17.31 | 30.8 | primary knobs missing: `first`, `last`; node chrome missing: channels selector |
-| 24 | Ramp (Draw #4) | `Ramp` | 17.05 | 31.8 | primary knobs missing: `output`, `premult`, `cliptype`, `replace`, `invert`, `opacity`, `type`; node chrome missing: mask channel, mask invert, mask inject |
-| 25 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
-| 26 | HueKeyer (Keyer #4) | `HueKeyer` | 15.00 | 40.0 | primary knobs missing: `output`, `output#2`; node chrome missing: channels selector |
-| 27 | Profile (Image #7) | `Profile` | 14.29 | 0.0 | primary knobs missing: `frame_range`, `open_profile_panel`; node chrome missing: channels selector |
-| 28 | Radial (Draw #5) | `Radial` | 13.68 | 31.6 | primary knobs missing: `output`, `premult`, `cliptype`, `replace`, `invert`, `opacity`, `plinear`; 4 secondary knobs missing: `ramp`, `p1`, `color0`, `p0`; node chrome missing: mask channel, mask invert, mask inject |
-| 29 | Soften (Filter #6) | `Soften` | 11.32 | 32.1 | primary knobs missing: `minimum`, `maximum`, `amount`, `filter`, `quailty`, `crop`; node chrome missing: mask channel, mask invert, mask inject, mask fringe |
-| 30 | Median (Filter #4) | `Median` | 11.11 | 55.6 | primary knobs missing: `ignore_top_line`; node chrome missing: mask channel, mask invert, mask inject, mask fringe |
+| 1 | Roto (Draw #1) | `Roto` | 70.55 | 29.5 | 65 secondary knobs missing; sockets missing: `mask`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 2 | Read (Image #1) | `Read` | 67.69 | 32.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `format`, `proxy`, `proxy_format`, `first`, `before`, `last` and 8 more; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
+| 3 | Grade (Color #1) | `Grade` | 58.88 | 41.1 | primary knobs missing: `blackpoint`, `whitepoint`, `black`, `white`, `gamma`, `reverse`, `black_clamp`, `white_clamp`; node chrome missing: mask fringe; formula cases failing: `grade_affine`, `grade_default_clamps`, `grade_levels`, `grade_gamma` |
+| 4 | Write (Image #2) | `Write` | 48.36 | 3.3 | primary knobs missing: `proxy`, `frame_mode`, `frame`, `colorspace`, `premultiplied`, `raw`, `views`, `create_directories` and 9 more; 37 secondary knobs missing; node chrome missing: channels selector |
+| 5 | Merge (Merge #1) | `Merge` | 47.45 | 52.5 | primary knobs missing: `sRGB`, `screen_alpha`, `metainput`, `rangeinput`, `Achannels`, `Bchannels`, `output`, `also_merge`; node chrome missing: mask fringe, bbox handling; formula cases failing: `merge_color-burn`, `merge_color-dodge`, `merge_divide`, `merge_geometric`, `merge_hard-light`, `merge_multiply` and 2 more |
+| 6 | Blur (Filter #1) | `Blur` | 45.56 | 54.4 | primary knobs missing: `filter`, `quality`, `crop`; node chrome missing: mask fringe |
+| 7 | TimeOffset (Time #1) | `TimeOffset` | 44.44 | 55.6 | primary knobs missing: `rounding_mode`, `enable_path_mask`, `mask_patterns`, `inject_mask` |
+| 8 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 35.00 | 30.0 | primary knobs missing: `_view`, `_screenGain`, `_screenBalance`; 10 secondary knobs missing: `_chromaGain`, `_whitePoint`, `_blackPoint`, `_alphaBias`, `_insideMask` ... |
+| 9 | Keyer (Keyer #1) | `Keyer` | 32.22 | 67.8 | primary knobs missing: `input`, `output`, `combine`, `range` |
+| 10 | Crop (Transform #2) | `Crop` | 32.00 | 36.0 | primary knobs missing: `softness`, `reformat`, `intersect`, `crop` |
+| 11 | Premult (Merge #2) | `Premult` | 30.56 | 38.9 | primary knobs missing: `alpha`, `invert`; node chrome missing: channels selector |
+| 12 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
+| 13 | Sharpen (Filter #2) | `Sharpen` | 22.62 | 54.8 | primary knobs missing: `minimum`, `maximum`, `filter`, `quailty`, `crop`; node chrome missing: mask fringe |
+| 14 | CopyMetaData (Metadata #3) | `CopyMetaData` | 21.33 | 36.0 | primary knobs missing: `mergeMode`, `metadatafilterMode`, `imageMetadatafilter`, `imageMetadatafilterMode` |
+| 15 | FrameHold (Time #2) | `FrameHold` | 21.21 | 57.6 | primary knobs missing: `rounding_mode`, `setToCurrentFrame`; 3 secondary knobs missing: `enable_path_mask`, `mask_patterns`, `inject_mask` |
+| 16 | Unpremult (Merge #3) | `Unpremult` | 20.37 | 38.9 | primary knobs missing: `alpha`, `invert`; node chrome missing: channels selector |
+| 17 | Tracker (Transform #3) | `Tracker` | 18.47 | 44.6 | primary knobs missing: `add_track`, `del_tracks`, `select_all`, `average_tracks`; 45 secondary knobs missing |
+| 18 | Retime (Time #3) | `Retime` | 18.26 | 45.2 | primary knobs missing: `input.first_lock`, `input.last_lock`, `reverse`, `output.first_lock`, `output.last_lock`, `before`, `after`, `filter` and 1 more; 1 secondary knob missing: `warp` |
+| 19 | Text (Draw #2) | `Text` | 18.04 | 63.9 | primary knobs missing: `yjustify`, `index`, `global_font_scale`, `font_width`, `font_height`, `kerning`, `tracking`, `baseline_shift` and 1 more; 20 secondary knobs missing |
+| 20 | Constant (Image #4) | `Constant` | 17.31 | 30.8 | primary knobs missing: `first`, `last`; node chrome missing: channels selector |
+| 21 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
+| 22 | Invert (Color #3) | `Invert` | 14.43 | 56.7 | primary knobs missing: `clamp`; node chrome missing: mask fringe |
+| 23 | Profile (Image #7) | `Profile` | 14.29 | 0.0 | primary knobs missing: `frame_range`, `open_profile_panel`; node chrome missing: channels selector |
+| 24 | NoTimeBlur (Time #9) | - | 11.11 | 0.0 | no node (PARITY_2D.md Time #9) |
+| 25 | Difference (Keyer #3) | `Difference` | 11.11 | 66.7 | primary knobs missing: `output`, `output#2` |
+| 26 | TimeClip (Time #4) | `TimeClip` | 10.00 | 60.0 | primary knobs missing: `fadeIn`, `fadeOut`, `frame_mode`, `origfirst`, `origlast`, `reverse` |
+| 27 | Copy (Channel #3) | `Copy` | 9.48 | 71.6 | primary knobs missing: `metainput`, `rangeinput`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, (un)premult invert, bbox handling |
+| 28 | Remove (Channel #5) | `Remove` | 9.33 | 53.3 | primary knobs missing: `channels2`, `channels3`, `channels4` |
+| 29 | Root (Other #11) | - | 9.09 | 0.0 | no node: per-script project settings (PARITY_2D.md Other #11) |
+| 30 | Soften (Filter #6) | `Soften` | 8.92 | 46.5 | primary knobs missing: `minimum`, `maximum`, `amount`, `filter`, `quailty`, `crop`; node chrome missing: mask fringe |
 
 ## Formula cases
 

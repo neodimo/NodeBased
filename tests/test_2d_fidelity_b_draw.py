@@ -144,6 +144,47 @@ class OptionTests(unittest.TestCase):
             np.testing.assert_array_equal(evaluator_pixels(g.doc, "node"), base)
 
 
+class MaskStripTests(unittest.TestCase):
+    """The Draw nodes take Nuke's mask strip too: the background is the wired image, or transparent black."""
+
+    def test_a_mask_channel_and_invert_gate_the_shape_over_a_blank_background(self):
+        g = drawn("Rectangle", dict(maskChannelInput="rgba.red", invert_mask=1), mask=True)
+        out = evaluator_pixels(g.doc, "node")
+        matte = evaluator_pixels(g.doc, "matte")
+        np.testing.assert_allclose(out, shape_of("Rectangle") * (1.0 - matte[..., 0:1]), atol=1e-6)
+
+    def test_the_default_mask_channel_is_the_wired_masks_alpha(self):
+        g = drawn("Radial", dict(mix=0.8), mask=True)
+        matte = evaluator_pixels(g.doc, "matte")[..., 3:4]
+        np.testing.assert_allclose(evaluator_pixels(g.doc, "node"), shape_of("Radial") * matte * 0.8, atol=1e-6)
+
+    def test_a_channel_of_the_wired_image_masks_when_no_mask_is_wired(self):
+        g = drawn("Rectangle", dict(maskChannelInput="rgba.alpha", invert_mask=1), bg=True)
+        background = evaluator_pixels(g.doc, "bg")
+        shape = shape_of("Rectangle")
+        composited = shape + background * (1.0 - shape[..., 3:4])
+        gate = 1.0 - background[..., 3:4]
+        np.testing.assert_allclose(evaluator_pixels(g.doc, "node"), composited * gate + background * (1.0 - gate), atol=1e-6)
+
+    def test_inject_writes_the_mask_layer_and_tiles_agree(self):
+        g = drawn("Rectangle", dict(inject=1, maskChannelInput="rgba.green"), mask=True)
+        full = Evaluator().evaluate_raster(dict(g.doc, view="node"), target="node")
+        matte = evaluator_pixels(g.doc, "matte")
+        np.testing.assert_allclose(full.layers["mask"].pixels[..., 3:4], matte[..., 1:2], atol=1e-6)
+
+    def test_the_strip_on_tiles_matches_the_evaluator(self):
+        executor = TileExecutor(evaluator=Evaluator(), tile_edge=32)
+        for kind in chrome.DRAW_KINDS_WITH_CHROME:
+            for option in (dict(maskChannelInput="rgba.blue"), dict(invert_mask=1), dict(maskChannelInput="rgba.red", invert_mask=1, opacity=0.6)):
+                for bg in (False, True):
+                    with self.subTest(kind=kind, option=option, bg=bg):
+                        g = drawn(kind, dict(option, mix=0.9), bg=bg, mask=True)
+                        document = dict(g.doc, view="node")
+                        region = executor.canvas_region(document, "node", frame=1, tier=1)
+                        tiled = executor.compose_region(document, "node", region, frame=1, tier=1).pixels
+                        np.testing.assert_allclose(tiled, evaluator_pixels(g.doc, "node"), atol=5e-3 if kind == "Text" else 1e-6)
+
+
 class TileTests(unittest.TestCase):
     def _tiled(self, document):
         executor = TileExecutor(evaluator=Evaluator(), tile_edge=32)

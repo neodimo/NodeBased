@@ -52,6 +52,9 @@ FILTER_CHROME = {
     "VectorBlur": ("all", True, False), "EdgeExtend": ("rgb", False, False), "EdgeDetect": ("all", False, False),
     "HueKeyer": ("rgb", False, False),
     "Merge": (None, True, False), "Dissolve": ("all", True, False), "ChannelMerge": (None, True, False),
+    # The Draw nodes have Nuke's mask strip too; their background is the `image` input, or transparent black.
+    "Ramp": (None, True, False), "Radial": (None, True, False), "Rectangle": (None, True, False),
+    "Noise": (None, True, False), "Text": (None, True, False), "Grid": (None, True, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.
@@ -363,8 +366,11 @@ def run_evaluator(kind, p, inputs, inner, spec, force=False):
     source = inputs[index] if len(inputs) > index else None
     slot = mask_slot(spec)
     mask = inputs[slot] if slot is not None and len(inputs) > slot else None
-    if cfg is None or source is None or not (force or cfg.active(mask is not None)):
+    blank = source is None and kind in DRAW_KINDS_WITH_CHROME          # a Draw node with no image draws on transparent black
+    if cfg is None or (source is None and not blank) or not (force or cfg.active(mask is not None)):
         return inner(kind, p, inputs)
+    if blank:
+        return _run_blank_background(kind, p, inputs, inner, cfg, slot, mask)
     if mask is not None and mask.display != source.display:
         raise ValueError(f"Mask display window {mask.display} does not match source {source.display}; "
                          "no silent resampling is performed")
@@ -413,6 +419,32 @@ def run_evaluator(kind, p, inputs, inner, spec, force=False):
     return Raster(pixels, box, source.display, layers or None, source.meta)
 
 
+def _run_blank_background(kind, p, inputs, inner, cfg, slot, mask):
+    """The chrome around a Draw node that has no image wired: the background is transparent black at its format."""
+    from .raster import Raster
+
+    kernel_inputs = list(inputs)
+    if slot is not None and slot < len(kernel_inputs):
+        kernel_inputs[slot] = None
+    result = inner(kind, inner_params(cfg, p), kernel_inputs)
+    if mask is not None and mask.display != result.display:
+        raise ValueError(f"Mask display window {mask.display} does not match {kind}'s own format {result.display}; "
+                         "no silent resampling is performed")
+    box = result.data
+    base = np.zeros((box.height, box.width, 4), np.float32)
+    matte = None
+    if mask is not None or cfg.mask_channel != "none":
+        if cfg.mask_channel == "none":
+            channel = mask.fit(box)[..., 3:4]
+        else:
+            holder = mask if mask is not None else Raster(base, box)
+            channel = resolve_channel(cfg.mask_channel, holder.fit(box), _layer_getter(holder, box))
+        matte = matte_of(channel, cfg.invert_mask)
+    pixels = gate(base, result.pixels, matte, cfg.mix)
+    layers = {"mask": Raster(injected_layer(matte), box, result.display)} if cfg.inject and matte is not None else None
+    return Raster(pixels, box, result.display, layers, result.meta)
+
+
 def _layer_getter(raster, box):
     layers = raster.layers or {}
 
@@ -459,8 +491,11 @@ def run_tile(kind, p, inputs, inner, spec, buffered_region, force=False):
     source = inputs[index] if len(inputs) > index else None
     slot = mask_slot(spec)
     mask = inputs[slot] if slot is not None and len(inputs) > slot else None
-    if cfg is None or source is None or not (force or cfg.active(mask is not None)):
+    blank = source is None and kind in DRAW_KINDS_WITH_CHROME
+    if cfg is None or (source is None and not blank) or not (force or cfg.active(mask is not None)):
         return inner(p, inputs)
+    if blank:
+        return _run_blank_tile(kind, p, inputs, inner, cfg, slot, mask, buffered_region)
     src_pixels = source.pixels
     kernel_inputs = list(inputs)
     if cfg.unpremult != "none":
@@ -503,6 +538,22 @@ def run_tile(kind, p, inputs, inner, spec, buffered_region, force=False):
     return gate(base, filtered, matte, cfg.mix)
 
 
+def _run_blank_tile(kind, p, inputs, inner, cfg, slot, mask, region):
+    """Tile twin of `_run_blank_background`."""
+    kernel_inputs = list(inputs)
+    if slot is not None and slot < len(kernel_inputs):
+        kernel_inputs[slot] = None
+    filtered = inner(inner_params(cfg, p), kernel_inputs)
+    base = np.zeros((region.height, region.width, 4), np.float32)
+    matte = None
+    if mask is not None or cfg.mask_channel != "none":
+        from .tileexec import _align_artifact_to
+        holder = _align_artifact_to(mask, region) if mask is not None else base
+        channel = holder[..., 3:4] if cfg.mask_channel == "none" else resolve_channel(cfg.mask_channel, holder)
+        matte = matte_of(channel, cfg.invert_mask)
+    return gate(base, filtered, matte, cfg.mix)
+
+
 def tile_inject_layer(kind, p, inputs, spec, region):
     """The `mask` layer array an `inject` writes on a tile, or None. Mirrors the matte `run_tile` used."""
     cfg = filter_config(kind, p)
@@ -515,9 +566,8 @@ def tile_inject_layer(kind, p, inputs, spec, region):
         return None
     from .tileexec import _align_artifact_to
     holder_artifact = mask if mask is not None else source
-    if holder_artifact is None:
-        return None
-    holder = _align_artifact_to(holder_artifact, region)
+    holder = (_align_artifact_to(holder_artifact, region) if holder_artifact is not None
+              else np.zeros((region.height, region.width, 4), np.float32))
     channel = holder[..., 3:4] if cfg.mask_channel == "none" else resolve_channel(cfg.mask_channel, holder)
     return injected_layer(matte_of(channel, cfg.invert_mask))
 

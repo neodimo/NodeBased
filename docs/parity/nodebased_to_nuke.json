@@ -105,7 +105,11 @@
     {"nodebased": [], "nuke": ["feather"], "kind": "panel", "reason": "shape feather in pixels, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
     {"nodebased": [], "nuke": ["feather_type"], "kind": "panel", "reason": "linear, smooth or Gaussian feather ramp, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
     {"nodebased": [], "nuke": ["blending_mode"], "kind": "panel", "reason": "shape mode union or subtract, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
-    {"nodebased": [], "nuke": ["openspline_width"], "kind": "panel", "reason": "open shape stroke_width, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"}
+    {"nodebased": [], "nuke": ["openspline_width"], "kind": "panel", "reason": "open shape stroke_width, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
+    {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"}
    ],
    "skip_default": ["format"]
   },
@@ -124,7 +128,16 @@
     {"nodebased": ["font_size"], "nuke": ["font_size"], "kind": "same"},
     {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["premult"], "nuke": ["premult"], "kind": "same"},
+    {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
+    {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ],
    "skip_default": ["box"]
   },
@@ -140,7 +153,16 @@
     {"nodebased": ["softness"], "nuke": ["softness"], "kind": "same"},
     {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["premult"], "nuke": ["premult"], "kind": "same"},
+    {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
+    {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ],
    "skip_default": ["area"]
   },
@@ -160,7 +182,16 @@
     {"nodebased": ["color0_green"], "kind": "extra", "reason": "NodeBased-only: the guide's table lists no start-colour knob"},
     {"nodebased": ["color0_blue"], "kind": "extra", "reason": "NodeBased-only: the guide's table lists no start-colour knob"},
     {"nodebased": ["color0_alpha"], "kind": "extra", "reason": "NodeBased-only: the guide's table lists no start-colour knob"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["premult"], "nuke": ["premult"], "kind": "same"},
+    {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
+    {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Radial": {
@@ -175,7 +206,16 @@
     {"nodebased": ["softness"], "nuke": ["softness"], "kind": "same"},
     {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["premult"], "nuke": ["premult"], "kind": "same"},
+    {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
+    {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ],
    "skip_default": ["area"]
   },
@@ -195,7 +235,16 @@
     {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["seed"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["premult"], "nuke": ["premult"], "kind": "same"},
+    {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
+    {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "RotoPaint": {
@@ -229,7 +278,11 @@
     {"nodebased": [], "nuke": ["source_time_offset_type"], "kind": "panel", "reason": "clone source relative or fixed frame, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
     {"nodebased": [], "nuke": ["feather"], "kind": "panel", "reason": "shape feather, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
     {"nodebased": [], "nuke": ["feather_type"], "kind": "panel", "reason": "shape feather ramp, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
-    {"nodebased": [], "nuke": ["openspline_width"], "kind": "panel", "reason": "open shape stroke width, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"}
+    {"nodebased": [], "nuke": ["openspline_width"], "kind": "panel", "reason": "open shape stroke width, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
+    {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"}
    ]
   },
   "LightWrap": {
@@ -360,7 +413,12 @@
     {"nodebased": ["seed"], "nuke": ["seed"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["bits"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["bits"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "Grid": {
@@ -378,7 +436,16 @@
     {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["spacing_x"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["spacing_y"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["premult"], "nuke": ["premult"], "kind": "same"},
+    {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
+    {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ],
    "skip_default": ["translate"]
   },
@@ -563,13 +630,18 @@
   "Shuffle": {
    "nodebased": "Shuffle",
    "inputs": [
-    {"nodebased": "image", "nuke": "B", "kind": "mapped"}
+    {"nodebased": "image", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"}
    ],
    "knobs": [
-    {"nodebased": ["red_from", "green_from", "blue_from", "alpha_from"], "nuke": ["in1"], "kind": "components", "reason": "per-output-channel source choice is Nuke's channel shuffle matrix"},
-    {"nodebased": ["layer"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["red_from", "green_from", "blue_from", "alpha_from"], "nuke": ["out1"], "kind": "components", "reason": "per-output-channel source choice: Nuke's routing matrix takes each output channel from a channel of either input layer or the constants 0 and 1"},
+    {"nodebased": ["layer"], "nuke": ["in1"], "kind": "renamed", "reason": "the layer the first routing slot reads; Nuke's scripting name is `in1`, NodeBased kept the older `layer`"},
+    {"nodebased": ["fromInput1"], "nuke": ["fromInput1"], "kind": "same"},
+    {"nodebased": ["in2"], "nuke": ["in2"], "kind": "same"},
+    {"nodebased": ["fromInput2"], "nuke": ["fromInput2"], "kind": "same"}
    ],
-   "skip_default": ["in1"]
+   "skip_default": ["in1", "out1", "fromInput2"],
+   "value_map": {}
   },
   "ShuffleCopy": {
    "nodebased": "ShuffleCopy",
@@ -613,7 +685,10 @@
     {"nodebased": ["b_channel"], "nuke": ["B"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `B`"},
     {"nodebased": ["out_channel"], "nuke": ["output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `output`"},
     {"nodebased": ["operation"], "nuke": ["operation"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Remove": {
@@ -636,7 +711,13 @@
     {"nodebased": ["offset"], "nuke": ["add"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `add`"},
     {"nodebased": ["multiply"], "nuke": ["multiply"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["exposure"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["exposure"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "ColorCorrect": {
@@ -667,7 +748,13 @@
     {"nodebased": ["gamma"], "nuke": ["gamma"], "kind": "same"},
     {"nodebased": ["gain"], "nuke": ["gain"], "kind": "same"},
     {"nodebased": ["offset"], "nuke": ["offset"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["lookup"]
   },
@@ -679,7 +766,12 @@
    ],
    "knobs": [
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "Saturation": {
@@ -690,7 +782,13 @@
    ],
    "knobs": [
     {"nodebased": ["saturation"], "nuke": ["saturation"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "Multiply": {
@@ -702,7 +800,12 @@
    "knobs": [
     {"nodebased": ["multiply"], "nuke": ["value"], "kind": "renamed", "reason": "Multiply's one value knob"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["value"]
   },
@@ -715,7 +818,12 @@
    "knobs": [
     {"nodebased": ["offset"], "nuke": ["value"], "kind": "renamed", "reason": "Add's one value knob"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "Gamma": {
@@ -727,7 +835,12 @@
    "knobs": [
     {"nodebased": ["gamma"], "nuke": ["value"], "kind": "renamed", "reason": "Gamma's one value knob"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "Clamp": {
@@ -742,7 +855,12 @@
     {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
     {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "HueCorrect": {
@@ -767,7 +885,13 @@
     {"nodebased": ["lum_blue"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["lum_magenta"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["sat_thrsh"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["hue_shift"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["hue_shift"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["hue"]
   },
@@ -779,7 +903,13 @@
    ],
    "knobs": [
     {"nodebased": ["curve_master", "curve_red", "curve_green", "curve_blue", "curve_alpha"], "nuke": ["lut"], "kind": "components", "reason": "Nuke keeps the master and channel curves in the one `lut` curve editor knob"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["lut"]
   },
@@ -797,7 +927,12 @@
     {"nodebased": ["green"], "nuke": ["green"], "kind": "same"},
     {"nodebased": ["blue"], "nuke": ["blue"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "HSVTool": {
@@ -838,7 +973,13 @@
    "knobs": [
     {"nodebased": ["matrix_00", "matrix_01", "matrix_02", "matrix_10", "matrix_11", "matrix_12", "matrix_20", "matrix_21", "matrix_22"], "nuke": ["matrix"], "kind": "components", "reason": "3x3 matrix as nine scalar params"},
     {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["matrix"]
   },
@@ -855,7 +996,13 @@
     {"nodebased": ["transfer_out"], "nuke": ["colorspace_out"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `colorspace_out`"},
     {"nodebased": ["whitepoint_in"], "nuke": ["illuninant_in"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input', scripting name `illuninant_in`"},
     {"nodebased": ["whitepoint_out"], "nuke": ["illuninant_out"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `illuninant_out`"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["primary_in", "primary_out", "colorspace_in", "colorspace_out"]
   },
@@ -870,7 +1017,13 @@
     {"nodebased": ["dst"], "nuke": ["out_colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `out_colorspace`"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["transform_direction"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["transform_direction"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["in_colorspace", "out_colorspace"]
   },
@@ -902,7 +1055,13 @@
     {"nodebased": ["transform_direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert direction checkbox"},
     {"nodebased": ["look"], "nuke": ["look"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["in_colorspace", "out_colorspace"],
    "value_map": {"invert": {"forward": false, "inverse": true}}
@@ -918,7 +1077,13 @@
     {"nodebased": ["transform_direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert direction checkbox"},
     {"nodebased": ["file_interpolation"], "nuke": ["interpolation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'interpolation', scripting name `interpolation`"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "value_map": {"invert": {"forward": false, "inverse": true}}
   },
@@ -932,7 +1097,12 @@
     {"nodebased": ["ocio_log_operation"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "Log2Lin": {
@@ -946,7 +1116,13 @@
     {"nodebased": ["black"], "nuke": ["black"], "kind": "same"},
     {"nodebased": ["white"], "nuke": ["white"], "kind": "same"},
     {"nodebased": ["gamma"], "nuke": ["gamma"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "value_map": {"operation": {"log to lin": "log2lin", "lin to log": "lin2log"}}
   },
@@ -961,7 +1137,13 @@
     {"nodebased": ["log_reference"], "nuke": ["logref"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'log reference value', scripting name `logref`"},
     {"nodebased": ["density_per_code_value"], "nuke": ["density"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `density`"},
     {"nodebased": ["negative_gamma"], "nuke": ["ngamma"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `ngamma`"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "MatchGrade": {
@@ -999,7 +1181,12 @@
     {"nodebased": ["expr_g"], "nuke": ["expr1"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr1`"},
     {"nodebased": ["expr_b"], "nuke": ["expr2"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr2`"},
     {"nodebased": ["expr_a"], "nuke": ["expr3"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr3`"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "CrossTalk": {
@@ -1012,7 +1199,12 @@
     {"nodebased": ["xt_curve_r_r", "xt_curve_r_g", "xt_curve_r_b", "xt_curve_g_r", "xt_curve_g_g", "xt_curve_g_b", "xt_curve_b_r", "xt_curve_b_g", "xt_curve_b_b"], "nuke": ["crossover"], "kind": "components", "reason": "the nine crossover curves"},
     {"nodebased": ["xt_unpremult"], "nuke": ["unpremult"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '(un)premult by', scripting name `unpremult`"},
     {"nodebased": ["xt_fringe"], "nuke": ["fringe"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'fringe', scripting name `fringe`"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["crossover"]
   },
@@ -1025,7 +1217,12 @@
    "knobs": [
     {"nodebased": ["colors"], "nuke": ["Colors"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Colors`"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "SoftClip": {
@@ -1050,7 +1247,13 @@
    "knobs": [
     {"nodebased": ["toe_lift"], "nuke": ["lift"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'lift', scripting name `lift`"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["toe"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["toe"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ]
   },
   "HistEQ": {
@@ -1148,7 +1351,11 @@
    ],
    "knobs": [
     {"nodebased": ["radius"], "nuke": ["size"], "kind": "renamed", "reason": "NodeBased's box radius in pixels; Nuke's size is a width/height pair"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Sharpen": {
@@ -1161,7 +1368,10 @@
     {"nodebased": ["sharpen_amount"], "nuke": ["amount"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'amount', scripting name `amount`"},
     {"nodebased": ["sharpen_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Erode (filter)": {
@@ -1173,8 +1383,13 @@
    "knobs": [
     {"nodebased": ["filter_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
     {"nodebased": ["filter_type"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'filter', scripting name `filter`"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
-   ]
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+   ],
+   "skip_default": ["channels"]
   },
   "Median": {
    "nodebased": "Median",
@@ -1185,7 +1400,10 @@
    "knobs": [
     {"nodebased": ["median_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Glow": {
@@ -1200,7 +1418,10 @@
     {"nodebased": ["glow_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
     {"nodebased": ["brightness"], "nuke": ["brightness"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Soften": {
@@ -1212,7 +1433,10 @@
    "knobs": [
     {"nodebased": ["soften_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "DropShadow": {
@@ -1240,7 +1464,10 @@
     {"nodebased": ["aspect"], "nuke": ["ratio"], "kind": "renamed", "reason": "aspect ratio"},
     {"nodebased": ["defocus"], "nuke": ["defocus"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "ZDefocus": {
@@ -1261,7 +1488,10 @@
     {"nodebased": ["blade_rotation"], "nuke": ["rotation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'rotation', scripting name `rotation`"},
     {"nodebased": ["max_size"], "nuke": ["max_size"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "DirBlur": {
@@ -1276,7 +1506,10 @@
     {"nodebased": ["angle"], "nuke": ["BlurAngle"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'BlurAngle', scripting name `BlurAngle`"},
     {"nodebased": ["length"], "nuke": ["BlurLength"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'BlurLength', scripting name `BlurLength`"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ],
    "skip_default": ["BlurCenter"]
   },
@@ -1290,7 +1523,10 @@
     {"nodebased": ["edgeblur_size"], "nuke": ["size"], "kind": "renamed", "reason": "PARITY_2D.md Filter #10: Nuke's `size`, renamed because `size` is a global LIMITS key"},
     {"nodebased": ["edge_mult"], "nuke": ["edge_mult"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "EdgeExtend": {
@@ -1302,7 +1538,8 @@
    "knobs": [
     {"nodebased": ["extend_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["extend_threshold"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
    ]
   },
   "Erode (fast)": {
@@ -1314,7 +1551,10 @@
    "knobs": [
     {"nodebased": ["erode_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Denoise": {
@@ -1339,7 +1579,11 @@
     {"nodebased": ["red_amount"], "nuke": ["rVal"], "kind": "renamed", "reason": "red blur"},
     {"nodebased": ["green_amount"], "nuke": ["gVal"], "kind": "renamed", "reason": "green blur"},
     {"nodebased": ["blue_amount"], "nuke": ["bVal"], "kind": "renamed", "reason": "blue blur"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "MotionBlur": {
@@ -1406,8 +1650,13 @@
     {"nodebased": ["vector_method"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["vector_sampling"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["max_length"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
-   ]
+    {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+   ],
+   "skip_default": ["channels"]
   },
   "Bilateral": {
    "nodebased": "Bilateral",
@@ -1418,7 +1667,11 @@
    "knobs": [
     {"nodebased": ["spatial_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Size', scripting name `size`"},
     {"nodebased": ["colour_sigma"], "nuke": ["colourSigma"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `colourSigma`"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Convolve": {
@@ -1430,7 +1683,11 @@
    ],
    "knobs": [
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["kernel_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["kernel_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Matrix": {
@@ -1442,7 +1699,11 @@
    "knobs": [
     {"nodebased": ["matrix_size", "weight0", "weight1", "weight2", "weight3", "weight4", "weight5", "weight6", "weight7", "weight8", "weight9", "weight10", "weight11", "weight12", "weight13", "weight14", "weight15", "weight16", "weight17", "weight18", "weight19", "weight20", "weight21", "weight22", "weight23", "weight24", "weight25", "weight26", "weight27", "weight28", "weight29", "weight30", "weight31", "weight32", "weight33", "weight34", "weight35", "weight36", "weight37", "weight38", "weight39", "weight40", "weight41", "weight42", "weight43", "weight44", "weight45", "weight46", "weight47", "weight48"], "nuke": ["matrix"], "kind": "components", "reason": "kernel weights as 49 scalar params plus a size choice"},
     {"nodebased": ["normalize"], "nuke": ["normalize"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ],
    "skip_default": ["matrix"]
   },
@@ -1455,7 +1716,8 @@
    "knobs": [
     {"nodebased": ["edge_type"], "nuke": ["edgedetector"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Edge Detector', scripting name `edgedetector`"},
     {"nodebased": ["threshold"], "nuke": ["threshold"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
    ]
   },
   "Emboss": {
@@ -1467,7 +1729,11 @@
    "knobs": [
     {"nodebased": ["angle"], "nuke": ["Angle"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Angle`"},
     {"nodebased": ["width"], "nuke": ["Width"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Width`"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "BumpBoss": {
@@ -1479,7 +1745,11 @@
    "knobs": [
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["height_channel"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["light_angle"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["light_angle"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Laplacian": {
@@ -1490,7 +1760,10 @@
    ],
    "knobs": [
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Inpaint": {
@@ -1634,7 +1907,8 @@
    "knobs": [
     {"nodebased": ["hue_center", "hue_width", "hue_softness", "sat_min", "sat_max"], "nuke": ["lut"], "kind": "components", "reason": "NodeBased replaces Nuke's hue/saturation curve with range params"},
     {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
    ],
    "skip_default": ["lut"]
   },
@@ -1763,7 +2037,10 @@
    ],
    "knobs": [
     {"nodebased": ["operation"], "nuke": ["operation"], "kind": "same"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "Premult": {
@@ -1799,7 +2076,11 @@
    ],
    "knobs": [
     {"nodebased": ["which"], "nuke": ["which"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
    ]
   },
   "KeyMix": {

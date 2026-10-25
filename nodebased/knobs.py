@@ -1343,11 +1343,14 @@ def _chrome_layout():
         if not added:
             continue
         groups = []
-        for position, name in enumerate(added):
+        for name in added:
+            section = None
+            if name == next((n for n in added if n in chrome.FILTER_PARAM_NAMES), None):
+                section = "Channels and mask"
+            elif name == next((n for n in added if n in chrome.DRAW_PARAM_NAMES), None):
+                section = "Draw options"
             groups.append(KnobGroup(kinds[name], (name,), label=labels[name], help=help_text[name],
-                                    soft_range=(0, 1) if kinds[name] == "float_slider" else None,
-                                    section=("Channels and mask" if kind in chrome.FILTER_CHROME else "Draw options")
-                                    if position == 0 else None))
+                                    soft_range=(0, 1) if kinds[name] == "float_slider" else None, section=section))
         if layout and layout[-1].params == ("mix",):
             KNOB_LAYOUT[kind] = [*layout[:-1], *groups, layout[-1]]
         else:

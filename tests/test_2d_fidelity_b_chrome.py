@@ -67,6 +67,10 @@ class DefaultsTests(unittest.TestCase):
                 elif slot in spec["inputs"] or slot in ("depth", "uv", "kernel"):
                     inputs[position] = Raster.of(rng_image if position % 2 == 0 else rng_image[::-1].copy())
             p = dict(spec["params"], mix=0.4)
+            if kind in chrome.DRAW_KINDS_WITH_CHROME:       # a Draw node draws at its own format; the image is optional
+                p.update(width=W, height=H)
+                if kind == "Text":
+                    p.update(box_width=W - 4, box_height=H - 4, box_x=2, box_y=2, font_size=12.0)
             with self.subTest(kind=kind):
                 native = Evaluator._windowed_kernel_inner(kind, p, inputs)
                 forced = chrome.run_evaluator(kind, p, inputs, lambda k, q, i: Evaluator._windowed_kernel_inner(k, q, i),

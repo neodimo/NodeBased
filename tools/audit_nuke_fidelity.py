@@ -345,7 +345,7 @@ def build_report(reference_dir=None):
     w(f"**Overall fidelity: {overall:.1f} / 100** ({len([u for u in units if u['score'] is not None])} nodes scored, rank-weighted; "
       f"{overall_existing:.1f} counting only the nodes NodeBased has).")
     w("")
-    w("This is the baseline measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts). "
+    w("This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. "
       "[PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. "
       "Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. "
       "Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists "
