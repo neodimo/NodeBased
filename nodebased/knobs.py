@@ -398,8 +398,18 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("direction",)), KnobGroup("enum", ("filter",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Shuffle": _groups(
-        KnobGroup("string", ("layer",)),
-        KnobGroup("enum", ("red_from",)), KnobGroup("enum", ("green_from",)),
+        KnobGroup("enum", ("fromInput1",), label="Input 1",
+                  help="Which input feeds the first routing slot: B (the main input) or A.", section="Routing slots"),
+        KnobGroup("string", ("layer",), label="Layer 1",
+                  help="The layer of that input the first slot reads. Leave empty or rgba for its own channels."),
+        KnobGroup("enum", ("fromInput2",), label="Input 2",
+                  help="Which input feeds the second routing slot: B or A (the second input)."),
+        KnobGroup("string", ("in2",), label="Layer 2",
+                  help="The layer of that input the second slot reads, or none when only the first slot is used."),
+        KnobGroup("enum", ("red_from",), section="Output channels",
+                  help="Where each output channel comes from: R, G, B or A of the first slot, R2, G2, B2 or A2 of the "
+                       "second, or the constants 0 and 1."),
+        KnobGroup("enum", ("green_from",)),
         KnobGroup("enum", ("blue_from",)), KnobGroup("enum", ("alpha_from",))),
     "Undistort": _groups(KnobGroup("enum", ("lens_preset",), label="Lens preset"),
                          KnobGroup("float", ("anamorphic_squeeze",), label="Anamorphic squeeze",
@@ -1297,3 +1307,51 @@ def slider_range(node_type, param, soft_range=None):
     soft_lo = lo if lo >= 0 else max(lo, -span)
     soft_hi = min(hi, (lo if lo > 0 else 0.0) + span)
     return soft_lo, soft_hi
+
+
+# Nuke's shared node chrome (nodebased/ops2d_chrome.py): the knobs it adds to the filter, colour, merge and
+# Draw nodes are laid out here, after each node's own knobs and ahead of its Mix card.
+def _chrome_layout():
+    from . import ops2d_chrome as chrome
+    help_text = {
+        "channels": "Which channels of the result come from this node; the others pass through unchanged. "
+                    "Pick a set (rgb, rgba, alpha, all, none), one channel, or type the name of a layer the image carries.",
+        "maskChannelInput": "Which channel gates the effect. None uses the alpha of the wired mask; otherwise a channel "
+                            "such as rgba.red or a layer channel, taken from the mask input, or from the image when no mask is wired.",
+        "invert_mask": "Apply the effect where the mask is empty instead of where it is full.",
+        "inject": "Copy the mask into the output as the mask layer, so a node further down can use it again.",
+        "unpremult": "Divide the colour by this channel before the effect and multiply it back afterwards.",
+        "invert_unpremult": "Multiply the colour by the channel before the effect and divide it back afterwards.",
+        "output": "The channels this node writes; the others pass the background through.",
+        "premult": "Multiply the colour of the shape by this channel.",
+        "cliptype": "How far the shape reaches: no clip, the bounding box, the format, or a union or intersection of the two.",
+        "replace": "Replace the background with the shape instead of drawing the shape over it.",
+        "invert": "Invert the shape: draw it everywhere it is not.",
+        "opacity": "Scale the whole shape, colour and alpha, by this amount.",
+    }
+    labels = {"channels": "Channels", "maskChannelInput": "Mask channel", "invert_mask": "Invert mask", "inject": "Inject mask",
+              "unpremult": "Unpremult by", "invert_unpremult": "Invert unpremult", "output": "Output", "premult": "Premult by",
+              "cliptype": "Clip to", "replace": "Replace", "invert": "Invert", "opacity": "Opacity"}
+    kinds = {"channels": "string", "maskChannelInput": "string", "unpremult": "string", "output": "string", "premult": "string",
+             "invert_mask": "bool", "inject": "bool", "invert_unpremult": "bool", "replace": "bool", "invert": "bool",
+             "cliptype": "enum", "opacity": "float_slider"}
+    for kind in (*chrome.FILTER_CHROME, *chrome.DRAW_CHROME):
+        layout = KNOB_LAYOUT[kind]
+        laid_out = {name for group in layout for name in group.params}
+        added = [name for name in (*chrome.FILTER_PARAM_NAMES, *chrome.DRAW_PARAM_NAMES)
+                 if name in SPECS[kind]["params"] and name not in laid_out]
+        if not added:
+            continue
+        groups = []
+        for position, name in enumerate(added):
+            groups.append(KnobGroup(kinds[name], (name,), label=labels[name], help=help_text[name],
+                                    soft_range=(0, 1) if kinds[name] == "float_slider" else None,
+                                    section=("Channels and mask" if kind in chrome.FILTER_CHROME else "Draw options")
+                                    if position == 0 else None))
+        if layout and layout[-1].params == ("mix",):
+            KNOB_LAYOUT[kind] = [*layout[:-1], *groups, layout[-1]]
+        else:
+            KNOB_LAYOUT[kind] = [*layout, *groups]
+
+
+_chrome_layout()

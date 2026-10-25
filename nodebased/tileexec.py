@@ -47,6 +47,7 @@ import numpy as np
 from . import cachetier
 from . import groups
 from . import imaging
+from . import ops2d_chrome as _chrome
 from . import shapes
 from . import tiers
 from .animation import resolve_document
@@ -494,6 +495,9 @@ class TileExecutor:
                 return False
             if node.get("input_outputs"):
                 # Named output layers are carried only by the full-frame Raster representation.
+                return False
+            if _chrome.needs_full_frame(node["type"], node["params"]):
+                # A chrome knob that names a layer reads Raster.layers, which only the whole-image path has.
                 return False
             if node["type"] == "DirBlur" and node["params"].get("blur_type", "linear") != "linear":
                 # Zoom and radial are centred on a canvas point and read from anywhere in the
@@ -1226,6 +1230,16 @@ class TileExecutor:
         return artifact
 
     def _evaluate_tile_kernel(self, kind, params, inputs, buffered_region, frame):
+        """Apply `kind`'s kernel on one tile's worth of inputs, with Nuke's shared node chrome around it when a
+        chrome knob is changed (nodebased/ops2d_chrome.py; the same arithmetic the evaluator uses)."""
+        if kind in _chrome.FILTER_CHROME:
+            return _chrome.run_tile(
+                kind, params, inputs,
+                lambda q, i: self._evaluate_tile_kernel_inner(kind, q, i, buffered_region, frame),
+                SPECS[kind], buffered_region)
+        return self._evaluate_tile_kernel_inner(kind, params, inputs, buffered_region, frame)
+
+    def _evaluate_tile_kernel_inner(self, kind, params, inputs, buffered_region, frame):
         """Apply `kind`'s kernel on one tile's worth of inputs.
 
         `inputs` are passed in the shape the kernel actually needs:
@@ -1244,18 +1258,8 @@ class TileExecutor:
             return inputs[0].pixels.copy()
         if kind == "Encryptomatte":
             return inputs[0].pixels.copy()
-        if kind == "Shuffle" and params.get("layer") not in ("", "rgba"):
-            source = inputs[0]
-            layer = source.layers.get(params["layer"])
-            if layer is None and "." in params["layer"]:
-                component = params["layer"].rsplit(".", 1)[-1]
-                layer = _named_layer_array(source, params["layer"])
-                if layer is not None:
-                    layer = np.repeat(layer, 4, axis=-1)
-                    layer[..., 3] = 1.0
-            if layer is None:
-                raise ValueError(f"Shuffle: layer {params['layer']!r} is unavailable")
-            return _run_full_kernel_on_array("Shuffle", {**params, "layer": ""}, [layer], frame)
+        if kind == "Shuffle":
+            return _shuffle_tile(params, inputs, buffered_region, frame)
         if kind == "ShuffleCopy":
             first, second = inputs[0], inputs[1]
             def pick(artifact, name):
@@ -1511,7 +1515,7 @@ class TileExecutor:
             if aligned[0] is None or aligned[1] is None:
                 raise ValueError("IBKGizmo needs both fg and c connected")
             return imaging.Evaluator._kernel(kind, params, aligned, frame).astype(np.float32)
-        if kind in ("Shuffle", "Premult", "Unpremult"):
+        if kind in ("Premult", "Unpremult"):
             return _run_full_kernel_on_array(kind, params, [inputs[0].pixels], frame)
         if kind in DRAW_KINDS:
             # Own-format generator (see tiers._identity above): the shape is rendered directly at
@@ -1529,7 +1533,7 @@ class TileExecutor:
                     raise ValueError(f"{kind} image input must match its own format in M0")
             else:
                 background = np.zeros((h, w, 4), dtype=np.float32)
-            composited = imaging.Evaluator._composite_shape_over(shape, background)
+            composited = _chrome.compose_draw(kind, params, shape, background)
             mask = mask_artifact.pixels if mask_artifact is not None else None
             return imaging.Evaluator._apply_mask_mix(background, composited, mask=mask,
                                                      mix=params.get("mix", 1.0))
@@ -1652,6 +1656,10 @@ def _tile_layers(kind, params, inputs, pixels, region, disabled=False):
             depth = np.repeat(nearest, 4, axis=-1)
             depth[..., 3] = 1.0
             layers[name.rsplit(".", 1)[0] if "." in name else name] = depth
+    if not disabled and kind in _chrome.FILTER_CHROME:
+        injected = _chrome.tile_inject_layer(kind, params, inputs, SPECS[kind], region)
+        if injected is not None:
+            layers["mask"] = injected
     return {name: np.asarray(array, dtype=np.float32) for name, array in layers.items()}
 
 
@@ -1720,6 +1728,33 @@ def _align_artifact_to(artifact: TileArtifact, target_region: TileRegion) -> np.
     return padded
 
 
+def _shuffle_tile(params, inputs, region, frame):
+    """One tile of Nuke's two-input Shuffle: slot 1 is layer `layer` of input `fromInput1`, slot 2 layer `in2` of
+    `fromInput2`; the routing is Evaluator._shuffle_route, the function the whole-image path uses."""
+    by_name = {"B": inputs[0], "A": inputs[1] if len(inputs) > 1 else None}
+
+    def slot_array(which, name):
+        artifact = by_name[which]
+        if artifact is None:
+            raise ValueError(f"Shuffle: input {which} is not connected")
+        if name in ("", "rgba"):
+            return _align_artifact_to(artifact, region)
+        layer = artifact.layers.get(name)
+        if layer is None and "." in name:
+            layer = _named_layer_array(artifact, name)
+            if layer is not None:
+                layer = np.repeat(layer, 4, axis=-1)
+                layer[..., 3] = 1.0
+        if layer is None:
+            raise ValueError(f"Shuffle: layer {name!r} is unavailable")
+        return _align_array_to_region(layer, artifact.region, region)
+    first = slot_array(params.get("fromInput1", "B"), params.get("layer", ""))
+    second = None
+    if params.get("in2", "none") != "none":
+        second = slot_array(params.get("fromInput2", "A"), params["in2"])
+    return _run_full_kernel_on_array("Shuffle", params, [first, second], frame)
+
+
 def _run_full_kernel_on_array(kind, params, inputs, frame):
     """Invoke the existing full-frame kernel as if it were on a full image, returning the array.
 
@@ -1730,15 +1765,7 @@ def _run_full_kernel_on_array(kind, params, inputs, frame):
     """
     image = inputs[0]
     if kind == "Shuffle":
-        index = {"R": 0, "G": 1, "B": 2, "A": 3}
-        h, w = image.shape[:2]
-        def pick(name):
-            if name in index:
-                return image[..., index[name]:index[name] + 1]
-            return np.full((h, w, 1), float(name), dtype=np.float32)
-        return np.concatenate([pick(params["red_from"]), pick(params["green_from"]),
-                               pick(params["blue_from"]), pick(params["alpha_from"])],
-                              axis=2).astype(np.float32)
+        return imaging.Evaluator._shuffle_route(params, image, inputs[1] if len(inputs) > 1 else None)
     if kind == "Premult":
         out = image.copy()
         alpha = image[..., 3:4]

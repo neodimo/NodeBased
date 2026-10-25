@@ -18,6 +18,7 @@ from . import cachetier
 from . import gpupicture
 from . import groups
 from . import metadata
+from . import ops2d_chrome as _chrome
 from . import shapes
 from . import tiers
 from . import tracker
@@ -2937,6 +2938,25 @@ class Evaluator:
     @staticmethod
     def _windowed_kernel(kind, p, inputs, frame=None, data=None, cancel=None, progress=None,
                          roto_rasterizer=None):
+        """Run a node's kernel on Rasters. A filter or colour node whose shared Nuke chrome (channels, mask
+        channel, invert, inject, un-premultiply by) is at its defaults runs its own kernel exactly as before;
+        a changed chrome knob runs that kernel with the chrome off and applies it around the result
+        (nodebased/ops2d_chrome.py)."""
+        if kind in _chrome.FILTER_CHROME:
+            from .core import SPECS
+            return _chrome.run_evaluator(
+                kind, p, inputs,
+                lambda k, q, i: Evaluator._windowed_kernel_inner(k, q, i, frame, data, cancel, progress, roto_rasterizer),
+                SPECS[kind])
+        if kind in ("Roto", "RotoPaint"):
+            return _chrome.run_roto(
+                kind, p, inputs,
+                lambda k, q, i: Evaluator._windowed_kernel_inner(k, q, i, frame, data, cancel, progress, roto_rasterizer))
+        return Evaluator._windowed_kernel_inner(kind, p, inputs, frame, data, cancel, progress, roto_rasterizer)
+
+    @staticmethod
+    def _windowed_kernel_inner(kind, p, inputs, frame=None, data=None, cancel=None, progress=None,
+                               roto_rasterizer=None):
         """Run a kernel with its inputs aligned to the output's data window.
 
         Two rules decide every case:
@@ -3127,7 +3147,7 @@ class Evaluator:
                     "no silent resampling is performed")
             background = image.fit(out) if image is not None else np.zeros((height, width, 4), np.float32)
             shape = Evaluator._draw_shape(kind, p, 0, 0, width, height, frame)
-            composited = Evaluator._composite_shape_over(shape, background)
+            composited = _chrome.compose_draw(kind, p, shape, background)
             pixels = Evaluator._apply_mask_mix(background, composited,
                                                mask.fit(out) if mask is not None else None,
                                                p.get("mix", 1.0))
@@ -3562,10 +3582,45 @@ class Evaluator:
             return source
         if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile", "PlanarTracker"):
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
-        if kind == "Shuffle" and p.get("layer"):
-            layer = Evaluator._layer_of(kind, source, p["layer"])
-            return Raster(Evaluator._kernel(kind, p, [layer.pixels], frame), layer.data, source.display)
+        if kind == "Shuffle":
+            return Evaluator._shuffle_raster(p, inputs, frame)
         return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
+
+    @staticmethod
+    def _shuffle_route(p, slot1, slot2):
+        """Nuke's Shuffle matrix: each output channel takes a channel of routing slot 1 (R G B A), of slot 2
+        (R2 G2 B2 A2) or a constant (0, 1). Arrays are (h, w, 4); slot 2 is None when `in2` is "none"."""
+        index = {"R": 0, "G": 1, "B": 2, "A": 3}
+        h, w = slot1.shape[:2]
+
+        def pick(name):
+            if name in index:
+                return slot1[..., index[name]:index[name] + 1]
+            if len(name) == 2 and name[0] in index and name[1] == "2":
+                if slot2 is None:
+                    raise ValueError(f"Shuffle routes {name} but in2 is none: choose a layer for the second slot")
+                return slot2[..., index[name[0]]:index[name[0]] + 1]
+            return np.full((h, w, 1), float(name), dtype=np.float32)
+        return np.concatenate([pick(p["red_from"]), pick(p["green_from"]), pick(p["blue_from"]), pick(p["alpha_from"])],
+                              axis=2).astype(np.float32)
+
+    @staticmethod
+    def _shuffle_raster(p, inputs, frame):
+        """Shuffle on Rasters: slot 1 is layer `layer` of input `fromInput1`, slot 2 layer `in2` of `fromInput2`."""
+        inputs_by_name = {"B": inputs[0], "A": inputs[1] if len(inputs) > 1 else None}
+
+        def source_of(slot_name, which):
+            raster = inputs_by_name[which]
+            if raster is None:
+                raise ValueError(f"Shuffle: input {which} is not connected ({slot_name} reads it)")
+            return raster
+        first_input = source_of("fromInput1", p.get("fromInput1", "B"))
+        first = Evaluator._layer_of("Shuffle", first_input, p.get("layer", ""))
+        second = None
+        if p.get("in2", "none") != "none":
+            second = Evaluator._layer_of("Shuffle", source_of("fromInput2", p.get("fromInput2", "A")), p["in2"])
+        pixels = Evaluator._kernel("Shuffle", p, [first.pixels, None if second is None else second.fit(first.data)], frame)
+        return Raster(pixels, first.data, first_input.display)
 
     @staticmethod
     def _metadata_node(kind, p, inputs, frame):
@@ -4439,7 +4494,8 @@ class Evaluator:
         if kind == "ColorMatrix":
             return Evaluator._color_matrix(source.fit(out), p)
         if kind in ("Log2Lin", "PLogLin", "CrossTalk", "Toe"):
-            return Evaluator._kernel(kind, p, [source.fit(out)], frame, origin=(out.x, out.y))
+            # The caller gates the result with mask and mix; the kernel's own mix would apply it a second time.
+            return Evaluator._kernel(kind, {**p, "mix": 1.0}, [source.fit(out)], frame, origin=(out.x, out.y))
         if kind == "Keyer":
             return Evaluator._keyer(source.fit(out), p)
         if kind == "HueKeyer":
@@ -4886,14 +4942,7 @@ class Evaluator:
             return np.concatenate([pick(p["out_red"]), pick(p["out_green"]),
                                    pick(p["out_blue"]), pick(p["out_alpha"])], axis=2).astype(np.float32)
         if kind == "Shuffle":
-            source = inputs[0]
-            index = {"R": 0, "G": 1, "B": 2, "A": 3}
-            h, w = source.shape[:2]
-            def pick(name):
-                if name in index:
-                    return source[..., index[name]:index[name] + 1]
-                return np.full((h, w, 1), float(name), dtype=np.float32)
-            return np.concatenate([pick(p["red_from"]), pick(p["green_from"]), pick(p["blue_from"]), pick(p["alpha_from"])], axis=2).astype(np.float32)
+            return Evaluator._shuffle_route(p, inputs[0], inputs[1] if len(inputs) > 1 else None)
         if kind == "Merge":
             a, b = inputs[0], inputs[1]
             mask = inputs[2] if len(inputs) > 2 else None
@@ -6949,6 +6998,11 @@ class Evaluator:
 
     @staticmethod
     def _draw_shape(kind, p, x0, y0, w, h, frame):
+        # Nuke's Draw chrome (invert, premult, opacity) is applied here, so both paths get it.
+        return _chrome.shape_chrome(kind, p, Evaluator._draw_shape_raw(kind, p, x0, y0, w, h, frame))
+
+    @staticmethod
+    def _draw_shape_raw(kind, p, x0, y0, w, h, frame):
         if kind == "Ramp":
             return Evaluator._ramp_shape(p, x0, y0, w, h)
         if kind == "Radial":

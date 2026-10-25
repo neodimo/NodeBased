@@ -488,8 +488,13 @@ SPECS = {
                               "vector_sampling": "source", "vector_alpha": "none", "max_length": 100.0,
                               "samples": 0, "mix": 1.0}},
     # Shuffle's `layer` (step 5c) names one of the input's named layers (Raster.layers); empty or
-    # "rgba" shuffles the input's own channels.
-    "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A", "layer": ""}},
+    # "rgba" shuffles the input's own channels. Nuke's two-input Shuffle (12.1 and later), fidelity step B: the
+    # inputs are B (`image`, the one every older Shuffle has) and A. Routing slot 1 reads layer `layer` (Nuke's
+    # `in1`) of the input `fromInput1`; slot 2 reads layer `in2` ("none" = unused) of the input `fromInput2`. Each
+    # output channel takes R, G, B, A of slot 1, R2, G2, B2, A2 of slot 2, or the constants 0 and 1.
+    "Shuffle": {"inputs": ["image"], "optional_inputs": ["A"],
+                "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A", "layer": "",
+                           "fromInput1": "B", "in2": "none", "fromInput2": "A"}},
     # Two-input explicit channel routing. Separate from Shuffle (one input, kept unchanged) because
     # CHOICES is keyed by parameter name globally — sharing "red_from" would force one option list
     # on both nodes. Naming a B.* source with B unwired is an error, never a silent black channel.
@@ -1999,6 +2004,23 @@ CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["diffuse_indirect", "sp
 _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
 CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["denoise", "motion"]
 
+# Nuke's shared node chrome (nodebased/ops2d_chrome.py): the filter and colour strip (channels, mask channel,
+# invert, inject, un-premultiply by) and the Draw strip (output, premult, cliptype, replace, invert, opacity).
+# Every default reproduces what the node did before the knob existed; a node only runs the extra code when a
+# chrome knob is changed. `channels`, `maskChannelInput`, `unpremult`, `output` and `premult` also take a layer
+# or channel name the input carries, so they are checked when the node runs rather than against a fixed list.
+from . import ops2d_chrome as _chrome
+for _kind in (*_chrome.FILTER_CHROME, *_chrome.DRAW_CHROME):
+    for _name, _default in _chrome.spec_params(_kind).items():
+        SPECS[_kind]["params"].setdefault(_name, _default)
+CHOICES["channels"] = list(_chrome.CHANNEL_CHOICES)
+CHOICES["cliptype"] = list(_chrome.CLIP_TYPES)
+# Shuffle's two routing slots (fidelity step B): R, G, B, A read the first, R2, G2, B2, A2 the second.
+SHUFFLE_SOURCES = ["R", "G", "B", "A", "0", "1", "R2", "G2", "B2", "A2"]
+CHOICES.update({name: list(SHUFFLE_SOURCES) for name in ("red_from", "green_from", "blue_from", "alpha_from")})
+CHOICES.update({"fromInput1": ["B", "A"], "fromInput2": ["B", "A"]})
+LIMITS.update({"invert_unpremult": (0, 1), "replace": (0, 1)})
+
 
 def _downstream_of(nodes, key):
     """Every node reachable by following outputs from `key`. Iterative, so a long chain cannot
@@ -2121,6 +2143,8 @@ def _add_roto_bg_slot(nodes):
             continue
         if node.get("type") == "Roto" and isinstance(node.get("inputs"), dict):
             node["inputs"].setdefault("bg", None)
+        if node.get("type") == "Shuffle" and isinstance(node.get("inputs"), dict):
+            node["inputs"].setdefault("A", None)      # the second input of Nuke's two-input Shuffle
         graph = node.get("graph")
         if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
             _add_roto_bg_slot(graph["nodes"])
@@ -2388,6 +2412,7 @@ def upgrade_document(document):
         nodes = doc.get("nodes", {})
         if isinstance(nodes, dict):
             _add_roto_bg_slot(nodes)
+            _chrome.upgrade_nodes(nodes)
             for node in nodes.values():
                 if isinstance(node, dict) and node.get("type") in ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D"):
                     params = node.get("params")
@@ -2553,7 +2578,8 @@ def upgrade_document(document):
                         params.setdefault("project_occlusion", "off")
                 # Step 5c: Shuffle's layer (empty = the input's own channels) and Write's bundle
                 # (off = no manifest) default to what every old node already did.
-                for kind, key, default in (("Shuffle", "layer", ""), ("Write", "bundle", 0)):
+                for kind, key, default in (("Shuffle", "layer", ""), ("Write", "bundle", 0), ("Shuffle", "fromInput1", "B"),
+                                           ("Shuffle", "in2", "none"), ("Shuffle", "fromInput2", "A")):
                     if isinstance(node, dict) and node.get("type") == kind:
                         params = node.get("params")
                         if isinstance(params, dict):
@@ -2738,7 +2764,8 @@ def validate(doc, _depth=0):
                 if value != "Custom" and value not in document_formats(doc):
                     raise ValueError(f"Invalid {name}: {value}")
                 continue
-            if name in CHOICES and value not in CHOICES[name] and not (kind == "LevelSet" and name in ("channel", "output")):
+            if (name in CHOICES and value not in CHOICES[name] and not (kind == "LevelSet" and name in ("channel", "output"))
+                    and not _chrome.is_open_choice(kind, name)):
                 raise ValueError(f"Invalid {name}: {value}")
             if isinstance(default, str):
                 if not isinstance(value, str) or len(value) > 32768:

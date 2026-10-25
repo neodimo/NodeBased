@@ -52,6 +52,7 @@ from .graphcorner import GraphCorner
 from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, WrappingRow, hide_spin_buttons,
                       with_hidden_buttons)
 from . import analysisregion
+from . import ops2d_chrome
 from . import presets as preset_model
 from . import fluidshelf
 from . import fluidknobpresets
@@ -11817,6 +11818,27 @@ class Window(QMainWindow):
                     "OCIODisplay": {"display", "view", "look"},
                     "OCIOLookTransform": {"src", "dst", "look"},
                 }
+                if ops2d_chrome.is_open_choice(node["type"], param):
+                    # Nuke's channel pickers: a listed word, or the name of a layer or channel the image carries.
+                    choices = list(ops2d_chrome.suggestions(param))
+                    if value and value not in choices:
+                        choices.append(value)
+                    control = ElidingComboBox()
+                    control.setObjectName(f"{param}-choice")
+                    control.setEditable(True)
+                    control.addItems(choices)
+                    control.setCurrentText(value)
+                    control.setToolTip("Pick a word, or type the name of a layer or channel the image carries")
+                    control.activated.connect(
+                        lambda index, k=key, p=param, w=control:
+                        w.itemText(index) != self.graph_nodes()[k]["params"][p]
+                        and self.defer_command({"op": "set", "id": k, "param": p, "value": w.itemText(index)}))
+                    control.lineEdit().editingFinished.connect(
+                        lambda k=key, p=param, w=control:
+                        w.currentText().strip() and w.currentText() != self.graph_nodes()[k]["params"][p]
+                        and self.defer_command({"op": "set", "id": k, "param": p, "value": w.currentText().strip()}))
+                    form.addRow(label or param.replace("_", " ").title(), control)
+                    return
                 if param in dynamic_ocio.get(node["type"], set()):
                     from .ocio_nodes import parameter_choices
                     config_name = (node["params"].get("config") or
