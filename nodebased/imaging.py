@@ -15,6 +15,7 @@ import numpy as np
 from PySide6.QtGui import QImage, QImageReader
 
 from . import cachetier
+from . import gpu2d
 from . import gpupicture
 from . import groups
 from . import metadata
@@ -662,6 +663,9 @@ class Evaluator:
     cold to within 0.2%.
     """
 
+    # Opt-in GPU 2D island backend (a nodebased.gpu2d.GPU2D); None keeps every node on the CPU kernels.
+    gpu2d = None
+
     def __init__(self, cache_bytes=None, disk=None, sim=None, shared_budget=None, shared_name="raster"):
         # The disk tier is opt-in at construction rather than on by default: a library evaluator
         # must not start writing to a user's cache directory as a side effect of being imported.
@@ -1019,6 +1023,34 @@ class Evaluator:
             prints.append(["later", *digests])
         return moments, later, ["motion", *prints]
 
+    def _gpu2d_cpu(self, item, frame, cancel, done=None):
+        """A staged island node computed on the CPU kernels (the fallback when the device cannot run it)."""
+        if not isinstance(item, gpu2d.DeferredImage):
+            return item
+        done = {} if done is None else done
+        if id(item) not in done:
+            inputs = [self._gpu2d_cpu(i, frame, cancel, done) for i in item.inputs]
+            raster = self._windowed_kernel(item.kind, item.params, inputs, frame, None, cancel=cancel, progress=self)
+            if raster.meta is None and not any(raster is image for image in inputs):
+                raster.meta = _inherited_metadata(item.kind, inputs)
+            done[id(item)] = raster
+        return done[id(item)]
+
+    def _gpu2d_node(self, key, kind, params, images, keys, interior, cancel, frame):
+        """The GPU island's turn at one node: ``(raster_or_deferred, images)``. A raster of None means
+        run the CPU kernel on the returned ``images``, which no longer hold staged nodes."""
+        backend = self.gpu2d
+        if kind in gpu2d.KINDS:
+            try:
+                staged = backend.stage(kind, params, images, keys, key)
+                return (staged if interior else backend.run(staged, cancel)), images
+            except gpu2d.Unsupported as exc:
+                backend.boundary(kind, exc.reason)
+        if any(isinstance(image, gpu2d.DeferredImage) for image in images):
+            done = {}
+            images = [self._gpu2d_cpu(image, frame, cancel, done) for image in images]
+        return None, images
+
     def evaluate(self, doc, target=None, cancel: threading.Event | None = None, frame=None, tier=1):
         """Evaluate `target` and return its **display window** as an array.
 
@@ -1116,6 +1148,9 @@ class Evaluator:
                 inputs = []
             stack.extend((source, False) for source in inputs if source is not None)
         values, hashes = {}, {}
+        # Opt-in GPU island (nodebased/gpu2d.py): Grade/Transform/Blur/Merge whose readers are all island nodes
+        # stay on the device; None (the default) leaves every node on the CPU kernels below.
+        gpu_interior = gpu2d.island_interior(nodes, order, target) if self.gpu2d is not None else frozenset()
         from . import fluid3d, flip3d, particles
 
         def reads_lazily(key):
@@ -2854,7 +2889,13 @@ class Evaluator:
                             images[2] = Raster(vectors_now.pixels, vectors_now.data, vectors_now.display,
                                                history_layers, vectors_now.meta)
                             fingerprint = [fingerprint, "gridwarp_history", history_digests]
-                    if temporal_samples is not None:
+                    gpu_raster = None
+                    if self.gpu2d is not None:
+                        gpu_raster, images = self._gpu2d_node(key, kind, params, images, [hashes.get(s) for s in slot_sources],
+                                                              key in gpu_interior, cancel, frame)
+                    if gpu_raster is not None:
+                        raster = gpu_raster
+                    elif temporal_samples is not None:
                         source = images[0]
                         prev, nxt = (r for r, _ in temporal_samples)
                         if prev.data != source.data or nxt.data != source.data:
@@ -2901,6 +2942,9 @@ class Evaluator:
                                 roto_rasterizer=(self._roto_matte if kind == "Roto" else None))
                     if raster.meta is None and not any(raster is image for image in images):
                         raster.meta = _inherited_metadata(kind, images)
+                if isinstance(raster, gpu2d.DeferredImage):
+                    values[key] = raster          # an island node: resolved on the device when its exit node runs
+                    continue
                 if tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:
                     # A file cannot be decoded at a fraction of its size, so a Read is the one
                     # source that must decimate after the fact. Everything downstream of it still
