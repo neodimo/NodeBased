@@ -1,3 +1,9 @@
+## 2026-10-25 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step A of 1: the Direct picture never crashes the app on a Linux machine whose only graphics path is OpenGL (integrator tick)
+
+- **What was done:** `main` `f3d28485` -> `c349d81d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `c349d81d`: Ran 6259 tests in 500.067 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-25 — Lane 2 (2D parity, Claude Sonnet 5.5) step A of 1: the Direct picture never takes the application down on a Linux machine whose only graphics path is OpenGL
 
 - **Why:** The 0.43.0 and 0.43.1 package builds aborted in the Direct viewer tests on GitHub's Linux runners (llvmpipe through EGL is the only adapter). `e58904b7` only skipped the tests; the product took the same path, and a Rust panic aborts the process, so no `try/except` around `RetainedPresenter` can save an artist's unsaved work.

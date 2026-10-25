@@ -1,5 +1,24 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (3:35 AM on 2026-10-25 PDT)
+
+`main` moved `f3d28485` -> `c349d81d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `c349d81d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1025-0321.log`, started 3:21 AM): **Ran 6259 tests in 500.067 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step A of 1: the Direct picture never crashes the app on a Linux machine whose only graphics path is OpenGL.** Commits:
+  - `587240cb` The Direct picture never aborts the application on a Linux machine whose only graphics path is OpenGL: wgpu-hal's GLES backend shares one EGL context between its adapters (eglMakeCurrent BadAccess aborts the process when two threads reach it), so Linux now asks Vulkan alone and refuses OpenGL before any surface, device or buffer exists, and adapter enumeration goes through one gate once (full suite 6259 tests OK, GL-only simulation 255 OK, no abort)
+  Diff: 10 files changed, 424 insertions(+), 37 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (2:15 AM on 2026-10-24 PDT)
 
 `main` moved `f172aa42` -> `b5a07e2f` (lane commits cherry-picked onto main in lane order) and then to this
