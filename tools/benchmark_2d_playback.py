@@ -5,7 +5,7 @@ Generated EXR inputs and run JSON belong in the caller-supplied scratch/output d
 only the small .nbcomp graph and this reproducible generator are tracked.
 """
 from __future__ import annotations
-import argparse, json, os, pathlib, statistics, subprocess, sys, threading, time, traceback
+import argparse, hashlib, json, os, pathlib, platform, statistics, subprocess, sys, threading, time, traceback
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'tests/fixtures/playback_comp.nbcomp'
 
@@ -38,6 +38,51 @@ def make_inputs(directory: pathlib.Path, width: int, height: int, frames: int = 
     return {'width': width, 'height': height, 'frames': frames,
             'plate_pattern': str(directory / 'plate.%04d.exr'),
             'background_pattern': str(directory / 'background.%04d.exr')}
+
+
+def sha256_of(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def environment_record(args, doc):
+    """Everything needed to reproduce and compare a run: revision, fixture and variant hashes, hardware, drivers."""
+    def run(*cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=10, cwd=ROOT).stdout.strip()
+        except Exception:
+            return None
+    cpu = None
+    try:
+        cpu = next((l.split(':', 1)[1].strip() for l in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if l.startswith('model name')), None)
+    except OSError:
+        pass
+    versions = {}
+    for name in ('numpy', 'PySide6', 'wgpu'):
+        try:
+            versions[name] = __import__(name).__version__
+        except Exception:
+            versions[name] = None
+    adapters = []
+    try:
+        from nodebased import gpu3d
+        adapters = [{k: a.get(k) for k in ('name', 'type', 'backend')} if isinstance(a, dict) else str(a) for a in gpu3d.enumerate_adapters()]
+    except Exception as exc:
+        adapters = [f'unavailable: {exc}']
+    portable = json.loads(json.dumps(doc, default=str))
+    for role in ('plate', 'background'):      # machine-specific source paths are not part of the variant
+        portable['nodes'][role]['params']['path'] = pathlib.Path(portable['nodes'][role]['params']['path']).name
+    variant = json.dumps(portable, sort_keys=True).encode()
+    return {
+        'revision': run('git', 'rev-parse', 'HEAD'), 'working_tree_dirty': bool(run('git', 'status', '--porcelain')),
+        'fixture_file': str(FIXTURE.relative_to(ROOT)), 'fixture_sha256': sha256_of(FIXTURE.read_bytes()),
+        'variant_sha256': sha256_of(variant), 'frame_range': [int(doc['time']['first']), int(doc['time']['last'])],
+        'host': platform.node(), 'os': platform.platform(), 'cpu': cpu, 'cpu_count': os.cpu_count(),
+        'python': platform.python_version(), 'versions': versions, 'adapters': adapters,
+        'nvidia_driver': run('nvidia-smi', '--query-gpu=name,driver_version', '--format=csv,noheader'),
+        'display': args.display, 'qt_platform': os.environ.get('QT_QPA_PLATFORM'),
+        'force_adapter': args.force_adapter, 'backend': args.backend,
+        'generator': 'tools/benchmark_2d_playback.py --generate-inputs (make_inputs: half-float EXR, frame*19 shifted bands, moving oval)',
+        'command': ' '.join(sys.argv)}
 
 
 def percentile(values, q):
@@ -116,6 +161,10 @@ def run_window(args):
                     current=current.f_back
             time.sleep(.002)
     doc=load_document(args.comp)
+    if args.frame_range:
+        # The sustained variant: more distinct source frames over the same graph. The curves hold their last
+        # key's value past frame 48 (animation.py endpoint hold), so only the plates differ from frame 49 on.
+        doc['time'].update(first=1,last=int(args.frame_range))
     doc['nodes']['plate']['params']['path']=str(pathlib.Path(args.plate_pattern).resolve())
     doc['nodes']['background']['params']['path']=str(pathlib.Path(args.background_pattern).resolve())
     args.width,args.height=((1920,1080) if args.size=='1080p' else (3840,2160))
@@ -151,6 +200,30 @@ def run_window(args):
     # restoration on stop, which are part of the production playback contract.
     win.playback_proxy.setChecked(args.size=='4k')
     win.show_thumbnails=False
+    gpu_backend=None; gpu_cold_ms=None; island_rows=[]; gpu_at={}
+    if args.backend=='gpu2d':
+        from nodebased import gpu2d
+        gpu_backend=gpu2d.GPU2D.open('default',args.gpu_budget_mb<<20)
+        if gpu_backend is None: raise RuntimeError(f'GPU 2D island unavailable: {gpu2d.GPU2D.open_error}')
+        # Cold shader setup is timed on its own; two sacrificial frames then warm pipelines, buffers and the
+        # device, and every cache is dropped so the measured frames are fresh decodes and fresh uploads.
+        gpu_cold_ms=gpu_backend.warm()
+        win.evaluator.gpu2d=gpu_backend
+        warm_doc=win.dispatcher.document
+        for warm_frame in range(1,1+max(0,args.warmup_frames)):
+            win.evaluator.evaluate_raster(warm_doc,warm_doc['view'],frame=warm_frame,tier=int(win.proxy.currentData() or 1))
+        win.evaluator.clear(); win.decode_pool.bump_epoch(); gpu_backend.release_all()
+        original_island=gpu_backend.run
+        def island_run(root,cancel=None):
+            before=gpu_backend.counters.snapshot(); t0=time.perf_counter()
+            try: return original_island(root,cancel)
+            finally:
+                delta=gpu2d.Counters.delta(gpu_backend.counters.snapshot(),before)
+                row={'t_ms':round((t0-trace_origin)*1000,3),'wall_ms':round((time.perf_counter()-t0)*1000,3),
+                     **{k:(round(v,3) if isinstance(v,float) else v) for k,v in delta.items() if k not in ('nodes_on_gpu','cpu_boundaries','live_bytes','peak_bytes')},
+                     'cpu_boundaries':delta['cpu_boundaries']}
+                island_rows.append(row); mark('gpu2d_island',wall_ms=row['wall_ms'],gpu_ms=row['gpu_ms'])
+        gpu_backend.run=island_run
     # Keep the cached run's scene-linear frames warm before the measured playback interval.
     if args.cache_mode=='cached':
         # The normal display-cache budget can retain the complete 48-frame HD sequence but only
@@ -268,6 +341,7 @@ def run_window(args):
     def begin():
         sample_start[0]=time.perf_counter(); sample_stop[0]=sample_start[0]+args.seconds
         mark('playback_start',mode=args.cache_mode,adapter=args.adapter)
+        if gpu_backend is not None: gpu_at['begin']=gpu_backend.counters.snapshot()
         playback_trace.enable()
         eight_bit.clear()
         win.toggle_playback(True)
@@ -279,6 +353,7 @@ def run_window(args):
         sample_timer.start(round(args.seconds*1000))
     def finish():
         stop_requested_at[0]=time.perf_counter()
+        if gpu_backend is not None: gpu_at['stop']=gpu_backend.counters.snapshot()
         mark('transport_state_at_stop',playing=win.playing,timer_active=win.playback_timer.isActive(),busy=win.busy,queued=len(win.preview_queue),rendered=win.playback_frames_rendered,elapsed=win.playback_elapsed_frames,current=win.dispatcher.document['time']['current'],stage_idle=win.convert_stage.idle)
         # toggle_playback owns cancellation and queues the full-resolution still after restoring
         # an automatic proxy. Cancelling again here would also cancel that required refinement.
@@ -360,7 +435,16 @@ def run_window(args):
         'status_line':statuses[-1] if statuses else win.statusBar().currentMessage(),
         'per_node':sorted(profiled_nodes,key=lambda row:row['estimated_ms'],reverse=True),'timeline':events,
         'sampling_profile':sample_counts,'worker_call_profiles':worker_profiles,
-        'disk_cache_stats':{'hits':disk.hits,'misses':disk.misses,'writes':disk.writes}}
+        'disk_cache_stats':{'hits':disk.hits,'misses':disk.misses,'writes':disk.writes},
+        'backend':args.backend,'environment':environment_record(args,doc)}
+    if gpu_backend is not None:
+        from nodebased import gpu2d as _gpu2d
+        stop=gpu_at.get('stop',gpu_backend.counters.snapshot())
+        result['gpu2d']={'device':gpu_backend.describe(),'cold_shader_setup_ms':round(gpu_cold_ms,3),
+            'counters_in_window':_gpu2d.Counters.delta(stop,gpu_at['begin']) if 'begin' in gpu_at else None,
+            'counters_total':gpu_backend.counters.snapshot(),'islands':island_rows,
+            'method':'gpu_ms = submit until the small flags readback returns (every pass done); upload_ms = host write_buffer calls; '
+                     'readback_ms = copy and map of the finished image; wall_ms per island includes all of them'}
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
     if args.timeline_output:
@@ -396,6 +480,11 @@ def main():
     p.add_argument('--case',default='1080p')
     p.add_argument('--display',default=os.environ.get('DISPLAY'))
     p.add_argument('--field',action='store_true',help='print compact fields for a run on another machine')
+    p.add_argument('--backend',choices=('cpu','gpu2d'),default='cpu',
+                   help='cpu (default) runs every node on the CPU kernels; gpu2d runs Grade, Transform, Blur and Merge as one GPU-resident island')
+    p.add_argument('--gpu-budget-mb',type=int,default=1024,help='2D device allocation cap for --backend gpu2d')
+    p.add_argument('--warmup-frames',type=int,default=2,help='sacrificial frames evaluated (then every cache dropped) before a gpu2d run')
+    p.add_argument('--frame-range',type=int,help='extend the fixture to frames 1..N (the curves hold their last key); pair with --generate-inputs --frames N')
     a=p.parse_args()
     if a.self_check:
         os.environ.setdefault('QT_QPA_PLATFORM','offscreen'); sys.path.insert(0,str(ROOT))
