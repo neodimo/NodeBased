@@ -1,0 +1,2526 @@
+{
+ "schema": 1,
+ "notes": [
+  "Every NodeBased knob and socket of every paired kind is listed once: `same` (identical name), `renamed` (different name, same control; reason given),",
+  "`components` (several NodeBased params make up one Nuke knob), or `extra` (NodeBased-only). The scorer reads this file and does no name matching of its own.",
+  "`nuke` names are the guide's scripting names; a name with #2, #3 marks the guide's repeated names in table order.",
+  "`skip_default` lists Nuke knobs whose default is not compared (it depends on the format, a unit, or a representation that differs); `value_map` translates NodeBased enum values to the guide's spelling before comparing."
+ ],
+ "pairs": {
+  "Read": {
+   "nodebased": "Read",
+   "inputs": [],
+   "knobs": [
+    {"nodebased": ["path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'File', scripting name `file`"},
+    {"nodebased": ["frame_offset"], "nuke": ["frame"], "kind": "renamed", "reason": "NodeBased offsets by an integer; Nuke's frame knob holds the offset when frame_mode is offset"},
+    {"nodebased": ["missing"], "nuke": ["on_error"], "kind": "renamed", "reason": "missing-frame policy"},
+    {"nodebased": ["colorspace"], "nuke": ["colorspace"], "kind": "same"},
+    {"nodebased": ["alpha_mode"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["layer"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["subimage"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["frame"]
+  },
+  "Write": {
+   "nodebased": "Write",
+   "inputs": [
+    {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'file', scripting name `file`"},
+    {"nodebased": ["file_type"], "nuke": ["file_type"], "kind": "same"},
+    {"nodebased": ["bit_depth"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["bundle"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Viewer": {
+   "nodebased": "Viewer",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": [], "nuke": ["gain"], "kind": "panel", "reason": "viewer look gain, viewer state, not a node param: core.VIEWER_LOOK_DEFAULT / VIEWER_STATE_KEYS and docs/PLAYBACK.md"},
+    {"nodebased": [], "nuke": ["gamma"], "kind": "panel", "reason": "viewer look gamma, viewer state, not a node param: core.VIEWER_LOOK_DEFAULT / VIEWER_STATE_KEYS and docs/PLAYBACK.md"},
+    {"nodebased": [], "nuke": ["clip_warning"], "kind": "panel", "reason": "viewer look zebra, viewer state, not a node param: core.VIEWER_LOOK_DEFAULT / VIEWER_STATE_KEYS and docs/PLAYBACK.md"},
+    {"nodebased": [], "nuke": ["downrez"], "kind": "panel", "reason": "viewer proxy tier (Full, 1/2, 1/4, 1/8), viewer state, not a node param: core.VIEWER_LOOK_DEFAULT / VIEWER_STATE_KEYS and docs/PLAYBACK.md"},
+    {"nodebased": [], "nuke": ["masking_mode"], "kind": "panel", "reason": "viewer format-mask mode (none, lines, half, full), viewer state, not a node param: core.VIEWER_LOOK_DEFAULT / VIEWER_STATE_KEYS and docs/PLAYBACK.md"},
+    {"nodebased": [], "nuke": ["masking_ratio"], "kind": "panel", "reason": "viewer format-mask ratio (format, 1.33 ... 2.40), viewer state, not a node param: core.VIEWER_LOOK_DEFAULT / VIEWER_STATE_KEYS and docs/PLAYBACK.md"}
+   ]
+  },
+  "Constant": {
+   "nodebased": "Constant",
+   "inputs": [],
+   "knobs": [
+    {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["width", "height"], "nuke": ["format"], "kind": "components", "reason": "NodeBased sizes a generator with width/height; Nuke sets the format knob"}
+   ],
+   "skip_default": ["format"]
+  },
+  "UDIM Import": {
+   "nodebased": null,
+   "reason": "no UDIM import node (PARITY_2D.md Image #5)"
+  },
+  "CurveTool": {
+   "nodebased": "CurveTool",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["box_x", "box_y", "box_width", "box_height"], "nuke": ["ROI"], "kind": "components", "reason": "NodeBased stores the box as x, y, width, height; Nuke's knob is one x, y, r, t value"},
+    {"nodebased": ["crop_x", "crop_y", "crop_width", "crop_height"], "nuke": ["autocropdata"], "kind": "components", "reason": "result of the AutoCrop analysis"},
+    {"nodebased": ["average_r", "average_g", "average_b", "average_a"], "nuke": ["intensitydata"], "kind": "components", "reason": "result of the Avg Intensities analysis"},
+    {"nodebased": ["max_x", "max_y"], "nuke": ["maxlumapixdata"], "kind": "components", "reason": "position of the brightest pixel"},
+    {"nodebased": ["min_x", "min_y"], "nuke": ["minlumapixdata"], "kind": "components", "reason": "position of the dimmest pixel"},
+    {"nodebased": ["max_value"], "nuke": ["maxlumapixvalue"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Maximum Luminence Pixel Value', scripting name `maxlumapixvalue`"},
+    {"nodebased": ["min_value"], "nuke": ["minlumapixvalue"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Minimum Luminence Pixel Value', scripting name `minlumapixvalue`"},
+    {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["autocrop_mode"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["autocrop_color_r"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["autocrop_color_g"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["autocrop_color_b"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["autocrop_tolerance"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["average_luminance"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["exposure_diff"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["ROI", "autocropdata", "intensitydata", "maxlumapixdata", "minlumapixdata"]
+  },
+  "Profile": {
+   "nodebased": "Profile",
+   "inputs": [
+    {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": []
+  },
+  "Roto": {
+   "nodebased": "Roto",
+   "inputs": [
+    {"nodebased": "bg", "nuke": "bg", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["width", "height"], "nuke": ["format"], "kind": "components", "reason": "NodeBased sizes a generator with width/height; Nuke sets the format knob"},
+    {"nodebased": ["premultiply_mode"], "nuke": ["premultiply"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'premultiply', scripting name `premultiply`"},
+    {"nodebased": ["invert"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": [], "nuke": ["opacity"], "kind": "panel", "reason": "shape opacity, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
+    {"nodebased": [], "nuke": ["feather"], "kind": "panel", "reason": "shape feather in pixels, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
+    {"nodebased": [], "nuke": ["feather_type"], "kind": "panel", "reason": "linear, smooth or Gaussian feather ramp, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
+    {"nodebased": [], "nuke": ["blending_mode"], "kind": "panel", "reason": "shape mode union or subtract, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
+    {"nodebased": [], "nuke": ["openspline_width"], "kind": "panel", "reason": "open shape stroke_width, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"}
+   ],
+   "skip_default": ["format"]
+  },
+  "Text": {
+   "nodebased": "Text",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["box_x", "box_y", "box_width", "box_height"], "nuke": ["box"], "kind": "components", "reason": "NodeBased stores the box as x, y, width, height; Nuke's knob is one x, y, r, t value"},
+    {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["justify"], "nuke": ["xjustify"], "kind": "renamed", "reason": "horizontal justification"},
+    {"nodebased": ["message"], "nuke": ["message"], "kind": "same"},
+    {"nodebased": ["font"], "nuke": ["font"], "kind": "same"},
+    {"nodebased": ["font_size"], "nuke": ["font_size"], "kind": "same"},
+    {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["box"]
+  },
+  "Rectangle": {
+   "nodebased": "Rectangle",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["box_x", "box_y", "box_width", "box_height"], "nuke": ["area"], "kind": "components", "reason": "NodeBased stores the box as x, y, width, height; Nuke's knob is one x, y, r, t value"},
+    {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["softness"], "nuke": ["softness"], "kind": "same"},
+    {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["area"]
+  },
+  "Ramp": {
+   "nodebased": "Ramp",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["p0_x", "p0_y"], "nuke": ["p0"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["p1_x", "p1_y"], "nuke": ["p1"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["color1_red", "color1_green", "color1_blue", "color1_alpha"], "nuke": ["color"], "kind": "components", "reason": "the colour reached at point 1"},
+    {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["color0_red"], "kind": "extra", "reason": "NodeBased-only: the guide's table lists no start-colour knob"},
+    {"nodebased": ["color0_green"], "kind": "extra", "reason": "NodeBased-only: the guide's table lists no start-colour knob"},
+    {"nodebased": ["color0_blue"], "kind": "extra", "reason": "NodeBased-only: the guide's table lists no start-colour knob"},
+    {"nodebased": ["color0_alpha"], "kind": "extra", "reason": "NodeBased-only: the guide's table lists no start-colour knob"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Radial": {
+   "nodebased": "Radial",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["box_x", "box_y", "box_width", "box_height"], "nuke": ["area"], "kind": "components", "reason": "NodeBased stores the box as x, y, width, height; Nuke's knob is one x, y, r, t value"},
+    {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["softness"], "nuke": ["softness"], "kind": "same"},
+    {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["area"]
+  },
+  "Noise": {
+   "nodebased": "Noise",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["z_slice"], "nuke": ["zoffset"], "kind": "renamed", "reason": "position along the noise volume's third axis"},
+    {"nodebased": ["size"], "nuke": ["size"], "kind": "same"},
+    {"nodebased": ["octaves"], "nuke": ["octaves"], "kind": "same"},
+    {"nodebased": ["lacunarity"], "nuke": ["lacunarity"], "kind": "same"},
+    {"nodebased": ["gain"], "nuke": ["gain"], "kind": "same"},
+    {"nodebased": ["gamma"], "nuke": ["gamma"], "kind": "same"},
+    {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["seed"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "RotoPaint": {
+   "nodebased": "RotoPaint",
+   "inputs": [
+    {"nodebased": "image", "nuke": "bg", "kind": "mapped"},
+    {"nodebased": "input2", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["dustbust_frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["dustbust_frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["dustbust_sensitivity"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["dustbust_patch_blend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": [], "nuke": ["opacity"], "kind": "panel", "reason": "item opacity, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["blending_mode"], "kind": "panel", "reason": "item blend mode, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["visible"], "kind": "panel", "reason": "item visibility, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["color"], "kind": "panel", "reason": "brush colour, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["brush_type"], "kind": "panel", "reason": "stroke tool, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["brush_size"], "kind": "panel", "reason": "brush size, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["brush_spacing"], "kind": "panel", "reason": "brush spacing, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["brush_hardness"], "kind": "panel", "reason": "brush hardness, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["dynamic_transparency"], "kind": "panel", "reason": "pressure scales the dab's strength, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["dynamic_size"], "kind": "panel", "reason": "pressure scales the dab's radius, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["lifetime_type"], "kind": "panel", "reason": "stroke lifetime all, single, range or from_current, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["lifetime_start"], "kind": "panel", "reason": "lifetime range start, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["lifetime_end"], "kind": "panel", "reason": "lifetime range end, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["source_transform_translate"], "kind": "panel", "reason": "clone source offset, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["source_time_offset"], "kind": "panel", "reason": "clone source frame offset, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["source_time_offset_type"], "kind": "panel", "reason": "clone source relative or fixed frame, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["feather"], "kind": "panel", "reason": "shape feather, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["feather_type"], "kind": "panel", "reason": "shape feather ramp, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"},
+    {"nodebased": [], "nuke": ["openspline_width"], "kind": "panel", "reason": "open shape stroke width, per-item field in the node's payload (docs/ROTO_TRACKING.md, RotoPaint and DustBust), not a node param"}
+   ]
+  },
+  "LightWrap": {
+   "nodebased": "LightWrap",
+   "inputs": [
+    {"nodebased": "fg", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "bg", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["red", "green", "blue"], "nuke": ["color"], "kind": "components", "reason": "the constant highlight colour"},
+    {"nodebased": ["intensity"], "nuke": ["Intensity"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Intensity`"},
+    {"nodebased": ["wrap_diffuse"], "nuke": ["size"], "kind": "renamed", "reason": "PARITY_2D.md Draw #8: Nuke's diffuse, renamed because `diffuse` is a 0 to 1 LIMITS key on Relight (the guide's scripting name is `size`, label Diffuse)"},
+    {"nodebased": ["fgblur"], "nuke": ["FGBlur"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `FGBlur`"},
+    {"nodebased": ["bgblur"], "nuke": ["BGBlur"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `BGBlur`"},
+    {"nodebased": ["highlight_merge"], "nuke": ["highlightmerge"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `highlightmerge`"},
+    {"nodebased": ["use_constant_highlight"], "nuke": ["useconstant"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `useconstant`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["wrap_threshold"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Grain": {
+   "nodebased": "Grain",
+   "inputs": [
+    {"nodebased": "image", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["red_intensity"], "nuke": ["red_i"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'red', scripting name `red_i`"},
+    {"nodebased": ["green_intensity"], "nuke": ["green_i"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'green', scripting name `green_i`"},
+    {"nodebased": ["blue_intensity"], "nuke": ["blue_i"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'blue', scripting name `blue_i`"},
+    {"nodebased": ["seed"], "nuke": ["seed"], "kind": "same"},
+    {"nodebased": ["red_size"], "nuke": ["red_size"], "kind": "same"},
+    {"nodebased": ["green_size"], "nuke": ["green_size"], "kind": "same"},
+    {"nodebased": ["blue_size"], "nuke": ["blue_size"], "kind": "same"},
+    {"nodebased": ["black"], "nuke": ["black"], "kind": "same"},
+    {"nodebased": ["luminance_weighted"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "ScannedGrain": {
+   "nodebased": "ScannedGrain",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "plate", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["amount"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["response"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["seed"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["preset"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["irregularity"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["minimum"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["apply_through_alpha"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "DustBust": {
+   "nodebased": null,
+   "reason": "provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10)"
+  },
+  "MarkerRemoval": {
+   "nodebased": null,
+   "reason": "provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10)"
+  },
+  "Flare": {
+   "nodebased": "Flare",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["position_x", "position_y"], "nuke": ["position"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["chromatic_shift"], "nuke": ["chroma_shift"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'chroma shift', scripting name `chroma_shift`"},
+    {"nodebased": ["brightness"], "nuke": ["brightness"], "kind": "same"},
+    {"nodebased": ["tracker_id"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["track_index"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["streaks"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["length"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["rotation"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["ghosts"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["spread"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["red"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["green"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["blue"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Glint": {
+   "nodebased": "Glint",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["rays"], "nuke": ["repeat"], "kind": "renamed", "reason": "number of rays"},
+    {"nodebased": ["tolerance"], "nuke": ["tolerance"], "kind": "same"},
+    {"nodebased": ["length"], "nuke": ["length"], "kind": "same"},
+    {"nodebased": ["rotation"], "nuke": ["rotation"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["falloff"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Sparkles": {
+   "nodebased": "Sparkles",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["size"], "nuke": ["size"], "kind": "same"},
+    {"nodebased": ["seed"], "nuke": ["seed"], "kind": "same"},
+    {"nodebased": ["tolerance"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["density"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Dither": {
+   "nodebased": "Dither",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["dither_amount"], "nuke": ["amount"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'amount', scripting name `amount`"},
+    {"nodebased": ["seed"], "nuke": ["seed"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["bits"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Grid": {
+   "nodebased": "Grid",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["number_x", "number_y"], "nuke": ["number"], "kind": "components", "reason": "lines across the format"},
+    {"nodebased": ["grid_offset_x", "grid_offset_y"], "nuke": ["translate"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["line_width"], "nuke": ["size"], "kind": "renamed", "reason": "line thickness"},
+    {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["spacing_x"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["spacing_y"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["translate"]
+  },
+  "TimeOffset": {
+   "nodebased": "TimeOffset",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["reverse"], "nuke": ["reverse_input"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Reverse Input', scripting name `reverse_input`"},
+    {"nodebased": ["time_offset"], "nuke": ["time_offset"], "kind": "same"}
+   ]
+  },
+  "FrameHold": {
+   "nodebased": "FrameHold",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["first_frame"], "nuke": ["firstFrame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `firstFrame`"},
+    {"nodebased": ["increment"], "nuke": ["increment"], "kind": "same"}
+   ]
+  },
+  "Retime": {
+   "nodebased": "Retime",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["input_range_start"], "nuke": ["input.first"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input range', scripting name `input.first`"},
+    {"nodebased": ["input_range_end"], "nuke": ["input.last"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input range', scripting name `input.last`"},
+    {"nodebased": ["output_range_start"], "nuke": ["output.first"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output range', scripting name `output.first`"},
+    {"nodebased": ["output_range_end"], "nuke": ["output.last"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output range', scripting name `output.last`"},
+    {"nodebased": ["speed"], "nuke": ["speed"], "kind": "same"}
+   ]
+  },
+  "TimeClip": {
+   "nodebased": "TimeClip",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["first"], "nuke": ["first"], "kind": "same"},
+    {"nodebased": ["last"], "nuke": ["last"], "kind": "same"},
+    {"nodebased": ["before"], "nuke": ["before"], "kind": "same"},
+    {"nodebased": ["after"], "nuke": ["after"], "kind": "same"},
+    {"nodebased": ["frame_range_type"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["time_offset"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "FrameRange": {
+   "nodebased": "FrameRange",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["first_frame"], "nuke": ["first_frame"], "kind": "same"},
+    {"nodebased": ["last_frame"], "nuke": ["last_frame"], "kind": "same"},
+    {"nodebased": ["before"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["after"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "AppendClip": {
+   "nodebased": "AppendClip",
+   "inputs": [
+    {"nodebased": "clip0", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "clip1", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "clip2", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "clip3", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "clip4", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "clip5", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "clip6", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "clip7", "nuke": "1", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["first_frame"], "nuke": ["firstFrame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `firstFrame`"},
+    {"nodebased": ["dissolve"], "nuke": ["dissolve"], "kind": "same"},
+    {"nodebased": ["length0"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["length1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["length2"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["length3"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["length4"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["length5"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["length6"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["length7"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "TimeBlur": {
+   "nodebased": "TimeBlur",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
+    {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
+    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["divisions"], "nuke": ["divisions"], "kind": "same"}
+   ]
+  },
+  "TimeWarp": {
+   "nodebased": "TimeWarp",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["lookup_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'filter', scripting name `filter`"},
+    {"nodebased": ["lookup"], "nuke": ["lookup"], "kind": "same"}
+   ]
+  },
+  "TimeEcho": {
+   "nodebased": "TimeEcho",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["frames"], "nuke": ["framesbehind"], "kind": "renamed", "reason": "frames to look at"},
+    {"nodebased": ["method"], "nuke": ["mode"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'TimeEcho Method', scripting name `mode`"},
+    {"nodebased": ["falloff"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Kronos": {
+   "nodebased": "Kronos",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["speed"], "nuke": ["timingOutputSpeed"], "kind": "renamed", "reason": "output speed"},
+    {"nodebased": ["frame"], "nuke": ["timingFrame2"], "kind": "renamed", "reason": "output frame"},
+    {"nodebased": ["shutter_samples"], "nuke": ["shutterSamples"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterSamples`"},
+    {"nodebased": ["interpolation"], "nuke": ["interpolation"], "kind": "same"},
+    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "OFlow": {
+   "nodebased": "OFlow",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["input_start"], "nuke": ["input.first"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Input Range', scripting name `input.first`"},
+    {"nodebased": ["input_end"], "nuke": ["input.last"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Input Range', scripting name `input.last`"},
+    {"nodebased": ["timing"], "nuke": ["timing2"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `timing2`"},
+    {"nodebased": ["speed"], "nuke": ["timingOutputSpeed"], "kind": "renamed", "reason": "output speed"},
+    {"nodebased": ["frame"], "nuke": ["timingFrame2"], "kind": "renamed", "reason": "output frame"},
+    {"nodebased": ["vector_detail"], "nuke": ["vectorDetail"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `vectorDetail`"},
+    {"nodebased": ["shutter_samples"], "nuke": ["shutterSamples"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterSamples`"},
+    {"nodebased": ["shutter_time"], "nuke": ["shutterTime"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterTime`"},
+    {"nodebased": ["smoothness"], "nuke": ["smoothness"], "kind": "same"},
+    {"nodebased": ["output_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "SmartVector": {
+   "nodebased": "SmartVector",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["vector_detail"], "nuke": ["vectorDetailReg"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `vectorDetailReg`"},
+    {"nodebased": ["reference_frame"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["smoothness"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["reanchor_interval"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "VectorToMotion": {
+   "nodebased": "VectorToMotion",
+   "inputs": [
+    {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["forward_layer"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["backward_layer"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "NoTimeBlur": {
+   "nodebased": null,
+   "reason": "no node (PARITY_2D.md Time #9)"
+  },
+  "Shuffle": {
+   "nodebased": "Shuffle",
+   "inputs": [
+    {"nodebased": "image", "nuke": "B", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["red_from", "green_from", "blue_from", "alpha_from"], "nuke": ["in1"], "kind": "components", "reason": "per-output-channel source choice is Nuke's channel shuffle matrix"},
+    {"nodebased": ["layer"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["in1"]
+  },
+  "ShuffleCopy": {
+   "nodebased": "ShuffleCopy",
+   "inputs": [
+    {"nodebased": "in1", "nuke": "1", "kind": "mapped"},
+    {"nodebased": "in2", "nuke": "2", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["out1_r", "out1_g", "out1_b", "out1_a"], "nuke": ["out"], "kind": "components", "reason": "per-output-channel source choice for the first output"},
+    {"nodebased": ["out2_r", "out2_g", "out2_b", "out2_a"], "nuke": ["out2"], "kind": "components", "reason": "per-output-channel source choice for the second output"},
+    {"nodebased": ["layer1"], "nuke": ["in"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '1 in', scripting name `in`"},
+    {"nodebased": ["layer2"], "nuke": ["in2"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '2 in', scripting name `in2`"}
+   ],
+   "skip_default": ["out", "out2", "in", "in2"]
+  },
+  "Copy": {
+   "nodebased": "Copy",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["copy_red"], "nuke": ["from0", "to0"], "kind": "components", "reason": "one copy pair per output channel"},
+    {"nodebased": ["copy_green"], "nuke": ["from1", "to1"], "kind": "components", "reason": "one copy pair per output channel"},
+    {"nodebased": ["copy_blue"], "nuke": ["from2", "to2"], "kind": "components", "reason": "one copy pair per output channel"},
+    {"nodebased": ["copy_alpha"], "nuke": ["from3", "to3"], "kind": "components", "reason": "one copy pair per output channel"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["from0", "to0", "from1", "to1", "from2", "to2", "from3", "to3"]
+  },
+  "ChannelMerge": {
+   "nodebased": "ChannelMerge",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["a_channel"], "nuke": ["A"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `A`"},
+    {"nodebased": ["b_channel"], "nuke": ["B"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `B`"},
+    {"nodebased": ["out_channel"], "nuke": ["output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `output`"},
+    {"nodebased": ["operation"], "nuke": ["operation"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Remove": {
+   "nodebased": "Remove",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["remove_operation"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
+    {"nodebased": ["layers"], "nuke": ["channels"], "kind": "renamed", "reason": "the layers to keep or remove"}
+   ]
+  },
+  "Grade": {
+   "nodebased": "Grade",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["offset"], "nuke": ["add"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `add`"},
+    {"nodebased": ["multiply"], "nuke": ["multiply"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["exposure"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "ColorCorrect": {
+   "nodebased": "ColorCorrect",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["shadows_curve", "highlights_curve"], "nuke": ["lookup"], "kind": "components", "reason": "range curves; Nuke keeps the three ranges in one curve editor knob"},
+    {"nodebased": ["shadows_saturation"], "nuke": ["shadows.saturation"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `shadows.saturation`"},
+    {"nodebased": ["shadows_contrast"], "nuke": ["shadows.contrast"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `shadows.contrast`"},
+    {"nodebased": ["shadows_gamma"], "nuke": ["shadows.gamma"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `shadows.gamma`"},
+    {"nodebased": ["shadows_gain"], "nuke": ["shadows.gain"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `shadows.gain`"},
+    {"nodebased": ["shadows_offset"], "nuke": ["shadows.offset"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `shadows.offset`"},
+    {"nodebased": ["midtones_saturation"], "nuke": ["midtones.saturation"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `midtones.saturation`"},
+    {"nodebased": ["midtones_contrast"], "nuke": ["midtones.contrast"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `midtones.contrast`"},
+    {"nodebased": ["midtones_gamma"], "nuke": ["midtones.gamma"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `midtones.gamma`"},
+    {"nodebased": ["midtones_gain"], "nuke": ["midtones.gain"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `midtones.gain`"},
+    {"nodebased": ["midtones_offset"], "nuke": ["midtones.offset"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `midtones.offset`"},
+    {"nodebased": ["highlights_saturation"], "nuke": ["highlights.saturation"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `highlights.saturation`"},
+    {"nodebased": ["highlights_contrast"], "nuke": ["highlights.contrast"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `highlights.contrast`"},
+    {"nodebased": ["highlights_gamma"], "nuke": ["highlights.gamma"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `highlights.gamma`"},
+    {"nodebased": ["highlights_gain"], "nuke": ["highlights.gain"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `highlights.gain`"},
+    {"nodebased": ["highlights_offset"], "nuke": ["highlights.offset"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `highlights.offset`"},
+    {"nodebased": ["saturation"], "nuke": ["saturation"], "kind": "same"},
+    {"nodebased": ["contrast"], "nuke": ["contrast"], "kind": "same"},
+    {"nodebased": ["gamma"], "nuke": ["gamma"], "kind": "same"},
+    {"nodebased": ["gain"], "nuke": ["gain"], "kind": "same"},
+    {"nodebased": ["offset"], "nuke": ["offset"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["lookup"]
+  },
+  "Invert": {
+   "nodebased": "Invert",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Saturation": {
+   "nodebased": "Saturation",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["saturation"], "nuke": ["saturation"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Multiply": {
+   "nodebased": "Multiply",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["multiply"], "nuke": ["value"], "kind": "renamed", "reason": "Multiply's one value knob"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["value"]
+  },
+  "Add": {
+   "nodebased": "Add",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["offset"], "nuke": ["value"], "kind": "renamed", "reason": "Add's one value knob"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Gamma": {
+   "nodebased": "Gamma",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["gamma"], "nuke": ["value"], "kind": "renamed", "reason": "Gamma's one value knob"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Clamp": {
+   "nodebased": "Clamp",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["clamp_min"], "nuke": ["minimum_enable"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'minimum', scripting name `minimum_enable`"},
+    {"nodebased": ["clamp_max"], "nuke": ["maximum_enable"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'maximum', scripting name `maximum_enable`"},
+    {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
+    {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "HueCorrect": {
+   "nodebased": "HueCorrect",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["curve_sat", "curve_lum", "curve_red", "curve_green", "curve_blue", "curve_r_sup", "curve_g_sup", "curve_b_sup"], "nuke": ["hue"], "kind": "components", "reason": "Nuke keeps every hue curve in the one `hue` curve editor knob"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["sat_red"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sat_yellow"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sat_green"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sat_cyan"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sat_blue"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sat_magenta"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lum_red"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lum_yellow"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lum_green"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lum_cyan"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lum_blue"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lum_magenta"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sat_thrsh"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["hue_shift"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["hue"]
+  },
+  "ColorLookup": {
+   "nodebased": "ColorLookup",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["curve_master", "curve_red", "curve_green", "curve_blue", "curve_alpha"], "nuke": ["lut"], "kind": "components", "reason": "Nuke keeps the master and channel curves in the one `lut` curve editor knob"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["lut"]
+  },
+  "Exposure": {
+   "nodebased": "Exposure",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["exposure_mode"], "nuke": ["mode"], "kind": "renamed", "reason": "PARITY_2D.md Color #11: Nuke's `mode`, renamed because `mode` already belongs to Tracker in the shared CHOICES"},
+    {"nodebased": ["blackpoint"], "nuke": ["blackpoint"], "kind": "same"},
+    {"nodebased": ["gang"], "nuke": ["gang"], "kind": "same"},
+    {"nodebased": ["red"], "nuke": ["red"], "kind": "same"},
+    {"nodebased": ["green"], "nuke": ["green"], "kind": "same"},
+    {"nodebased": ["blue"], "nuke": ["blue"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "HSVTool": {
+   "nodebased": "HSVTool",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "hue_mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "sat_mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "brt_mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["hue_range_min", "hue_range_max"], "nuke": ["huesrcs"], "kind": "components", "reason": "range as two scalar params"},
+    {"nodebased": ["saturation_range_min", "saturation_range_max"], "nuke": ["satsrcs"], "kind": "components", "reason": "range as two scalar params"},
+    {"nodebased": ["brightness_range_min", "brightness_range_max"], "nuke": ["brtsrcs"], "kind": "components", "reason": "range as two scalar params"},
+    {"nodebased": ["srccolor_r", "srccolor_g", "srccolor_b"], "nuke": ["srccolor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["dstcolor_r", "dstcolor_g", "dstcolor_b"], "nuke": ["dstcolor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["hue_rotation"], "nuke": ["huerotation"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `huerotation`"},
+    {"nodebased": ["hue_rolloff"], "nuke": ["huerolloffrange"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Range Rolloff', scripting name `huerolloffrange`"},
+    {"nodebased": ["saturation_rolloff"], "nuke": ["satrolloffrange"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Range Rolloff', scripting name `satrolloffrange`"},
+    {"nodebased": ["sat_adjust"], "nuke": ["saturation"], "kind": "renamed", "reason": "PARITY_2D.md Color #12: Nuke's saturation adjustment, renamed because the name belongs to other nodes"},
+    {"nodebased": ["set_saturation"], "nuke": ["setsaturation"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `setsaturation`"},
+    {"nodebased": ["brightness_rolloff"], "nuke": ["brtrolloffrange"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Range Rolloff', scripting name `brtrolloffrange`"},
+    {"nodebased": ["brt_adjust"], "nuke": ["brightness"], "kind": "renamed", "reason": "PARITY_2D.md Color #12: Nuke's brightness adjustment, renamed because the name belongs to other nodes"},
+    {"nodebased": ["set_brightness"], "nuke": ["setbrightness"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `setbrightness`"},
+    {"nodebased": ["output_alpha"], "nuke": ["output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `output`"},
+    {"nodebased": ["color_replace"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["huesrcs", "satsrcs", "brtsrcs", "output"]
+  },
+  "ColorMatrix": {
+   "nodebased": "ColorMatrix",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["matrix_00", "matrix_01", "matrix_02", "matrix_10", "matrix_11", "matrix_12", "matrix_20", "matrix_21", "matrix_22"], "nuke": ["matrix"], "kind": "components", "reason": "3x3 matrix as nine scalar params"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["matrix"]
+  },
+  "Colorspace": {
+   "nodebased": "Colorspace",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["primaries_in"], "nuke": ["primary_in"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input', scripting name `primary_in`"},
+    {"nodebased": ["primaries_out"], "nuke": ["primary_out"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `primary_out`"},
+    {"nodebased": ["transfer_in"], "nuke": ["colorspace_in"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input', scripting name `colorspace_in`"},
+    {"nodebased": ["transfer_out"], "nuke": ["colorspace_out"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `colorspace_out`"},
+    {"nodebased": ["whitepoint_in"], "nuke": ["illuninant_in"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input', scripting name `illuninant_in`"},
+    {"nodebased": ["whitepoint_out"], "nuke": ["illuninant_out"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `illuninant_out`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["primary_in", "primary_out", "colorspace_in", "colorspace_out"]
+  },
+  "OCIOColorspace": {
+   "nodebased": "OCIOColorspace",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["src"], "nuke": ["in_colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input', scripting name `in_colorspace`"},
+    {"nodebased": ["dst"], "nuke": ["out_colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `out_colorspace`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["transform_direction"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["in_colorspace", "out_colorspace"]
+  },
+  "OCIODisplay": {
+   "nodebased": "OCIODisplay",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["transform_direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert direction checkbox"},
+    {"nodebased": ["display"], "nuke": ["display"], "kind": "same"},
+    {"nodebased": ["view"], "nuke": ["view"], "kind": "same"},
+    {"nodebased": ["look"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "value_map": {"invert": {"forward": false, "inverse": true}}
+  },
+  "OCIOLookTransform": {
+   "nodebased": "OCIOLookTransform",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["src"], "nuke": ["in_colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input', scripting name `in_colorspace`"},
+    {"nodebased": ["dst"], "nuke": ["out_colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `out_colorspace`"},
+    {"nodebased": ["transform_direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert direction checkbox"},
+    {"nodebased": ["look"], "nuke": ["look"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["in_colorspace", "out_colorspace"],
+   "value_map": {"invert": {"forward": false, "inverse": true}}
+  },
+  "OCIOFileTransform": {
+   "nodebased": "OCIOFileTransform",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'file', scripting name `file`"},
+    {"nodebased": ["transform_direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert direction checkbox"},
+    {"nodebased": ["file_interpolation"], "nuke": ["interpolation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'interpolation', scripting name `interpolation`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "value_map": {"invert": {"forward": false, "inverse": true}}
+  },
+  "OCIOLogConvert": {
+   "nodebased": "OCIOLogConvert",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["ocio_log_operation"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Log2Lin": {
+   "nodebased": "Log2Lin",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["log_direction"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
+    {"nodebased": ["black"], "nuke": ["black"], "kind": "same"},
+    {"nodebased": ["white"], "nuke": ["white"], "kind": "same"},
+    {"nodebased": ["gamma"], "nuke": ["gamma"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "value_map": {"operation": {"log to lin": "log2lin", "lin to log": "lin2log"}}
+  },
+  "PLogLin": {
+   "nodebased": "PLogLin",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["linear_reference"], "nuke": ["linref"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'linear reference value', scripting name `linref`"},
+    {"nodebased": ["log_reference"], "nuke": ["logref"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'log reference value', scripting name `logref`"},
+    {"nodebased": ["density_per_code_value"], "nuke": ["density"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `density`"},
+    {"nodebased": ["negative_gamma"], "nuke": ["ngamma"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `ngamma`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "MatchGrade": {
+   "nodebased": "MatchGrade",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "reference", "nuke": "Target", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["grade_gain_r", "grade_gain_g", "grade_gain_b"], "nuke": ["slope"], "kind": "components", "reason": "the solved gain is Nuke's CDL slope"},
+    {"nodebased": ["grade_gamma_r", "grade_gamma_g", "grade_gamma_b"], "nuke": ["power"], "kind": "components", "reason": "the solved gamma is Nuke's CDL power"},
+    {"nodebased": ["grade_offset_r", "grade_offset_g", "grade_offset_b"], "nuke": ["offset"], "kind": "components", "reason": "the solved offset is Nuke's CDL offset"},
+    {"nodebased": ["grade_lift_r"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["grade_lift_g"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["grade_lift_b"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["match_analyzed"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["slope", "power", "offset"]
+  },
+  "ColorTransfer": {
+   "nodebased": null,
+   "reason": "covered by MatchGrade, no separate node (PARITY_2D.md Color #16)"
+  },
+  "Expression": {
+   "nodebased": "Expression",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "second", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["expr_r"], "nuke": ["expr0"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr0`"},
+    {"nodebased": ["expr_g"], "nuke": ["expr1"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr1`"},
+    {"nodebased": ["expr_b"], "nuke": ["expr2"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr2`"},
+    {"nodebased": ["expr_a"], "nuke": ["expr3"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr3`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "CrossTalk": {
+   "nodebased": "CrossTalk",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["xt_curve_r_r", "xt_curve_r_g", "xt_curve_r_b", "xt_curve_g_r", "xt_curve_g_g", "xt_curve_g_b", "xt_curve_b_r", "xt_curve_b_g", "xt_curve_b_b"], "nuke": ["crossover"], "kind": "components", "reason": "the nine crossover curves"},
+    {"nodebased": ["xt_unpremult"], "nuke": ["unpremult"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '(un)premult by', scripting name `unpremult`"},
+    {"nodebased": ["xt_fringe"], "nuke": ["fringe"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'fringe', scripting name `fringe`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["crossover"]
+  },
+  "Posterize": {
+   "nodebased": "Posterize",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["colors"], "nuke": ["Colors"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Colors`"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "SoftClip": {
+   "nodebased": "SoftClip",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["conversion"], "nuke": ["conversion"], "kind": "same"},
+    {"nodebased": ["softclip_min"], "nuke": ["softclip_min"], "kind": "same"},
+    {"nodebased": ["softclip_max"], "nuke": ["softclip_max"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Toe": {
+   "nodebased": "Toe",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["toe_lift"], "nuke": ["lift"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'lift', scripting name `lift`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["toe"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "HistEQ": {
+   "nodebased": "HistEQ",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["hist_eq_mode"], "nuke": ["histeqbins"], "kind": "renamed", "reason": "no counterpart: NodeBased selects the equalised quantity, Nuke the bin count"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Histogram": {
+   "nodebased": "Histogram",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["black", "white", "gamma"], "nuke": ["in"], "kind": "components", "reason": "input range black, white and gamma"},
+    {"nodebased": ["black_out", "white_out"], "nuke": ["out"], "kind": "components", "reason": "output range"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["in", "out"]
+  },
+  "MinColor": {
+   "nodebased": "MinColor",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mincolor_mode"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["box_x"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["box_y"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["box_width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["box_height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mincolor_r"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mincolor_g"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mincolor_b"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mincolor_a"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Sampler": {
+   "nodebased": "Sampler",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["sample_x0", "sample_y0"], "nuke": ["sampler"], "kind": "components", "reason": "sample point"},
+    {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sample_x1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sample_y1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sample_r"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sample_g"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sample_b"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sample_a"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["sampler"]
+  },
+  "GenerateLUT": {
+   "nodebased": "GenerateLUT",
+   "inputs": [
+    {"nodebased": "source", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["lut_path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output file', scripting name `file`"},
+    {"nodebased": ["lut_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["colorspace_in"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["colorspace_out"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Vectorfield": {
+   "nodebased": "Vectorfield",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["cube_path"], "nuke": ["vfield_file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'vectorfield file', scripting name `vfield_file`"},
+    {"nodebased": ["colorspace_in"], "nuke": ["colorspaceIn"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `colorspaceIn`"},
+    {"nodebased": ["colorspace_out"], "nuke": ["colorspaceOut"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `colorspaceOut`"},
+    {"nodebased": ["interpolation"], "nuke": ["interpolation"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Blur": {
+   "nodebased": "Blur",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["radius"], "nuke": ["size"], "kind": "renamed", "reason": "NodeBased's box radius in pixels; Nuke's size is a width/height pair"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Sharpen": {
+   "nodebased": "Sharpen",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["sharpen_amount"], "nuke": ["amount"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'amount', scripting name `amount`"},
+    {"nodebased": ["sharpen_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Erode (filter)": {
+   "nodebased": "ErodeFilter",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["filter_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
+    {"nodebased": ["filter_type"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'filter', scripting name `filter`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Median": {
+   "nodebased": "Median",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["median_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Glow": {
+   "nodebased": "Glow",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["red", "green", "blue"], "nuke": ["tint"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["glow_threshold"], "nuke": ["tolerance"], "kind": "renamed", "reason": "brightness above which the glow starts"},
+    {"nodebased": ["glow_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
+    {"nodebased": ["brightness"], "nuke": ["brightness"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Soften": {
+   "nodebased": "Soften",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["soften_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "DropShadow": {
+   "nodebased": "DropShadow",
+   "inputs": [
+    {"nodebased": "image", "nuke": "input", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["red", "green", "blue"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["angle"], "nuke": ["dropshadow_angle"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `dropshadow_angle`"},
+    {"nodebased": ["distance"], "nuke": ["dropshadow_distance"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `dropshadow_distance`"},
+    {"nodebased": ["shadow_size"], "nuke": ["softness"], "kind": "renamed", "reason": "PARITY_2D.md Filter #7 calls it Nuke's `size`; the guide's table has `softness` for the shadow blur and `size` for shrink/expand. Renamed because `size` is a global LIMITS key"},
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Defocus": {
+   "nodebased": "Defocus",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["aspect"], "nuke": ["ratio"], "kind": "renamed", "reason": "aspect ratio"},
+    {"nodebased": ["defocus"], "nuke": ["defocus"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "ZDefocus": {
+   "nodebased": "ZDefocus",
+   "inputs": [
+    {"nodebased": "image", "nuke": "image", "kind": "mapped"},
+    {"nodebased": "depth", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "kernel", "nuke": "filter", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["depth_layer"], "nuke": ["z_channel"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'depth channel', scripting name `z_channel`"},
+    {"nodebased": ["focal_plane"], "nuke": ["center"], "kind": "renamed", "reason": "focus plane"},
+    {"nodebased": ["depth_of_field"], "nuke": ["dof"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `dof`"},
+    {"nodebased": ["depth_math"], "nuke": ["math"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'math', scripting name `math`"},
+    {"nodebased": ["bokeh_shape"], "nuke": ["filter_type"], "kind": "renamed", "reason": "kernel type"},
+    {"nodebased": ["blade_count"], "nuke": ["blades"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'blades', scripting name `blades`"},
+    {"nodebased": ["blade_rotation"], "nuke": ["rotation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'rotation', scripting name `rotation`"},
+    {"nodebased": ["max_size"], "nuke": ["max_size"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "DirBlur": {
+   "nodebased": "DirBlur",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["center_x", "center_y"], "nuke": ["BlurCenter"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["blur_type"], "nuke": ["BlurType"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `BlurType`"},
+    {"nodebased": ["angle"], "nuke": ["BlurAngle"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'BlurAngle', scripting name `BlurAngle`"},
+    {"nodebased": ["length"], "nuke": ["BlurLength"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'BlurLength', scripting name `BlurLength`"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["BlurCenter"]
+  },
+  "EdgeBlur": {
+   "nodebased": "EdgeBlur",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["edgeblur_size"], "nuke": ["size"], "kind": "renamed", "reason": "PARITY_2D.md Filter #10: Nuke's `size`, renamed because `size` is a global LIMITS key"},
+    {"nodebased": ["edge_mult"], "nuke": ["edge_mult"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "EdgeExtend": {
+   "nodebased": "EdgeExtend",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["extend_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["extend_threshold"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Erode (fast)": {
+   "nodebased": "Erode",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["erode_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `size`"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Denoise": {
+   "nodebased": "Denoise",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["denoise_strength"], "nuke": ["amount"], "kind": "renamed", "reason": "Denoise Amount"},
+    {"nodebased": ["temporal"], "nuke": ["enable_temporal"], "kind": "renamed", "reason": "temporal processing switch"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "DegrainSimple": {
+   "nodebased": "DegrainSimple",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["red_amount"], "nuke": ["rVal"], "kind": "renamed", "reason": "red blur"},
+    {"nodebased": ["green_amount"], "nuke": ["gVal"], "kind": "renamed", "reason": "green blur"},
+    {"nodebased": ["blue_amount"], "nuke": ["bVal"], "kind": "renamed", "reason": "blue blur"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "MotionBlur": {
+   "nodebased": "MotionBlur",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["shutter"], "nuke": ["shutterTime"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Shutter Time', scripting name `shutterTime`"},
+    {"nodebased": ["samples"], "nuke": ["shutterSamples"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Shutter Samples', scripting name `shutterSamples`"},
+    {"nodebased": ["shutter_offset"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["custom_offset"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["vector_layer"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "MotionBlur2D": {
+   "nodebased": "MotionBlur2D",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
+    {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
+    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "MotionBlur3D": {
+   "nodebased": "MotionBlur3D",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "depth", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "camera", "nuke": "cam", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
+    {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
+    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "VectorBlur": {
+   "nodebased": "VectorBlur",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "uv", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["uv_layer"], "nuke": ["uv"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'uv channels', scripting name `uv`"},
+    {"nodebased": ["vector_scale"], "nuke": ["scale"], "kind": "renamed", "reason": "motion amount"},
+    {"nodebased": ["vector_offset"], "nuke": ["offset"], "kind": "renamed", "reason": "motion offset"},
+    {"nodebased": ["vector_alpha"], "nuke": ["alpha"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'uv alpha', scripting name `alpha`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["u_channel"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["v_channel"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["vector_method"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["vector_sampling"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["max_length"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Bilateral": {
+   "nodebased": "Bilateral",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["spatial_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Size', scripting name `size`"},
+    {"nodebased": ["colour_sigma"], "nuke": ["colourSigma"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `colourSigma`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Convolve": {
+   "nodebased": "Convolve",
+   "inputs": [
+    {"nodebased": "image", "nuke": "image", "kind": "mapped"},
+    {"nodebased": "kernel", "nuke": "filter", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["kernel_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Matrix": {
+   "nodebased": "Matrix",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["matrix_size", "weight0", "weight1", "weight2", "weight3", "weight4", "weight5", "weight6", "weight7", "weight8", "weight9", "weight10", "weight11", "weight12", "weight13", "weight14", "weight15", "weight16", "weight17", "weight18", "weight19", "weight20", "weight21", "weight22", "weight23", "weight24", "weight25", "weight26", "weight27", "weight28", "weight29", "weight30", "weight31", "weight32", "weight33", "weight34", "weight35", "weight36", "weight37", "weight38", "weight39", "weight40", "weight41", "weight42", "weight43", "weight44", "weight45", "weight46", "weight47", "weight48"], "nuke": ["matrix"], "kind": "components", "reason": "kernel weights as 49 scalar params plus a size choice"},
+    {"nodebased": ["normalize"], "nuke": ["normalize"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ],
+   "skip_default": ["matrix"]
+  },
+  "EdgeDetect": {
+   "nodebased": "EdgeDetect",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["edge_type"], "nuke": ["edgedetector"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Edge Detector', scripting name `edgedetector`"},
+    {"nodebased": ["threshold"], "nuke": ["threshold"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Emboss": {
+   "nodebased": "Emboss",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["angle"], "nuke": ["Angle"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Angle`"},
+    {"nodebased": ["width"], "nuke": ["Width"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Width`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "BumpBoss": {
+   "nodebased": "BumpBoss",
+   "inputs": [
+    {"nodebased": "image", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["height_channel"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["light_angle"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Laplacian": {
+   "nodebased": "Laplacian",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Inpaint": {
+   "nodebased": "Inpaint",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "matte", "nuke": "Matte", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["temporal_frames"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["fill_method"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "GodRays": {
+   "nodebased": "GodRays",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["center_x", "center_y"], "nuke": ["center"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["steps"], "nuke": ["steps"], "kind": "same"},
+    {"nodebased": ["translate"], "nuke": ["translate"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["decay"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "VolumeRays": {
+   "nodebased": "VolumeRays",
+   "inputs": [
+    {"nodebased": "image", "nuke": "img", "kind": "mapped"},
+    {"nodebased": "matte", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["center_x", "center_y"], "nuke": ["vol_pos"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["steps"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["decay"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["translate"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["vol_pos"]
+  },
+  "LevelSet": {
+   "nodebased": "LevelSet",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["channel"], "nuke": ["channel"], "kind": "same"},
+    {"nodebased": ["threshold"], "nuke": ["threshold"], "kind": "same"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["gradient"], "nuke": ["gradient"], "kind": "same"},
+    {"nodebased": ["create_matte"], "nuke": ["create_matte"], "kind": "same"},
+    {"nodebased": ["matt_limit"], "nuke": ["matt_limit"], "kind": "same"},
+    {"nodebased": ["extrapolated"], "nuke": ["extrapolated"], "kind": "same"},
+    {"nodebased": ["gradient_extrapolate"], "nuke": ["gradient_extrapolate"], "kind": "same"},
+    {"nodebased": ["enabled"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "ZSlice": {
+   "nodebased": "ZSlice",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "depth", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["near", "far"], "nuke": ["center", "dof"], "kind": "components", "reason": "NodeBased gives the slice as near/far; Nuke as centre and field width"},
+    {"nodebased": ["depth_layer"], "nuke": ["Zchan"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Z', scripting name `Zchan`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["falloff"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["depth_math"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["zslice_output"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["center", "dof"]
+  },
+  "Bokeh": {
+   "nodebased": null,
+   "reason": "provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20)"
+  },
+  "Keyer": {
+   "nodebased": "Keyer",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["keyer_operation"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
+    {"nodebased": ["range_a"], "nuke": ["range#2"], "kind": "renamed", "reason": "A point"},
+    {"nodebased": ["range_b"], "nuke": ["range#3"], "kind": "renamed", "reason": "B point"},
+    {"nodebased": ["range_c"], "nuke": ["range#4"], "kind": "renamed", "reason": "C point"},
+    {"nodebased": ["range_d"], "nuke": ["range#5"], "kind": "renamed", "reason": "D point"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "value_map": {"operation": {"luminance": "luminance key"}}
+  },
+  "ChromaKeyer": {
+   "nodebased": "ChromaKeyer",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["key_red", "key_green", "key_blue"], "nuke": ["_screenColor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["despill_bias"], "nuke": ["despillBias"], "kind": "renamed", "reason": "NodeBased has one scalar bias; Nuke's is per channel"},
+    {"nodebased": ["premultiply"], "nuke": ["_preMultiply"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `_preMultiply`"},
+    {"nodebased": ["key_tolerance"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["key_softness"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["luma_gain"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["shadow_level"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["highlight_level"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["despill"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["invert"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["despillBias"]
+  },
+  "Difference": {
+   "nodebased": "Difference",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["offset"], "nuke": ["offset"], "kind": "same"},
+    {"nodebased": ["gain"], "nuke": ["gain"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "HueKeyer": {
+   "nodebased": "HueKeyer",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["hue_center", "hue_width", "hue_softness", "sat_min", "sat_max"], "nuke": ["lut"], "kind": "components", "reason": "NodeBased replaces Nuke's hue/saturation curve with range params"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["lut"]
+  },
+  "Keylight": {
+   "nodebased": "ScreenKeyer",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "inside", "nuke": "InM", "kind": "mapped"},
+    {"nodebased": "outside", "nuke": "OutM", "kind": "mapped"},
+    {"nodebased": "clean", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["screen_red", "screen_green", "screen_blue"], "nuke": ["screenColor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["alpha_bias_red", "alpha_bias_green", "alpha_bias_blue"], "nuke": ["alphaBias"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["despill_bias_red", "despill_bias_green", "despill_bias_blue"], "nuke": ["despillBias"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["screen_gain"], "nuke": ["screenGain"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenGain`"},
+    {"nodebased": ["screen_balance"], "nuke": ["screenBalance"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenBalance`"},
+    {"nodebased": ["clip_black"], "nuke": ["screenClipMin"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenClipMin`"},
+    {"nodebased": ["clip_white"], "nuke": ["screenClipMax"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenClipMax`"},
+    {"nodebased": ["clip_rollback"], "nuke": ["screenClipRollback"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenClipRollback`"},
+    {"nodebased": ["screen_shrink"], "nuke": ["screenGrowShrink"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Screen Dilate', scripting name `screenGrowShrink`"},
+    {"nodebased": ["screen_softness"], "nuke": ["screenSoftness"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenSoftness`"},
+    {"nodebased": ["screen_preblur"], "nuke": ["preBlur"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `preBlur`"},
+    {"nodebased": ["keyer_view"], "nuke": ["show"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'View', scripting name `show`"},
+    {"nodebased": ["despill_bias"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["alpha_bias"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["edge_grade_gain"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["edge_grade_gamma"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["edge_grade_saturation"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["edge_width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["bias_colours"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "value_map": {"show": {"final": "final result"}}
+  },
+  "Primatte": {
+   "nodebased": null,
+   "reason": "no node: commercial keying algorithm (PARITY_2D.md Keyer #6)"
+  },
+  "Ultimatte": {
+   "nodebased": null,
+   "reason": "no node: commercial keying algorithm (PARITY_2D.md Keyer #6)"
+  },
+  "IBKColor": {
+   "nodebased": "IBKColor",
+   "inputs": [
+    {"nodebased": "c", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["fill_size"], "nuke": ["Size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `Size`"},
+    {"nodebased": ["screen_erode"], "nuke": ["erode"], "kind": "renamed", "reason": "PARITY_2D.md Keyer #7: Nuke's `erode`"},
+    {"nodebased": ["darks"], "nuke": ["off"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `off`"},
+    {"nodebased": ["lights"], "nuke": ["mult"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `mult`"},
+    {"nodebased": ["patch_black"], "nuke": ["multi"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `multi`"},
+    {"nodebased": ["screen_type"], "nuke": ["screen_type"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "IBKGizmo": {
+   "nodebased": "IBKGizmo",
+   "inputs": [
+    {"nodebased": "fg", "nuke": "fg", "kind": "mapped"},
+    {"nodebased": "c", "nuke": "c", "kind": "mapped"},
+    {"nodebased": "bg", "nuke": "bg", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["screen_type"], "nuke": ["st"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `st`"},
+    {"nodebased": ["luminance_match"], "nuke": ["lm_enable"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `lm_enable`"},
+    {"nodebased": ["luminance_level"], "nuke": ["luma"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `luma`"},
+    {"nodebased": ["use_bg_luminance"], "nuke": ["ublu"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'use bkg luminnance', scripting name `ublu`"},
+    {"nodebased": ["screen_subtraction"], "nuke": ["ss"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `ss`"},
+    {"nodebased": ["red_weight"], "nuke": ["red_weight"], "kind": "same"},
+    {"nodebased": ["blue_green_weight"], "nuke": ["blue_green_weight"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Cryptomatte": {
+   "nodebased": "Cryptomatte",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["crypto_layer"], "nuke": ["cryptoLayerChoice"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Layer Selection', scripting name `cryptoLayerChoice`"},
+    {"nodebased": ["matte_list"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["crypto_view"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Encryptomatte": {
+   "nodebased": "Encryptomatte",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "matte0", "nuke": "Matte", "kind": "mapped"},
+    {"nodebased": "matte1", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "matte2", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "matte3", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "matte4", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "matte5", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "matte6", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "matte7", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["layer_name"], "nuke": ["matteName"], "kind": "renamed", "reason": "name of the matte layer"},
+    {"nodebased": ["id0"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["id1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["id2"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["id3"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["id4"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["id5"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["id6"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["id7"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Merge": {
+   "nodebased": "Merge",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["operation"], "nuke": ["operation"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Premult": {
+   "nodebased": "Premult",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": []
+  },
+  "Unpremult": {
+   "nodebased": "Unpremult",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": []
+  },
+  "Switch": {
+   "nodebased": "Switch",
+   "inputs": [
+    {"nodebased": "0", "nuke": "0,1, 2, 3, 4...", "kind": "mapped"},
+    {"nodebased": "1", "nuke": "0,1, 2, 3, 4...", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["which"], "nuke": ["which"], "kind": "same"}
+   ]
+  },
+  "Dissolve": {
+   "nodebased": "Dissolve",
+   "inputs": [
+    {"nodebased": "A", "nuke": "0-9999", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "0-9999", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["which"], "nuke": ["which"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "KeyMix": {
+   "nodebased": "Keymix",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["invert_mask"], "nuke": ["invertMask"], "kind": "renamed", "reason": "KeyMix's own invert checkbox under its mask channel"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "AddMix": {
+   "nodebased": "AddMix",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "Blend": {
+   "nodebased": "Blend",
+   "inputs": [
+    {"nodebased": "in0", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in1", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in2", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in3", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in4", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in5", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in6", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in7", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in8", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in9", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in10", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in11", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in12", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in13", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in14", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "in15", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["mask_channel"], "nuke": ["maskChannelInput"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'mask', scripting name `maskChannelInput`"},
+    {"nodebased": ["weight0"], "nuke": ["weight0"], "kind": "same"},
+    {"nodebased": ["weight1"], "nuke": ["weight1"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["weight2"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight3"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight4"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight5"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight6"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight7"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight8"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight9"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight10"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight11"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight12"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight13"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight14"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight15"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["normalize"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "CopyRectangle": {
+   "nodebased": "CopyRectangle",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["area_x"], "nuke": ["area"], "kind": "renamed", "reason": "x of the area"},
+    {"nodebased": ["area_y"], "nuke": ["area#2"], "kind": "renamed", "reason": "y of the area"},
+    {"nodebased": ["area_r"], "nuke": ["area#3"], "kind": "renamed", "reason": "r of the area"},
+    {"nodebased": ["area_t"], "nuke": ["area#4"], "kind": "renamed", "reason": "t of the area"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["softness"], "nuke": ["softness"], "kind": "same"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+   ]
+  },
+  "CopyBBox": {
+   "nodebased": "CopyBBox",
+   "inputs": [
+    {"nodebased": "A", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "B", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": []
+  },
+  "ContactSheet": {
+   "nodebased": "ContactSheet",
+   "inputs": [
+    {"nodebased": "clip0", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip1", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip2", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip3", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip4", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip5", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip6", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip7", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip8", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip9", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip10", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip11", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip12", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip13", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip14", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip15", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip16", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip17", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip18", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip19", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip20", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip21", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip22", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip23", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip24", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip25", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip26", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip27", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip28", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip29", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip30", "nuke": "numbered inputs", "kind": "mapped"},
+    {"nodebased": "clip31", "nuke": "numbered inputs", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["rows"], "nuke": ["rows"], "kind": "same"},
+    {"nodebased": ["columns"], "nuke": ["columns"], "kind": "same"},
+    {"nodebased": ["gap"], "nuke": ["gap"], "kind": "same"},
+    {"nodebased": ["width"], "nuke": ["width"], "kind": "same"},
+    {"nodebased": ["height"], "nuke": ["height"], "kind": "same"},
+    {"nodebased": ["roworder"], "nuke": ["roworder"], "kind": "same"},
+    {"nodebased": ["colorder"], "nuke": ["colorder"], "kind": "same"},
+    {"nodebased": ["center"], "nuke": ["center"], "kind": "same"},
+    {"nodebased": ["splitinputs"], "nuke": ["splitinputs"], "kind": "same"},
+    {"nodebased": ["startframe"], "nuke": ["startframe"], "kind": "same"},
+    {"nodebased": ["endframe"], "nuke": ["endframe"], "kind": "same"},
+    {"nodebased": ["labels"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["fit"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "TimeDissolve": {
+   "nodebased": "TimeDissolve",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["ease"], "nuke": ["lut"], "kind": "renamed", "reason": "easing curve"},
+    {"nodebased": ["in"], "nuke": ["in"], "kind": "same"},
+    {"nodebased": ["out"], "nuke": ["out"], "kind": "same"},
+    {"nodebased": ["which"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["lut"]
+  },
+  "ZMerge": {
+   "nodebased": "ZMerge",
+   "inputs": [
+    {"nodebased": "A", "nuke": "[numbered inputs]", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "[numbered inputs]", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["depth_layer"], "nuke": ["z_channel"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Z channel', scripting name `z_channel`"},
+    {"nodebased": ["depth_math"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["smoothing"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Transform": {
+   "nodebased": "Transform",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["translate_x", "translate_y"], "nuke": ["translate"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["center_x", "center_y"], "nuke": ["center"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["skew_x"], "nuke": ["skewX"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `skewX`"},
+    {"nodebased": ["skew_y"], "nuke": ["skewY"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `skewY`"},
+    {"nodebased": ["invert"], "nuke": ["invert_matrix"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `invert_matrix`"},
+    {"nodebased": ["scale_x"], "nuke": ["scale"], "kind": "renamed", "reason": "NodeBased's per-axis scale; Nuke's scale takes one or two values"},
+    {"nodebased": ["scale_y"], "nuke": ["scale"], "kind": "renamed", "reason": "NodeBased's per-axis scale; Nuke's scale takes one or two values"},
+    {"nodebased": ["scale_mode"], "nuke": ["scale"], "kind": "renamed", "reason": "NodeBased's uniform/per-axis switch; Nuke's scale takes one or two values"},
+    {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
+    {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
+    {"nodebased": ["rotate"], "nuke": ["rotate"], "kind": "same"},
+    {"nodebased": ["scale"], "nuke": ["scale"], "kind": "same"},
+    {"nodebased": ["skew_order"], "nuke": ["skew_order"], "kind": "same"},
+    {"nodebased": ["clamp"], "nuke": ["clamp"], "kind": "same"},
+    {"nodebased": ["black_outside"], "nuke": ["black_outside"], "kind": "same"},
+    {"nodebased": ["motionblur"], "nuke": ["motionblur"], "kind": "same"},
+    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["translate", "center"]
+  },
+  "Crop": {
+   "nodebased": "Crop",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["x", "y", "width", "height"], "nuke": ["box"], "kind": "components", "reason": "NodeBased stores the box as x, y, width, height; Nuke's knob is one x, y, r, t value"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["box"]
+  },
+  "Tracker": {
+   "nodebased": "Tracker",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "track", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["smoothing"], "nuke": ["smoothT", "smoothR", "smoothS"], "kind": "components", "reason": "one smoothing frame count; Nuke smooths translate, rotate and scale separately"},
+    {"nodebased": ["tracking_channels"], "nuke": ["channels"], "kind": "renamed", "reason": "the channels the tracker matches on"},
+    {"nodebased": ["reference_frame"], "nuke": ["reference_frame"], "kind": "same"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["mode"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["apply_translate"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["apply_rotate"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["apply_scale"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["pattern_radius"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["search_radius"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["adaptive_update"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["channels", "smoothT", "smoothR", "smoothS"]
+  },
+  "PlanarTracker": {
+   "nodebased": "PlanarTracker",
+   "inputs": [
+    {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["reference_frame"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["samples_per_axis"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["vector_detail"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["smoothness"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["ransac_threshold"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["filter"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Reformat": {
+   "nodebased": "Reformat",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["width", "height"], "nuke": ["box_width", "box_height"], "kind": "components", "reason": "to-box size"},
+    {"nodebased": ["reformat_type"], "nuke": ["type"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'type', scripting name `type`"},
+    {"nodebased": ["pixel_aspect"], "nuke": ["box_pixel_aspect"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `box_pixel_aspect`"},
+    {"nodebased": ["resize_type"], "nuke": ["resize"], "kind": "renamed", "reason": "resize type"},
+    {"nodebased": ["preserve_bbox"], "nuke": ["pbb"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'preserve bounding box', scripting name `pbb`"},
+    {"nodebased": ["format"], "nuke": ["format"], "kind": "same"},
+    {"nodebased": ["scale"], "nuke": ["scale"], "kind": "same"},
+    {"nodebased": ["center"], "nuke": ["center"], "kind": "same"},
+    {"nodebased": ["flip"], "nuke": ["flip"], "kind": "same"},
+    {"nodebased": ["flop"], "nuke": ["flop"], "kind": "same"},
+    {"nodebased": ["turn"], "nuke": ["turn"], "kind": "same"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["box_width", "box_height"]
+  },
+  "CornerPin2D": {
+   "nodebased": "CornerPin",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["to1_x", "to1_y"], "nuke": ["to1"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["to2_x", "to2_y"], "nuke": ["to2"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["to3_x", "to3_y"], "nuke": ["to3"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["to4_x", "to4_y"], "nuke": ["to4"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["from1_x", "from1_y"], "nuke": ["from1"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["from2_x", "from2_y"], "nuke": ["from2"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["from3_x", "from3_y"], "nuke": ["from3"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["from4_x", "from4_y"], "nuke": ["from4"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert checkbox"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["to1", "to2", "to3", "to4", "from1", "from2", "from3", "from4"],
+   "value_map": {"invert": {"forward": false, "inverse": true}}
+  },
+  "Mirror": {
+   "nodebased": "Mirror",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["flip_x"], "nuke": ["Horizontal"], "kind": "renamed", "reason": "mirror left to right"},
+    {"nodebased": ["flip_y"], "nuke": ["Vertical"], "kind": "renamed", "reason": "mirror top to bottom"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Stabilize": {
+   "nodebased": "Stabilize",
+   "inputs": [
+    {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["reference_frame"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["apply_translate"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["apply_rotate"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["apply_scale"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["smoothing"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["pattern_radius"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["search_radius"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["adaptive_update"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["tracking_channels"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["filter"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Position": {
+   "nodebased": "Position",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["translate_x", "translate_y"], "nuke": ["translate"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"}
+   ]
+  },
+  "AdjustBBox": {
+   "nodebased": "AdjustBBox",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["numpixels"], "nuke": ["numpixels"], "kind": "same"},
+    {"nodebased": ["clip_to_format"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "BlackOutside": {
+   "nodebased": "BlackOutside",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": []
+  },
+  "STMap": {
+   "nodebased": "STMap",
+   "inputs": [
+    {"nodebased": "image", "nuke": "src", "kind": "mapped"},
+    {"nodebased": "uv", "nuke": "stmap", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["uv_layer", "u_channel", "v_channel"], "nuke": ["uv"], "kind": "components", "reason": "UV channel choice as layer plus two channels"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["uv_outside"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["uv"]
+  },
+  "IDistort": {
+   "nodebased": "IDistort",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "uv", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["uv_layer", "u_channel", "v_channel"], "nuke": ["uv"], "kind": "components", "reason": "UV channel choice as layer plus two channels"},
+    {"nodebased": ["uv_scale_x", "uv_scale_y"], "nuke": ["uv_scale"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["uv_offset_x", "uv_offset_y"], "nuke": ["uv_offset"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["uv", "uv_scale", "uv_offset"]
+  },
+  "GridWarp": {
+   "nodebased": "GridWarp",
+   "inputs": [
+    {"nodebased": "image", "nuke": "src", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["bbox"], "nuke": ["boundary_box"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'set bbox to', scripting name `boundary_box`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["rows"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["columns"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "SplineWarp": {
+   "nodebased": "SplineWarp",
+   "inputs": [
+    {"nodebased": "image", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["curve_resolution"], "nuke": ["curverez"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `curverez`"},
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["root_warp"], "nuke": ["root_warp"], "kind": "same"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["bbox"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Tile": {
+   "nodebased": "Tile",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["mirror_x"], "nuke": ["mirrorColumns"], "kind": "renamed", "reason": "mirror alternate columns"},
+    {"nodebased": ["mirror_y"], "nuke": ["mirrorRows"], "kind": "renamed", "reason": "mirror alternate rows"},
+    {"nodebased": ["rows"], "nuke": ["rows"], "kind": "same"},
+    {"nodebased": ["columns"], "nuke": ["columns"], "kind": "same"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "VectorCornerPin": {
+   "nodebased": "VectorCornerPin",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "vectors", "nuke": "SmartVector", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["reference_frame"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["corner1_x"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["corner1_y"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["corner2_x"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["corner2_y"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["corner3_x"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["corner3_y"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["corner4_x"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["corner4_y"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "VectorDistort": {
+   "nodebased": "VectorDistort",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "vectors", "nuke": "SmartVector", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["reference_frame"], "nuke": ["referenceFrame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `referenceFrame`"},
+    {"nodebased": ["blur_size"], "nuke": ["blurSize"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `blurSize`"},
+    {"nodebased": ["fade_frames"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "PointsTo3D": {
+   "nodebased": "PointsTo3D",
+   "inputs": [
+    {"nodebased": "camera", "nuke": "cam", "kind": "mapped"},
+    {"nodebased": "object", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["track_x0", "track_y0"], "nuke": ["pointA"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["track_x1", "track_y1"], "nuke": ["pointB"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["track_x2", "track_y2"], "nuke": ["pointC"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["frame0"], "nuke": ["ref_timeA"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'point ref time', scripting name `ref_timeA`"},
+    {"nodebased": ["frame1"], "nuke": ["ref_timeB"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'point ref time', scripting name `ref_timeB`"},
+    {"nodebased": ["frame2"], "nuke": ["ref_timeC"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'point ref time', scripting name `ref_timeC`"},
+    {"nodebased": ["track_count"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["image_width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["image_height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["min_ray_angle"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["tx"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["ty"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["tz"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["rx"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["ry"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["rz"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sx"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sy"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["sz"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["uscale"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["rot_order"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["pivot_x"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["pivot_y"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["pivot_z"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ],
+   "skip_default": ["pointA", "pointB", "pointC"]
+  },
+  "Reconcile3D": {
+   "nodebased": "Reconcile3D",
+   "inputs": [
+    {"nodebased": "camera", "nuke": "cam", "kind": "mapped"},
+    {"nodebased": "point", "nuke": "axis", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["point_x", "point_y", "point_z"], "nuke": ["point"], "kind": "components", "reason": "3D point as three scalar params"},
+    {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["image_width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["image_height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["vertex_index"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "TVIScale": {
+   "nodebased": "TVIScale",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["power"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["filter"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "LensDistortion": {
+   "nodebased": "Undistort",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "camera", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["lens_preset"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lens_k1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lens_k2"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lens_k3"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lens_p1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lens_p2"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lens_cx"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lens_cy"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["anamorphic_squeeze"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["lens_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "ViewMetaData": {
+   "nodebased": "ViewMetaData",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": [], "nuke": ["shownmetadata"], "kind": "panel", "reason": "panel table of every key and value, the properties panel, not a node param (PARITY_2D.md Metadata #1)"},
+    {"nodebased": [], "nuke": ["metadatafilter"], "kind": "panel", "reason": "panel search box, the properties panel, not a node param (PARITY_2D.md Metadata #1)"},
+    {"nodebased": [], "nuke": ["metadatafiltermode"], "kind": "panel", "reason": "the search box matches key or value, the properties panel, not a node param (PARITY_2D.md Metadata #1)"}
+   ]
+  },
+  "ModifyMetaData": {
+   "nodebased": "ModifyMetaData",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["edits"], "nuke": ["metadata"], "kind": "renamed", "reason": "NodeBased's edit list is Nuke's metadata table"}
+   ]
+  },
+  "CopyMetaData": {
+   "nodebased": "CopyMetaData",
+   "inputs": [
+    {"nodebased": "image", "nuke": "Image", "kind": "mapped"},
+    {"nodebased": "meta", "nuke": "Meta", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["keys"], "nuke": ["metadatafilter"], "kind": "renamed", "reason": "keys to copy"}
+   ]
+  },
+  "AddTimeCode": {
+   "nodebased": "AddTimeCode",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["timecode"], "nuke": ["startcode"], "kind": "renamed", "reason": "start time code"},
+    {"nodebased": ["start_frame"], "nuke": ["frame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `frame`"},
+    {"nodebased": ["fps"], "nuke": ["fps"], "kind": "same"},
+    {"nodebased": ["drop_frame"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "CompareMetaData": {
+   "nodebased": "CompareMetaData",
+   "inputs": [
+    {"nodebased": "image", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "other", "nuke": "B", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": [], "nuke": ["metadata"], "kind": "panel", "reason": "panel table of the differing keys (PARITY_2D.md Metadata #5), not a node param"}
+   ]
+  },
+  "Dot": {
+   "nodebased": "Dot",
+   "inputs": [
+    {"nodebased": "input", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": []
+  },
+  "NoOp": {
+   "nodebased": "NoOp",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["note"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Backdrop": {
+   "nodebased": "Backdrop",
+   "inputs": [],
+   "knobs": [
+    {"nodebased": ["red"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["green"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["blue"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "PostageStamp": {
+   "nodebased": "PostageStamp",
+   "inputs": [
+    {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["hide_input"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Group": {
+   "nodebased": "Group",
+   "inputs": [],
+   "knobs": []
+  },
+  "Input": {
+   "nodebased": "Input",
+   "inputs": [],
+   "knobs": [
+    {"nodebased": ["input_number"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Output": {
+   "nodebased": "Output",
+   "inputs": [
+    {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": []
+  },
+  "BlinkScript": {
+   "nodebased": null,
+   "reason": "no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6)"
+  },
+  "BurnIn": {
+   "nodebased": "BurnIn",
+   "inputs": [
+    {"nodebased": "image", "nuke": "1", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["burnIn_color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["top_left"], "nuke": ["burnIn_topLeft"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `burnIn_topLeft`"},
+    {"nodebased": ["top_right"], "nuke": ["burnIn_topRight"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `burnIn_topRight`"},
+    {"nodebased": ["bottom_left"], "nuke": ["burnIn_bottomLeft"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `burnIn_bottomLeft`"},
+    {"nodebased": ["bottom_right"], "nuke": ["burnIn_bottomRight"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `burnIn_bottomRight`"},
+    {"nodebased": ["font"], "nuke": ["fontfamily"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `fontfamily`"},
+    {"nodebased": ["bar"], "nuke": ["burnIn_backgroundEnable"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'enable', scripting name `burnIn_backgroundEnable`"},
+    {"nodebased": ["bar_opacity"], "nuke": ["burnIn_backgroundOpacity"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'opacity', scripting name `burnIn_backgroundOpacity`"},
+    {"nodebased": ["center"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["font_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["margin"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "LiveGroup": {
+   "nodebased": null,
+   "reason": "no node (PARITY_2D.md Other #8)"
+  },
+  "LiveInput": {
+   "nodebased": null,
+   "reason": "no node (PARITY_2D.md Other #8)"
+  },
+  "VariableGroup": {
+   "nodebased": null,
+   "reason": "no node (PARITY_2D.md Other #8)"
+  },
+  "Link": {
+   "nodebased": null,
+   "reason": "no node (PARITY_2D.md Other #8)"
+  },
+  "Precomp": {
+   "nodebased": "Precomp",
+   "inputs": [],
+   "knobs": [
+    {"nodebased": ["output_node"], "nuke": ["output"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `output`"},
+    {"nodebased": ["file"], "nuke": ["file"], "kind": "same"},
+    {"nodebased": ["frame_offset"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["reload"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "Root": {
+   "nodebased": null,
+   "reason": "no node: per-script project settings (PARITY_2D.md Other #11)"
+  },
+  "Assert": {
+   "nodebased": "Assert",
+   "inputs": [
+    {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["condition"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["message"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
+  },
+  "AudioRead": {
+   "nodebased": null,
+   "reason": "no node: no audio pipeline (PARITY_2D.md Other #14)"
+  }
+ }
+}
