@@ -1,5 +1,24 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (3:25 PM on 2026-10-25 PDT)
+
+`main` moved `5eccc56c` -> `b84823f5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `b84823f5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1025-1514.log`, started 3:14 PM): **Ran 6286 tests in 488.047 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step A of N: measure how closely the 2D nodes match real Nuke nodes, and publish the score.** Commits:
+  - `d33447d3` The 2D nodes get a ruler against the real Nuke nodes: every Nuke node of every PARITY_2D row is scored 0 to 100 from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob pairing and formula tests, and the baseline is 54.5 overall (full suite 6286 tests OK, skipped=35)
+  Diff: 12 files changed, 9202 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:35 AM on 2026-10-25 PDT)
 
 `main` moved `695b5b96` -> `8e547ad6` (lane commits cherry-picked onto main in lane order) and then to this

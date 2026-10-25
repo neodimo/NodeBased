@@ -1,3 +1,9 @@
+## 2026-10-25 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step A of N: measure how closely the 2D nodes match real Nuke nodes, and publish the score (integrator tick)
+
+- **What was done:** `main` `5eccc56c` -> `b84823f5` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `b84823f5`: Ran 6286 tests in 488.047 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-25 — Lane 2 (2D parity, Claude Sonnet 5.5) step A of 1: the fidelity ruler: how closely each 2D node matches the real Nuke node, scored from the Nuke 17.0 Reference Guide
 
 - **Why:** DiMo, 10/25 1:28 PM: "I'm very sure the 2d node parity is not mimicking actual Nuke node functionality yet." PARITY_2D.md counts 123 of 138 rows supported, but that grade means "a node does the main thing and has tests", and the golden images in `tests/data/golden/` lock NodeBased's own output. The most-used nodes are the thinnest (Grade has `exposure`, `multiply`, `offset`, `mix`; the guide's has ten knobs, a mask channel and an unpremult-by). This step builds the ruler. It changes no node behaviour.
