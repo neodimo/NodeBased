@@ -328,14 +328,14 @@ def _state(choice=None):
             raise RuntimeError(reason) from exc
 
 
-def start_clock_ramp(budget):
+def start_clock_ramp(budget, scale=2):
     """A `cardclock.Ramp` for a play that starts now, when the card the app renders on is one whose clocks and link fall at rest and the app
     has not used it for `cardclock.REST_SECONDS`; None otherwise (no card yet, an integrated or software one, or a card that is warm)."""
     state = _states.get('default')
     rest = cardclock.rest_seconds()
     if not state or rest is None or rest < cardclock.REST_SECONDS or not cardclock.clock_idles(state['info']):
         return None
-    return cardclock.Ramp(budget)
+    return cardclock.Ramp(budget, scale=scale)
 
 
 def available():
@@ -2077,6 +2077,7 @@ def _release_staging(state):
     in one allocation. Call with the GPU lock held."""
     held = state.get('staging')
     if held is not None and held.size > STAGING_RELEASE_BYTES:
+        state['staging_wanted'] = held.size       # the size the next played frames at the chosen size will want again (`_staging_buffer`)
         held.destroy()
         state['staging'] = None
 
@@ -2094,6 +2095,14 @@ def _staging_buffer(state, size, keep):
     if held is not None:
         held.destroy()
         state['staging'] = None
+    ramp = cardclock.current()
+    if ramp is not None:
+        # The first frames of a play after a rest are drawn at half size and the first frame at the chosen size follows them. Its
+        # readback buffer is four times the size and took 11.5 to 15 ms to allocate in the switch frame (the mixed scene, the RTX,
+        # 10/25): the half-size frames make it once, in frames that have room (the size a stop's full-quality picture released just
+        # before, or the ramp's size ratio squared with a margin for the rows' alignment).
+        grown = int(size * ramp.scale ** 2 * 1.05)
+        size = max(size, int(state.get('staging_wanted', 0)), grown if grown <= STAGING_KEEP_BYTES else 0)
     buffer = device.create_buffer(size=size, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ)
     state['staging_creates'] = state.get('staging_creates', 0) + 1
     if size <= STAGING_KEEP_BYTES:

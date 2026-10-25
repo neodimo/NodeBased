@@ -158,6 +158,75 @@ class SharedPackTests(unittest.TestCase):
                 np.testing.assert_allclose(picture, fresh, atol=2e-3, rtol=0)
 
 
+class StagingBufferTests(unittest.TestCase):
+    """The readback buffer of the chosen size is made by the half-size frames, not by the first full-size frame."""
+
+    @classmethod
+    def setUpClass(cls):
+        need_gpu(cls)
+
+    def setUp(self):
+        self.state = gpu3d._state()
+        self.saved = self.state.get("staging"), self.state.get("staging_wanted")
+        self.state["staging"] = None
+        self.state.pop("staging_wanted", None)
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        held = self.state.get("staging")
+        if held is not None and held is not self.saved[0]:
+            held.destroy()
+        self.state["staging"], wanted = self.saved
+        if wanted is None:
+            self.state.pop("staging_wanted", None)
+        else:
+            self.state["staging_wanted"] = wanted
+
+    def test_releasing_a_big_buffer_remembers_its_size(self):
+        gpu3d._staging_buffer(self.state, 20 << 20, lambda b: b)
+        gpu3d._release_staging(self.state)
+        self.assertEqual(self.state["staging_wanted"], 20 << 20)
+        self.assertIsNone(self.state["staging"])
+
+    def test_a_ramp_frame_makes_the_buffer_the_chosen_size_wanted_and_the_switch_frame_reuses_it(self):
+        self.state["staging_wanted"] = 40 << 20
+        ramp = cardclock.Ramp(1 / 24)
+        self.addCleanup(ramp.finish)
+        small = gpu3d._staging_buffer(self.state, 10 << 20, lambda b: b)
+        self.assertGreaterEqual(small.size, 40 << 20)
+        creates = self.state.get("staging_creates", 0)
+        big = gpu3d._staging_buffer(self.state, 40 << 20, lambda b: b)
+        self.assertIs(big, small)
+        self.assertEqual(self.state.get("staging_creates", 0), creates)
+
+    def test_a_ramp_that_never_saw_the_chosen_size_grows_the_buffer_by_its_size_ratio_squared(self):
+        ramp = cardclock.Ramp(1 / 24, scale=2)
+        self.addCleanup(ramp.finish)
+        small = gpu3d._staging_buffer(self.state, 10 << 20, lambda b: b)
+        self.assertGreaterEqual(small.size, 40 << 20)
+        self.assertLess(small.size, 45 << 20)
+        creates = self.state.get("staging_creates", 0)
+        self.assertIs(gpu3d._staging_buffer(self.state, 40 << 20, lambda b: b), small)
+        self.assertEqual(self.state.get("staging_creates", 0), creates)
+
+    def test_a_buffer_the_state_would_not_keep_is_not_made_early(self):
+        ramp = cardclock.Ramp(1 / 24, scale=2)
+        self.addCleanup(ramp.finish)
+        size = (gpu3d.STAGING_KEEP_BYTES // 4) + (1 << 20)
+        self.assertEqual(gpu3d._staging_buffer(self.state, size, lambda b: b).size, size)
+
+    def test_without_a_ramp_a_frame_makes_only_the_buffer_it_needs(self):
+        self.state["staging_wanted"] = 40 << 20
+        small = gpu3d._staging_buffer(self.state, 10 << 20, lambda b: b)
+        self.assertEqual(small.size, 10 << 20)
+
+    def test_a_ramp_that_has_ended_does_not_enlarge_the_buffer(self):
+        self.state["staging_wanted"] = 40 << 20
+        cardclock.Ramp(1 / 24).finish()
+        self.assertFalse(cardclock.active())
+        self.assertEqual(gpu3d._staging_buffer(self.state, 10 << 20, lambda b: b).size, 10 << 20)
+
+
 class EvaluatorTierTests(unittest.TestCase):
     """The real source of the two sets of arrays: one document evaluated at tier 1 and at tier 2 by the Evaluator."""
 

@@ -9889,7 +9889,7 @@ class Window(QMainWindow):
                 or not any(node.get("type") == "Render3D" for node in self.dispatcher.document.get("nodes", {}).values())):
             return
         index = self.proxy.findData(CLOCK_RAMP_TIER)
-        ramp = (gpu3d.start_clock_ramp(1.0 / max(1.0, float(self.dispatcher.document['time'].get('fps', 24.0))))
+        ramp = (gpu3d.start_clock_ramp(1.0 / max(1.0, float(self.dispatcher.document['time'].get('fps', 24.0))), CLOCK_RAMP_TIER)
                 if index >= 0 else None)
         if ramp is None:
             return

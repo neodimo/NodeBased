@@ -264,7 +264,8 @@ class WindowRampTests(unittest.TestCase):
         from PySide6.QtWidgets import QApplication
         global APP
         APP = QApplication.instance() or QApplication([])
-        from nodebased.app import Window
+        from nodebased.app import Window, CLOCK_RAMP_TIER
+        self.tier = CLOCK_RAMP_TIER
         self.window = Window(agent_name="card-clock-" + uuid.uuid4().hex)
         self.window.agent_command({"op": "batch", "commands": splat_commands()})
         self.window.agent_command({"op": "view", "id": "render"})
@@ -291,7 +292,7 @@ class WindowRampTests(unittest.TestCase):
 
     def test_play_after_a_rest_draws_half_size_and_asks_the_card_for_a_ramp_at_the_comps_rate(self):
         start = self.play(self.ramp)
-        start.assert_called_once_with(1 / 24)
+        start.assert_called_once_with(1 / 24, self.tier)
         self.assertEqual(self.window.proxy.currentData(), 2)
         self.assertIsNotNone(self.window.playback_auto_proxy_index)
         self.assertIs(self.window._clock_ramp, self.ramp)

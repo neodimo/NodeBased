@@ -58,7 +58,8 @@ BALLAST_FILL = 0.8
 # three frames of 51 ms at 2.3 to 2.9 s in half of the cube runs, 10/24).
 TAPER_SECONDS = 2.0
 # The first frame at the chosen size takes longer after its start than a frame at the lower size: about three times what the lower size
-# took (HOLD_FACTOR) plus the time it spends packing its scene again. The last few frames at the lower size are held to make up the
+# took (HOLD_FACTOR) plus the time it spends packing its scene when the scene changed (the two sizes share one pack since 10/25, so
+# that is nothing unless an edit lands during the ramp). The last few frames at the lower size are held to make up the
 # difference, each at most HOLD_STEP_SECONDS longer than the one before so no interval grows by more than that, up to HOLD_MAX_SECONDS.
 HOLD_FACTOR = 3.0
 HOLD_MAX_SECONDS = 0.060
@@ -70,8 +71,9 @@ _active = [None]           # the Ramp of the play that is starting, while its fr
 class Ramp:
     """The start of one play after a rest (see the module doc). `budget` is the seconds a frame has (1 / the frame rate)."""
 
-    def __init__(self, budget, clock=time.monotonic):
+    def __init__(self, budget, clock=time.monotonic, scale=2):
         self.budget = float(budget)
+        self.scale = max(1, int(scale))      # the frames run at 1/scale of the chosen size along each side
         self.clock = clock
         self.began = clock()
         self.times = []
@@ -113,9 +115,19 @@ class Ramp:
         return None if elapsed >= TAPER_SECONDS else BALLAST_FILL * (1.0 - elapsed / TAPER_SECONDS)
 
 
+def current():
+    """The `Ramp` that is running (its frames are drawn at the lower size and the chosen size follows), or None."""
+    return _active[0]
+
+
+def active():
+    return _active[0] is not None
+
+
 def note_build(seconds):
-    """A frame has just spent `seconds` packing and uploading its scene for the card. The first frame at the chosen size does it again (the
-    scene it draws is not the one the lower size drew), so the ramp counts it into the time that frame will take longer."""
+    """A frame has just spent `seconds` packing and uploading its scene for the card. The frames at the chosen size use the pack the lower
+    size made (`gpu3d._array_key` tells equal scenes by content), so this only counts when the scene changed during the ramp, into the time
+    the first frame at the chosen size will take longer."""
     ramp = _active[0]
     if ramp is not None:
         ramp.build_seconds = max(ramp.build_seconds, float(seconds))
