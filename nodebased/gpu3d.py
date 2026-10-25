@@ -1482,6 +1482,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
     _mark('render_begin')
+    _mark(f'size {int(width)}x{int(height)}')
     if samples > 1 and scene3d.is_empty_scene(scene):
         samples = 1   # nothing to antialias: the frame is the flat background
     if scene3d.has_shadow_catchers(scene):
@@ -1706,6 +1707,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 last_shadow_path = 'bvh'
                 levels = math.log2(triangles+2)
                 work = width * height * samples**2 * shadow_count * 16 * levels + 16 * triangles * levels
+        _mark('shadow_ready')
         if volumes:
             # The meshes' shadows on the smoke cost a walk of the triangle tree per lit sample (sixteen box tests a level) when the
             # raster shadows use the tree, else a test of every triangle: the work the frame is cut into bands by.
@@ -2357,6 +2359,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     key = (_mesh_key(scene, order), light_data.tobytes(), area_lights_data.tobytes(), area_samples_data.tobytes(),
            _environment_key(getattr(scene, 'environments', ())), shadow_triangles,
            id(shadow_data) if shadow_triangles else None, id(bvh_data[0]) if bvh_data is not None else None)
+    _mark('key_done')
     held = state.setdefault('residents', {})
     res = held.get(key)
     if res is None:
@@ -2364,6 +2367,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
         res = _build_resident(state, scene, order, key, light_data, area_lights_data, area_samples_data, shadow_data,
                               bvh_data, shadow_triangles, cancel)
         cardclock.note_build(time.monotonic() - built)
+        _mark('resident_built')
         held[key] = res
         while len(held) > RESIDENT_SCENES:          # oldest first (insertion order)
             held.pop(next(iter(held)))
@@ -2383,6 +2387,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     device.queue.write_buffer(res['uniform'], 0, params)
     fmt = 'rgba32float' if data else state['format']
     target_view, depth_view, target = _frame_targets(state, width, height, fmt)
+    _mark('targets_ready')
     has_volumes = volume is not None and output == 'rgba' and bool(getattr(scene, 'volumes', ()))
     # The smoke shadows the meshes: the shadowed lights' rays are marched through the volumes' density (gpuvolume).
     smoke = bool(has_volumes and shadow_triangles and volume.shadow_density > 0
@@ -2421,6 +2426,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                                         bool(scene.lights), depth_view, keep, target=fmt, used=used, shadow_buffer=res['shadow'],
                                         shadow_count=shadow_triangles, shadow_bias=bias, light_order=light_order,
                                         bvh=[entry['resource']['buffer'] for entry in res['bvh']] if res['bvh'] else None)
+    _mark('volume_ready')
     # The display picture of a played frame (nodebased/gpupicture.py) is made by one more pass in the last band's submission and
     # read back through the same buffer, after the float rows.
     picture_view = (gpupicture.armed_view() if output == 'rgba' and not data and not bg.any()
@@ -2428,9 +2434,11 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
     recorder = gpupicture.prepare(state, picture_view, width, height) if picture_view is not None else None
     if picture_view is None and gpupicture.warm_view() is not None:
         gpupicture.warm(state, gpupicture.warm_view())       # a frame that is not played builds the display pass the played ones will use
+    _mark('picture_ready')
     float_bytes = stride*max(y1-y0 for y0, y1 in bands)
     picture_offset = (float_bytes + 255)//256*256
     staging = _staging_buffer(state, picture_offset + (recorder.bytes if recorder is not None else 0), keep)
+    _mark('staging_ready')
     result = np.empty((height, width, 4), 'f4')
     state['picture_rgba'] = None
     splat_layer = False            # a frame with smoke in several bands prepares its splat layer once: False until then, then it or None
@@ -2477,6 +2485,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
                     splat_layer = gpusplat.prepare_on_card(state, splat_job[0], camera, width, height, depth_view,
                                                            lighting=splat_job[1], cancel=cancel, keep=keep,
                                                            glass_view=glass_view if glass else None)
+                    _mark('splat_ready')
                     encoder = device.create_command_encoder()
                     if splat_layer is not None:
                         splat_layer(encoder, target_view, between, **split)

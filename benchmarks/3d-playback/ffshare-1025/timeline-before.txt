@@ -1,0 +1,28 @@
+The switch frame of each scene on the RTX 3080 Ti before the fix (10/25 3:50 PM, play pressed 4 s after the first picture, Proxy while playing on, 1080p).
+Time between consecutive worker stamps in ms, stamps under 0.5 ms left out. Produced by switch_timeline.py from the raw events beside it.
+
+== cube
+last small frame (960x540) 18.2 ms
+  render_begin 0.5, gpu_done 3.6, readback_done 12.8
+switch frame (1920x1080) 18.2 ms
+  render_begin 0.5, targets_ready 0.7, submit 0.6, gpu_done 13.4, readback_done 2.4
+== furnished
+last small frame (960x540) 35.5 ms
+  eval_begin#26 0.5, render_begin 1.2, submit 0.5, gpu_done 5.5, readback_done 26.8
+switch frame (1920x1080) 53.5 ms
+  eval_begin#27 0.5, render_begin 1.1, shadow_ready 17.9, resident_built 9.6, targets_ready 0.7, upload_done 0.6, submit 0.6, gpu_done 18.5, readback_done 3.3
+== mixed
+last small frame (960x540) 33.8 ms
+  eval_begin#17 0.7, render_begin 1.6, splat_ready 5.9, gpu_done 3.7, readback_done 20.5
+switch frame (1920x1080) 49.7 ms
+  eval_begin#18 0.6, render_begin 1.5, shadow_ready 5.2, resident_built 7.9, staging_ready 11.5, submit 0.5, splat_ready 5.4, gpu_done 13.2, readback_done 2.4
+== mixedglass
+last small frame (960x540) 60.6 ms
+  eval_begin#16 0.6, render_begin 8.3, key_done 1.7, upload_done 1.4, volume_ready 0.7, submit 0.6, splat_ready 6.7, gpu_done 5.9, readback_done 33.8
+switch frame (1920x1080) 67.2 ms
+  eval_begin#17 1.0, render_begin 6.3, shadow_ready 7.4, key_done 1.3, resident_built 7.9, upload_done 2.2, volume_ready 0.9, staging_ready 11.7, submit 1.0, splat_ready 5.4, gpu_done 18.8, readback_done 2.4
+
+Causes (a debug print of which parts of the cache key differed, one run of the furnished room):
+  shadow_ready  the shadow triangles and their BVH are packed again: the key holds each geometry's vertex and triangle arrays by identity (they are read-only), and the full-size scene is a different set of array objects with the same content
+  resident_built  the resident scene (vertices, materials, textures, light tables) is built again for the same reason (vertices, triangles, uvs by identity; then the shadow data's identity, which the first miss changed)
+  staging_ready  the readback buffer for the full size is allocated again (the half-size frames' buffer is smaller; the stop's full-quality picture of a splat scene released the big one)
