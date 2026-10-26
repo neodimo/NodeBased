@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 64.4 / 100** (167 nodes scored, rank-weighted; 66.3 counting only the nodes NodeBased has).
+**Overall fidelity: 65.2 / 100** (167 nodes scored, rank-weighted; 67.1 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -25,7 +25,7 @@ Per node, five components, each a fraction from 0 to 1:
 
 | Group | Rank-weighted | Plain mean | Nodes |
 |---|---|---|---|
-| Image | 38.4 | 30.2 | 6 |
+| Image | 48.4 | 38.2 | 6 |
 | Draw | 62.5 | 51.5 | 17 |
 | Time | 56.2 | 53.3 | 13 |
 | Channel | 87.4 | 81.0 | 5 |
@@ -46,7 +46,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Read | `Read` | supported | 63.3 | 58 (15/32) | 86 | - | - | - | no fixture |
-| 2 | Write | `Write` | supported | 3.3 | 5 (2/56) | 0 | - | 0 | - | no fixture |
+| 2 | Write | `Write` | supported | 51.2 | 32 (12/56) | 55 | - | 100 | - | no fixture |
 | 3 | Viewer | `Viewer` | supported | 30.8 | 25 (6/24) | - | 100 | 0 | - | no fixture |
 | 4 | Constant | `Constant` | supported | 30.8 | 50 (2/4) | 0 | - | 0 | - | no fixture |
 | 5 | UDIM Import | - | missing | n/a | - | - | - | - | - | no fixture |
@@ -280,16 +280,16 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
 | 1 | Grade (Color #1) | `Grade` | 58.88 | 41.1 | primary knobs missing: `blackpoint`, `whitepoint`, `black`, `white`, `gamma`, `reverse`, `black_clamp`, `white_clamp`; node chrome missing: mask fringe; formula cases failing: `grade_affine`, `grade_default_clamps`, `grade_levels`, `grade_gamma` |
-| 2 | Write (Image #2) | `Write` | 48.36 | 3.3 | primary knobs missing: `proxy`, `frame_mode`, `frame`, `colorspace`, `premultiplied`, `raw`, `views`, `create_directories` and 9 more; 37 secondary knobs missing; node chrome missing: channels selector |
-| 3 | Roto (Draw #1) | `Roto` | 47.88 | 52.1 | 65 secondary knobs missing; node chrome missing: mask fringe |
-| 4 | Merge (Merge #1) | `Merge` | 47.45 | 52.5 | primary knobs missing: `sRGB`, `screen_alpha`, `metainput`, `rangeinput`, `Achannels`, `Bchannels`, `output`, `also_merge`; node chrome missing: mask fringe, bbox handling; formula cases failing: `merge_color-burn`, `merge_color-dodge`, `merge_divide`, `merge_geometric`, `merge_hard-light`, `merge_multiply` and 2 more |
-| 5 | Blur (Filter #1) | `Blur` | 45.56 | 54.4 | primary knobs missing: `filter`, `quality`, `crop`; node chrome missing: mask fringe |
-| 6 | TimeOffset (Time #1) | `TimeOffset` | 44.44 | 55.6 | primary knobs missing: `rounding_mode`, `enable_path_mask`, `mask_patterns`, `inject_mask` |
-| 7 | Read (Image #1) | `Read` | 36.70 | 63.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `proxy`, `proxy_format`, `reload`; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
-| 8 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 35.00 | 30.0 | primary knobs missing: `_view`, `_screenGain`, `_screenBalance`; 10 secondary knobs missing: `_chromaGain`, `_whitePoint`, `_blackPoint`, `_alphaBias`, `_insideMask` ... |
-| 9 | Keyer (Keyer #1) | `Keyer` | 32.22 | 67.8 | primary knobs missing: `input`, `output`, `combine`, `range` |
-| 10 | Crop (Transform #2) | `Crop` | 32.00 | 36.0 | primary knobs missing: `softness`, `reformat`, `intersect`, `crop` |
-| 11 | Premult (Merge #2) | `Premult` | 30.56 | 38.9 | primary knobs missing: `alpha`, `invert`; node chrome missing: channels selector |
+| 2 | Roto (Draw #1) | `Roto` | 47.88 | 52.1 | 65 secondary knobs missing; node chrome missing: mask fringe |
+| 3 | Merge (Merge #1) | `Merge` | 47.45 | 52.5 | primary knobs missing: `sRGB`, `screen_alpha`, `metainput`, `rangeinput`, `Achannels`, `Bchannels`, `output`, `also_merge`; node chrome missing: mask fringe, bbox handling; formula cases failing: `merge_color-burn`, `merge_color-dodge`, `merge_divide`, `merge_geometric`, `merge_hard-light`, `merge_multiply` and 2 more |
+| 4 | Blur (Filter #1) | `Blur` | 45.56 | 54.4 | primary knobs missing: `filter`, `quality`, `crop`; node chrome missing: mask fringe |
+| 5 | TimeOffset (Time #1) | `TimeOffset` | 44.44 | 55.6 | primary knobs missing: `rounding_mode`, `enable_path_mask`, `mask_patterns`, `inject_mask` |
+| 6 | Read (Image #1) | `Read` | 36.70 | 63.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `proxy`, `proxy_format`, `reload`; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
+| 7 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 35.00 | 30.0 | primary knobs missing: `_view`, `_screenGain`, `_screenBalance`; 10 secondary knobs missing: `_chromaGain`, `_whitePoint`, `_blackPoint`, `_alphaBias`, `_insideMask` ... |
+| 8 | Keyer (Keyer #1) | `Keyer` | 32.22 | 67.8 | primary knobs missing: `input`, `output`, `combine`, `range` |
+| 9 | Crop (Transform #2) | `Crop` | 32.00 | 36.0 | primary knobs missing: `softness`, `reformat`, `intersect`, `crop` |
+| 10 | Premult (Merge #2) | `Premult` | 30.56 | 38.9 | primary knobs missing: `alpha`, `invert`; node chrome missing: channels selector |
+| 11 | Write (Image #2) | `Write` | 24.42 | 51.2 | primary knobs missing: `proxy`, `render_order`, `Render`, `reading`, `on_error`, `reload`, `read_all_lines`; 37 secondary knobs missing |
 | 12 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
 | 13 | Sharpen (Filter #2) | `Sharpen` | 22.62 | 54.8 | primary knobs missing: `minimum`, `maximum`, `filter`, `quailty`, `crop`; node chrome missing: mask fringe |
 | 14 | CopyMetaData (Metadata #3) | `CopyMetaData` | 21.33 | 36.0 | primary knobs missing: `mergeMode`, `metadatafilterMode`, `imageMetadatafilter`, `imageMetadatafilterMode` |

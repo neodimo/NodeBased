@@ -73,6 +73,7 @@ PARAM_SKIPS = {
     ("OCIOLogConvert", "config"): "must name a real OCIO config file/URI",
     ("OCIOLookTransform", "config"): "must name a real OCIO config file/URI",
     ("OCIOLookTransform", "look"): "must name a look defined in the active config",
+    ("Write", "views"): "only the main view exists, so the knob has no second value to try",
     ("Shuffle", "layer"): "needs a real named layer on a multichannel source",
     ("ShuffleCopy", "layer1"): "needs a real named layer on a multichannel source",
     ("ShuffleCopy", "layer2"): "needs a real named layer on a multichannel source",

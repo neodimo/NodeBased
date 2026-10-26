@@ -748,7 +748,14 @@ KNOB_LAYOUT = {
     "Viewer": [],
     "Write": _groups(
         KnobGroup("file_write", ("path",)), KnobGroup("enum", ("file_type",)),
-        KnobGroup("enum", ("bit_depth",)), KnobGroup("bool", ("bundle",), label="Conditioning bundle")),
+        KnobGroup("enum", ("bit_depth",)), KnobGroup("bool", ("bundle",), label="Conditioning bundle"),
+        # Nuke's Write knobs (nodebased/writenode.py).
+        KnobGroup("string", ("channels",), label="Channels"), KnobGroup("enum", ("colorspace",), label="Output transform"),
+        KnobGroup("bool", ("premultiplied",), label="Premultiplied"), KnobGroup("bool", ("raw",), label="Raw data"),
+        KnobGroup("enum", ("views",), label="Views"), KnobGroup("enum", ("frame_mode",), label="Frame mode"),
+        KnobGroup("string", ("frame_expr",), label="Frame"), KnobGroup("bool", ("create_directories",), label="Create directories"),
+        KnobGroup("bool", ("use_limit",), label="Limit to range"), KnobGroup("int", ("first",), label="First frame"),
+        KnobGroup("int", ("last",), label="Last frame"), KnobGroup("enum", ("exr_compression",), label="EXR compression")),
     "ReadBundle": _groups(
         KnobGroup("string", ("path",), label="Model output"),
         KnobGroup("string", ("bundle",), label="Bundle manifest"),

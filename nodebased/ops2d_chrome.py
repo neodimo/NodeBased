@@ -115,6 +115,8 @@ def spec_params(kind):
 
 def is_open_choice(kind, name):
     """Is `name` on `kind` one of the chrome knobs that takes a layer or channel name as well as a listed word?"""
+    if kind == "Write" and name == "channels":
+        return True              # Write's channels (fidelity step C) take a layer name too
     if name not in OPEN_CHOICE_PARAMS:
         return False
     if name in ("output", "premult"):
@@ -138,6 +140,9 @@ def upgrade_nodes(nodes):
         if node.get("type") == "Read":
             from .readknobs import DEFAULTS as read_defaults       # Read's Nuke knobs (fidelity step C)
             added = {**added, **read_defaults}
+        elif node.get("type") == "Write":
+            from .writenode import DEFAULTS as write_defaults      # Write's Nuke knobs (fidelity step C)
+            added = {**added, **write_defaults}
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

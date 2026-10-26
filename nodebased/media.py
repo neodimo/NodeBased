@@ -568,7 +568,7 @@ def raster_layer_arrays(raster):
 
 
 def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRESSION, layers=None,
-              metadata=None):
+              metadata=None, beauty='RGBA', colorspace_tag=WORKING):
     """Write RGBA scene-linear EXR. Defaults: 16-bit half, ZIPS (one-scanline zip).
 
     `bits='float'` keeps full 32-bit precision for data passes that need it (depth, IDs,
@@ -580,6 +580,8 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
     The layers are data as authored (no colour transform), stored at the same bit depth.
     A layer named `crypto...NN` writes four channels (a Cryptomatte rank layer). `metadata`
     (name -> string) is written into the header as-is, e.g. the `cryptomatte/<key>/...` entries.
+    `beauty` names the beauty channels written, in R, G, B, A order (a subset drops the others; '' writes layers only), and
+    `colorspace_tag` is the `oiio:ColorSpace` the file declares (the working space unless the Write converted the colour).
     """
     import OpenImageIO as oiio
     if bits not in EXR_BITS:
@@ -592,6 +594,10 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
         raise ValueError('EXR output path must end in .exr')
     pixels = half_safe(frame) if bits == 'half' else np.ascontiguousarray(frame, np.float32)
     names = ['R', 'G', 'B', 'A']
+    if beauty != 'RGBA':
+        keep = [index for index, letter in enumerate('RGBA') if letter in beauty]
+        pixels = np.ascontiguousarray(pixels[..., keep])
+        names = [names[index] for index in keep]
     if layers:
         planes = [pixels]
         for name, layer in layers.items():
@@ -605,6 +611,8 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
                           else np.ascontiguousarray(layer[..., :len(wanted)], np.float32))
             names += [f'{name}.{channel}' for channel in wanted]
         pixels = np.ascontiguousarray(np.concatenate(planes, axis=2))
+    if not names:
+        raise ValueError('Nothing to write: the selected channels name no channel of this image')
     fd, temporary = tempfile.mkstemp(prefix='.' + path.stem, suffix='.exr', dir=path.parent)
     os.close(fd)
     writer = None
@@ -613,7 +621,7 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
         spec.channelnames = names
         # Tag what is actually in the buffer: working-space scene-linear. Reading one of our
         # own EXRs back is then a true no-op instead of a silent Rec.709 -> ACEScg conversion.
-        spec.attribute('oiio:ColorSpace', WORKING)
+        spec.attribute('oiio:ColorSpace', colorspace_tag)
         spec.attribute('compression', compression)
         from .metadata import EXR_TIMECODE_ATTRIBUTE, header_metadata, timecode_words
         for attribute, value in header_metadata(metadata).items():

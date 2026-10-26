@@ -165,6 +165,7 @@ VIEWER_EXTRA_KEYS = ("look", "roi", "proxy", "masks")
 _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p2": 0.0,
          "lens_cx": 0.0, "lens_cy": 0.0}
 
+from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -847,7 +848,9 @@ SPECS = {
     # format, and rendering it is an explicit action rather than a side effect of looking at a
     # frame. It passes its input through unchanged, so a Write parked mid-branch never alters the
     # comp downstream of it. "file_type" Auto takes the extension on "path" at its word.
-    "Write": {"inputs": ["image"], "params": {"path": "", "file_type": "Auto", "bit_depth": "half", "bundle": 0}},
+    "Write": {"inputs": ["image"], "params": {"path": "", "file_type": "Auto", "bit_depth": "half", "bundle": 0,
+                                              # Nuke's Write knobs (nodebased/writenode.py); every default is the Write of before.
+                                              **_WRITE_KNOB_DEFAULTS}},
     # ReadBundle (step 5c): reads a diffusion or transform model's output image for the graph's
     # frame and refuses it unless the bundle manifest Write wrote for that frame agrees on frame and
     # size (nodebased/bundle.py). `path` and `bundle` may be padded patterns (render.%04d.png,
@@ -2028,6 +2031,9 @@ LIMITS.update({"invert_unpremult": (0, 1), "replace": (0, 1)})
 # Read's Nuke knobs (fidelity step C): the frame knob's mode, the format override, the original range and the three checkboxes.
 CHOICES["frame_mode"] = list(_READ_FRAME_MODES)
 CHOICES["read_format"] = ["file", *REFORMAT_FORMATS]
+CHOICES["views"] = list(_WRITE_VIEWS)
+CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none"]
+LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1)})
 LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000),
                "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})
 

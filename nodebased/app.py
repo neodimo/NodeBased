@@ -53,6 +53,7 @@ from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, Wrapp
                       with_hidden_buttons)
 from . import analysisregion
 from . import ops2d_chrome
+from . import writenode
 from . import presets as preset_model
 from . import fluidshelf
 from . import fluidknobpresets
@@ -16253,8 +16254,17 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Write", str(error))
             return
         time_range = self.dispatcher.document["time"]
-        frames = ([time_range["current"]] if single
-                  else list(range(time_range["first"], time_range["last"] + 1)))
+        write_params = dict(self.dispatcher.document["nodes"][key]["params"])   # one snapshot for the whole render
+        try:
+            writenode.check_views(write_params)
+            frames = writenode.frames_to_render(write_params, time_range, single)
+        except ValueError as error:
+            QMessageBox.warning(self, "Write", str(error))
+            return
+        if not frames:
+            QMessageBox.warning(self, "Write", "No frame to write: the frame range limit on the Write node leaves out "
+                                               "the frames this render covers.")
+            return
         if len(frames) > 1 and not is_sequence(path):
             QMessageBox.warning(self, "Write",
                                 f"{Path(path).name!r} is a single file, so a {len(frames)}-frame "
@@ -16269,7 +16279,12 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Write", "The conditioning bundle needs an EXR output path "
                                                "(it writes a multichannel EXR and a manifest beside it).")
             return
-        Path(path).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        if int(write_params.get("create_directories", 1)):
+            Path(path).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        elif not Path(path).expanduser().parent.is_dir():
+            QMessageBox.warning(self, "Write", f"The folder {str(Path(path).expanduser().parent)!r} does not exist. "
+                                               "Turn on Create directories to have it made.")
+            return
         self.set_node_error(key, None)
         self._hide_write_folder_button()
         job = {"key": key, "total": len(frames), "cancel": threading.Event(),
@@ -16294,7 +16309,8 @@ class Window(QMainWindow):
                 def tile_report(stage, fraction, info, job=job):
                     self._report_write_progress(job, fraction)
                     QApplication.processEvents()
-                target = sequence_path(path, frame_number) if is_sequence(path) else path
+                number = writenode.file_frame_number(write_params, frame_number, frames[0])
+                target = sequence_path(path, number) if is_sequence(path) else path
                 try:
                     with self.render_progress_router.handler(tile_report):
                         if bundle_on:
@@ -16309,15 +16325,10 @@ class Window(QMainWindow):
                             # frames of the wrong tree.
                             raster = self.evaluator.evaluate_raster(
                                 document, key, cancel=job["cancel"], frame=frame_number, tier=1)
-                            pixels = raster.to_display()
-                            if file_type == "exr":
-                                # A multichannel input (Render3D's multichannel output, a
-                                # multilayer Read) writes every named layer into the same part;
-                                # PNG only ever writes the beauty.
-                                write_exr(target, pixels, bits=bits, layers=raster_layer_arrays(raster),
-                                          metadata=raster.meta)
-                            else:
-                                write_png(target, pixels)
+                            # A multichannel input (Render3D's multichannel output, a multilayer Read) writes
+                            # every named layer into the same EXR part; PNG only ever writes the beauty. The Write
+                            # node's own knobs (channels, output transform, ...) are applied in writenode.
+                            writenode.write_raster(raster, target, file_type, bits, write_params)
                 except Cancelled:
                     break
                 except Exception as error:

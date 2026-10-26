@@ -41,8 +41,20 @@
    "knobs": [
     {"nodebased": ["path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'file', scripting name `file`"},
     {"nodebased": ["file_type"], "nuke": ["file_type"], "kind": "same"},
-    {"nodebased": ["bit_depth"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["bundle"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["bit_depth"], "nuke": ["datatype#2"], "kind": "renamed", "reason": "same control under another name; the EXR tab's data type (16 bit half, 32 bit float), scripting name `datatype`, second of the guide's repeated names"},
+    {"nodebased": ["bundle"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["colorspace"], "nuke": ["colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output transform', scripting name `colorspace`"},
+    {"nodebased": ["premultiplied"], "nuke": ["premultiplied"], "kind": "same"},
+    {"nodebased": ["raw"], "nuke": ["raw"], "kind": "same"},
+    {"nodebased": ["views"], "nuke": ["views"], "kind": "same"},
+    {"nodebased": ["frame_mode"], "nuke": ["frame_mode"], "kind": "same"},
+    {"nodebased": ["frame_expr"], "nuke": ["frame"], "kind": "renamed", "reason": "same control under another name (`frame_expr` keeps Read's and Write's frame knobs apart from the timeline frame); Nuke's label is 'frame'"},
+    {"nodebased": ["create_directories"], "nuke": ["create_directories"], "kind": "same"},
+    {"nodebased": ["first"], "nuke": ["first"], "kind": "same"},
+    {"nodebased": ["last"], "nuke": ["last"], "kind": "same"},
+    {"nodebased": ["use_limit"], "nuke": ["use_limit"], "kind": "same"},
+    {"nodebased": ["exr_compression"], "nuke": ["compression"], "kind": "renamed", "reason": "same control under another name; the EXR tab's compression, scripting name `compression`"}
    ]
   },
   "Viewer": {
