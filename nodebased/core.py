@@ -175,6 +175,7 @@ from . import blurknobs as _blurknobs
 from . import timeknobs as _timeknobs
 from . import cornerpinknobs as _cornerpinknobs
 from . import profilenode as _profilenode
+from . import trackerknobs as _trackerknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -646,7 +647,7 @@ SPECS = {
                            "apply_rotate": 1, "apply_scale": 1, "smoothing": 0,
                            "pattern_radius": 8, "search_radius": 24,
                            "adaptive_update": 0, "tracking_channels": "luminance",
-                           "filter": "bilinear", "mix": 1.0}},
+                           "filter": "bilinear", "mix": 1.0, **_trackerknobs.new_params("Tracker")}},
     # Stabilize uses the same tracked similarity fit as Tracker with the inverse transform fixed
     # on, and its own smoothing control in place of Tracker's mode switch.
     # PlanarTracker is an analysis tap: Lucas–Kanade flow and robust fitting write four
@@ -1900,7 +1901,7 @@ MERGE_OPERATIONS = ("over", "under", "plus", "minus", "multiply", "screen", "max
                     "exclusion", "geometric", "overlay", "hard-light", "soft-light", "color-dodge",
                     "color-burn")
 TRANSFORM_FILTERS = ("nearest", "bilinear", "cubic")
-TRACKER_MODES = ("match_move", "stabilise")
+TRACKER_MODES = _trackerknobs.MODES
 # Write destinations. Deliberately the two formats media.py can actually write; a format list
 # longer than the writer is a promise the render button cannot keep.
 WRITE_FILE_TYPES = ("Auto", "exr", "png")
@@ -1965,7 +1966,8 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "bbox": ["source", "union"], "root_warp": ["A", "B"], "output": ["image", "stmap", "none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "vector_alpha": ["none", "weighted"], "vector_sampling": ["source", "destination"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
            "roworder": ["TopBottom", "BottomTop"], "colorder": ["LeftRight", "RightLeft", "Snake"],
-           "mode": list(TRACKER_MODES), "tracking_channels": ["luminance", "rgb", "red", "green", "blue", "alpha"],
+           "mode": list(TRACKER_MODES), "pretrack_filter": list(_trackerknobs.PRETRACK_FILTERS),
+           "grab_behavior": list(_trackerknobs.GRAB_BEHAVIOURS), "tracking_channels": ["luminance", "rgb", "red", "green", "blue", "alpha"],
            "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
@@ -2065,6 +2067,12 @@ for _kind in (*_chrome.FILTER_CHROME, *_chrome.DRAW_CHROME):
     for _name, _default in _chrome.spec_params(_kind).items():
         SPECS[_kind]["params"].setdefault(_name, _default)
 CHOICES["global_motionblur_shutter_offset_type"] = ["start", "centred", "end", "custom"]
+# Tracker's Nuke knobs (fidelity step G, nodebased/trackerknobs.py).
+LIMITS.update({**{name: (0, 1) for name in ("adjust_for_luminance_changes", "clamp_footage", "predict_track", "snap_to_markers",
+                                            "hide_progress_bar", "show_error_on_track_links", "create_key_on_move",
+                                            "autotracks_delete_keyframes", "livelink_transform")},
+               "max_error": (0.0, 1.0), "grab_interval": (0, 100000), "grab_error_above": (0.0, 1.0),
+               "grab_error_below": (0.0, 1.0), "jitter_period": (1, 1000)})
 # CornerPin's Nuke knobs (fidelity step G, nodebased/cornerpinknobs.py).
 LIMITS.update({**{f"enable{i}": (0, 1) for i in _cornerpinknobs.CORNERS},
                **{name: (-1000000.0, 1000000.0) for name in _cornerpinknobs.MATRIX_NAMES}})

@@ -230,8 +230,8 @@ def step_f_params(kind):
 def step_g_params(kind):
     """The knobs fidelity step G added (CornerPin's enables, extra matrix and blur; the Tracker's; Profile's), at the values that
     leave an older document's node as it was."""
-    from . import cornerpinknobs, profilenode
-    return {**cornerpinknobs.upgrade_params(kind), **profilenode.upgrade_params(kind)}
+    from . import cornerpinknobs, profilenode, trackerknobs
+    return {**cornerpinknobs.upgrade_params(kind), **profilenode.upgrade_params(kind), **trackerknobs.upgrade_params(kind)}
 
 
 def upgrade_nodes(nodes):

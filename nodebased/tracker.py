@@ -26,7 +26,7 @@ from concurrent.futures import CancelledError
 
 import numpy as np
 
-from . import shapes
+from . import shapes, trackerknobs
 
 # The fields a solve produces, in the vocabulary `Transform` already speaks. `tiers` imports this
 # name so the region rule and the kernel cannot disagree about what a solved transform contains.
@@ -45,7 +45,7 @@ class AnalysisError(ValueError):
     """Actionable failure from pixel analysis; callers can show this directly to an artist."""
 
 
-def _analysis_pixels(image, channels="luminance"):
+def _analysis_pixels(image, channels="luminance", prefilter="none", clamp=False):
     pixels = getattr(image, "pixels", image)
     array = np.asarray(pixels, dtype=np.float32)
     if array.ndim == 3 and array.shape[2] >= 3:
@@ -71,7 +71,10 @@ def _analysis_pixels(image, channels="luminance"):
     origin = (int(getattr(window, "x", 0)), int(getattr(window, "y", 0)))
     if gray.size == 0 or not np.isfinite(gray).all():
         raise AnalysisError("pixel analysis requires finite, non-empty image pixels")
-    return np.ascontiguousarray(gray, dtype=np.float64), origin
+    gray = np.ascontiguousarray(gray, dtype=np.float64)
+    if clamp:
+        gray = np.clip(gray, 0.0, 1.0)
+    return trackerknobs.prefiltered(gray, prefilter), origin
 
 
 def _radii(pattern_radius, search_radius):
@@ -176,12 +179,25 @@ def _phase_refine(pattern, candidate, radius):
             max(-0.5, min(0.5, float(solution[1]))))
 
 
+def _ssd_score(pattern, candidate):
+    """One minus the squared difference over the pattern's own energy: 1 for an exact copy, falling as the levels differ."""
+    energy = float(np.sum((pattern - pattern.mean(dtype=np.float64)) ** 2))
+    if energy <= 1e-15:
+        return float("nan")
+    return 1.0 - float(np.sum((pattern - candidate) ** 2)) / energy
+
+
 def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, search_point=None,
-                  channels="luminance"):
-    """Deterministic zero-mean NCC with integer peak and parabolic refinement."""
+                  channels="luminance", metric="ncc", prefilter="none", clamp=False, min_score=MINIMUM_MATCH_SCORE):
+    """Deterministic zero-mean NCC with integer peak and parabolic refinement.
+
+    `metric` "ssd" compares the levels themselves instead of their pattern, so a change of exposure or gain moves the best match
+    (Nuke's `adjust for luminance changes` off); `prefilter` and `clamp` prepare both images first (nodebased/trackerknobs.py);
+    a best score under `min_score` is an error."""
     pattern_radius, search_radius = _radii(pattern_radius, search_radius)
-    ref, ref_origin = _analysis_pixels(reference, channels)
-    current, origin = _analysis_pixels(image, channels)
+    ref, ref_origin = _analysis_pixels(reference, channels, prefilter, clamp)
+    current, origin = _analysis_pixels(image, channels, prefilter, clamp)
+    compare = _ncc if metric == "ncc" else _ssd_score
     pattern, pattern_x, pattern_y = _window(ref, float(point[0]), float(point[1]), pattern_radius,
                                             ref_origin, "Pattern")
     point_offset_x = float(point[0]) - (ref_origin[0] + pattern_x + 0.5)
@@ -198,17 +214,17 @@ def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, s
             if x - pattern_radius < 0 or y - pattern_radius < 0 or \
                     x + pattern_radius + 1 > current.shape[1] or y + pattern_radius + 1 > current.shape[0]:
                 continue
-            score = _ncc(pattern, current[y-pattern_radius:y+pattern_radius+1,
-                                         x-pattern_radius:x+pattern_radius+1])
+            score = compare(pattern, current[y-pattern_radius:y+pattern_radius+1,
+                                            x-pattern_radius:x+pattern_radius+1])
             if math.isfinite(score):
                 scores[(x, y)] = score
     if not scores:
         raise AnalysisError("search window is out of bounds; no complete candidate windows remain")
     peak = max(scores, key=lambda key: (scores[key], -key[1], -key[0]))
     px, py = peak
-    if scores[peak] < MINIMUM_MATCH_SCORE:
-        raise AnalysisError(f"no reliable match (best NCC score {scores[peak]:.3f} < "
-                            f"{MINIMUM_MATCH_SCORE:.3f}); the point may be occluded")
+    if scores[peak] < min_score:
+        raise AnalysisError(f"no reliable match (best {'NCC' if metric == 'ncc' else 'SSD'} score {scores[peak]:.3f} < "
+                            f"{min_score:.3f}); the point may be occluded")
     candidate = current[py-pattern_radius:py+pattern_radius+1,
                         px-pattern_radius:px+pattern_radius+1]
     refined = _phase_refine(pattern, candidate, pattern_radius)
@@ -219,25 +235,35 @@ def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, s
 
 def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
             first_frame=None, last_frame=None, cancel=None, progress=None, direction="forward",
-            channels="luminance", adaptive_update=False, roi_frame=None):
+            channels="luminance", adaptive_update=False, roi_frame=None,
+            metric="ncc", prefilter="none", clamp=False, predict=False, grab=None, max_error=None, info=None):
     """Track from the reference toward one timeline direction without mutating a document.
 
     Backward analysis uses ``first_frame`` as its inclusive endpoint; forward analysis uses
     ``last_frame``. Progress receives (frame, completed, total, confidence).
+
+    The Tracker's Nuke knobs (nodebased/trackerknobs.py): `metric`, `prefilter` and `clamp` prepare the matching;
+    `predict` centres each search on where the motion so far says the point will be; `grab` (a `trackerknobs.Grab`) says
+    when the pattern is grabbed again from the frame just tracked, and `adaptive_update` is the older spelling of "every
+    frame"; `max_error` stops the analysis, keeping the frames tracked so far, at the first frame whose error (one minus the
+    score) is above it, and says where in `info` (`stopped_at`, `error`).
     """
     _radii(pattern_radius, search_radius)
     get_frame = frames if callable(frames) else lambda frame: frames[frame]
     reference_frame = int(reference_frame)
     first = int(reference_frame if first_frame is None else first_frame)
-    last = int(last_frame if last_frame is None else last_frame)
+    last = int(reference_frame if last_frame is None else last_frame)
     if direction not in ("forward", "backward"):
         raise AnalysisError("direction must be 'forward' or 'backward'")
     if first > reference_frame or last < reference_frame:
         raise AnalysisError("analysis range must include the reference frame")
     frame_numbers = (range(reference_frame + 1, last + 1) if direction == "forward"
                      else range(reference_frame - 1, first - 1, -1))
+    if grab is None and adaptive_update:
+        grab = trackerknobs.Grab("every frame")
     result = {reference_frame: (float(point[0]), float(point[1]))}
     previous = result[reference_frame]
+    velocity = (0.0, 0.0)
     total = len(frame_numbers)
     reference = (roi_frame(reference_frame, point, pattern_radius + 2)
                  if roi_frame is not None else get_frame(reference_frame))
@@ -245,15 +271,23 @@ def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
     for offset, frame in enumerate(frame_numbers, start=1):
         if cancel is not None and cancel.is_set():
             raise CancelledError()
-        current_image = (roi_frame(frame, previous, search_radius + pattern_radius + 2)
-                         if roi_frame is not None else get_frame(frame))
+        centre = (previous[0] + velocity[0], previous[1] + velocity[1]) if predict else previous
+        margin = search_radius + pattern_radius + 2 + (int(math.ceil(max(abs(velocity[0]), abs(velocity[1])))) if predict else 0)
+        current_image = (roi_frame(frame, centre, margin) if roi_frame is not None else get_frame(frame))
         match = match_pattern(reference, current_image, pattern_point, pattern_radius, search_radius,
-                              search_point=previous, channels=channels)
+                              search_point=centre, channels=channels, metric=metric, prefilter=prefilter, clamp=clamp,
+                              min_score=MINIMUM_MATCH_SCORE if max_error is None else -math.inf)
+        error = max(0.0, 1.0 - match[2])
+        if max_error is not None and error > max_error:
+            if info is not None:
+                info.update(stopped_at=frame, error=error)
+            break
+        velocity = (match[0] - previous[0], match[1] - previous[1])
         previous = match[:2]
         result[frame] = previous
         if progress is not None:
             progress(frame, offset, total, match[2])
-        if adaptive_update:
+        if grab is not None and grab.due(offset, error):
             reference, pattern_point = current_image, previous
     return result
 
@@ -296,6 +330,73 @@ def _similarity(pairs):
     return rotate, scale, (rx, ry), (cx, cy)
 
 
+def _entries(payload, source_frame, frame, smoothing=0):
+    """[(source point, destination point, (T, R, S))] for every track usable at both frames.
+
+    A track is usable at a frame where it is enabled. With `smoothing` each point is the mean over the frames either side."""
+    tracks = (payload or {}).get("tracks", [])
+    flags = [trackerknobs.track_flags(track) for track in tracks]
+    if smoothing:
+        def smoothed_positions(center):
+            samples = [shapes.resolve_tracks(payload, sample_frame)
+                       for sample_frame in range(center - smoothing, center + smoothing + 1)]
+            positions = []
+            for index in range(len(tracks)):
+                usable = [sample[index] for sample in samples if sample[index]["enabled"]]
+                positions.append(None if not usable else
+                                 (sum(item["x"] for item in usable) / len(usable),
+                                  sum(item["y"] for item in usable) / len(usable)))
+            return positions
+        reference, current = smoothed_positions(int(source_frame)), smoothed_positions(int(math.floor(frame)))
+    else:
+        reference, current = _usable(payload, source_frame), _usable(payload, frame)
+    return [(r, c, f) for r, c, f in zip(reference, current, flags) if r is not None and c is not None]
+
+
+def _jitter_entries(payload, frame, period, removing):
+    """Each track's position at `frame` against its mean over `period` frames about it: raw to mean when `removing` the jitter
+    (the picture follows the mean path), mean to raw when adding it."""
+    tracks = (payload or {}).get("tracks", [])
+    flags = [trackerknobs.track_flags(track) for track in tracks]
+    half = max(1, int(period) // 2)
+    samples = [shapes.resolve_tracks(payload, frame + offset) for offset in range(-half, half + 1)]
+    raw = shapes.resolve_tracks(payload, frame)
+    entries = []
+    for index, track in enumerate(raw):
+        usable = [sample[index] for sample in samples if sample[index]["enabled"]]
+        if not track["enabled"] or not usable:
+            continue
+        mean = (sum(item["x"] for item in usable) / len(usable), sum(item["y"] for item in usable) / len(usable))
+        point = (track["x"], track["y"])
+        entries.append((point, mean, flags[index]) if removing else (mean, point, flags[index]))
+    return entries
+
+
+def _fit(entries):
+    """(rotate, scale, origin, moved) for the entries: translation from the tracks with T, rotation from those with R, scale from S."""
+    if len(entries) == 1:
+        # One track carries no orientation and no size, so asking for rotation or scale from it
+        # would be inventing them. Translation is all it actually measures.
+        (r, c, _), = entries
+        return 0.0, 1.0, r, c
+    if all(all(flags) for _, _, flags in entries):
+        return _similarity([(r, c) for r, c, _ in entries])
+    translating = [(r, c) for r, c, flags in entries if flags[0]]
+    rotating = [(r, c) for r, c, flags in entries if flags[1]]
+    scaling = [(r, c) for r, c, flags in entries if flags[2]]
+    rotate = _similarity(rotating)[0] if len(rotating) >= 2 else 0.0
+    scale = _similarity(scaling)[1] if len(scaling) >= 2 else 1.0
+    base = translating or [(r, c) for r, c, _ in entries]
+    origin = (sum(r[0] for r, _ in base) / len(base), sum(r[1] for r, _ in base) / len(base))
+    moved = (sum(c[0] for _, c in base) / len(base), sum(c[1] for _, c in base) / len(base)) if translating else origin
+    return rotate, scale, origin, moved
+
+
+def manual_transform(params):
+    """The node's own transform knobs, as the six solved fields: what a Tracker applies when its live link is off or its mode is none."""
+    return {name: float(params.get(name, default)) for name, default in IDENTITY.items()}
+
+
 def solve(payload, frame, params, force_stabilise=False):
     """Solve one Tracker node's transform at `frame`.
 
@@ -303,33 +404,25 @@ def solve(payload, frame, params, force_stabilise=False):
     both frames, or every component switched off resolves to identity — never to "leave the
     region rule undefined", because an unsolved data-dependent node is exactly the silent
     full-frame fall back clause C2 forbids.
+
+    The mode is the node's `mode` (Nuke's `transform`); with it at `none`, or the live link off, the answer is the node's own
+    transform knobs instead (a Stabilize is always solved).
     """
-    reference_frame = int(params.get("reference_frame", 1))
-    smoothing = max(0, int(params.get("smoothing", 0)))
-    if smoothing:
-        def smoothed_positions(center):
-            samples = [shapes.resolve_tracks(payload, sample_frame)
-                       for sample_frame in range(center - smoothing, center + smoothing + 1)]
-            tracks = []
-            for index in range(len((payload or {}).get("tracks", []))):
-                usable = [sample[index] for sample in samples if sample[index]["enabled"]]
-                tracks.append(None if not usable else
-                              (sum(item["x"] for item in usable) / len(usable),
-                               sum(item["y"] for item in usable) / len(usable)))
-            return tracks
-        reference, current = smoothed_positions(reference_frame), smoothed_positions(int(frame))
-        pairs = [(r, c) for r, c in zip(reference, current) if r is not None and c is not None]
+    mode = "stabilise" if force_stabilise else str(params.get("mode", "match_move"))
+    if not force_stabilise and (mode == "none" or not int(params.get("livelink_transform", 1))):
+        return manual_transform(params)
+    one_point = mode.endswith("_1pt")
+    mode = mode[:-4] if one_point else mode
+    if mode in ("remove_jitter", "add_jitter"):
+        entries = _jitter_entries(payload, frame, params.get("jitter_period", 10), mode == "remove_jitter")
     else:
-        pairs = _pairs(payload, reference_frame, int(frame))
-    if not pairs:
+        reference_frame = int(params.get("reference_frame", 1))
+        entries = _entries(payload, reference_frame, frame, max(0, int(params.get("smoothing", 0))))
+    if one_point:
+        entries = entries[:1]
+    if not entries:
         return dict(IDENTITY)
-    if len(pairs) == 1:
-        # One track carries no orientation and no size, so asking for rotation or scale from it
-        # would be inventing them. Translation is all it actually measures.
-        (r, c), = pairs
-        rotate, scale, origin, moved = 0.0, 1.0, r, c
-    else:
-        rotate, scale, origin, moved = _similarity(pairs)
+    rotate, scale, origin, moved = _fit(entries)
 
     if not int(params.get("apply_rotate", 1)):
         rotate = 0.0
@@ -339,7 +432,7 @@ def solve(payload, frame, params, force_stabilise=False):
     if not int(params.get("apply_translate", 1)):
         translate = (0.0, 0.0)
 
-    if not force_stabilise and params.get("mode", "match_move") == "match_move":
+    if mode != "stabilise":
         return {"translate_x": translate[0], "translate_y": translate[1],
                 "rotate": rotate, "scale": scale,
                 "center_x": origin[0], "center_y": origin[1]}

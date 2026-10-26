@@ -217,10 +217,21 @@ def validate_shape(shape, where):
             validate_scalar(point[field], field, f"{where}.points[{index}]")
 
 
+# A track's own T, R and S switches and its pattern and search areas (fidelity step G, nodebased/trackerknobs.py); absent means the node's.
+TRACK_OPTIONS = ("use_t", "use_r", "use_s", "pattern_radius", "search_radius")
+
+
 def validate_track(track, where):
     if (not isinstance(track, dict) or not {"name", "enabled", "x", "y"}.issubset(track)
-            or set(track) - {"name", "enabled", "x", "y", "error"}):
-        raise ValueError(f"{where}: a track defines exactly name, enabled, x and y, with optional error")
+            or set(track) - {"name", "enabled", "x", "y", "error", *TRACK_OPTIONS}):
+        raise ValueError(f"{where}: a track defines exactly name, enabled, x and y, with optional error, "
+                         f"{', '.join(TRACK_OPTIONS)}")
+    for field in ("use_t", "use_r", "use_s"):
+        if field in track and track[field] not in (0, 1):
+            raise ValueError(f"{where}.{field} must be 0 or 1")
+    for field in ("pattern_radius", "search_radius"):
+        if field in track and (type(track[field]) is not int or not 1 <= track[field] <= 256):
+            raise ValueError(f"{where}.{field} must be a whole number from 1 to 256")
     if not isinstance(track["name"], str) or not 1 <= len(track["name"]) <= 128:
         raise ValueError(f"{where}.name must contain 1-128 characters")
     for field in ("enabled", "x", "y"):

@@ -745,6 +745,9 @@ PIXEL_UNIT_PARAMS = {
     "CopyRectangle": ("area_x", "area_y", "area_r", "area_t"),
     "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
+    # A Tracker's own transform knobs (fidelity step G): used when its live link is off or its mode is none. A solved transform comes
+    # from the tracks, which `scale_node_data` scales.
+    "Tracker": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height", "crop_softness"),
     # Reformat's "scale" is a unitless ratio (like Transform's own "scale"), not a pixel count, so
     # it is deliberately absent here; width/height are the format's own pixel size and are the

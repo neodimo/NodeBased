@@ -115,6 +115,7 @@ from .groups import scope_document, flatten_groups
 from . import shapes as shape_model
 from . import handles2d
 from . import tracker as tracker_model
+from . import trackerknobs
 from . import planar as planar_model
 from .agentpanel import AgentPanel
 from .knobs import knob_layout, slider_range
@@ -2684,20 +2685,20 @@ class Viewer(PanZoomView):
         point = self._tracker_data_point(scene_pos)
         zoom = max(abs(self.view_zoom()), 0.05)
         hit_radius = 10.0 / zoom
-        pattern = float(node["params"].get("pattern_radius", 8))
-        search = float(node["params"].get("search_radius", 24))
+        raw_tracks = payload.get("tracks", [])
         best = None
         distance = hit_radius
         for index, track in enumerate(tracks):
             x, y = track["x"], track["y"]
+            pattern, search = (float(radius) for radius in trackerknobs.track_radii(node["params"], raw_tracks[index]))
             if abs(abs(point[0]-x)-pattern) <= hit_radius and abs(point[1]-y) <= pattern+hit_radius:
-                return {"kind": "pattern", "center": (x, y)}
+                return {"kind": "pattern", "center": (x, y), "index": index}
             if abs(abs(point[1]-y)-pattern) <= hit_radius and abs(point[0]-x) <= pattern+hit_radius:
-                return {"kind": "pattern", "center": (x, y)}
+                return {"kind": "pattern", "center": (x, y), "index": index}
             if abs(abs(point[0]-x)-search) <= hit_radius and abs(point[1]-y) <= search+hit_radius:
-                return {"kind": "search", "center": (x, y)}
+                return {"kind": "search", "center": (x, y), "index": index}
             if abs(abs(point[1]-y)-search) <= hit_radius and abs(point[0]-x) <= search+hit_radius:
-                return {"kind": "search", "center": (x, y)}
+                return {"kind": "search", "center": (x, y), "index": index}
             d = math.hypot(point[0]-x, point[1]-y)
             if d < distance:
                 best, distance = {"kind": "point", "index": index}, d
@@ -2774,8 +2775,9 @@ class Viewer(PanZoomView):
             for path_frame in frames:
                 resolved = shape_model.resolve_tracks({"tracks": [raw]}, path_frame)[0]
                 path_points.append((path_frame, self._roto_scene_point(resolved, 1), resolved["error"]))
+            show_error = bool(int(params.get("show_error_on_track_links", 1)))
             for a, b in zip(path_points, path_points[1:]):
-                err = max(a[2], b[2])
+                err = max(a[2], b[2]) if show_error else 0.0
                 color = QColor.fromRgbF(min(1.0, 0.25 + 1.5*err), max(0.0, 0.85-1.5*err), 0.2, 0.9)
                 pen = QPen(color, 2); pen.setCosmetic(True); painter.setPen(pen)
                 painter.drawLine(a[1], b[1])
@@ -2783,8 +2785,8 @@ class Viewer(PanZoomView):
                 continue
             track = tracks[index]
             center = self._roto_scene_point(track, 1)
-            for radius, color in ((float(params.get("search_radius", 24)), "#f4ce63"),
-                                  (float(params.get("pattern_radius", 8)), "#58d7ff")):
+            own_pattern, own_search = trackerknobs.track_radii(params, raw)
+            for radius, color in ((float(own_search), "#f4ce63"), (float(own_pattern), "#58d7ff")):
                 side = 2 * radius
                 pen = QPen(QColor(color), 1); pen.setCosmetic(True); pen.setStyle(Qt.PenStyle.DashLine)
                 painter.setPen(pen); painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -2893,9 +2895,9 @@ class Viewer(PanZoomView):
         if drag["kind"] == "point":
             x, y = self._tracker_data_point(drag["scene"])
             tracks = copy.deepcopy(payload.get("tracks", []))
-            track = tracks[drag["index"]]
-            for field, value in (("x", x), ("y", y)):
-                track[field] = self._roto_scalar_at_frame(track[field], frame, value)
+            tracks[drag["index"]] = trackerknobs.moved_point(
+                tracks[drag["index"]], frame, x, y, bool(int(node["params"].get("create_key_on_move", 1))),
+                set_at=lambda scalar, at, value: self._roto_scalar_at_frame(scalar, at, value))
             self.window.command({"op": "set_tracks", "id": key, "tracks": tracks})
         else:
             center = drag["center"]
@@ -2904,6 +2906,20 @@ class Viewer(PanZoomView):
             radius = min(maximum, max(1, int(round(max(abs(point[0]-center[0]),
                                                        abs(point[1]-center[1]))))))
             params = node["params"]
+            tracks = payload.get("tracks", [])
+            own = drag.get("index")
+            if own is not None and 0 <= own < len(tracks) and any(name in tracks[own] for name in ("pattern_radius", "search_radius")):
+                # A track with areas of its own: the drag resizes that track's area, not the node's.
+                updated = copy.deepcopy(tracks)
+                pattern, search = trackerknobs.track_radii(params, updated[own])
+                if drag["kind"] == "pattern":
+                    pattern = radius
+                    search = max(search, pattern)
+                else:
+                    search = max(radius, pattern)
+                updated[own].update(pattern_radius=pattern, search_radius=search)
+                self.window.command({"op": "set_tracks", "id": key, "tracks": updated})
+                return True
             param = "pattern_radius" if drag["kind"] == "pattern" else "search_radius"
             edits = [{"op": "set", "id": key, "param": param, "value": radius}]
             if param == "pattern_radius" and radius > int(params.get("search_radius", 24)):
@@ -8740,6 +8756,7 @@ class Window(QMainWindow):
         self._tracker_cancel = None
         self._tracker_index = None
         self._tracker_seed = None
+        self._tracker_replace = False
         self._tracker_selected_index = None
         self._tracker_key = None
         self._tracker_job = None
@@ -12897,6 +12914,12 @@ class Window(QMainWindow):
                 backward_button.clicked.connect(lambda checked=False, k=key, a=range_first:
                                                 self.analyse_tracker(k, "backward", first_frame=a.value()))
                 form.addRow(backward_button)
+                retrack_button = QPushButton("Track selected again")
+                retrack_button.setObjectName("tracker-retrack-selected")
+                retrack_button.setToolTip("Analyze the selected track again forward from the reference frame, with that track's own areas")
+                retrack_button.clicked.connect(lambda checked=False, k=key, b=range_last:
+                                               self.retrack_selected(k, "forward", last_frame=b.value()))
+                form.addRow(retrack_button)
                 cancel_button = QPushButton("Cancel analysis")
                 cancel_button.setEnabled(self._tracker_future is not None)
                 cancel_button.clicked.connect(self.cancel_tracker_analysis)
@@ -13982,18 +14005,69 @@ class Window(QMainWindow):
         if len(payload.get("tracks", [])) >= 16:
             self._show_command_error(ValueError("Tracker supports at most 16 track points"))
             return False
-        names = {track.get("name") for track in payload.get("tracks", [])}
-        index = 1
-        while f"track{index}" in names:
-            index += 1
-        self._tracker_seed = {"name": f"track{index}", "enabled": 1,
-                              "x": float(point[0]), "y": float(point[1])}
+        if int(context[1]["params"].get("snap_to_markers", 0)):
+            point = self._snap_tracker_point(key, context, point)
+        self._tracker_seed = trackerknobs.new_track(payload.get("tracks", []), point[0], point[1])
         self._tracker_key = key
         self._tracker_index = len(payload.get("tracks", []))
         self.viewer.hide_prompt()
         self.viewer.viewport().update()
         self.statusBar().showMessage(f"Picked {self._tracker_seed['name']} at reference point; ready to analyze")
         return True
+
+    def add_track_at_centre(self, key):
+        """Nuke's `add track`: a new, enabled track at the middle of the Tracker's picture, to drag or track from there."""
+        context = self._tracker_context(key)
+        if context is None:
+            return False
+        tracks = copy.deepcopy(context[2].get("tracks", []))
+        if len(tracks) >= trackerknobs.MAX_TRACKS:
+            self._show_command_error(ValueError(f"Tracker supports at most {trackerknobs.MAX_TRACKS} track points"))
+            return False
+        node = context[1]
+        source = node["inputs"].get("image")
+        x = y = 0.0
+        if source is not None:
+            display = self.evaluator.evaluate_raster(self.dispatcher.document, target=source,
+                                                     frame=int(node["params"].get("reference_frame", 1))).display
+            x, y = display.x + display.width / 2.0, display.y + display.height / 2.0
+        tracks.append(trackerknobs.new_track(tracks, x, y))
+        self._tracker_selected_index = len(tracks) - 1
+        self.command({"op": "set_tracks", "id": key, "tracks": tracks})
+        return True
+
+    def average_selected_tracks(self, key, indices):
+        """Nuke's `average tracks`: a new track that follows the mean of the selected ones, keyed on every frame."""
+        context = self._tracker_context(key)
+        if context is None:
+            return False
+        tracks = copy.deepcopy(context[2].get("tracks", []))
+        if len(tracks) >= trackerknobs.MAX_TRACKS:
+            self._show_command_error(ValueError(f"Tracker supports at most {trackerknobs.MAX_TRACKS} track points"))
+            return False
+        time = self.dispatcher.document["time"]
+        try:
+            tracks.append(trackerknobs.averaged_track(tracks, indices, range(int(time["first"]), int(time["last"]) + 1)))
+        except ValueError as error:
+            self._show_command_error(error)
+            return False
+        self._tracker_selected_index = len(tracks) - 1
+        self.command({"op": "set_tracks", "id": key, "tracks": tracks})
+        return True
+
+    def _snap_tracker_point(self, key, context, point):
+        """Nuke's `snap to markers`: the picked point moves to the strongest feature within a few pixels of it."""
+        node = context[1]
+        source = node["inputs"].get("image")
+        if source is None:
+            return point
+        try:
+            raster = self.evaluator.evaluate_raster(self.dispatcher.document, target=source,
+                                                    frame=int(node["params"].get("reference_frame", 1)))
+            gray, origin = tracker_model._analysis_pixels(raster, node["params"].get("tracking_channels", "luminance"))
+        except (ValueError, KeyError):
+            return point
+        return trackerknobs.snap_to_marker(gray, point, origin)
 
     def key_tracker_point(self, key):
         context = self._tracker_context(key)
@@ -14126,6 +14200,27 @@ class Window(QMainWindow):
             self._planar_cancel.set()
             self.statusBar().showMessage("Tracker analysis: cancelling…")
 
+    def retrack_selected(self, key, direction="forward", first_frame=None, last_frame=None):
+        """Analyse the selected track again from its position at the reference frame, with that track's own pattern and search
+        areas, and replace its keys. Returns True when the analysis started."""
+        context = self._tracker_context(key)
+        index = self._tracker_selected_index
+        if context is None or index is None or index >= len(context[2].get("tracks", [])):
+            self._show_command_error(ValueError("Select a track point first"))
+            return False
+        track = context[2]["tracks"][index]
+        reference = int(context[1]["params"].get("reference_frame", 1))
+        seed = {**copy.deepcopy(track), "x": shape_model.resolve_scalar(track["x"], reference, "x"),
+                "y": shape_model.resolve_scalar(track["y"], reference, "y")}
+        seed.pop("error", None)
+        self._tracker_seed, self._tracker_index, self._tracker_key = seed, index, key
+        self._tracker_replace = True
+        started = self.analyse_tracker(key, direction, first_frame, last_frame)
+        if not started:
+            self._tracker_seed = self._tracker_index = self._tracker_key = None
+            self._tracker_replace = False
+        return started
+
     def analyse_tracker(self, key, direction="forward", first_frame=None, last_frame=None):
         if self._tracker_future is not None:
             return False
@@ -14151,12 +14246,15 @@ class Window(QMainWindow):
                "base_tracks": copy.deepcopy(context[2].get("tracks", [])),
                "reference_frame": frame, "progress": {"frame": frame, "completed": 0,
                                                           "total": abs((last if direction == "forward" else first) - frame)},
-               "errors": {frame: 0.0}}
+               "errors": {frame: 0.0}, "info": {}, "replace": bool(getattr(self, "_tracker_replace", False)),
+               "hide_progress": bool(int(context[1]["params"].get("hide_progress_bar", 0))),
+               "delete_keys": bool(int(context[1]["params"].get("autotracks_delete_keyframes", 1)))}
+        self._tracker_replace = False
         self._tracker_job = job
         self._tracker_cancel = cancel
         def analyze_roi():
-            pattern_radius = int(context[1]["params"].get("pattern_radius", 8))
-            search_radius = int(context[1]["params"].get("search_radius", 24))
+            pattern_radius, search_radius = trackerknobs.track_radii(context[1]["params"], self._tracker_seed)
+            options = trackerknobs.analysis_options(context[1]["params"])
             roi_executor = TileExecutor(tile_edge=self.tile_executor.tile_edge)
 
             def read_roi(at_frame, center, margin):
@@ -14178,15 +14276,15 @@ class Window(QMainWindow):
                 frame, point, first_frame=first, last_frame=last, cancel=cancel,
                 direction=direction, pattern_radius=pattern_radius, search_radius=search_radius,
                 channels=context[1]["params"].get("tracking_channels", "luminance"),
-                adaptive_update=bool(context[1]["params"].get("adaptive_update", 0)),
-                roi_frame=read_roi,
+                roi_frame=read_roi, info=job["info"], **options,
                 progress=lambda f, n, total, score: (
                     job["progress"].update(frame=f, completed=n, total=total, score=score),
                     job["errors"].update({f: max(0.0, min(1.0, 1.0-score))})))
 
         self._tracker_future = self.executor.submit(analyze_roi)
         total = last - frame if direction == "forward" else frame - first
-        self.statusBar().showMessage(f"Tracker {direction}: 0/{max(0, total)} frames")
+        if not job["hide_progress"]:
+            self.statusBar().showMessage(f"Tracker {direction}: 0/{max(0, total)} frames")
         self.inspect(key)
         QTimer.singleShot(50, self._poll_tracker_analysis)
         return True
@@ -14198,9 +14296,10 @@ class Window(QMainWindow):
         if not future.done():
             job = self._tracker_job or {}
             progress = job.get("progress", {})
-            self.statusBar().showMessage(
-                f"Tracker analysis: {progress.get('completed', 0)}/{progress.get('total', 0)} "
-                f"frames · frame {progress.get('frame', '?')}")
+            if not job.get("hide_progress"):
+                self.statusBar().showMessage(
+                    f"Tracker analysis: {progress.get('completed', 0)}/{progress.get('total', 0)} "
+                    f"frames · frame {progress.get('frame', '?')}")
             QTimer.singleShot(50, self._poll_tracker_analysis)
             return
         self._tracker_future = None
@@ -14223,23 +14322,41 @@ class Window(QMainWindow):
                 raise tracker_model.AnalysisError("Tracker data changed during analysis; results discarded")
             payload = {"tracks": copy.deepcopy(job["base_tracks"])}
             index = job["index"]
-            payload["tracks"].append(copy.deepcopy(job["seed"]))
-            track = payload["tracks"][index]
+            replace = bool(job.get("replace"))
+            if replace:
+                track = payload["tracks"][index]
+            else:
+                payload["tracks"].append(copy.deepcopy(job["seed"]))
+                track = payload["tracks"][index]
+            delete_keys = bool(job.get("delete_keys", True))
+
+            def keys_of(scalar):
+                return list(scalar["curve"]["keys"]) if replace and isinstance(scalar, dict) and scalar.get("curve") else []
+
             for field in ("x", "y"):
                 keys = [{"frame": int(f), "value": float(position[0 if field == "x" else 1])}
                         for f, position in sorted(results.items())]
+                keys = trackerknobs.merged_keys(keys_of(track[field]), keys, delete_keys)
                 track[field] = {"value": float(track[field]) if not isinstance(track[field], dict) else float(track[field]["value"]),
                                 "curve": {"interpolation": "constant", "keys": keys}}
+            error_keys = [{"frame": int(f), "value": float(error)}
+                          for f, error in sorted({f: e for f, e in job.get("errors", {}).items() if f in results}.items())
+                          ] or [{"frame": int(f), "value": 0.0} for f in sorted(results)]
             track["error"] = {"value": float(track.get("error", 0.0)) if not isinstance(track.get("error", 0.0), dict)
                                else float(track["error"]["value"]),
-                               "curve": {"interpolation": "linear", "keys": [
-                                   {"frame": int(f), "value": float(error)}
-                                   for f, error in sorted(job.get("errors", {f: 0.0 for f in results}).items())]}}
+                               "curve": {"interpolation": "linear",
+                                         "keys": trackerknobs.merged_keys(keys_of(track.get("error", 0.0)), error_keys, delete_keys)}}
             self.command({"op": "set_tracks", "id": key, "tracks": payload["tracks"]})
             self._tracker_seed = None
             self._tracker_index = None
             self._tracker_key = None
-            self.statusBar().showMessage(f"Tracker analysis complete: {len(results)} frames")
+            stopped = (job.get("info") or {}).get("stopped_at")
+            if stopped is None:
+                self.statusBar().showMessage(f"Tracker analysis complete: {len(results)} frames")
+            else:
+                self.statusBar().showMessage(
+                    f"Tracker stopped at frame {stopped}: the error {job['info']['error']:.2f} is above the max error; "
+                    f"kept {len(results)} frames", 10000)
         except CancelledError:
             self.statusBar().showMessage("Tracker analysis cancelled; document unchanged")
         except (ValueError, KeyError, OSError) as error:

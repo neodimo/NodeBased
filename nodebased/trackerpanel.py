@@ -1,8 +1,10 @@
 """Artist-facing point list for Tracker and Stabilize nodes."""
 import copy
 
-from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-                               QListWidgetItem, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+                               QListWidgetItem, QPushButton, QSpinBox, QVBoxLayout, QWidget)
+
+from . import trackerknobs
 
 
 def build_panel(window, key):
@@ -88,6 +90,54 @@ def build_panel(window, key):
                 replace_tracks(updated)
         enabled.toggled.connect(set_enabled)
         row_layout.addWidget(enabled)
+        # Nuke's T, R and S: which of the tracks give translation, rotation and scale (none ticked is all three).
+        flags = trackerknobs.track_flags(track)
+        for letter, field, on, tip in (("T", "use_t", flags[0], "This track gives the transform's translation"),
+                                       ("R", "use_r", flags[1], "This track gives the transform's rotation"),
+                                       ("S", "use_s", flags[2], "This track gives the transform's scale")):
+            box = QCheckBox(letter)
+            box.setObjectName(f"tracker-track-{letter.lower()}-{index}")
+            box.setToolTip(tip)
+            box.setChecked(on)
+
+            def set_flag(value, i=index, name=field):
+                updated = current_tracks()
+                if i >= len(updated):
+                    return
+                effective = trackerknobs.track_flags(updated[i])
+                for position, other in enumerate(("use_t", "use_r", "use_s")):
+                    updated[i][other] = 1 if effective[position] else 0
+                updated[i][name] = 1 if value else 0
+                replace_tracks(updated)
+            box.toggled.connect(set_flag)
+            row_layout.addWidget(box)
+        # The track's own pattern and search areas; empty (the node's) until set here or dragged on the viewer.
+        pattern_box = QSpinBox()
+        pattern_box.setObjectName(f"tracker-track-pattern-{index}")
+        pattern_box.setRange(1, 256)
+        pattern_box.setToolTip("This track's pattern area (half-width in pixels)")
+        search_box = QSpinBox()
+        search_box.setObjectName(f"tracker-track-search-{index}")
+        search_box.setRange(1, 256)
+        search_box.setToolTip("This track's search area (half-width in pixels)")
+        node_params = window.dispatcher.document["nodes"][key]["params"]
+        own_pattern, own_search = trackerknobs.track_radii(node_params, track)
+        pattern_box.setValue(own_pattern)
+        search_box.setValue(own_search)
+
+        def set_areas(_value=0, i=index, a=pattern_box, b=search_box):
+            updated = current_tracks()
+            if i >= len(updated):
+                return
+            pattern, search = a.value(), max(b.value(), a.value())
+            if (updated[i].get("pattern_radius"), updated[i].get("search_radius")) == (pattern, search):
+                return
+            updated[i].update(pattern_radius=pattern, search_radius=search)
+            replace_tracks(updated)
+        pattern_box.editingFinished.connect(set_areas)
+        search_box.editingFinished.connect(set_areas)
+        row_layout.addWidget(pattern_box)
+        row_layout.addWidget(search_box)
         analyzed = any(
             isinstance(track.get(field), dict) and track[field].get("curve") and
             any(first <= int(item["frame"]) <= last for item in track[field]["curve"].get("keys", []))
@@ -97,6 +147,7 @@ def build_panel(window, key):
     if selected is not None and 0 <= selected < len(tracks):
         listing.setCurrentRow(selected)
     layout.addWidget(QLabel("Track points"))
+    listing.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     layout.addWidget(listing)
     controls = QHBoxLayout()
     add = QPushButton("Add point…")
@@ -107,14 +158,39 @@ def build_panel(window, key):
     remove.setObjectName("tracker-track-delete")
     remove.setEnabled(bool(tracks))
     def delete_selected():
-        index = listing.currentRow()
+        indices = sorted({listing.row(item) for item in listing.selectedItems()} | ({listing.currentRow()} - {-1}))
         updated = current_tracks()
-        if 0 <= index < len(updated):
-            del updated[index]
-            replace_tracks(updated)
+        kept = trackerknobs.remove_tracks(updated, indices)
+        if len(kept) != len(updated):
+            window._tracker_selected_index = None
+            replace_tracks(kept)
     remove.clicked.connect(delete_selected)
     controls.addWidget(remove)
     layout.addLayout(controls)
+    # Nuke's four buttons over the list: add track (a new track at the middle of the picture), delete track (every selected one),
+    # select all, and average tracks (a new track at the mean of the selected ones).
+    row = QHBoxLayout()
+    for name, text, tip in (("tracker-add-track", "Add track", "Add a new track at the middle of the picture"),
+                            ("tracker-del-tracks", "Delete tracks", "Delete every selected track"),
+                            ("tracker-select-all", "Select all", "Select every track"),
+                            ("tracker-average-tracks", "Average tracks", "Add a track that follows the mean of the selected tracks")):
+        button = QPushButton(text)
+        button.setObjectName(name)
+        button.setToolTip(tip)
+        row.addWidget(button)
+        if name == "tracker-add-track":
+            button.clicked.connect(lambda _c=False: window.add_track_at_centre(key))
+        elif name == "tracker-del-tracks":
+            button.clicked.connect(lambda _c=False: delete_selected())
+            button.setEnabled(bool(tracks))
+        elif name == "tracker-select-all":
+            button.clicked.connect(lambda _c=False: listing.selectAll())
+            button.setEnabled(bool(tracks))
+        else:
+            button.clicked.connect(lambda _c=False: window.average_selected_tracks(
+                key, sorted({listing.row(item) for item in listing.selectedItems()})))
+            button.setEnabled(len(tracks) > 1)
+    layout.addLayout(row)
 
     def select(row):
         window._tracker_selected_index = row if row >= 0 else None

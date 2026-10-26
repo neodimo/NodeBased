@@ -496,6 +496,10 @@ class TileExecutor:
                 return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
+            if node["type"] == "Tracker" and any(node["params"].get(name) for name in ("motionblur", "clamp", "black_outside")):
+                # Shutter blur averages the node over other frames, and `clamp` and `black outside` fill the area beyond the picture,
+                # which the evaluator's data window limits and a tile has no notion of: they run on the full-frame evaluator.
+                return False
             if node["type"] == "RotoPaint" and any(
                     float(item.get("patch_blend", 0.0)) > 0
                     for item in document.get("node_data", {}).get(node_id, {}).get("items", [])

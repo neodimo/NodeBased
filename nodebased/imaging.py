@@ -2610,7 +2610,7 @@ class Evaluator:
             contactsheet_sequence = None
             timewarp_weights = None
             temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D", "TimeWarp")
-            transform_blur = kind in ("Transform", "CornerPin") and bool(params.get("motionblur", 0))
+            transform_blur = kind in ("Transform", "CornerPin", "Tracker") and bool(params.get("motionblur", 0))
             if (kind in temporal_kinds or transform_blur) and not node["disabled"]:
                 source_key = node["inputs"]["image"]
                 if kind == "TimeWarp":
