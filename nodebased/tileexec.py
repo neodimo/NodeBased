@@ -1772,16 +1772,8 @@ def _run_full_kernel_on_array(kind, params, inputs, frame):
     image = inputs[0]
     if kind == "Shuffle":
         return imaging.Evaluator._shuffle_route(params, image, inputs[1] if len(inputs) > 1 else None)
-    if kind == "Premult":
-        out = image.copy()
-        alpha = image[..., 3:4]
-        out[..., :3] = image[..., :3] * alpha
-        return out
-    if kind == "Unpremult":
-        alpha = image[..., 3:4]
-        safe = np.where(alpha > 0, alpha, np.float32(1.0))
-        straight = np.where(alpha > 0, image[..., :3] / safe, image[..., :3])
-        return np.concatenate([straight, alpha], axis=2).astype(np.float32)
+    if kind in ("Premult", "Unpremult"):
+        return imaging.Evaluator._premult_array(kind, params, image)
     raise UnsupportedTile(f"{kind} has no tile-native full-kernel path")
 
 

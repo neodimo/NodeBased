@@ -58,14 +58,19 @@ FILTER_CHROME = {
     # Roto's mask input and mask channel gate its result against the bg (or transparent black); `channels` limits which
     # channels it may write (the guide's Roto lists `channels` on its tracking tab, so its default here is "all").
     "Roto": ("all", True, False),
+    # Nuke's Premult and Unpremult carry `channels` and nothing else of the strip; their kernels do rgb / rgba / alpha themselves.
+    "Premult": ("rgb", False, False), "Unpremult": ("rgb", False, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.
 NATIVE_CHANNELS = frozenset({
     "Invert", "Multiply", "Add", "Gamma", "Clamp", "Exposure", "OCIOLogConvert", "Posterize", "Dither",
     "Sharpen", "Median", "Glow", "Soften", "Defocus", "ZDefocus", "DirBlur", "EdgeBlur", "Erode", "Laplacian",
+    "Premult", "Unpremult",
 })
 NATIVE_VALUES = frozenset({"rgb", "rgba", "alpha"})
+# Kinds with no `mix` (Nuke's Roto, Premult and Unpremult have none), which the shared tests therefore leave out of their mix checks.
+MIXLESS = frozenset({"Roto", "Premult", "Unpremult"})
 # Kinds whose own kernel does not read the mask input: the wrapper gates a wired mask for them, even with every chrome knob unchanged.
 WRAPPER_GATED = frozenset({"Roto"})
 # Merge-like nodes gate against input B (Nuke's background); everything else gates against its first input.
@@ -89,6 +94,7 @@ CLIP_TYPES = ("no clip", "bbox", "format", "union bbox + format", "intersect bbo
 CHANNEL_CHOICES = ["rgb", "rgba", "alpha", "all", "none", "red", "green", "blue"]
 MASK_CHANNEL_CHOICES = ["none", "rgba.alpha", "rgba.red", "rgba.green", "rgba.blue", "rgba.luminance"]
 UNPREMULT_CHOICES = ["none", "rgba.alpha", "rgba.red", "rgba.green", "rgba.blue"]
+PREMULT_BY_CHOICES = ["rgba.alpha", "rgba.red", "rgba.green", "rgba.blue", "rgba.luminance"]       # Premult / Unpremult: there is always a divisor
 OUTPUT_CHOICES = ["rgba", "rgb", "alpha", "red", "green", "blue", "none"]
 OPEN_CHOICE_PARAMS = frozenset({"channels", "maskChannelInput", "unpremult", "output", "premult"})
 
@@ -117,6 +123,8 @@ def is_open_choice(kind, name):
     """Is `name` on `kind` one of the chrome knobs that takes a layer or channel name as well as a listed word?"""
     if kind == "Write" and name == "channels":
         return True              # Write's channels (fidelity step C) take a layer name too
+    if name == "premult_by":
+        return kind in ("Premult", "Unpremult")
     if name not in OPEN_CHOICE_PARAMS:
         return False
     if name in ("output", "premult"):
@@ -127,7 +135,7 @@ def is_open_choice(kind, name):
 def suggestions(name):
     """The words offered in a chrome knob's drop-down."""
     return {"channels": CHANNEL_CHOICES, "maskChannelInput": MASK_CHANNEL_CHOICES, "unpremult": UNPREMULT_CHOICES,
-            "output": OUTPUT_CHOICES, "premult": UNPREMULT_CHOICES}[name]
+            "output": OUTPUT_CHOICES, "premult": UNPREMULT_CHOICES, "premult_by": PREMULT_BY_CHOICES}[name]
 
 
 def step_c_params(kind):
@@ -140,6 +148,8 @@ def step_c_params(kind):
         return dict(DEFAULTS)
     if kind == "Crop":
         return {"crop_softness": 0.0, "reformat": 0, "intersect": 1, "crop": 1}
+    if kind in ("Premult", "Unpremult"):
+        return {"channels": "rgb", "premult_by": "rgba.alpha", "invert": 0}
     return {}
 
 
@@ -306,6 +316,8 @@ def needs_full_frame(kind, p):
             return True
         cfg = filter_config(kind, p)
         return bool(cfg is not None and cfg.active(False))
+    if kind in ("Premult", "Unpremult") and not _is_rgba_token(p.get("premult_by", "rgba.alpha")):
+        return True      # divides or multiplies by a layer channel, which only the whole-image path can read
     cfg = filter_config(kind, p)
     if cfg is None:
         return False

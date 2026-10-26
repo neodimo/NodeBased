@@ -3711,6 +3711,10 @@ class Evaluator:
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
         if kind == "Shuffle":
             return Evaluator._shuffle_raster(p, inputs, frame)
+        if kind in ("Premult", "Unpremult") and not _chrome._is_rgba_token(p.get("premult_by", "rgba.alpha")):
+            # Divided or multiplied by a channel of a named layer the input carries.
+            by = _chrome.resolve_channel(p["premult_by"], source.pixels, _chrome._layer_getter(source, source.data))
+            return source.with_pixels(Evaluator._premult_array(kind, p, source.pixels, by))
         return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
 
     @staticmethod
@@ -5093,18 +5097,8 @@ class Evaluator:
             if a.shape != b.shape:
                 raise ValueError("Merge inputs must have matching formats in M0")
             return Evaluator._merge_gated(p.get("operation", "over"), a, b, p["mix"], mask)
-        if kind == "Premult":
-            frame = inputs[0].copy()
-            alpha = frame[..., 3:4]
-            frame[..., :3] = frame[..., :3] * alpha
-            return frame
-        if kind == "Unpremult":
-            frame = inputs[0].copy()
-            alpha = frame[..., 3:4]
-            # Guard alpha == 0 to keep RGB untouched (avoids NaN/inf while preserving the premultiplied channel).
-            safe = np.where(alpha > 0, alpha, np.float32(1.0))
-            straight = np.where(alpha > 0, frame[..., :3] / safe, frame[..., :3])
-            return np.concatenate([straight, alpha], axis=2).astype(np.float32)
+        if kind in ("Premult", "Unpremult"):
+            return Evaluator._premult_array(kind, p, inputs[0])
         if kind == "Dot":
             # Graph passthrough: wire reroute, pixel data unchanged. The optional_mask/mix
             # contract does not apply; Dot is intentionally neutral.
@@ -7598,6 +7592,30 @@ class Evaluator:
         if radius < 0.5:
             return image.copy()
         return Evaluator._box_blur_axis(Evaluator._box_blur_axis(image, radius, axis=1), radius, axis=0)
+
+    @staticmethod
+    def _premult_array(kind, p, pixels, by=None):
+        """Nuke's Premult and Unpremult on an (h, w, 4) array: the `channels` (rgb, rgba or alpha here; the shared chrome
+        handles any other set) are multiplied (Premult) or divided (Unpremult) by the `premult_by` channel (`by`, an
+        (h, w, 1) array, when the caller already resolved one), and `invert` swaps the two operations.
+
+        Dividing leaves a pixel whose divisor is not above zero as it is (no NaN or infinity; the premultiplied colour stays)."""
+        from . import ops2d_chrome as chrome
+        targets = {"rgb": (0, 1, 2), "rgba": (0, 1, 2, 3), "alpha": (3,)}.get(str(p.get("channels", "rgb")).strip().lower())
+        if targets is None:
+            raise ValueError(f"{kind}: channels {p.get('channels')!r} reaches the kernel without the shared channel handling")
+        frame = np.array(pixels, dtype=np.float32, copy=True)
+        if by is None:
+            by = chrome.resolve_channel(p.get("premult_by", "rgba.alpha"), frame)
+        by = np.asarray(by, dtype=np.float32)
+        multiply = (kind == "Premult") != bool(p.get("invert", 0))
+        picked = list(targets)
+        if multiply:
+            frame[..., picked] = frame[..., picked] * by
+        else:
+            safe = np.where(by > 0, by, np.float32(1.0))
+            frame[..., picked] = np.where(by > 0, frame[..., picked] / safe, frame[..., picked])
+        return frame.astype(np.float32)
 
     @staticmethod
     def _crop_vignette(box, region, softness):

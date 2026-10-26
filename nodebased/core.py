@@ -842,8 +842,10 @@ SPECS = {
     # blended by the fractional part) -- a deliberate simplification of Nuke's three-way
     # none/nearest/box choice. No mask or mix, matching every other Time-menu node.
     "TimeWarp": {"inputs": ["image"], "params": {"lookup": 1.0, "lookup_filter": "blend"}},
-    "Premult": {"inputs": ["image"], "params": {}},
-    "Unpremult": {"inputs": ["image"], "params": {}},
+    # Premult / Unpremult (fidelity step C): Nuke's `channels` (the ones multiplied or divided; rgb), `alpha` ("by"; kept
+    # as `premult_by` because `alpha` is a number elsewhere in the parameter table) and `invert`.
+    "Premult": {"inputs": ["image"], "params": {"channels": "rgb", "premult_by": "rgba.alpha", "invert": 0}},
+    "Unpremult": {"inputs": ["image"], "params": {"channels": "rgb", "premult_by": "rgba.alpha", "invert": 0}},
     "Dot": {"inputs": ["input"], "params": {}},
     "Switch": {"inputs": ["0", "1"], "params": {"which": 0}},
     "Viewer": {"inputs": ["image"], "params": {}},

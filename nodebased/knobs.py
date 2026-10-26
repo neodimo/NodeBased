@@ -746,7 +746,9 @@ KNOB_LAYOUT = {
                         KnobGroup("xy", ("width", "height"), label="Size")),
     "Group": [], "Output": [],
     "Input": _groups(KnobGroup("int", ("input_number",), label="Number")),
-    "Premult": [], "Unpremult": [], "Dot": [],
+    "Premult": _groups(KnobGroup("string", ("premult_by",), label="By"), KnobGroup("bool", ("invert",), label="Invert")),
+    "Unpremult": _groups(KnobGroup("string", ("premult_by",), label="By"), KnobGroup("bool", ("invert",), label="Invert")),
+    "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],
     "Write": _groups(

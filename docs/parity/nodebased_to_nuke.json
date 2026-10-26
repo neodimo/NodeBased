@@ -2077,14 +2077,22 @@
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
-   "knobs": []
+   "knobs": [
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["premult_by"], "nuke": ["alpha"], "kind": "renamed", "reason": "same control under another name (`alpha` is a number elsewhere in the parameter table); Nuke's label is 'by', scripting name `alpha`"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"}
+   ]
   },
   "Unpremult": {
    "nodebased": "Unpremult",
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
-   "knobs": []
+   "knobs": [
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["premult_by"], "nuke": ["alpha"], "kind": "renamed", "reason": "same control under another name (`alpha` is a number elsewhere in the parameter table); Nuke's label is 'by', scripting name `alpha`"},
+    {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"}
+   ]
   },
   "Switch": {
    "nodebased": "Switch",
