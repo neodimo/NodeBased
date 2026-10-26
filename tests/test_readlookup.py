@@ -12,7 +12,7 @@ import numpy as np
 
 from nodebased import localize, media
 from nodebased.imaging import Evaluator
-from nodebased.media import file_identity, write_exr
+from nodebased.media import file_identity, read_identity, resolve_source_path, write_exr
 from nodebased.tileexec import TileExecutor
 from tests.test_2d_fidelity_f_readwrite import FolderCase, picture, red_of, replace_keeping_size_and_time
 
@@ -146,6 +146,65 @@ class FileIdentityTests(FolderCase):
         self.assertEqual(len(resolves), 1)
 
 
+class ReadIdentityTests(FolderCase):
+    def setUp(self):
+        super().setUp()
+        media.clear_directory_memo()
+        self.dir = self.dir.resolve()
+
+    def test_a_sequence_member_gives_what_resolve_source_path_and_file_identity_give(self):
+        for number in (1, 2):
+            self.exr(f"plate.{number:04d}.exr", 0.1 * number)
+        pattern = str(self.dir / "plate.%04d.exr")
+        for frame in (1, 2):
+            resolved, exists, identity = read_identity(pattern, frame)
+            self.assertEqual((resolved, exists), resolve_source_path(pattern, frame))
+            self.assertEqual(identity, file_identity(resolved))
+
+    def test_a_still_gives_the_same(self):
+        path = self.exr("still.exr", 0.3)
+        self.assertEqual(read_identity(str(path), 7), (str(path), True, file_identity(path)))
+
+    def test_a_gap_follows_the_missing_frame_policy(self):
+        self.exr("plate.0001.exr", 0.1)
+        self.exr("plate.0002.exr", 0.2)
+        pattern = str(self.dir / "plate.%04d.exr")
+        self.assertEqual(read_identity(pattern, 5, "black"), (None, False, None))
+        resolved, exists, identity = read_identity(pattern, 5, "hold")
+        self.assertEqual((resolved, exists), (str(self.dir / "plate.0002.exr"), True))
+        self.assertEqual(identity, file_identity(resolved))
+        with self.assertRaises(ValueError):
+            read_identity(pattern, 5, "error")
+
+    def test_a_missing_still_raises_what_stat_raises(self):
+        with self.assertRaises(FileNotFoundError):
+            read_identity(str(self.dir / "nothing.exr"), 1)
+
+    def test_a_linked_frame_takes_the_full_lookup_and_agrees(self):
+        target = self.exr("real/plate.0001.exr", 0.3)
+        (self.dir / "plate.0001.exr").symlink_to(target)
+        pattern = str(self.dir / "plate.%04d.exr")
+        resolved, exists, identity = read_identity(pattern, 1)
+        self.assertEqual((resolved, exists, identity), (str(self.dir / "plate.0001.exr"), True, file_identity(self.dir / "plate.0001.exr")))
+        self.assertEqual(identity[0], str(target))
+
+    def test_a_warm_frame_costs_two_system_calls(self):
+        self.exr("plate.0001.exr", 0.1)
+        pattern = str(self.dir / "plate.%04d.exr")
+        read_identity(pattern, 1)
+        with CountedCalls() as counted:
+            read_identity(pattern, 1)
+        self.assertEqual(counted.count, 2)
+
+    def test_the_decode_pool_key_names_the_same_file_and_size_as_the_walk(self):
+        from nodebased import tileexec
+        self.exr("plate.0001.exr", 0.1)
+        params = {"path": str(self.dir / "plate.%04d.exr"), "frame_offset": 0, "missing": "error"}
+        key = tileexec._read_source_fingerprint(params, 1)
+        self.assertEqual(key[0], "source")
+        self.assertEqual(tuple(key[1:]), file_identity(self.dir / "plate.0001.exr"))
+
+
 class ReadKeepsReloadingTests(FolderCase):
     def test_a_file_replaced_during_the_session_is_read_again(self):
         path = self.exr("plate.0001.exr", 0.25)
@@ -196,7 +255,7 @@ class ReadKeepsReloadingTests(FolderCase):
         with CountedCalls() as counted:
             for number in (2, 3, 4):
                 red_of(doc, evaluator, frame=number)
-        self.assertLessEqual(counted.count / 3, 6, "a Read frame's lookups")
+        self.assertLessEqual(counted.count / 3, 4, "a Read frame's lookups")
 
     def test_the_tile_path_keys_the_read_like_the_evaluator(self):
         self.exr("plate.0001.exr", 0.3)

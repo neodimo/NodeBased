@@ -204,7 +204,7 @@ def run_window(args):
     gpu_backend=None; gpu_cold_ms=None; island_rows=[]; gpu_at={}
     if args.backend=='gpu2d':
         from nodebased import gpu2d
-        gpu_backend=gpu2d.GPU2D.open('default',args.gpu_budget_mb<<20)
+        gpu_backend=gpu2d.GPU2D.open(args.island_adapter,args.gpu_budget_mb<<20)
         if gpu_backend is None: raise RuntimeError(f'GPU 2D island unavailable: {gpu2d.GPU2D.open_error}')
         # Cold shader setup is timed on its own; two sacrificial frames then warm pipelines, buffers and the
         # device, and every cache is dropped so the measured frames are fresh decodes and fresh uploads.
@@ -558,6 +558,7 @@ def main():
                    help='uncached disables persistent evaluator results; cached prewarms displayed frames')
     p.add_argument('--adapter',default='unknown')
     p.add_argument('--force-adapter',choices=('default','integrated','cpu'),default='default')
+    p.add_argument('--island-adapter',choices=('default','automatic','discrete','integrated','cpu'),default='default',help='how the island opens its card: default (the adapter Settings names, else the discrete card), automatic (the card measured fastest, as the app does), or one kind')
     p.add_argument('--no-pipeline',action='store_true',help='restore the one-thread order: evaluate, convert, show, then the next frame')
     p.add_argument('--timeline-output',type=pathlib.Path,help='write only the per-frame stage timeline (compact JSON) here')
     p.add_argument('--leaf-sampler',action='store_true',help='with --stage-trace: also sample the evaluating thread line by line every millisecond (a diagnostic)')

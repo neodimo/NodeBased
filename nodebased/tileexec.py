@@ -173,9 +173,9 @@ def _compute_node_digests(document, tier, frame, solve=None):
             sources = [_bypass_source(node)]
         fingerprint = None
         if kind == "Read" and params["path"]:
-            from .media import nearest_sequence_path as _nearest, resolve_source_path as _resolve
+            from .media import nearest_sequence_path as _nearest, read_identity
             source_frame, policy, forced = imaging.read_lookup(params, frame)
-            resolved, exists = (None, False) if forced else _resolve(params["path"], source_frame, policy)
+            resolved, exists, identity = (None, False, None) if forced else read_identity(params["path"], source_frame, policy)
             if resolved is None:
                 reference = _nearest(params["path"], source_frame)
                 if reference is not None:
@@ -183,8 +183,7 @@ def _compute_node_digests(document, tier, frame, solve=None):
                     fingerprint = ["<black>", source_frame, str(Path(reference).resolve()),
                                    stat.st_size, stat.st_mtime_ns]
             else:
-                from .media import file_identity
-                fingerprint = list(file_identity(resolved))
+                fingerprint = list(identity)
         if kind == "ReadBundle":
             from .bundle import fingerprint as bundle_fingerprint
             fingerprint = bundle_fingerprint(params, frame)
@@ -306,14 +305,13 @@ def _read_source_fingerprint(params, frame):
     satisfy a decode request warmed against the old file. Black gaps still use the nearest
     existing member for their display/data-window shape, so that reference is part of the key.
     """
-    from .media import nearest_sequence_path, resolve_source_path
+    from .media import nearest_sequence_path, read_identity
 
     path = params.get("path")
     source_frame, policy, forced = imaging.read_lookup(params, int(frame))
-    resolved, exists = (None, False) if forced else resolve_source_path(path, source_frame, policy)
+    resolved, exists, identity = (None, False, None) if forced else read_identity(path, source_frame, policy)
     if resolved is not None:
-        stat = Path(resolved).stat()
-        return ("source", str(Path(resolved).resolve()), int(stat.st_size), int(stat.st_mtime_ns))
+        return ("source", str(identity[0]), int(identity[1]), int(identity[2]))
     # ``missing=black`` has no source pixels, but imaging still reads the nearest member to
     # obtain the black raster's display window. Include its fingerprint so a changed reference
     # cannot leave a stale-shaped black decode in the pool.

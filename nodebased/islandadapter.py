@@ -89,10 +89,22 @@ def cpu_identity(cpus=None):
     return f"cpu|{count}|{platform.machine()}|{platform.processor() or platform.system()}"
 
 
+FILE_ENV = "NODEBASED_ISLAND_PROBE_FILE"
+
+
 class SettingsStore:
-    """The measurements, as one JSON text under `playback/island_probe` in the machine's preferences."""
+    """The measurements, as one JSON text under `playback/island_probe` in the machine's preferences, or in the file
+    `NODEBASED_ISLAND_PROBE_FILE` names (a benchmark that must not touch the preferences)."""
 
     def load(self):
+        path = os.environ.get(FILE_ENV)
+        if path:
+            try:
+                with open(path) as handle:
+                    data = json.load(handle)
+            except (OSError, ValueError):
+                return {}
+            return data if isinstance(data, dict) else {}
         try:
             from PySide6.QtCore import QSettings
             text = QSettings("NodeBased", "NodeBased").value(SETTING, "")
@@ -102,6 +114,14 @@ class SettingsStore:
         return data if isinstance(data, dict) else {}
 
     def save(self, records):
+        path = os.environ.get(FILE_ENV)
+        if path:
+            try:
+                with open(path, "w") as handle:
+                    json.dump(records, handle, sort_keys=True, indent=1)
+            except OSError:
+                pass
+            return
         try:
             from PySide6.QtCore import QSettings
             store = QSettings("NodeBased", "NodeBased")

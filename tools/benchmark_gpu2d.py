@@ -600,7 +600,7 @@ def cmd_playback(args):
         timeline = out_dir / f"{case}.timeline.json"
         cmd = [sys.executable, str(TOOLS / "benchmark_2d_playback.py"), "--plate-pattern", str(inputs / "plate.%04d.exr"),
                "--background-pattern", str(inputs / "background.%04d.exr"), "--size", "1080p", "--cache-mode", "uncached",
-               "--display", args.display, "--force-adapter", args.force_adapter, "--adapter", args.label, "--backend", args.backend,
+               "--display", args.display, "--force-adapter", args.force_adapter, "--island-adapter", getattr(args, "island_adapter", "default"), "--adapter", args.label, "--backend", args.backend,
                "--gpu-budget-mb", str(args.budget_mb), "--seconds", str(args.seconds), "--case", case, "--output", str(raw),
                "--timeline-output", str(timeline)]
         if args.frame_range != 48:
@@ -923,7 +923,7 @@ def main():
     def common(p):
         p.add_argument("--inputs", required=True, type=pathlib.Path, help="directory with plate.%%04d.exr and background.%%04d.exr")
         p.add_argument("--size", default="1080p", help="1080p, 4k or WIDTHxHEIGHT matching the generated inputs")
-        p.add_argument("--adapter", default="default", choices=("default", "discrete", "integrated", "cpu"))
+        p.add_argument("--adapter", default="default", choices=("default", "automatic", "discrete", "integrated", "cpu"))
         p.add_argument("--budget-mb", type=int, default=1024, help="2D device allocation cap")
         p.add_argument("--label", default="run")
         p.add_argument("--output", required=True, type=pathlib.Path)
@@ -952,6 +952,8 @@ def main():
     pb.add_argument("--display", required=True, help="private X display, e.g. :99")
     pb.add_argument("--backend", choices=("cpu", "gpu2d"), default="gpu2d")
     pb.add_argument("--force-adapter", choices=("default", "integrated", "cpu"), default="default")
+    pb.add_argument("--island-adapter", choices=("default", "automatic", "discrete", "integrated", "cpu"), default="default",
+                    help="how the island opens its card: default (discrete first), automatic (measured, as the app does) or one kind")
     pb.add_argument("--label", required=True, help="hardware label used in the case names")
     pb.add_argument("--frame-range", type=int, default=48)
     pb.add_argument("--passes", type=int, default=3)

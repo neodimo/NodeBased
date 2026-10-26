@@ -208,29 +208,55 @@ def clear_directory_memo():
     _DIRECTORY_MEMO.clear()
 
 
+def _plain_file_identity(text):
+    """(real path, size, modified time) of a regular file named by an absolute path, in two system calls, or None when the
+    lookup does not apply (switched off, a relative or dotted path, a link or anything but a regular file). OSError when the file is missing."""
+    if not (lookup_memo_enabled() and os.path.isabs(text) and '..' not in re.split(r'[\\/]', text) and not text.endswith(('/', os.sep))):
+        return None
+    parent, name = os.path.split(os.path.normpath(text))
+    if not name or name == '.':
+        return None
+    info = os.lstat(text)
+    if not stat_module.S_ISREG(info.st_mode):
+        return None
+    directory = os.stat(parent)
+    token = (directory.st_dev, directory.st_ino, directory.st_mtime_ns, directory.st_ctime_ns)
+    memo = _DIRECTORY_MEMO.get(parent)
+    if memo is None or memo[0] != token:
+        memo = (token, os.path.realpath(parent))
+        if len(_DIRECTORY_MEMO) >= _DIRECTORY_MEMO_LIMIT:
+            _DIRECTORY_MEMO.clear()
+        _DIRECTORY_MEMO[parent] = memo
+    return os.path.join(memo[1], name), info.st_size, info.st_mtime_ns
+
+
 def file_identity(path):
     """(real path, size, modified time in ns) of the file `path` names, the values the Read's cache key is made of.
 
     Same answer as `str(Path(path).resolve())` with `Path(path).stat()` (OSError when the file is missing); two system calls
     for a plain file in a directory that did not change since the last call, the full `Path.resolve()` otherwise."""
     text = os.fspath(path)
-    if lookup_memo_enabled() and os.path.isabs(text) and '..' not in re.split(r'[\\/]', text) and not text.endswith(('/', os.sep)):
-        parent, name = os.path.split(os.path.normpath(text))
-        if name and name != '.':
-            info = os.lstat(text)
-            if stat_module.S_ISREG(info.st_mode):         # a link or anything else takes the full path below
-                directory = os.stat(parent)
-                token = (directory.st_dev, directory.st_ino, directory.st_mtime_ns, directory.st_ctime_ns)
-                memo = _DIRECTORY_MEMO.get(parent)
-                if memo is None or memo[0] != token:
-                    memo = (token, os.path.realpath(parent))
-                    if len(_DIRECTORY_MEMO) >= _DIRECTORY_MEMO_LIMIT:
-                        _DIRECTORY_MEMO.clear()
-                    _DIRECTORY_MEMO[parent] = memo
-                return os.path.join(memo[1], name), info.st_size, info.st_mtime_ns
-    resolved = Path(text)
-    info = resolved.stat()
-    return str(resolved.resolve()), info.st_size, info.st_mtime_ns
+    identity = _plain_file_identity(text)
+    if identity is not None:
+        return identity
+    info = Path(text).stat()
+    return str(Path(text).resolve()), info.st_size, info.st_mtime_ns
+
+
+def read_identity(path, frame, missing='error'):
+    """`resolve_source_path` and `file_identity` of what it found, as (path, exists, identity); identity is None for a gap that
+    shows black. A plain file that is there costs two system calls (the answer of `resolve_source_path` is a regular file when
+    `file_identity`'s lookup applies), anything else asks the two functions one after the other as before."""
+    if path:
+        candidate = sequence_path(path, frame) if is_sequence(path) else str(path)
+        try:
+            identity = _plain_file_identity(candidate)
+        except OSError:
+            identity = None
+        if identity is not None:
+            return candidate, True, identity
+    resolved, exists = resolve_source_path(path, frame, missing)
+    return resolved, exists, (file_identity(resolved) if resolved is not None else None)
 
 
 def resolve_source_path(path, frame, missing='error'):
