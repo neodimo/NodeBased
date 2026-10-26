@@ -1,3 +1,7 @@
+## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
+
+`v0.44.0` (annotated) at `8dcd9693` is published: https://github.com/neodimo/NodeBased/releases/tag/v0.44.0 . Four assets (Linux AppImage, Windows portable ZIP, Windows setup exe, SHA256SUMS); tag workflows green on Linux and Windows. Release suite on `8dcd9693`: Ran 6537 tests in 496.574 s, OK, exit 0 (started 1:36 AM, tagged 1:45 AM). The Windows package job took about 2 h 10 min, almost all of it in its test step. The announcement goes to Releases #nodebased through the lanes tick.
+
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (3:35 AM on 2026-10-26 PDT)
