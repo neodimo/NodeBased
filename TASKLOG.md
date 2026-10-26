@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step F of N: Roto, Text, Read and Write take the rest of Nuke's knobs, and the time nodes get Nuke's path mask (integrator tick)
+
+- **What was done:** `main` `db12f300` -> `3ff19e79` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `3ff19e79`: Ran 6908 tests in 516.304 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) step A of 1: the Read decodes and the Roto matte of a frame run at the same time (integrator tick)
 
 - **What was done:** `main` `4379060e` -> `e7ce209b` plus this docs commit. Evidence and per-lane commit

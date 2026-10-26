@@ -1,5 +1,26 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:25 AM on 2026-10-26 PDT)
+
+`main` moved `db12f300` -> `3ff19e79` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `3ff19e79` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-0505.log`, started 5:05 AM): **Ran 6908 tests in 516.304 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step F of N: Roto, Text, Read and Write take the rest of Nuke's knobs, and the time nodes get Nuke's path mask.** Commits:
+  - `3b6cdad5` 2D fidelity F part 4: Read takes localization, a proxy, reload and context variables; Write takes read-back (Read file, on error, reload), render order with Render all, and context variables; the mapping marks the knobs NodeBased cannot honour; docs rows and step notes; the re-scored report (80.1 to 83.6)
+  - `a16333d2` 2D fidelity F parts 2 and 3: Text takes vertical justify, font style and scales, kerning, tracking, baseline shift, leading, a block transform, a colour ramp and drop shadows; TimeOffset and FrameHold take Nuke's path mask (enable, patterns, inject) through shared code
+  - `24f12eda` 2D fidelity F part 1: Roto takes Nuke's feather switch and falloff, transform skew and extra matrix, shutter motion blur (per shape and global), lifetime, open-spline end caps and an output mask layer; the mapping marks what NodeBased cannot honour, with reasons
+  Diff: 36 files changed, 3026 insertions(+), 199 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 `v0.44.0` (annotated) at `8dcd9693` is published: https://github.com/neodimo/NodeBased/releases/tag/v0.44.0 . Four assets (Linux AppImage, Windows portable ZIP, Windows setup exe, SHA256SUMS); tag workflows green on Linux and Windows. Release suite on `8dcd9693`: Ran 6537 tests in 496.574 s, OK, exit 0 (started 1:36 AM, tagged 1:45 AM). The Windows package job took about 2 h 10 min, almost all of it in its test step. The announcement goes to Releases #nodebased through the lanes tick.
 
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
