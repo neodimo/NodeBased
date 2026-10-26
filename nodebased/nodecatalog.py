@@ -120,7 +120,7 @@ NODE_CATEGORIES = {
         "GodRays": "Smears bright areas into radial light shafts.",
         "VolumeRays": "Smears a source matte into radial light shafts.",
         "LevelSet": "Measures signed distance to a selected channel threshold.",
-        "Soften": "A gaussian-leaning soften with Nuke's filter shapes, amount, quality limit and value range.",
+        "Soften": "A soft gaussian-leaning blur with Nuke's filter shapes, amount, quality limit and value range.",
         "Defocus": "A disc blur that mimics an out-of-focus lens.",
         "Bilateral": "Smooths noise while preserving colour edges.",
         "Denoise": "A practical bilateral-plus-temporal noise reducer (not Nuke Denoise).",
