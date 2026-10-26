@@ -1,3 +1,9 @@
+## 2026-10-25 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step C of N: Roto, Read, Write, Crop, Premult and Unpremult take Nuke's knobs, and "clip to" changes pixels (integrator tick)
+
+- **What was done:** `main` `499a0d2a` -> `4e87354d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `4e87354d`: Ran 6537 tests in 491.052 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-25 — continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) step B of 3: the GPU island matches CPU pixels everywhere, and fails safely (integrator tick)
 
 - **What was done:** `main` `6e6e65d6` -> `a85129fe` plus this docs commit. Evidence and per-lane commit

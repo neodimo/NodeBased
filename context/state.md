@@ -1,5 +1,30 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (7:45 PM on 2026-10-25 PDT)
+
+`main` moved `499a0d2a` -> `4e87354d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `4e87354d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1025-1935.log`, started 7:35 PM): **Ran 6537 tests in 491.052 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step C of N: Roto, Read, Write, Crop, Premult and Unpremult take Nuke's knobs, and "clip to" changes pixels.** Commits:
+  - `e2d03dd0` 2D fidelity C: docs rows and step notes, the re-scored report (62.7 to 67.7); a Roto stays undisableable, as its existing rule says
+  - `f965aa56` 2D fidelity C part 6: clip to changes pixels on the Draw nodes and Roto: no clip, bbox, format, union and intersect
+  - `c9629332` 2D fidelity C part 5: Premult and Unpremult take Nuke's channels, by channel and invert
+  - `ad2f4e69` 2D fidelity C part 4: Crop takes Nuke's softness, reformat, intersect and black outside
+  - `04999b66` 2D fidelity C part 3: Write takes Nuke's channels, output transform, raw, premultiplied, views, frame knob, create directories, range limit and EXR compression
+  - `9f7839de` 2D fidelity C part 2: Read takes Nuke's frame knob and mode, first and last with before and after, the original range, format, raw, premultiplied and auto alpha
+  - `fd48c914` 2D fidelity C part 1: Roto takes Nuke's mask input, mask channel, invert, inject and channels; a disabled Roto passes its bg
+  Diff: 27 files changed, 2313 insertions(+), 203 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (7:05 PM on 2026-10-25 PDT)
 
 `main` moved `6e6e65d6` -> `a85129fe` (lane commits cherry-picked onto main in lane order) and then to this
