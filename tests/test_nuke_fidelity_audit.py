@@ -4,6 +4,7 @@
 formula tests; `docs/PARITY_2D_FIDELITY.md` is its output. This test fails when the report drifts from the code, the same way
 `tests/test_2d_parity_step_w3.py` pins PARITY_2D.md."""
 import json
+import os
 import re
 import stat
 import sys
@@ -285,7 +286,8 @@ class ReferencePackTests(unittest.TestCase):
             for name in ("A", "B", "mask"):
                 self.assertTrue((root / "fixtures" / f"{name}.exr").exists())
             render = root / "render_all.sh"
-            self.assertTrue(render.stat().st_mode & stat.S_IXUSR)
+            if os.name != "nt":                              # Windows keeps no execute bit
+                self.assertTrue(render.stat().st_mode & stat.S_IXUSR)
             text = render.read_text()
             self.assertIn("-t", text)                       # terminal mode: the only render path Non-commercial Nuke allows
             self.assertIn("scripts/*.py", text)
