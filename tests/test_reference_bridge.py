@@ -7,7 +7,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from nodebased.core import Dispatcher, empty_document, upgrade_document, validate, SCHEMA_VERSION
+from nodebased.core import Dispatcher, SPECS, empty_document, upgrade_document, validate, SCHEMA_VERSION
 from nodebased.imaging import Evaluator
 
 
@@ -16,7 +16,7 @@ class ReferenceBridgeTests(unittest.TestCase):
         old = empty_document()
         old["nodes"] = {
             "c": {"type": "Constant", "name": "C", "pos": [0, 0], "disabled": False,
-                  "inputs": {}, "params": {"width": 2, "height": 2, "red": 0.2,
+                  "inputs": {}, "params": {**SPECS["Constant"]["params"], "width": 2, "height": 2, "red": 0.2,
                                                "green": 0.4, "blue": 0.6, "alpha": 1.0}}}
         old["view"] = "c"
         old["version"] = 9
