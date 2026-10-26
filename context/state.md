@@ -1,5 +1,27 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (4:05 PM on 2026-10-26 PDT)
+
+`main` moved `8ac90404` -> `32ba3515` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `32ba3515` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-1555.log`, started 3:55 PM): **Ran 7335 tests in 518.852 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, Claude Sonnet 5.5), step D of 4: "Automatic" picks the card that is actually faster, and the Read stops paying 11 ms in file checks.** Commits:
+  - `ac3ced61` R6-1 step D notes: Automatic picks the card the island is faster on (probe, cache, gates), the Read's file checks cut from 27 system calls to 3, before and after tables, gains and losses of GPU nodes by default, -1026d evidence
+  - `e9dce4f7` Read: the walk's digest, the decode pool's key and the tile path ask for the file with one two-call lookup (existence and identity together); benchmarks can open the island as Automatic (--island-adapter) and keep the probe in a file
+  - `98066969` Automatic graphics adapter for the 2D island: each card is timed on one frame's upload, kernels and download (cached per card and driver, never during playback or while the card is busy) and the fastest card that beats the CPU nodes wins; a named adapter is never overridden; Settings shows the card and why
+  - `6d3b9488` Read: a played frame looks its file up with 4 system calls instead of 27 (the directory's real path is kept while the directory is unchanged, the file's size and time are read every frame), and the auto-localize check no longer resolves the path when no folder is named
+  Diff: 25 files changed, 2149 insertions(+), 36 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (3:05 PM on 2026-10-26 PDT)
 
 `main` moved `f90b6d84` -> `ffa7d4a6` (lane commits cherry-picked onto main in lane order) and then to this
