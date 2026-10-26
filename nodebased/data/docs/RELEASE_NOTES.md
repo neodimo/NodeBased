@@ -1,3 +1,53 @@
+# NodeBased 0.44.0-preview.1
+
+Preview build of 0.44.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.44.0 release that follows.
+
+## What changed since 0.43.2
+
+- **The 2D nodes now have a ruler against the real Nuke nodes.** Every Nuke node behind a 2D parity row is scored 0 to 100
+  from the Nuke 17.0 Reference Guide's own tables, with an explicit knob-by-knob pairing and formula tests. The baseline was
+  54.5 overall; this release brings it to 67.7.
+- **Nuke's shared node controls on 55 nodes.** Every filter, colour and merge node, plus Ramp, Radial, Rectangle, Noise, Text
+  and Grid, takes Nuke's channels, mask channel with invert and inject, and unpremult-by. The six Draw nodes also take output,
+  premult, clip to, replace, invert and opacity, and "clip to" now decides how far each Draw node and Roto draws.
+- **Shuffle is Nuke's two-input Shuffle**: inputs B and A, either input's layers, and the constants 0 and 1 (score 26 to 93).
+- **Roto** takes a mask input with Nuke's mask channel, invert, inject and channels; a disabled Roto passes its background.
+- **Read** follows Nuke's frame knob and mode, first and last with hold, loop, bounce or black, an original range, a format
+  override, raw, premultiplied and auto alpha.
+- **Write** picks channels, an output transform, raw, premultiplied, the frame number in the file name, a range limit,
+  create directories and EXR compression.
+- **Crop** has softness, reformat, intersect and black outside (36 to 96). **Premult and Unpremult** pick the channels, the
+  dividing channel and invert (39 to 100).
+- **Opt-in GPU path for 2D.** Grade, Transform, Blur and Merge can run on the graphics card as one resident island
+  (`--backend gpu2d` on the playback benchmark): pictures stay on the card and one comes back per frame. It matches the
+  processor within 6e-8 on the realistic comp, frames 1 to 240 at 1080p, on the RTX 3080 Ti, the Radeon 8060S and the
+  software renderer, and falls back to the processor in every unsupported or failing case. Two Transform differences next to
+  extreme HDR values were found and fixed on the way. The processor stays the default.
+- **No more abort on OpenGL-only Linux machines.** On a Linux machine whose only graphics path is OpenGL, the Direct picture
+  used to be able to abort the whole application. Linux now asks for Vulkan alone and declines OpenGL before any surface or
+  device exists.
+- The 2D playback benchmark gained a backend switch, a sustained frame range, warm-up frames and a full environment record.
+
+## Known limits
+
+- The GPU island is opt-in and benchmark-only for now. Blur radius above 4, Transform motion blur and Merge operations
+  without a kernel stay on the processor. On this workstation's RTX the island reaches about 5 frames a second (its link moves
+  about 1 GB a second); the integrated Radeon reaches about 13, double its processor speed. The A6000, the RTX 4070 laptop
+  and Windows D3D12 have not been checked.
+- Fidelity scores come from the Reference Guide; the Nuke reference renders have not been run yet, so pixel-level agreement
+  with real Nuke is unverified. Crop's softness curve is a reading, since the guide gives none.
+- Read proxy, TIFF and JPEG writing, and mask fringe have no counterpart yet. A Roto still cannot be disabled.
+- Grade, Blur and Merge formulas are not yet Nuke's (scores 41, 54 and 53).
+- After the RTX has idled about 4 seconds, the first played 3D frames can still show one 59 to 85 ms gap.
+- The Direct picture is still off by default.
+
+## Moved to 0.45.0
+
+- 2D parity step D: the time nodes, the keyers and the small channel nodes take Nuke's knobs.
+- The Nuke reference pack run against real Nuke renders.
+- GPU island step C, and the laptop, A6000 and Windows checks.
+- Rendering: the first full-size frame after a rest reuses the scene packed for the half-size frames.
+
 # NodeBased 0.43.2
 
 ## What changed since 0.42.1
