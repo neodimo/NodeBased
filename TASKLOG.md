@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step H of N: the short knob rows: keyers, RotoPaint, Precomp, the time and metadata nodes, Glow, DropShadow and AddMix (resume) (integrator tick)
+
+- **What was done:** `main` `f90b6d84` -> `ffa7d4a6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `ffa7d4a6`: Ran 7275 tests in 518.870 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) step C of 3: where the last 50 ms of the Radeon frame go, and the two-worker and GPU-default switches ready to flip (integrator tick)
 
 - **What was done:** `main` `560840a6` -> `c8ee9c86` plus this docs commit. Evidence and per-lane commit

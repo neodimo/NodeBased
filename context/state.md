@@ -1,5 +1,27 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (3:05 PM on 2026-10-26 PDT)
+
+`main` moved `f90b6d84` -> `ffa7d4a6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `ffa7d4a6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-1455.log`, started 2:55 PM): **Ran 7275 tests in 518.870 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step H of N: the short knob rows: keyers, RotoPaint, Precomp, the time and metadata nodes, Glow, DropShadow and AddMix (resume).** Commits:
+  - `52f2b820` 2D fidelity H part 4: CurveTool, AddMix, DropShadow, Glow, Median, Shuffle out2, STMap and KeyMix knobs; mapping and re-scored report (88.7)
+  - `eb091039` 2D fidelity H part 3: Precomp takes use_output, read file for output (missing frames, reload) and working Open, Render and Reload buttons; AddTimeCode takes get FPS from metadata and use start frame; AppendClip takes fade in, fade out, metadata from the first clip and shows its last frame; BurnIn takes opacity, y padding, text scale, font style, top and bottom middle and the bar's colour and borders; the mapping and the re-scored report (87.0)
+  - `0848c0ac` 2D fidelity H part 2: RotoPaint takes Nuke's premultiply, mask strip (channels, mask channel, invert, inject, fringe), output mask and global motion blur on the node, and per-item source, transform, motion blur, shape settings, stroke effect, build up, write on and the Clone tab (transform, round, filter, black outside); the tile path reads the first frame's clone source; the mapping and the re-scored report (86.1)
+  - `9e12c1c5` 2D fidelity H part 1: Keylight (ScreenKeyer) takes unPreMultiply, gangBiases, the screen despot, screen and inside replace, the tuning gains, source alpha, the source crops, the inside and outside components, five more views and the bg input; HueKeyer takes its output switch and channel; the mapping and the re-scored report (85.9)
+  Diff: 37 files changed, 4646 insertions(+), 443 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (10:55 AM on 2026-10-26 PDT)
 
 `main` moved `560840a6` -> `c8ee9c86` (lane commits cherry-picked onto main in lane order) and then to this
