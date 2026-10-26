@@ -1857,18 +1857,14 @@ def _canvas_size_for_chain(document, target, frame, tier):
             # input, so -- like Read just above -- this states its size unconditionally, disabled
             # or not (a generator has nothing to bypass to; see `core.bypass_slot`'s default for a
             # kind with no declared inputs).
-            from .core import load_document
-            path = node["params"].get("file", "")
-            if not path:
-                raise ValueError("Precomp: choose a referenced document")
-            try:
-                ref_doc = load_document(path)
-            except OSError:
-                raise ValueError(f"Precomp: file not found: {path}") from None
-            output_id = node["params"].get("output_node") or ref_doc.get("view")
-            if not output_id or output_id not in ref_doc["nodes"]:
-                raise ValueError(f"Precomp: no output node {output_id!r} in {path}")
+            from . import precompnode
+            ref_doc, path = precompnode.load(node["params"])
+            output_id = precompnode.output_id(node["params"], ref_doc, path)
             ref_frame = frame + int(node["params"].get("frame_offset", 0))
+            if int(node["params"].get("reading", 0)):
+                # The size of the file it reads, which is only known by reading it.
+                raster = Evaluator().evaluate_raster(document, cursor, frame=frame, tier=tier)
+                return int(raster.pixels.shape[1]), int(raster.pixels.shape[0])
             resolved_ref = resolve_document(ref_doc, ref_frame)
             return _canvas_size_for_chain(resolved_ref, output_id, ref_frame, tier)
         if node["type"] == "TVIScale" and not node["disabled"]:

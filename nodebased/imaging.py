@@ -654,19 +654,8 @@ def _branch_frame_range(nodes, key):
     return None
 
 
-def _append_clip_plan(doc_nodes, node, params, frame):
-    """The nested evaluations AppendClip needs at timeline ``frame``: a list of
-    ``(slot, source_frame, weight)`` with weights summing to 1 (one entry, or two inside a
-    dissolve).
-
-    Wired clips play head to tail from ``first_frame``. A clip's length is its branch's frame range
-    when directly known (`_branch_frame_range`), and it is sampled from that range's first frame;
-    otherwise its length is the ``length<i>`` knob (0 skips the clip) and it is sampled from frame 1.
-    ``dissolve`` frames overlap each clip's tail with the next clip's head (clamped to one frame
-    less than either clip); inside the overlap the outgoing clip is weighted ``1 - w`` and the
-    incoming ``w = (k + 1) / (dissolve + 1)`` at overlap index ``k``. Before the first clip and
-    after the last the first frame / last frame holds. If more than two clips overlap on one frame
-    (dissolve longer than a middle clip), the first two are blended and the rest ignored."""
+def _append_clip_clips(doc_nodes, node, params):
+    """The AppendClip's playing clips as `(slot, length, start)`: wired, and not of length 0."""
     from .core import SPECS
     clips = []
     for index, slot in enumerate(SPECS["AppendClip"]["optional_inputs"]):
@@ -682,6 +671,14 @@ def _append_clip_plan(doc_nodes, node, params, frame):
             clips.append((slot, length, start))
     if not clips:
         raise ValueError(f"{node['name']}: connect at least one clip input")
+    return clips
+
+
+def append_clip_layout(doc_nodes, node, params):
+    """`(clips, starts, overlaps, first, last)` of an AppendClip: each clip's first output frame, the frames it overlaps the next
+    clip by, and the first and last frame of the whole output (Nuke's `firstFrame` and `lastFrame`)."""
+    from . import metaknobs
+    clips = _append_clip_clips(doc_nodes, node, params)
     dissolve = int(params.get("dissolve", 0))
     starts, overlaps, cursor = [], [], int(params.get("first_frame", 1))
     for i, (_, length, _) in enumerate(clips):
@@ -691,6 +688,24 @@ def _append_clip_plan(doc_nodes, node, params, frame):
             overlap = max(0, min(dissolve, length - 1, clips[i + 1][1] - 1))
         overlaps.append(overlap)
         cursor += length - overlap
+    first, last = metaknobs.output_range(params.get("first_frame", 1), [c[1] for c in clips], overlaps)
+    return clips, starts, overlaps, first, last
+
+
+def _append_clip_plan(doc_nodes, node, params, frame):
+    """The nested evaluations AppendClip needs at timeline ``frame``: a list of
+    ``(slot, source_frame, weight)`` with weights summing to 1 (one entry, or two inside a
+    dissolve).
+
+    Wired clips play head to tail from ``first_frame``. A clip's length is its branch's frame range
+    when directly known (`_branch_frame_range`), and it is sampled from that range's first frame;
+    otherwise its length is the ``length<i>`` knob (0 skips the clip) and it is sampled from frame 1.
+    ``dissolve`` frames overlap each clip's tail with the next clip's head (clamped to one frame
+    less than either clip); inside the overlap the outgoing clip is weighted ``1 - w`` and the
+    incoming ``w = (k + 1) / (dissolve + 1)`` at overlap index ``k``. Before the first clip and
+    after the last the first frame / last frame holds. If more than two clips overlap on one frame
+    (dissolve longer than a middle clip), the first two are blended and the rest ignored."""
+    clips, starts, overlaps, _first, _last = append_clip_layout(doc_nodes, node, params)
     frame = int(frame)
     live = [i for i, (_, length, _) in enumerate(clips) if starts[i] <= frame < starts[i] + length]
     if not live:
@@ -2606,6 +2621,10 @@ class Evaluator:
                 # These write the timeline frame into metadata or pixels, so the frame is part of
                 # the result even though no upstream digest carries it.
                 fingerprint = ["frame", frame]
+                if kind == "AddTimeCode":
+                    # With `use_frame` off the code counts from the document's first frame, which the kernel reads from `_first`.
+                    params = {**params, "_first": int(doc.get("time", {}).get("first", 1))}
+                    fingerprint.append(params["_first"])
             if kind == "Relight":
                 # Sparse light slots are paired by index, so their positions affect the result.
                 fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
@@ -2838,6 +2857,25 @@ class Evaluator:
                         remap_raster = Raster((a.pixels * np.float32(1.0 - weight)
                                                + b.pixels * np.float32(weight)), a.data, a.display)
                         fingerprint.append(round(weight, 9))
+                    from . import metaknobs
+                    if float(params.get("fade_in", 0)) > 0 or float(params.get("fade_out", 0)) > 0:
+                        # The head and tail of the whole output fade up from and down to black.
+                        _clips, _starts, _overlaps, out_first, out_last = append_clip_layout(nodes, node, params)
+                        gain = metaknobs.fade_gain(int(frame), out_first, out_last, float(params.get("fade_in", 0)),
+                                                   float(params.get("fade_out", 0)))
+                        if gain != 1.0:
+                            remap_raster = Raster((remap_raster.pixels * np.float32(gain)).astype(np.float32), remap_raster.data,
+                                                  remap_raster.display, remap_raster.layers, remap_raster.meta)
+                            fingerprint.append(round(gain, 9))
+                    if int(params.get("meta_from_first", 0)):
+                        # The metadata of the first clip's first frame, whichever clip is showing.
+                        first_slot, _length, first_start = append_clip_layout(nodes, node, params)[0][0]
+                        first_raster, first_digest = self.evaluate_raster(doc, target=node["inputs"][first_slot], cancel=cancel,
+                                                                           frame=first_start, tier=tier, typed=True,
+                                                                           return_digest=True)
+                        remap_raster = Raster(remap_raster.pixels, remap_raster.data, remap_raster.display, remap_raster.layers,
+                                              first_raster.meta)
+                        fingerprint.append(["meta_from_first", first_digest])
                 elif kind in timeknobs.KINDS:
                     # Nuke's four retiming nodes (nodebased/timeknobs.py): a plan of input frames with weights (one for
                     # a whole-frame node, several for Retime's box filter), a black flag and TimeClip's fade gain.
@@ -3861,20 +3899,16 @@ class Evaluator:
                                                None if mask is None else mask.fit(out), mix)
             return Raster(pixels, out, target_display)
         if kind == "Precomp":
-            from .core import load_document
-            path = p.get("file", "")
-            if not path:
-                raise ValueError("Precomp: choose a referenced document")
-            try:
-                ref_doc = load_document(path)
-            except OSError:
-                raise ValueError(f"Precomp: file not found: {path}") from None
-            except ValueError as error:
-                raise ValueError(f"Precomp: {path}: {error}") from None
-            output_id = p.get("output_node") or ref_doc.get("view")
-            if not output_id or output_id not in ref_doc["nodes"]:
-                raise ValueError(f"Precomp: no output node {output_id!r} in {path}")
-            ref_frame = (frame or 1) + int(p.get("frame_offset", 0))
+            from . import precompnode
+            ref_doc, path = precompnode.load(p)
+            output_id = precompnode.output_id(p, ref_doc, path)
+            ref_frame = precompnode.reference_frame(p, frame)
+            if int(p.get("reading", 0)):
+                # Read file for output: the file the referenced Write wrote, unless `missing_frames` sends a missing frame back to
+                # the document.
+                raster = precompnode.read_file(p, ref_doc, output_id, path, ref_frame)
+                if raster is not None:
+                    return raster
             # A fresh, disk-cache-free Evaluator: Precomp is a low-priority script-management node
             # (docs/PARITY_2D.md), so correctness on every call outweighs sharing a cache with the
             # outer document, which a second document's node ids could collide with anyway.
@@ -4160,44 +4194,72 @@ class Evaluator:
                 return source
         elif kind == "AddTimeCode":
             meta = dict(meta or {})
+            from . import metaknobs
             meta[metadata.TIMECODE_KEY] = metadata.timecode_at(
-                p["timecode"], p["fps"], p["start_frame"], frame, bool(p["drop_frame"]))
+                p["timecode"], metaknobs.time_code_rate(p, source.meta), metaknobs.time_code_start_frame(p), frame,
+                bool(p["drop_frame"]))
         if meta == source.meta:
             return source
         return Raster(source.pixels, source.data, source.display, source.layers, meta or {})
 
     @staticmethod
     def _burn_in(p, source, frame):
-        """Text overlay on the image: five slots (corners and centre) of literal text with `[frame]` and
-        `[metadata key]` substitutions, drawn by the Text node's own rasteriser, over optional top and
-        bottom bars."""
+        """Text overlay on the image: slots (the corners, the top and bottom middle and the centre) of literal text with `[frame]`
+        and `[metadata key]` substitutions, drawn by the Text node's own rasteriser, over optional top and bottom bars
+        (nodebased/metaknobs.py holds the step H knobs: opacity, padding, text scale, font style, bar colour and borders)."""
+        from . import metaknobs
         display, box = source.display, source.data
         width, height = display.width, display.height
-        size = float(p["font_size"])
-        margin, band = float(p["margin"]), max(1, int(round(size * 2.0)))
-        slots = (("top_left", "left", 0.0, band, True), ("top_right", "right", 0.0, band, True),
-                 ("bottom_left", "left", height - band, band, True),
-                 ("bottom_right", "right", height - band, band, True), ("center", "center", 0.0, height, False))
+        size, band, pad, reach = metaknobs.band_rows(p, height)
+        margin = float(p["margin"])
+        fit = bool(int(p.get("bar_fit", 0)))
+        slots = (("top_left", "left", pad, band, True), ("top_middle", "center", pad, band, True),
+                 ("top_right", "right", pad, band, True),
+                 ("bottom_left", "left", height - band - pad, band, True),
+                 ("bottom_middle", "center", height - band - pad, band, True),
+                 ("bottom_right", "right", height - band - pad, band, True), ("center", "center", 0.0, height, False))
         overlay = np.zeros((box.height, box.width, 4), np.float32)
-        texts = [(name, justify, top, extent, bar, metadata.expand(str(p[name]), source.meta, frame))
+        texts = [(name, justify, top, extent, bar, metadata.expand(str(p.get(name, "")), source.meta, frame))
                  for name, justify, top, extent, bar in slots]
-        if int(p["bar"]):
-            opacity = np.float32(np.clip(p["bar_opacity"], 0.0, 1.0))
+        bar_alpha = np.float32(np.clip(p["bar_opacity"], 0.0, 1.0) * np.clip(p.get("bar_alpha", 1.0), 0.0, 1.0))
+        bar_colour = np.array([p.get("bar_red", 0.0), p.get("bar_green", 0.0), p.get("bar_blue", 0.0)], np.float32)
+
+        def fill(rows_region):
+            rows = rows_region.intersect(box)
+            if not rows.is_empty:
+                part = overlay[rows.y - box.y:rows.bottom - box.y, rows.x - box.x:rows.right - box.x]
+                part[..., :3] = bar_colour * bar_alpha
+                part[..., 3] = bar_alpha
+        if int(p["bar"]) and not fit:
             filled = {name: bool(text) for name, _, _, _, _, text in texts}
-            for top, wanted in ((0, filled["top_left"] or filled["top_right"]),
-                                (height - band, filled["bottom_left"] or filled["bottom_right"])):
-                rows = Region(0, top, width, band).intersect(box)
-                if wanted and not rows.is_empty:
-                    overlay[rows.y - box.y:rows.bottom - box.y, rows.x - box.x:rows.right - box.x, 3] = opacity
+            for region, wanted in ((Region(0, 0, width, reach), filled["top_left"] or filled["top_middle"] or filled["top_right"]),
+                                   (Region(0, height - reach, width, reach),
+                                    filled["bottom_left"] or filled["bottom_middle"] or filled["bottom_right"])):
+                if wanted:
+                    fill(region)
+        shapes_drawn = []
         for name, justify, top, extent, bar, text in texts:
             if not text:
                 continue
             text_params = {"message": text, "font": p["font"], "font_size": size, "justify": justify,
                            "box_x": margin, "box_y": top, "box_width": max(1.0, width - 2 * margin),
                            "box_height": float(extent), "red": p["red"], "green": p["green"],
-                           "blue": p["blue"], "alpha": p["alpha"]}
-            shape = Evaluator._text_shape(text_params, box.x, box.y, box.width, box.height)
+                           "blue": p["blue"], "alpha": p["alpha"], "yjustify": "center",
+                           "index": p.get("font_style", "Regular")}
+            shapes_drawn.append((bar, Evaluator._text_shape(text_params, box.x, box.y, box.width, box.height)))
+        if int(p["bar"]) and fit:
+            # A box around each slot's own text, grown by the borders (Nuke's background).
+            border_x, border_y = int(round(float(p.get("bar_x_border", 0.0)))), int(round(float(p.get("bar_y_border", 0.0))))
+            for bar, shape in shapes_drawn:
+                found = metaknobs.text_extent(shape) if bar else None
+                if found is not None:
+                    x0, y0, x1, y1 = found
+                    fill(Region(box.x + x0 - border_x, box.y + y0 - border_y, x1 - x0 + 2 * border_x, y1 - y0 + 2 * border_y))
+        for _bar, shape in shapes_drawn:
             overlay = Evaluator._composite_shape_over(shape, overlay)
+        opacity = float(p.get("opacity", 1.0))
+        if opacity != 1.0:
+            overlay = (overlay * np.float32(np.clip(opacity, 0.0, 1.0))).astype(np.float32)
         pixels = Evaluator._composite_shape_over(overlay, source.pixels)
         return Raster(pixels, source.data, source.display, source.layers, source.meta)
 

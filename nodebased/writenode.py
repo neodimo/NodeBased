@@ -42,6 +42,24 @@ def active(params):
 
 
 # --------------------------------------------------------------------------------------------------- frames
+def target_of(params):
+    """A Write's (path, file type, bit depth), or ValueError with the reason it cannot render: the path with its context keys filled
+    in, the format taken from the extension for `Auto` or the extension made to agree with an explicit choice."""
+    path = pathcontext.substitute(params["path"], params).strip()      # %{key} filled from the node's key / value pairs
+    if not path:
+        raise ValueError("Set an output path on the Write node first")
+    chosen = params["file_type"]
+    suffix = Path(path).suffix.lower().lstrip(".")
+    if chosen == "Auto":
+        if suffix not in ("exr", "png"):
+            raise ValueError(f"Cannot infer a format from {Path(path).name!r}; choose exr or png, or use that extension")
+        chosen = suffix
+    elif suffix != chosen:
+        # Honour the explicit choice and make the filename agree with it, rather than writing PNG bytes into a file called .exr.
+        path = str(Path(path).with_suffix("." + chosen))
+    return path, chosen, params["bit_depth"]
+
+
 def frames_to_render(params, time, single):
     """The timeline frames a render covers: the current one, or the document range, limited to [first, last] when
     `use_limit` is on."""

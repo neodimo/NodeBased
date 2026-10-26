@@ -12635,6 +12635,26 @@ class Window(QMainWindow):
                 reload_button.setToolTip("Read the file again from disk, ignoring anything kept from the last read")
                 reload_button.clicked.connect(lambda _checked=False, k=key: self.reload_node(k))
                 form.addRow(reload_button)
+            if node["type"] == "AppendClip":
+                # Nuke's lastFrame: the output's last frame, worked out from the clips' lengths and the dissolve.
+                last_label = QLabel(self.append_clip_last_frame_text(key))
+                last_label.setObjectName("appendclip-last-frame")
+                form.addRow("Last frame", last_label)
+            if node["type"] == "Precomp":
+                # Nuke's Precomp buttons: Reload the script, Open it, Render its Write, Reload the file that Write wrote.
+                for name, text, tip, handler in (
+                        ("precomp-reload", "Reload", "Read the referenced document again, ignoring anything kept from the last read",
+                         lambda k: self.reload_node(k)),
+                        ("precomp-open", "Open", "Open the referenced document in this window", lambda k: self.open_precomp(k)),
+                        ("precomp-render", "Render", "Write the referenced document's Write node over its frame range",
+                         lambda k: self.render_precomp(k)),
+                        ("precomp-reload-write", "Reload file", "Read the file the referenced Write wrote again",
+                         lambda k: self.reload_precomp_file(k))):
+                    button = QPushButton(text)
+                    button.setObjectName(name)
+                    button.setToolTip(tip)
+                    button.clicked.connect(lambda _checked=False, k=key, h=handler: h(k))
+                    form.addRow(button)
             if node["type"] == "Read":
                 localize_button = QPushButton("Update localization")
                 localize_button.setObjectName("read-update-localization")
@@ -15258,12 +15278,21 @@ class Window(QMainWindow):
             return
         start = str(Path(self.project_path).parent) if self.project_path else self.preferences.last_project_directory()
         path, _ = QFileDialog.getOpenFileName(self, "Open project", start, "NodeBased (*.nbcomp)")
-        if path and self.command({"op": "load", "path": path}) is not None:
-            self.project_path = path
-            self.preferences.set_last_project_directory(str(Path(path).parent))
-            self.saved_document = copy.deepcopy(self.dispatcher.document)
-            self.update_title()
-            self.graph.fit()
+        if path:
+            self.open_project_path(path, confirmed=True)
+
+    def open_project_path(self, path, confirmed=False):
+        """Load the project at `path` into this window; unsaved changes are asked about first unless `confirmed`."""
+        if not confirmed and not self.confirm_discard():
+            return False
+        if self.command({"op": "load", "path": str(path)}) is None:
+            return False
+        self.project_path = str(path)
+        self.preferences.set_last_project_directory(str(Path(path).parent))
+        self.saved_document = copy.deepcopy(self.dispatcher.document)
+        self.update_title()
+        self.graph.fit()
+        return True
 
     def save_project(self, save_as=False):
         path = self.project_path
@@ -16839,22 +16868,7 @@ class Window(QMainWindow):
 
     def write_target(self, key):
         """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""
-        params = self.dispatcher.document["nodes"][key]["params"]
-        path = pathcontext.substitute(params["path"], params).strip()      # %{key} filled from the node's key / value pairs
-        if not path:
-            raise ValueError("Set an output path on the Write node first")
-        chosen = params["file_type"]
-        suffix = Path(path).suffix.lower().lstrip(".")
-        if chosen == "Auto":
-            if suffix not in ("exr", "png"):
-                raise ValueError(f"Cannot infer a format from {Path(path).name!r}; "
-                                 f"choose exr or png, or use that extension")
-            chosen = suffix
-        elif suffix != chosen:
-            # Honour the explicit choice and make the filename agree with it, rather than writing
-            # PNG bytes into a file called .exr.
-            path = str(Path(path).with_suffix("." + chosen))
-        return path, chosen, params["bit_depth"]
+        return writenode.target_of(self.dispatcher.document["nodes"][key]["params"])
 
     def cornerpin_button(self, key, which):
         """CornerPin's Copy 'from', Copy 'to' and Set to input: set the eight points in one undoable step."""
@@ -16879,6 +16893,55 @@ class Window(QMainWindow):
         """Nuke's reload for Read and Write: count one more reload on the node, which is part of what its result is keyed by."""
         node = self.graph_nodes()[key]
         self.command({"op": "set", "id": key, "param": "reload", "value": int(node["params"].get("reload", 0)) + 1})
+
+    def append_clip_last_frame_text(self, key):
+        """The last frame of an AppendClip's output as text, or why it cannot be worked out yet."""
+        from . import imaging
+        document = self.graph_document()
+        try:
+            last = imaging.append_clip_layout(document["nodes"], document["nodes"][key], document["nodes"][key]["params"])[4]
+        except ValueError as error:
+            return str(error)
+        return str(last)
+
+    def reload_precomp_file(self, key):
+        """Nuke's reload_write: count one more reload of the file the Precomp reads, which is part of what its result is keyed by."""
+        node = self.graph_nodes()[key]
+        self.command({"op": "set", "id": key, "param": "reload_write", "value": int(node["params"].get("reload_write", 0)) + 1})
+
+    def open_precomp(self, key):
+        """Nuke's Open: the referenced document is opened in this window (the unsaved changes asked about first, as File > Open does)."""
+        from . import precompnode
+        params = self.graph_nodes()[key]["params"]
+        try:
+            _document, path = precompnode.load(params)
+        except ValueError as error:
+            QMessageBox.warning(self, "Precomp", str(error))
+            return False
+        return self.open_project_path(path)
+
+    def render_precomp(self, key):
+        """Nuke's Render: the referenced document's Write node is rendered over its frame range, on this window's evaluator."""
+        from . import precompnode
+        params = dict(self.graph_nodes()[key]["params"])
+        cancel = threading.Event()
+
+        def progress(done, total):
+            self.statusBar().showMessage(f"Precomp render {done} of {total}", 0)
+            QApplication.processEvents()
+        try:
+            written = precompnode.render(params, self.evaluator, cancel=cancel, progress=progress)
+        except Cancelled:
+            self.statusBar().showMessage("Precomp render cancelled", 6000)
+            return []
+        except Exception as error:  # noqa: BLE001 - shown to the artist and recorded on the node
+            self.set_node_error(key, f"Precomp render failed: {error}")
+            self.statusBar().showMessage(f"Precomp render failed: {error}", 20000)
+            return []
+        self.set_node_error(key, None)
+        self.statusBar().showMessage(f"Precomp rendered {len(written)} file{'s' if len(written) != 1 else ''}", 8000)
+        self.command({"op": "set", "id": key, "param": "reload_write", "value": int(params.get("reload_write", 0)) + 1})
+        return written
 
     def update_localization(self, key):
         """Nuke's updateLocalization for Read: replace the local copies of the Read's files now."""

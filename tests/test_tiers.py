@@ -310,8 +310,9 @@ class ProxyTierTests(unittest.TestCase):
                        # D1: CurveTool's dimmest-pixel position joins its brightest-pixel position.
                        "min_x", "min_y",
                        "sample_x0", "sample_y0", "sample_x1", "sample_y1",
-                       # BurnIn (step S3): the distance of its text from the frame edge.
-                       "margin",
+                       # BurnIn (step S3): the distance of its text from the frame edge; fidelity step H adds the y padding and the
+                       # bar's borders.
+                       "margin", "y_padding", "bar_x_border", "bar_y_border",
                        # Fidelity step F: Text's letter spacing, baseline shift, line spacing and shadow reach are pixel lengths.
                        "kerning", "tracking", "baseline_shift", "leading", "shadow_distance", "shadow_softness", "shadow_expand",
                        # Grid (step 4c): spacing, offset and line width are pixel lengths.

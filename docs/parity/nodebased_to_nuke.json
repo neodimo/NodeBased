@@ -951,7 +951,11 @@
     {"nodebased": ["length4"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["length5"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["length6"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["length7"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["length7"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["fade_in"], "nuke": ["fadeIn"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Fade In', scripting name `fadeIn`"},
+    {"nodebased": ["fade_out"], "nuke": ["fadeOut"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Fade Out', scripting name `fadeOut`"},
+    {"nodebased": [], "nuke": ["lastFrame"], "kind": "panel", "reason": "Nuke's Last Frame, the output's last frame: worked out from the clips' lengths and the dissolve (imaging.append_clip_layout) and shown as a label in the properties panel, not a node param"},
+    {"nodebased": ["meta_from_first"], "nuke": ["meta_from_first"], "kind": "same"}
    ]
   },
   "TimeBlur": {
@@ -3305,8 +3309,11 @@
     {"nodebased": ["timecode"], "nuke": ["startcode"], "kind": "renamed", "reason": "start time code"},
     {"nodebased": ["start_frame"], "nuke": ["frame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `frame`"},
     {"nodebased": ["fps"], "nuke": ["fps"], "kind": "same"},
-    {"nodebased": ["drop_frame"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
-   ]
+    {"nodebased": ["drop_frame"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["metafps"], "nuke": ["metafps"], "kind": "same"},
+    {"nodebased": ["use_frame"], "nuke": ["useFrame"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'use start frame?', scripting name `useFrame`"}
+   ],
+   "skip_default": ["metafps", "useFrame"]
   },
   "CompareMetaData": {
    "nodebased": "CompareMetaData",
@@ -3393,8 +3400,19 @@
     {"nodebased": ["bar_opacity"], "nuke": ["burnIn_backgroundOpacity"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'opacity', scripting name `burnIn_backgroundOpacity`"},
     {"nodebased": ["center"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["font_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["margin"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
-   ]
+    {"nodebased": ["opacity"], "nuke": ["burnIn_opacity"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'opacity', scripting name `burnIn_opacity`"},
+    {"nodebased": ["margin"], "nuke": ["burnIn_xpadding"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'x-padding', scripting name `burnIn_xpadding`"},
+    {"nodebased": ["y_padding"], "nuke": ["burnIn_yPadding"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'y-padding', scripting name `burnIn_yPadding`"},
+    {"nodebased": ["font_style"], "nuke": ["fontstyle"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'font', scripting name `fontstyle`"},
+    {"nodebased": ["text_scale"], "nuke": ["burnIn_textScale"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'text scale', scripting name `burnIn_textScale`"},
+    {"nodebased": ["top_middle"], "nuke": ["burnIn_topMiddle"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'top middle', scripting name `burnIn_topMiddle`"},
+    {"nodebased": ["bottom_middle"], "nuke": ["burnIn_bottomMiddle"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'bottom middle', scripting name `burnIn_bottomMiddle`"},
+    {"nodebased": ["bar_red", "bar_green", "bar_blue", "bar_alpha"], "nuke": ["burnIn_backgroundColor"], "kind": "components", "reason": "the background colour"},
+    {"nodebased": ["bar_x_border"], "nuke": ["burnIn_backgroundXBorder"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'x-border', scripting name `burnIn_backgroundXBorder`"},
+    {"nodebased": ["bar_y_border"], "nuke": ["burnIn_backgroundYBorder"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'y-border', scripting name `burnIn_backgroundYBorder`"},
+    {"nodebased": ["bar_fit"], "kind": "extra", "reason": "NodeBased-only: draws the background as a box around each text slot, as Nuke does, instead of a full-width bar"}
+   ],
+   "skip_default": ["burnIn_xpadding", "burnIn_yPadding", "burnIn_textScale", "burnIn_topMiddle", "burnIn_bottomMiddle", "burnIn_backgroundXBorder", "burnIn_backgroundYBorder", "burnIn_backgroundColor"]
   },
   "LiveGroup": {
    "nodebased": null,
@@ -3419,7 +3437,13 @@
     {"nodebased": ["output_node"], "nuke": ["output"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `output`"},
     {"nodebased": ["file"], "nuke": ["file"], "kind": "same"},
     {"nodebased": ["frame_offset"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["reload"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["reload"], "nuke": ["reload_script"], "kind": "renamed", "reason": "same control under another name; Nuke's Reload button beside the script; NodeBased's counter, bumped by the Reload button, is part of the node's cache key"},
+    {"nodebased": [], "nuke": ["open"], "kind": "panel", "reason": "the Open button of the Precomp panel (the window's open_precomp, nodebased/precompnode.py): opens the referenced document in the window; a button, not a node param"},
+    {"nodebased": [], "nuke": ["render"], "kind": "panel", "reason": "the Render button of the Precomp panel (the window's render_precomp, nodebased/precompnode.py `render`): writes the referenced document's Write node over its frame range; a button, not a node param"},
+    {"nodebased": ["reading"], "nuke": ["reading"], "kind": "same"},
+    {"nodebased": ["missing_frames"], "nuke": ["on_error"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'missing frames', scripting name `on_error` (NodeBased's `on_error` is the Write's, which has no 'read input')"},
+    {"nodebased": ["reload_write"], "nuke": ["reload_write"], "kind": "same"},
+    {"nodebased": ["use_output"], "nuke": ["use_output"], "kind": "same"}
    ]
   },
   "Root": {

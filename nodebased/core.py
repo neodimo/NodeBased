@@ -179,6 +179,8 @@ from . import trackerknobs as _trackerknobs
 from . import viewerknobs as _viewerknobs
 from . import keyerknobs as _keyerknobs
 from . import paintknobs as _paintknobs
+from . import precompnode as _precompnode
+from . import metaknobs as _metaknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -607,7 +609,8 @@ SPECS = {
     # fresh read regardless of whether the referenced document's mtime granularity caught the
     # edit -- the same "counter as a manual cache key" shape `Vectorfield`'s LUT and `Read`'s own
     # fingerprint would need if their filesystem's mtime resolution were ever in question.
-    "Precomp": {"inputs": [], "params": {"file": "", "output_node": "", "frame_offset": 0, "reload": 0}},
+    "Precomp": {"inputs": [], "params": {"file": "", "output_node": "", "frame_offset": 0, "reload": 0,
+                                         **_precompnode.new_params("Precomp")}},
     # Assert: Nuke's pass-through QA node. `condition` is a restricted expression (`ops2d_assert.py`,
     # sharing `expressions.py`'s safe function/constant set) over `frame` and the input's own pixel
     # statistics (`r_avg`/`g_avg`/`b_avg`/`a_avg`/`avg`, `*_min`, `*_max`, `width`, `height`); a
@@ -821,12 +824,12 @@ SPECS = {
     "CopyMetaData": {"inputs": ["image"], "optional_inputs": ["meta"], "params": {"keys": "", **_smallnodes.new_params("CopyMetaData")}},
     "CompareMetaData": {"inputs": ["image"], "optional_inputs": ["other"], "params": {}},
     "AddTimeCode": {"inputs": ["image"], "params": {"timecode": "00:00:00:00", "fps": 24.0, "start_frame": 1,
-                                                    "drop_frame": 0}},
+                                                    "drop_frame": 0, **_metaknobs.new_params("AddTimeCode")}},
     "BurnIn": {"inputs": ["image"],
                "params": {"top_left": "[metadata input/filename]", "top_right": "[frame]", "bottom_left": "",
                           "bottom_right": "[metadata timecode]", "center": "", "font": "", "font_size": 24.0,
                           "margin": 12.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "bar": 1,
-                          "bar_opacity": 0.5}},
+                          "bar_opacity": 0.5, **_metaknobs.new_params("BurnIn")}},
     # Difference: Nuke's two-input colour-difference keyer. Reuses Grade's "offset" and
     # ColorCorrect's "gain" param names/LIMITS rather than inventing new ones (same convention as
     # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.
@@ -866,7 +869,8 @@ SPECS = {
     "FrameRange": {"inputs": ["image"],
                    "params": {"first_frame": 1, "last_frame": 100, "before": "hold", "after": "hold"}},
     "AppendClip": {"inputs": [], "optional_inputs": [f"clip{i}" for i in range(8)],
-                   "params": {"first_frame": 1, "dissolve": 0, **{f"length{i}": 100 for i in range(8)}}},
+                   "params": {"first_frame": 1, "dissolve": 0, **{f"length{i}": 100 for i in range(8)},
+                              **_metaknobs.new_params("AppendClip")}},
     # TimeWarp (plan 2D parity 14, step E1) is Nuke's own last Time-menu producer: "lookup" is an
     # animatable curve mapping the output frame to an input frame (Nuke's own default identity --
     # here, no curve at all on "lookup" means the input plays at the output frame unchanged, since
@@ -2124,9 +2128,15 @@ from . import localize as _localize
 CHOICES["localizationPolicy"] = list(_localize.POLICIES)
 CHOICES["proxy_format"] = ["file", *REFORMAT_FORMATS]
 CHOICES["on_error"] = list(MISSING_FRAME_POLICIES)
-LIMITS.update({"reload": (0, 2147483647), "reading": (0, 1), "render_order": (-1000000, 1000000)})
+CHOICES["missing_frames"] = list(_precompnode.MISSING_FRAMES)
+LIMITS.update({"reload": (0, 2147483647), "reading": (0, 1), "render_order": (-1000000, 1000000),
+               "use_output": (0, 1), "reload_write": (0, 2147483647)})
 CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none"]
 LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1)})
+# Step H: AddTimeCode, AppendClip and BurnIn (nodebased/metaknobs.py).
+LIMITS.update({"metafps": (0, 1), "use_frame": (0, 1), "meta_from_first": (0, 1), "y_padding": (0.0, 8192.0),
+               "text_scale": (0.01, 100.0), "bar_red": (0.0, 1.0), "bar_green": (0.0, 1.0), "bar_blue": (0.0, 1.0),
+               "bar_alpha": (0.0, 1.0), "bar_x_border": (0.0, 8192.0), "bar_y_border": (0.0, 8192.0), "bar_fit": (0, 1)})
 LIMITS.update({"crop_softness": (0.0, 100000.0), "reformat": (0, 1), "intersect": (0, 1), "crop": (0, 1)})
 LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000),
                "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})

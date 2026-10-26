@@ -134,7 +134,7 @@ class PrecompTests(unittest.TestCase):
             plate_only = evaluator_pixels(Evaluator(), ref_doc, "plate")
 
             g = Graph()
-            g.add("node", "Precomp", dict(file=ref_path, output_node="plate"))
+            g.add("node", "Precomp", dict(file=ref_path, output_node="plate", use_output=1))
             result = evaluator_pixels(Evaluator(), g.doc, "node")
             np.testing.assert_array_equal(result, plate_only)
 

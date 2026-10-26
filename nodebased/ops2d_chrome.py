@@ -240,8 +240,9 @@ def step_g_params(kind):
 def step_h_params(kind):
     """The knobs fidelity step H added (the keyers, RotoPaint, Precomp, the time and metadata nodes, CurveTool, AddMix,
     DropShadow, Glow, Median, Shuffle, STMap and KeyMix), at the values that leave an older document's node as it was."""
-    from . import keyerknobs, paintknobs
-    return {**keyerknobs.upgrade_params(kind), **paintknobs.upgrade_params(kind)}
+    from . import keyerknobs, metaknobs, paintknobs, precompnode
+    return {**keyerknobs.upgrade_params(kind), **paintknobs.upgrade_params(kind), **precompnode.upgrade_params(kind),
+            **metaknobs.upgrade_params(kind)}
 
 
 def upgrade_nodes(nodes):
@@ -250,6 +251,9 @@ def upgrade_nodes(nodes):
         if not isinstance(node, dict):
             continue
         params = node.get("params")
+        if node.get("type") == "Precomp" and isinstance(params, dict):
+            from . import precompnode
+            precompnode.upgrade_use_output(params)         # an older Precomp that names an output node keeps using it
         added = spec_params(node.get("type"))
         added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type")), **step_f_params(node.get("type")), **step_g_params(node.get("type")), **step_h_params(node.get("type"))}
         if added and isinstance(params, dict):
