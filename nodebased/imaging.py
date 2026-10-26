@@ -19,6 +19,7 @@ from . import gpu2d
 from . import gpupicture
 from . import groups
 from . import metadata
+from . import pathmask as _pathmask
 from . import ops2d_chrome as _chrome
 from . import shapes
 from . import sourcepool
@@ -2732,6 +2733,13 @@ class Evaluator:
                         blended = sum(r.pixels * np.float32(w) for (r, _), (_, w) in zip(parts, time_plan.samples))
                         remap_raster = Raster(blended.astype(np.float32), base.data, base.display, meta=base.meta)
                         fingerprint = ["time_remap", *(d for _, d in parts), *(w for _, w in time_plan.samples)]
+                    if _pathmask.active(kind, params):
+                        # Nuke's path mask (nodebased/pathmask.py): the layers the patterns select take the time change,
+                        # the others stay on the frame that was asked for.
+                        current, current_digest = self.evaluate_raster(doc, target=source_key, cancel=cancel, frame=frame,
+                                                                       tier=tier, typed=True, return_digest=True)
+                        remap_raster = _pathmask.combine(remap_raster, current, params)
+                        fingerprint = [*fingerprint, "path_mask", current_digest]
                     if time_plan.gain != 1.0:
                         remap_raster = Raster((remap_raster.pixels * np.float32(time_plan.gain)).astype(np.float32),
                                               remap_raster.data, remap_raster.display, meta=remap_raster.meta)
@@ -7686,6 +7694,10 @@ class Evaluator:
         if QApplication.instance() is None:
             QApplication(["nodebased"])
         w, h = max(1, int(w)), max(1, int(h))
+        from . import textknobs
+        if not textknobs.is_legacy(p):
+            # Nuke's Text knobs (vertical justify, font style and scales, spacing, a transform, a ramp, shadows).
+            return textknobs.render(p, x0, y0, w, h)
         image = QImage(w, h, QImage.Format.Format_RGBA8888)
         image.fill(0)
         painter = QPainter(image)

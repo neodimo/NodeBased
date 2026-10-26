@@ -33,11 +33,14 @@ RETIME_RANGE = ("continue", "loop", "bounce", "hold", "black")
 RETIME_FILTERS = ("none", "nearest", "box")
 MAX_BOX_FRAMES = 64
 
+# TimeOffset and FrameHold's path mask (fidelity step F, nodebased/pathmask.py): off, with no patterns, injecting nothing.
+PATH_MASK = {"enable_path_mask": 0, "mask_patterns": "", "inject_mask": 0}
+
 # What a new node gets (Nuke's defaults where the guide states them) and what an older document's node gets, which is
 # what that node did before the knob existed.
 NEW = {
-    "TimeOffset": {"rounding_mode": "Whole frames", "reverse_input": 0},
-    "FrameHold": {"rounding_mode": "Whole frames"},
+    "TimeOffset": {"rounding_mode": "Whole frames", "reverse_input": 0, **PATH_MASK},
+    "FrameHold": {"rounding_mode": "Whole frames", **PATH_MASK},
     "Retime": {"input_range_start_lock": 0, "input_range_end_lock": 0, "output_range_start_lock": 0,
                "output_range_end_lock": 0, "reverse": 0, "retime_before": "hold", "retime_after": "hold",
                "retime_filter": "box", "shutter": 1.0},
@@ -45,8 +48,8 @@ NEW = {
                  "origlast": 0, "reverse": 0},
 }
 OLD = {
-    "TimeOffset": {"rounding_mode": "Whole frames", "reverse_input": 0},
-    "FrameHold": {"rounding_mode": "Whole frames"},
+    "TimeOffset": {"rounding_mode": "Whole frames", "reverse_input": 0, **PATH_MASK},
+    "FrameHold": {"rounding_mode": "Whole frames", **PATH_MASK},
     "Retime": {"input_range_start_lock": 1, "input_range_end_lock": 0, "output_range_start_lock": 1,
                "output_range_end_lock": 0, "reverse": 0, "retime_before": "continue", "retime_after": "continue",
                "retime_filter": "nearest", "shutter": 1.0},

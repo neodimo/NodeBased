@@ -169,6 +169,7 @@ from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
 from . import rotoknobs as _rotoknobs
+from . import textknobs as _textknobs
 from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
 from . import timeknobs as _timeknobs
@@ -634,7 +635,7 @@ SPECS = {
              "params": {"width": 960, "height": 540, "message": "Text", "font": "", "font_size": 48.0,
                        "box_x": 40.0, "box_y": 40.0, "box_width": 880.0, "box_height": 460.0,
                        "justify": "left", "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
-                       "mix": 1.0}},
+                       "mix": 1.0, **_textknobs.new_params("Text")}},
     # Tracker is a Transform whose transform is solved from tracks in node_data instead of typed
     # in. It honours the same optional-mask + mix contract as the image filters.
     "Tracker": {"inputs": ["image"], "optional_inputs": ["mask", "track"],
@@ -2061,6 +2062,16 @@ for _kind in (*_chrome.FILTER_CHROME, *_chrome.DRAW_CHROME):
     for _name, _default in _chrome.spec_params(_kind).items():
         SPECS[_kind]["params"].setdefault(_name, _default)
 CHOICES["global_motionblur_shutter_offset_type"] = ["start", "centred", "end", "custom"]
+# TimeOffset and FrameHold's path mask (fidelity step F, nodebased/pathmask.py).
+LIMITS.update({"enable_path_mask": (0, 1), "inject_mask": (0, 1)})
+# Text's Nuke knobs (fidelity step F, nodebased/textknobs.py).
+CHOICES.update({"yjustify": list(_textknobs.YJUSTIFY), "ramp": list(_textknobs.RAMPS)})
+LIMITS.update({"global_font_scale": (0.01, 100.0), "font_width": (1.0, 1000.0), "font_height": (1.0, 1000.0),
+               "kerning": (-1000.0, 1000.0), "tracking": (-1000.0, 1000.0), "baseline_shift": (-100000.0, 100000.0),
+               "leading": (-1000.0, 1000.0), "enable_shadows": (0, 1), "shadow_inherit_input_color": (0, 1),
+               "shadow_red": (0.0, 1.0), "shadow_green": (0.0, 1.0), "shadow_blue": (0.0, 1.0), "shadow_alpha": (0.0, 1.0),
+               "shadow_opacity": (0.0, 1.0), "shadow_angle": (-360.0, 360.0), "shadow_distance": (0.0, 4096.0),
+               "shadow_softness": (0.0, 1000.0), "shadow_expand": (-1000.0, 1000.0)})
 LIMITS.update({"shape_motionblur_on": (0, 1), "global_motionblur_on": (0, 1), "global_motionblur": (1, 64),
                "global_motionblur_shutter": (0.0, 8.0), "global_motionblur_shutter_offset": (-8.0, 8.0)})
 CHOICES["channels"] = list(_chrome.CHANNEL_CHOICES)

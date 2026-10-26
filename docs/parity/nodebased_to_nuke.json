@@ -235,7 +235,36 @@
     {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["yjustify"], "nuke": ["yjustify"], "kind": "same"},
+    {"nodebased": ["index"], "nuke": ["index"], "kind": "same"},
+    {"nodebased": ["global_font_scale"], "nuke": ["global_font_scale"], "kind": "same"},
+    {"nodebased": ["font_width"], "nuke": ["font_width"], "kind": "same"},
+    {"nodebased": ["font_height"], "nuke": ["font_height"], "kind": "same"},
+    {"nodebased": ["kerning"], "nuke": ["kerning"], "kind": "same"},
+    {"nodebased": ["tracking"], "nuke": ["tracking"], "kind": "same"},
+    {"nodebased": ["baseline_shift"], "nuke": ["baseline_shift"], "kind": "same"},
+    {"nodebased": ["leading"], "nuke": ["leading"], "kind": "same"},
+    {"nodebased": ["translate_x", "translate_y"], "nuke": ["translate"], "kind": "components", "reason": "NodeBased stores the text block's translation as two scalar params; Nuke has one translate xy knob"},
+    {"nodebased": ["rotate"], "nuke": ["rotate"], "kind": "same"},
+    {"nodebased": ["scale"], "nuke": ["scale"], "kind": "same"},
+    {"nodebased": ["skew_x"], "nuke": ["skewX"], "kind": "renamed", "reason": "same control under another name; NodeBased's skew is a shear factor like its Transform node's"},
+    {"nodebased": ["skew_y"], "nuke": ["skewY"], "kind": "renamed", "reason": "same control under another name; NodeBased's skew is a shear factor like its Transform node's"},
+    {"nodebased": ["skew_order"], "nuke": ["skew_order"], "kind": "same"},
+    {"nodebased": ["center_x", "center_y"], "nuke": ["center"], "kind": "components", "reason": "the pivot of the text block as two scalar params; NodeBased reads them as an offset from the box's centre, so the pivot follows the box"},
+    {"nodebased": [], "nuke": ["group_animation"], "kind": "unsupported", "reason": "Nuke's animation layers animate groups of characters or lines; NodeBased's Text draws one block and has no per-character animation"},
+    {"nodebased": ["ramp"], "nuke": ["ramp"], "kind": "same"},
+    {"nodebased": ["p0_x", "p0_y"], "nuke": ["p0"], "kind": "components", "reason": "ramp start point as two scalar params; Nuke has one xy knob"},
+    {"nodebased": ["p1_x", "p1_y"], "nuke": ["p1"], "kind": "components", "reason": "ramp end point as two scalar params; Nuke has one xy knob"},
+    {"nodebased": ["color0_red", "color0_green", "color0_blue", "color0_alpha"], "nuke": ["color0"], "kind": "components", "reason": "ramp start colour as four scalar params; Nuke has one colour knob"},
+    {"nodebased": ["enable_shadows"], "nuke": ["enable_shadows"], "kind": "same"},
+    {"nodebased": ["shadow_inherit_input_color"], "nuke": ["shadow_inherit_input_color"], "kind": "same"},
+    {"nodebased": ["shadow_red", "shadow_green", "shadow_blue", "shadow_alpha"], "nuke": ["color#2"], "kind": "components", "reason": "shadow colour as four scalar params; Nuke has one colour knob (the second `color` of the guide's repeated names)"},
+    {"nodebased": ["shadow_opacity"], "nuke": ["opacity#2"], "kind": "renamed", "reason": "the shadow's opacity (the second `opacity` of the guide's repeated names)"},
+    {"nodebased": ["shadow_angle"], "nuke": ["angle"], "kind": "renamed", "reason": "the shadow's angle; the other angle-like knobs of Text are the rotate"},
+    {"nodebased": ["shadow_distance"], "nuke": ["distance"], "kind": "renamed", "reason": "the shadow's distance"},
+    {"nodebased": ["shadow_softness"], "nuke": ["softness"], "kind": "renamed", "reason": "the shadow's softness (a blur size)"},
+    {"nodebased": ["shadow_expand"], "nuke": ["shrink/expand"], "kind": "renamed", "reason": "the shadow's shrink or expand, in pixels"}
    ],
    "skip_default": ["box"]
   },
@@ -557,7 +586,10 @@
     {"nodebased": ["rounding_mode"], "nuke": ["rounding_mode"], "kind": "same"},
     {"nodebased": ["time_offset"], "nuke": ["time_offset"], "kind": "same"},
     {"nodebased": ["reverse_input"], "nuke": ["reverse_input"], "kind": "same"},
-    {"nodebased": ["reverse"], "kind": "extra", "reason": "NodeBased-only: the flip of the offset's direction this node had before `reverse_input`; kept so older documents draw the same"}
+    {"nodebased": ["reverse"], "kind": "extra", "reason": "NodeBased-only: the flip of the offset's direction this node had before `reverse_input`; kept so older documents draw the same"},
+    {"nodebased": ["enable_path_mask"], "nuke": ["enable_path_mask"], "kind": "same"},
+    {"nodebased": ["mask_patterns"], "nuke": ["mask_patterns"], "kind": "same"},
+    {"nodebased": ["inject_mask"], "nuke": ["inject_mask"], "kind": "same"}
    ]
   },
   "FrameHold": {
@@ -569,7 +601,10 @@
     {"nodebased": ["rounding_mode"], "nuke": ["rounding_mode"], "kind": "same"},
     {"nodebased": ["first_frame"], "nuke": ["firstFrame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `firstFrame`"},
     {"nodebased": [], "nuke": ["setToCurrentFrame"], "kind": "panel", "reason": "the Set to current frame button in the properties panel (it writes first_frame); a button, not a node param"},
-    {"nodebased": ["increment"], "nuke": ["increment"], "kind": "same"}
+    {"nodebased": ["increment"], "nuke": ["increment"], "kind": "same"},
+    {"nodebased": ["enable_path_mask"], "nuke": ["enable_path_mask"], "kind": "same"},
+    {"nodebased": ["mask_patterns"], "nuke": ["mask_patterns"], "kind": "same"},
+    {"nodebased": ["inject_mask"], "nuke": ["inject_mask"], "kind": "same"}
    ]
   },
   "Retime": {

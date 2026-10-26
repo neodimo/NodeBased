@@ -117,6 +117,9 @@ VALUE_OVERRIDES = {
     ("Expression", "expr_a"): "a*0.5",
     ("Shuffle", "in2"): "rgba",
     ("TimeClip", "frame_expr"): "frame + 1",      # fidelity step D: Nuke's frame knob, a formula in `frame`
+    ("Text", "index"): "Bold",                    # fidelity step F: a font style that changes the glyphs
+    ("TimeOffset", "mask_patterns"): "rgba",      # fidelity step F: the path mask's patterns select the picture layer
+    ("FrameHold", "mask_patterns"): "rgba",
 }
 
 # Optional inputs a kind needs wired before every param can take a second value: Shuffle's

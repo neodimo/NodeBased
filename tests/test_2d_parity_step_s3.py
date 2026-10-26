@@ -307,6 +307,7 @@ class BurnInTests(FileCase):
 
     def text_node(self, g, message, justify, **box):
         params = {"width": W, "height": H, "message": message, "font_size": self.FONT, "justify": justify,
+                  "yjustify": "center",         # BurnIn centres its lines in their strip; a new Text starts at the top, as in Nuke
                   "box_x": 12.0, "box_width": W - 24.0, "box_y": 0.0, "box_height": 20.0}
         params.update(box)
         return g.add("text", "Text", params, image="r")
@@ -402,7 +403,7 @@ class BurnInTests(FileCase):
         g.add("burn", "BurnIn", {"top_right": "", "bottom_right": "[metadata timecode]", "bar": 0,
                                  "top_left": "", "font_size": self.FONT}, image="tc")
         g.add("text", "Text", {"width": W, "height": H, "message": "00:00:01:00", "font_size": self.FONT,
-                               "justify": "right", "box_x": 12.0, "box_width": W - 24.0, "box_y": H - 20.0,
+                               "justify": "right", "yjustify": "center", "box_x": 12.0, "box_width": W - 24.0, "box_y": H - 20.0,
                                "box_height": 20.0}, image="r")
         e = Evaluator()
         np.testing.assert_array_equal(e.evaluate(dict(g.doc, view="burn"), frame=24),

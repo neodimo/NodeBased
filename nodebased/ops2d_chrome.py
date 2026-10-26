@@ -221,8 +221,9 @@ def step_e_params(kind):
 def step_f_params(kind):
     """The knobs fidelity step F added (Roto's node-level settings, Text, the time nodes' path mask, Read and Write), at the
     values that leave an older document's node as it was."""
-    from . import rotoknobs
+    from . import rotoknobs, textknobs
     out = rotoknobs.upgrade_params(kind)
+    out.update(textknobs.upgrade_params(kind))
     return out
 
 

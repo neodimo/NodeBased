@@ -310,6 +310,8 @@ class ProxyTierTests(unittest.TestCase):
                        "sample_x0", "sample_y0", "sample_x1", "sample_y1",
                        # BurnIn (step S3): the distance of its text from the frame edge.
                        "margin",
+                       # Fidelity step F: Text's letter spacing, baseline shift, line spacing and shadow reach are pixel lengths.
+                       "kerning", "tracking", "baseline_shift", "leading", "shadow_distance", "shadow_softness", "shadow_expand",
                        # Grid (step 4c): spacing, offset and line width are pixel lengths.
                        "spacing_x", "spacing_y", "grid_offset_x", "grid_offset_y", "line_width",
                        # CornerPin (group 2c5): eight pixel-position point pairs.
