@@ -1,0 +1,34 @@
+rtx      cube        4 runs, longest interval 53.1 to 54.4 ms, 2 over 54: [53.1, 54.1, 54.4, 53.1]
+           run 2: 54.1 ms ending 845.2 ms after the play
+           run 3: 54.4 ms ending 302.0 ms after the play
+rtx      furnished   4 runs, longest interval 53.3 to 60.2 ms, 3 over 54: [58.0, 56.4, 53.3, 60.2]
+           run 1: 56.4 ms ending 91.8 ms after the play
+           run 1: 55.1 ms ending 304.1 ms after the play
+           run 1: 54.6 ms ending 466.6 ms after the play
+           run 1: 55.3 ms ending 631.1 ms after the play
+           run 1: 55.3 ms ending 715.1 ms after the play
+           run 1: 58.0 ms ending 846.9 ms after the play
+           run 1: 57.6 ms ending 1463.8 ms after the play
+           run 2: 55.1 ms ending 380.8 ms after the play
+           run 2: 56.4 ms ending 466.8 ms after the play
+           run 2: 55.9 ms ending 630.9 ms after the play
+           run 4: 54.7 ms ending 89.8 ms after the play
+           run 4: 54.8 ms ending 468.5 ms after the play
+           run 4: 55.1 ms ending 673.0 ms after the play
+           run 4: 54.2 ms ending 754.5 ms after the play
+           run 4: 60.2 ms ending 892.0 ms after the play
+rtx      mixed       4 runs, longest interval 54.2 to 71.1 ms, 4 over 54: [56.5, 54.2, 58.1, 71.1]
+           run 1: 56.5 ms ending 304.2 ms after the play
+           run 1: 55.2 ms ending 384.9 ms after the play
+           run 2: 54.2 ms ending 506.0 ms after the play
+           run 2: 54.1 ms ending 592.2 ms after the play
+           run 3: 56.8 ms ending 259.0 ms after the play
+           run 3: 54.6 ms ending 343.6 ms after the play
+           run 3: 58.1 ms ending 467.4 ms after the play
+           run 4: 55.1 ms ending 90.2 ms after the play
+           run 4: 70.3 ms ending 1020.0 ms after the play
+           run 4: 71.1 ms ending 2196.0 ms after the play
+rtx      mixedglass  4 runs, longest interval 51.1 to 56.3 ms, 2 over 54: [53.2, 55.4, 51.1, 56.3]
+           run 2: 55.4 ms ending 771.3 ms after the play
+           run 4: 55.1 ms ending 433.6 ms after the play
+           run 4: 56.3 ms ending 859.2 ms after the play

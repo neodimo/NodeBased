@@ -1,0 +1,38 @@
+rtx      cube        4 runs, longest interval 52.0 to 55.6 ms, 1 over 54: [55.6, 52.6, 53.8, 52.0]
+           run 1: 55.6 ms ending 302.7 ms after the play
+           run 1: 55.3 ms ending 596.7 ms after the play
+rtx      furnished   4 runs, longest interval 54.7 to 60.3 ms, 4 over 54: [56.6, 54.7, 60.3, 57.0]
+           run 1: 55.5 ms ending 94.8 ms after the play
+           run 1: 55.2 ms ending 215.9 ms after the play
+           run 1: 55.4 ms ending 302.0 ms after the play
+           run 1: 56.3 ms ending 423.0 ms after the play
+           run 1: 55.7 ms ending 548.4 ms after the play
+           run 1: 54.2 ms ending 632.5 ms after the play
+           run 1: 56.6 ms ending 802.2 ms after the play
+           run 1: 54.9 ms ending 921.6 ms after the play
+           run 2: 54.3 ms ending 172.7 ms after the play
+           run 2: 54.7 ms ending 593.3 ms after the play
+           run 3: 55.5 ms ending 94.7 ms after the play
+           run 3: 56.5 ms ending 216.2 ms after the play
+           run 3: 60.3 ms ending 304.7 ms after the play
+           run 3: 56.7 ms ending 424.6 ms after the play
+           run 3: 55.0 ms ending 509.1 ms after the play
+           run 3: 58.6 ms ending 599.0 ms after the play
+           run 3: 57.4 ms ending 755.9 ms after the play
+           run 3: 55.9 ms ending 841.0 ms after the play
+           run 3: 55.0 ms ending 925.3 ms after the play
+           run 4: 55.4 ms ending 150.8 ms after the play
+           run 4: 57.0 ms ending 465.1 ms after the play
+           run 4: 55.3 ms ending 633.7 ms after the play
+           run 4: 54.2 ms ending 718.1 ms after the play
+rtx      mixed       4 runs, longest interval 56.7 to 62.1 ms, 4 over 54: [62.1, 56.7, 60.3, 57.3]
+           run 1: 62.1 ms ending 102.3 ms after the play
+           run 1: 55.7 ms ending 427.9 ms after the play
+           run 2: 56.7 ms ending 95.8 ms after the play
+           run 3: 60.3 ms ending 99.7 ms after the play
+           run 3: 54.8 ms ending 237.1 ms after the play
+           run 4: 56.7 ms ending 96.4 ms after the play
+           run 4: 57.3 ms ending 469.0 ms after the play
+rtx      mixedglass  4 runs, longest interval 51.5 to 55.5 ms, 1 over 54: [55.5, 51.8, 51.5, 52.5]
+           run 1: 55.2 ms ending 163.1 ms after the play
+           run 1: 55.5 ms ending 268.5 ms after the play

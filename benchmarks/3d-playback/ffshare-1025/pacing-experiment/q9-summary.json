@@ -1,0 +1,463 @@
+{
+ "rtx": {
+  "cube": [
+   {
+    "run": 1,
+    "max_ms": 52.3,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 2,
+    "max_ms": 55.7,
+    "over_54": [
+     {
+      "after_play_ms": 220.7,
+      "ms": 55.7
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 3,
+    "max_ms": 53.7,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 4,
+    "max_ms": 55.4,
+    "over_54": [
+     {
+      "after_play_ms": 1125.9,
+      "ms": 55.4
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 5,
+    "max_ms": 55.7,
+    "over_54": [
+     {
+      "after_play_ms": 90.9,
+      "ms": 55.7
+     },
+     {
+      "after_play_ms": 174.9,
+      "ms": 54.8
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 6,
+    "max_ms": 46.5,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 7,
+    "max_ms": 58.0,
+    "over_54": [
+     {
+      "after_play_ms": 1716.2,
+      "ms": 58.0
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 8,
+    "max_ms": 48.4,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   }
+  ],
+  "furnished": [
+   {
+    "run": 1,
+    "max_ms": 53.0,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 2,
+    "max_ms": 66.1,
+    "over_54": [
+     {
+      "after_play_ms": 149.1,
+      "ms": 66.1
+     },
+     {
+      "after_play_ms": 203.4,
+      "ms": 54.2
+     },
+     {
+      "after_play_ms": 258.1,
+      "ms": 54.8
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 3,
+    "max_ms": 58.4,
+    "over_54": [
+     {
+      "after_play_ms": 91.5,
+      "ms": 58.4
+     },
+     {
+      "after_play_ms": 1213.7,
+      "ms": 57.0
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 4,
+    "max_ms": 64.7,
+    "over_54": [
+     {
+      "after_play_ms": 144.0,
+      "ms": 64.7
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 5,
+    "max_ms": 51.7,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 6,
+    "max_ms": 74.0,
+    "over_54": [
+     {
+      "after_play_ms": 107.1,
+      "ms": 74.0
+     },
+     {
+      "after_play_ms": 186.7,
+      "ms": 55.8
+     },
+     {
+      "after_play_ms": 799.8,
+      "ms": 57.3
+     },
+     {
+      "after_play_ms": 1105.3,
+      "ms": 64.5
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 7,
+    "max_ms": 46.7,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 8,
+    "max_ms": 64.0,
+    "over_54": [
+     {
+      "after_play_ms": 143.7,
+      "ms": 64.0
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   }
+  ],
+  "mixed": [
+   {
+    "run": 1,
+    "max_ms": 61.1,
+    "over_54": [
+     {
+      "after_play_ms": 469.6,
+      "ms": 60.4
+     },
+     {
+      "after_play_ms": 2472.1,
+      "ms": 61.1
+     },
+     {
+      "after_play_ms": 2885.6,
+      "ms": 57.4
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 2,
+    "max_ms": 55.6,
+    "over_54": [
+     {
+      "after_play_ms": 470.9,
+      "ms": 55.6
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 3,
+    "max_ms": 54.1,
+    "over_54": [
+     {
+      "after_play_ms": 507.2,
+      "ms": 54.1
+     },
+     {
+      "after_play_ms": 884.6,
+      "ms": 54.1
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 4,
+    "max_ms": 54.5,
+    "over_54": [
+     {
+      "after_play_ms": 884.5,
+      "ms": 54.5
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 5,
+    "max_ms": 56.1,
+    "over_54": [
+     {
+      "after_play_ms": 345.7,
+      "ms": 56.1
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 6,
+    "max_ms": 52.1,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 7,
+    "max_ms": 54.3,
+    "over_54": [
+     {
+      "after_play_ms": 1134.1,
+      "ms": 54.3
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 8,
+    "max_ms": 53.3,
+    "over_54": [],
+    "shown": 72,
+    "fps": 24.0
+   }
+  ],
+  "mixedglass": [
+   {
+    "run": 1,
+    "max_ms": 71.8,
+    "over_54": [
+     {
+      "after_play_ms": 131.4,
+      "ms": 71.8
+     },
+     {
+      "after_play_ms": 186.7,
+      "ms": 55.3
+     },
+     {
+      "after_play_ms": 1100.0,
+      "ms": 57.5
+     },
+     {
+      "after_play_ms": 2566.6,
+      "ms": 68.8
+     },
+     {
+      "after_play_ms": 2626.8,
+      "ms": 60.2
+     }
+    ],
+    "shown": 70,
+    "fps": 23.33
+   },
+   {
+    "run": 2,
+    "max_ms": 63.4,
+    "over_54": [
+     {
+      "after_play_ms": 187.3,
+      "ms": 56.5
+     },
+     {
+      "after_play_ms": 727.4,
+      "ms": 61.9
+     },
+     {
+      "after_play_ms": 1050.7,
+      "ms": 55.5
+     },
+     {
+      "after_play_ms": 1114.1,
+      "ms": 63.4
+     },
+     {
+      "after_play_ms": 1208.1,
+      "ms": 55.7
+     }
+    ],
+    "shown": 69,
+    "fps": 23.0
+   },
+   {
+    "run": 3,
+    "max_ms": 57.8,
+    "over_54": [
+     {
+      "after_play_ms": 617.7,
+      "ms": 55.7
+     },
+     {
+      "after_play_ms": 675.5,
+      "ms": 57.8
+     },
+     {
+      "after_play_ms": 885.5,
+      "ms": 55.9
+     },
+     {
+      "after_play_ms": 1269.6,
+      "ms": 54.5
+     },
+     {
+      "after_play_ms": 1326.4,
+      "ms": 56.9
+     }
+    ],
+    "shown": 68,
+    "fps": 22.67
+   },
+   {
+    "run": 4,
+    "max_ms": 56.6,
+    "over_54": [
+     {
+      "after_play_ms": 345.8,
+      "ms": 56.6
+     },
+     {
+      "after_play_ms": 1125.0,
+      "ms": 56.2
+     }
+    ],
+    "shown": 69,
+    "fps": 23.0
+   },
+   {
+    "run": 5,
+    "max_ms": 55.9,
+    "over_54": [
+     {
+      "after_play_ms": 1078.4,
+      "ms": 55.9
+     }
+    ],
+    "shown": 69,
+    "fps": 23.0
+   },
+   {
+    "run": 6,
+    "max_ms": 59.1,
+    "over_54": [
+     {
+      "after_play_ms": 105.7,
+      "ms": 55.6
+     },
+     {
+      "after_play_ms": 1051.2,
+      "ms": 54.8
+     },
+     {
+      "after_play_ms": 1136.5,
+      "ms": 59.1
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   },
+   {
+    "run": 7,
+    "max_ms": 78.6,
+    "over_54": [
+     {
+      "after_play_ms": 579.3,
+      "ms": 57.6
+     },
+     {
+      "after_play_ms": 2355.1,
+      "ms": 78.6
+     },
+     {
+      "after_play_ms": 2508.6,
+      "ms": 54.7
+     }
+    ],
+    "shown": 71,
+    "fps": 23.67
+   },
+   {
+    "run": 8,
+    "max_ms": 56.8,
+    "over_54": [
+     {
+      "after_play_ms": 106.2,
+      "ms": 54.8
+     },
+     {
+      "after_play_ms": 843.9,
+      "ms": 56.8
+     }
+    ],
+    "shown": 72,
+    "fps": 24.0
+   }
+  ]
+ }
+}

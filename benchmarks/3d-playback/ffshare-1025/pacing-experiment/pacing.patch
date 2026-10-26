@@ -1,0 +1,272 @@
+diff --git a/nodebased/app.py b/nodebased/app.py
+index bd5cc44d..a685a526 100644
+--- a/nodebased/app.py
++++ b/nodebased/app.py
+@@ -43,6 +43,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
+ from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
+ from . import radialcommands
+ from . import graphlook
++from . import cardclock
+ from . import gpu3d
+ from . import gpupicture
+ from .playback_trace import mark as _trace_mark, mark_frame as _trace_frame
+@@ -14944,6 +14945,7 @@ class Window(QMainWindow):
+             start = time.perf_counter()
+             _trace_mark("worker_start")
+             _trace_frame("start", request.generation)
++            cardclock.note_frame_start()
+             def stage_conversion(pixels, build_image, status_of, region):
+                 """Played frame: build its picture on the conversion stage and free this worker for the next
+                 frame. The stage emits `finished`; a frame it replaced before converting it is a counted drop."""
+diff --git a/nodebased/cardclock.py b/nodebased/cardclock.py
+index ad7bdc57..d2649613 100644
+--- a/nodebased/cardclock.py
++++ b/nodebased/cardclock.py
+@@ -77,6 +77,14 @@ LOWER_EXIT_FRACTION = 0.35
+ LOWER_MAX_SECONDS = 0.8
+ LOWER_KEEP_FRAMES = 3
+ 
++# The frames of a ramp arrive at an even spacing: a frame that came back sooner than the others is held until it has taken PACE_FRACTION of the
++# frame time (measured from the worker picking the request up to the end of the readback, so a scene that takes long to evaluate is held
++# less; the rest of the way to the screen takes 10 ms more). On the idle clock the first half-size frame of the RTX's cube takes 16 ms
++# and the frames after it 29 (26 of them waiting on the card), so the
++# second picture came 60 ms after the first although both frames fit the frame time (10/26); a quarter-size frame (7 ms) between half-size
++# ones did the same. A frame that takes longer than that is not held.
++PACE_FRACTION = 0.50
++
+ _active = [None]           # the Ramp of the play that is starting, while its frames are drawn at the lower size
+ 
+ 
+@@ -104,6 +112,8 @@ class Ramp:
+         self.switch = False        # the window draws the chosen size from the next frame on
+         self.build_seconds = 0.0   # the longest a frame spent packing and uploading its scene since the ramp began
+         self.extra_bytes = 0
++        self.frame_began = None    # when the render in flight started (`note_frame_start`), for the pacing of `after_frame`
++        self.paced_seconds = 0.0   # the time the frames of this ramp were held to even their spacing
+         _active[0] = self
+ 
+     def observe(self, seconds):
+@@ -176,10 +186,36 @@ def note_build(seconds):
+         ramp.build_seconds = max(ramp.build_seconds, float(seconds))
+ 
+ 
+-def after_frame(state, readback_bytes, seconds):
+-    """Called by a render right after its picture has been read back, `seconds` after it was submitted. While a `Ramp` is running, notes the
+-    time and queues a copy to the processor of the bytes the rest of the frame's time can carry at the speed this readback showed
+-    (never waited for here: it runs while the frame is on its way to the screen and ends before the next one is submitted)."""
++def note_frame_start():
++    """A frame has just begun (the worker took the request up, or, without one, `gpu3d.render` was entered): the pacing of `after_frame`
++    counts from here. Only the first call of a frame counts (a start older than two frame times belongs to a frame that was cancelled)."""
++    ramp = _active[0]
++    if ramp is None or ramp.switch:
++        return
++    now = ramp.clock()
++    if ramp.frame_began is None or now - ramp.frame_began > 2 * ramp.budget:
++        ramp.frame_began = now
++
++
++def after_frame(state, readback_bytes, seconds, final=True):
++    """Called by a render right after its picture has been read back, `seconds` after it was submitted (`final`: the last band of the
++    frame). While a `Ramp` is running, notes the time and queues a copy to the processor of the bytes the rest of the frame's time can
++    carry at the speed this readback showed (never waited for here: it runs while the frame is on its way to the screen and ends before
++    the next one is submitted), then holds a frame that came back quickly until it has taken PACE_FRACTION of the frame time, so the
++    pictures of the ramp are evenly spaced."""
++    ramp = _active[0]
++    paced = ramp is not None and final and not ramp.switch
++    _after_frame(state, readback_bytes, seconds)
++    if paced:
++        began, ramp.frame_began = ramp.frame_began, None
++        if began is not None:
++            wait = PACE_FRACTION * ramp.budget - (ramp.clock() - began)
++            if wait > 0:
++                ramp.paced_seconds += wait
++                time.sleep(wait)
++
++
++def _after_frame(state, readback_bytes, seconds):
+     ramp = _active[0]
+     if ramp is None:
+         return
+diff --git a/nodebased/gpu3d.py b/nodebased/gpu3d.py
+index 684368fc..1d28fd88 100644
+--- a/nodebased/gpu3d.py
++++ b/nodebased/gpu3d.py
+@@ -1516,6 +1516,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
+     Unsupported/RuntimeError and use scene3d.render as their fallback.
+     """
+     _mark('render_begin')
++    cardclock.note_frame_start()
+     _mark(f'size {int(width)}x{int(height)}')
+     if samples > 1 and scene3d.is_empty_scene(scene):
+         samples = 1   # nothing to antialias: the frame is the flat background
+@@ -2564,7 +2565,7 @@ def _render_resident(state, scene, camera, width, height, bg, ambient, output, c
+                     state['picture_rgba'] = recorder.read(staging)
+             finally:
+                 staging.unmap()
+-            cardclock.after_frame(state, rows * stride, waited)
++            cardclock.after_frame(state, rows * stride, waited, final=y1 == bands[-1][1])
+             _mark('readback_done')
+             _cancel(cancel)
+     finally:
+@@ -2847,7 +2848,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
+                 _copy_band(staging, result, y0, y1, dtype, stride, width)
+             finally:
+                 staging.unmap()
+-            cardclock.after_frame(state, rows * stride, waited)
++            cardclock.after_frame(state, rows * stride, waited, final=y1 == bands[-1][1])
+             _mark('readback_done')
+             _cancel(cancel)
+         if not data and bg.any():
+diff --git a/tests/test_card_clock.py b/tests/test_card_clock.py
+index 3dba32ff..3eef2334 100644
+--- a/tests/test_card_clock.py
++++ b/tests/test_card_clock.py
+@@ -229,6 +229,117 @@ class AfterFrameTests(unittest.TestCase):
+         self.assertEqual(self.device.submitted, [])
+ 
+ 
++class PacingTests(unittest.TestCase):
++    """The frames of a ramp arrive evenly: on the idle clock the RTX's cube takes 16 ms for its first half-size frame and 29 for the next,
++    so the second picture came 60 ms after the first (10/26)."""
++
++    def setUp(self):
++        never_lower(self)
++        self.clock = Clock()
++        self.device = Device()
++        self.state = fake_state(self.device)
++        self.sleeps = []
++        patch = unittest.mock.patch.object(cardclock.time, "sleep", self.sleeps.append)
++        patch.start()
++        self.addCleanup(patch.stop)
++        self.addCleanup(lambda: cardclock._active.__setitem__(0, None))
++
++    def ramp(self):
++        return cardclock.Ramp(1 / 24, clock=self.clock)
++
++    def frame(self, seconds, megabytes=8, step=0.0417):
++        self.clock.now += step
++        cardclock.after_frame(self.state, int(megabytes * 2 ** 20), seconds)
++
++    def reach_up(self, ramp):
++        for _ in range(3):
++            self.frame(0.022)
++        self.clock.now += cardclock.MIN_SECONDS
++        for _ in range(2):
++            self.frame(0.0039)
++        self.assertTrue(ramp.up)
++
++    def begin(self, ramp, seconds_into_render):
++        """A render that began `seconds_into_render` ago."""
++        ramp.frame_began = self.clock.now - seconds_into_render
++
++    def test_a_frame_that_came_back_quickly_is_held_until_it_has_taken_the_paced_share_of_the_frame_time(self):
++        ramp = self.ramp()
++        self.begin(ramp, 0.010)
++        self.sleeps.clear()
++        self.frame(0.008, step=0)
++        self.assertAlmostEqual(self.sleeps[-1], cardclock.PACE_FRACTION / 24 - 0.010, places=6)
++        self.assertGreater(ramp.paced_seconds, 0.010)
++
++    def test_a_frame_that_took_longer_is_not_held(self):
++        ramp = self.ramp()
++        self.begin(ramp, 0.025)
++        self.sleeps.clear()
++        self.frame(0.02, step=0)
++        self.assertEqual(self.sleeps, [])
++
++    def test_the_render_start_is_read_once_per_frame(self):
++        ramp = self.ramp()
++        cardclock.note_frame_start()
++        first = ramp.frame_began
++        self.clock.now += 0.01
++        cardclock.note_frame_start()          # a nested render of the same frame
++        self.assertEqual(ramp.frame_began, first)
++        self.frame(0.01, step=0)
++        self.assertIsNone(ramp.frame_began)    # read by the frame's end
++        self.clock.now += 0.001
++        cardclock.note_frame_start()
++        self.assertEqual(ramp.frame_began, self.clock.now)
++
++    def test_the_start_of_a_cancelled_render_is_not_carried_into_the_next_frame(self):
++        ramp = self.ramp()
++        cardclock.note_frame_start()
++        self.clock.now += 0.2
++        cardclock.note_frame_start()
++        self.assertEqual(ramp.frame_began, self.clock.now)
++
++    def test_a_frame_without_a_known_start_and_the_frames_after_the_switch_are_not_held(self):
++        ramp = self.ramp()
++        self.sleeps.clear()
++        self.frame(0.01, step=0)
++        self.assertEqual(self.sleeps, [])
++        self.reach_up(ramp)
++        self.frame(0.0039)
++        self.frame(0.0039)
++        self.assertTrue(ramp.switch)
++        self.sleeps.clear()
++        cardclock.note_frame_start()
++        self.assertIsNone(ramp.frame_began)
++        self.frame(0.01, step=0)
++        self.assertEqual(self.sleeps, [])
++
++    def test_only_the_last_band_of_a_frame_is_held(self):
++        ramp = self.ramp()
++        self.begin(ramp, 0.01)
++        self.sleeps.clear()
++        cardclock.after_frame(self.state, 8 * 2 ** 20, 0.01, final=False)
++        self.assertEqual(self.sleeps, [])
++        self.assertIsNotNone(ramp.frame_began)
++        cardclock.after_frame(self.state, 8 * 2 ** 20, 0.01, final=True)
++        self.assertEqual(len(self.sleeps), 1)
++
++    def test_the_extra_copy_is_sent_before_the_hold(self):
++        ramp = self.ramp()
++        self.begin(ramp, 0.01)
++        order = []
++        self.device.queue.submit = lambda commands: order.append("copy")
++        with unittest.mock.patch.object(cardclock.time, "sleep", lambda seconds: order.append("hold")):
++            self.frame(0.01, step=0)
++        self.assertEqual(order, ["copy", "hold"])
++
++    def test_no_ramp_no_hold(self):
++        cardclock._active[0] = None
++        self.sleeps.clear()
++        cardclock.note_frame_start()
++        cardclock.after_frame(self.state, 8 * 2 ** 20, 0.01)
++        self.assertEqual(self.sleeps, [])
++
++
+ class LoweredRampTests(unittest.TestCase):
+     """A scene the idle shader clock slows down (the smoke, splats and glass scene: 40 to 47 ms of waiting on the card for each of its first
+     four half-size frames, 22 then 8 once the clock has risen; the RTX, 10/25) draws the frames after a slow first frame at a quarter of the
+@@ -491,3 +602,30 @@ class WindowRampTests(unittest.TestCase):
+ 
+ if __name__ == "__main__":
+     unittest.main()
++
++
++class FrameStartHookTests(unittest.TestCase):
++    """The pacing counts a frame from the moment the worker takes its request up (a scene that takes long to evaluate is held less) and
++    `gpu3d.render` starts it when it is the first to ask."""
++
++    def test_the_preview_worker_stamps_the_start_of_every_frame(self):
++        import time
++        from PySide6.QtWidgets import QApplication
++        app = QApplication.instance() or QApplication([])
++        from nodebased.app import Window
++        window = Window(agent_name="card-clock-start-" + uuid.uuid4().hex)
++        self.addCleanup(lambda: (setattr(window, "saved_document", window.dispatcher.document), window.close()))
++        with unittest.mock.patch.object(cardclock, "note_frame_start") as stamp:
++            window.request_preview()
++            deadline = time.monotonic() + 30
++            while not stamp.called and time.monotonic() < deadline:
++                app.processEvents()
++                time.sleep(0.01)
++        self.assertTrue(stamp.called)
++
++    def test_gpu_render_stamps_the_start_before_it_touches_the_card(self):
++        class Stop(Exception):
++            pass
++        with unittest.mock.patch.object(cardclock, "note_frame_start", side_effect=Stop):
++            with self.assertRaises(Stop):
++                gpu3d.render(None, None, 8, 8)
