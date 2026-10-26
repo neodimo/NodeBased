@@ -202,7 +202,7 @@ def resolve_source_path(path, frame, missing='error'):
         if nearest:
             return nearest, True
         raise ValueError(f'No frames found for sequence {path}')
-    if missing == 'black':
+    if missing in ('black', 'checkerboard'):
         return None, False
     raise ValueError(f'Missing frame {frame}: {candidate}')
 
@@ -288,7 +288,7 @@ def read_exr_layers(source, spec, subimage, data, display, pixels=None):
             for name, channels in groups.items()}
 
 
-def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0):
+def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0, auto_alpha=True):
     """Decode into a `Raster`, preserving the file's data window even when it exceeds the frame.
 
     OpenEXR stores `dataWindow` and `displayWindow` separately precisely so a render can carry
@@ -371,6 +371,8 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
             associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
             rgba = to_working(rgba, space, associated, in_place=True)
+            if alpha is None and not auto_alpha:
+                rgba[..., 3] = 0.0          # Nuke's Read without "auto alpha": a file with no alpha channel reads as alpha 0
         # Both windows in display-window-relative coordinates: the display window is rebased to
         # (0, 0) and the data window keeps its offset, which may be negative or reach past w/h.
         display = Region(0, 0, w, h)
@@ -402,7 +404,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         source.close()
 
 
-def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0):
+def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0, auto_alpha=True):
     """Read only the requested display-relative rectangle from an image.
 
     This is deliberately a separate API from :func:`read_media_raster`: callers that need an
@@ -474,6 +476,8 @@ def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer=
         space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
         associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
         rgba = to_working(rgba, space, associated, in_place=True)
+        if alpha is None and not auto_alpha:
+            rgba[..., 3] = 0.0
         oy, ox = overlap.y - requested.y, overlap.x - requested.x
         out[oy:oy + overlap.height, ox:ox + overlap.width] = rgba
         return Raster(out, requested, display)

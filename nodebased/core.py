@@ -165,12 +165,15 @@ VIEWER_EXTRA_KEYS = ("look", "roi", "proxy", "masks")
 _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p2": 0.0,
          "lens_cx": 0.0, "lens_cy": 0.0}
 
+from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
     # be a padded sequence pattern (plate.%04d.exr / plate.####.exr) or a still; "frame_offset"
     # shifts the source relative to the timeline, and "missing" decides what an absent frame does.
     "Read": {"inputs": [], "params": {"path": "", "colorspace": "Auto", "alpha_mode": "Auto", "layer": "", "subimage": 0,
-                                      "frame_offset": 0, "missing": "error"}},
+                                      "frame_offset": 0, "missing": "error",
+                                      # Nuke's Read knobs that change what is read (nodebased/readknobs.py); every default is the Read of before.
+                                      **{key: value for key, value in _READ_KNOB_DEFAULTS.items()}}},
     "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0}},
     "Checker": {"inputs": [], "params": {"width": 960, "height": 540, "size": 64}},
     "Grade": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0}},
@@ -1849,7 +1852,7 @@ DEFAULT_TIME = {"first": 1, "last": 1, "current": 1, "fps": 24.0}
 # has 100 frames to loop before anything is loaded (QA finding 15); empty_document() and the v4-
 # upgrade path keep DEFAULT_TIME, which is correct for a document with no time axis at all.
 NEW_PROJECT_TIME = {"first": 1, "last": 100, "current": 1, "fps": 24.0}
-MISSING_FRAME_POLICIES = ("error", "hold", "black")
+MISSING_FRAME_POLICIES = ("error", "hold", "black", "checkerboard")
 
 
 # Merge keeps A as foreground and B as background, mirroring Nuke's wiring convention.
@@ -2022,6 +2025,11 @@ SHUFFLE_SOURCES = ["R", "G", "B", "A", "0", "1", "R2", "G2", "B2", "A2"]
 CHOICES.update({name: list(SHUFFLE_SOURCES) for name in ("red_from", "green_from", "blue_from", "alpha_from")})
 CHOICES.update({"fromInput1": ["B", "A"], "fromInput2": ["B", "A"]})
 LIMITS.update({"invert_unpremult": (0, 1), "replace": (0, 1)})
+# Read's Nuke knobs (fidelity step C): the frame knob's mode, the format override, the original range and the three checkboxes.
+CHOICES["frame_mode"] = list(_READ_FRAME_MODES)
+CHOICES["read_format"] = ["file", *REFORMAT_FORMATS]
+LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000),
+               "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})
 
 
 def _downstream_of(nodes, key):

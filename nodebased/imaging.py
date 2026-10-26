@@ -185,29 +185,85 @@ def linear_to_srgb(rgb):
 
 
 def read_image(path, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
-               frame_offset=0, missing="error", frame=None):
+               frame_offset=0, missing="error", frame=None, **nuke_knobs):
     """Read one timeline frame as a display-window array. Overscan is dropped at this boundary."""
     return read_image_raster(path, colorspace, alpha_mode, layer, subimage,
-                             frame_offset, missing, frame).to_display()
+                             frame_offset, missing, frame, **nuke_knobs).to_display()
+
+
+def read_lookup(params, frame):
+    """(source frame, missing policy, forced) for a Read at timeline `frame`: where Read looks for its file.
+
+    A Read with none of Nuke's time knobs set maps the frame the way it always did (the frame plus `frame_offset`, rounded);
+    otherwise nodebased/readknobs.py applies the frame knob, the clip range with before / after and the original range."""
+    from . import readknobs
+    if not readknobs.time_active(params):
+        source = int(math.floor((frame if frame is not None else 0) + int(params.get("frame_offset", 0)) + 0.5))
+        return source, params.get("missing", "error"), False
+    first_on_disk = None
+    if str(params.get("frame_mode", "expression")) == "start at" and readknobs.DEFAULTS["first"] == params.get("first", 0):
+        from .media import scan_sequence
+        found = scan_sequence(params.get("path"))
+        first_on_disk = found[0] if found else None
+    return readknobs.resolve_policy(params, frame if frame is not None else 0, first_on_disk)
+
+
+def _checkerboard(display):
+    """The error picture of Nuke's Read `on_error: checkerboard`: 16-pixel squares, 0.2 and 0.8 grey, opaque."""
+    yy, xx = np.indices((display.height, display.width))
+    tone = np.where(((yy // 16) + (xx // 16)) % 2 == 0, 0.8, 0.2).astype(np.float32)
+    out = np.ones((display.height, display.width, 4), np.float32)
+    out[..., :3] = tone[..., None]
+    return out
+
+
+def _apply_format(raster, fmt):
+    """Nuke's Read `format`: the file's pixels keep their place from the lower-left corner and the display window becomes the
+    chosen format, so a taller format shows more above the picture and a shorter one crops the top."""
+    from . import readknobs
+    from .core import REFORMAT_FORMATS
+    size = readknobs.parse_format(fmt, REFORMAT_FORMATS)
+    if size is None:
+        return raster
+    width, height = size
+    shift = height - raster.display.height
+
+    def moved(item):
+        return Region(item.data.x, item.data.y + shift, item.data.width, item.data.height)
+    layers = {name: Raster(layer.pixels, moved(layer), Region(0, 0, width, height), meta=layer.meta)
+              for name, layer in (raster.layers or {}).items()} or raster.layers
+    return Raster(raster.pixels, moved(raster), Region(0, 0, width, height), layers, raster.meta)
 
 
 def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
-                      frame_offset=0, missing="error", frame=None):
+                      frame_offset=0, missing="error", frame=None, read_format="file", first=0, last=0, before="hold",
+                      after="hold", frame_mode="expression", frame_expr="", origfirst=0, origlast=0, raw=0,
+                      premultiplied=0, auto_alpha=1):
     """Read one timeline frame, data window intact. Read owns its source-time mapping — see
-    docs/TIME_MODEL.md; it owns its bounding box the same way — see docs/BOUNDING_BOX.md."""
+    docs/TIME_MODEL.md; it owns its bounding box the same way — see docs/BOUNDING_BOX.md.
+
+    The keywords from `read_format` on are Nuke's Read knobs (nodebased/readknobs.py); at their defaults this is the Read it
+    always was."""
     from .media import nearest_sequence_path, read_media_raster, resolve_source_path
-    source_frame = int(math.floor((frame if frame is not None else 0) + int(frame_offset) + 0.5))
-    resolved, exists = resolve_source_path(path, source_frame, missing)
+    knobs = dict(path=path, frame_offset=frame_offset, missing=missing, first=first, last=last, before=before, after=after,
+                 frame_mode=frame_mode, frame_expr=frame_expr, origfirst=origfirst, origlast=origlast)
+    source_frame, policy, forced = read_lookup(knobs, frame)
+    if premultiplied:
+        alpha_mode = "Premultiplied"
+    if raw:
+        colorspace = "Raw"
+    resolved, exists = (None, False) if forced else resolve_source_path(path, source_frame, policy)
     if resolved is None and not exists:
         # Preserve the sequence's actual display window. A 1x1 placeholder would make every
         # downstream Merge fail exactly when an artist asked for a harmless black gap. The gap's
         # data window is the display window: a black hole in a sequence claims no overscan.
-        reference = nearest_sequence_path(path, source_frame)
+        reference = nearest_sequence_path(path, source_frame) if is_sequence_path(path) else (str(path) if path else None)
         if reference is None:
             raise ValueError(f'No frames found for sequence {path}')
         display = read_media_raster(reference, colorspace, alpha_mode, layer, subimage).display
-        return Raster(np.zeros((display.height, display.width, 4), np.float32), display, display)
-    raster = read_media_raster(resolved, colorspace, alpha_mode, layer, subimage)
+        pixels = _checkerboard(display) if policy == "checkerboard" else np.zeros((display.height, display.width, 4), np.float32)
+        return _apply_format(Raster(pixels, display, display), read_format)
+    raster = read_media_raster(resolved, colorspace, alpha_mode, layer, subimage, auto_alpha=bool(auto_alpha))
     # Where the pixels came from, in Nuke's key names. Every value follows from the resolved file
     # (input/frame only when that file is the one the sequence names for this frame), so the Read's
     # cache key, which fingerprints the resolved file, already covers the metadata.
@@ -217,20 +273,31 @@ def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subi
     if str(resolved) == sequence_path(path, source_frame) and str(resolved) != str(path):
         meta["input/frame"] = str(source_frame)
     raster.meta = {**meta, **(raster.meta or {})}
-    return raster
+    return _apply_format(raster, read_format)
+
+
+def is_sequence_path(path):
+    from .media import is_sequence
+    return is_sequence(path)
 
 
 def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
-                      frame_offset=0, missing="error", frame=None):
+                      frame_offset=0, missing="error", frame=None, **nuke_knobs):
     """Acquire a bounded Read region at full resolution.
 
     The returned Raster is anchored at ``region`` even when it extends into EXR overscan or
     beyond a source data window. This is the source-side counterpart to TileExecutor's bounded
     compose API: a viewport request no longer needs a full image decode merely to slice it.
+    A Read with any of Nuke's knobs changed (nodebased/readknobs.py) is decoded whole and cut to the region.
     """
-    from .media import nearest_sequence_path, read_media_region, read_media_raster, resolve_source_path
-    source_frame = int(math.floor((frame if frame is not None else 0) + int(frame_offset) + 0.5))
-    resolved, exists = resolve_source_path(path, source_frame, missing)
+    from . import readknobs
+    from .media import nearest_sequence_path, read_media_raster, read_media_region
+    if readknobs.active(nuke_knobs):
+        full = read_image_raster(path, colorspace, alpha_mode, layer, subimage, frame_offset, missing, frame, **nuke_knobs)
+        return Raster(full.fit(region), region, full.display)
+    source_frame, policy, _forced = read_lookup(dict(path=path, frame_offset=frame_offset, missing=missing), frame)
+    from .media import resolve_source_path
+    resolved, exists = resolve_source_path(path, source_frame, policy)
     if resolved is None and not exists:
         reference = nearest_sequence_path(path, source_frame)
         if reference is None:
@@ -240,11 +307,16 @@ def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer=
     return read_media_region(resolved, region, colorspace, alpha_mode, layer, subimage)
 
 
-def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=None):
-    """Read only source window metadata for a timeline frame (no pixel decode)."""
+def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=None, **nuke_knobs):
+    """Read only source window metadata for a timeline frame (no pixel decode). A Read with any of Nuke's knobs changed
+    (nodebased/readknobs.py) answers from its decoded raster, since the knobs move the windows."""
+    from . import readknobs
     from .media import nearest_sequence_path, read_media_bounds, resolve_source_path
-    source_frame = int(math.floor((frame if frame is not None else 0) + int(frame_offset) + 0.5))
-    resolved, exists = resolve_source_path(path, source_frame, missing)
+    if readknobs.active(nuke_knobs):
+        full = read_image_raster(path, subimage=subimage, frame_offset=frame_offset, missing=missing, frame=frame, **nuke_knobs)
+        return full.data, full.display
+    source_frame, policy, _forced = read_lookup(dict(path=path, frame_offset=frame_offset, missing=missing), frame)
+    resolved, exists = resolve_source_path(path, source_frame, policy)
     if resolved is None and not exists:
         resolved = nearest_sequence_path(path, source_frame)
         if resolved is None:

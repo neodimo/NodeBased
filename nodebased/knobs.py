@@ -109,7 +109,15 @@ KNOB_LAYOUT = {
         KnobGroup("file_read", ("path",)), KnobGroup("enum", ("colorspace",)),
         KnobGroup("enum", ("alpha_mode",)), KnobGroup("string", ("layer",)),
         KnobGroup("int", ("subimage",)), KnobGroup("int", ("frame_offset",)),
-        KnobGroup("enum", ("missing",))),
+        KnobGroup("enum", ("missing",), label="On error"),
+        # Nuke's Read knobs that change what is read (nodebased/readknobs.py).
+        KnobGroup("enum", ("read_format",), label="Format"),
+        KnobGroup("int", ("first",), label="First frame"), KnobGroup("enum", ("before",), label="Before first"),
+        KnobGroup("int", ("last",), label="Last frame"), KnobGroup("enum", ("after",), label="After last"),
+        KnobGroup("enum", ("frame_mode",), label="Frame mode"), KnobGroup("string", ("frame_expr",), label="Frame"),
+        KnobGroup("int", ("origfirst",), label="Original first"), KnobGroup("int", ("origlast",), label="Original last"),
+        KnobGroup("bool", ("raw",), label="Raw data"), KnobGroup("bool", ("premultiplied",), label="Premultiplied"),
+        KnobGroup("bool", ("auto_alpha",), label="Auto alpha")),
     "Constant": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("color", ("red", "green", "blue", "alpha"))),

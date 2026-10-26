@@ -173,8 +173,8 @@ def _compute_node_digests(document, tier, frame, solve=None):
         fingerprint = None
         if kind == "Read" and params["path"]:
             from .media import nearest_sequence_path as _nearest, resolve_source_path as _resolve
-            source_frame = frame + int(params.get("frame_offset", 0))
-            resolved, exists = _resolve(params["path"], source_frame, params.get("missing", "error"))
+            source_frame, policy, forced = imaging.read_lookup(params, frame)
+            resolved, exists = (None, False) if forced else _resolve(params["path"], source_frame, policy)
             if resolved is None:
                 reference = _nearest(params["path"], source_frame)
                 if reference is not None:
@@ -308,8 +308,8 @@ def _read_source_fingerprint(params, frame):
     from .media import nearest_sequence_path, resolve_source_path
 
     path = params.get("path")
-    source_frame = int(frame) + int(params.get("frame_offset", 0))
-    resolved, exists = resolve_source_path(path, source_frame, params.get("missing", "error"))
+    source_frame, policy, forced = imaging.read_lookup(params, int(frame))
+    resolved, exists = (None, False) if forced else resolve_source_path(path, source_frame, policy)
     if resolved is not None:
         stat = Path(resolved).stat()
         return ("source", str(Path(resolved).resolve()), int(stat.st_size), int(stat.st_mtime_ns))
@@ -340,8 +340,8 @@ def _read_has_named_layers(params, frame):
     try:
         from .media import resolve_source_path
         import OpenImageIO as oiio
-        source_frame = int(frame) + int(params.get("frame_offset", 0))
-        path, _exists = resolve_source_path(params.get("path"), source_frame, params.get("missing", "error"))
+        source_frame, policy, forced = imaging.read_lookup(params, int(frame))
+        path, _exists = (None, False) if forced else resolve_source_path(params.get("path"), source_frame, policy)
         if path is None:
             return False
         image = oiio.ImageInput.open(str(path))
@@ -465,10 +465,13 @@ class TileExecutor:
                               full_width=width, full_height=height)
         params = dict(node["params"])
         params["frame"] = frame or 1
+        from . import readknobs
         data, _display = imaging.read_image_bounds(
             params.pop("path"), subimage=params.pop("subimage", 0),
             frame_offset=params.pop("frame_offset", 0), missing=params.pop("missing", "error"),
-            frame=params.pop("frame"))
+            frame=params.pop("frame"), **({key: params[key] for key in readknobs.KEYS if key in params}
+                                          | {key: params[key] for key in ("colorspace", "alpha_mode", "layer") if key in params}
+                                          if readknobs.active(params) else {}))
         if int(tier) != 1:
             data = tiers.Region(data.x // int(tier), data.y // int(tier),
                                 (data.width + int(tier) - 1) // int(tier),

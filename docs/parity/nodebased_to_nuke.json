@@ -12,12 +12,24 @@
    "inputs": [],
    "knobs": [
     {"nodebased": ["path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'File', scripting name `file`"},
-    {"nodebased": ["frame_offset"], "nuke": ["frame"], "kind": "renamed", "reason": "NodeBased offsets by an integer; Nuke's frame knob holds the offset when frame_mode is offset"},
+    {"nodebased": ["frame_offset"], "kind": "extra", "reason": "NodeBased-only: the integer offset NodeBased had before Nuke's frame knob; it adds after the frame knob and is kept so older documents read the same"},
     {"nodebased": ["missing"], "nuke": ["on_error"], "kind": "renamed", "reason": "missing-frame policy"},
     {"nodebased": ["colorspace"], "nuke": ["colorspace"], "kind": "same"},
     {"nodebased": ["alpha_mode"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["layer"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["subimage"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["subimage"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["read_format"], "nuke": ["format"], "kind": "renamed", "reason": "same control under another name (`format` is Reformat's own choice list in NodeBased's parameter table); Nuke's label is 'format'"},
+    {"nodebased": ["first"], "nuke": ["first"], "kind": "same"},
+    {"nodebased": ["last"], "nuke": ["last"], "kind": "same"},
+    {"nodebased": ["before"], "nuke": ["before"], "kind": "same"},
+    {"nodebased": ["after"], "nuke": ["after"], "kind": "same"},
+    {"nodebased": ["frame_mode"], "nuke": ["frame_mode"], "kind": "same"},
+    {"nodebased": ["frame_expr"], "nuke": ["frame"], "kind": "renamed", "reason": "same control under another name (`frame` is the timeline frame in the evaluator's own signature); Nuke's label is 'frame'"},
+    {"nodebased": ["origfirst"], "nuke": ["origfirst"], "kind": "same"},
+    {"nodebased": ["origlast"], "nuke": ["origlast"], "kind": "same"},
+    {"nodebased": ["raw"], "nuke": ["raw"], "kind": "same"},
+    {"nodebased": ["premultiplied"], "nuke": ["premultiplied"], "kind": "same"},
+    {"nodebased": ["auto_alpha"], "nuke": ["auto_alpha"], "kind": "same"}
    ],
    "skip_default": ["frame"]
   },

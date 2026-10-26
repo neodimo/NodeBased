@@ -278,6 +278,8 @@ class MediaTests(unittest.TestCase):
             read_media(str(path), subimage=3)
 
 
+from nodebased.readknobs import DEFAULTS as READ_KNOB_DEFAULTS
+
 class DocumentUpgradeTests(unittest.TestCase):
     def test_version_one_read_nodes_gain_color_defaults(self):
         old = {'version': 1, 'view': 'r', 'nodes': {'r': {'type': 'Read', 'name': 'Read1', 'pos': [0, 0],
@@ -291,7 +293,8 @@ class DocumentUpgradeTests(unittest.TestCase):
         self.assertEqual(upgraded['version'], SCHEMA_VERSION)
         self.assertEqual(upgraded['nodes']['r']['params'],
                          {'path': '/tmp/a.png', 'colorspace': 'Auto', 'alpha_mode': 'Auto', 'layer': '', 'subimage': 0,
-                          'frame_offset': 0, 'missing': 'error'})
+                          'frame_offset': 0, 'missing': 'error',
+                          **READ_KNOB_DEFAULTS})        # the Nuke Read knobs (fidelity step C) arrive at their no-change values
         self.assertEqual(old['nodes']['r']['params'], {'path': '/tmp/a.png'})  # input untouched
 
     def test_invalid_choices_are_rejected(self):
