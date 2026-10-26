@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step D of N: the time nodes, the keyers and the small channel nodes take Nuke's knobs, Lane 8 (2D on the GPU, Claude Sonnet 5.5) step C of 3: measure the GPU island against the gates and give the go/no-go (integrator tick)
+
+- **What was done:** `main` `8dcd9693` -> `df49d0a4` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `df49d0a4`: Ran 6636 tests in 504.283 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-25 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step C of N: Roto, Read, Write, Crop, Premult and Unpremult take Nuke's knobs, and "clip to" changes pixels (integrator tick)
 
 - **What was done:** `main` `499a0d2a` -> `4e87354d` plus this docs commit. Evidence and per-lane commit

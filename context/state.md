@@ -1,5 +1,32 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D on the GPU, Claude Sonnet 5.5) (2:05 AM on 2026-10-26 PDT)
+
+`main` moved `8dcd9693` -> `df49d0a4` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `df49d0a4` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-0155.log`, started 1:55 AM): **Ran 6636 tests in 504.283 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step D of N: the time nodes, the keyers and the small channel nodes take Nuke's knobs.** Commits:
+  - `42fef7e2` tests: the v9 upgrade check starts from a Constant carrying today's knobs, so new Constant knobs read as defaults rather than as a changed graph
+  - `61432a25` 2D fidelity D part 4: ChromaKeyer alpha bias, inside mask, custom despill bias and replace modes; docs rows and step notes; the re-scored report (67.7 to 73.8)
+  - `557906fa` 2D fidelity D parts 2 and 3: the keyers (screen operations, input/output/combine, chroma key gain, balance, points and view, Difference output) and the small channel nodes (Constant channels and range, Invert clamp, Copy channels and metadata/range input and mask strip, Remove channels2 to 4, CopyMetaData merge modes and filters)
+  - `e8213e36` 2D fidelity D part 1: TimeOffset, FrameHold, Retime and TimeClip take Nuke's knobs: rounding modes, reverse input, range locks, before/after/filter/shutter, frame mode, original range, fades and reverse
+  Diff: 21 files changed, 1857 insertions(+), 216 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D on the GPU, Claude Sonnet 5.5), step C of 3: measure the GPU island against the gates and give the go/no-go.** Commits:
+  - `337088fe` R6-1 step C: measurements and go/no-go. Pixels, residency and execution pass; the RTX 3080 Ti row fails every transfer-inclusive gate behind its 2-lane PCI link (165.7 ms against 30 ms), the integrated Radeon passes 20 and 30 ms and doubles playback (13.1 fps) but misses 16 and 24 fps with Read plus Roto left; laptop, A6000 and D3D12 unverified. Evidence under benchmarks/2d-gpu/R6-1, section in docs/PERFORMANCE.md
+  - `c188cd5b` R6-1 part 4: tools/benchmark_gpu2d.py measures the four-node chain three ways (CPU kernels, per-node round trip, resident island with fresh or already-resident sources), the whole graph, and N fresh playback passes with each island joined to its accepted frame; the island now also times the device-to-host copy and the host copy separately
+  Diff: 76 files changed, 14651 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (7:45 PM on 2026-10-25 PDT)
 
 `main` moved `499a0d2a` -> `4e87354d` (lane commits cherry-picked onto main in lane order) and then to this
