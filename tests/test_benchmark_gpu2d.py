@@ -80,7 +80,7 @@ class EndToEndTests(unittest.TestCase):
 
     def args(self, name, **extra):
         base = dict(inputs=pathlib.Path(self.directory.name), size="96x54", adapter="default", budget_mb=256, label="unit",
-                    output=pathlib.Path(self.directory.name, name), warmup=1, frames="1-4", last=None, reps=2, truth_frames=2, backend="gpu2d")
+                    output=pathlib.Path(self.directory.name, name), warmup=1, frames="1-4", last=None, reps=2, truth_frames=2, backend="gpu2d", source_workers=0)
         base.update(extra)
         return namespace(**base)
 
@@ -116,6 +116,18 @@ class EndToEndTests(unittest.TestCase):
             self.assertEqual({"Grade", "Transform", "Blur", "Merge"} <= kinds, backend == "cpu")
             if backend == "gpu2d":
                 self.assertTrue(all(r["island"]["downloads"] == 1 and r["island"]["intermediate_readbacks"] == 0 for r in report["samples"]))
+
+    def test_graph_with_source_workers_gives_the_serial_pixels_and_records_the_count(self):
+        reports = {}
+        for workers in (0, 2):
+            args = self.args(f"g-workers-{workers}.json", backend="cpu", source_workers=workers)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(tool.cmd_graph(args), 0)
+            reports[workers] = json.loads(args.output.read_text())
+            self.assertEqual(reports[workers]["source_workers"], workers)
+            self.assertTrue(all(r["finite"] for r in reports[workers]["samples"]))
+        self.assertEqual(reports[0]["frames"], reports[2]["frames"])
+        self.assertEqual({"Read", "Roto"} <= set(reports[2]["kernel_ms_by_node_kind"]), True)
 
 
 if __name__ == "__main__":
