@@ -289,7 +289,11 @@
    "inputs": [
     {"nodebased": "image", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
-   "knobs": []
+   "knobs": [
+    {"nodebased": ["frame_range"], "nuke": ["frame_range"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": [], "nuke": ["open_profile_panel"], "kind": "panel", "reason": "the Open profile panel button of the Profile panel (window.open_profile_panel): the profile table in a window of its own"}
+   ]
   },
   "Roto": {
    "nodebased": "Roto",
@@ -2825,7 +2829,22 @@
     {"nodebased": ["from4_x", "from4_y"], "nuke": ["from4"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
     {"nodebased": ["direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert checkbox"},
     {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["enable1"], "nuke": ["enable1"], "kind": "same"},
+    {"nodebased": ["enable2"], "nuke": ["enable2"], "kind": "same"},
+    {"nodebased": ["enable3"], "nuke": ["enable3"], "kind": "same"},
+    {"nodebased": ["enable4"], "nuke": ["enable4"], "kind": "same"},
+    {"nodebased": ["extra_matrix_00", "extra_matrix_01", "extra_matrix_02", "extra_matrix_10", "extra_matrix_11", "extra_matrix_12", "extra_matrix_20", "extra_matrix_21", "extra_matrix_22"], "nuke": ["transform_matrix"], "kind": "components", "reason": "NodeBased stores the extra matrix as nine params, a 3 x 3 projective matrix; Nuke's knob is 4 x 4 and a 2D warp reads its x, y and w rows and columns"},
+    {"nodebased": ["clamp"], "nuke": ["clamp"], "kind": "same"},
+    {"nodebased": ["black_outside"], "nuke": ["black_outside"], "kind": "same"},
+    {"nodebased": ["motionblur"], "nuke": ["motionblur"], "kind": "same"},
+    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
+    {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
+    {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: how many sub-frames the shutter blur averages (Nuke's motionblur knob is that count itself)"},
+    {"nodebased": [], "nuke": ["copy_from_to"], "kind": "panel", "reason": "the Copy 'from' button of the CornerPin panel (window.cornerpin_button, nodebased/cornerpinknobs.py): the From points into the To points"},
+    {"nodebased": [], "nuke": ["set_to_input"], "kind": "panel", "reason": "the Set to input button of the CornerPin panel: the From points on the corners of the input's format"},
+    {"nodebased": [], "nuke": ["copy_from_to#2"], "kind": "panel", "reason": "the Copy 'to' button of the CornerPin panel: the To points into the From points"}
    ],
    "skip_default": ["to1", "to2", "to3", "to4", "from1", "from2", "from3", "from4"],
    "value_map": {"invert": {"forward": false, "inverse": true}}

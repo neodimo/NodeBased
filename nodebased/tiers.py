@@ -412,8 +412,9 @@ def _cornerpin_rule(params, region, arity):
     """
     if region.is_empty:
         return [region] + [region] * (arity - 1)
-    from_pts = [(params[f"from{i}_x"], params[f"from{i}_y"]) for i in (1, 2, 3, 4)]
-    to_pts = [(params[f"to{i}_x"], params[f"to{i}_y"]) for i in (1, 2, 3, 4)]
+    from . import cornerpinknobs
+    from_pts = cornerpinknobs.points(params, "from")
+    to_pts = cornerpinknobs.effective_to_points(params)
     a = [[0.0] * 8 for _ in range(8)]
     b = [0.0] * 8
     for i, ((x, y), (u, v)) in enumerate(zip(from_pts, to_pts)):
@@ -422,7 +423,7 @@ def _cornerpin_rule(params, region, arity):
         a[2 * i + 1] = [0, 0, 0, x, y, 1, -x * v, -y * v]
         b[2 * i + 1] = v
     h = _solve_linear_8(a, b)
-    forward = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1.0]]
+    forward = cornerpinknobs.after_extra([[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1.0]], params)
     if params.get("direction", "forward") != "forward":
         forward = _invert_3x3(forward)
     inverse = _invert_3x3(forward)
@@ -798,6 +799,11 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
         # uv offsets and vector lengths are read from image data in full-resolution pixels; at a
         # proxy tier the image is smaller, so the factors that turn that data into pixels shrink.
         params = {**params, **{name: params[name] / tier for name in divided if name in params}}
+    if kind == "CornerPin" and "extra_matrix_02" in params:
+        # The extra matrix works in canvas pixels: a position entry shrinks with the canvas, a perspective entry grows.
+        from . import cornerpinknobs
+        params = {**params, **{name: params[name] / tier for name in cornerpinknobs.POSITION_ENTRIES},
+                  **{name: params[name] * tier for name in cornerpinknobs.PERSPECTIVE_ENTRIES}}
     if not names:
         return params
     scaled = dict(params)

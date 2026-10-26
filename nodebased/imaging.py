@@ -1117,10 +1117,10 @@ class Evaluator:
 
     _PROFILE_LOG_LIMIT = 500
 
-    def _record_profile(self, node_id, frame, wall_time_ms, cache_hits):
+    def _record_profile(self, node_id, frame, wall_time_ms, cache_hits, channels="rgba"):
         """Append one Profile row, keeping at most `_PROFILE_LOG_LIMIT` per node (oldest dropped)."""
         rows = self.profile_log.setdefault(node_id, [])
-        rows.append({"frame": frame, "wall_time_ms": wall_time_ms, "cache_hits": cache_hits})
+        rows.append({"frame": frame, "wall_time_ms": wall_time_ms, "cache_hits": cache_hits, "channels": channels})
         del rows[:-self._PROFILE_LOG_LIMIT]
 
     @property
@@ -1533,7 +1533,7 @@ class Evaluator:
                 values[key] = self.evaluate_raster(doc, image_input, cancel=cancel, frame=frame,
                                                    tier=tier, cache_fractional=cache_fractional)
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
-                self._record_profile(key, frame, elapsed_ms, self.hits - hits_before)
+                self._record_profile(key, frame, elapsed_ms, self.hits - hits_before, node["params"].get("channels", "rgba"))
                 continue
             active_inputs = node["inputs"]
             if node["disabled"]:
@@ -2610,7 +2610,7 @@ class Evaluator:
             contactsheet_sequence = None
             timewarp_weights = None
             temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D", "TimeWarp")
-            transform_blur = kind == "Transform" and bool(params.get("motionblur", 0))
+            transform_blur = kind in ("Transform", "CornerPin") and bool(params.get("motionblur", 0))
             if (kind in temporal_kinds or transform_blur) and not node["disabled"]:
                 source_key = node["inputs"]["image"]
                 if kind == "TimeWarp":
@@ -4896,11 +4896,11 @@ class Evaluator:
         destination) is what keeps the two from drifting apart the way `_transform` and
         `_transformed_window` are kept in sync by hand -- see that pair's own docstring.
         """
-        homography = Evaluator._solve_homography(
-            [(p["from1_x"], p["from1_y"]), (p["from2_x"], p["from2_y"]),
-             (p["from3_x"], p["from3_y"]), (p["from4_x"], p["from4_y"])],
-            [(p["to1_x"], p["to1_y"]), (p["to2_x"], p["to2_y"]),
-             (p["to3_x"], p["to3_y"]), (p["to4_x"], p["to4_y"])])
+        from . import cornerpinknobs
+        homography = Evaluator._solve_homography(cornerpinknobs.points(p, "from"), cornerpinknobs.effective_to_points(p))
+        if cornerpinknobs.has_extra(p):
+            # Nuke's extra matrix follows the pin itself.
+            homography = np.array(cornerpinknobs.extra_matrix(p), dtype=np.float64) @ homography
         return homography if p["direction"] == "forward" else np.linalg.inv(homography)
 
     @staticmethod
@@ -8272,7 +8272,13 @@ class Evaluator:
         sy = (inverse[1, 0] * gx + inverse[1, 1] * gy + inverse[1, 2]) / denom
         sx_frac = (sx - 0.5 - src_box.x).astype(np.float32)
         sy_frac = (sy - 0.5 - src_box.y).astype(np.float32)
-        return Evaluator._resample(src, sx_frac, sy_frac, p["filter"]).astype(np.float32)
+        # Nuke's `black outside` off carries the picture's outermost pixels over the area the warp does not cover.
+        result = Evaluator._resample(src, sx_frac, sy_frac, p["filter"],
+                                     clamp=not int(p.get("black_outside", 1))).astype(np.float32)
+        if int(p.get("clamp", 0)) and src.size:
+            # Nuke's `clamp`: a filter with negative lobes cannot overshoot the range of the input.
+            result = np.clip(result, src.min(axis=(0, 1)), src.max(axis=(0, 1)))
+        return result
 
     @staticmethod
     def _transform(src, translate_x, translate_y, rotate, scale, center_x, center_y, filter,

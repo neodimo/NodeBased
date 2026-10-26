@@ -227,6 +227,13 @@ def step_f_params(kind):
     return out
 
 
+def step_g_params(kind):
+    """The knobs fidelity step G added (CornerPin's enables, extra matrix and blur; the Tracker's; Profile's), at the values that
+    leave an older document's node as it was."""
+    from . import cornerpinknobs, profilenode
+    return {**cornerpinknobs.upgrade_params(kind), **profilenode.upgrade_params(kind)}
+
+
 def upgrade_nodes(nodes):
     """Give an older document's nodes the chrome knobs at their no-change defaults. Walks Group graphs."""
     for node in nodes.values():
@@ -234,7 +241,7 @@ def upgrade_nodes(nodes):
             continue
         params = node.get("params")
         added = spec_params(node.get("type"))
-        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type")), **step_f_params(node.get("type"))}
+        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type")), **step_f_params(node.get("type")), **step_g_params(node.get("type"))}
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

@@ -173,6 +173,8 @@ from . import textknobs as _textknobs
 from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
 from . import timeknobs as _timeknobs
+from . import cornerpinknobs as _cornerpinknobs
+from . import profilenode as _profilenode
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -456,7 +458,8 @@ SPECS = {
                             "from3_x": 0.0, "from3_y": 540.0, "from4_x": 960.0, "from4_y": 540.0,
                             "to1_x": 0.0, "to1_y": 0.0, "to2_x": 960.0, "to2_y": 0.0,
                             "to3_x": 0.0, "to3_y": 540.0, "to4_x": 960.0, "to4_y": 540.0,
-                            "direction": "forward", "filter": "bilinear", "mix": 1.0}},
+                            "direction": "forward", "filter": "cubic", "mix": 1.0,
+                            **_cornerpinknobs.new_params("CornerPin")}},
     # Undistort / Redistort (Rendering 13 step L1): Nuke's LensDistortion round trip. The optional camera input
     # supplies the lens; unwired, `lens_preset` picks a named lens ("custom" reads the node's own knobs).
     # Undistort grows the data window to hold the straightened plate; Redistort returns to the format.
@@ -581,7 +584,7 @@ SPECS = {
     # Profile: Nuke's in-graph performance probe. A pass-through node (`bypass_slot`'s first-input
     # rule, same as NoOp) with no params of its own; its properties panel reads the per-evaluation
     # wall-time/cache-hit rows the evaluator keeps in `Evaluator.profile_log`, session-only.
-    "Profile": {"inputs": ["image"], "params": {}},
+    "Profile": {"inputs": ["image"], "params": {**_profilenode.new_params("Profile")}},
     # PostageStamp: Nuke's node that shows a live thumbnail of its input on the graph and passes the
     # image through untouched. `hide_input` hides the wire into it (the stamp keeps its connection;
     # only the noodle is not drawn), which is how Nuke uses it to keep a distant source in view.
@@ -2062,6 +2065,9 @@ for _kind in (*_chrome.FILTER_CHROME, *_chrome.DRAW_CHROME):
     for _name, _default in _chrome.spec_params(_kind).items():
         SPECS[_kind]["params"].setdefault(_name, _default)
 CHOICES["global_motionblur_shutter_offset_type"] = ["start", "centred", "end", "custom"]
+# CornerPin's Nuke knobs (fidelity step G, nodebased/cornerpinknobs.py).
+LIMITS.update({**{f"enable{i}": (0, 1) for i in _cornerpinknobs.CORNERS},
+               **{name: (-1000000.0, 1000000.0) for name in _cornerpinknobs.MATRIX_NAMES}})
 # TimeOffset and FrameHold's path mask (fidelity step F, nodebased/pathmask.py).
 LIMITS.update({"enable_path_mask": (0, 1), "inject_mask": (0, 1)})
 # Text's Nuke knobs (fidelity step F, nodebased/textknobs.py).

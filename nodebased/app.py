@@ -12318,6 +12318,17 @@ class Window(QMainWindow):
                 set_current.clicked.connect(lambda _checked=False, k=key: self.commit_param(
                     k, "first_frame", float(self.graph_document()["time"]["current"])))
                 form.addRow(set_current)
+            if node["type"] == "CornerPin":
+                # Nuke's three buttons: Copy 'from' (the From points into the To points), Copy 'to' (the reverse) and Set to input
+                # (the From points on the corners of the input's format).
+                for name, text, tip in (("cornerpin-copy-from", "Copy 'from'", "Set every To point to its From point"),
+                                        ("cornerpin-copy-to", "Copy 'to'", "Set every From point to its To point"),
+                                        ("cornerpin-set-to-input", "Set to input", "Put the From points on the corners of the input's format")):
+                    button = QPushButton(text)
+                    button.setObjectName(name)
+                    button.setToolTip(tip)
+                    button.clicked.connect(lambda _checked=False, k=key, n=name: self.cornerpin_button(k, n))
+                    form.addRow(button)
             if node["type"] in ("Histogram", "Sampler", "MinColor", "MatchGrade"):
                 readout = QLabel("Analyze the configured frame range")
                 readout.setWordWrap(True)
@@ -13637,7 +13648,7 @@ class Window(QMainWindow):
         document, so it lives on the evaluator instance rather than in `node["params"]`.
         """
         from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
-        columns = ("Frame", "Wall time (ms)", "Cache hits")
+        columns = ("Frame", "Wall time (ms)", "Cache hits", "Channels")
         rows = list(self.evaluator.profile_log.get(key, []))
         table = QTableWidget(len(rows), len(columns))
         table.setObjectName("profile-table")
@@ -13646,7 +13657,7 @@ class Window(QMainWindow):
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setMinimumHeight(140)
         for row, entry in enumerate(rows):
-            values = (entry["frame"], f"{entry['wall_time_ms']:.2f}", entry["cache_hits"])
+            values = (entry["frame"], f"{entry['wall_time_ms']:.2f}", entry["cache_hits"], entry.get("channels", "rgba"))
             for column, value in enumerate(values):
                 table.setItem(row, column, QTableWidgetItem(str(value)))
         form.addRow(table)
@@ -13665,10 +13676,68 @@ class Window(QMainWindow):
                 writer = csv.writer(handle)
                 writer.writerow(columns)
                 for entry in self.evaluator.profile_log.get(k, []):
-                    writer.writerow([entry["frame"], f"{entry['wall_time_ms']:.2f}", entry["cache_hits"]])
+                    writer.writerow([entry["frame"], f"{entry['wall_time_ms']:.2f}", entry["cache_hits"], entry.get("channels", "rgba")])
 
         export.clicked.connect(do_export)
         form.addRow(export)
+        # Nuke's profile panel: Profile frame range runs the node over its frame range; Open profile panel shows the table in a window.
+        run = QPushButton("Profile frame range")
+        run.setObjectName("profile-run")
+        run.setToolTip("Evaluate this Profile at every frame of its frame range (the project's range when it is empty)")
+        run.clicked.connect(lambda _checked=False, k=key: self.profile_frame_range(k))
+        form.addRow(run)
+        opener = QPushButton("Open profile panel")
+        opener.setObjectName("profile-open-panel")
+        opener.setToolTip("Show the profile table in a window of its own")
+        opener.clicked.connect(lambda _checked=False, k=key: self.open_profile_panel(k))
+        form.addRow(opener)
+
+    def profile_frame_range(self, key):
+        """Profile's range run: evaluate the node at every frame of its frame range, recording one row per frame. Returns the frames."""
+        from . import profilenode
+        document = self.dispatcher.document
+        node = document["nodes"][key]
+        try:
+            frames = profilenode.frames_to_profile(node["params"], document["time"])
+        except ValueError as error:
+            self._show_command_error(error)
+            return []
+        if node["inputs"].get("image") is None:
+            self.statusBar().showMessage("Connect an image to profile", 6000)
+            return []
+        self.statusBar().showMessage(f"Profiling {len(frames)} frame{'s' if len(frames) != 1 else ''}…")
+        for index, frame in enumerate(frames, 1):
+            self.evaluator.evaluate_raster(document, target=key, frame=frame)
+            if index % 4 == 0:
+                QApplication.processEvents()
+        self.statusBar().showMessage(f"Profiled {len(frames)} frame{'s' if len(frames) != 1 else ''}", 6000)
+        self.inspect(key)
+        dialog = getattr(self, "_profile_dialog", None)
+        try:
+            showing = dialog is not None and dialog.isVisible()
+        except RuntimeError:          # the window was closed and deleted
+            showing = False
+        if showing:
+            self.open_profile_panel(key)
+        return frames
+
+    def open_profile_panel(self, key):
+        """Nuke's `open profile panel`: the Profile node's table in a window of its own. Returns the window."""
+        dialog = getattr(self, "_profile_dialog", None)
+        if dialog is not None:
+            dialog.close()
+        dialog = QDialog(self)
+        dialog.setObjectName("profile-panel")
+        dialog.setWindowTitle(f"Profile: {self.dispatcher.document['nodes'][key]['name']}")
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        layout.addLayout(form)
+        self.add_profile_view(form, key)
+        dialog.resize(520, 420)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dialog.show()
+        self._profile_dialog = dialog
+        return dialog
 
     def begin_zdefocus_pick(self, key):
         node = self.dispatcher.document["nodes"].get(key)
@@ -16324,6 +16393,25 @@ class Window(QMainWindow):
             # PNG bytes into a file called .exr.
             path = str(Path(path).with_suffix("." + chosen))
         return path, chosen, params["bit_depth"]
+
+    def cornerpin_button(self, key, which):
+        """CornerPin's Copy 'from', Copy 'to' and Set to input: set the eight points in one undoable step."""
+        from . import cornerpinknobs
+        node = self.graph_nodes()[key]
+        params = node["params"]
+        if which == "cornerpin-copy-from":
+            updates = cornerpinknobs.copy_from_into_to(params)
+        elif which == "cornerpin-copy-to":
+            updates = cornerpinknobs.copy_to_into_from(params)
+        else:
+            source = node.get("inputs", {}).get("image")
+            if source is None:
+                self.statusBar().showMessage("Connect an image to set the From points to its corners", 6000)
+                return
+            document = self.graph_document()
+            display = self.evaluator.evaluate_raster(document, target=source, frame=int(document["time"]["current"])).display
+            updates = cornerpinknobs.from_input_corners(display.x, display.y, display.width, display.height)
+        self.command({"op": "batch", "commands": cornerpinknobs.button_commands(key, updates)})
 
     def reload_node(self, key):
         """Nuke's reload for Read and Write: count one more reload on the node, which is part of what its result is keyed by."""
