@@ -120,7 +120,9 @@ class PoolTests(unittest.TestCase):
         self.assertEqual(sourcepool.default_workers(3), 0)
         self.assertEqual(sourcepool.default_workers(2), 0)
         self.assertEqual(sourcepool.default_workers(4), sourcepool.FOUR_CPU_WORKERS)
-        self.assertLessEqual(sourcepool.FOUR_CPU_WORKERS, 2)
+        self.assertEqual(sourcepool.FOUR_CPU_WORKERS, 1)
+        self.assertEqual(sourcepool.default_workers(5), 2)
+        self.assertEqual(sourcepool.default_workers(32), sourcepool.MAX_WORKERS)
 
     def test_ahead_work_waits_behind_the_frame_in_hand_and_runs_one_stream(self):
         pool = SourcePool(max_workers=3, budget_bytes=1 << 40)
@@ -430,6 +432,118 @@ class ReadAheadTests(unittest.TestCase):
             self.assertTrue(np.array_equal(a.pixels, b.pixels), frame)
         self.settle()
         self.assertEqual(self.ahead._ahead_inflight, {})
+
+
+class CriticalPathTests(unittest.TestCase):
+    """The read-ahead runs for a Roto the walk waits for, and not where the chain beside it is the long part of the frame."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._directory = tempfile.TemporaryDirectory()
+        make_plates(cls._directory.name)
+        cls.doc = small_comp(cls._directory.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._directory.cleanup()
+
+    def pooled(self):
+        evaluator = Evaluator()
+        pool = SourcePool(max_workers=3, budget_bytes=1 << 40)
+        evaluator.source_pool = pool
+        self.addCleanup(pool.shutdown, True, 2)
+        return evaluator, pool
+
+    def slow_matte(self, evaluator, seconds):
+        real = evaluator._roto_matte
+
+        def matte(params, data):
+            time.sleep(seconds)
+            return real(params, data)
+        evaluator._roto_matte = matte
+
+    def slow_blur(self, seconds):
+        real = Evaluator._windowed_kernel_inner
+
+        def inner(kind, *args, **kwargs):
+            if kind == "Blur":
+                time.sleep(seconds)
+            return real(kind, *args, **kwargs)
+        return mock.patch.object(Evaluator, "_windowed_kernel_inner", staticmethod(inner))
+
+    def test_an_unmeasured_roto_counts_as_critical(self):
+        evaluator, pool = self.pooled()
+        self.assertTrue(evaluator.roto_is_critical("roto"))
+
+    def test_a_matte_the_walk_waits_for_is_critical(self):
+        evaluator, pool = self.pooled()
+        self.slow_matte(evaluator, 0.15)
+        for frame in (1, 2, 3):
+            evaluator.evaluate_raster(self.doc, "colorcorrect", frame=frame)
+        self.assertGreater(evaluator._roto_wait["roto"], Evaluator.ROTO_CRITICAL_MS)
+        self.assertTrue(evaluator.roto_is_critical("roto"))
+        scheduler = RotoAhead(evaluator, pool, frames=2, byte_cap=1 << 40)
+        self.assertEqual(scheduler.schedule(self.doc, "colorcorrect", [4, 5], 1), 2)
+        scheduler.cancel()
+
+    def test_a_matte_beside_a_longer_chain_is_found_ready_and_is_not_read_ahead(self):
+        evaluator, pool = self.pooled()
+        self.slow_matte(evaluator, 0.03)
+        with self.slow_blur(0.25):
+            for frame in (1, 2, 3):
+                evaluator.evaluate_raster(self.doc, "colorcorrect", frame=frame)
+        self.assertLess(evaluator._roto_wait["roto"], Evaluator.ROTO_CRITICAL_MS)
+        self.assertFalse(evaluator.roto_is_critical("roto"))
+        scheduler = RotoAhead(evaluator, pool, frames=2, byte_cap=1 << 40)
+        self.assertEqual(scheduler.schedule(self.doc, "colorcorrect", [4, 5], 1), 0)
+
+    def test_a_matte_found_in_the_cache_does_not_change_the_measurement(self):
+        evaluator, pool = self.pooled()
+        evaluator._note_source_join("Roto", "roto", 30.0, 25.0)
+        before = evaluator._roto_wait["roto"]
+        evaluator._note_source_join("Roto", "roto", 0.4, 0.0)           # a cache hit: nothing was computed
+        evaluator._note_source_join("Read", "plate", 60.0, 0.0)          # another kind of source
+        self.assertEqual(evaluator._roto_wait["roto"], before)
+        evaluator._note_source_join("Roto", "roto", 30.0, 1.0)           # computed and found ready: the average falls
+        self.assertLess(evaluator._roto_wait["roto"], before)
+
+
+class IslandReadAheadTests(unittest.TestCase):
+    """The island runs on the card on the preview thread while the pool draws the next Roto: same pixels as without it."""
+
+    @classmethod
+    def setUpClass(cls):
+        from nodebased import gpu2d
+        cls.backend = gpu2d.GPU2D.open("default")
+        cls._directory = tempfile.TemporaryDirectory()
+        make_plates(cls._directory.name)
+        cls.doc = small_comp(cls._directory.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.backend is not None:
+            cls.backend.release_all()
+        cls._directory.cleanup()
+
+    def test_the_island_frames_are_identical_with_and_without_the_read_ahead(self):
+        if self.backend is None:
+            self.skipTest("no wgpu adapter")
+        serial, ahead = Evaluator(), Evaluator()
+        serial.gpu2d = ahead.gpu2d = self.backend
+        pool = SourcePool(max_workers=2, budget_bytes=1 << 40)
+        ahead.source_pool = pool
+        scheduler = RotoAhead(ahead, pool, frames=2, byte_cap=1 << 40)
+        try:
+            for frame in range(1, FRAMES):
+                scheduler.schedule(self.doc, "colorcorrect", [frame + 1, frame + 2], 1)
+                a = ahead.evaluate_raster(self.doc, "colorcorrect", frame=frame)
+                b = serial.evaluate_raster(self.doc, "colorcorrect", frame=frame)
+                self.assertTrue(np.array_equal(a.pixels, b.pixels), frame)
+            self.assertTrue(wait_for(lambda: all(t._done.is_set() for t in list(scheduler._tasks.values()))))
+            self.assertGreater(ahead.hits, 0)
+        finally:
+            scheduler.cancel()
+            pool.shutdown(wait=True, timeout=2)
 
 
 class WindowTests(unittest.TestCase):

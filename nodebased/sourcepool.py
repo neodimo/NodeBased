@@ -39,8 +39,9 @@ DEFAULT_SOURCE_BYTES = 64 << 20
 
 DEFAULT_BUDGET_FRACTION = 0.1
 
-# Workers at exactly four CPUs (the laptop stand-in); step B of the source-pool lane measured one and two.
-FOUR_CPU_WORKERS = 0
+# Workers at exactly four CPUs (the laptop stand-in). Measured 10/26 on the stand-in, one and two workers with the Roto
+# read-ahead: the CPU nodes play at 5.9 fps with one and 5.7 with two (4.8 with none), the Radeon island at 9.0 and 9.4 (7.1).
+FOUR_CPU_WORKERS = 1
 
 
 def available_cpus() -> int:

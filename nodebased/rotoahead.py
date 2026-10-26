@@ -19,6 +19,8 @@ What keeps it safe:
 * Only a Roto with no input is read ahead (a wired one would decode its plate on the worker), and none in a
   graph that remaps time: there the next frame's matte is not the next frame's.
 * A Roto whose shapes do not animate has one matte for every frame: it is read ahead once per document state.
+* It only runs for a Roto the walk waits for (`Evaluator.roto_is_critical`): where the chain beside the Roto is the long
+  part of the frame (the CPU kernels) the matte is ready anyway, and drawing it early costs the chain memory bandwidth.
 """
 from __future__ import annotations
 
@@ -132,6 +134,7 @@ class RotoAhead:
         if not self.active or not frames or target is None:
             return 0
         flat, flat_target, keys = read_ahead_sources(doc, target)
+        keys = [key for key in keys if self.evaluator.roto_is_critical(key)]
         if not keys:
             return 0
         tier = int(tier)

@@ -36,7 +36,11 @@ M2 additions:
   fabricated track history).
 
     python tools/benchmark_4k_viewport.py [--json out.json] [--edits 40]
-        [--edit-samples 10] [--label "CI runner"]
+        [--edit-samples 10] [--label "CI runner"] [--source-workers N]
+
+`--source-workers N` (default 0, the evaluator as before) gives every evaluator the source pool of the desktop app with N
+workers (nodebased/sourcepool.py), so the edit latencies can be compared with and without it; the laptop stand-in is
+`taskset -c 0-3 python tools/benchmark_4k_viewport.py --source-workers 2 ...`.
 
 `--label` is stamped into the output table and JSON so a machine that produced the numbers
 (a shared CI runner, not a fixed workstation) is never confused for one.
@@ -65,6 +69,18 @@ WIDTH, HEIGHT = 3840, 2160
 VIEWPORT_WIDTH, VIEWPORT_HEIGHT = 1920, 1080
 RESOLUTIONS = (("1080p", 1920, 1080), ("4K", 3840, 2160))
 EDIT_KINDS = ("Grade", "Transform", "Merge", "Blur", "Roto shape drag", "Tracker frame step")
+
+
+SOURCE_WORKERS = 0
+
+
+def make_evaluator():
+    """An `Evaluator`, with the app's source pool installed when `--source-workers` asks for one."""
+    evaluator = Evaluator()
+    if SOURCE_WORKERS > 0:
+        from nodebased.sourcepool import SourcePool
+        evaluator.source_pool = SourcePool(max_workers=SOURCE_WORKERS)
+    return evaluator
 
 
 def peak_memory_mb():
@@ -129,7 +145,7 @@ def percentile_ms(samples, pct):
 def measure_full_frame(edits):
     d, target = build_document()
 
-    ev = Evaluator()
+    ev = make_evaluator()
     t0 = time.perf_counter()
     ev.evaluate_raster(d.document, target, tier=1, typed=True)
     cold = time.perf_counter() - t0
@@ -207,7 +223,7 @@ def measure_time_to_first_pixel(width, height, tmpdir):
     d.execute({"op": "create", "type": "Viewer", "id": "viewer", "params": {}})
     d.execute({"op": "connect", "id": "viewer", "input": "image", "source": "read"})
 
-    ev = Evaluator()
+    ev = make_evaluator()
     t0 = time.perf_counter()
     ev.evaluate_raster(d.document, "viewer", tier=1, typed=True)
     return (time.perf_counter() - t0) * 1000.0
@@ -300,7 +316,7 @@ def _edit_kind_graph(kind, width, height):
 
 def measure_edit_kind(kind, width, height, samples):
     d, target, edit = _edit_kind_graph(kind, width, height)
-    ev = Evaluator()
+    ev = make_evaluator()
     times = []
     for i in range(samples):
         edit(i)
@@ -319,10 +335,14 @@ def main():
     parser.add_argument("--skip-m2", action="store_true",
                         help="run only the M1 method (startup and TTFP measurements need a real "
                              "subprocess and a temp EXR, which a constrained CI step may want to skip)")
+    parser.add_argument("--source-workers", type=int, default=0,
+                        help="workers of the source pool every evaluator gets (0 = none, the evaluator as before)")
     parser.add_argument("--json", type=Path, default=None, help="write the results as JSON to this path")
     parser.add_argument("--label", default=platform.node() or "unknown",
                         help="identifies the machine that produced this run (e.g. a CI runner name)")
     args = parser.parse_args()
+    global SOURCE_WORKERS
+    SOURCE_WORKERS = max(0, args.source_workers)
 
     full = measure_full_frame(args.edits)
     tiled = measure_tiled_viewport(args.edits)
@@ -335,6 +355,8 @@ def main():
         "python": platform.python_version(),
         "numpy": np.__version__,
         "edits_sampled": args.edits,
+        "source_workers": SOURCE_WORKERS,
+        "cpus": len(__import__("os").sched_getaffinity(0)) if hasattr(__import__("os"), "sched_getaffinity") else None,
         "peak_memory_mb": peak_mb,
         "full_frame_3840x2160": full,
         "tiled_viewport_1920x1080": tiled,

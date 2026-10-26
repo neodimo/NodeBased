@@ -34,12 +34,14 @@ Examples (``$NB_RUN`` is the disk scratch directory; sources from `tools/benchma
 from __future__ import annotations
 
 import argparse
+import copy
 import gzip
 import importlib.util
 import json
 import os
 import pathlib
 import platform
+import random
 import statistics
 import subprocess
 import sys
@@ -464,6 +466,77 @@ def cmd_graph(args):
 
 
 # ---------------------------------------------------------------------------------------------------------
+# interaction
+
+def cmd_interaction(args):
+    """Interaction latency of the realistic comp through `Evaluator` (CPU nodes, no window): a Grade knob drag with the
+    sources cached, a scrub to frames nobody has computed, and a Roto point drag. `--source-workers N` installs the source pool."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ["NODEBASED_DISK_CACHE"] = "0"
+    sys.path.insert(0, str(ROOT))
+    ck = load_module("check_gpu2d_fixture", TOOLS / "check_gpu2d_fixture.py")
+    from nodebased.imaging import Evaluator
+    width, height = parse_size(args.size)
+    inputs = pathlib.Path(args.inputs).resolve()
+    base = ck.fixture_document(inputs / "plate.%04d.exr", inputs / "background.%04d.exr", width, height)
+
+    def fresh():
+        evaluator = Evaluator()
+        if args.source_workers:
+            from nodebased.sourcepool import SourcePool
+            evaluator.source_pool = SourcePool(max_workers=args.source_workers)
+        return evaluator
+
+    def timed(evaluator, doc, frame):
+        t = time.perf_counter()
+        out = evaluator.evaluate_raster(doc, "colorcorrect", frame=frame)
+        return (time.perf_counter() - t) * 1000, bool(np.isfinite(out.pixels).all())
+
+    results = {}
+    # knob drag: every sample is a new Grade multiply at one frame (the exposure is animated in the fixture), so the Grade chain recomputes and the sources are cache hits
+    evaluator = fresh()
+    doc = copy.deepcopy(base)
+    timed(evaluator, doc, 5)
+    rows = []
+    for i in range(args.samples):
+        doc["nodes"]["grade"]["params"]["multiply"] = 1.0 + 0.002 * (i + 1)
+        rows.append(timed(evaluator, doc, 5))
+    results["knob drag (Grade multiply, sources cached)"] = rows
+    # Roto point drag: a new point position per sample, the Reads cached
+    evaluator = fresh()
+    doc = copy.deepcopy(base)
+    timed(evaluator, doc, 5)
+    rows = []
+    point = doc["node_data"]["roto"]["shapes"][0]["points"][0]
+    start_y = float(point["y"]["value"] if isinstance(point["y"], dict) else point["y"])
+    for i in range(args.samples):
+        point["y"] = start_y + 0.5 * (i + 1)
+        rows.append(timed(evaluator, doc, 5))
+    results["Roto point drag (Reads cached)"] = rows
+    # scrub: a frame order that never repeats, so every sample decodes two Reads and draws a matte
+    rng = random.Random(7)
+    order = list(range(1, 49))
+    rng.shuffle(order)
+    evaluator = fresh()
+    timed(evaluator, base, order[0])           # one frame to warm the process, then nothing is cached
+    evaluator.clear()
+    rows = []
+    for frame in order[1:1 + args.samples]:
+        rows.append(timed(evaluator, base, frame))
+    results["scrub (new frame, nothing cached)"] = rows
+    report = {"tool": "tools/benchmark_gpu2d.py interaction", "label": args.label, "source_workers": args.source_workers,
+              "size": [width, height], "samples": args.samples, "environment": environment(args, None),
+              "note": "Evaluator to ColorCorrect on the CPU kernels, no window; the knob and point drags are cache misses by construction "
+                      "(a new value for every sample), the scrub draws frames in a fixed shuffled order",
+              "interactions": {name: {"ms": stats([r[0] for r in rows]), "finite": all(r[1] for r in rows),
+                                      "samples": [round(r[0], 3) for r in rows]} for name, rows in results.items()}}
+    pathlib.Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    pathlib.Path(args.output).write_text(json.dumps(report, indent=1) + "\n")
+    print(json.dumps({name: {"p50": v["ms"]["p50"], "p95": v["ms"]["p95"]} for name, v in report["interactions"].items()}, indent=1))
+    return 0
+
+
+# ---------------------------------------------------------------------------------------------------------
 # playback
 
 def join_islands(timeline, limit=None):
@@ -724,6 +797,11 @@ def main():
     g.add_argument("--backend", choices=("cpu", "gpu2d"), default="gpu2d")
     g.add_argument("--source-workers", type=int, default=0, help="worker threads for the independent sources of a frame (0 = serial, the step C method)")
     g.set_defaults(fn=cmd_graph)
+    it = sub.add_parser("interaction", help="knob drag, Roto point drag and scrub latency of the realistic comp through the evaluator")
+    common(it)
+    it.add_argument("--samples", type=int, default=24)
+    it.add_argument("--source-workers", type=int, default=0, help="workers of the source pool (0 = none)")
+    it.set_defaults(fn=cmd_interaction)
     pb = sub.add_parser("playback", help="N fresh passes of the real-window playback benchmark, summarized")
     pb.add_argument("--inputs", required=True, type=pathlib.Path)
     pb.add_argument("--display", required=True, help="private X display, e.g. :99")

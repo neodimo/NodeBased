@@ -8772,7 +8772,7 @@ class Window(QMainWindow):
         self.evaluator.decode_pool = self.decode_pool
         # The independent sources of one frame (Reads, Roto, generators) compute side by side on a few
         # workers, joined where the walk reaches each node -- sourcepool.py. Off at three CPUs or fewer
-        # and with NODEBASED_SOURCE_WORKERS=0; two workers at four CPUs (measured, docs/PERFORMANCE.md).
+        # and with NODEBASED_SOURCE_WORKERS=0; one worker at four CPUs (measured, docs/PERFORMANCE.md).
         self.source_pool = SourcePool()
         self.evaluator.source_pool = self.source_pool
         # While a played frame is finished and shown, the pool computes the Roto matte of the next frames
@@ -14937,8 +14937,11 @@ class Window(QMainWindow):
                             if not self._selected_tier_is_cached(snapshot, target, future, tier)]
             if decode_ahead:
                 self.tile_executor.prefetch_reads(snapshot, target, decode_ahead)
-        if target and self.playing and self.roto_ahead.active and self._viewport_is_whole_frame(viewport):
-            # The frame in hand is being evaluated and shown: its successors' Roto mattes compute on the source pool.
+        if (target and self.playing and playhead_only and self.roto_ahead.active
+                and self._viewport_is_whole_frame(viewport)):
+            # A transport advance: the frame in hand is being evaluated and shown, and its successors' Roto mattes
+            # compute on the source pool. The request that starts playback or follows an edit does not: its frame
+            # is cold, and the lead would compete with it for the first picture.
             self.roto_ahead.schedule(snapshot, target, self.future_frames(frame, count=self.roto_ahead.frames), tier)
         # The normal 35 ms coalescing window is useful for paused property edits. A live drag
         # already has its own gesture cadence and needs the first coarse picture promptly.

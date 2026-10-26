@@ -807,6 +807,9 @@ class _SourceScope:
 
     def __init__(self):
         self.tasks = {}
+        self.kinds = {}
+        self.durations = {}
+        self.observer = None
         self.values = _SourceResults(self)
         self.hashes = _SourceResults(self)
         self.positions = {}
@@ -820,7 +823,10 @@ class _SourceScope:
     def resolve(self, key):
         """Join the task of source `key` (running it here when no worker started it) and publish its
         raster and digest; its error is raised here, at the node that needed it."""
+        begin = time.perf_counter()
         raster, digest = self.tasks[key].result()
+        if self.observer is not None:
+            self.observer(self.kinds.get(key), key, self.durations.get(key, 0.0), (time.perf_counter() - begin) * 1000)
         dict.__setitem__(self.values, key, raster)
         dict.__setitem__(self.hashes, key, digest)
         self._joined.add(key)
@@ -899,6 +905,9 @@ class Evaluator:
         self.ahead_runs = 0
         self.ahead_cached = 0
         self.ahead_joins = 0
+        # How long the walk waited at the join of each Roto it had to compute (a moving average, milliseconds): the
+        # read-ahead only pays where the Roto is what the frame waits for.
+        self._roto_wait = {}
         self.cache = OrderedDict()
         self.bytes = 0
         # Roto coverage is independent of the connected plate's frame. Keep a separate bounded
@@ -1272,6 +1281,27 @@ class Evaluator:
                     del self._ahead_inflight[digest_key]
             done.set()
 
+    # A Roto the walk had to compute (it took at least this long) is on the frame's critical path when the walk then
+    # waited at least this long for it; the Roto read-ahead is only worth its processor time then.
+    ROTO_COMPUTED_MS = 5.0
+    ROTO_CRITICAL_MS = 4.0
+
+    def _note_source_join(self, kind, key, computed_ms, waited_ms):
+        """The walk joined a source: remember how long it waited for a Roto that had to be drawn."""
+        if kind != "Roto" or computed_ms < self.ROTO_COMPUTED_MS:
+            return
+        with self._lock:
+            old = self._roto_wait.get(key)
+            self._roto_wait[key] = float(waited_ms) if old is None else 0.5 * old + 0.5 * float(waited_ms)
+
+    def roto_is_critical(self, key) -> bool:
+        """False once the walk has been seen to find this Roto's matte ready (the chain beside it is the long one), True
+        when it waits for it or has not been measured yet. A Roto read ahead is not computed by the walk, so its
+        entry keeps the value from when it was."""
+        with self._lock:
+            wait = self._roto_wait.get(key)
+        return wait is None or wait >= self.ROTO_CRITICAL_MS
+
     def _ahead_gate(self, digest, cancel):
         """At a Roto's digest: a read-ahead worker announces the matte it is about to compute, a walk waits for one
         already running on the same digest. Nothing here waits for work that has not started."""
@@ -1314,11 +1344,16 @@ class Evaluator:
                    and key not in lut_roots]
         if len(sources) < 2:
             return
+        scope.observer = self._note_source_join
         for key in sources:
+            scope.kinds[key] = nodes[key]["type"]
+
             def evaluate_source(key=key):
+                begin = time.perf_counter()
                 raster, digest = self.evaluate_raster(
                     doc, key, cancel=cancel, frame=frame, tier=tier, typed=True, return_digest=True,
                     cache_fractional=cache_fractional)
+                scope.durations[key] = (time.perf_counter() - begin) * 1000
                 if isinstance(raster, Raster):
                     self._source_sizes[key] = int(raster.nbytes)
                 return raster, digest
