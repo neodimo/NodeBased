@@ -302,13 +302,65 @@ class EvaluatorTests(unittest.TestCase):
         nodes = doc["nodes"]
         order = ["plate", "roto", "background", "grade"]
         pooled._launch_sources(scope, doc, order, nodes, None, 1, 1, False)
-        self.assertEqual(sorted(scope.tasks), ["roto"])     # the first source ("plate") stays with the walk
+        self.assertEqual(sorted(scope.tasks), ["plate", "roto"])
         scope.close()
         scope = imaging._SourceScope()
         nodes["roto"]["inputs"]["bg"] = "plate"
         pooled._launch_sources(scope, doc, order, nodes, None, 1, 1, False)
         self.assertEqual(scope.tasks, {})
         scope.close()
+
+    def test_a_single_source_is_left_to_the_walk(self):
+        _, pooled = self.evaluators()
+        scope = imaging._SourceScope()
+        pooled._launch_sources(scope, self.doc, ["plate", "grade"], self.doc["nodes"], None, 1, 1, False)
+        self.assertEqual(scope.tasks, {})
+
+    def test_the_walk_goes_on_with_the_chain_while_a_slow_source_computes(self):
+        """The Roto has no consumer until the Merge, so the Grade, Transform and Blur run beside it."""
+        _, pooled = self.evaluators(workers=2)
+        events = []
+        lock = threading.Lock()
+        real_matte = pooled._roto_matte
+        real_inner = Evaluator._windowed_kernel_inner
+
+        def slow_matte(params, data):
+            with lock:
+                events.append("roto begin")
+            time.sleep(0.4)
+            try:
+                return real_matte(params, data)
+            finally:
+                with lock:
+                    events.append("roto end")
+
+        def inner(kind, *args, **kwargs):
+            if kind == "Blur":
+                with lock:
+                    events.append("blur")
+            return real_inner(kind, *args, **kwargs)
+        pooled._roto_matte = slow_matte
+        with mock.patch.object(Evaluator, "_windowed_kernel_inner", staticmethod(inner)):
+            pooled.evaluate_raster(self.doc, "colorcorrect", frame=2)
+        self.assertLess(events.index("blur"), events.index("roto end"))
+        self.assertEqual(events[0], "roto begin")
+
+    def test_the_earliest_failing_source_in_the_graph_is_the_one_reported(self):
+        for broken in (("plate", "background"), ("background",), ("plate",)):
+            doc = copy.deepcopy(self.doc)
+            for role in broken:
+                doc["nodes"][role]["params"]["path"] = str(Path(self._directory.name) / f"{role}.gone.%04d.exr")
+            doc["nodes"]["merge"]["inputs"]["A"] = None      # the Merge cannot pass either: connect error
+            serial, pooled = self.evaluators()
+            for target in ("colorcorrect", "merge", "blur"):
+                outcomes = []
+                for evaluator in (serial, pooled):
+                    try:
+                        evaluator.evaluate_raster(doc, target, frame=3)
+                        outcomes.append(None)
+                    except Exception as error:
+                        outcomes.append((type(error), str(error)))
+                self.assertEqual(outcomes[0], outcomes[1], (broken, target))
 
     def test_without_a_pool_nothing_is_launched(self):
         serial = Evaluator()

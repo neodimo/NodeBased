@@ -768,12 +768,73 @@ def _cubic_taps(fraction):
 
 LIGHT_MIXER_SLOTS = 8    # LightMixer: light groups with their own gain and colour knobs
 
+class _SourceResults(dict):
+    """The `values` or `hashes` of one walk. A source launched on the source pool has no entry until a
+    node asks for it: the first read joins the task, so the walk blocks only at the first node that
+    needs the source and everything before that overlaps with it (`_SourceScope.resolve`)."""
+
+    def __init__(self, scope):
+        super().__init__()
+        self._scope = scope
+
+    def __missing__(self, key):
+        if key in self._scope.tasks:
+            self._scope.resolve(key)
+            return dict.__getitem__(self, key)
+        raise KeyError(key)
+
+    def get(self, key, default=None):
+        if key in self._scope.tasks and not dict.__contains__(self, key):
+            return self[key]
+        return dict.get(self, key, default)
+
+
 class _SourceScope:
-    """The source tasks one `evaluate_raster` call launched; `close` runs when that call ends, by any
+    """The source tasks one `evaluate_raster` call launched. `close` runs when that call ends, by any
     route, so no source computation outlives the call that asked for it."""
 
     def __init__(self):
         self.tasks = {}
+        self.values = _SourceResults(self)
+        self.hashes = _SourceResults(self)
+        self.positions = {}
+        self.current = None
+        self._joined = set()
+
+    def start(self, order):
+        self.positions = {key: index for index, key in enumerate(order)}
+        return self.values, self.hashes
+
+    def resolve(self, key):
+        """Join the task of source `key` (running it here when no worker started it) and publish its
+        raster and digest; its error is raised here, at the node that needed it."""
+        raster, digest = self.tasks[key].result()
+        dict.__setitem__(self.values, key, raster)
+        dict.__setitem__(self.hashes, key, digest)
+        self._joined.add(key)
+
+    def resolve_all(self):
+        """Join what no node asked for, in graph order, so a failing source is never left unreported."""
+        for key in sorted(self.tasks, key=self.positions.get):
+            if key not in self._joined:
+                self.resolve(key)
+
+    def earlier_failure(self, error):
+        """The serial walk computes every source before the node that failed, so a source that fails
+        and sits earlier in the graph order than the node being walked is the error to report."""
+        if isinstance(error, Cancelled) or not self.tasks or self.current not in self.positions:
+            return None
+        limit = self.positions[self.current]
+        for key in sorted((k for k in self.tasks if self.positions[k] < limit), key=self.positions.get):
+            if key in self._joined:
+                continue
+            try:
+                self.tasks[key].result()
+            except Cancelled:
+                continue
+            except BaseException as caught:
+                return caught
+        return None
 
     def close(self):
         for task in self.tasks.values():
@@ -1170,12 +1231,12 @@ class Evaluator:
     _PARALLEL_SOURCE_KINDS = ("Read", "Roto", "Noise", "Ramp", "Radial", "Rectangle", "Grid", "Checker")
 
     def _launch_sources(self, scope, doc, order, nodes, cancel, frame, tier, cache_fractional):
-        """Start every independent source of this walk but the first on the source pool.
+        """Start the independent sources of this walk on the source pool (two or more of them).
 
         Each task is a nested `evaluate_raster` of that one node, so it takes the same cache keys, the
-        same disk tier, the same decimation and raises the same error as the walk would; the walk
-        joins it where it reaches the node (see `sourcepool.py`). The first source stays with the
-        walking thread, which has nothing else to do until it reaches it.
+        same disk tier, the same decimation and raises the same error as the walk would. The walk
+        joins a source where the first node that reads it needs it, and runs it itself if no worker
+        has started it (see `sourcepool.py`).
         """
         pool = self.source_pool
         if pool is None or not pool.active:
@@ -1185,7 +1246,9 @@ class Evaluator:
                    if nodes[key]["type"] in self._PARALLEL_SOURCE_KINDS and not nodes[key]["disabled"]
                    and all(source is None for source in nodes[key]["inputs"].values())
                    and key not in lut_roots]
-        for key in sources[1:]:
+        if len(sources) < 2:
+            return
+        for key in sources:
             def evaluate_source(key=key):
                 raster, digest = self.evaluate_raster(
                     doc, key, cancel=cancel, frame=frame, tier=tier, typed=True, return_digest=True,
@@ -1276,6 +1339,11 @@ class Evaluator:
         try:
             return self._evaluate_raster(doc, target, cancel, frame, tier, typed, return_digest,
                                          cache_fractional, digest_only, scope)
+        except BaseException as error:
+            earlier = scope.earlier_failure(error)
+            if earlier is None:
+                raise
+            raise earlier from None
         finally:
             scope.close()
 
@@ -1330,7 +1398,7 @@ class Evaluator:
                 # of what actually happened -- exactly the same reason TimeBlur is excluded above.
                 inputs = []
             stack.extend((source, False) for source in inputs if source is not None)
-        values, hashes = {}, {}
+        values, hashes = scope.start(order)
         # Opt-in GPU island (nodebased/gpu2d.py): Grade/Transform/Blur/Merge whose readers are all island nodes
         # stay on the device; None (the default) leaves every node on the CPU kernels below.
         gpu_interior = gpu2d.island_interior(nodes, order, target) if self.gpu2d is not None else frozenset()
@@ -1348,11 +1416,10 @@ class Evaluator:
         for key in order:
             if cancel and cancel.is_set():
                 raise Cancelled()
-            task = scope.tasks.get(key)
-            if task is not None:
-                # A source launched at the top of this walk: joined here, at its own node, so it
-                # raises here and nothing downstream starts before it.
-                values[key], hashes[key] = task.result()
+            scope.current = key
+            if key in scope.tasks:
+                # A source launched at the top of this walk: it computes on the source pool and is joined
+                # by the first node that reads it (`_SourceResults`), or after the walk.
                 continue
             node = nodes[key]
             kind = node["type"]
@@ -3185,6 +3252,7 @@ class Evaluator:
                 if not fractional_frame or cache_fractional:
                     self._store(digest, raster)
             values[key] = raster
+        scope.resolve_all()
         result = values[target]
         if not isinstance(result, Raster) and not typed:
             raise ValueError(f"{nodes[target]['name']} outputs {OUTPUT_TYPES.get(nodes[target]['type'])}, "
