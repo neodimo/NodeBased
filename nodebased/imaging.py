@@ -21,6 +21,7 @@ from . import groups
 from . import metadata
 from . import ops2d_chrome as _chrome
 from . import shapes
+from . import sourcepool
 from . import tiers
 from . import timeknobs
 from . import tracker
@@ -767,6 +768,18 @@ def _cubic_taps(fraction):
 
 LIGHT_MIXER_SLOTS = 8    # LightMixer: light groups with their own gain and colour knobs
 
+class _SourceScope:
+    """The source tasks one `evaluate_raster` call launched; `close` runs when that call ends, by any
+    route, so no source computation outlives the call that asked for it."""
+
+    def __init__(self):
+        self.tasks = {}
+
+    def close(self):
+        for task in self.tasks.values():
+            task.finish()
+
+
 class Evaluator:
     """Retained-result evaluator with a memory tier over an optional disk tier.
 
@@ -797,6 +810,13 @@ class Evaluator:
         # Optional bounded source decode-ahead cache installed by the desktop app. The evaluator
         # remains single-owner; only the immutable decoded Raster is shared across threads.
         self.decode_pool = None
+        # Optional `sourcepool.SourcePool`: the independent sources of one frame (Reads, Roto and the
+        # generators) compute on its workers while the walk reaches them. None keeps every source on
+        # the walking thread. `_lock` guards the retained results and the counters those workers share
+        # with the walk; nothing computes while it is held.
+        self.source_pool = None
+        self._lock = threading.RLock()
+        self._source_sizes = {}
         self.cache = OrderedDict()
         self.bytes = 0
         # Roto coverage is independent of the connected plate's frame. Keep a separate bounded
@@ -995,13 +1015,14 @@ class Evaluator:
         The disk tier survives on purpose: it is what makes reopening a project cheap, and clearing
         it is a separate, explicit act.
         """
-        self.cache.clear()
-        self.__dict__.pop("_geometry_memo", None)
-        self.bytes = 0
-        self._roto_mattes.clear()
-        self._roto_matte_bytes = 0
-        self._roto_shape_mattes.clear()
-        self._roto_shape_matte_bytes = 0
+        with self._lock:
+            self.cache.clear()
+            self.__dict__.pop("_geometry_memo", None)
+            self.bytes = 0
+            self._roto_mattes.clear()
+            self._roto_matte_bytes = 0
+            self._roto_shape_mattes.clear()
+            self._roto_shape_matte_bytes = 0
 
     _PROFILE_LOG_LIMIT = 500
 
@@ -1028,36 +1049,42 @@ class Evaluator:
         refusing to keep the only result the artist is looking at was the 8K failure — it made the
         cache silently inert at exactly the resolution where recompute hurts most.
         """
-        while self.cache and self.bytes + raster.nbytes > self.budget:
-            old_digest, old = self.cache.popitem(last=False)
-            self.bytes -= old.nbytes
-            if old.layers is None and self.disk_spills_enabled:
-                # The disk tier stores one array per raster; layers would be lost.
-                self.disk.put_raster(old_digest, old)
-        self.cache[digest] = raster
-        self.bytes += raster.nbytes
+        spilled = []
+        with self._lock:
+            while self.cache and self.bytes + raster.nbytes > self.budget:
+                old_digest, old = self.cache.popitem(last=False)
+                self.bytes -= old.nbytes
+                if old.layers is None and self.disk_spills_enabled:
+                    # The disk tier stores one array per raster; layers would be lost.
+                    spilled.append((old_digest, old))
+            self.cache[digest] = raster
+            self.bytes += raster.nbytes
+        for old_digest, old in spilled:
+            self.disk.put_raster(old_digest, old)
 
     def _roto_matte(self, params, data):
         """Return the Roto raster for resolved shapes, reused across changing plate frames."""
         key = hashlib.sha256(json.dumps([params, data], sort_keys=True,
                                         separators=(",", ":")).encode()).digest()
-        cached = self._roto_mattes.pop(key, None)
-        if cached is not None:
-            self.roto_matte_hits += 1
-            self._roto_mattes[key] = cached
-            return cached
-        self.roto_matte_misses += 1
+        with self._lock:
+            cached = self._roto_mattes.pop(key, None)
+            if cached is not None:
+                self.roto_matte_hits += 1
+                self._roto_mattes[key] = cached
+                return cached
+            self.roto_matte_misses += 1
         from . import roto
         raster = roto.rasterise(
             data or [], params["width"], params["height"], bool(params.get("invert", 0)),
             shape_cache=self._roto_shape_matte)
         raster.flags.writeable = False
-        if raster.nbytes <= self._roto_matte_budget:
-            while self._roto_mattes and self._roto_matte_bytes + raster.nbytes > self._roto_matte_budget:
-                _, old = self._roto_mattes.popitem(last=False)
-                self._roto_matte_bytes -= old.nbytes
-            self._roto_mattes[key] = raster
-            self._roto_matte_bytes += raster.nbytes
+        with self._lock:
+            if raster.nbytes <= self._roto_matte_budget:
+                while self._roto_mattes and self._roto_matte_bytes + raster.nbytes > self._roto_matte_budget:
+                    _, old = self._roto_mattes.popitem(last=False)
+                    self._roto_matte_bytes -= old.nbytes
+                self._roto_mattes[key] = raster
+                self._roto_matte_bytes += raster.nbytes
         return raster
 
     def _roto_shape_matte(self, shape, bounds, canvas, render):
@@ -1068,21 +1095,23 @@ class Evaluator:
         payload = [canvas, bounds, geometry]
         key = hashlib.sha256(json.dumps(payload, sort_keys=True,
                                         separators=(",", ":")).encode()).digest()
-        cached = self._roto_shape_mattes.pop(key, None)
-        if cached is not None:
-            self.roto_shape_matte_hits += 1
-            self._roto_shape_mattes[key] = cached
-            return cached
-        self.roto_shape_matte_misses += 1
+        with self._lock:
+            cached = self._roto_shape_mattes.pop(key, None)
+            if cached is not None:
+                self.roto_shape_matte_hits += 1
+                self._roto_shape_mattes[key] = cached
+                return cached
+            self.roto_shape_matte_misses += 1
         cover = render()
         cover.flags.writeable = False
-        if cover.nbytes <= self._roto_shape_matte_budget:
-            while (self._roto_shape_mattes
-                   and self._roto_shape_matte_bytes + cover.nbytes > self._roto_shape_matte_budget):
-                _, old = self._roto_shape_mattes.popitem(last=False)
-                self._roto_shape_matte_bytes -= old.nbytes
-            self._roto_shape_mattes[key] = cover
-            self._roto_shape_matte_bytes += cover.nbytes
+        with self._lock:
+            if cover.nbytes <= self._roto_shape_matte_budget:
+                while (self._roto_shape_mattes
+                       and self._roto_shape_matte_bytes + cover.nbytes > self._roto_shape_matte_budget):
+                    _, old = self._roto_shape_mattes.popitem(last=False)
+                    self._roto_shape_matte_bytes -= old.nbytes
+                self._roto_shape_mattes[key] = cover
+                self._roto_shape_matte_bytes += cover.nbytes
         return cover
 
     def _motion_inputs(self, doc, node, params, frame, tier, cancel, base):
@@ -1135,6 +1164,37 @@ class Evaluator:
                      isinstance(scene_later, scene3d.Scene) else base_scene, camera_later)
             prints.append(["later", *digests])
         return moments, later, ["motion", *prints]
+
+    # The nodes with no input to wait for that are worth a thread of their own. Text is left out (Qt
+    # painting belongs to the thread that owns the application) and so are the cheap constants.
+    _PARALLEL_SOURCE_KINDS = ("Read", "Roto", "Noise", "Ramp", "Radial", "Rectangle", "Grid", "Checker")
+
+    def _launch_sources(self, scope, doc, order, nodes, cancel, frame, tier, cache_fractional):
+        """Start every independent source of this walk but the first on the source pool.
+
+        Each task is a nested `evaluate_raster` of that one node, so it takes the same cache keys, the
+        same disk tier, the same decimation and raises the same error as the walk would; the walk
+        joins it where it reaches the node (see `sourcepool.py`). The first source stays with the
+        walking thread, which has nothing else to do until it reaches it.
+        """
+        pool = self.source_pool
+        if pool is None or not pool.active:
+            return
+        lut_roots = getattr(self, "_lut_roots", {})
+        sources = [key for key in order
+                   if nodes[key]["type"] in self._PARALLEL_SOURCE_KINDS and not nodes[key]["disabled"]
+                   and all(source is None for source in nodes[key]["inputs"].values())
+                   and key not in lut_roots]
+        for key in sources[1:]:
+            def evaluate_source(key=key):
+                raster, digest = self.evaluate_raster(
+                    doc, key, cancel=cancel, frame=frame, tier=tier, typed=True, return_digest=True,
+                    cache_fractional=cache_fractional)
+                if isinstance(raster, Raster):
+                    self._source_sizes[key] = int(raster.nbytes)
+                return raster, digest
+            scope.tasks[key] = pool.submit(
+                evaluate_source, self._source_sizes.get(key, sourcepool.DEFAULT_SOURCE_BYTES), key)
 
     def _gpu2d_cpu(self, item, frame, cancel, done=None):
         """A staged island node computed on the CPU kernels (the fallback when the device cannot run it)."""
@@ -1212,6 +1272,16 @@ class Evaluator:
         at that frame — not the outer walk's `hashes[source]`, which was computed at the wrong
         (document) frame and would miss an edit to a keyframe elsewhere in the curve.
         """
+        scope = _SourceScope()
+        try:
+            return self._evaluate_raster(doc, target, cancel, frame, tier, typed, return_digest,
+                                         cache_fractional, digest_only, scope)
+        finally:
+            scope.close()
+
+    def _evaluate_raster(self, doc, target, cancel, frame, tier, typed, return_digest,
+                         cache_fractional, digest_only, scope):
+        """`evaluate_raster` with the source tasks it may launch collected in `scope`."""
         tier = int(tier)
         if tier not in tiers.PROXY_TIERS:
             raise ValueError(f"Unsupported proxy tier {tier}; expected one of {tiers.PROXY_TIERS}")
@@ -1264,6 +1334,7 @@ class Evaluator:
         # Opt-in GPU island (nodebased/gpu2d.py): Grade/Transform/Blur/Merge whose readers are all island nodes
         # stay on the device; None (the default) leaves every node on the CPU kernels below.
         gpu_interior = gpu2d.island_interior(nodes, order, target) if self.gpu2d is not None else frozenset()
+        self._launch_sources(scope, doc, order, nodes, cancel, frame, tier, cache_fractional)
         from . import fluid3d, flip3d, particles
 
         def reads_lazily(key):
@@ -1277,6 +1348,12 @@ class Evaluator:
         for key in order:
             if cancel and cancel.is_set():
                 raise Cancelled()
+            task = scope.tasks.get(key)
+            if task is not None:
+                # A source launched at the top of this walk: joined here, at its own node, so it
+                # raises here and nothing downstream starts before it.
+                values[key], hashes[key] = task.result()
+                continue
             node = nodes[key]
             kind = node["type"]
             if kind == "Input":
@@ -2644,12 +2721,16 @@ class Evaluator:
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
-            if (not fractional_frame or cache_fractional) and digest in self.cache and key not in getattr(self, "_lut_roots", {}):
-                self.hits += 1
-                raster = self.cache.pop(digest)
-                self.cache[digest] = raster
-            else:
-                self.misses += 1
+            with self._lock:
+                cache_hit = ((not fractional_frame or cache_fractional) and digest in self.cache
+                             and key not in getattr(self, "_lut_roots", {}))
+                if cache_hit:
+                    self.hits += 1
+                    raster = self.cache.pop(digest)
+                    self.cache[digest] = raster
+                else:
+                    self.misses += 1
+            if not cache_hit:
                 # A memory miss consults the disk tier before recomputing. A hit there repopulates
                 # memory, so the second read of a spilled result is a memory hit again (C4).
                 spilled = None if fractional_frame or key in getattr(self, "_lut_roots", {}) else self.disk.get_raster(digest)

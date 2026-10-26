@@ -43,6 +43,7 @@ import platform
 import statistics
 import subprocess
 import sys
+import threading
 import time
 
 import numpy as np
@@ -403,6 +404,9 @@ def cmd_graph(args):
         cold = backend.warm()
     evaluator = Evaluator()
     evaluator.gpu2d = backend
+    if args.source_workers:        # independent sources of a frame on worker threads (nodebased/sourcepool.py)
+        from nodebased.sourcepool import SourcePool
+        evaluator.source_pool = SourcePool(max_workers=args.source_workers)
     for f in range(1, 1 + args.warmup):
         evaluator.evaluate_raster(doc, "colorcorrect", frame=f)
     evaluator.clear()
@@ -410,6 +414,7 @@ def cmd_graph(args):
         backend.release_all()
     # Per-node cost: time every kernel call by node kind (the two Reads add up), and the island's staging and run.
     spent = {}
+    spent_lock = threading.Lock()
 
     def timed(label, function):
         def wrapper(*a, **kw):
@@ -417,7 +422,8 @@ def cmd_graph(args):
             try:
                 return function(*a, **kw)
             finally:
-                spent[label] = spent.get(label, 0.0) + (time.perf_counter() - t0) * 1000
+                with spent_lock:
+                    spent[label] = spent.get(label, 0.0) + (time.perf_counter() - t0) * 1000
         return wrapper
     original_kernel = Evaluator.__dict__["_windowed_kernel"].__func__
     Evaluator._windowed_kernel = staticmethod(lambda kind, *a, **kw: timed(kind, original_kernel)(kind, *a, **kw))
@@ -441,9 +447,10 @@ def cmd_graph(args):
         Evaluator._windowed_kernel = staticmethod(original_kernel)
     keys = sorted({k for r in rows for k in r["nodes_ms"]})
     report = {"tool": "tools/benchmark_gpu2d.py graph", "label": args.label, "backend": args.backend, "adapter_choice": args.adapter,
-              "size": [width, height], "frames": frames, "environment": environment(args, backend),
+              "source_workers": args.source_workers, "size": [width, height], "frames": frames, "environment": environment(args, backend),
               "cold_shader_setup_ms": None if cold is None else round(cold, 3),
-              "note": "serial evaluation of the whole fixture to ColorCorrect, Read decodes inline (both Reads add up under Read), no window and no display "
+              "note": "evaluation of the whole fixture to ColorCorrect (source_workers 0 is serial: Read decodes inline, both Reads add up under Read; "
+                      "above 0 the sources run on worker threads and the per-kind rows are busy time summed over threads while wall_ms stays the frame), no window and no display "
                       "conversion; kernel_ms_by_node_kind times every CPU kernel call by node kind, and under the island the island rows hold the staging and "
                       "the run (upload, passes, terminal readback) in place of the Grade, Transform, Blur and Merge kernels",
               "wall_ms": stats([r["wall_ms"] for r in rows]),
@@ -715,6 +722,7 @@ def main():
     common(g)
     g.add_argument("--frames", default="1-48")
     g.add_argument("--backend", choices=("cpu", "gpu2d"), default="gpu2d")
+    g.add_argument("--source-workers", type=int, default=0, help="worker threads for the independent sources of a frame (0 = serial, the step C method)")
     g.set_defaults(fn=cmd_graph)
     pb = sub.add_parser("playback", help="N fresh passes of the real-window playback benchmark, summarized")
     pb.add_argument("--inputs", required=True, type=pathlib.Path)

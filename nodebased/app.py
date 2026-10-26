@@ -91,6 +91,7 @@ from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTEN
                      sequence_path, sequence_pattern)
 from .cachetier import DiskCache, SharedMemoryBudget
 from .decodepool import DecodeAheadPool
+from .sourcepool import SourcePool
 from .tileexec import TileExecutor
 from .tiles import TileCache, TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
@@ -8767,6 +8768,11 @@ class Window(QMainWindow):
         else:
             self.decode_pool = DecodeAheadPool(max_workers=0 if available_cpus <= 4 else None)
         self.evaluator.decode_pool = self.decode_pool
+        # The independent sources of one frame (Reads, Roto, generators) compute side by side on a few
+        # workers, joined where the walk reaches each node -- sourcepool.py. Off at four CPUs or fewer,
+        # like the decode-ahead pool, and with NODEBASED_SOURCE_WORKERS=0.
+        self.source_pool = SourcePool()
+        self.evaluator.source_pool = self.source_pool
         # Preview takes the tile path when every upstream node supports it. The executor reports
         # an explicit fallback for unsupported graphs; export remains the reference evaluator.
         self.tile_executor = TileExecutor(
@@ -16533,6 +16539,7 @@ class Window(QMainWindow):
         self.queue_panel.runner.shutdown(wait=False, cancel_futures=True)
         self.job_queue._pool.shutdown(wait=False, cancel_futures=True)
         self.decode_pool.shutdown()
+        self.source_pool.shutdown()
         if self.server:
             self.server.close()
         QApplication.instance().removeEventFilter(self)
