@@ -790,6 +790,9 @@ class GPU2D:
     evaluator's worker); ``run`` is serialised by a lock."""
 
     open_error = None
+    open_deferred = False       # the last open() was put off (a clip is playing, or the card is busy), not refused
+    choice_reason = None        # why this backend's adapter was chosen, when it was chosen by measurement or by Settings
+    choice_scores = ()
 
     def __init__(self, state, budget_bytes=DEFAULT_BUDGET_BYTES, label="default"):
         self.state = state
@@ -818,22 +821,46 @@ class GPU2D:
 
     @classmethod
     def open(cls, choice="default", budget_bytes=DEFAULT_BUDGET_BYTES):
-        """A backend on the named adapter, or None with ``open_error`` set when there is none."""
+        """A backend on the named adapter, or None with ``open_error`` set when there is none.
+
+        ``choice`` is "default" (the adapter Settings names, else the discrete card first), "discrete", "integrated" or "cpu", or
+        "automatic": the card `islandadapter.resolve` picks by measuring what the island pays on each (an adapter named in
+        Settings is used as named). Automatic returns None with ``open_deferred`` set while it cannot measure, and None with the
+        reason in ``open_error`` when no card is faster than the CPU nodes."""
         from . import gpu3d
+        reason, scores = None, ()
+        cls.open_deferred = False
+        if choice == "automatic":
+            from . import islandadapter
+            try:
+                picked = islandadapter.resolve(budget_bytes)
+            except islandadapter.Deferred as exc:
+                cls.open_error, cls.open_deferred = str(exc), True
+                return None
+            except islandadapter.NoCard as exc:
+                cls.open_error = str(exc)
+                return None
+            except Exception as exc:
+                cls.open_error = f"{type(exc).__name__}: {exc}"
+                return None
+            choice, reason, scores = picked.choice, picked.reason, picked.scores
         try:
             state = gpu3d._state(choice)
         except Exception as exc:        # no device is a normal answer; the island simply stays off
             cls.open_error = f"{type(exc).__name__}: {exc}"
             return None
         cls.open_error = None
-        return cls(state, budget_bytes, choice)
+        backend = cls(state, budget_bytes, choice)
+        backend.choice_reason, backend.choice_scores = reason, tuple(scores)
+        return backend
 
     def describe(self):
         info = self.adapter
         return {"device": info.get("device"), "backend": info.get("backend_type"),
                 "adapter_type": info.get("adapter_type"), "driver": info.get("driver"),
                 "driver_info": info.get("driver_info"), "budget_bytes": self.budget,
-                "max_binding_bytes": self.max_binding, "label": self.label}
+                "max_binding_bytes": self.max_binding, "label": self.label,
+                "reason": self.choice_reason, "scores": list(self.choice_scores)}
 
     # -- memory ------------------------------------------------------------------------------
 

@@ -97,6 +97,7 @@ from .decodepool import DecodeAheadPool
 from . import sourcepool
 from .sourcepool import SourcePool
 from .rotoahead import RotoAhead
+from . import islandadapter
 from . import playbackprefs
 from .tileexec import TileExecutor
 from .tiles import TileCache, TileRegion
@@ -8247,7 +8248,9 @@ class ProjectSettingsDialog(QDialog):
         self.gpu_nodes.setChecked(bool(gpu_nodes))
         self.gpu_nodes.setToolTip("Grade, Transform, Blur and Merge stay on the card between nodes and come back once per frame. "
                                   "Takes effect at once. A card that cannot run them leaves the CPU nodes in use. "
-                                  "It uses the graphics adapter chosen above.")
+                                  "Automatic uses the graphics card that measures fastest for this work (timed once per card and "
+                                  "driver, never while a clip plays) and keeps the CPU nodes when no card beats them; a graphics "
+                                  "adapter chosen above is used as named.")
         interface.addRow("2D nodes", self.gpu_nodes)
         self.gpu_nodes_note = QLabel(gpu_nodes_note)
         self.gpu_nodes_note.setWordWrap(True)
@@ -8938,7 +8941,10 @@ class Window(QMainWindow):
         self.signals.gpu_nodes.connect(self.gpu_nodes_ready)
         # The GPU nodes (Settings, Playback): off until chosen. The card is opened on the preview worker so the window
         # does not wait for it, and a card that refuses leaves the CPU nodes in use (apply_gpu_nodes).
-        self.gpu_nodes_state = {"active": False, "error": None, "adapter": None, "pending": False}
+        self.gpu_nodes_state = {"active": False, "error": None, "adapter": None, "pending": False, "deferred": None}
+        import weakref
+        self_ref = weakref.ref(self)
+        islandadapter.set_playback_probe(lambda: bool(getattr(self_ref(), "playing", False)))     # Automatic never measures the cards mid-playback
         self.apply_gpu_nodes()
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
@@ -9949,6 +9955,9 @@ class Window(QMainWindow):
                 self.evaluator.disk_spills_enabled = saved_spills
             self._playback_saved_disk_spills = None
             self.roto_ahead.cancel()          # a stopped (or turned-round) playback keeps no read-ahead
+            if self.gpu_nodes_state.get("deferred") and not self.gpu_nodes_state.get("pending"):
+                self.gpu_nodes_state["deferred"] = None
+                QTimer.singleShot(0, self.apply_gpu_nodes)       # Automatic measures the cards now that nothing plays
         if hasattr(self, "state_word"):
             self.refresh_state_word()
         forward = start and self.play_direction > 0
@@ -11647,11 +11656,11 @@ class Window(QMainWindow):
         if want and self.evaluator.gpu2d is None and not state["pending"]:
             state["pending"] = True
             self.executor.submit(self._install_gpu_nodes, announce)
-        elif not want and (self.evaluator.gpu2d is not None or state["error"]):
+        elif not want and (self.evaluator.gpu2d is not None or state["error"] or state.get("deferred")):
             if self.evaluator.gpu2d is not None:
                 self.executor.submit(self._remove_gpu_nodes, announce)
             else:
-                state.update(error=None)
+                state.update(error=None, deferred=None)
 
     def _install_gpu_nodes(self, announce):
         """Preview worker: open the island on the adapter Settings chose and install it on the evaluator."""
@@ -11660,8 +11669,10 @@ class Window(QMainWindow):
         try:
             override = os.environ.get("NODEBASED_GPU2D_MB")
             budget = (int(override) if override else self.GPU_NODES_BUDGET_MB) << 20
-            backend = gpu2d.GPU2D.open("default", budget)
-            if backend is None:
+            backend = gpu2d.GPU2D.open("automatic", budget)
+            if backend is None and gpu2d.GPU2D.open_deferred:
+                result["deferred"] = gpu2d.GPU2D.open_error      # Automatic has not measured the cards yet (playing, or the card is busy)
+            elif backend is None:
                 result["error"] = gpu2d.GPU2D.open_error or "no graphics device"
             else:
                 backend.warm()
@@ -11689,12 +11700,18 @@ class Window(QMainWindow):
         """Qt thread: the GPU nodes were installed, removed or refused; say so and draw the frame again."""
         state = self.gpu_nodes_state
         state.update(active=bool(result.get("active")), error=result.get("error"), adapter=result.get("adapter"),
-                     pending=False)
+                     pending=False, deferred=result.get("deferred"))
         self.display_cache.clear()
         self.tile_executor.cache.clear()
         self.request_preview()
         if result.get("active"):
+            adapter = result.get("adapter")
             message = "GPU nodes on: Grade, Transform, Blur and Merge run on the graphics card"
+            if isinstance(adapter, dict) and adapter.get("device"):
+                message += f" ({adapter['device']})"
+        elif result.get("deferred"):
+            message = f"GPU nodes waiting: {result['deferred']}; the CPU nodes are in use meanwhile"
+            self._retry_deferred_gpu_nodes_later()
         elif result.get("error"):
             message = f"GPU nodes unavailable ({result['error']}); the CPU nodes stay in use"
         else:
@@ -11702,8 +11719,20 @@ class Window(QMainWindow):
         if result.get("announce") or result.get("error"):
             self.statusBar().showMessage(message, 10000)
         # A choice made while the card was opening is applied now (the answer above may already be stale).
-        if playbackprefs.gpu_nodes_wanted(self.preferences.gpu_nodes()) != bool(result.get("active")) and not result.get("error"):
+        if (playbackprefs.gpu_nodes_wanted(self.preferences.gpu_nodes()) != bool(result.get("active"))
+                and not result.get("error") and not result.get("deferred")):
             self.apply_gpu_nodes(announce=bool(result.get("announce")))
+
+    def _retry_deferred_gpu_nodes_later(self):
+        """Automatic could not measure the cards because another job held the card: ask again shortly. (A clip that is playing
+        asks again when it stops, in toggle_playback.)"""
+        QTimer.singleShot(islandadapter.RETRY_SECONDS * 1000, self._retry_deferred_gpu_nodes)
+
+    def _retry_deferred_gpu_nodes(self):
+        state = self.gpu_nodes_state
+        if state.get("deferred") and not state.get("pending") and not self.playing:
+            state["deferred"] = None
+            self.apply_gpu_nodes()
 
     def _check_gpu_nodes_lost(self):
         """Qt thread, after a frame: a card that lost its device is dropped for good, with a message."""
@@ -11717,11 +11746,16 @@ class Window(QMainWindow):
         if playbackprefs.gpu_nodes_forced():
             return f"{playbackprefs.GPU_NODES_ENV} is set and decides this."
         if state.get("error"):
+            if str(state["error"]).startswith("no graphics card"):
+                return f"{str(state['error'])[0].upper()}{str(state['error'])[1:]}; the CPU nodes are in use."
             return f"The card refused ({state['error']}); the CPU nodes are in use."
+        if state.get("deferred"):
+            return f"{state['deferred']}; the CPU nodes are in use until then."
         if state.get("active") and state.get("adapter"):
             info = state["adapter"]
             name = info.get("device") if isinstance(info, dict) else str(info)
-            return f"Running on {name}."
+            reason = info.get("reason") if isinstance(info, dict) else None
+            return f"Running on {name}." + (f" {reason}." if reason else "")
         return ""
 
     def workers_note_text(self):

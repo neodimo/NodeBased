@@ -393,6 +393,80 @@ class IslandSettingTests(unittest.TestCase):
         for n, a, d in zip(numbers, reference, off):
             self.assertTrue(np.array_equal(a.pixels, d.pixels), f"frame {n} after turning them off again")
 
+    def test_automatic_waits_for_playback_to_stop_and_then_measures(self):
+        from nodebased import gpu2d
+        window = self.window
+        messages = self.record_messages()
+        window.preferences.set_gpu_nodes(True)
+        real = gpu2d.GPU2D.open.__func__
+        calls = []
+
+        def deferred(cls, choice="default", budget=256 << 20):
+            calls.append(choice)
+            cls.open_error, cls.open_deferred = "Automatic measures the graphics cards when playback stops", True
+            return None
+        with mock.patch.object(gpu2d.GPU2D, "open", classmethod(deferred)):
+            window.apply_gpu_nodes(announce=True)
+            self.assertTrue(wait_for(lambda: window.gpu_nodes_state["deferred"] is not None))
+            time.sleep(0.3)
+            self.assertEqual(calls, ["automatic"], "a deferred answer must not be asked for again in a loop")
+        self.assertIsNone(window.gpu_nodes_state["error"])
+        self.assertIsNone(window.evaluator.gpu2d)
+        self.assertIn("when playback stops", window.gpu_nodes_note_text())
+        self.assertTrue(any("GPU nodes waiting" in m for m in messages), messages)
+        window.playing = True                                  # a clip plays: a retry waits
+        window._retry_deferred_gpu_nodes()
+        self.assertEqual(calls, ["automatic"])
+        window.playing = False
+        with mock.patch.object(gpu2d.GPU2D, "open", classmethod(lambda cls, choice="default", budget=256 << 20: real(cls, "cpu", budget))):
+            window._retry_deferred_gpu_nodes()
+            self.assertTrue(wait_for(lambda: window.evaluator.gpu2d is not None and window.gpu_nodes_state["active"]))
+        self.assertIsNone(window.gpu_nodes_state["deferred"])
+
+    def test_stopping_playback_asks_automatic_again(self):
+        window = self.window
+        window.preferences.set_gpu_nodes(True)
+        window.gpu_nodes_state["deferred"] = "Automatic measures the graphics cards when playback stops"
+        asked = []
+        window.apply_gpu_nodes = lambda announce=False: asked.append(announce)
+        window.toggle_playback(True)
+        self.assertEqual(asked, [])
+        window.toggle_playback(False)
+        self.assertTrue(wait_for(lambda: asked == [False]), asked)
+        self.assertIsNone(window.gpu_nodes_state["deferred"])
+
+    def test_no_card_faster_than_the_cpu_nodes_keeps_the_cpu_nodes_and_says_why(self):
+        from nodebased import gpu2d
+        window = self.window
+        messages = self.record_messages()
+        window.preferences.set_gpu_nodes(True)
+        why = "no graphics card was faster than the CPU nodes in the measurement (RTX 90 ms; CPU nodes 38 ms)"
+        with mock.patch.object(gpu2d.GPU2D, "open", classmethod(lambda cls, *a, **k: setattr(cls, "open_error", why) or setattr(cls, "open_deferred", False) or None)):
+            window.apply_gpu_nodes(announce=True)
+            self.assertTrue(wait_for(lambda: window.gpu_nodes_state["error"] is not None))
+        self.assertIsNone(window.evaluator.gpu2d)
+        self.assertTrue(window.gpu_nodes_note_text().startswith("No graphics card was faster than the CPU nodes"), window.gpu_nodes_note_text())
+        self.assertNotIn("refused", window.gpu_nodes_note_text())
+        self.assertTrue(any("CPU nodes stay in use" in m for m in messages), messages)
+
+    def test_the_settings_row_names_the_card_and_the_reason(self):
+        from nodebased import gpu2d
+        window = self.window
+        window.preferences.set_gpu_nodes(True)
+        real = gpu2d.GPU2D.open.__func__
+
+        def with_reason(cls, choice="default", budget=256 << 20):
+            backend = real(cls, "cpu", budget)
+            backend.choice_reason = "Automatic: measured 9 ms for a frame's upload, kernels and download, against 38 ms on the CPU nodes"
+            return backend
+        with mock.patch.object(gpu2d.GPU2D, "open", classmethod(with_reason)):
+            window.apply_gpu_nodes()
+            self.assertTrue(wait_for(lambda: window.evaluator.gpu2d is not None and window.gpu_nodes_state["active"]))
+        note = window.gpu_nodes_note_text()
+        self.assertIn("Running on", note)
+        self.assertIn("measured 9 ms", note)
+        self.assertIn("38 ms on the CPU nodes", note)
+
     def test_a_choice_made_while_the_card_opens_is_applied_afterwards(self):
         window = self.window
         window.preferences.set_gpu_nodes(True)
