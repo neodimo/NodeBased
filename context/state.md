@@ -1,5 +1,24 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (5:45 AM on 2026-10-26 PDT)
+
+`main` moved `9a7a1fca` -> `f30486f2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `f30486f2` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-0535.log`, started 5:35 AM): **Ran 6908 tests in 515.276 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 1: the first full-size frame after a rest reuses the scene packed for the half-size frames (resume 2) (finish 1).** Commits:
+  - `48b85d84` The first frames on the RTX after a rest, traced and tried again (step C finish): the second picture comes 60 ms after the first because the first half-size frame takes 13 ms on the card and the second 26, and the 54 to 60 ms intervals after that are an alternation between the scheduler and the picture hand-over; pacing the frames of the ramp (three settings) and showing a picture before asking for the next frame were measured on the RTX and are not kept (no better over 8 runs per scene, the smoke, splats and glass scene worse), their summaries and the pacing patch are committed, and the known limit says what the traces show
+  Diff: 13 files changed, 1883 insertions(+), 4 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:25 AM on 2026-10-26 PDT)
 
 `main` moved `db12f300` -> `3ff19e79` (lane commits cherry-picked onto main in lane order) and then to this

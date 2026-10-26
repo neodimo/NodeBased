@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 1: the first full-size frame after a rest reuses the scene packed for the half-size frames (resume 2) (finish 1) (integrator tick)
+
+- **What was done:** `main` `9a7a1fca` -> `f30486f2` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `f30486f2`: Ran 6908 tests in 515.276 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step F of N: Roto, Text, Read and Write take the rest of Nuke's knobs, and the time nodes get Nuke's path mask (integrator tick)
 
 - **What was done:** `main` `db12f300` -> `3ff19e79` plus this docs commit. Evidence and per-lane commit
