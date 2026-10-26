@@ -1212,10 +1212,30 @@ Play pressed 4 s after the first picture, "Proxy while playing" on, 1080p, first
 | Radeon, all four scenes | 45 to 52 | 12 runs: 44 to 52 and one 94 (furnished, 1.6 s in, a single hiccup that the ramp cannot cause: this card takes no ramp) |
 | Laptop stand-in, all four scenes | 45 to 55 | 12 runs: 45 to 52 |
 
-The cube holds the gate (no interval over 54 ms; one run in eight reaches 54.4). The other three RTX scenes still show one interval at the switch (59 to 85 ms) and, for the smoke scene, four of 70 to 76 ms at the start.
-Cause of the switch interval: the first full-size frame packs and uploads the scene for the playing document again (12 ms for the furnished room, 40 ms and more for the mixed scene with its 20,000 splats),
-because the scene the half-size frames drew is not the one it draws; the hold covers the time the readback and the render take at the larger size but not that, and a hold that covered it would make the frames longer than the
-frame time. Cause of the smoke scene's start: its frames are bound by the card's shader clock (a half-size frame is 52 ms on the idle clock, 14 ms on the raised one), which only a compute load raises, and a compute load beside the played frames lengthened them
-(first pass). Left: pack the playing document's scene at the chosen size while the half-size frames run (the evaluator caches a scene per tier, so this wants the scene evaluation shared between tiers), and for the smoke scene a lower first tier than half.
+The cube holds the gate (no interval over 54 ms; one run in eight reaches 54.4). The other three RTX scenes still show one interval at the switch (59 to 85 ms) and, for the smoke scene, four of 70 to 76 ms at the start (0.43.2; the next section is what changed).
+
+### One packed scene for both sizes (step C, 10/26/2026)
+
+Where the switch frame went (`benchmarks/3d-playback/ffshare-1025/timeline-before.txt`, made by `switch_timeline.py` from the raw trace; the RTX, 10/25): the furnished room spent 18 ms packing its shadow triangles and 10 ms building its resident scene again, the mixed scene 5 and 8 ms plus 11.5 ms allocating the full-size readback buffer, the smoke, splats and glass scene the same plus the volume, and the cube repacked nothing.
+Two causes: the half-size and full-size frames hold equal arrays that are different objects (a tier is part of each node's digest, so the Evaluator makes the scene again per tier) and the card's cache keys told read-only arrays apart by identity; and the full-size readback buffer was made by the first full-size frame.
+What changed: read-only arrays are keyed by their content (hashed once per array object and remembered, bounded at 128 MB; a read-only view of an array that can still change is hashed every time), so the full-size frame reuses the shadow triangles and the resident scene the half-size frames made and an edit still repacks; a ramp frame makes the readback buffer the chosen size will need, so the switch frame reuses it; the switch frames are now 23 ms (furnished), 26 ms (mixed), 41 ms (smoke, splats and glass) and 19 ms (cube).
+The smoke scene waits 40 to 47 ms on the card for each of its first four half-size frames while the shader clock is down, so the first frames are drawn at a quarter of the chosen size when the first half-size frame kept the card busy 85 percent of the frame time or arrived over 52 ms after the one before (the furnished room's first frame waits 24 to 41 ms on the idle clock and does not qualify); a quarter-size wait that has fallen to two thirds of the first, or 0.8 s, brings back half size.
+
+Same measurement, 8 runs of each scene on each adapter, play pressed 4 s after the first picture (`benchmarks/3d-playback/ffshare-1025/gate/`, `summarize_gate.py`; the run directory also holds the raw traces), longest interval of each run in ms:
+
+| Adapter, scene | 0.43.2 | step C: 8 runs, range (runs over 54) |
+|---|---|---|
+| RTX cube | 49 to 54 | 49.3 to 59.7 (5) |
+| RTX furnished | 59 to 73 | 49.7 to 67.0 (3) |
+| RTX mixed | 70 to 85 | 54.3 to 63.9 (8) |
+| RTX smoke, splats and glass | 76 to 78 | 51.3 to 59.7 (3) |
+| Radeon cube | 44 to 52 | 44.4 to 50.1 (0) |
+| Radeon furnished | 44 to 52 | 46.1 to 72.8 (1, a single 72.8 ms hiccup, 0.7 s in; this card takes no ramp) |
+| Radeon mixed | 44 to 52 | 46.3 to 54.7 (1, 54.7) |
+| Radeon smoke, splats and glass | 44 to 52 | 44.9 to 50.4 (0) |
+| Laptop stand-in, four scenes | 45 to 52 | 44.6 to 52.0 (0 of 32) |
+
+The gate (no interval over 54 ms in any scene on the three adapters) holds on the laptop stand-in and, but for two single intervals, on the Radeon. It does not hold on the RTX: the switch interval is gone (the long intervals after the first 0.4 s are 54 to 60 ms, a few ms over, with one of 66.7 ms in a furnished run; the scene that had 70 to 85 ms is at 54 to 64), and what remains over 54 ms is mostly in the first 0.4 s after the play (59.7 ms between the first two pictures of a cube run): those frames are bound by the card's shader clock (in the cube run with the 59.7 ms interval, `submit to gpu_done` is 13 ms for the first frame and 38 ms for the second), which only a compute load raises and the ramp cannot lower below a quarter-size frame.
+Known limit: on the RTX 3080 Ti the first two or three frames of a play after a rest can arrive 55 to 67 ms apart (all four scenes); the card's clock, not packing, is the cause. Left: a compute load that raises the clock without lengthening the played frames (the first try lengthened them).
 
 Tests of the ramp (`tests/test_card_clock.py`, each fails without the part it names): the link-up decision on canned frame times (a middle stage is not up, a fast frame before the minimum time is not enough, a card that never speeds up counts as up at 1.5 s); the extra copy fills the rest of the frame's time at the readback's speed, is never over 16 MB, is not sent for a frame that fills its time, keeps its buffers for the next ramp and ends quietly on a failing card; the holds grow in steps and count the scene's packing time and the cap; the copies taper off and stop; a ramp exists only for a discrete card that has rested; the window draws half size on a rested card, leaves a warm card, "Proxy while playing" off, an artist's own tier and a comp without a 3D render alone, puts the tier back without a new request, leaves the lowered frames out of the automatic tier, and a stop gives the tier back. Tests of this step run on the RTX, the Radeon and llvmpipe with the splat, volume and glass agreement tests, each under `flock -w 1800 /tmp/nb-gpu.lock` with a timeout (`tests-L4c-agree-*.log` in the lane run directory).

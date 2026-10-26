@@ -1,0 +1,40 @@
+laptop   cube        8 runs, longest interval 45.1 to 49.4 ms, 0 over 54: [49.4, 46.5, 47.6, 45.5, 47.0, 45.1, 45.1, 48.3]
+laptop   furnished   8 runs, longest interval 45.4 to 49.8 ms, 0 over 54: [46.6, 46.3, 46.2, 48.0, 47.0, 49.8, 45.4, 45.4]
+laptop   mixed       8 runs, longest interval 44.6 to 51.9 ms, 0 over 54: [50.8, 51.3, 44.6, 51.9, 50.0, 49.4, 51.2, 45.9]
+laptop   mixedglass  8 runs, longest interval 46.4 to 52.0 ms, 0 over 54: [48.7, 46.8, 48.0, 46.4, 51.9, 52.0, 50.2, 48.9]
+radeon   cube        8 runs, longest interval 44.4 to 50.1 ms, 0 over 54: [50.1, 44.4, 45.7, 45.2, 44.8, 45.7, 48.7, 46.7]
+radeon   furnished   8 runs, longest interval 46.1 to 72.8 ms, 1 over 54: [47.2, 49.2, 46.6, 48.5, 46.1, 72.8, 48.2, 50.4]
+           run 6: 72.8 ms ending 720.5 ms after the play
+radeon   mixed       8 runs, longest interval 46.3 to 54.7 ms, 1 over 54: [49.8, 46.9, 54.7, 46.7, 46.3, 46.5, 51.4, 51.4]
+           run 3: 54.7 ms ending 159.1 ms after the play
+radeon   mixedglass  8 runs, longest interval 44.9 to 50.4 ms, 0 over 54: [45.7, 46.5, 45.1, 45.5, 44.9, 50.4, 45.4, 45.6]
+rtx      cube        8 runs, longest interval 49.3 to 59.7 ms, 5 over 54: [56.0, 51.2, 49.3, 56.7, 52.2, 55.9, 59.7, 56.7]
+           run 1: 56.0 ms ending 206.3 ms after the play
+           run 4: 56.7 ms ending 1333.7 ms after the play
+           run 6: 55.9 ms ending 164.2 ms after the play
+           run 7: 59.7 ms ending 82.2 ms after the play
+           run 7: 55.5 ms ending 163.8 ms after the play
+           run 8: 56.7 ms ending 956.6 ms after the play
+rtx      furnished   8 runs, longest interval 49.7 to 67.0 ms, 3 over 54: [59.0, 67.0, 52.4, 49.7, 51.3, 53.7, 66.7, 51.8]
+           run 1: 59.0 ms ending 180.3 ms after the play
+           run 2: 64.6 ms ending 144.3 ms after the play
+           run 2: 67.0 ms ending 229.9 ms after the play
+           run 7: 66.7 ms ending 2853.8 ms after the play
+rtx      mixed       8 runs, longest interval 54.3 to 63.9 ms, 8 over 54: [58.0, 55.3, 63.9, 57.2, 57.3, 55.6, 54.3, 63.5]
+           run 1: 58.0 ms ending 636.6 ms after the play
+           run 2: 55.3 ms ending 94.5 ms after the play
+           run 3: 63.9 ms ending 103.0 ms after the play
+           run 3: 55.4 ms ending 591.1 ms after the play
+           run 4: 57.2 ms ending 133.5 ms after the play
+           run 5: 57.3 ms ending 754.8 ms after the play
+           run 5: 55.3 ms ending 1050.6 ms after the play
+           run 6: 54.3 ms ending 216.1 ms after the play
+           run 6: 55.6 ms ending 635.9 ms after the play
+           run 6: 54.9 ms ending 1258.5 ms after the play
+           run 7: 54.3 ms ending 923.2 ms after the play
+           run 8: 63.5 ms ending 103.0 ms after the play
+rtx      mixedglass  8 runs, longest interval 51.3 to 59.7 ms, 3 over 54: [57.1, 51.3, 53.9, 59.7, 52.2, 51.3, 51.9, 56.4]
+           run 1: 57.1 ms ending 836.3 ms after the play
+           run 4: 59.7 ms ending 1760.0 ms after the play
+           run 8: 54.8 ms ending 589.9 ms after the play
+           run 8: 56.4 ms ending 1078.4 ms after the play
