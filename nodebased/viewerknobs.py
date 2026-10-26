@@ -82,7 +82,9 @@ def validate(knobs):
 
 def knobs_of(document):
     """The document's Viewer knobs, with the defaults where it stores none."""
-    return {**DEFAULT, **document["settings"]["viewer"].get("knobs", {})}
+    # A document without settings (older files, test fixtures) uses every default.
+    viewer = (document.get("settings") or {}).get("viewer") or {}
+    return {**DEFAULT, **viewer.get("knobs", {})}
 
 
 def normalised(knobs):
