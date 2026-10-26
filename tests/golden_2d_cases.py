@@ -97,7 +97,7 @@ def _grade_hdr_above_one(tmpdir):
 def _grade_negative_values(tmpdir):
     g = Graph()
     g.add("src", "Constant", dict(width=W, height=H, red=-0.6, green=-0.2, blue=0.9, alpha=1.0))
-    g.add("node", "Grade", dict(exposure=0.3, offset=-0.15), image="src")
+    g.add("node", "Grade", dict(exposure=0.3, offset=-0.15, black_clamp=0), image="src")   # Nuke's default clamps the negatives away; this case keeps them
     return g.doc, "node"
 
 

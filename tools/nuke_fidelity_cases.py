@@ -252,32 +252,42 @@ def _cases():
                     {f"matrix_{r}{c}": rows[r][c] for r in range(3) for c in range(3)}, ("A",), colormatrix, "guide",
                     "ColorMatrix: each output channel is the matrix row applied to the input r, g, b"))
 
-    def grade(blackpoint=0.0, whitepoint=1.0, lift=0.0, gain=1.0, multiply=1.0, offset=0.0, gamma=1.0, black_clamp=True, white_clamp=False):
+    def grade(blackpoint=0.0, whitepoint=1.0, lift=0.0, gain=1.0, multiply=1.0, offset=0.0, gamma=1.0, black_clamp=True, white_clamp=False,
+              reverse=False):
         def fn(rgb):
             scale = multiply * (gain - lift) / (whitepoint - blackpoint)
             shift = offset + lift - scale * blackpoint
-            r = scale * rgb + shift
-            if gamma != 1.0:
-                r = np.where(r > 0, np.power(np.maximum(r, 0), 1.0 / gamma), r)
+            if reverse:
+                r = np.where(rgb > 0, np.power(np.maximum(rgb, 0), gamma), rgb) if gamma != 1.0 else rgb
+                r = (r - shift) / scale
+            else:
+                r = scale * rgb + shift
+                if gamma != 1.0:
+                    r = np.where(r > 0, np.power(np.maximum(r, 0), 1.0 / gamma), r)
             if black_clamp:
                 r = np.maximum(r, 0.0)
             if white_clamp:
                 r = np.minimum(r, 1.0)
             return r, np.ones(rgb.shape, bool)
         return _rgb_only(fn)
-    grade_note = ("Grade (convention, not stated in the 17.0 page): A = multiply * (gain - lift) / (whitepoint - blackpoint); B = offset + lift - A * blackpoint; "
-                  "out = A * in + B, then ** (1 / gamma) for out > 0, then the clamps")
+    grade_note = ("Grade (convention, not stated in the 17.0 page): A = multiply * (white - black) / (whitepoint - blackpoint); B = add + black - A * blackpoint; "
+                  "out = A * in + B, then ** (1 / gamma) for out > 0, then the clamps; reverse is the opposite gamma followed by the opposite ramp")
     out.append(Case("grade_affine", "Grade", "Grade", (("multiply", 1.5), ("add", 0.1), ("black_clamp", False)), ("A",), "Grade",
-                    {"multiply": 1.5, "offset": 0.1}, ("A",), grade(multiply=1.5, offset=0.1, black_clamp=False), "convention", grade_note))
+                    {"multiply": 1.5, "offset": 0.1, "black_clamp": 0}, ("A",), grade(multiply=1.5, offset=0.1, black_clamp=False), "convention", grade_note))
     out.append(Case("grade_default_clamps", "Grade", "Grade", (("multiply", 1.5), ("add", 0.1)), ("A",), "Grade",
                     {"multiply": 1.5, "offset": 0.1}, ("A",), grade(multiply=1.5, offset=0.1), "convention",
                     grade_note + "; the guide's defaults enable black clamp"))
     out.append(Case("grade_levels", "Grade", "Grade",
-                    (("blackpoint", 0.05), ("whitepoint", 2.0), ("black", 0.1), ("white", 0.9), ("black_clamp", False)), ("A",), "Grade", None, ("A",),
-                    grade(blackpoint=0.05, whitepoint=2.0, lift=0.1, gain=0.9, black_clamp=False), "convention", grade_note,
-                    inexpressible="NodeBased's Grade has no blackpoint, whitepoint, lift or gain"))
-    out.append(Case("grade_gamma", "Grade", "Grade", (("gamma", 1.8),), ("A",), "Grade", None, ("A",), grade(gamma=1.8), "convention", grade_note,
-                    inexpressible="NodeBased's Grade has no gamma"))
+                    (("blackpoint", 0.05), ("whitepoint", 2.0), ("black", 0.1), ("white", 0.9), ("black_clamp", False)), ("A",), "Grade",
+                    {"blackpoint": 0.05, "whitepoint": 2.0, "black": 0.1, "white": 0.9, "black_clamp": 0}, ("A",),
+                    grade(blackpoint=0.05, whitepoint=2.0, lift=0.1, gain=0.9, black_clamp=False), "convention", grade_note))
+    out.append(Case("grade_gamma", "Grade", "Grade", (("gamma", 1.8),), ("A",), "Grade", {"gamma": 1.8}, ("A",), grade(gamma=1.8), "convention", grade_note))
+    out.append(Case("grade_white_clamp", "Grade", "Grade", (("multiply", 2.0), ("white_clamp", True)), ("A",), "Grade",
+                    {"multiply": 2.0, "white_clamp": 1}, ("A",), grade(multiply=2.0, white_clamp=True), "convention", grade_note))
+    out.append(Case("grade_reverse", "Grade", "Grade",
+                    (("multiply", 1.5), ("add", 0.1), ("blackpoint", 0.05), ("gamma", 1.8), ("reverse", True), ("black_clamp", False)), ("A",), "Grade",
+                    {"multiply": 1.5, "offset": 0.1, "blackpoint": 0.05, "gamma": 1.8, "reverse": 1, "black_clamp": 0}, ("A",),
+                    grade(multiply=1.5, offset=0.1, blackpoint=0.05, gamma=1.8, reverse=True, black_clamp=False), "convention", grade_note))
 
     def exposure(stops, blackpoint=0.0):
         return _rgb_only(lambda rgb: ((rgb - blackpoint) * 2.0 ** stops, np.ones(rgb.shape, bool)))

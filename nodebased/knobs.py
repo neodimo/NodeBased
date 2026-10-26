@@ -130,6 +130,22 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("exposure",), soft_range=(-10, 10)),
         KnobGroup("float_slider", ("multiply",), soft_range=(-4, 4)),
         KnobGroup("float_slider", ("offset",), soft_range=(-10, 10)),
+        KnobGroup("float_slider", ("blackpoint",), label="Black point", soft_range=(-1, 1),
+                  help="The input value that becomes the lift: pixels of this value are set to the black (lift) level.", section="Levels"),
+        KnobGroup("float_slider", ("whitepoint",), label="White point", soft_range=(0, 4),
+                  help="The input value that becomes the gain: pixels of this value are set to the white (gain) level."),
+        KnobGroup("float_slider", ("black",), label="Lift", soft_range=(-1, 1),
+                  help="The level that pixels at the black point are set to."),
+        KnobGroup("float_slider", ("white",), label="Gain", soft_range=(0, 4),
+                  help="The level that pixels at the white point are set to."),
+        KnobGroup("float_slider", ("gamma",), label="Gamma", soft_range=(0.1, 4),
+                  help="A constant gamma applied after the ramp: above 1 lightens the midtones."),
+        KnobGroup("bool", ("reverse",), label="Reverse",
+                  help="Undo this grade further downstream: the opposite gamma, then the opposite ramp."),
+        KnobGroup("bool", ("black_clamp",), label="Black clamp", help="Set output values below 0 to 0."),
+        KnobGroup("bool", ("white_clamp",), label="White clamp", help="Set output values above 1 to 1."),
+        KnobGroup("bool", ("offset_by_alpha",), label="Offset follows alpha",
+                  help="Scale the offset by each pixel's alpha, as NodeBased's Grade always did. Off is Nuke's flat offset."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     # Laid out like Nuke's: a section per range, each with the same five sliders, then the Ranges
     # lookup curves (Nuke keeps those on a second tab), then mix.
@@ -1384,6 +1400,7 @@ def _chrome_layout():
                             "such as rgba.red or a layer channel, taken from the mask input, or from the image when no mask is wired.",
         "invert_mask": "Apply the effect where the mask is empty instead of where it is full.",
         "inject": "Copy the mask into the output as the mask layer, so a node further down can use it again.",
+        "fringe": "Apply the effect only on the soft edge of the mask. A mask that is fully on or fully off has no edge.",
         "unpremult": "Divide the colour by this channel before the effect and multiply it back afterwards.",
         "invert_unpremult": "Multiply the colour by the channel before the effect and divide it back afterwards.",
         "output": "The channels this node writes; the others pass the background through.",
@@ -1393,11 +1410,11 @@ def _chrome_layout():
         "invert": "Invert the shape: draw it everywhere it is not.",
         "opacity": "Scale the whole shape, colour and alpha, by this amount.",
     }
-    labels = {"channels": "Channels", "maskChannelInput": "Mask channel", "invert_mask": "Invert mask", "inject": "Inject mask",
+    labels = {"channels": "Channels", "maskChannelInput": "Mask channel", "invert_mask": "Invert mask", "inject": "Inject mask", "fringe": "Mask fringe",
               "unpremult": "Unpremult by", "invert_unpremult": "Invert unpremult", "output": "Output", "premult": "Premult by",
               "cliptype": "Clip to", "replace": "Replace", "invert": "Invert", "opacity": "Opacity"}
     kinds = {"channels": "string", "maskChannelInput": "string", "unpremult": "string", "output": "string", "premult": "string",
-             "invert_mask": "bool", "inject": "bool", "invert_unpremult": "bool", "replace": "bool", "invert": "bool",
+             "invert_mask": "bool", "inject": "bool", "fringe": "bool", "invert_unpremult": "bool", "replace": "bool", "invert": "bool",
              "cliptype": "enum", "opacity": "float_slider"}
     for kind in (*chrome.FILTER_CHROME, *chrome.DRAW_CHROME):
         layout = KNOB_LAYOUT[kind]

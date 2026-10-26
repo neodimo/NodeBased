@@ -167,6 +167,7 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
 
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
 from . import smallnodes as _smallnodes
+from . import gradeknobs as _gradeknobs
 from . import timeknobs as _timeknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
@@ -182,7 +183,10 @@ SPECS = {
     "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0,
                                           **_smallnodes.new_params("Constant")}},
     "Checker": {"inputs": [], "params": {"width": 960, "height": 540, "size": 64}},
-    "Grade": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0}},
+    # Grade's Nuke knobs (fidelity step E, nodebased/gradeknobs.py): the levels `blackpoint`, `whitepoint`, `black` (lift) and `white`
+    # (gain), `gamma`, `reverse` and the two clamps. `exposure`, `multiply` and `offset` keep their meaning.
+    "Grade": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0,
+                                                                           **_gradeknobs.new_params("Grade")}},
     # ColorCorrect as in Nuke (properties overhaul, 10/18): master, shadows, midtones and highlights, each with
     # saturation, contrast, gamma, gain and offset; the Ranges tab's shadow and highlight lookup curves pick
     # how much of each pixel (by its luminance) is shadow or highlight, midtones are the rest.
@@ -2064,6 +2068,9 @@ LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1)})
 LIMITS.update({"crop_softness": (0.0, 100000.0), "reformat": (0, 1), "intersect": (0, 1), "crop": (0, 1)})
 LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000),
                "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})
+# Grade's Nuke knobs (fidelity step E). `black` and `white` are shared names (Log2Lin, Histogram), so Grade's wider ranges are its own.
+LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
+NODE_LIMITS["Grade"] = {"black": (-1000.0, 1000.0), "white": (-1000.0, 1000.0), "blackpoint": (-1000.0, 1000.0)}
 
 
 def _downstream_of(nodes, key):

@@ -129,15 +129,30 @@ class Counters:
 
 
 def map_grade(p):
-    """Grade's parameters as the shader sees them (``Evaluator._grade``: exposure and multiply scale
-    premultiplied RGB, offset adds ``alpha * offset``; alpha is untouched)."""
+    """Grade's parameters as the shader sees them. A Grade whose step-E knobs are off is ``Evaluator._grade``'s old arithmetic
+    (exposure and multiply scale premultiplied RGB, offset adds ``alpha * offset``); otherwise it is the ramp, gamma and
+    clamps of ``gradeknobs`` (``mode`` 1). ``reverse`` has no kernel here: that Grade runs on the CPU. Alpha is untouched."""
+    from . import gradeknobs
     exposure, multiply, offset = p["exposure"], p["multiply"], p["offset"]
+    mix = float(p.get("mix", 1.0))
+    if gradeknobs.is_legacy(p):
+        return {
+            "mode": 0, "identity": exposure == 0.0 and multiply == 1.0 and offset == 0.0,
+            "gain": float(np.float32(2.0 ** exposure)),
+            "multiply": float(np.float32(multiply)), "use_multiply": multiply != 1.0,
+            "offset": float(np.float32(offset)), "use_offset": offset != 0.0,
+            "mix": mix,
+        }
+    if p.get("reverse", 0):
+        raise Unsupported("Grade reverse has no GPU kernel yet")
+    slope, shift = gradeknobs.terms(p)
+    gamma = float(p.get("gamma", 1.0))
     return {
-        "identity": exposure == 0.0 and multiply == 1.0 and offset == 0.0,
-        "gain": float(np.float32(2.0 ** exposure)),
-        "multiply": float(np.float32(multiply)), "use_multiply": multiply != 1.0,
-        "offset": float(np.float32(offset)), "use_offset": offset != 0.0,
-        "mix": float(p.get("mix", 1.0)),
+        "mode": 1, "identity": False, "slope": float(np.float32(slope)), "shift": float(np.float32(shift)),
+        "alpha_offset": float(np.float32(gradeknobs.alpha_offset(p))),
+        "gamma_inv": float(np.float32(1.0 / gamma)), "use_gamma": gamma != 1.0,
+        "black_clamp": bool(p.get("black_clamp", 0)), "white_clamp": bool(p.get("white_clamp", 0)),
+        "mix": mix,
     }
 
 
@@ -158,6 +173,20 @@ def map_merge(p):
     if op not in MERGE_OPS:
         raise Unsupported(f"Merge operation {op!r} has no GPU kernel yet")
     return {"op": MERGE_OPS.index(op), "name": op, "mix": float(p["mix"])}
+
+
+def _check_chrome(kind, p, images):
+    """The shared node chrome (nodebased/ops2d_chrome.py: channels, mask channel, invert, inject, fringe, (un)premult by) runs
+    around the CPU kernels. The shaders have none of it, so a node whose strip is not at its defaults stays on the CPU rather than
+    having a knob silently ignored."""
+    from . import ops2d_chrome as chrome
+    cfg = chrome.filter_config(kind, p)
+    if cfg is None:
+        return
+    slot = 2 if kind == "Merge" else 1
+    mask_wired = len(images) > slot and images[slot] is not None
+    if cfg.active(mask_wired):
+        raise Unsupported(f"{kind} uses the shared channel and mask strip")
 
 
 _FILTERS = {"nearest": 0, "bilinear": 1, "cubic": 2}
@@ -415,15 +444,28 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let oi = gid.y * u32(p.out_r.z) + gid.x;
 """
 
-# i0 = (has_mask, blend, identity/aux, aux2); f0 = (gain, multiply, offset, _); f1 = (_, _, _, mix)
+# i0 = (has_mask, blend, identity, flags); f1 = (_, _, _, mix).
+# flags bit 16 off (the old arithmetic): bit 1 multiply, bit 2 offset; f0 = (gain, multiply, offset, _).
+# flags bit 16 on (gradeknobs): bit 4 gamma, bit 8 black clamp, bit 32 white clamp; f0 = (slope, shift, alpha offset, 1 / gamma).
 _GRADE = _PRELUDE + _BINDINGS_3 + _fetch("src", "r0") + _fetch_alpha("mask", "rm") + _GATE + _MAIN_HEAD + """
     let s = fetch_src(ax, ay);
     var f = s;
     if (p.i0.z == 0) {
-        var rgb = s.xyz * p.f0.x;
-        if ((p.i0.w & 1) != 0) { rgb = rgb * p.f0.y; }
-        if ((p.i0.w & 2) != 0) { rgb = rgb + s.w * p.f0.z; }
-        f = vec4<f32>(rgb, s.w);
+        if ((p.i0.w & 16) != 0) {
+            var rgb = s.xyz * p.f0.x + vec3<f32>(p.f0.y);
+            rgb = rgb + vec3<f32>(s.w * p.f0.z);
+            if ((p.i0.w & 4) != 0) {
+                rgb = select(rgb, pow(max(rgb, vec3<f32>(0.0)), vec3<f32>(p.f0.w)), rgb > vec3<f32>(0.0));
+            }
+            if ((p.i0.w & 8) != 0) { rgb = max(rgb, vec3<f32>(0.0)); }
+            if ((p.i0.w & 32) != 0) { rgb = min(rgb, vec3<f32>(1.0)); }
+            f = vec4<f32>(rgb, s.w);
+        } else {
+            var rgb = s.xyz * p.f0.x;
+            if ((p.i0.w & 1) != 0) { rgb = rgb * p.f0.y; }
+            if ((p.i0.w & 2) != 0) { rgb = rgb + s.w * p.f0.z; }
+            f = vec4<f32>(rgb, s.w);
+        }
     }
     out[oi] = gated(s, f, ax, ay);
 }
@@ -925,6 +967,8 @@ class GPU2D:
         ``images`` are the node's inputs in slot order: Rasters, DeferredImages or None."""
         if self.lost:
             raise Unsupported("device lost; GPU 2D stays off until reopened")
+        if kind in KINDS:
+            _check_chrome(kind, params, images)
         if kind == "Grade":
             map_grade(params)
         elif kind == "Blur":
@@ -1173,10 +1217,14 @@ class GPU2D:
             m = map_grade(p)
             mbuf, mbytes, mrect, has_mask = mask_info(ins[1] if len(ins) > 1 else None)
             blend = 1 if (has_mask or m["mix"] != 1.0) else 0
-            aux = (1 if m["use_multiply"] else 0) | (2 if m["use_offset"] else 0)
+            if m["mode"] == 0:
+                aux = (1 if m["use_multiply"] else 0) | (2 if m["use_offset"] else 0)
+                f0 = (m["gain"], m["multiply"], m["offset"], 0.0)
+            else:
+                aux = 16 | (4 if m["use_gamma"] else 0) | (8 if m["black_clamp"] else 0) | (32 if m["white_clamp"] else 0)
+                f0 = (m["slope"], m["shift"], m["alpha_offset"], m["gamma_inv"])
             slot = add_params(_params(_rect(dst), _rect(ins[0].data), (0, 0, 0, 0), mrect,
-                                      (has_mask, blend, 1 if m["identity"] else 0, aux),
-                                      (m["gain"], m["multiply"], m["offset"], 0.0), (0.0, 0.0, 0.0, m["mix"])))
+                                      (has_mask, blend, 1 if m["identity"] else 0, aux), f0, (0.0, 0.0, 0.0, m["mix"])))
             passes.append((self._pipeline("grade"), [(0, ins[0].buffer, ins[0].nbytes), (1, mbuf, mbytes),
                                                      (2, out.buffer, out.nbytes)], slot, groups, 3))
         elif kind == "Blur":

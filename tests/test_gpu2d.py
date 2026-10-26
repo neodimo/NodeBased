@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from nodebased import gpu2d
+from nodebased import gpu2d, gradeknobs
 from nodebased.cancellation import Cancelled
 from nodebased.core import SPECS
 from nodebased.imaging import Evaluator
@@ -24,6 +24,9 @@ from nodebased.raster import Raster
 from nodebased.tiers import Region
 
 TOL_ABS = TOL_REL = 2e-5
+
+
+OLD_GRADE = gradeknobs.OLD          # an older document's Grade: no clamp, an alpha-scaled offset, the old arithmetic
 
 
 def params(kind, **over):
@@ -98,12 +101,37 @@ class MappingTests(unittest.TestCase):
     """No device needed: the parameter mapping, windows and fallbacks that decide what runs where."""
 
     def test_grade_mapping_matches_the_cpu_formula_inputs(self):
-        m = gpu2d.map_grade(params("Grade", exposure=1.0, multiply=1.5, offset=0.25, mix=0.5))
+        m = gpu2d.map_grade(params("Grade", **OLD_GRADE, exposure=1.0, multiply=1.5, offset=0.25, mix=0.5))
         self.assertFalse(m["identity"])
         self.assertEqual((m["gain"], m["multiply"], m["offset"], m["mix"]), (2.0, 1.5, 0.25, 0.5))
-        self.assertTrue(gpu2d.map_grade(params("Grade"))["identity"])
-        only_exposure = gpu2d.map_grade(params("Grade", exposure=-0.5))
+        self.assertTrue(gpu2d.map_grade(params("Grade", **OLD_GRADE))["identity"])
+        only_exposure = gpu2d.map_grade(params("Grade", **OLD_GRADE, exposure=-0.5))
         self.assertFalse(only_exposure["use_multiply"] or only_exposure["use_offset"])
+
+    def test_grade_step_e_mapping_carries_the_ramp_gamma_and_clamps(self):
+        m = gpu2d.map_grade(params("Grade", multiply=2.0, offset=0.1, blackpoint=0.25, black=0.5, gamma=2.0, white_clamp=1))
+        self.assertEqual(m["mode"], 1)
+        slope, shift = gradeknobs.terms(params("Grade", multiply=2.0, offset=0.1, blackpoint=0.25, black=0.5))
+        self.assertAlmostEqual(m["slope"], slope, places=6)
+        self.assertAlmostEqual(m["shift"], shift, places=6)
+        self.assertEqual((m["use_gamma"], m["black_clamp"], m["white_clamp"]), (True, True, True))
+        self.assertAlmostEqual(m["gamma_inv"], 0.5)
+        self.assertEqual(gpu2d.map_grade(params("Grade", **OLD_GRADE))["mode"], 0)
+
+    def test_a_reversed_grade_has_no_kernel_and_stays_on_the_cpu(self):
+        with self.assertRaises(gpu2d.Unsupported):
+            gpu2d.map_grade(params("Grade", reverse=1))
+
+    def test_a_node_with_a_changed_channel_or_mask_strip_stays_on_the_cpu(self):
+        backend, _ = fake_backend()
+        source, matte = Data().image(16, 16), Data().matte(16, 16)
+        for kind, extra in (("Grade", {"channels": "red"}), ("Grade", {"unpremult": "rgba.alpha"}), ("Blur", {"channels": "alpha"})):
+            with self.subTest(kind=kind, extra=extra), self.assertRaises(gpu2d.Unsupported):
+                backend.stage(kind, params(kind, **extra), [source])
+        for extra in ({"invert_mask": 1}, {"inject": 1}, {"fringe": 1}):
+            with self.subTest(extra=extra), self.assertRaises(gpu2d.Unsupported):
+                backend.stage("Grade", params("Grade", **extra), [source, matte])
+        backend.stage("Grade", params("Grade", fringe=1), [source])         # no mask wired: nothing to take the edge of
 
     def test_blur_mapping_rounds_like_the_cpu_and_limits_the_validated_radii(self):
         self.assertEqual(gpu2d.map_blur(params("Blur", radius=0.4))["radius"], 0)
@@ -591,6 +619,24 @@ class KernelTests(DeviceTestCase):
                                     [src] + ([mask] if mask is not None else []), f"mix {mix} mask {mask is not None}")
         self.assert_matches("Grade", params("Grade"), [src], "identity")
         self.assert_matches("Grade", params("Grade", exposure=-1.1), [src], "exposure only")
+
+    def test_grade_levels_gamma_and_clamps_on_the_device(self):
+        src, matte = self.data.image(37, 23, bands=True), self.data.matte(37, 23)
+        for label, over in (("defaults (black clamp on)", {}),
+                            ("levels", dict(blackpoint=0.1, whitepoint=1.7, black=0.05, white=0.9)),
+                            ("gamma", dict(gamma=1.8)), ("gamma below one", dict(gamma=0.45, black_clamp=0)),
+                            ("both clamps", dict(multiply=1.6, offset=-0.1, white_clamp=1)),
+                            ("no clamp", dict(multiply=0.7, black_clamp=0)),
+                            ("alpha-scaled offset", dict(offset=0.2, offset_by_alpha=1, black_clamp=0)),
+                            ("everything", dict(exposure=0.3, multiply=1.2, offset=0.05, blackpoint=0.1, whitepoint=2.0, black=0.1,
+                                                white=0.8, gamma=1.3, white_clamp=1))):
+            for mask in (None, matte):
+                self.assert_matches("Grade", params("Grade", **over, mix=0.8 if mask is not None else 1.0),
+                                    [src] + ([mask] if mask is not None else []), label)
+
+    def test_an_older_grade_still_runs_the_old_shader_branch(self):
+        src = self.data.image(37, 23, bands=True)
+        self.assert_matches("Grade", params("Grade", **OLD_GRADE, exposure=0.6, multiply=1.3, offset=-0.2), [src], "older document")
 
     def test_grade_mask_with_a_different_data_window_gates_by_the_zero_filled_matte(self):
         self.assert_matches("Grade", params("Grade", exposure=0.4, mix=0.8), [self.data.image(37, 23), self.data.matte(20, 30, -5, 3)])

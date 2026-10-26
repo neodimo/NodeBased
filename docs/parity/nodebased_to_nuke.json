@@ -141,7 +141,8 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["format", "channels"]
   },
@@ -450,7 +451,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Grid": {
@@ -729,7 +731,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["from0", "to0", "from1", "to1", "from2", "to2", "from3", "to3"]
   },
@@ -748,7 +751,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Remove": {
@@ -780,7 +784,17 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["blackpoint"], "nuke": ["blackpoint"], "kind": "same"},
+    {"nodebased": ["whitepoint"], "nuke": ["whitepoint"], "kind": "same"},
+    {"nodebased": ["black"], "nuke": ["black"], "kind": "same"},
+    {"nodebased": ["white"], "nuke": ["white"], "kind": "same"},
+    {"nodebased": ["gamma"], "nuke": ["gamma"], "kind": "same"},
+    {"nodebased": ["reverse"], "nuke": ["reverse"], "kind": "same"},
+    {"nodebased": ["black_clamp"], "nuke": ["black_clamp"], "kind": "same"},
+    {"nodebased": ["white_clamp"], "nuke": ["white_clamp"], "kind": "same"},
+    {"nodebased": ["offset_by_alpha"], "kind": "extra", "reason": "NodeBased-only: an older document's offset is scaled by alpha; a new node's offset is Nuke's flat one"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "ColorCorrect": {
@@ -817,7 +831,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["lookup"]
   },
@@ -835,7 +850,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
-    {"nodebased": ["clamp"], "nuke": ["clamp"], "kind": "same"}
+    {"nodebased": ["clamp"], "nuke": ["clamp"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Saturation": {
@@ -852,7 +868,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Multiply": {
@@ -869,7 +886,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["value"]
   },
@@ -887,7 +905,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Gamma": {
@@ -904,7 +923,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Clamp": {
@@ -924,7 +944,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "HueCorrect": {
@@ -955,7 +976,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["hue"]
   },
@@ -973,7 +995,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["lut"]
   },
@@ -996,7 +1019,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "HSVTool": {
@@ -1043,7 +1067,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["matrix"]
   },
@@ -1066,7 +1091,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["primary_in", "primary_out", "colorspace_in", "colorspace_out"]
   },
@@ -1087,7 +1113,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["in_colorspace", "out_colorspace"]
   },
@@ -1125,7 +1152,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["in_colorspace", "out_colorspace"],
    "value_map": {"invert": {"forward": false, "inverse": true}}
@@ -1147,7 +1175,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "value_map": {"invert": {"forward": false, "inverse": true}}
   },
@@ -1166,7 +1195,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Log2Lin": {
@@ -1186,7 +1216,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "value_map": {"operation": {"log to lin": "log2lin", "lin to log": "lin2log"}}
   },
@@ -1207,7 +1238,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "MatchGrade": {
@@ -1250,7 +1282,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "CrossTalk": {
@@ -1268,7 +1301,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["crossover"]
   },
@@ -1286,7 +1320,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "SoftClip": {
@@ -1317,7 +1352,8 @@
     {"nodebased": ["invert_mask"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "HistEQ": {
@@ -1419,7 +1455,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Sharpen": {
@@ -1435,7 +1472,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Erode (filter)": {
@@ -1451,7 +1489,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["channels"]
   },
@@ -1467,7 +1506,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Glow": {
@@ -1485,7 +1525,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Soften": {
@@ -1500,7 +1541,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "DropShadow": {
@@ -1531,7 +1573,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "ZDefocus": {
@@ -1555,7 +1598,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "DirBlur": {
@@ -1573,7 +1617,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["BlurCenter"]
   },
@@ -1590,7 +1635,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "EdgeExtend": {
@@ -1618,7 +1664,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Denoise": {
@@ -1647,7 +1694,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "MotionBlur": {
@@ -1718,7 +1766,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["channels"]
   },
@@ -1735,7 +1784,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Convolve": {
@@ -1751,7 +1801,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Matrix": {
@@ -1767,7 +1818,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
    "skip_default": ["matrix"]
   },
@@ -1797,7 +1849,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "BumpBoss": {
@@ -1813,7 +1866,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Laplacian": {
@@ -1827,7 +1881,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Inpaint": {
@@ -2123,7 +2178,8 @@
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "Premult": {
@@ -2171,7 +2227,8 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "KeyMix": {

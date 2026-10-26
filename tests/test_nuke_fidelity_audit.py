@@ -260,7 +260,7 @@ class FormulaCaseTests(unittest.TestCase):
             self.assertEqual(results[ok]["status"], "pass", ok)
         self.assertEqual(results["merge_divide"]["status"], "fail")        # NodeBased divides to 0 where B <= 0; the guide says A
         self.assertEqual(results["clamp_to_values"]["status"], "inexpressible")
-        self.assertEqual(results["grade_levels"]["status"], "inexpressible")
+        self.assertEqual(results["grade_levels"]["status"], "pass")
         self.assertEqual(results["merge_matte"]["status"], "not scored")
 
     def test_cases_are_expressible_on_the_nuke_side(self):

@@ -78,9 +78,11 @@ WRAPPER_GATED = frozenset({"Roto"})
 # Merge-like nodes gate against input B (Nuke's background); everything else gates against its first input.
 B_INPUT = frozenset({"Merge", "Dissolve", "ChannelMerge", "Copy"})
 
-MASK_DEFAULTS = {"maskChannelInput": "none", "invert_mask": 0, "inject": 0}
+# The Draw generators' mask strip has no `fringe` in Nuke's guide (Rectangle, Radial, Ramp, Noise, Text and Grid), so they do not get one.
+NO_FRINGE = frozenset({"Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid"})
+MASK_DEFAULTS = {"maskChannelInput": "none", "invert_mask": 0, "inject": 0, "fringe": 0}
 PREMULT_DEFAULTS = {"unpremult": "none", "invert_unpremult": 0}
-FILTER_PARAM_NAMES = ("channels", "maskChannelInput", "invert_mask", "inject", "unpremult", "invert_unpremult")
+FILTER_PARAM_NAMES = ("channels", "maskChannelInput", "invert_mask", "inject", "fringe", "unpremult", "invert_unpremult")
 
 # Draw nodes: kind -> {default of each knob it gains}. `invert` and `premultiply_mode` of Roto are its own.
 DRAW_KINDS_WITH_CHROME = ("Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid")
@@ -148,6 +150,8 @@ def spec_params(kind):
             out["channels"] = channels
         if mask:
             out.update(MASK_DEFAULTS)
+            if kind in NO_FRINGE:
+                out.pop("fringe")
         if unpremult:
             out.update(PREMULT_DEFAULTS)
     if kind in DRAW_CHROME:
@@ -198,6 +202,14 @@ def step_d_params(kind):
     return out
 
 
+def step_e_params(kind):
+    """The knobs fidelity step E added (Grade, Merge, Blur, Sharpen and Soften), at the values that leave an older document's
+    node as it was."""
+    from . import gradeknobs
+    out = gradeknobs.upgrade_params(kind)
+    return out
+
+
 def upgrade_nodes(nodes):
     """Give an older document's nodes the chrome knobs at their no-change defaults. Walks Group graphs."""
     for node in nodes.values():
@@ -205,7 +217,7 @@ def upgrade_nodes(nodes):
             continue
         params = node.get("params")
         added = spec_params(node.get("type"))
-        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type"))}
+        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type"))}
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)
@@ -285,6 +297,7 @@ class FilterConfig:
     unpremult: str
     invert_unpremult: bool
     mix: float
+    fringe: bool = False
 
     @property
     def channel_set(self):
@@ -310,7 +323,7 @@ class FilterConfig:
             return True
         if self.mask_channel != "none":
             return True
-        if has_mask and (self.invert_mask or self.inject or self.kind in WRAPPER_GATED):
+        if has_mask and (self.invert_mask or self.inject or self.fringe or self.kind in WRAPPER_GATED):
             return True
         return False
 
@@ -324,7 +337,8 @@ def filter_config(kind, p):
     return FilterConfig(kind=kind, channels=channels, native=kind in NATIVE_CHANNELS,
                         mask_channel=str(p.get("maskChannelInput", "none")), invert_mask=bool(p.get("invert_mask", 0)),
                         inject=bool(p.get("inject", 0)), unpremult=str(p.get("unpremult", "none")),
-                        invert_unpremult=bool(p.get("invert_unpremult", 0)), mix=float(p.get("mix", 1.0)))
+                        invert_unpremult=bool(p.get("invert_unpremult", 0)), mix=float(p.get("mix", 1.0)),
+                        fringe=bool(p.get("fringe", 0)))
 
 
 def mask_slot(spec):
@@ -421,6 +435,19 @@ def matte_of(channel, invert):
     return (np.float32(1.0) - matte) if invert else matte
 
 
+def fringe_of(matte):
+    """Nuke's `fringe`: the effect applies only on the soft edge of the mask. The weight is 0 where the mask is empty or full and
+    peaks at 1 where it is half (a triangle, `1 - |2 m - 1|`, on the mask clamped to 0 .. 1), so a hard-edged mask has no edge
+    to work on. The guide says only "only apply the effect to the edge of the mask"; the shape of the ramp is our reading."""
+    m = np.clip(matte, np.float32(0.0), np.float32(1.0))
+    return (np.float32(1.0) - np.abs(np.float32(2.0) * m - np.float32(1.0))).astype(np.float32)
+
+
+def gate_matte(matte, cfg):
+    """The matte the standard blend uses: the mask itself, or its soft edge when `fringe` is on."""
+    return matte if matte is None or not cfg.fringe else fringe_of(matte)
+
+
 def gate(source, filtered, matte, mix):
     """The standard Nuke blend `mix * matte`: the same arithmetic as Evaluator._apply_mask_mix."""
     if matte is None:
@@ -497,7 +524,7 @@ def run_evaluator(kind, p, inputs, inner, spec, force=False):
             holder = mask if mask is not None else source
             channel = resolve_channel(cfg.mask_channel, holder.fit(box), _layer_getter(holder, box))
         matte = matte_of(channel, cfg.invert_mask)
-    pixels = gate(base, filtered, matte, cfg.mix)
+    pixels = gate(base, filtered, gate_matte(matte, cfg), cfg.mix)
     if cfg.inject and matte is not None:
         layers["mask"] = Raster(injected_layer(matte), box, source.display)
     return Raster(pixels, box, source.display, layers or None, source.meta)
@@ -524,7 +551,7 @@ def _run_blank_background(kind, p, inputs, inner, cfg, slot, mask):
             holder = mask if mask is not None else Raster(base, box)
             channel = resolve_channel(cfg.mask_channel, holder.fit(box), _layer_getter(holder, box))
         matte = matte_of(channel, cfg.invert_mask)
-    pixels = gate(base, result.pixels, matte, cfg.mix)
+    pixels = gate(base, result.pixels, gate_matte(matte, cfg), cfg.mix)
     layers = {"mask": Raster(injected_layer(matte), box, result.display)} if cfg.inject and matte is not None else None
     return Raster(pixels, box, result.display, layers, result.meta)
 
@@ -619,7 +646,7 @@ def run_tile(kind, p, inputs, inner, spec, buffered_region, force=False):
             holder = base
         channel = holder[..., 3:4] if cfg.mask_channel == "none" else resolve_channel(cfg.mask_channel, holder)
         matte = matte_of(channel, cfg.invert_mask)
-    return gate(base, filtered, matte, cfg.mix)
+    return gate(base, filtered, gate_matte(matte, cfg), cfg.mix)
 
 
 def _run_blank_tile(kind, p, inputs, inner, cfg, slot, mask, region):
@@ -635,7 +662,7 @@ def _run_blank_tile(kind, p, inputs, inner, cfg, slot, mask, region):
         holder = _align_artifact_to(mask, region) if mask is not None else base
         channel = holder[..., 3:4] if cfg.mask_channel == "none" else resolve_channel(cfg.mask_channel, holder)
         matte = matte_of(channel, cfg.invert_mask)
-    return gate(base, filtered, matte, cfg.mix)
+    return gate(base, filtered, gate_matte(matte, cfg), cfg.mix)
 
 
 def tile_inject_layer(kind, p, inputs, spec, region):

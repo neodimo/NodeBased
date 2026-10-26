@@ -7510,6 +7510,10 @@ class Evaluator:
 
     @staticmethod
     def _grade(image, p):
+        from . import gradeknobs
+        if not gradeknobs.is_legacy(p):
+            # Nuke's levels, gamma, reverse and clamps (fidelity step E); the arithmetic is in nodebased/gradeknobs.py.
+            return gradeknobs.grade(image, p)
         if p["exposure"] == 0.0 and p["multiply"] == 1.0 and p["offset"] == 0.0:
             # Identity Grade is common in comps as a placeholder; preserve value semantics
             # without copying the frame and streaming its RGB through a neutral multiply.
