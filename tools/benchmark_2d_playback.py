@@ -112,6 +112,7 @@ def run_window(args):
     sys.path.insert(0, str(ROOT))
     # Settings stay out of the real NodeBased.conf: a run that left the Direct picture dock open in the saved layout
     # made the next run open it, and the next benchmark measured a different display path (10/22).
+    if os.environ.get('NODEBASED_SWITCH_INTERVAL_MS'): sys.setswitchinterval(float(os.environ['NODEBASED_SWITCH_INTERVAL_MS'])/1000.0)   # experiment: the GIL hand-off interval (Python default 5 ms)
     import tests.isolation  # noqa: F401
     from PySide6.QtCore import QTimer, Qt
     from PySide6.QtWidgets import QApplication
@@ -341,11 +342,13 @@ def run_window(args):
     # island rows already use; tools/benchmark_gpu2d.py stages attributes each played frame's node stage to them.
     stage_spans=[]; stage_joins=[]
     if args.stage_trace:
+        active_labels={}
         def spanned(label_of, fn):
             def wrapper(*wa,**wk):
-                t0=time.perf_counter()
+                t0=time.perf_counter(); label=label_of(*wa,**wk); stack=active_labels.setdefault(threading.get_ident(),[]); stack.append(label)
                 try: return fn(*wa,**wk)
-                finally: stage_spans.append((threading.current_thread().name,label_of(*wa,**wk),t0,time.perf_counter()))
+                finally:
+                    stack.pop(); stage_spans.append((threading.current_thread().name,label,t0,time.perf_counter()))
             return wrapper
         original_kernel=imaging.Evaluator.__dict__['_windowed_kernel'].__func__
         imaging.Evaluator._windowed_kernel=staticmethod(spanned(lambda kind,*a,**kw:'kernel:'+str(kind),original_kernel))
@@ -378,7 +381,24 @@ def run_window(args):
             gpu_backend._lock=TimedLock(gpu_backend._lock)
             traced_run=gpu_backend.run
             gpu_backend.run=spanned(lambda *a,**kw:'island run',traced_run)
-    sampler=threading.Thread(target=sample_stacks,name='playback-sampler',daemon=True); sampler.start()
+    leaf_counts={}
+    def sample_leaves():
+        # --leaf-sampler: where the evaluating thread is, line by line, under the span it is in (1 ms period; a diagnostic, it perturbs the run)
+        while run_end[0] is None:
+            if sample_start[0] is None or not (sample_start[0] <= time.perf_counter() < sample_stop[0]): time.sleep(.002); continue
+            ids=[t.ident for t in threading.enumerate() if t.name.startswith('nodebased-preview')]
+            frames=sys._current_frames()
+            for ident in ids:
+                frame=frames.get(ident)
+                if frame is None: continue
+                labels=active_labels.get(ident) or []
+                where=lambda f: f'{pathlib.Path(f.f_code.co_filename).name}:{f.f_code.co_name}:{f.f_lineno}'
+                key=(labels[-1] if labels else '-', where(frame), where(frame.f_back) if frame.f_back else '')
+                leaf_counts[key]=leaf_counts.get(key,0)+1
+            time.sleep(.001)
+    if args.leaf_sampler and args.stage_trace: threading.Thread(target=sample_leaves,name='leaf-sampler',daemon=True).start()
+    sampler=threading.Thread(target=sample_stacks,name='playback-sampler',daemon=True)
+    if not args.no_sampler: sampler.start()     # the stack sampler takes the GIL every 2 ms; --no-sampler measures playback without it
     def begin():
         sample_start[0]=time.perf_counter(); sample_stop[0]=sample_start[0]+args.seconds
         mark('playback_start',mode=args.cache_mode,adapter=args.adapter)
@@ -408,7 +428,7 @@ def run_window(args):
         QTimer.singleShot(100,quit_when_idle)
     QTimer.singleShot(300,begin)
     app.exec()
-    sampler.join()
+    if sampler.is_alive(): sampler.join()
     trace_events=playback_trace.disable()
     frame_rows=playback_trace.frame_timeline(trace_events)
     # Stop time is the acceptance-window boundary. The worker may finish in-flight frames while
@@ -504,6 +524,7 @@ def run_window(args):
             'joins':stage_joins,'islands':island_rows,
             'frames':[{'points_ms':{k:round(v+offset_ms,3) for k,v in r['points_ms'].items()},'generation':r.get('generation')} for r in in_window],
             'sampling_profile':sample_counts,
+            'leaf_samples':[{'span':k[0],'at':k[1],'caller':k[2],'samples':v} for k,v in sorted(leaf_counts.items(),key=lambda kv:-kv[1])[:120]],
             'source_pool':result.get('source_pool')})+'\n')
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
@@ -539,6 +560,8 @@ def main():
     p.add_argument('--force-adapter',choices=('default','integrated','cpu'),default='default')
     p.add_argument('--no-pipeline',action='store_true',help='restore the one-thread order: evaluate, convert, show, then the next frame')
     p.add_argument('--timeline-output',type=pathlib.Path,help='write only the per-frame stage timeline (compact JSON) here')
+    p.add_argument('--leaf-sampler',action='store_true',help='with --stage-trace: also sample the evaluating thread line by line every millisecond (a diagnostic)')
+    p.add_argument('--no-sampler',action='store_true',help='do not run the 2 ms stack sampler (its GIL use slows the playback it measures); per_node and sampling_profile stay empty')
     p.add_argument('--stage-trace',type=pathlib.Path,help='write every thread span of the run (kernels, decodes, joins, island stage and run) here; slows the run by a few percent')
     p.add_argument('--direct-picture',action='store_true',
                    help='route finished linear frames through the optional Direct picture viewer')

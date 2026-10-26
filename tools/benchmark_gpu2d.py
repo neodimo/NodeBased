@@ -480,8 +480,14 @@ def cmd_interaction(args):
     inputs = pathlib.Path(args.inputs).resolve()
     base = ck.fixture_document(inputs / "plate.%04d.exr", inputs / "background.%04d.exr", width, height)
 
+    backend = None
+    if getattr(args, "backend", "cpu") == "gpu2d":      # the GPU nodes: the island on the chosen adapter (--adapter default|discrete|integrated|cpu)
+        backend = open_backend(args.adapter, args.budget_mb)
+        backend.warm()
+
     def fresh():
         evaluator = Evaluator()
+        evaluator.gpu2d = backend
         if args.source_workers:
             from nodebased.sourcepool import SourcePool
             evaluator.source_pool = SourcePool(max_workers=args.source_workers)
@@ -525,8 +531,9 @@ def cmd_interaction(args):
         rows.append(timed(evaluator, base, frame))
     results["scrub (new frame, nothing cached)"] = rows
     report = {"tool": "tools/benchmark_gpu2d.py interaction", "label": args.label, "source_workers": args.source_workers,
-              "size": [width, height], "samples": args.samples, "environment": environment(args, None),
-              "note": "Evaluator to ColorCorrect on the CPU kernels, no window; the knob and point drags are cache misses by construction "
+              "backend": getattr(args, "backend", "cpu"), "adapter_choice": args.adapter,
+              "size": [width, height], "samples": args.samples, "environment": environment(args, backend),
+              "note": "Evaluator to ColorCorrect (CPU nodes, or the island with --backend gpu2d), no window; the knob and point drags are cache misses by construction "
                       "(a new value for every sample), the scrub draws frames in a fixed shuffled order",
               "interactions": {name: {"ms": stats([r[0] for r in rows]), "finite": all(r[1] for r in rows),
                                       "samples": [round(r[0], 3) for r in rows]} for name, rows in results.items()}}
@@ -598,6 +605,10 @@ def cmd_playback(args):
                "--timeline-output", str(timeline)]
         if args.frame_range != 48:
             cmd += ["--frame-range", str(args.frame_range)]
+        if getattr(args, "leaf_sampler", False):
+            cmd += ["--leaf-sampler"]
+        if getattr(args, "no_sampler", False):
+            cmd += ["--no-sampler"]
         if getattr(args, "stages", False):
             cmd += ["--stage-trace", str(out_dir / f"{case}.stages.json")]
         if args.cpus:                  # the laptop stand-in: four CPUs (pair with --env QT_SCALE_FACTOR=2)
@@ -934,6 +945,7 @@ def main():
     common(it)
     it.add_argument("--samples", type=int, default=24)
     it.add_argument("--source-workers", type=int, default=0, help="workers of the source pool (0 = none)")
+    it.add_argument("--backend", choices=("cpu", "gpu2d"), default="cpu", help="cpu nodes (default) or the GPU nodes (the island) on --adapter")
     it.set_defaults(fn=cmd_interaction)
     pb = sub.add_parser("playback", help="N fresh passes of the real-window playback benchmark, summarized")
     pb.add_argument("--inputs", required=True, type=pathlib.Path)
@@ -947,6 +959,8 @@ def main():
     pb.add_argument("--budget-mb", type=int, default=1024)
     pb.add_argument("--cpus", help="restrict the run to these CPUs with taskset, e.g. 0-3")
     pb.add_argument("--env", action="append", default=[], metavar="NAME=VALUE", help="extra environment for the run (repeatable), e.g. QT_SCALE_FACTOR=2")
+    pb.add_argument("--leaf-sampler", action="store_true", help="with --stages: also sample the evaluating thread line by line every millisecond")
+    pb.add_argument("--no-sampler", action="store_true", help="run without the harness's 2 ms stack sampler (its GIL use slows the playback it measures)")
     pb.add_argument("--stages", action="store_true", help="also write <case>.stages.json: every thread span of the run (see the `stages` command)")
     pb.add_argument("--out-dir", required=True, type=pathlib.Path)
     pb.set_defaults(fn=cmd_playback)

@@ -2561,7 +2561,7 @@ class Evaluator:
                     except (OSError, KeyError):
                         fingerprint.extend((source_path, "missing"))
             if kind == "Read" and params["path"]:
-                from .media import nearest_sequence_path, resolve_source_path
+                from .media import nearest_sequence_path, resolve_source_path, resolved_file
                 source_frame = int(math.floor(frame + int(params.get("frame_offset", 0)) + 0.5))
                 resolved, exists = resolve_source_path(params["path"], source_frame, params.get("missing", "error"))
                 if resolved is None:
@@ -2573,7 +2573,7 @@ class Evaluator:
                                    stat.st_size, stat.st_mtime_ns]
                 else:
                     stat = Path(resolved).stat()
-                    fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
+                    fingerprint = [resolved_file(resolved), stat.st_size, stat.st_mtime_ns]
             if kind == "Write" and params.get("reading") and params.get("path") and not node["disabled"]:
                 # Read file: the file is part of the answer, so a replaced or deleted file re-keys the Write.
                 from . import writenode
