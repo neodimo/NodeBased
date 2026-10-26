@@ -4,6 +4,28 @@
 
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (4:15 AM on 2026-10-26 PDT)
+
+`main` moved `4379060e` -> `e7ce209b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e7ce209b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-0405.log`, started 4:05 AM): **Ran 6790 tests in 513.130 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, Claude Sonnet 5.5), step A of 1: the Read decodes and the Roto matte of a frame run at the same time.** Commits:
+  - `98447370` R6-1 source pool: the graph benchmark tolerates a caller without --source-workers, and a test covers the option
+  - `f7d5e54c` R6-1 source pool: measurements and notes. The graph without a window gets 25 to 43% faster; the real window gains 0.3 to 1.0 fps on the CPU nodes and none on the Radeon island
+  - `7728b652` R6-1 source pool: a launched source is joined by the first node that reads it, with the serial walk's error order
+  - `d2f669ca` R6-1 source pool: the independent sources of one frame (Reads, Roto, generators) compute side by side on worker threads
+  Diff: 125 files changed, 55902 insertions(+), 51 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (3:35 AM on 2026-10-26 PDT)
 
 `main` moved `3c368b33` -> `d703209b` (lane commits cherry-picked onto main in lane order) and then to this
