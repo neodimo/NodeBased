@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) step C of 3: where the last 50 ms of the Radeon frame go, and the two-worker and GPU-default switches ready to flip (integrator tick)
+
+- **What was done:** `main` `560840a6` -> `c8ee9c86` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `c8ee9c86`: Ran 7090 tests in 519.914 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step G of N: the Viewer and the Tracker take Nuke's knobs, plus Profile and CornerPin (resume) (integrator tick)
 
 - **What was done:** `main` `9b0e1102` -> `53933a67` plus this docs commit. Evidence and per-lane commit

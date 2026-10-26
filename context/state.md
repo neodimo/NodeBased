@@ -1,5 +1,29 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (10:55 AM on 2026-10-26 PDT)
+
+`main` moved `560840a6` -> `c8ee9c86` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `c8ee9c86` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-1045.log`, started 10:45 AM): **Ran 7090 tests in 519.914 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, Claude Sonnet 5.5), step C of 3: where the last 50 ms of the Radeon frame go, and the two-worker and GPU-default switches ready to flip.** Commits:
+  - `b188312f` R6-1 step C notes: where the last 50 ms of the Radeon frame go, the worker and GPU-node settings with their measurements, and the -1026c evidence
+  - `9160afbe` Decode pool: a walk that reaches a Read whose decode is already running waits for it instead of decoding the frame again; a decode lead setting for the benchmarks; shorter Settings notes
+  - `c3281e23` Take back the Read path memo and the Transform axis tables: interleaved passes on the Radeon measured no gain (16.4 fps without, 15.7 to 16.3 with)
+  - `51882387` Read paths resolve without walking the directory's links each time, and the island keeps the Transform axis tables a frame did not change; the benchmark tools gain a stack-sampler switch, a line-level sampler and the island in the interaction run
+  - `94533a9d` Playback benchmark: a stage trace of every thread span and a stages command that attributes the node stage of a played frame
+  - `85813e48` Playback settings: GPU nodes and the decode and source worker counts, each with a one-line default, an environment override and effect without a restart
+  Diff: 43 files changed, 5896 insertions(+), 27 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:15 AM on 2026-10-26 PDT)
 
 `main` moved `9b0e1102` -> `53933a67` (lane commits cherry-picked onto main in lane order) and then to this
