@@ -1,5 +1,37 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (3:35 AM on 2026-10-26 PDT)
+
+`main` moved `3c368b33` -> `d703209b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `d703209b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-0323.log`, started 3:23 AM): **Ran 6767 tests in 508.042 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step E of N: Grade, Merge, Blur, Sharpen and Soften take Nuke's knobs, and every masked node gets Nuke's mask fringe.** Commits:
+  - `7b1b3999` Soften's toolbar description says blur again, so the Tab search for 'blur' still lists Soften among the description matches (the step E wording dropped the word)
+  - `662d5cc9` 2D fidelity E part 3: Blur, Sharpen and Soften take Nuke's filter shapes, quality limit and crop to format (Sharpen and Soften also a value range, Soften an amount); docs rows and step notes; the re-scored report (73.8 to 80.1)
+  - `464b67ef` 2D fidelity E part 2: Merge follows the guide's algorithms for every operation and takes Nuke's video colorspace, alpha masking, channel sets, output, also merge, bbox and metadata/range from
+  - `53a4a33c` 2D fidelity E part 1: Grade takes Nuke's levels, gamma, reverse and clamps, and every masked node gets the mask fringe; the GPU island carries the new Grade arithmetic and stays off nodes whose channel or mask strip is changed
+  Diff: 29 files changed, 2360 insertions(+), 453 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step A of 1: the first full-size frame after a rest reuses the scene packed for the half-size frames (resume 2).** Commits:
+  - `d484e55b` First-frame gate numbers after the shared pack (step C part 3, 10/26): 8 runs of four scenes at 1080p after a 4 s rest on the RTX, the Radeon and the laptop stand-in, next to the 0.43.2 rows; the laptop stand-in and (but for two single intervals) the Radeon hold 54 ms, the RTX plays 49 to 67 ms for the first frames because of the card's clock; the repack timeline and the known limit rewritten to what remains
+  - `dfa811b4` A summarizer for the first-frame gate: reads <root>/<adapter>/<scene>-<run>.json from tools/benchmark_3d_playback.py and prints each run's longest interval, the runs over 54 ms and where in the first 3 s the long intervals fell (step C part 3)
+  - `590212c9` The quarter-size first frames of a play after a rest are chosen from the frames that were slow, not from any first frame: a frame among the first three that kept the card 85 percent of the frame time or arrived over 52 ms after the one before lowers the ramp (the furnished room's first frame waits 24 to 41 ms on the idle clock and its frames arrive 44 to 50 ms apart, so lowering for it kept the clock down for 18 frames); a quarter-size frame that waits under 35 percent of the frame time sends the ramp back to half size, and the link-up test keeps the slow frame as its baseline only when the quarter-size frames went on for three (step C part 3)
+  - `feed610c` The first frames of a play after a rest are drawn at a quarter of the chosen size when the first half-size frame kept the card most of the frame time: the smoke, splats and glass scene waits 40 to 47 ms on the card for each of its first four half-size frames while the shader clock is down (RTX, 10/25), so those intervals were 70 to 84 ms; at a quarter the wait is 17 ms and the frames 30 to 43 ms, the window draws half size again once a quarter-size wait has fallen to two thirds of the first (or after 0.8 s), and the link-up test compares the half-size frames after that with the slow first one (step C part 3)
+  - `2c1b38af` The readback buffer for the chosen size is made by the half-size frames of a ramp, not by the first full-size frame: the ramp carries its size ratio, a ramp frame asks for the buffer the chosen size will need (the ratio squared with a margin, or the size a stop's picture released), and the switch frame reuses it (11.5 to 15 ms of allocation in the mixed scene's switch frame, the RTX, 10/25); the switch frames are now 23 ms (furnished), 26 ms (mixed), 41 ms (smoke, splats and glass) and 19 ms (cube) (step C part 1)
+  - `44be3f4f` The half-size and full-size frames of a play after a rest share one packed scene: the card's cache keys told read-only arrays apart by identity, and the Evaluator makes the scene again for every proxy tier (a tier is part of each node's digest), so the first full-size frame packed the shadow triangles and built the resident scene again; read-only arrays are now keyed by their content, hashed once per array object and remembered (bounded at 128 MB), a read-only view of an array that can still change is hashed every time, and an edit still repacks (step C part 1)
+  - `66f99f96` The switch frame back to full size after a rest, timed stage by stage on the RTX: the furnished room spends 18 ms packing its shadow triangles and 10 ms building its resident scene again, the mixed scene 5 and 8 ms plus 11.5 ms allocating the full-size readback buffer, the smoke, splats and glass scene the same; the cube repacks nothing. New trace stamps (size, shadow_ready, key_done, resident_built, targets_ready, volume_ready, picture_ready, staging_ready, splat_ready) and benchmarks/3d-playback/ffshare-1025/switch_timeline.py (step C part 2)
+  Diff: 112 files changed, 252101 insertions(+), 29 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D on the GPU, Claude Sonnet 5.5) (2:05 AM on 2026-10-26 PDT)
 
 `main` moved `8dcd9693` -> `df49d0a4` (lane commits cherry-picked onto main in lane order) and then to this
