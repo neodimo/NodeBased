@@ -712,7 +712,7 @@ island row does not move. Measured, three fresh passes per row (details below):
   decode-ahead pool, the GPU lock or the evaluator's cache lock. Memory in flight is bounded by the worker count and a byte budget (10% of the cache
   memory, at least 256 MiB, `NODEBASED_SOURCE_POOL_MB`; each source is assumed to hold the size it produced last time, 64 MiB before that); a worker that would pass
   the budget leaves the task to the joining thread.
-- Workers: none at four CPUs or fewer (the same rule as the decode-ahead pool, read from the process affinity), otherwise up to three
+- Workers: none at three CPUs or fewer, one at exactly four (the process affinity decides; the later Roto read-ahead step turned it on there), otherwise up to three
   (`CPUs - 3`, at most 3). `NODEBASED_SOURCE_WORKERS` sets the count outright (0 turns the pool off). `Window` installs the pool on its evaluator and
   shuts it down at close; a bare `Evaluator()` has none and walks serially as before.
 - `Evaluator.evaluate_raster` starts every source with no connected input (Read, Roto, Noise, Ramp, Radial, Rectangle, Grid, Checker; not Text, which paints with Qt)
@@ -773,7 +773,7 @@ node-evaluation stage in the timeline):
 - Two decode-ahead workers (`NODEBASED_DECODE_AHEAD_WORKERS=2`) instead of one, with and without the pool, leave the Radeon island row at 12.4 to 12.6 fps (pool) and 13.0 to 13.1 fps
   (serial); node stage 71.4 to 71.9 ms and 68.3 to 70.3 ms.
 - Where the decode-ahead pool is off (four CPUs or fewer) the pool does help the window (stand-in rows above: +0.5 to +0.8 fps on the CPU nodes and +1.5 to +1.9 fps on the island, node stage about 20 to 30 ms shorter in both).
-  The default there stays at zero workers, as required; whether to switch two workers on at four CPUs is Gonzo's call.
+  Gonzo answered yes on 10/26; the Roto read-ahead step runs one worker there.
 
 **Do the Radeon rows reach 16 and 24 fps?** No. Fresh playback of the 48-frame lap runs at 12.2 to 12.9 fps with the pool (12.9 to 13.3 fps serial), the 240-frame clip at 17.0 to 17.2 fps with a p95 of 80.6 to 86.0 ms
 (the 62.5 ms gate fails, as in step C), and no row comes near 24 fps (41.67 ms). The island frame in the serial graph reached 42.5 ms, 0.8 ms over the 24 fps interval, and the window adds the
@@ -783,12 +783,97 @@ display conversion, the hand-off and the other threads on top of it.
 link whatever the sources do). Plate files were regenerated with the unchanged generator; EXR headers carry a creation time, so their file hashes differ from `inputs-1080p-240.sha256`.
 An early targeted run of `tests.test_gpu2d` and `tests.test_benchmark_gpu2d` (28 s) ran on the RTX 3080 Ti without `/tmp/nb-gpu.lock`; every measurement and the final GPU test runs took it.
 
-**Needs Gonzo.** (1) Decide whether to turn two source workers on at four CPUs (the stand-in gains 0.5 to 1.9 fps; the decode-ahead pool, which an earlier test found to slow that size down, is
+**Needs Gonzo.** (Both questions below were answered yes on 10/26 and are built in the Roto read-ahead step that follows.) (1) Decide whether to turn two source workers on at four CPUs (the stand-in gains 0.5 to 1.9 fps; the decode-ahead pool, which an earlier test found to slow that size down, is
 off there). (2) The longest source, the animated Roto matte, decides the Radeon island frame; computing the next frame's matte while this frame's island runs (a read-ahead like the decode-ahead pool, using
 the source pool) would remove up to the 13 to 18 fps difference measured above, and it needs the app's next-frames list; this step did not build it. (3) The remaining 50 ms of node stage with a free Roto is unexplained.
 
 Rerun: `python tools/benchmark_gpu2d.py graph --inputs "$NB_RUN/plates" --backend gpu2d --adapter integrated --budget-mb 512 --label radeon8060s --source-workers 3 --output g.json`
 (`--source-workers 0` for the serial walk) and `python tools/benchmark_gpu2d.py playback ... --env NODEBASED_SOURCE_WORKERS=3`; tests: `python -m unittest tests.test_sourcepool`.
+
+### R6-1: the next frame's Roto matte drawn while this frame is shown, and a source worker at four CPUs (10/26, Roto read-ahead step B of 2)
+
+Step A left the animated Roto matte as the longest source and the thing the Radeon island frame waited for (12 to 13 fps; 18 fps with the matte already drawn). This step
+draws the matte of the next frame or two while the current frame is evaluated, converted and shown, and switches the source workers on at four CPUs. Evidence is in
+`benchmarks/2d-gpu/R6-1/` under the `-1026b` names (`playback-*`, `playback-summary-*`, `m2-latency-standin-*`, `interaction-standin-*`, `roto-ahead-summary-1026b.json`,
+`roto-ahead-environment-1026b.json`, `roto-ahead-gate-stats-1026b.json`). In the file names `ahead` is the first version (the read-ahead on every playback request), `adaptive` the final
+code, `noahead` the same code with `NODEBASED_ROTO_AHEAD=0` (the step A configuration), `standin-w0|w1|w2` the stand-in with that many source workers, `standin-default` its default
+(one worker), `smoke-ahead1|2|3` a short experiment with the lead set to 1, 2 and 3 frames, and `da2` two decode-ahead workers.
+
+**Result.** The Radeon island row gains 20 to 30 percent where the Roto decides the frame, the RTX island rows gain 5 to 20 percent, the CPU-node rows are unchanged, and the
+four-CPU stand-in plays 1.0 to 1.4 fps faster. **The Radeon island comes close to 16 fps on average and does not pass the 16 fps gate (interval p95 62.5 ms), and does not come near 24 fps.**
+
+- Real window, Radeon island, 48 frames: 12.3 fps (control today, 12.2 to 12.9 in step A) becomes 15.2 to 15.9 fps; the node stage 71.5 to 74.0 ms becomes 49.5 to 53.1 ms; interval p95
+  87.8 to 89.9 ms becomes 74.8 to 86.2 ms. 240 frames: 17.1 fps becomes 17.0 to 18.0 fps and p95 81.5 to 82.5 ms becomes 70.4 to 75.3 ms (the Roto holds its last key after frame 48, so
+  only the first 48 frames of the clip draw a new matte). The earlier always-on version measured 15.0 to 16.2 fps (p95 73.5 to 79.9 ms) and 18.0 to 18.4 fps (p95 68.4 to 70.6 ms).
+- Real window, RTX 3080 Ti island: 4.6 to 5.0 fps becomes 5.5 to 5.8 fps (48 frames) and 5.1 to 5.2 becomes 5.4 to 5.6 (240 frames, the rows step A left out). The card's link is still the limit.
+- CPU nodes (Radeon box and RTX box, 48 and 240 frames): 7.4 to 7.6 and 9.2 to 9.3 fps without the read-ahead, 7.5 to 7.6 and 9.2 fps with it. The gate below keeps it off there.
+- Laptop stand-in (four CPUs, 2x scale): CPU nodes 4.74 to 4.77 fps become 5.67 to 5.83 fps (node stage 205 to 208 ms become 168 to 170 ms); the Radeon island 6.96 to 7.24 fps becomes 8.00 to 8.57 fps
+  (node stage 134 to 142 ms become 114 to 119 ms). These gains come from the one source worker; the read-ahead stays off on the stand-in (see the gate).
+- Interaction on the stand-in (the evaluator, 24 samples per interaction, three passes): a Grade knob drag is unchanged (87.1 to 87.3 ms, one worker 86.7 to 87.5 ms); a scrub to an uncomputed frame falls from 148 ms to 109 to 112 ms;
+  a Roto point drag with the Reads cached rises from 48.1 to 48.4 ms to 49.8 to 50.5 ms (about 1.5 ms, 3 percent). The M2 edit-latency benchmark (`tools/benchmark_4k_viewport.py --source-workers N`, three passes
+  each at zero, one and two workers on `taskset -c 0-3`) moves no median outside the pass-to-pass spread (4K Grade 75.1 to 77.4 ms and 74.1 to 78.2 ms; 4K Merge 40.2 to 41.0 and 40.3 to 42.6; 1080p Roto shape drag
+  11.3 to 12.0 and 10.7 to 11.9); single passes show p95 outliers with the pool on and off alike (4K Tracker frame step p95 857 to 866 ms off, 854 to 1044 ms with one worker).
+
+**What was built.**
+
+- `nodebased/rotoahead.py`: `RotoAhead` queues, for the Roto nodes with no input under the viewed node, the matte of the next frames in playback order (`NODEBASED_ROTO_AHEAD`, default 2 frames, 0 turns it off). It does
+  nothing in a graph that remaps time, for a Roto with a wired input, for a view zoomed to under 80 percent of the picture (the tiles draw only that part), or on the request that starts playback or follows an edit; the window
+  schedules it on playback ticks. A Roto whose shapes carry no animation (`payload_animates`, a read-only function over the stored shapes) is read ahead once per document state. The lead is also capped by the bytes in
+  flight (`NODEBASED_ROTO_AHEAD_MB`, default 256, counted with the size each Roto produced last).
+- `Evaluator.read_ahead_node` evaluates one such Roto for a frame on a pool worker through the ordinary nested `evaluate_raster`, so the matte enters the cache under the key the walk computes and nothing else is stored.
+  While it runs it announces its digest; a walk that reaches the same digest waits for it instead of drawing the matte again (`ahead_joins`, cancellable), and a walk that reaches a matte nobody has started draws it itself.
+  Its errors stay in its task: the walk that needs the frame draws the Roto and raises the same error on the same node.
+- `SourcePool.submit_ahead` is a second, lower queue: workers take it only when no source of the frame in hand is waiting, one stream at a time (`ahead_limit`), and a task that does not fit the byte budget is dropped instead of waiting.
+  Nobody joins an ahead task. The window cancels the lead (`RotoAhead.cancel`: queued tasks dropped at once, a running one stops before it stores) when playback stops or turns, the playhead is moved by hand or the document is edited
+  (every request that cancels the preview in flight), and when it closes, before the pool shuts down and is waited for.
+- The gate. The walk records how long it waited at the join of a Roto it had to draw (`Evaluator.roto_is_critical`, a moving average over frames where the Roto took 5 ms or more); the read-ahead runs while that wait is 4 ms or more, or unmeasured.
+  Where the chain beside the Roto is the long part of the frame (the CPU kernels, the stand-in), the matte is ready when the Merge asks for it, and the always-on version measured 0.5 to 4 percent slower there (Radeon CPU nodes, 48 frames: 6.99 to 7.51 fps against 7.42 to 7.60) as the
+  drawing took memory bandwidth from the chain. One pass each of the final code (`roto-ahead-gate-stats-1026b.json`): Radeon island 520 matte tasks, 73 drawn and 447 already cached, no walk waited for one in flight, measured wait 15.5 ms;
+  Radeon CPU nodes, stand-in island and stand-in CPU nodes 0 tasks, measured wait 0.0 ms.
+- Workers at four CPUs: `sourcepool.FOUR_CPU_WORKERS = 1`; none at three CPUs or fewer; `NODEBASED_SOURCE_WORKERS` still sets the count outright. Measured on the stand-in with the same code and the read-ahead off: the CPU nodes play at 5.79 to 5.92 fps with one worker and 5.41 to 5.69
+  with two, the Radeon island at 8.57 to 8.68 and 9.13 to 9.23. One worker is the cap because the CPU kernels are what the shipped app runs (the island is opt-in) and a second worker costs them 0.1 to 0.5 fps; the island would take the second worker (+0.5 fps).
+- `tools/benchmark_gpu2d.py interaction` (knob drag, Roto point drag, scrub of the realistic comp through the evaluator) and `tools/benchmark_4k_viewport.py --source-workers N` give the latency comparison; `tools/benchmark_2d_playback.py` records the pool and read-ahead counters in its pass file.
+
+**Tests** (`tests/test_rotoahead.py`, 29 tests, 4 s). A matte read ahead equals the walk's bit for bit at tiers 1 and 2 (shapes scaled onto the small canvas so the mattes have pixels) and leaves the cache holding exactly the entries the walk makes;
+a Roto that raises gives the serial error text on the same node; a walk that reaches a matte in flight waits and the matte is drawn once; the wait can be cancelled; a cancel drops the queued mattes and a running one stores nothing, with nothing left in flight;
+an edit never serves the old matte; the same frame is not queued twice; a held Roto is read ahead once; the lead follows the frame count and the byte cap; nothing is queued without workers or after shutdown and a pool shut down with work queued raises nothing
+("cannot schedule new futures after shutdown" cannot occur, the pool does not use `concurrent.futures`); a playing walk, the read-ahead and the source pool run together without deadlock; the gate measures a Roto the walk waits for as critical and one beside a longer chain as ready;
+the island frames on the card equal the island frames without the read-ahead (RTX 3080 Ti); the window installs the read-ahead and closing cancels it. `tests/test_sourcepool.py` follows the new four-CPU rule.
+
+**Measured table** (`benchmark_gpu2d.py playback`, uncached, first lap, three fresh passes per row, ranges over the passes: fps / interval p95 in ms / node stage in ms; "Step A" is the earlier 10/26 pool run, "Control" is today's run with `NODEBASED_ROTO_AHEAD=0`, which
+is the step A configuration, "Final" is the code of this step; the 240-frame RTX rows have no step A entry and show step C, 10/25):
+
+| Row | Step A | Control | Final |
+|---|---|---|---|
+| Radeon, 48 frames, island | 12.20 to 12.87 / 83.5 to 90.0 / 69.9 to 72.9 | 12.26 to 12.39 / 87.8 to 89.9 / 71.5 to 74.0 | 15.17 to 15.92 / 74.8 to 86.2 / 49.5 to 53.1 |
+| Radeon, 240 frames, island | 17.03 to 17.16 / 80.6 to 86.0 / 53.5 to 55.1 | 17.06 to 17.16 / 81.5 to 82.5 / 53.6 to 54.5 | 17.01 to 17.98 / 70.4 to 75.3 / 46.7 to 50.4 |
+| Radeon, 48 frames, CPU nodes | 6.99 to 7.58 / 151.4 to 164.4 / 124.9 to 136.3 | 7.42 to 7.60 / 143.6 to 151.0 / 122.6 to 124.0 | 7.58 to 7.62 / 144.4 to 150.5 / 121.6 to 123.6 |
+| Radeon, 240 frames, CPU nodes | 8.83 to 9.21 / 136.4 to 152.5 / 97.4 to 98.5 | 9.19 to 9.32 / 137.1 to 138.4 / 95.8 to 96.4 | 9.22 to 9.26 / 138.1 to 138.8 / 95.6 to 96.5 |
+| RTX 3080 Ti, 48 frames, island | 4.64 to 4.87 / 241.9 to 398.5 / 212.1 to 217.0 | 4.58 to 5.02 / 238.4 to 361.4 / 210.9 to 218.5 | 5.46 to 5.80 / 209.0 to 218.8 / 179.6 to 181.9 |
+| RTX 3080 Ti, 240 frames, island | step C: 5.14 to 5.36 / 254.4 to 276.0 / 175.3 to 177.5 | 5.05 to 5.19 / 267.7 to 289.5 / 176.2 to 177.4 | 5.37 to 5.64 / 250.5 to 272.0 / 173.3 to 175.7 |
+| RTX 3080 Ti, 48 frames, CPU nodes | 7.70 to 7.75 / 138.9 to 143.5 / 120.3 to 122.4 | 7.51 to 7.61 / 145.2 to 152.4 / 123.0 to 125.1 | 7.47 to 7.50 / 147.7 to 153.4 / 123.9 to 124.6 |
+| RTX 3080 Ti, 240 frames, CPU nodes | step C: 8.78 to 8.95 / 154.2 to 159.1 / 97.3 to 98.3 | 9.20 to 9.30 / 137.4 to 140.6 / 95.3 to 96.4 | 9.15 to 9.19 / 139.3 to 141.3 / 96.3 to 97.0 |
+| Stand-in (4 CPUs, 2x scale), 48 frames, island | no workers: 7.17 to 7.31 / 147.6 to 155.2 / 132.3 to 135.9 | no pool: 6.96 to 7.24 / 147.7 to 151.7 / 133.6 to 141.8; one worker, read-ahead off: 8.57 to 8.68 / 129.5 to 135.5 / 110.6 to 113.9 | one worker (default): 8.00 to 8.57 / 133.6 to 145.3 / 113.7 to 119.0 |
+| Stand-in, 48 frames, CPU nodes | no workers: 4.75 to 4.81 / 221.8 to 229.4 / 206.5 to 209.9 | no pool: 4.74 to 4.77 / 226.6 to 228.7 / 205.3 to 208.3; one worker, read-ahead off: 5.79 to 5.92 / 188.4 to 196.2 / 166.9 to 171.0 | one worker (default): 5.67 to 5.83 / 194.6 to 211.6 / 167.8 to 169.8 |
+
+Other rows (stand-in, 48 frames, two workers): CPU nodes 5.41 to 5.69 fps (read-ahead off) and 5.66 to 5.72 (always on); island 9.13 to 9.23 and 9.34 to 9.57. One worker with the always-on read-ahead: CPU nodes 5.88 to 5.91, island 8.96 to 9.08. The stand-in shares its four cores with the
+other lanes' processes, which are not pinned, so its ranges move from session to session by about 0.5 fps; compare the rows measured in one session (the control, one-worker and two-worker rows were).
+
+Lead and decode-ahead experiments on the Radeon island, 48 frames, the always-on version, two passes each: a lead of 1, 2 and 3 frames gives 16.3 to 16.6, 16.2 to 16.8 and 16.7 to 16.9 fps (the read-ahead off, one pass: 11.6), so two is kept. With two decode-ahead workers instead of the default
+(`NODEBASED_DECODE_AHEAD_WORKERS=2`) and the read-ahead on, three passes give 16.7 to 17.0 fps, interval p95 64.9 to 68.5 ms and node stage 44.6 to 46.3 ms: with the matte ready, decoding the Reads is the next thing the frame waits for. That setting is not made default here.
+
+**Do the Radeon rows reach 16 and 24 fps?** On average the 48-frame lap runs at 15.2 to 15.9 fps (the always-on version 15.0 to 16.2, the short lead experiment 16.2 to 16.9) and the 240-frame clip at 17.0 to 18.0 fps. **The 16 fps gate, an interval p95 of 62.5 ms, is not passed in any row** (74.8 to 86.2 ms and 70.4 to 75.3 ms;
+64.9 to 68.5 ms with two decode-ahead workers). **No row comes near 24 fps** (41.67 ms; the node stage with the matte ready is 47 to 53 ms).
+
+**Left out.** RTX 4070 laptop, A6000 and Windows rows stay unverified (Gonzo owns them); the llvmpipe playback rows and the stand-in 240-frame rows were not repeated; the first-version (`ahead`) rows were measured before the gate and before the tick-only scheduling and are kept as evidence of the always-on version.
+The GPU islands are opt-in in the app, so the CPU-node rows are what a default install plays. Four short targeted runs (`tests.test_benchmark_gpu2d` twice and the island class of `tests.test_rotoahead` twice, 1 to 30 seconds each) ran on the RTX 3080 Ti without `/tmp/nb-gpu.lock`, a repeat of the step A slip; every measurement and
+every later GPU test run took the lock. Plates were regenerated with the unchanged generator (EXR headers carry a creation time, so their file hashes differ from `inputs-1080p-240.sha256`).
+
+**Needs Gonzo.** (1) Whether two decode-ahead workers become the default where the Roto read-ahead is on (+0.7 to +1.0 fps and a p95 near the 16 fps gate on the Radeon island; an earlier test found a decoder slows the four-CPU stand-in down, which this does not touch). (2) The remaining 47 to 53 ms of node stage with the matte ready.
+(3) Whether the island becomes the default playback backend, since the read-ahead only pays there.
+
+Rerun: `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :183 --backend gpu2d --force-adapter integrated --label radeon8060s --frame-range 48 --passes 3 --budget-mb 512 --out-dir "$NB_RUN/pbb"` (`--env NODEBASED_ROTO_AHEAD=0` for the control,
+`--cpus 0-3 --env QT_SCALE_FACTOR=2` for the stand-in), `python tools/benchmark_gpu2d.py interaction --inputs "$NB_RUN/plates" --source-workers 1 --output i.json` and `taskset -c 0-3 python tools/benchmark_4k_viewport.py --source-workers 1 --json m2.json`; tests: `python -m unittest tests.test_rotoahead tests.test_sourcepool`.
 
 ## Lane 2 step notes
 

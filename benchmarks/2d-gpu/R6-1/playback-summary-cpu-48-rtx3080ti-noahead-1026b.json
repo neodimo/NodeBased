@@ -1,0 +1,165 @@
+{
+ "tool": "tools/benchmark_gpu2d.py playback",
+ "label": "rtx3080ti-noahead",
+ "backend": "cpu",
+ "frame_range": 48,
+ "force_adapter": "default",
+ "cpus": null,
+ "env": [
+  "NODEBASED_ROTO_AHEAD=0"
+ ],
+ "passes": [
+  {
+   "case": "cpu-48-rtx3080ti-noahead-1",
+   "adapter": "rtx3080ti-noahead",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 7.606,
+   "total_duration_ms": 6263.22,
+   "mean_interval_ms": 131.763,
+   "interval_ms": {
+    "n": 46,
+    "mean": 131.763,
+    "p50": 131.072,
+    "p95": 145.231,
+    "p99": 149.741,
+    "max": 153.316
+   },
+   "first_picture_latency_ms": 202.128,
+   "latency_ms": {
+    "n": 47,
+    "mean": 150.892,
+    "p50": 148.955,
+    "p95": 174.26,
+    "p99": 194.274,
+    "max": 202.128
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 122.909,
+    "p50": 123.733,
+    "p95": 142.866,
+    "p99": 153.733,
+    "max": 157.291
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 18.662,
+    "p50": 18.321,
+    "p95": 20.834,
+    "p99": 37.017,
+    "max": 49.582
+   },
+   "frames_dropped_counted": 9,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ],
+   "wall_seconds": 13.7
+  },
+  {
+   "case": "cpu-48-rtx3080ti-noahead-2",
+   "adapter": "rtx3080ti-noahead",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 7.566,
+   "total_duration_ms": 6298.02,
+   "mean_interval_ms": 132.422,
+   "interval_ms": {
+    "n": 46,
+    "mean": 132.422,
+    "p50": 130.129,
+    "p95": 150.492,
+    "p99": 155.991,
+    "max": 158.298
+   },
+   "first_picture_latency_ms": 206.618,
+   "latency_ms": {
+    "n": 47,
+    "mean": 151.854,
+    "p50": 149.634,
+    "p95": 173.454,
+    "p99": 194.834,
+    "max": 206.618
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 124.213,
+    "p50": 122.98,
+    "p95": 147.796,
+    "p99": 152.333,
+    "max": 154.047
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 18.437,
+    "p50": 18.696,
+    "p95": 21.602,
+    "p99": 37.479,
+    "max": 50.074
+   },
+   "frames_dropped_counted": 8,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ],
+   "wall_seconds": 14.3
+  },
+  {
+   "case": "cpu-48-rtx3080ti-noahead-3",
+   "adapter": "rtx3080ti-noahead",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 7.509,
+   "total_duration_ms": 6346.351,
+   "mean_interval_ms": 133.05,
+   "interval_ms": {
+    "n": 46,
+    "mean": 133.05,
+    "p50": 130.391,
+    "p95": 152.447,
+    "p99": 157.163,
+    "max": 157.271
+   },
+   "first_picture_latency_ms": 226.051,
+   "latency_ms": {
+    "n": 47,
+    "mean": 154.292,
+    "p50": 151.085,
+    "p95": 177.499,
+    "p99": 208.864,
+    "max": 226.051
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 125.905,
+    "p50": 125.149,
+    "p95": 153.108,
+    "p99": 156.879,
+    "max": 157.761
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 19.388,
+    "p50": 18.898,
+    "p95": 21.656,
+    "p99": 43.357,
+    "max": 58.293
+   },
+   "frames_dropped_counted": 6,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ],
+   "wall_seconds": 14.3
+  }
+ ],
+ "median": {
+  "first_pass_fps": 7.566,
+  "interval_p95_ms": 150.492,
+  "node_evaluation_p50_ms": 123.733
+ }
+}

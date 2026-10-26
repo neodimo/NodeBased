@@ -1,0 +1,146 @@
+{
+ "tool": "tools/benchmark_gpu2d.py interaction",
+ "label": "standin-4cpu-w0",
+ "source_workers": 0,
+ "size": [
+  1920,
+  1080
+ ],
+ "samples": 24,
+ "environment": {
+  "revision": "209a9bfec6a8742746c828866d1300339b991963",
+  "working_tree_dirty": true,
+  "fixture_sha256": "697f157ac59ef14c54c9f34dd8ceb7b5d1603ecb18537f0ea682c4afa0bbca8f",
+  "host": "bazzite",
+  "os": "Linux-7.2.9-ogc3.1.fc44.x86_64-x86_64-with-glibc2.43",
+  "cpu": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "cpu_count": 32,
+  "python": "3.12.13",
+  "versions": {
+   "numpy": "2.5.3",
+   "wgpu": "0.32.0",
+   "PySide6": "6.11.2"
+  },
+  "nvidia_smi": "NVIDIA GeForce RTX 3080 Ti, 615.78.08, 12288 MiB, 1, 4, 2, 16",
+  "command": "tools/benchmark_gpu2d.py interaction --inputs $NB_RUN/plates --label standin-4cpu-w0 --samples 24 --source-workers 0 --output $NB_RUN/inter/inter-w0-3.json",
+  "disk_cache": "0",
+  "timing_method": "bounded completion: gpu_ms = queue submit until a 16-byte flags readback returns (every pass finished); upload_ms = host write_buffer calls; readback_ms = copy and map of the finished image; exec_ms = stage + encode + passes to completion (no source upload, no terminal readback); total_ms = stage start until the Raster is on the host; no GPU timestamp queries (feature not enabled on the shared device)"
+ },
+ "note": "Evaluator to ColorCorrect on the CPU kernels, no window; the knob and point drags are cache misses by construction (a new value for every sample), the scrub draws frames in a fixed shuffled order",
+ "interactions": {
+  "knob drag (Grade multiply, sources cached)": {
+   "ms": {
+    "n": 24,
+    "mean": 87.249,
+    "p50": 87.205,
+    "p95": 89.158,
+    "p99": 89.33,
+    "max": 89.373,
+    "min": 85.418
+   },
+   "finite": true,
+   "samples": [
+    85.777,
+    85.534,
+    86.624,
+    89.184,
+    85.823,
+    87.307,
+    87.089,
+    87.7,
+    89.373,
+    85.484,
+    89.012,
+    86.844,
+    88.477,
+    85.418,
+    87.103,
+    87.817,
+    88.834,
+    86.83,
+    87.395,
+    88.793,
+    85.73,
+    86.8,
+    87.489,
+    87.544
+   ]
+  },
+  "Roto point drag (Reads cached)": {
+   "ms": {
+    "n": 24,
+    "mean": 48.147,
+    "p50": 48.104,
+    "p95": 49.658,
+    "p99": 51.619,
+    "max": 52.172,
+    "min": 46.201
+   },
+   "finite": true,
+   "samples": [
+    49.766,
+    48.257,
+    47.919,
+    52.172,
+    48.53,
+    48.711,
+    48.312,
+    48.426,
+    48.109,
+    46.738,
+    49.044,
+    47.887,
+    47.75,
+    47.539,
+    48.327,
+    47.85,
+    46.201,
+    48.601,
+    48.099,
+    47.631,
+    48.312,
+    47.616,
+    47.334,
+    46.389
+   ]
+  },
+  "scrub (new frame, nothing cached)": {
+   "ms": {
+    "n": 24,
+    "mean": 148.544,
+    "p50": 148.416,
+    "p95": 156.856,
+    "p99": 157.464,
+    "max": 157.63,
+    "min": 132.621
+   },
+   "finite": true,
+   "samples": [
+    147.504,
+    147.241,
+    145.538,
+    149.357,
+    152.102,
+    144.261,
+    149.41,
+    147.863,
+    144.809,
+    148.183,
+    152.263,
+    156.906,
+    150.138,
+    132.621,
+    147.332,
+    157.63,
+    156.474,
+    148.649,
+    156.57,
+    151.041,
+    132.801,
+    147.573,
+    152.323,
+    146.459
+   ]
+  }
+ }
+}

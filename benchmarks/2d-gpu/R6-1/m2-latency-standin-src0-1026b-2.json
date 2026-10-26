@@ -1,0 +1,86 @@
+{
+  "label": "standin-4cpu-w0",
+  "commit": null,
+  "platform": "Linux 7.2.9-ogc3.1.fc44.x86_64 x86_64",
+  "python": "3.12.13",
+  "numpy": "2.5.3",
+  "edits_sampled": 20,
+  "source_workers": 0,
+  "cpus": 4,
+  "peak_memory_mb": 8956.17578125,
+  "full_frame_3840x2160": {
+    "cold_ttfp_ms": 729.4938980048755,
+    "warm_ms": 0.15407599858008325,
+    "edit_p50_ms": 695.3466830018442,
+    "edit_p95_ms": 936.4632903489111
+  },
+  "tiled_viewport_1920x1080": {
+    "cold_ttfp_ms": 308.92200701055117,
+    "warm_ms": 4.369382004369982,
+    "edit_p50_ms": 169.95696500089252,
+    "edit_p95_ms": 176.32725374787697
+  },
+  "process_startup": {
+    "cold_start_ms": 117.06673698790837,
+    "warm_start_ms": 111.53026900137775
+  },
+  "read_to_viewer_ttfp_ms": {
+    "1080p": 29.853497006115504,
+    "4K": 114.96784799965099
+  },
+  "edit_samples": 20,
+  "representative_edit_latency": {
+    "1080p": {
+      "Grade": {
+        "edit_p50_ms": 18.089705998136196,
+        "edit_p95_ms": 20.39657570785494
+      },
+      "Transform": {
+        "edit_p50_ms": 5.640124996716622,
+        "edit_p95_ms": 7.110465351433963
+      },
+      "Merge": {
+        "edit_p50_ms": 10.635323997121304,
+        "edit_p95_ms": 12.411789008183415
+      },
+      "Blur": {
+        "edit_p50_ms": 93.40625900222221,
+        "edit_p95_ms": 121.16625464768731
+      },
+      "Roto shape drag": {
+        "edit_p50_ms": 11.262100502790418,
+        "edit_p95_ms": 11.781553750188323
+      },
+      "Tracker frame step": {
+        "edit_p50_ms": 206.01439150050282,
+        "edit_p95_ms": 211.93794169666944
+      }
+    },
+    "4K": {
+      "Grade": {
+        "edit_p50_ms": 75.07250449998537,
+        "edit_p95_ms": 81.00744409821347
+      },
+      "Transform": {
+        "edit_p50_ms": 14.692035503685474,
+        "edit_p95_ms": 24.86014644600802
+      },
+      "Merge": {
+        "edit_p50_ms": 40.98256149882218,
+        "edit_p95_ms": 45.3599862987176
+      },
+      "Blur": {
+        "edit_p50_ms": 354.707097998471,
+        "edit_p95_ms": 470.0437923966092
+      },
+      "Roto shape drag": {
+        "edit_p50_ms": 46.67622050328646,
+        "edit_p95_ms": 50.22081113929744
+      },
+      "Tracker frame step": {
+        "edit_p50_ms": 830.7087765060714,
+        "edit_p95_ms": 857.3577470575401
+      }
+    }
+  }
+}

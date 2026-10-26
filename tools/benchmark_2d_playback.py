@@ -445,6 +445,13 @@ def run_window(args):
             'counters_total':gpu_backend.counters.snapshot(),'islands':island_rows,
             'method':'gpu_ms = submit until the small flags readback returns (every pass done); upload_ms = host write_buffer calls; '
                      'readback_ms = copy and map of the finished image; wall_ms per island includes all of them'}
+    if hasattr(win, 'roto_ahead'):
+        # What the source pool and the Roto read-ahead did (nodebased/sourcepool.py, nodebased/rotoahead.py): tasks run by the workers,
+        # read-ahead mattes queued and computed, walks that waited for a matte in flight, and the walk's measured wait at the Roto join.
+        ev = win.evaluator
+        result['source_pool'] = {'pool': win.source_pool.stats(), 'roto_ahead': win.roto_ahead.stats(),
+                                 'evaluator': {'ahead_runs': ev.ahead_runs, 'ahead_cached': ev.ahead_cached, 'ahead_joins': ev.ahead_joins,
+                                               'roto_wait_ms': {k: round(v, 2) for k, v in ev._roto_wait.items()}}}
     # The island rows are stamped on the perf_counter clock and the frame rows on the trace clock; this offset joins them
     # (tools/benchmark_gpu2d.py playback assigns each island to the accepted frame whose evaluation contains it).
     result['trace_offset_ms']=round(offset_ms,3)

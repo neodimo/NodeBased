@@ -1,0 +1,51 @@
+{
+ "revision": "209a9bfec6a8742746c828866d1300339b991963",
+ "working_tree_dirty": false,
+ "fixture_file": "tests/fixtures/playback_comp.nbcomp",
+ "fixture_sha256": "697f157ac59ef14c54c9f34dd8ceb7b5d1603ecb18537f0ea682c4afa0bbca8f",
+ "variant_sha256": "3299df457d8be5ddb6a45c71b61ca58bab431db5559236e320d9e77f0237fb73",
+ "frame_range": [
+  1,
+  48
+ ],
+ "host": "bazzite",
+ "os": "Linux-7.2.9-ogc3.1.fc44.x86_64-x86_64-with-glibc2.43",
+ "cpu": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+ "cpu_count": 32,
+ "python": "3.12.13",
+ "versions": {
+  "numpy": "2.5.3",
+  "PySide6": "6.11.2",
+  "wgpu": "0.32.0"
+ },
+ "adapters": [
+  {
+   "name": "NVIDIA GeForce RTX 3080 Ti",
+   "type": "discrete",
+   "backend": "Vulkan"
+  },
+  {
+   "name": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "type": "integrated",
+   "backend": "Vulkan"
+  },
+  {
+   "name": "llvmpipe (LLVM 22.1.8, 256 bits)",
+   "type": "software",
+   "backend": "Vulkan"
+  },
+  {
+   "name": "NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2",
+   "type": "Unknown",
+   "backend": "OpenGL"
+  }
+ ],
+ "nvidia_driver": "NVIDIA GeForce RTX 3080 Ti, 615.78.08",
+ "display": ":183 (private Xvfb 2560x1440x24)",
+ "qt_platform": "xcb",
+ "force_adapter": "integrated",
+ "backend": "gpu2d",
+ "generator": "tools/benchmark_2d_playback.py --generate-inputs (make_inputs: half-float EXR, frame*19 shifted bands, moving oval)",
+ "command": "python tools/benchmark_2d_playback.py --plate-pattern $NB_RUN/plates/plate.%04d.exr --background-pattern $NB_RUN/plates/background.%04d.exr --size 1080p --cache-mode uncached --backend gpu2d|cpu --force-adapter integrated|default --gpu-budget-mb 512|1024 --seconds 12|60 (through tools/benchmark_gpu2d.py playback --passes 3; the read-ahead off is --env NODEBASED_ROTO_AHEAD=0, the stand-in is --cpus 0-3 --env QT_SCALE_FACTOR=2 with --env NODEBASED_SOURCE_WORKERS=0|1|2)",
+ "note": "environment block for the 10/26 Roto read-ahead passes (revision is the read-ahead commit; the worker default at four CPUs was set to one worker afterwards, and every stand-in row set NODEBASED_SOURCE_WORKERS explicitly); plates regenerated with tools/benchmark_2d_playback.py --generate-inputs --size 1080p --frames 240 (EXR headers carry a DateTime, so file hashes differ from inputs-1080p-240.sha256 although the generator is unchanged)"
+}

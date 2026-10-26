@@ -1,0 +1,126 @@
+{
+ "cpu-48-radeon8060s-standin-stats-1": {
+  "pool": {
+   "workers": 1,
+   "threads": 1,
+   "budget": 858993459,
+   "in_flight": 0,
+   "peak_in_flight": 67108864,
+   "submitted": 144,
+   "worker_runs": 96,
+   "queued": 0,
+   "ahead_submitted": 0,
+   "ahead_runs": 0,
+   "ahead_dropped": 0,
+   "ahead_queued": 0
+  },
+  "roto_ahead": {
+   "frames": 2,
+   "scheduled": 0,
+   "cancelled": 0,
+   "epochs": 5,
+   "pending": 0
+  },
+  "evaluator": {
+   "ahead_runs": 0,
+   "ahead_cached": 0,
+   "ahead_joins": 0,
+   "roto_wait_ms": {
+    "roto": 0.0
+   }
+  }
+ },
+ "cpu-48-radeon8060s-stats-1": {
+  "pool": {
+   "workers": 3,
+   "threads": 3,
+   "budget": 858993459,
+   "in_flight": 0,
+   "peak_in_flight": 201326592,
+   "submitted": 144,
+   "worker_runs": 97,
+   "queued": 0,
+   "ahead_submitted": 0,
+   "ahead_runs": 0,
+   "ahead_dropped": 0,
+   "ahead_queued": 0
+  },
+  "roto_ahead": {
+   "frames": 2,
+   "scheduled": 0,
+   "cancelled": 0,
+   "epochs": 4,
+   "pending": 0
+  },
+  "evaluator": {
+   "ahead_runs": 0,
+   "ahead_cached": 0,
+   "ahead_joins": 0,
+   "roto_wait_ms": {
+    "roto": 0.0
+   }
+  }
+ },
+ "gpu2d-48-radeon8060s-standin-stats-1": {
+  "pool": {
+   "workers": 1,
+   "threads": 1,
+   "budget": 858993459,
+   "in_flight": 0,
+   "peak_in_flight": 67108864,
+   "submitted": 150,
+   "worker_runs": 62,
+   "queued": 0,
+   "ahead_submitted": 0,
+   "ahead_runs": 0,
+   "ahead_dropped": 0,
+   "ahead_queued": 0
+  },
+  "roto_ahead": {
+   "frames": 2,
+   "scheduled": 0,
+   "cancelled": 0,
+   "epochs": 5,
+   "pending": 0
+  },
+  "evaluator": {
+   "ahead_runs": 0,
+   "ahead_cached": 0,
+   "ahead_joins": 0,
+   "roto_wait_ms": {
+    "roto": 0.01
+   }
+  }
+ },
+ "gpu2d-48-radeon8060s-stats-1": {
+  "pool": {
+   "workers": 3,
+   "threads": 3,
+   "budget": 858993459,
+   "in_flight": 0,
+   "peak_in_flight": 201326592,
+   "submitted": 150,
+   "worker_runs": 101,
+   "queued": 0,
+   "ahead_submitted": 520,
+   "ahead_runs": 520,
+   "ahead_dropped": 0,
+   "ahead_queued": 0
+  },
+  "roto_ahead": {
+   "frames": 2,
+   "scheduled": 520,
+   "cancelled": 0,
+   "epochs": 5,
+   "pending": 0
+  },
+  "evaluator": {
+   "ahead_runs": 73,
+   "ahead_cached": 447,
+   "ahead_joins": 0,
+   "roto_wait_ms": {
+    "roto": 15.45
+   }
+  }
+ }
+}
