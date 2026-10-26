@@ -1,0 +1,157 @@
+{
+ "tool": "tools/benchmark_gpu2d.py playback",
+ "label": "llvmpipe",
+ "backend": "cpu",
+ "frame_range": 48,
+ "passes": [
+  {
+   "case": "cpu-48-llvmpipe-1",
+   "adapter": "llvmpipe",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.586,
+   "total_duration_ms": 7242.853,
+   "mean_interval_ms": 153.109,
+   "interval_ms": {
+    "n": 46,
+    "mean": 153.109,
+    "p50": 150.303,
+    "p95": 168.204,
+    "p99": 170.885,
+    "max": 172.117
+   },
+   "first_picture_latency_ms": 199.841,
+   "latency_ms": {
+    "n": 47,
+    "mean": 173.919,
+    "p50": 170.752,
+    "p95": 201.866,
+    "p99": 210.788,
+    "max": 215.565
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 146.715,
+    "p50": 144.668,
+    "p95": 169.122,
+    "p99": 174.307,
+    "max": 178.046
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 20.996,
+    "p50": 18.512,
+    "p95": 32.602,
+    "p99": 42.165,
+    "max": 48.997
+   },
+   "frames_dropped_counted": 4,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ]
+  },
+  {
+   "case": "cpu-48-llvmpipe-2",
+   "adapter": "llvmpipe",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.606,
+   "total_duration_ms": 7221.144,
+   "mean_interval_ms": 152.19,
+   "interval_ms": {
+    "n": 46,
+    "mean": 152.19,
+    "p50": 152.555,
+    "p95": 164.286,
+    "p99": 165.318,
+    "max": 165.408
+   },
+   "first_picture_latency_ms": 220.409,
+   "latency_ms": {
+    "n": 47,
+    "mean": 172.117,
+    "p50": 171.166,
+    "p95": 191.734,
+    "p99": 216.803,
+    "max": 220.409
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 145.508,
+    "p50": 145.871,
+    "p95": 167.798,
+    "p99": 175.176,
+    "max": 180.244
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 19.497,
+    "p50": 18.508,
+    "p95": 26.942,
+    "p99": 38.777,
+    "max": 47.838
+   },
+   "frames_dropped_counted": 6,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ]
+  },
+  {
+   "case": "cpu-48-llvmpipe-3",
+   "adapter": "llvmpipe",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.711,
+   "total_duration_ms": 7106.448,
+   "mean_interval_ms": 150.184,
+   "interval_ms": {
+    "n": 46,
+    "mean": 150.184,
+    "p50": 147.427,
+    "p95": 168.334,
+    "p99": 171.021,
+    "max": 172.083
+   },
+   "first_picture_latency_ms": 197.98,
+   "latency_ms": {
+    "n": 47,
+    "mean": 167.876,
+    "p50": 165.366,
+    "p95": 191.498,
+    "p99": 201.409,
+    "max": 204.33
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 142.822,
+    "p50": 142.465,
+    "p95": 165.166,
+    "p99": 173.878,
+    "max": 179.386
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 18.012,
+    "p50": 17.686,
+    "p95": 19.437,
+    "p99": 35.701,
+    "max": 49.121
+   },
+   "frames_dropped_counted": 8,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ]
+  }
+ ],
+ "median": {
+  "first_pass_fps": 6.606,
+  "interval_p95_ms": 168.204,
+  "node_evaluation_p50_ms": 144.668
+ }
+}

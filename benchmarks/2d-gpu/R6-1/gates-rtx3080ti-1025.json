@@ -1,0 +1,82 @@
+{
+ "tier": "rtx3080ti",
+ "gates": [
+  {
+   "gate": "Pixels inside 2e-5 + 2e-5*abs(cpu)",
+   "limit": "ratio <= 1",
+   "measured": "worst ratio 0.0020, violations 0",
+   "result": "pass",
+   "note": ""
+  },
+  {
+   "gate": "Zero readbacks between the four kernels, all four on the device",
+   "limit": "0",
+   "measured": "0 intermediate readbacks; boundaries none",
+   "result": "pass",
+   "note": ""
+  },
+  {
+   "gate": "Allocations within the cap",
+   "limit": "peak <= 1024 MiB",
+   "measured": "peak 457 MiB",
+   "result": "pass",
+   "note": ""
+  },
+  {
+   "gate": "Four-node resident execution p95",
+   "limit": "<= 20.0 ms",
+   "measured": "sources already on the device [4.062, 9.358, 4.279] ms; sources uploaded that frame, upload and readback time left out [14.037, 14.431, 14.575] ms (passes)",
+   "result": "pass",
+   "note": "stage + encode + passes to completion; both variants must pass"
+  },
+  {
+   "gate": "Uploads + resident execution + terminal readback p95",
+   "limit": "<= 30.0 ms",
+   "measured": "[165.284, 165.671, 166.482] ms (passes)",
+   "result": "fail",
+   "note": "completion included"
+  },
+  {
+   "gate": "Realistic graph node-stage median vs the same machine's CPU run (48-frame clip)",
+   "limit": ">= 2x",
+   "measured": "CPU 141.6 ms -> island 212.8 ms = 0.67x (passes: [210.8, 212.8, 217.7])",
+   "result": "fail",
+   "note": "accepted fresh frames per pass [[47, 48], [47, 48], [47, 48]]"
+  },
+  {
+   "gate": "Intermediate: fresh playback fps and interval p95, 48-frame clip",
+   "limit": ">= 16.0 fps and p95 <= 62.5 ms",
+   "measured": "[4.945, 4.924, 4.657] fps, p95 [234.089, 229.754, 354.376] ms (passes); CPU run [6.745, 6.673, 6.636] fps",
+   "result": "fail",
+   "note": ""
+  },
+  {
+   "gate": "Final: 24 fps, 48-frame clip",
+   "limit": ">= 24.0 fps and p95 <= 41.67 ms",
+   "measured": "[4.945, 4.924, 4.657] fps, p95 [234.089, 229.754, 354.376] ms (passes)",
+   "result": "fail",
+   "note": ""
+  },
+  {
+   "gate": "Realistic graph node-stage median vs the same machine's CPU run (240-frame clip)",
+   "limit": ">= 2x",
+   "measured": "CPU 98.3 ms -> island 175.3 ms = 0.56x (passes: [175.3, 177.5, 175.3])",
+   "result": "fail",
+   "note": "accepted fresh frames per pass [[240, 240], [240, 240], [240, 240]]"
+  },
+  {
+   "gate": "Intermediate: fresh playback fps and interval p95, 240-frame clip",
+   "limit": ">= 16.0 fps and p95 <= 62.5 ms",
+   "measured": "[5.335, 5.144, 5.363] fps, p95 [264.283, 276.02, 254.385] ms (passes); CPU run [8.81, 8.776, 8.947] fps",
+   "result": "fail",
+   "note": ""
+  },
+  {
+   "gate": "Final: 24 fps, 240-frame clip",
+   "limit": ">= 24.0 fps and p95 <= 41.67 ms",
+   "measured": "[5.335, 5.144, 5.363] fps, p95 [264.283, 276.02, 254.385] ms (passes)",
+   "result": "fail",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,61 @@
+{
+ "tier": "radeon8060s-standin",
+ "gates": [
+  {
+   "gate": "Pixels inside 2e-5 + 2e-5*abs(cpu)",
+   "limit": "ratio <= 1",
+   "measured": "worst ratio 0.0020, violations 0",
+   "result": "pass",
+   "note": ""
+  },
+  {
+   "gate": "Zero readbacks between the four kernels, all four on the device",
+   "limit": "0",
+   "measured": "0 intermediate readbacks; boundaries none",
+   "result": "pass",
+   "note": ""
+  },
+  {
+   "gate": "Allocations within the cap",
+   "limit": "peak <= 512 MiB",
+   "measured": "peak 313 MiB",
+   "result": "pass",
+   "note": ""
+  },
+  {
+   "gate": "Four-node resident execution p95",
+   "limit": "<= 20.0 ms",
+   "measured": "sources already on the device [4.177, 4.183, 4.454] ms; sources uploaded that frame, upload and readback time left out [4.965, 5.551, 5.356] ms (passes)",
+   "result": "pass",
+   "note": "stage + encode + passes to completion; both variants must pass"
+  },
+  {
+   "gate": "Uploads + resident execution + terminal readback p95",
+   "limit": "<= 30.0 ms",
+   "measured": "[10.545, 11.481, 11.097] ms (passes)",
+   "result": "pass",
+   "note": "completion included"
+  },
+  {
+   "gate": "Realistic graph node-stage median vs the same machine's CPU run (48-frame clip)",
+   "limit": ">= 2x",
+   "measured": "CPU 206.2 ms -> island 135.5 ms = 1.52x (passes: [135.8, 134.0, 135.5])",
+   "result": "fail",
+   "note": "accepted fresh frames per pass [[47, 48], [47, 48], [47, 48]]"
+  },
+  {
+   "gate": "Intermediate: fresh playback fps and interval p95, 48-frame clip",
+   "limit": ">= 16.0 fps and p95 <= 62.5 ms",
+   "measured": "[7.11, 7.256, 7.24] fps, p95 [154.253, 149.986, 147.72] ms (passes); CPU run [4.787, 4.806, 4.717] fps",
+   "result": "fail",
+   "note": ""
+  },
+  {
+   "gate": "Final: 24 fps, 48-frame clip",
+   "limit": ">= 24.0 fps and p95 <= 41.67 ms",
+   "measured": "[7.11, 7.256, 7.24] fps, p95 [154.253, 149.986, 147.72] ms (passes)",
+   "result": "fail",
+   "note": ""
+  }
+ ]
+}

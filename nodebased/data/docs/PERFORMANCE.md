@@ -454,8 +454,9 @@ desktop-class RTX and on the RTX 4070 laptop (unverified; Gonzo owns those runs)
   Needs Lane 2 to say whether the CPU path is intended.
 - Blur is validated for radii 1 to 4 (the CPU's own float32 shifted sum); wider radii use float64 cumulative sums on the CPU and stay
   on the CPU until the float32 accumulation is measured (step B).
-- Remaining after the island: the node stage still holds the Read decodes, the Roto matte and the CPU ColorCorrect (about 55 ms of the
-  Radeon's 69 ms), and the 8-bit display conversion; closing 24 fps needs those as well.
+- Remaining after the island: the node stage still holds the Read decodes and the Roto matte (33.5 and 25.0 ms of the Radeon's 74.1 ms serial
+  graph, measured in step C; the CPU ColorCorrect is an identity at the fixture's values and costs 0.07 ms) and the 8-bit display
+  conversion; closing 24 fps needs those as well.
 
 Rerun: `python tools/benchmark_2d_playback.py --plate-pattern "$NB_RUN/plates/plate.%04d.exr" --background-pattern "$NB_RUN/plates/background.%04d.exr" --size 1080p --cache-mode uncached --display :N --backend gpu2d --seconds 12 --output run.json`
 on a private X display, then `python tools/summarize_2d_playback.py run.json`; the pixel check is
@@ -529,6 +530,160 @@ Rerun: `python /path/force-adapter.py integrated tests.test_gpu2d` (and `cpu`, o
 to write the table above. The 1080p check is `python tools/check_gpu2d_fixture.py --inputs "$NB_RUN/plates" --size 1080p --frames 1 2 6 12 18 24 30 36 42 47 48 --adapter default`
 (add `--last 240` and frames 49 to 240 for the extrapolated range). Regenerated EXR sources carry a capture date, so their file hashes
 change on each generation; the pixels do not.
+
+### R6-1: measurements and the go/no-go (10/25, step C of 3)
+
+Step C measures the island against every R6-1 gate with the new `tools/benchmark_gpu2d.py` (commands `kernels`, `graph`, `playback`, `gates`,
+`table`, `resummarize`, `make-inputs`; tests in `tests/test_benchmark_gpu2d.py`) and records the decision. Evidence is in
+`benchmarks/2d-gpu/R6-1/` under the `-1025` names: `kernels-*`, `graph-*`, `playback-*`, `gates-*`, `kernels-summary-1025.json` and
+`transfer-rates-island-pattern-1025.json`. The A6000, the RTX 4070 laptop with its Iris Xe and Windows D3D12 were not available: those rows
+are **unverified**, and Gonzo owns them (field-kit commands at the end of this section).
+
+**Decision.** The island is a go as a design and a no-go as a speed-up on this workstation's RTX 3080 Ti.
+
+- Pixels, residency and execution time pass everywhere they were measured: 402 million channels per GPU mode agree with the CPU chain within
+  the gate (worst gate ratio 0.0020, 0 violations), 1 download and 0 intermediate readbacks per frame, and the four nodes take 14.5 ms (RTX
+  3080 Ti, p95, with that frame's sources just uploaded) or 4.3 ms (sources already on the card) against 78 to 85 ms on the CPU kernels.
+- The RTX 3080 Ti row fails every gate that includes the bus: uploads, the four nodes and the readback take 165.7 ms (p95; gate 30 ms), the
+  node stage gets slower than the CPU (213 ms against 142 ms), playback runs at 4.9 fps against 6.7 fps on the CPU nodes. This card sits behind
+  a PCI link negotiated at generation 4 with 2 lanes, and moving the 75 MB of sources up and the 33.5 MB result back costs 85 ms on it before
+  any node runs (below). The 30 ms gate cannot be met on that link whatever the island does.
+- On the integrated Radeon 8060S, where host and card share memory, the same island takes 11.0 ms in total (p95), the node stage gets 2.06 times
+  faster on the 48-frame clip, and playback doubles (13.1 fps against 6.7). It still misses 16 fps and 24 fps. **The stage left is the sources:
+  the two Read decodes take 33.5 ms and the Roto matte 25.0 ms of the 74.1 ms serial graph, the island 13.6 ms.**
+
+**Method.** Revision `499a0d2a` plus the tool (committed as `c188cd5b`; its only changes to existing code are two extra timing counters in
+`gpu2d.py` and a clock offset in the playback harness), fixture `tests/fixtures/playback_comp.nbcomp` unchanged (sha256 `697f157a...`), sources
+regenerated with `tools/benchmark_2d_playback.py --generate-inputs $NB_RUN/plates --size 1080p --frames 240` (480 half-float EXR files on disk).
+AMD Ryzen AI MAX+ 395, wgpu 0.32.0, NVIDIA driver 615.78.08, RADV, llvmpipe (LLVM 22.1.8). Every GPU run took `/tmp/nb-gpu.lock`, so the integrator's
+suites did not overlap them. Timing is bounded completion, never enqueue time: `gpu_ms` runs from the queue submit until a 16-byte flags readback
+returns after the last pass; **no GPU timestamp queries**, because the shared device (`gpu3d._state`) is created without the `timestamp-query`
+feature and this wgpu build's queue work-done callback fails. Three passes per tier, each a fresh process. A `kernels` pass decodes the
+48 animated frames' three sources once into RAM (4.8 GB, excluded from every kernel number), runs two sacrificial frames in every mode, checks
+pixels of both GPU modes on all 48 frames, then times four modes over the same frames and parameters: the CPU kernels (proven bit-identical
+to `Evaluator` on frames 1 to 3), one GPU run per node (every node uploads its inputs and reads its result back), the island with every source
+uploaded for that frame (**fresh**: the transfer-inclusive number) and the island with the sources already resident (**warm**: the first run of
+a frame uploads, two timed runs follow). `exec_ms` is host staging plus encoding plus the passes to completion, with the source uploads and the
+terminal readback taken out. `playback` passes are the real window through `tools/benchmark_2d_playback.py`: uncached (disk cache off), private
+Xvfb with software OpenGL, decode-ahead on and timed, two sacrificial frames before each island run, first lap only (pictures counted when the
+Viewer accepts the request generation, every frame of the lap shown, no frame skipped or repeated). Stage records exist for fresh evaluations
+only: 47 of the 48 pictures of the 48-frame lap (frame 1 is on screen when play starts) and 240 of 240 for the long clip. The "dropped" counts
+in the raw files cover the whole 12 or 60 second window, later laps included, and never count as progress. The 240-frame clip extends the
+curves with their last key, so from frame 49 on the Transform is a whole-pixel translate that the CPU copies without resampling: the CPU is
+faster there (98 ms node stage against 142 ms) and the island's relative gain shrinks.
+
+**The four nodes alone, predecoded, 1080p, 48 animated frames, three passes pooled** (milliseconds; `kernels-summary-1025.json`):
+
+| Tier | CPU kernels p50 / p95 | One run per node p50 / p95 | Island, sources uploaded that frame p50 / p95 | Island, sources resident p50 / p95 |
+|---|---:|---:|---:|---:|
+| RTX 3080 Ti (1 GiB cap) | 78.3 / 85.2 | 234.7 / 452.4 | 163.9 / 165.7 | 16.3 / 19.3 |
+| Radeon 8060S (512 MiB cap) | 78.8 / 83.6 | 21.7 / 24.1 | 9.7 / 11.0 | 5.4 / 6.0 |
+| Radeon 8060S, four CPUs, 2x scale stand-in (512 MiB) | 78.3 / 83.7 | 21.7 / 24.4 | 9.9 / 11.3 | 5.5 / 6.0 |
+| llvmpipe, software wgpu, 12 frames, one pass (1 GiB) | 79.3 / 84.5 | 57.5 / 76.9 | 33.5 / 37.9 | 20.4 / 22.2 |
+| llvmpipe, 480 x 270, 128 MiB cap | 3.7 / 4.0 | 6.0 / 8.1 | 3.4 / 4.0 | 2.1 / 2.7 |
+
+Execution only (`exec_ms`, p50 / p95; per-pass p95 in brackets):
+
+| Tier | Sources uploaded that frame | Sources resident |
+|---|---|---|
+| RTX 3080 Ti | 13.6 / 14.5 (14.0, 14.4, 14.6) | 3.2 / 4.3 (4.1, 9.4, 4.3) |
+| Radeon 8060S | 4.6 / 5.2 (4.8, 5.2, 5.4) | 3.8 / 4.2 (4.2, 4.0, 4.4) |
+| llvmpipe, 1080p | 26.7 / 31.2 | 18.0 / 19.7 |
+
+The CPU chain's medians are Grade 11.4 ms, Transform 24.2, Blur 20.2, Merge 21.1 (graph run); the island's cold shader setup is 29.0 ms
+(RTX), 28.5 ms (Radeon) and 39 ms (llvmpipe), measured separately and left out of every pass. Counters per frame, identical on every tier: the island
+uploads 3 sources plus the Transform's table (74.7 MB), downloads once (33.5 MB), submits twice, dispatches 9 passes (6 when the sources are
+resident, which skips the three input checks), allocates 0 to 2 buffers after warm-up (6 to 9 pool hits), 0 intermediate readbacks, no CPU
+boundary; peak 457 MiB of the RTX's 1 GiB cap and 313 MiB of the Radeon's 512 MiB. The per-node round trip moves 175 MB up and 133 MB down for
+each frame (4 downloads): residency alone is a 2.2 times gain on the Radeon (21.7 to 9.7 ms).
+
+**Where the RTX's 164 ms goes** (median of the island with fresh sources, pass 2 and 3; pass 1 in brackets): staging 0.7 ms, uploading 74.7 MB
+104.7 ms (75.8), encoding 0.3, the passes to completion 12.1 (3.3), reading back 45.3 ms (13.4), of which the device-to-host copy and map take 43.8
+(11.9) and the host copy 1.4. Raw rates from `xfer2.py`/`xfer3.py` on this link (`transfer-rates-island-pattern-1025.json`): 75 MB up in 73.7 ms
+(1.01 GB/s), 33.5 MB back in 11.8 ms (2.8 GB/s), and the Radeon does the same in 3.6 and 1.9 ms (20.6 and 17.8 GB/s). Three upload paths
+(`write_buffer`, a mapped staging buffer plus a copy, and the same in 8 MiB pieces) all take 73.6 ms: the upload call is not the cause. The rate
+moves between passes of identical code (pass 1 above) because the card's link renegotiates with load (`nvidia-smi` reads gen 4, 2 lanes of 16
+while busy and gen 1 at rest). The best case measured, 93 ms in total, is three times the 30 ms gate. For scale (a calculation from the link width): 2 lanes of generation 4 carry at most 3.9 GB/s, so even a perfect copy path would need 28 ms for the transfers alone; and with
+the 14.5 ms of execution the gate asks for about 7 GB/s averaged over both directions.
+
+**Playback through the real window, uncached, first lap, three passes per row** (`playback-*-1025-*.timeline.json.gz`, summaries beside them; ranges
+cover the three passes; `Node stage` is the median of the node-evaluation stage in the timeline):
+
+| Row | Fresh fps | Interval p50 / p95 / p99 (ms) | Node stage (ms) | First picture (ms) | Lap time (s) |
+|---|---|---|---|---|---|
+| RTX 3080 Ti, 48 frames, CPU nodes | 6.64 to 6.75 | 149 to 151 / 161 to 164 / 166 to 169 | 139.4 to 145.2 | 201 to 222 | 7.1 to 7.2 |
+| RTX 3080 Ti, 48 frames, island | 4.66 to 4.95 | 222 to 227 / 230 to 354 / 384 to 395 | 210.8 to 217.7 | 185 to 195 | 9.7 to 10.3 |
+| RTX 3080 Ti, 240 frames, CPU nodes | 8.78 to 8.95 | 103 to 105 / 154 to 159 / 163 to 169 | 97.3 to 98.3 | 199 to 235 | 26.9 to 27.4 |
+| RTX 3080 Ti, 240 frames, island | 5.14 to 5.36 | 183 to 186 / 254 to 276 / 322 to 368 | 175.3 to 177.5 | 189 to 199 | 44.9 to 46.8 |
+| Radeon 8060S, 48 frames, CPU nodes | 6.65 to 6.73 | 148 to 150 / 165 to 166 / 166 to 173 | 140.9 to 143.6 | 201 to 216 | 7.1 to 7.2 |
+| Radeon 8060S, 48 frames, island | 12.97 to 13.49 | 74 to 75 / 78 to 86 / 79 to 91 | 67.7 to 71.1 | 109 to 115 | 3.5 to 3.7 |
+| Radeon 8060S, 240 frames, CPU nodes | 8.85 to 8.93 | 103 to 104 / 155 to 157 / 163 to 164 | 97.1 to 97.9 | 202 to 206 | 26.9 to 27.2 |
+| Radeon 8060S, 240 frames, island | 16.90 to 17.43 | 55 to 57 / 79 to 80 / 82 to 85 | 51.9 to 53.6 | 112 to 122 | 13.8 to 14.2 |
+| Radeon stand-in (4 CPUs, 2x scale), 48 frames, CPU nodes | 4.72 to 4.81 | 209 to 212 / 222 to 234 / 224 to 236 | 205.1 to 209.8 | 253 to 260 | 9.9 to 10.1 |
+| Radeon stand-in, 48 frames, island | 7.11 to 7.26 | 138 to 141 / 148 to 154 / 158 to 164 | 134.0 to 135.8 | 171 to 174 | 6.6 to 6.7 |
+| llvmpipe, 48 frames, CPU nodes (numpy) | 6.59 to 6.71 | 147 to 153 / 164 to 168 / 165 to 171 | 142.5 to 145.9 | 198 to 220 | 7.1 to 7.2 |
+| llvmpipe, 48 frames, island (software wgpu) | 9.90 to 10.36 | 94 to 98 / 112 to 116 / 119 to 129 | 87.1 to 92.2 | 165 to 176 | 4.6 to 4.8 |
+
+**What the node stage holds under the island** (median pass; each island joined to the accepted frame whose evaluation contained it, 47 or 240
+frames per pass; milliseconds):
+
+| Row | Node stage | Island total | Upload | Passes + encode | Readback | Left outside the island |
+|---|---:|---:|---:|---:|---:|---:|
+| RTX 3080 Ti, 48 frames | 210.8 | 161.0 | 104.9 | 12.4 | 42.8 | 56.6 |
+| RTX 3080 Ti, 240 frames | 175.3 | 151.1 | 92.4 | 11.9 | 45.8 | 25.1 |
+| Radeon 8060S, 48 frames | 71.1 | 14.2 | 5.2 | 5.8 | 2.4 | 55.8 |
+| Radeon 8060S, 240 frames | 52.2 | 11.5 | 3.6 | 4.8 | 2.3 | 40.7 |
+| Radeon stand-in, 48 frames | 135.8 | 13.5 | 4.5 | 5.8 | 2.6 | 122.4 |
+
+The serial graph without a window (`graph-*-1025.json`, 48 frames, medians by node kind) names that remainder: CPU nodes 136.0 ms in total (Read 33.3,
+Roto 23.9, Grade 11.4, Transform 24.2, Blur 20.2, Merge 21.1, ColorCorrect 0.06); with the island on the Radeon 74.1 ms (Read 33.5, Roto 25.0, island
+13.6, staging 0.6, ColorCorrect 0.07); with the island on the RTX 221.7 ms (Read 33.1, Roto 24.9, island 161.6). ColorCorrect at this fixture's
+values is an identity that costs 0.06 ms, so moving it to the card would gain nothing here. Display conversion (18 to 19 ms per frame, 37 ms on the
+stand-in) overlaps the next evaluation in the pipeline and lifts the interval only on the stand-in.
+
+**Go/no-go against every R6-1 gate.** Pass, fail or unverified, with the number:
+
+| Gate | RTX 3080 Ti | RTX 4070 laptop | A6000 | Radeon 8060S (reference) |
+|---|---|---|---|---|
+| Pixels within 2e-5 + 2e-5 abs(cpu) | pass: worst ratio 0.0020, 0 violations, 48 frames x 2 modes | unverified | unverified | pass: 0.0020, 0 violations |
+| Zero readbacks between the kernels, four nodes resident | pass: 0 readbacks, 1 download, no CPU boundary | unverified | unverified | pass |
+| Allocations within the cap | pass: peak 457 of 1024 MiB | unverified | unverified | pass: 313 of 512 MiB |
+| Four-node resident execution p95 <= 20 ms | pass: 14.5 ms (sources just uploaded), 4.3 ms (resident) | unverified | unverified | pass: 5.2 ms, 4.2 ms |
+| Uploads + execution + terminal readback p95 <= 30 ms | **fail: 165.7 ms** (best pass p50 93.4) | unverified | unverified | pass: 11.0 ms |
+| Node-stage median at least 2x better than the same machine's CPU run | **fail: 0.67x** (141.6 to 212.8 ms); 240 frames 0.56x | unverified | unverified | pass 2.06x (143.5 to 69.6); 240 frames fail 1.86x |
+| 16 fps fresh playback, interval p95 <= 62.5 ms (laptop: 12 fps, 83.33 ms) | **fail: 4.9 fps**, p95 230 to 354 ms; 240 frames 5.3 fps | unverified | unverified | fail: 13.1 fps, p95 78 to 86 ms; 240 frames 17.3 fps, p95 79 to 80 ms (p95 fails) |
+| 24 fps final, interval p95 <= 41.67 ms | **fail** | unverified | unverified | fail |
+
+llvmpipe has no speed gate: its pixel and failure rows pass (480 x 270 at the 128 MiB cap, 1080p at 1 GiB, the 62 step B tests), and the CPU default and
+fallback paths are the ones the CPU rows ran and the step B failure tests cover. The Radeon column applies the RTX thresholds for reference; R6-1 sets no
+Radeon speed gate. **The spike is PARTIAL: the RTX row is measured and fails its transfer and playback gates, the laptop and A6000 rows are unmeasured.**
+
+**What is left on the 24 fps path (measured stage and an estimate).** On the Radeon the island is 14 ms of a 74 ms frame; the two Read decodes
+and the Roto matte, run one after the other on the CPU, are 59 ms. They are independent, so run on three threads they would take about 25 ms (the
+Roto), and 25 + 14 = 39 ms would sit under the 41.7 ms frame (an estimate from these medians, unmeasured; it also needs the decode pool and
+the conversion stage to keep their overlap). On the RTX 3080 Ti behind a 2-lane link the transfers (85 ms or more) rule out 24 fps and
+16 fps; the same card on a wider link is the open question.
+
+**Other findings.** (1) Residency matters: one GPU run per node costs 2.2 times the island on the Radeon and 1.4 times on the RTX, and a
+frame's sources must cross the bus once. (2) The result readback is 33.5 MB because CPU ColorCorrect and the display still need float pixels;
+a GPU ColorCorrect with the display conversion on the card would remove it (not measured). (3) The decode pool does not hide the Read decodes
+under the island: the Radeon's node stage in the window (70 ms) is close to the serial sum of its parts (74 ms). (4) Step A's estimate that the CPU ColorCorrect took part of the
+remainder was wrong; the remainder is Read plus Roto. (5) The numbers at the stand-in's four CPUs show the same island time (13.5 ms) and a
+node stage dominated by the CPU sources (122 ms outside the island).
+
+**Field-kit commands for the unverified rows (owner: Gonzo).** On the RTX 4070 laptop, A6000 and the Windows D3D12 adapters, with the plates
+generated as above and `NB_RUN` set: `python tools/benchmark_gpu2d.py kernels --inputs "$NB_RUN/plates" --adapter default --budget-mb 512 --label rtx4070laptop --output k1.json`
+(three times, three fresh processes; 1024 for the A6000; log the adapter, VRAM and the PCI link first), then `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :N --backend gpu2d --label rtx4070laptop --frame-range 48 --passes 3 --out-dir out`
+and the same with `--backend cpu` and `--frame-range 240`, and finally `python tools/benchmark_gpu2d.py gates --tier rtx4070laptop --kernels k1.json k2.json k3.json --playback out/summary-gpu2d-48-rtx4070laptop.json --cpu-playback out/summary-cpu-48-rtx4070laptop.json`.
+Windows rows need the real display route recorded by hand (render and present devices, scaling, power state); no Radeon or Xvfb run can stand in
+for them.
+
+Rerun the measurements here: `NB_RUN=... python tools/benchmark_gpu2d.py kernels --inputs "$NB_RUN/plates" --adapter default --budget-mb 1024 --label rtx3080ti --output k.json`
+(use `--adapter integrated --budget-mb 512` for the Radeon, `--adapter cpu --budget-mb 128` with `make-inputs` sources at 480 x 270 for the
+llvmpipe row, and `taskset -c 0-3` with `QT_SCALE_FACTOR=2` through `playback --cpus 0-3 --env QT_SCALE_FACTOR=2` for the stand-in);
+`python tools/benchmark_gpu2d.py graph --inputs "$NB_RUN/plates" --backend gpu2d --label rtx3080ti --output g.json`; `python tools/benchmark_gpu2d.py table --kernels k*.json`;
+tests with `python -m unittest tests.test_gpu2d tests.test_benchmark_gpu2d` (and the same through
+`run/force-adapter.py integrated|cpu`): 68 tests pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.
 
 ## Lane 2 step notes
 

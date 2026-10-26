@@ -1,0 +1,79 @@
+{
+ "note": "Host to device and back in the pattern of one island frame (75 MB of sources up in three buffers, 33.5 MB result back), medians of 15 repeats; script scratch/nb-lanes/run/big-L8/xfer2.py (xfer3.py compares upload paths). The RTX 3080 Ti sits behind a PCIe link negotiated at gen 4 by 2 lanes (nvidia-smi pcie.link.gen.current 4, width.current 2, maxima 4 and 16); at rest the link falls to gen 1.",
+ "island_pattern": [
+  {
+   "device": "NVIDIA GeForce RTX 3080 Ti",
+   "link_before": "4, 2, 4, 16",
+   "link_during": "4, 2, 4, 16",
+   "up_75MB_back_to_back_ms": {
+    "call": 72.94,
+    "complete": 73.7
+   },
+   "down_33MB_back_to_back_ms": 11.8,
+   "island_pattern_up_then_down_ms": {
+    "up_complete": 73.63,
+    "down": 11.74
+   },
+   "down_after_up_and_300ms_idle_ms": 62.13,
+   "up_GBps": 1.01,
+   "down_GBps": 2.81,
+   "link_after": "1, 2, 4, 16"
+  },
+  {
+   "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "link_before": "4, 2, 4, 16",
+   "link_during": "4, 2, 4, 16",
+   "up_75MB_back_to_back_ms": {
+    "call": 2.6,
+    "complete": 3.63
+   },
+   "down_33MB_back_to_back_ms": 1.86,
+   "island_pattern_up_then_down_ms": {
+    "up_complete": 3.84,
+    "down": 1.63
+   },
+   "down_after_up_and_300ms_idle_ms": 4.22,
+   "up_GBps": 20.56,
+   "down_GBps": 17.84,
+   "link_after": "2, 2, 4, 16"
+  }
+ ],
+ "upload_paths_75MB": [
+  {
+   "device": "NVIDIA GeForce RTX 3080 Ti",
+   "write_buffer": {
+    "host_call_ms": 72.9,
+    "complete_ms": 73.68,
+    "GBps": 1.01
+   },
+   "map_write_copy": {
+    "host_call_ms": 73.16,
+    "complete_ms": 73.63,
+    "GBps": 1.01
+   },
+   "chunked_map_write": {
+    "host_call_ms": 73.56,
+    "complete_ms": 73.65,
+    "GBps": 1.01
+   }
+  },
+  {
+   "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "write_buffer": {
+    "host_call_ms": 2.8,
+    "complete_ms": 3.81,
+    "GBps": 19.59
+   },
+   "map_write_copy": {
+    "host_call_ms": 2.46,
+    "complete_ms": 3.44,
+    "GBps": 21.7
+   },
+   "chunked_map_write": {
+    "host_call_ms": 2.95,
+    "complete_ms": 3.13,
+    "GBps": 23.85
+   }
+  }
+ ]
+}
