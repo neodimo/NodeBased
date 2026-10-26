@@ -172,7 +172,7 @@ def _compute_node_digests(document, tier, frame, solve=None):
             sources = [_bypass_source(node)]
         fingerprint = None
         if kind == "Read" and params["path"]:
-            from .media import nearest_sequence_path as _nearest, resolve_source_path as _resolve, resolved_file
+            from .media import nearest_sequence_path as _nearest, resolve_source_path as _resolve
             source_frame, policy, forced = imaging.read_lookup(params, frame)
             resolved, exists = (None, False) if forced else _resolve(params["path"], source_frame, policy)
             if resolved is None:
@@ -183,7 +183,7 @@ def _compute_node_digests(document, tier, frame, solve=None):
                                    stat.st_size, stat.st_mtime_ns]
             else:
                 stat = Path(resolved).stat()
-                fingerprint = [resolved_file(resolved), stat.st_size, stat.st_mtime_ns]
+                fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
         if kind == "ReadBundle":
             from .bundle import fingerprint as bundle_fingerprint
             fingerprint = bundle_fingerprint(params, frame)
@@ -305,14 +305,14 @@ def _read_source_fingerprint(params, frame):
     satisfy a decode request warmed against the old file. Black gaps still use the nearest
     existing member for their display/data-window shape, so that reference is part of the key.
     """
-    from .media import nearest_sequence_path, resolve_source_path, resolved_file
+    from .media import nearest_sequence_path, resolve_source_path
 
     path = params.get("path")
     source_frame, policy, forced = imaging.read_lookup(params, int(frame))
     resolved, exists = (None, False) if forced else resolve_source_path(path, source_frame, policy)
     if resolved is not None:
         stat = Path(resolved).stat()
-        return ("source", resolved_file(resolved), int(stat.st_size), int(stat.st_mtime_ns))
+        return ("source", str(Path(resolved).resolve()), int(stat.st_size), int(stat.st_mtime_ns))
     # ``missing=black`` has no source pixels, but imaging still reads the nearest member to
     # obtain the black raster's display window. Include its fingerprint so a changed reference
     # cannot leave a stale-shaped black decode in the pool.

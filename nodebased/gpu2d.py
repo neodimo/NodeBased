@@ -244,33 +244,6 @@ def _separable_weights(coordinates, length, clamp):
     return np.stack([_separable_weight(coordinates - (base + offset)) for offset in (-1, 0, 1, 2)], axis=-1)
 
 
-# One axis of a translation-only cubic Transform plan: the split coordinates and the four tap weights of every output
-# pixel. A frame that moves the picture along one axis leaves the other axis's tables unchanged, so they are kept
-# (bit for bit the arrays a rebuild gives) and the staging of a played frame builds only the axis that moved. The
-# key holds every value the arrays depend on.
-_AXIS_TABLES = {}
-_AXIS_TABLES_LIMIT = 24
-
-
-def _axis_tables(count, origin, offset, source_origin, source_length, clamp):
-    """``(whole, high, low, weights)`` for ``count`` output pixels starting at ``origin``: the axis's coordinates as
-    `Evaluator._resample_cubic_separable` builds them (float32), split by `_split`, with their tap weights flattened."""
-    key = (int(count), int(origin), float(offset), int(source_origin), int(source_length), bool(clamp))
-    found = _AXIS_TABLES.get(key)
-    if found is not None:
-        return found
-    coordinate = np.arange(count, dtype=np.float32) + origin + 0.5
-    coordinate = coordinate + np.float32(offset) - 0.5 - source_origin
-    whole, high, low = _split(coordinate)
-    tables = (whole, high, low, _separable_weights(coordinate, source_length, clamp).reshape(-1), coordinate)
-    for array in tables:
-        array.flags.writeable = False
-    if len(_AXIS_TABLES) >= _AXIS_TABLES_LIMIT:
-        _AXIS_TABLES.pop(next(iter(_AXIS_TABLES)))
-    _AXIS_TABLES[key] = tables
-    return tables
-
-
 @dataclass
 class TransformPlan:
     mode: str                       # "copy" (whole-pixel move) or "sample"
@@ -321,13 +294,17 @@ def map_transform(p, src: Region, dst: Region):
     zeros_w, zeros_h = np.zeros(w, np.float32), np.zeros(h, np.float32)
     zero_rows = weighted = False
     if separable_cubic:
-        # The CPU builds these two vectors in float32; reproduce them with the same expressions (one axis at a time, so a
-        # frame that moves along x leaves the y tables of the last frame in use).
-        sx_ci, sx_c1, sx_c0, sx_weights, sx = _axis_tables(w, dst.x, inverse[0, 2], src.x, src.width, clamp)
-        sy_ri, sy_r1, sy_r0, sy_weights, sy = _axis_tables(h, dst.y, inverse[1, 2], src.y, src.height, clamp)
+        # The CPU builds these two vectors in float32; reproduce them with the same expressions.
+        x = np.arange(w, dtype=np.float32) + dst.x + 0.5
+        y = np.arange(h, dtype=np.float32) + dst.y + 0.5
+        sx = x + np.float32(inverse[0, 2]) - 0.5 - src.x
+        sy = y + np.float32(inverse[1, 2]) - 0.5 - src.y
+        sx_ci, sx_c1, sx_c0 = _split(sx)
+        sy_ri, sy_r1, sy_r0 = _split(sy)
         tables = np.concatenate([sx_ci, sx_c1, sx_c0, zeros_h, zeros_h, zeros_h,
                                  zeros_w, zeros_w, zeros_w, sy_ri, sy_r1, sy_r0,
-                                 sx_weights, sy_weights])
+                                 _separable_weights(sx, src.width, clamp).reshape(-1),
+                                 _separable_weights(sy, src.height, clamp).reshape(-1)])
         weighted = True
         # `_resample_cubic_separable` handles a whole-pixel vertical map by cropping and zero-padding rows,
         # even with `clamp` on (the horizontal pass still clamps). The device reproduces that exactly.

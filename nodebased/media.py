@@ -187,43 +187,6 @@ def nearest_sequence_path(path, frame):
     return sequence_path(path, nearest)
 
 
-_DIRECTORY_REAL = {}      # directory as written -> (its resolved path, st_dev, st_ino)
-_DIRECTORY_REAL_LIMIT = 256
-
-
-def resolved_file(path):
-    """``str(Path(path).resolve())`` for a source file, without walking every symlink of its directory each time.
-
-    A played frame asks for the resolved path of each Read three times (the cache key, the decode key, the read), and
-    ``Path.resolve`` costs one ``lstat`` per path component: with the other threads of a playing window busy, every one of
-    those calls waits for the interpreter lock when it returns, and they added up to about 10 ms per frame. The
-    directory's resolution is kept and trusted only while ``stat`` of the directory still names the same device and inode,
-    so a directory or a link above it that is moved, replaced or retargeted is resolved again. The file itself is
-    checked with one ``lstat`` (a link is resolved the long way). A relative path, a ``..`` component or an
-    unreadable directory take the plain ``Path.resolve`` route.
-    """
-    text = os.fspath(path)
-    parts = text.split(os.sep)
-    if not os.path.isabs(text) or '..' in parts:
-        return str(Path(text).resolve())
-    text = os.path.normpath(text)
-    directory, name = os.path.split(text)
-    try:
-        status = os.stat(directory)
-    except OSError:
-        return str(Path(text).resolve())
-    entry = _DIRECTORY_REAL.get(directory)
-    if entry is None or entry[1] != status.st_dev or entry[2] != status.st_ino:
-        if len(_DIRECTORY_REAL) >= _DIRECTORY_REAL_LIMIT:
-            _DIRECTORY_REAL.clear()
-        entry = (os.path.realpath(directory), status.st_dev, status.st_ino)
-        _DIRECTORY_REAL[directory] = entry
-    candidate = os.path.join(entry[0], name)
-    if name in ('', '.') or os.path.islink(candidate):
-        return str(Path(text).resolve())
-    return candidate
-
-
 def resolve_source_path(path, frame, missing='error'):
     """Map an already-offset source frame onto a real file, applying the missing-frame policy.
 
