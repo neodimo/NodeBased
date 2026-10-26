@@ -12041,7 +12041,20 @@ class Window(QMainWindow):
                         heading = QLabel(group.section.upper())
                         heading.setObjectName("knob-section")
                         heading.setStyleSheet("color: #56606b; font-size: 11px; margin-top: 8px")
-                        form.addRow(heading)
+                        (form if rotopaint_holds is not None else main_form).addRow(heading)
+                        if rotopaint_holds is None:
+                            # A section lines up its own labels: a long label in it ("Invert unpremult")
+                            # no longer pushes the node's own sliders aside (10/25 CI: Grade's exposure
+                            # slider 115 px on Windows once the shared channel knobs joined its form).
+                            holder = QWidget()
+                            section_form = QFormLayout(holder)
+                            section_form.setContentsMargins(0, 0, 0, 0)
+                            section_form.setHorizontalSpacing(main_form.horizontalSpacing())
+                            section_form.setVerticalSpacing(main_form.verticalSpacing())
+                            section_form.setFieldGrowthPolicy(main_form.fieldGrowthPolicy())
+                            section_form.setRowWrapPolicy(main_form.rowWrapPolicy())
+                            main_form.addRow(holder)
+                            form = section_form
                 if group.help:
                     help_rows.append((form, form.rowCount(), group.help))
                 if node["type"] == "Flare" and set(group.params) & {"tracker_id", "track_index"}:
