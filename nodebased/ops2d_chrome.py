@@ -139,7 +139,7 @@ PREMULT_BY_CHOICES = ["rgba.alpha", "rgba.red", "rgba.green", "rgba.blue", "rgba
 MERGE_CHANNEL_CHOICES = ["rgba", "rgb", "alpha", "none", "red", "green", "blue"]
 OUTPUT_CHOICES = ["rgba", "rgb", "alpha", "red", "green", "blue", "none"]
 MERGE_OPEN_CHOICES = ("Achannels", "Bchannels", "merge_output", "also_merge")
-OPEN_CHOICE_PARAMS = frozenset({"channels", "maskChannelInput", "unpremult", "output", "premult"})
+OPEN_CHOICE_PARAMS = frozenset({"channels", "maskChannelInput", "unpremult", "output", "premult", "width_channel", "blur_channel"})
 
 _COMPONENT = {"R": 0, "X": 0, "U": 0, "G": 1, "Y": 1, "V": 1, "B": 2, "Z": 2, "A": 3, "W": 3}
 _RGBA_WORDS = {"red": 0, "r": 0, "green": 1, "g": 1, "blue": 2, "b": 2, "alpha": 3, "a": 3}
@@ -170,7 +170,7 @@ def is_open_choice(kind, name):
         return True              # Write's channels (fidelity step C) take a layer name too
     if name == "premult_by":
         return kind in ("Premult", "Unpremult")
-    if kind == "Merge" and name in MERGE_OPEN_CHOICES:
+    if kind in ("Merge", "AddMix") and name in MERGE_OPEN_CHOICES:
         return True              # Merge's channel sets (fidelity step E) take a layer name too
     if name not in OPEN_CHOICE_PARAMS:
         return False
@@ -183,6 +183,7 @@ def suggestions(name):
     """The words offered in a chrome knob's drop-down."""
     return {"channels": CHANNEL_CHOICES, "maskChannelInput": MASK_CHANNEL_CHOICES, "unpremult": UNPREMULT_CHOICES,
             "output": OUTPUT_CHOICES, "premult": UNPREMULT_CHOICES, "premult_by": PREMULT_BY_CHOICES,
+            "width_channel": MASK_CHANNEL_CHOICES, "blur_channel": MASK_CHANNEL_CHOICES,
             "Achannels": MERGE_CHANNEL_CHOICES, "Bchannels": MERGE_CHANNEL_CHOICES, "merge_output": MERGE_CHANNEL_CHOICES,
             "also_merge": ["none", "all"]}[name]
 
@@ -240,9 +241,13 @@ def step_g_params(kind):
 def step_h_params(kind):
     """The knobs fidelity step H added (the keyers, RotoPaint, Precomp, the time and metadata nodes, CurveTool, AddMix,
     DropShadow, Glow, Median, Shuffle, STMap and KeyMix), at the values that leave an older document's node as it was."""
-    from . import keyerknobs, metaknobs, paintknobs, precompnode
-    return {**keyerknobs.upgrade_params(kind), **paintknobs.upgrade_params(kind), **precompnode.upgrade_params(kind),
-            **metaknobs.upgrade_params(kind)}
+    from . import addmixknobs, curvetoolknobs, keymixknobs, keyerknobs, metaknobs, paintknobs, precompnode
+    small = {"Median": {"ignore_top_line": 0},
+             "Shuffle": {"out2": "none", "red_from2": "R", "green_from2": "G", "blue_from2": "B", "alpha_from2": "A"},
+             "DropShadow": {"enable_dropshadow_effect": 1, "inherit_input_color": 0, "shrink_expand": 0.0, "operation": "over"},
+             "Glow": {"saturation": 1.0, "width_channel": "none", "nonlinear": 0, "effect_only": 0}}.get(kind, {})
+    return {**small, **addmixknobs.upgrade_params(kind), **keymixknobs.upgrade_params(kind), **keyerknobs.upgrade_params(kind), **paintknobs.upgrade_params(kind), **precompnode.upgrade_params(kind),
+            **metaknobs.upgrade_params(kind), **curvetoolknobs.upgrade_params(kind)}
 
 
 def upgrade_nodes(nodes):
@@ -419,7 +424,16 @@ def needs_full_frame(kind, p):
         from . import keyerknobs
         if keyerknobs.needs_full_frame(kind, p):
             return True      # a crop is a fraction of the whole picture, which a tile does not hold
-    if kind in ("Blur", "Sharpen", "Soften"):
+    if kind == "Keymix":
+        from . import keymixknobs
+        if keymixknobs.needs_full_frame(kind, p):
+            return True      # a result window other than the union, or a mask channel from a named layer
+    if kind == "Shuffle" and str(p.get("out2", "none")).strip().lower() not in ("", "none"):
+        return True          # a second output layer rides on the whole-image raster only
+    if kind == "Glow" and str(p.get("width_channel", "none")).strip().lower() not in ("", "none") \
+            and not _is_rgba_token(p.get("width_channel")):
+        return True          # a width channel from a named layer is only on the whole-image path
+    if kind in ("Blur", "Sharpen", "Soften", "Glow"):
         from . import blurknobs
         if blurknobs.needs_full_frame(kind, p):
             return True      # a window that grows, or a picture scaled down to fit `quality`, is not a tile's business

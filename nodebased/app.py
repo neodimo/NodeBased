@@ -54,7 +54,7 @@ from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, Wrapp
 from . import analysisregion
 from . import ops2d_chrome
 from . import pathcontext
-from . import writenode
+from . import curvetoolknobs, writenode
 from . import presets as preset_model
 from . import fluidshelf
 from . import fluidknobpresets
@@ -2605,10 +2605,10 @@ class Viewer(PanZoomView):
                                           autocrop_mode=values["autocrop_mode"],
                                           autocrop_color=(values["autocrop_color_r"], values["autocrop_color_g"],
                                                           values["autocrop_color_b"]),
-                                          autocrop_tolerance=values["autocrop_tolerance"])
-            measured.pop("exposure_diff")
-            return [{"op": "set_key", "id": key, "param": name, "frame": frame, "value": float(value),
-                     "interpolation": "linear"} for name, value in measured.items()]
+                                          autocrop_tolerance=values["autocrop_tolerance"],
+                                          channels=str(node["params"].get("channels", "rgba")))
+            names = [name for name in curvetoolknobs.result_names(node["params"]) if name != "exposure_diff"]
+            return curvetoolknobs.key_commands(key, frame, measured, names)
         except Exception:
             return []
 
@@ -12580,52 +12580,31 @@ class Window(QMainWindow):
                 progress.setMinimumDuration(0)
 
                 def analyze_curve_tool(k=key, dialog=progress):
-                    selected = self.graph_nodes()[k]
-                    source_id = selected["inputs"].get("image")
-                    if not source_id:
-                        QMessageBox.information(self, "CurveTool", "Connect an image input first.")
-                        dialog.close(); return
-                    params = selected["params"]
-                    first, last = int(params["frame_start"]), int(params["frame_end"])
-                    if last < first:
-                        QMessageBox.warning(self, "CurveTool", "The end frame must be at or after the start frame.")
-                        dialog.close(); return
-                    dialog.setRange(0, last-first+1)
+                    """Go!: measure the node's frame range and key the Curve Type's results (nodebased/curvetoolknobs.py)."""
+                    document = self.graph_document()
+                    first, last = int(document["nodes"][k]["params"]["frame_start"]), int(document["nodes"][k]["params"]["frame_end"])
+                    dialog.setRange(0, max(1, last - first + 1))
                     dialog.show()
-                    commands = []
-                    names = ("average_r", "average_g", "average_b", "average_a", "average_luminance",
-                             "crop_x", "crop_y", "crop_width", "crop_height", "max_x", "max_y", "max_value",
-                             "min_x", "min_y", "min_value", "exposure_diff")
-                    previous_luminance = None
-                    for index, frame_number in enumerate(range(first, last+1)):
+
+                    def advance(done, total):
+                        dialog.setValue(done)
                         QApplication.processEvents()
-                        if dialog.wasCanceled():
-                            dialog.close(); return
-                        try:
-                            raster = self.evaluator.evaluate_raster(self.graph_document(), target=source_id,
-                                                                    frame=frame_number).to_display()
-                            frame_params = analysisregion.region_params_at_frame(self.graph_document(), k, frame_number)
-                            measured = curve_tool_metrics(raster, (frame_params["box_x"], frame_params["box_y"],
-                                                                   frame_params["box_width"], frame_params["box_height"]),
-                                                          previous_luminance=previous_luminance,
-                                                          autocrop_mode=frame_params["autocrop_mode"],
-                                                          autocrop_color=(frame_params["autocrop_color_r"],
-                                                                         frame_params["autocrop_color_g"],
-                                                                         frame_params["autocrop_color_b"]),
-                                                          autocrop_tolerance=frame_params["autocrop_tolerance"])
-                            previous_luminance = measured["average_luminance"]
-                            commands.extend({"op":"set_key", "id":k, "param":name, "frame":frame_number,
-                                             "value":value, "interpolation":"linear"}
-                                            for name,value in measured.items())
-                        except Exception as exc:
-                            dialog.close(); QMessageBox.warning(self, "CurveTool", f"Analysis stopped: {exc}"); return
-                        dialog.setValue(index+1)
-                    if not dialog.wasCanceled():
-                        self.command({"op":"batch", "commands":commands})
+                    try:
+                        commands = curvetoolknobs.analyze(document, self.evaluator, k, progress=advance, cancel=dialog.wasCanceled)
+                    except ValueError as exc:
+                        dialog.close()
+                        QMessageBox.information(self, "CurveTool", str(exc))
+                        return
+                    except Exception as exc:
+                        dialog.close(); QMessageBox.warning(self, "CurveTool", f"Analysis stopped: {exc}"); return
+                    if commands is not None:
+                        self.command({"op": "batch", "commands": commands})
                     dialog.close()
 
-                button = QPushButton("Analyze")
-                button.clicked.connect(analyze_curve_tool)
+                button = QPushButton("Go!")
+                button.setObjectName("curvetool-go")
+                button.setToolTip("Measure the frame range and write the Curve Type's results as animation keys")
+                button.clicked.connect(lambda _checked=False, k=key: analyze_curve_tool(k))        # `clicked` sends its state first
                 form.addRow(button)
             if node["type"] in ("Read", "Write"):
                 # Nuke's reload button: bumping the counter re-keys the node, so the file is read from disk again even if its size and

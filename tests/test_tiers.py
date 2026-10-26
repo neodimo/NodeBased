@@ -299,8 +299,8 @@ class ProxyTierTests(unittest.TestCase):
                        "fill_size", "screen_erode", "filter_size",
                        # Step K2: ScreenKeyer shrink/grow and softness are pixel lengths.
                        "screen_shrink", "screen_softness",
-                       # Fidelity step H: Keylight's despot sizes are pixel lengths.
-                       "screen_despot_black", "screen_despot_white",
+                       # Fidelity step H: Keylight's despot sizes are pixel lengths; so is DropShadow's shrink / expand.
+                       "screen_despot_black", "screen_despot_white", "shrink_expand",
                        # Fidelity step C: Crop's softness is a pixel length (the guide's `softness`).
                        "crop_softness",
                        # Step 5b: Grain's per-channel sizes and CopyRectangle's area box are pixel lengths.

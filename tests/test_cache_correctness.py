@@ -98,6 +98,8 @@ FRACTIONAL_SAMPLING_KINDS = {"Kronos", "OFlow", "MotionBlur", "MotionBlur2D", "M
 # Overrides for params whose valid value space a generic type-based rule cannot guess
 # (grammar-checked strings, cross-referenced ids, discrete non-CHOICES sets).
 VALUE_OVERRIDES = {
+    ("AddMix", "lut_a"): "0:0 1:0.5",            # AddMix's lookup curves are x:y point lists, which a generic edit cannot invent
+    ("AddMix", "lut_b"): "0:1 1:0.5",
     ("AddTimeCode", "timecode"): "00:00:01:00",
     ("Assert", "condition"): "2",
     ("GenerateLUT", "lut_size"): lambda default: 17 if default != 17 else 33,

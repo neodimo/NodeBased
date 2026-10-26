@@ -141,7 +141,7 @@ def _paint_contact_label(pixels, text, x, y, scale):
 
 
 def curve_tool_metrics(pixels, box=(0, 0, 0, 0), previous_luminance=None,
-                       autocrop_mode="alpha", autocrop_color=(0.0, 0.0, 0.0), autocrop_tolerance=0.0):
+                       autocrop_mode="alpha", autocrop_color=(0.0, 0.0, 0.0), autocrop_tolerance=0.0, channels="rgba"):
     """Average RGBA in a display-space box, autocrop bounds, brightest/dimmest pixel, exposure step.
 
     Mirrors Nuke's CurveTool "Curve Type" analyses (reference guide): Avg Intensities (the
@@ -152,8 +152,15 @@ def curve_tool_metrics(pixels, box=(0, 0, 0, 0), previous_luminance=None,
     both extremes and their values are returned), and Exposure Difference (the change in average
     luminance from the previous sampled frame, zero on the first frame of a range or when the
     caller has no earlier sample to compare).
+
+    `channels` (Nuke's selector, fidelity step H, nodebased/curvetoolknobs.py) limits what is measured: an unselected channel
+    reads as zero, the luminance is the mean of the selected colour channels, and the alpha-mode auto crop needs alpha selected.
     """
     pixels = np.asarray(pixels, dtype=np.float32)
+    selected = _chrome.parse_channels(channels).rgba if str(channels) != "rgba" else (True, True, True, True)
+    restricted = not all(selected)
+    if restricted:
+        pixels = pixels * np.array(selected, np.float32)
     x, y, width, height = map(int, box)
     x0, y0 = max(0, x), max(0, y)
     x1 = pixels.shape[1] if width <= 0 else min(pixels.shape[1], x + width)
@@ -163,16 +170,24 @@ def curve_tool_metrics(pixels, box=(0, 0, 0, 0), previous_luminance=None,
         raise ValueError("Analysis box does not overlap the image")
     if autocrop_mode == "color":
         target = np.asarray(autocrop_color, dtype=np.float32)
-        diff = np.max(np.abs(pixels[..., :3] - target), axis=2)
+        diff = np.abs(pixels[..., :3] - target)
+        if restricted:
+            diff = diff[..., [i for i in range(3) if selected[i]]] if any(selected[:3]) else np.zeros(pixels.shape[:2] + (1,), np.float32)
+        diff = np.max(diff, axis=2)
         ys, xs = np.nonzero(diff > float(autocrop_tolerance))
     else:
         ys, xs = np.nonzero(pixels[..., 3] > 1e-6)
     crop = ((float(xs.min()), float(ys.min()), float(xs.max()-xs.min()+1), float(ys.max()-ys.min()+1))
             if len(xs) else (0.0, 0.0, 0.0, 0.0))
-    luminance = pixels[..., :3].mean(axis=2)
+    if restricted:
+        colour = [i for i in range(3) if selected[i]]
+        luminance = pixels[..., colour].mean(axis=2) if colour else np.zeros(pixels.shape[:2], np.float32)
+        average_luminance = float(sum(region[..., i].mean() for i in colour) / len(colour)) if colour else 0.0
+    else:
+        luminance = pixels[..., :3].mean(axis=2)
+        average_luminance = float((region[..., 0].mean() + region[..., 1].mean() + region[..., 2].mean()) / 3.0)
     max_y, max_x = np.unravel_index(int(np.argmax(luminance)), luminance.shape)
     min_y, min_x = np.unravel_index(int(np.argmin(luminance)), luminance.shape)
-    average_luminance = float((region[..., 0].mean() + region[..., 1].mean() + region[..., 2].mean()) / 3.0)
     exposure_diff = 0.0 if previous_luminance is None else average_luminance - float(previous_luminance)
     return {"average_r": float(region[..., 0].mean()), "average_g": float(region[..., 1].mean()),
             "average_b": float(region[..., 2].mean()), "average_a": float(region[..., 3].mean()),
@@ -3823,7 +3838,7 @@ class Evaluator:
                 # as it did before bounding boxes existed. Differing *data* windows is now normal:
                 # that is a plate with overscan merged over one without, which must work.
                 raise ValueError(f"{kind} inputs must have matching formats in M0")
-            if kind == "Merge":
+            if kind in ("Merge", "Keymix"):
                 from . import mergeknobs
                 out = mergeknobs.bbox_window(p, a.data, b.data)         # union, intersection, A or B
             else:
@@ -3837,6 +3852,15 @@ class Evaluator:
                 pixels, named = mergeknobs.merge_raster(p, a, b, mask, out, Evaluator._merge_op, b.display)
                 return Raster(pixels, out, b.display, named)
             layers = [a.fit(out), b.fit(out)] + ([] if mask is None else [mask.fit(out)])
+            if kind == "Keymix":
+                from . import keymixknobs
+                if not keymixknobs.is_alpha(p.get("maskChannelInput", "rgba.alpha")):
+                    # KeyMix's mask channel: taken here from the mask input's (or A's) named layers, then handed on as an alpha.
+                    holder = mask if mask is not None else a
+                    matte = keymixknobs.keymix_matte(p, a.fit(out), None if mask is None else mask.fit(out),
+                                                     _chrome._layer_getter(holder, out))
+                    layers = [layers[0], layers[1], matte]
+                    p = {**p, "maskChannelInput": "rgba.alpha"}
             return Raster(Evaluator._kernel(kind, p, layers, frame, origin=(out.x, out.y)), out, b.display)
         if kind == "Switch":
             chosen = Evaluator._kernel("Switch", p, [r.pixels if r is not None else None
@@ -4096,6 +4120,16 @@ class Evaluator:
                     f"Mask display window {mask.display} does not match source {source.display}; "
                     "no silent resampling is performed")
             mix = p.get("mix", 1.0)
+            if kind == "DropShadow" and len(inputs) > 2 and inputs[2] is not None:
+                # Fidelity step H: with the `bg` input wired the shadowed picture is merged over it with `operation`.
+                bg = inputs[2]
+                if bg.display != source.display:
+                    raise ValueError(f"DropShadow bg display window {bg.display} does not match source {source.display}")
+                box = Evaluator._filter_window(kind, p, source).union(bg.data)
+                shadowed = Evaluator._drop_shadow(source.fit(box), p)
+                pixels = Evaluator._merge_gated(str(p.get("operation", "over")), shadowed, bg.fit(box), mix,
+                                                None if mask is None else mask.fit(box))
+                return Raster(pixels, box, source.display)
             filtered_box = Evaluator._filter_window(kind, p, source)
             # A gated filter blends against the untouched source, so the source's own rectangle is
             # part of the answer. An ungated one is replaced outright and keeps only its own.
@@ -4176,8 +4210,18 @@ class Evaluator:
         second = None
         if p.get("in2", "none") != "none":
             second = Evaluator._layer_of("Shuffle", source_of("fromInput2", p.get("fromInput2", "A")), p["in2"])
-        pixels = Evaluator._kernel("Shuffle", p, [first.pixels, None if second is None else second.fit(first.data)], frame)
-        return Raster(pixels, first.data, first_input.display)
+        arrays = [first.pixels, None if second is None else second.fit(first.data)]
+        pixels = Evaluator._kernel("Shuffle", p, arrays, frame)
+        out2 = str(p.get("out2", "none")).strip()
+        if out2.lower() in ("", "none"):
+            return Raster(pixels, first.data, first_input.display)
+        # Fidelity step H: the second output layer, with its own routing matrix over the same two slots.
+        if out2.lower() == "rgba":
+            raise ValueError("Shuffle: out2 is a second layer; name one other than rgba")
+        second_routing = {**p, "red_from": p.get("red_from2", "R"), "green_from": p.get("green_from2", "G"),
+                          "blue_from": p.get("blue_from2", "B"), "alpha_from": p.get("alpha_from2", "A")}
+        layer = Evaluator._kernel("Shuffle", second_routing, arrays, frame)
+        return Raster(pixels, first.data, first_input.display, {out2: Raster(layer, first.data, first_input.display)})
 
     @staticmethod
     def _metadata_node(kind, p, inputs, frame):
@@ -4474,15 +4518,26 @@ class Evaluator:
                              "no silent resampling is performed")
         mix = p.get("mix", 1.0)
         base = uv.data if kind == "STMap" else source.data
-        out = base.union(source.data) if (mask is not None or mix != 1.0) else base
+        from . import keymixknobs
+        # STMap's mask channel (fidelity step H) gates against the source too, so it joins the source rectangle like a wired mask.
+        mask_token = p.get("maskChannelInput", "none") if kind == "STMap" else "none"
+        gated = mask is not None or mix != 1.0 or not keymixknobs.is_alpha(mask_token)
+        out = base.union(source.data) if gated else base
         if out.is_empty:
             return Raster(np.zeros((out.height, out.width, 4), np.float32), out, source.display)
         u_index, v_index = Evaluator._UV_SLOT[p["u_channel"]], Evaluator._UV_SLOT[p["v_channel"]]
         uv_pixels = uv.fit(out)
         u = np.nan_to_num(uv_pixels[..., u_index], nan=0.0, posinf=0.0, neginf=0.0)
         v = np.nan_to_num(uv_pixels[..., v_index], nan=0.0, posinf=0.0, neginf=0.0)
+        if kind == "STMap" and int(p.get("premultiplied", 0)):
+            u, v = keymixknobs.unpremultiply_map(u, uv_pixels[..., 3]), keymixknobs.unpremultiply_map(v, uv_pixels[..., 3])
         if kind == "STMap":
             filtered = Evaluator._stmap(source, u, v, p, out)
+            blur_token = str(p.get("blur_channel", "none")).strip()
+            if blur_token.lower() not in ("", "none"):
+                # The remapped picture is blurred by a per-pixel radius: the chosen channel of the map times blur_scale.
+                radius = _chrome.resolve_channel(blur_token, uv_pixels, _chrome._layer_getter(uv_in if uv_in is not None else source, out))
+                filtered = keymixknobs.variable_box_blur(filtered, radius[..., 0] * float(p.get("blur_scale", 1.0)))
         elif kind == "IDistort":
             filtered = Evaluator._idistort(source, u, v, p, out)
         else:
@@ -4494,8 +4549,23 @@ class Evaluator:
             if not overlap.is_empty:
                 inside[overlap.y - out.y:overlap.bottom - out.y, overlap.x - out.x:overlap.right - out.x] = 1.0
             filtered = filtered * inside
-        pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
-                                           None if mask is None else mask.fit(out), mix)
+        key = None if mask is None else mask.fit(out)
+        if kind == "STMap":
+            filtered_channels = str(p.get("channels", "all")).strip().lower()
+            if filtered_channels not in ("all", "rgba"):
+                chosen = _chrome.parse_channels(p["channels"])
+                if chosen.layers:
+                    raise ValueError(f"STMap: channels takes R, G, B and A, not the layer {chosen.layers[0]!r}")
+                filtered = _chrome.restrict(source.fit(out), filtered, chosen)
+            invert = bool(int(p.get("invert_mask", 0)))
+            if (mask is not None or not keymixknobs.is_alpha(mask_token)) and (invert or not keymixknobs.is_alpha(mask_token)):
+                holder = mask if mask is not None else source
+                holder_pixels = holder.fit(out)
+                channel = (holder_pixels[..., 3:4] if keymixknobs.is_alpha(mask_token)
+                           else _chrome.resolve_channel(mask_token, holder_pixels, _chrome._layer_getter(holder, out)))
+                key = np.array(holder_pixels, np.float32, copy=True)
+                key[..., 3:4] = (1.0 - channel) if invert else channel
+        pixels = Evaluator._apply_mask_mix(source.fit(out), filtered, key, mix)
         return Raster(pixels, out, source.display)
 
     @staticmethod
@@ -4892,7 +4962,7 @@ class Evaluator:
             return Evaluator._transformed_window(source.data, p)
         if kind == "CornerPin":
             return Evaluator._cornerpin_window(source.data, p)
-        if kind in ("Blur", "Sharpen", "Soften") and not p.get("crop", 1):
+        if kind in ("Blur", "Sharpen", "Soften", "Glow") and not p.get("crop", 1):
             # "Crop to format" off: the window grows by the filter's reach, the new edge being transparent black.
             from . import blurknobs
             return blurknobs.grown_window(kind, p, source.data)
@@ -5128,7 +5198,7 @@ class Evaluator:
         if kind == "BumpBoss": return Evaluator._bump_boss(source.fit(out), p)
         if kind == "ErodeFilter": return Evaluator._erode_filter(source.fit(out), p)
         if kind == "Glow":
-            return Evaluator._glow(source.fit(out), p)
+            return Evaluator._glow(source.fit(out), p, (out.x, out.y), Evaluator._glow_width(source, out, p))
         if kind == "Soften":
             return Evaluator._soften(source.fit(out), p, (out.x, out.y))
         if kind == "Defocus":
@@ -5388,7 +5458,9 @@ class Evaluator:
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Glow":
-            filtered = Evaluator._glow(inputs[0], p)
+            token = str(p.get("width_channel", "none")).strip()
+            width = None if token.lower() in ("", "none") else _chrome.resolve_channel(token, inputs[0])
+            filtered = Evaluator._glow(inputs[0], p, origin, width)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Exposure":
@@ -5417,6 +5489,9 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "DropShadow":
             filtered = Evaluator._drop_shadow(inputs[0], p)
+            if len(inputs) > 2 and inputs[2] is not None:
+                return Evaluator._merge_gated(str(p.get("operation", "over")), filtered, inputs[2], p.get("mix", 1.0),
+                                              inputs[1] if len(inputs) > 1 else None)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("EdgeBlur", "EdgeExtend", "Dither"):
@@ -5447,6 +5522,11 @@ class Evaluator:
             a, b = inputs[0], inputs[1]
             if a.shape != b.shape:
                 raise ValueError("AddMix inputs must have matching formats in M0")
+            from . import addmixknobs
+            if not addmixknobs.is_default(p):
+                # The lookup curves, premultiplied, nonlinear and the channel sets of fidelity step H.
+                return addmixknobs.gate(b, addmixknobs.combine(p, a, b), inputs[2] if len(inputs) > 2 else None,
+                                        p.get("mix", 1.0))
             return Evaluator._merge_gated("over", Evaluator._premultiply(a), b, p.get("mix", 1.0),
                                           inputs[2] if len(inputs) > 2 else None)
         if kind == "CopyRectangle":
@@ -5497,10 +5577,8 @@ class Evaluator:
             mask = inputs[2] if len(inputs) > 2 else None
             if a.shape != b.shape:
                 raise ValueError("Keymix inputs must have matching formats in M0")
-            key_mask = mask
-            if key_mask is not None and p.get("invert_mask"):
-                key_mask = np.concatenate([key_mask[..., :3], 1 - key_mask[..., 3:4]], axis=-1)
-            return Evaluator._apply_mask_mix(b, a, mask=key_mask, mix=p.get("mix", 1.0))
+            from . import keymixknobs
+            return keymixknobs.keymix(p, a, b, mask)
         if kind == "Copy":
             a, b = inputs[0], inputs[1]
             mask = inputs[2] if len(inputs) > 2 else None
@@ -6424,7 +6502,9 @@ class Evaluator:
         # A true 2D median is not separable, unlike box blur/erode/dilate, so every tap in the
         # window is stacked and reduced at once. Fine at the small radii these tests and typical
         # despeckle work use; a large radius would want a running-histogram median instead.
-        stack = np.stack([padded[dy:dy + h, dx:dx + w] for dy in range(window) for dx in range(window)])
+        # Nuke's "ignore top line": the top row of the filter box (the one a row above the rest of the window) is left out.
+        first_row = 1 if int(p.get("ignore_top_line", 0)) and support > 0 else 0
+        stack = np.stack([padded[dy:dy + h, dx:dx + w] for dy in range(first_row, window) for dx in range(window)])
         med = np.median(stack, axis=0).astype(np.float32)
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
             out[..., c] = med[..., c]
@@ -6597,22 +6677,43 @@ class Evaluator:
         return blurknobs.sharpen(image, p, Evaluator._CHANNEL_SETS, origin)
 
     @staticmethod
-    def _glow(image, p):
+    def _glow(image, p, origin=(0, 0), width=None):
         # Nuke's Glow2: blur only what's above a threshold, tint and scale it, and add it back
         # over the input. A black image has nothing above a positive threshold, so it stays black.
+        # Fidelity step H (nodebased/blurknobs.py for the filter and quality, nodebased/glowknobs.py for the rest): the filter
+        # shape and quality limit of the blur, the glow's saturation, the non linear switch, effect only, and `width`, a (h, w, 1)
+        # channel in 0 .. 1 that scales the size per pixel.
+        from . import blurknobs, glowknobs
         threshold = p.get("glow_threshold", 1.0)
-        size = p.get("glow_size", 8.0)
+        size = float(p.get("glow_size", 8.0))
+        shape, quality = blurknobs._get("Glow", p, "kernel_filter"), blurknobs._get("Glow", p, "quality")
         bright = np.clip(image[..., :3] - threshold, 0.0, None)
-        blurred = Evaluator._blur(np.concatenate([bright, image[..., 3:4]], axis=2),
-                                  {"radius": size})[..., :3]
+        nonlinear = bool(int(p.get("nonlinear", 0)))
+        if nonlinear:
+            from . import mergeknobs
+            bright = mergeknobs.to_srgb(bright)
+        blurred = glowknobs.blurred(bright, size, shape, quality, origin, width)
+        if nonlinear:
+            from . import mergeknobs
+            blurred = mergeknobs.from_srgb(blurred)
         brightness = p.get("brightness", 1.0)
         tint = np.array([p.get("red", 1.0), p.get("green", 1.0), p.get("blue", 1.0)], dtype=np.float32)
         glow_rgb = (blurred * brightness * tint).astype(np.float32)
+        glow_rgb = glowknobs.saturate(glow_rgb, p.get("saturation", 1.0))
         out = image.copy()
+        effect_only = bool(int(p.get("effect_only", 0)))
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
             if c < 3:
-                out[..., c] = image[..., c] + glow_rgb[..., c]
+                out[..., c] = glow_rgb[..., c] if effect_only else image[..., c] + glow_rgb[..., c]
         return out
+
+    @staticmethod
+    def _glow_width(source, out, p):
+        """The `width_channel` of a Glow as an (h, w, 1) array over `out`, or None when it is none."""
+        token = str(p.get("width_channel", "none")).strip()
+        if token.lower() in ("", "none"):
+            return None
+        return _chrome.resolve_channel(token, source.fit(out), _chrome._layer_getter(source, out))
 
     @staticmethod
     def _exposure(image, p):
@@ -6879,19 +6980,33 @@ class Evaluator:
         # premultiplied RGBA, so wherever the input is opaque it is untouched. Outside the frame
         # counts as transparent (zero fill, not edge extension: a shadow must not be invented from
         # the border pixel). The result stays inside the input's window, like Blur.
+        if not int(p.get("enable_dropshadow_effect", 1)):
+            return image.copy()                      # fidelity step H: Nuke's "enable drop shadow" off draws the input alone
         height, width = image.shape[:2]
         dx, dy = Evaluator._shadow_offset(p)
-        shifted = np.zeros((height, width, 1), dtype=np.float32)
+        inherit = bool(int(p.get("inherit_input_color", 0)))
+        # The alpha, or with `inherit_input_color` the premultiplied RGBA, so the shadow takes the colour it was cast from.
+        planes = image if inherit else image[..., 3:4]
+        shifted = np.zeros((height, width, planes.shape[2]), dtype=np.float32)
         src_x, src_y = slice(max(0, -dx), min(width, width - dx)), slice(max(0, -dy), min(height, height - dy))
         dst_x, dst_y = slice(max(0, dx), min(width, width + dx)), slice(max(0, dy), min(height, height + dy))
         if dst_x.stop > dst_x.start and dst_y.stop > dst_y.start:
-            shifted[dst_y, dst_x, 0] = image[src_y, src_x, 3]
+            shifted[dst_y, dst_x] = planes[src_y, src_x]
+        grow = float(p.get("shrink_expand", 0.0))
+        if abs(grow) >= 0.5:
+            # Shrink (negative) or expand (positive) by that many pixels, with a box element; beyond the frame is transparent.
+            support = int(math.ceil(abs(grow)))
+            padded = np.pad(shifted, ((support, support), (support, support), (0, 0)), mode="constant")
+            padded = Evaluator._box_extreme(padded, grow, use_max=grow > 0)
+            shifted = padded[support:support + height, support:support + width]
         size = abs(float(p.get("shadow_size", 0.0)))
         if size >= 0.5:
             radius, sigma = int(math.ceil(size)), size / 3.0
             shifted = Evaluator._gaussian_axis(Evaluator._gaussian_axis(shifted, radius, sigma, axis=1, mode="constant"),
                                                radius, sigma, axis=0, mode="constant")
         shadow = shifted * np.float32(p.get("opacity", 0.5))
+        if inherit:
+            return (image + shadow * (1.0 - image[..., 3:4])).astype(np.float32)
         tint = np.array([p.get("red", 0.0), p.get("green", 0.0), p.get("blue", 0.0), 1.0], dtype=np.float32)
         return (image + shadow * tint * (1.0 - image[..., 3:4])).astype(np.float32)
 

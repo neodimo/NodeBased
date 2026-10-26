@@ -294,14 +294,16 @@
     {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["autocrop_mode"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["autocrop_color_r"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["autocrop_color_g"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["autocrop_color_b"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["autocrop_tolerance"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["average_luminance"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["exposure_diff"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["exposure_diff"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["curve_type"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Curve Type', scripting name `operation`"},
+    {"nodebased": [], "nuke": ["go"], "kind": "panel", "reason": "the Go! button of the CurveTool panel (nodebased/curvetoolknobs.py `analyze`, which the window's button runs): measures the frame range and keys the Curve Type's results; a button, not a node param"},
+    {"nodebased": ["autocrop_color_r", "autocrop_color_g", "autocrop_color_b"], "nuke": ["color"], "kind": "components", "reason": "the Auto Crop colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["autocrop_tolerance"], "nuke": ["ccrange"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Intensity Range', scripting name `ccrange`"},
+    {"nodebased": ["avg_frames"], "nuke": ["avgframes"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '# frames for base average', scripting name `avgframes`"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
    ],
-   "skip_default": ["ROI", "autocropdata", "intensitydata", "maxlumapixdata", "minlumapixdata"]
+   "skip_default": ["ROI", "autocropdata", "intensitydata", "maxlumapixdata", "minlumapixdata", "ccrange", "avgframes"]
   },
   "Profile": {
    "nodebased": "Profile",
@@ -1063,7 +1065,8 @@
     {"nodebased": ["layer"], "nuke": ["in1"], "kind": "renamed", "reason": "the layer the first routing slot reads; Nuke's scripting name is `in1`, NodeBased kept the older `layer`"},
     {"nodebased": ["fromInput1"], "nuke": ["fromInput1"], "kind": "same"},
     {"nodebased": ["in2"], "nuke": ["in2"], "kind": "same"},
-    {"nodebased": ["fromInput2"], "nuke": ["fromInput2"], "kind": "same"}
+    {"nodebased": ["fromInput2"], "nuke": ["fromInput2"], "kind": "same"},
+    {"nodebased": ["out2", "red_from2", "green_from2", "blue_from2", "alpha_from2"], "nuke": ["out2"], "kind": "components", "reason": "the second output layer and its routing over the same two slots"}
    ],
    "skip_default": ["in1", "out1", "fromInput2"],
    "value_map": {}
@@ -1886,7 +1889,8 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["ignore_top_line"], "nuke": ["ignore_top_line"], "kind": "same"}
    ]
   },
   "Glow": {
@@ -1905,7 +1909,14 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["saturation"], "nuke": ["saturation"], "kind": "same"},
+    {"nodebased": ["width_channel"], "nuke": ["W"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Width channel', scripting name `W`"},
+    {"nodebased": ["nonlinear"], "nuke": ["nonlinear"], "kind": "same"},
+    {"nodebased": ["effect_only"], "nuke": ["effect_only"], "kind": "same"},
+    {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'filter', scripting name `filter`; shared with Blur (nodebased/blurknobs.py)"},
+    {"nodebased": ["quality"], "nuke": ["quality"], "kind": "same"},
+    {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"}
    ]
   },
   "Soften": {
@@ -1934,7 +1945,8 @@
    "nodebased": "DropShadow",
    "inputs": [
     {"nodebased": "image", "nuke": "input", "kind": "mapped"},
-    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "bg", "nuke": "bg", "kind": "mapped"}
    ],
    "knobs": [
     {"nodebased": ["red", "green", "blue"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
@@ -1942,7 +1954,11 @@
     {"nodebased": ["distance"], "nuke": ["dropshadow_distance"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `dropshadow_distance`"},
     {"nodebased": ["shadow_size"], "nuke": ["softness"], "kind": "renamed", "reason": "PARITY_2D.md Filter #7 calls it Nuke's `size`; the guide's table has `softness` for the shadow blur and `size` for shrink/expand. Renamed because `size` is a global LIMITS key"},
     {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["enable_dropshadow_effect"], "nuke": ["enable_dropshadow_effect"], "kind": "same"},
+    {"nodebased": ["inherit_input_color"], "nuke": ["inherit_input_color"], "kind": "same"},
+    {"nodebased": ["shrink_expand"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shrink/expand', scripting name `size`"},
+    {"nodebased": ["operation"], "nuke": ["operation"], "kind": "same"}
    ]
   },
   "Defocus": {
@@ -2661,7 +2677,10 @@
    ],
    "knobs": [
     {"nodebased": ["invert_mask"], "nuke": ["invertMask"], "kind": "renamed", "reason": "KeyMix's own invert checkbox under its mask channel"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannel"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'mask channel', scripting name `maskChannel`"},
+    {"nodebased": ["merge_bbox"], "nuke": ["bbox"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Set BBox to', scripting name `bbox`"}
    ]
   },
   "AddMix": {
@@ -2672,7 +2691,13 @@
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
    "knobs": [
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["Achannels"], "nuke": ["A"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'A', scripting name `A`"},
+    {"nodebased": ["Bchannels"], "nuke": ["B"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'B', scripting name `B`"},
+    {"nodebased": ["merge_output"], "nuke": ["output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `output`"},
+    {"nodebased": ["premultiplied"], "nuke": ["premultiplied"], "kind": "same"},
+    {"nodebased": ["nonlinear"], "nuke": ["nonlinear"], "kind": "same"},
+    {"nodebased": ["lut_a", "lut_b"], "nuke": ["lut"], "kind": "components", "reason": "the A and B lookup curves as x:y point strings; Nuke has one curve editor for both"}
    ]
   },
   "Blend": {
@@ -3089,7 +3114,13 @@
     {"nodebased": ["uv_layer", "u_channel", "v_channel"], "nuke": ["uv"], "kind": "components", "reason": "UV channel choice as layer plus two channels"},
     {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
     {"nodebased": ["uv_outside"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["blur_channel"], "nuke": ["blur"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'blur channel', scripting name `blur`"},
+    {"nodebased": ["blur_scale"], "nuke": ["blur_scale"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannel"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'mask channel', scripting name `maskChannel`"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["premultiplied"], "nuke": ["premultiplied"], "kind": "same"}
    ],
    "skip_default": ["uv"]
   },

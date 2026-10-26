@@ -216,7 +216,7 @@ def _convolve_rule(params, region, arity):
     size = size if size in (1, 3, 5, 7) else 1
     support = size // 2
     return [region.expand(support, support), Region(0, 0, size, size)] + [region] * (arity - 2)
-_glow_rule = _support_rule("glow_size")
+_glow_rule = _blurknobs_rule("Glow")
 _soften_rule = _blurknobs_rule("Soften")
 
 
@@ -299,7 +299,9 @@ def _drop_shadow_rule(params, region, arity):
     # then `shadow_size` more through the blur, so the image is padded by their sum.
     distance = abs(float(params.get("distance", 0.0)))
     size = abs(float(params.get("shadow_size", 0.0)))
-    support = int(math.ceil(distance)) + (0 if size < 0.5 else int(math.ceil(size)))
+    grow = abs(float(params.get("shrink_expand", 0.0)))
+    support = (int(math.ceil(distance)) + (0 if size < 0.5 else int(math.ceil(size)))
+               + (0 if grow < 0.5 else int(math.ceil(grow))))
     return [region.expand(support, support)] + [region] * (arity - 1)
 
 
@@ -734,7 +736,7 @@ PIXEL_UNIT_PARAMS = {
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size",), "DirBlur": ("length", "center_x", "center_y"),
     "VectorDistort": ("blur_size",),
     "VectorCornerPin": tuple(f"corner{i}_{axis}" for i in range(1, 5) for axis in ("x", "y")),
-    "DropShadow": ("distance", "shadow_size"),
+    "DropShadow": ("distance", "shadow_size", "shrink_expand"),
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
     "IBKColor": ("fill_size", "screen_erode"),

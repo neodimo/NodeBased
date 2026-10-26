@@ -181,6 +181,9 @@ from . import keyerknobs as _keyerknobs
 from . import paintknobs as _paintknobs
 from . import precompnode as _precompnode
 from . import metaknobs as _metaknobs
+from . import curvetoolknobs as _curvetoolknobs
+from . import addmixknobs as _addmixknobs
+from . import keymixknobs as _keymixknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -235,7 +238,7 @@ SPECS = {
     "Dilate": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"dilate_size": 1.0, "channels": "rgba", "mix": 1.0}},
     "Median": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"median_size": 1.0, "channels": "rgba", "mix": 1.0}},
+               "params": {"median_size": 1.0, "channels": "rgba", "mix": 1.0, "ignore_top_line": 0}},
     "Sharpen": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0,
                            **_blurknobs.new_params("Sharpen")}},
@@ -256,7 +259,11 @@ SPECS = {
     # colour knob sharing their LIMITS, rather than inventing tint_red/tint_green/tint_blue.
     "Glow": {"inputs": ["image"], "optional_inputs": ["mask"],
              "params": {"glow_threshold": 1.0, "glow_size": 8.0, "brightness": 1.0,
-                       "red": 1.0, "green": 1.0, "blue": 1.0, "channels": "rgb", "mix": 1.0}},
+                       "red": 1.0, "green": 1.0, "blue": 1.0, "channels": "rgb", "mix": 1.0,
+                       # Step H (nodebased/glowknobs.py, blurknobs.py): saturation, the width channel, the non linear and effect
+                       # only switches, and Blur's filter shape, quality limit and crop to format.
+                       "saturation": 1.0, "width_channel": "none", "nonlinear": 0, "effect_only": 0,
+                       **_blurknobs.new_params("Glow")}},
     # Soften (step 3a) is Nuke's Filter-menu Soften: a Gaussian-leaning sibling of Blur's box
     # filter. Its own "soften_size" name for the same reason as the other padded filters.
     "Soften": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -330,9 +337,12 @@ SPECS = {
     # counter-clockwise from +x with y up; the default points down and to the right), blurred by
     # "shadow_size" (Nuke's `size`, renamed because "size" is a global LIMITS key with a 1 minimum
     # and a different meaning on Checker/Noise), tinted and put UNDER the input.
-    "DropShadow": {"inputs": ["image"], "optional_inputs": ["mask"],
+    # Step H adds Nuke's `bg` input (last, so the mask keeps its slot), merged under the shadowed picture with `operation`, and the
+    # enable switch, `inherit_input_color` and the shrink / expand of the shadow (`shrink_expand`, Nuke's `size`).
+    "DropShadow": {"inputs": ["image"], "optional_inputs": ["mask", "bg"],
                    "params": {"angle": -45.0, "distance": 10.0, "shadow_size": 5.0, "opacity": 0.5,
-                              "red": 0.0, "green": 0.0, "blue": 0.0, "mix": 1.0}},
+                              "red": 0.0, "green": 0.0, "blue": 0.0, "mix": 1.0, "enable_dropshadow_effect": 1,
+                              "inherit_input_color": 0, "shrink_expand": 0.0, "operation": "over"}},
     # EdgeBlur (step 5a): blur only along the matte's edge. "edgeblur_size" is the Gaussian's
     # pixel reach (Nuke's `size`, renamed because "size" is a global LIMITS key with a 1 minimum);
     # `edge_mult` scales the width of the band around the alpha edge the blur is confined to
@@ -392,7 +402,8 @@ SPECS = {
                            "color_replace": 0, "srccolor_r": 0.0, "srccolor_g": 0.0, "srccolor_b": 0.0,
                            "dstcolor_r": 0.0, "dstcolor_g": 0.0, "dstcolor_b": 0.0, "mix": 1.0}},
     # AddMix (step 5b): A is premultiplied, then merged `over` B (MERGE_LIKE_KINDS: bypass passes B).
-    "AddMix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"mix": 1.0}},
+    "AddMix": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+               "params": {"mix": 1.0, **_addmixknobs.new_params("AddMix")}},
     # Blend (step 5b, extended step D2): weighted average of up to sixteen inputs (Nuke adds a
     # weight knob per input as you wire more, unbounded; BLEND_MAX_INPUTS below is this
     # repository's fixed-slot approximation of that). One `weightN` per input. The first two are
@@ -482,7 +493,7 @@ SPECS = {
     # input's beauty". u_channel/v_channel pick which channels of that raster are u and v.
     "STMap": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
               "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G", "filter": "bilinear",
-                         "uv_outside": "black", "mix": 1.0}},
+                         "uv_outside": "black", "mix": 1.0, **_keymixknobs.new_params("STMap")}},
     "IDistort": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                  "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                             "uv_scale_x": 1.0, "uv_scale_y": 1.0, "uv_offset_x": 0.0, "uv_offset_y": 0.0,
@@ -525,7 +536,9 @@ SPECS = {
     # output channel takes R, G, B, A of slot 1, R2, G2, B2, A2 of slot 2, or the constants 0 and 1.
     "Shuffle": {"inputs": ["image"], "optional_inputs": ["A"],
                 "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A", "layer": "",
-                           "fromInput1": "B", "in2": "none", "fromInput2": "A"}},
+                           "fromInput1": "B", "in2": "none", "fromInput2": "A",
+                           # Step H: Nuke's second output layer, `out2`, with its own routing over the same two slots.
+                           "out2": "none", "red_from2": "R", "green_from2": "G", "blue_from2": "B", "alpha_from2": "A"}},
     # Two-input explicit channel routing. Separate from Shuffle (one input, kept unchanged) because
     # CHOICES is keyed by parameter name globally — sharing "red_from" would force one option list
     # on both nodes. Naming a B.* source with B unwired is an error, never a silent black channel.
@@ -710,7 +723,8 @@ SPECS = {
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0,
                   "autocrop_mode": "alpha", "autocrop_color_r": 0.0, "autocrop_color_g": 0.0, "autocrop_color_b": 0.0, "autocrop_tolerance": 0.1,
-                  "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "average_luminance": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0, "max_value": 0.0, "min_x": 0.0, "min_y": 0.0, "min_value": 0.0, "exposure_diff": 0.0}},
+                  "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "average_luminance": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0, "max_value": 0.0, "min_x": 0.0, "min_y": 0.0, "min_value": 0.0, "exposure_diff": 0.0,
+                  **_curvetoolknobs.new_params("CurveTool")}},
     # ContactSheet uses the first clip as the format reference and lays up to 16 frames in cells.
     # 32 clips (rows/columns are user-set independently, as in Nuke); roworder/colorder match
     # Nuke's row/column population direction knobs exactly (names and default values). `center`
@@ -723,7 +737,8 @@ SPECS = {
                       "params": {"rows": 4, "columns": 4, "gap": 4, "labels": "name", "fit": "fit",
                                 "width": 1920, "height": 1080, "roworder": "BottomTop", "colorder": "LeftRight",
                                 "center": 0, "splitinputs": 0, "startframe": 1, "endframe": 1}},
-    "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"invert_mask": 0, "mix": 1.0}},
+    "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+               "params": {"invert_mask": 0, "mix": 1.0, **_keymixknobs.new_params("Keymix")}},
     # Copy replaces named channels of B with channels from A; "none" leaves that output channel
     # as B's own. Named copy_* (not red_from/green_from/...) because those names are already
     # Shuffle's CHOICES with a different option list (routes from A, B or a constant).
@@ -2116,7 +2131,8 @@ CHOICES["channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["cliptype"] = list(_chrome.CLIP_TYPES)
 # Shuffle's two routing slots (fidelity step B): R, G, B, A read the first, R2, G2, B2, A2 the second.
 SHUFFLE_SOURCES = ["R", "G", "B", "A", "0", "1", "R2", "G2", "B2", "A2"]
-CHOICES.update({name: list(SHUFFLE_SOURCES) for name in ("red_from", "green_from", "blue_from", "alpha_from")})
+CHOICES.update({name: list(SHUFFLE_SOURCES) for name in ("red_from", "green_from", "blue_from", "alpha_from",
+                                                         "red_from2", "green_from2", "blue_from2", "alpha_from2")})
 CHOICES.update({"fromInput1": ["B", "A"], "fromInput2": ["B", "A"]})
 LIMITS.update({"invert_unpremult": (0, 1), "replace": (0, 1)})
 # Read's Nuke knobs (fidelity step C): the frame knob's mode, the format override, the original range and the three checkboxes.
@@ -2134,6 +2150,10 @@ LIMITS.update({"reload": (0, 2147483647), "reading": (0, 1), "render_order": (-1
 CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none"]
 LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1)})
 # Step H: AddTimeCode, AppendClip and BurnIn (nodebased/metaknobs.py).
+CHOICES.update({"width_channel": list(_chrome.MASK_CHANNEL_CHOICES), "blur_channel": list(_chrome.MASK_CHANNEL_CHOICES)})
+LIMITS.update({"blur_scale": (0.0, 1000.0), "ignore_top_line": (0, 1), "avg_frames": (0, 1000), "enable_dropshadow_effect": (0, 1), "inherit_input_color": (0, 1),
+               "shrink_expand": (-500.0, 500.0), "nonlinear": (0, 1), "effect_only": (0, 1)})
+CHOICES["curve_type"] = list(_curvetoolknobs.CURVE_TYPES)
 LIMITS.update({"metafps": (0, 1), "use_frame": (0, 1), "meta_from_first": (0, 1), "y_padding": (0.0, 8192.0),
                "text_scale": (0.01, 100.0), "bar_red": (0.0, 1.0), "bar_green": (0.0, 1.0), "bar_blue": (0.0, 1.0),
                "bar_alpha": (0.0, 1.0), "bar_x_border": (0.0, 8192.0), "bar_y_border": (0.0, 8192.0), "bar_fit": (0, 1)})

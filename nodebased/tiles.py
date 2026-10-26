@@ -455,7 +455,7 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
     the halo is the caller's job when the request is in tier space.
     """
     params = params or {}
-    if kind in ("Blur", "Sharpen", "Soften"):
+    if kind in ("Blur", "Sharpen", "Soften", "Glow"):
         # Mirror `tiers._blur_rule`: the kernel reaches `ceil(size)` pixels each way (a box blur's window is 2r+1 with
         # r = round(size), so the round-up is slightly conservative); a `quality` that scales the picture down adds two blocks.
         from . import blurknobs
@@ -478,7 +478,7 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         if params.get("filter_type", "box") == "gaussian" and support:
             support += int(math.ceil(max(1.0, size * 0.5)))
         return (support, support)
-    if kind in ("Erode", "Dilate", "Median", "Glow"):
+    if kind in ("Erode", "Dilate", "Median"):
         import math
         # Same "ceil the pixel-radius param" rule as Blur, mirroring tiers.py's per-kind rule.
         param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size",
@@ -506,7 +506,9 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         # Mirror `tiers._drop_shadow_rule`: offset plus blur reach.
         distance = abs(float(params.get("distance", 0.0)))
         size = abs(float(params.get("shadow_size", 0.0)))
-        support = int(math.ceil(distance)) + (0 if size < 0.5 else int(math.ceil(size)))
+        grow = abs(float(params.get("shrink_expand", 0.0)))
+        support = (int(math.ceil(distance)) + (0 if size < 0.5 else int(math.ceil(size)))
+                   + (0 if grow < 0.5 else int(math.ceil(grow))))
         return (support, support)
     if kind == "EdgeBlur":
         import math

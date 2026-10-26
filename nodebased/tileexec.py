@@ -1439,7 +1439,9 @@ class TileExecutor:
             elif kind == "BumpBoss": filtered = imaging.Evaluator._bump_boss(image, params)
             elif kind == "ErodeFilter": filtered = imaging.Evaluator._erode_filter(image, params)
             elif kind == "Glow":
-                filtered = imaging.Evaluator._glow(image, params)
+                token = str(params.get("width_channel", "none")).strip()
+                width = None if token.lower() in ("", "none") else _chrome.resolve_channel(token, image)
+                filtered = imaging.Evaluator._glow(image, params, (image_artifact.region.x, image_artifact.region.y), width)
             elif kind == "Soften":
                 filtered = imaging.Evaluator._soften(image, params, (image_artifact.region.x, image_artifact.region.y))
             elif kind == "Defocus":
@@ -1455,6 +1457,17 @@ class TileExecutor:
                 filtered = imaging.Evaluator._dirblur(image, params)
             elif kind == "DropShadow":
                 filtered = imaging.Evaluator._drop_shadow(image, params)
+                if len(inputs) > 2 and inputs[2] is not None:
+                    # The `bg` input (fidelity step H): the shadowed picture is merged over it with `operation`. The picture
+                    # carries the shadow's halo; bg and the mask are at the output region.
+                    bg_artifact = inputs[2]
+                    bh, bw = bg_artifact.pixels.shape[:2]
+                    offset_x = max(0, bg_artifact.region.x - image_artifact.region.x)
+                    offset_y = max(0, bg_artifact.region.y - image_artifact.region.y)
+                    shadowed = filtered[offset_y:offset_y + bh, offset_x:offset_x + bw]
+                    mask_pixels = None if mask_artifact is None else _align_artifact_to(mask_artifact, bg_artifact.region)
+                    return imaging.Evaluator._merge_gated(str(params.get("operation", "over")), shadowed, bg_artifact.pixels,
+                                                          params.get("mix", 1.0), mask_pixels)
             elif kind == "EdgeBlur":
                 filtered = imaging.Evaluator._edge_blur(image, params)
             elif kind == "EdgeExtend":
