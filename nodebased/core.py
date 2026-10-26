@@ -2085,6 +2085,12 @@ LIMITS.update({"invert_unpremult": (0, 1), "replace": (0, 1)})
 CHOICES["frame_mode"] = list(_READ_FRAME_MODES)
 CHOICES["read_format"] = ["file", *REFORMAT_FORMATS]
 CHOICES["views"] = list(_WRITE_VIEWS)
+# Fidelity step F: Read's localization and proxy, Write's read-back and render order (nodebased/localize.py, readproxy.py, writenode.py).
+from . import localize as _localize
+CHOICES["localizationPolicy"] = list(_localize.POLICIES)
+CHOICES["proxy_format"] = ["file", *REFORMAT_FORMATS]
+CHOICES["on_error"] = list(MISSING_FRAME_POLICIES)
+LIMITS.update({"reload": (0, 2147483647), "reading": (0, 1), "render_order": (-1000000, 1000000)})
 CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none"]
 LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1)})
 LIMITS.update({"crop_softness": (0.0, 100000.0), "reformat": (0, 1), "intersect": (0, 1), "crop": (0, 1)})

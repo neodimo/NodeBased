@@ -155,7 +155,10 @@ def resolve_params(node, animation_section, frame, spec_params, limits):
     curve exists. Never mutates the input. With endpoint hold, a present curve always
     overrides the base param — there is no "base value at this frame" branch.
     """
-    resolved = dict(node["params"])
+    from . import pathcontext
+    # A Read or Write with context variables (key / value pairs, `%{key}` in the path) gets its path filled in here, so every
+    # reader of a node's resolved parameters sees the real file; the stored path keeps the variables.
+    resolved = pathcontext.apply(node.get("type"), dict(node["params"]))
     if not animation_section:
         return resolved
     for param, curve in animation_section.items():
@@ -186,9 +189,12 @@ def resolve_document(document, frame):
     exact cache keys. The returned copy carries an empty curve set, making a second
     resolve a no-op rather than a re-evaluation.
     """
+    from . import pathcontext
     curves = (document.get("animation") or {}).get("curves") or {}
     expression_section = document.get("expressions") or {}
-    if not curves and not expression_section:
+    context_nodes = [node_id for node_id, node in document.get("nodes", {}).items()
+                     if isinstance(node, dict) and node.get("type") in pathcontext.KINDS and pathcontext.uses(node.get("params") or {})]
+    if not curves and not expression_section and not context_nodes:
         return document
     from .core import SPECS, LIMITS
     from . import expressions as expr
@@ -218,6 +224,14 @@ def resolve_document(document, frame):
                                    lambda kind: SPECS[kind]["params"], coerce)
         if after is not before:
             resolved_nodes = after
+
+    for node_id in context_nodes:
+        node = (resolved_nodes or nodes)[node_id]
+        params = pathcontext.apply(node["type"], node["params"])
+        if params is not node["params"]:
+            if resolved_nodes is None:
+                resolved_nodes = dict(nodes)
+            resolved_nodes[node_id] = {**node, "params": params}
 
     if resolved_nodes is None:
         return document

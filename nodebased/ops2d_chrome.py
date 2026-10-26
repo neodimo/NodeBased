@@ -404,6 +404,8 @@ def needs_full_frame(kind, p):
             return True      # a bounding box other than the union moves the output window, and layers are not in tiles
     if kind in DRAW_KINDS_WITH_CHROME and str(p.get("cliptype", "format")) != "format":
         return True      # a clip other than the format moves the output window, which tiles of the format cannot hold
+    if kind == "Write" and p.get("reading"):
+        return True      # a Write that shows its file instead of its input has no tile path
     if kind in ("Premult", "Unpremult") and not _is_rgba_token(p.get("premult_by", "rgba.alpha")):
         return True      # divides or multiplies by a layer channel, which only the whole-image path can read
     cfg = filter_config(kind, p)

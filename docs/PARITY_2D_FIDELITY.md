@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 82.9 / 100** (167 nodes scored, rank-weighted; 85.3 counting only the nodes NodeBased has).
+**Overall fidelity: 83.6 / 100** (167 nodes scored, rank-weighted; 86.1 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -25,7 +25,7 @@ Per node, five components, each a fraction from 0 to 1:
 
 | Group | Rank-weighted | Plain mean | Nodes |
 |---|---|---|---|
-| Image | 55.2 | 49.1 | 6 |
+| Image | 65.2 | 54.2 | 6 |
 | Draw | 77.3 | 55.4 | 17 |
 | Time | 89.5 | 67.1 | 13 |
 | Channel | 95.5 | 95.8 | 5 |
@@ -45,8 +45,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Read | `Read` | supported | 63.3 | 58 (15/32) | 86 | - | - | - | no fixture |
-| 2 | Write | `Write` | supported | 51.2 | 32 (12/56) | 55 | - | 100 | - | no fixture |
+| 1 | Read | `Read` | supported | 80.9 | 92 (28/32) | 35 | - | - | - | no fixture |
+| 2 | Write | `Write` | supported | 63.8 | 56 (25/56) | 41 | - | 100 | - | no fixture |
 | 3 | Viewer | `Viewer` | supported | 30.8 | 25 (6/24) | - | 100 | 0 | - | no fixture |
 | 4 | Constant | `Constant` | supported | 96.2 | 100 (4/4) | 75 | - | 100 | - | no fixture |
 | 5 | UDIM Import | - | missing | n/a | - | - | - | - | - | no fixture |
@@ -279,11 +279,11 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
-| 1 | Read (Image #1) | `Read` | 36.70 | 63.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `proxy`, `proxy_format`, `reload`; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
-| 2 | Write (Image #2) | `Write` | 24.42 | 51.2 | primary knobs missing: `proxy`, `render_order`, `Render`, `reading`, `on_error`, `reload`, `read_all_lines`; 37 secondary knobs missing |
-| 3 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
-| 4 | Tracker (Transform #3) | `Tracker` | 18.47 | 44.6 | primary knobs missing: `add_track`, `del_tracks`, `select_all`, `average_tracks`; 45 secondary knobs missing |
-| 5 | Roto (Draw #1) | `Roto` | 18.23 | 81.8 | 27 secondary knobs missing |
+| 1 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
+| 2 | Read (Image #1) | `Read` | 19.10 | 80.9 | 4 secondary knobs missing: `importsequence`, `sequence`, `shownmetadata`, `metadatafilter` |
+| 3 | Tracker (Transform #3) | `Tracker` | 18.47 | 44.6 | primary knobs missing: `add_track`, `del_tracks`, `select_all`, `average_tracks`; 45 secondary knobs missing |
+| 4 | Roto (Draw #1) | `Roto` | 18.23 | 81.8 | 27 secondary knobs missing |
+| 5 | Write (Image #2) | `Write` | 18.08 | 63.8 | primary knobs missing: `proxy`, `read_all_lines`; 29 secondary knobs missing |
 | 6 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
 | 7 | Profile (Image #7) | `Profile` | 14.29 | 0.0 | primary knobs missing: `frame_range`, `open_profile_panel`; node chrome missing: channels selector |
 | 8 | NoTimeBlur (Time #9) | - | 11.11 | 0.0 | no node (PARITY_2D.md Time #9) |
@@ -382,7 +382,7 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 - The guide states no formula for Grade or Exposure. Their cases use Nuke's long-standing forms and are marked *convention*; the lane brief's `A*(in-B)^gamma` shape is the Grade form.
 - The Merge page's algorithm for `matte` ('screen(A,a,B,b) if A==a, B if a<=0, ...') cannot be implemented without guessing, so that case is listed and not scored. `soft-light`, `hard-light`, `screen`, `multiply` and `divide` are implemented literally from the guide's text, which is not always what Nuke does outside 0..1; a failure there is a difference from the guide as written.
 - The guide's mask input is listed as a socket only on some pages whose nodes do have a mask channel knob (for example Crop has neither). The sockets component counts what each page lists.
-- Features NodeBased keeps in a payload or panel rather than in a node param (Roto and RotoPaint shape and stroke fields, the Viewer's look and proxy state, the metadata viewers) are paired as `panel` entries, each citing the document that describes it; they count as covered. Roto's transform, motion blur and CornerPin export tabs are not paired.
+- Features NodeBased keeps in a payload or panel rather than in a node param (Roto and RotoPaint shape and stroke fields, the Viewer's look and proxy state, the metadata viewers) are paired as `panel` entries, each citing the document that describes it; they count as covered. A Nuke knob NodeBased cannot honour is paired as `unsupported` with the reason; it counts as missing, so listing it explains a gap without closing it. Roto's CornerPin export tab is not paired.
 
 ### Guide pages without a row in PARITY_2D.md
 

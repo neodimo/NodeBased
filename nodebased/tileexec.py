@@ -333,6 +333,16 @@ def _read_decode_key(params, frame):
     return tuple(sorted(keyed.items()))
 
 
+def _has_proxy_read(document, target, tier):
+    """True when a Read upstream of `target` is to read its proxy file at this tier (nodebased/readproxy.py). The proxy is fitted
+    to the canvas of the full-size Read by the whole-image evaluator, which the tile path hands such a graph to."""
+    from . import readproxy
+    if int(tier) == 1:
+        return False
+    nodes = document["nodes"]
+    return any(nodes[key]["type"] == "Read" and readproxy.active(nodes[key]["params"], tier) for key in _all_ancestors(document, target))
+
+
 def _read_has_named_layers(params, frame):
     """Inspect source channel names cheaply so a warm RGBA decode avoids a second pixel read."""
     try:
@@ -595,7 +605,7 @@ class TileExecutor:
         self._unbaked_document = document
         self._fallback_nodes = set()
         resolved = resolve_document(document, frame)
-        if not self.supports_tiled(resolved, target):
+        if not self.supports_tiled(resolved, target) or _has_proxy_read(resolved, target, tier):
             self.stats["full_frame_fallbacks"] += 1
             fallback_nodes = tuple(sorted({resolved["nodes"][key]["type"]
                                            for key in _all_ancestors(resolved, target)

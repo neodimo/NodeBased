@@ -19,8 +19,13 @@ from __future__ import annotations
 import math
 import re
 
+from . import pathcontext
+
 DEFAULTS = {"read_format": "file", "first": 0, "last": 0, "before": "hold", "after": "hold", "frame_mode": "expression",
-            "frame_expr": "", "origfirst": 0, "origlast": 0, "raw": 0, "premultiplied": 0, "auto_alpha": 1}
+            "frame_expr": "", "origfirst": 0, "origlast": 0, "raw": 0, "premultiplied": 0, "auto_alpha": 1,
+            # Fidelity step F: localization (nodebased/localize.py), the reload counter, the proxy (nodebased/readproxy.py) and
+            # the context variables (nodebased/pathcontext.py).
+            "localizationPolicy": "from auto-localize path", "reload": 0, "proxy": "", "proxy_format": "file", **pathcontext.PARAMS}
 KEYS = tuple(DEFAULTS)
 RANGE_BEHAVIOURS = ("hold", "loop", "bounce", "black")
 FRAME_MODES = ("expression", "start at", "offset")
@@ -34,7 +39,8 @@ def extras(params):
 
 def active(params):
     """True when any of these knobs differs from the value that leaves Read as it was."""
-    return any(params.get(key, default) != default for key, default in DEFAULTS.items())
+    from . import localize
+    return any(params.get(key, default) != default for key, default in DEFAULTS.items()) or localize.applies(params)
 
 
 def time_active(params):

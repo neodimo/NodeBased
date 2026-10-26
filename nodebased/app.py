@@ -53,6 +53,7 @@ from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, Wrapp
                       with_hidden_buttons)
 from . import analysisregion
 from . import ops2d_chrome
+from . import pathcontext
 from . import writenode
 from . import presets as preset_model
 from . import fluidshelf
@@ -12281,6 +12282,20 @@ class Window(QMainWindow):
                 button = QPushButton("Analyze")
                 button.clicked.connect(analyze_curve_tool)
                 form.addRow(button)
+            if node["type"] in ("Read", "Write"):
+                # Nuke's reload button: bumping the counter re-keys the node, so the file is read from disk again even if its size and
+                # modified time have not changed (a Write reads only while Read file is on).
+                reload_button = QPushButton("Reload")
+                reload_button.setObjectName(f"{node['type'].lower()}-reload")
+                reload_button.setToolTip("Read the file again from disk, ignoring anything kept from the last read")
+                reload_button.clicked.connect(lambda _checked=False, k=key: self.reload_node(k))
+                form.addRow(reload_button)
+            if node["type"] == "Read":
+                localize_button = QPushButton("Update localization")
+                localize_button.setObjectName("read-update-localization")
+                localize_button.setToolTip("Replace the local copies of this Read's files with the current ones")
+                localize_button.clicked.connect(lambda _checked=False, k=key: self.update_localization(k))
+                form.addRow(localize_button)
             if node["type"] == "FrameHold":
                 # Nuke's setToCurrentFrame: first frame becomes the frame the playhead is on.
                 set_current = QPushButton("Set to current frame")
@@ -13012,6 +13027,11 @@ class Window(QMainWindow):
                                         "pattern such as render.%04d.exr")
                 render_range.clicked.connect(lambda checked=False, k=key: self.render_write(k, single=False))
                 form.addRow(render_range)
+                render_all = QPushButton("Render all Write nodes")
+                render_all.setObjectName("write-render-all")
+                render_all.setToolTip("Renders every Write node's frame range, the lowest render order first")
+                render_all.clicked.connect(lambda checked=False: self.render_all_writes())
+                form.addRow(render_all)
             # Nuke keeps presentation and bypass on a second "Node" tab, away from the knobs
             # that change pixels.
             tabs = QTabWidget()
@@ -16267,7 +16287,7 @@ class Window(QMainWindow):
     def write_target(self, key):
         """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""
         params = self.dispatcher.document["nodes"][key]["params"]
-        path = params["path"].strip()
+        path = pathcontext.substitute(params["path"], params).strip()      # %{key} filled from the node's key / value pairs
         if not path:
             raise ValueError("Set an output path on the Write node first")
         chosen = params["file_type"]
@@ -16282,6 +16302,23 @@ class Window(QMainWindow):
             # PNG bytes into a file called .exr.
             path = str(Path(path).with_suffix("." + chosen))
         return path, chosen, params["bit_depth"]
+
+    def reload_node(self, key):
+        """Nuke's reload for Read and Write: count one more reload on the node, which is part of what its result is keyed by."""
+        node = self.graph_nodes()[key]
+        self.command({"op": "set", "id": key, "param": "reload", "value": int(node["params"].get("reload", 0)) + 1})
+
+    def update_localization(self, key):
+        """Nuke's updateLocalization for Read: replace the local copies of the Read's files now."""
+        from . import localize
+        made = localize.update_read(self.graph_nodes()[key]["params"])
+        self.statusBar().showMessage(f"Localized {len(made)} file{'s' if len(made) != 1 else ''}", 6000)
+        return made
+
+    def render_all_writes(self):
+        """Render every enabled Write node's frame range, the lowest render order first (ties in the order the nodes were made)."""
+        for key in writenode.render_order(self.dispatcher.document):
+            self.render_write(key, single=False)
 
     def render_write(self, key, single=True):
         """Render a Write node. Always full resolution through the reference evaluator."""

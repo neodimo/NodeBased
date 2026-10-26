@@ -20,6 +20,7 @@ from . import gpupicture
 from . import groups
 from . import metadata
 from . import pathmask as _pathmask
+from . import readproxy as _readproxy
 from . import ops2d_chrome as _chrome
 from . import shapes
 from . import sourcepool
@@ -241,13 +242,20 @@ def _apply_format(raster, fmt):
 def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
                       frame_offset=0, missing="error", frame=None, read_format="file", first=0, last=0, before="hold",
                       after="hold", frame_mode="expression", frame_expr="", origfirst=0, origlast=0, raw=0,
-                      premultiplied=0, auto_alpha=1):
+                      premultiplied=0, auto_alpha=1, localizationPolicy="from auto-localize path", reload=0, proxy="",
+                      proxy_format="file", **context):
     """Read one timeline frame, data window intact. Read owns its source-time mapping — see
     docs/TIME_MODEL.md; it owns its bounding box the same way — see docs/BOUNDING_BOX.md.
 
     The keywords from `read_format` on are Nuke's Read knobs (nodebased/readknobs.py); at their defaults this is the Read it
     always was."""
     from .media import nearest_sequence_path, read_media_raster, resolve_source_path
+    from . import localize, pathcontext
+    unknown = set(context) - set(pathcontext.PARAMS)
+    if unknown:
+        raise TypeError(f"read_image_raster() got unexpected keyword arguments {sorted(unknown)}")
+    # `reload`, `proxy` and `proxy_format` are read by the evaluator and the tile executor, which choose the file and size the
+    # picture; the context key / value pairs have filled the path by the time it gets here.
     knobs = dict(path=path, frame_offset=frame_offset, missing=missing, first=first, last=last, before=before, after=after,
                  frame_mode=frame_mode, frame_expr=frame_expr, origfirst=origfirst, origlast=origlast)
     source_frame, policy, forced = read_lookup(knobs, frame)
@@ -266,7 +274,10 @@ def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subi
         display = read_media_raster(reference, colorspace, alpha_mode, layer, subimage).display
         pixels = _checkerboard(display) if policy == "checkerboard" else np.zeros((display.height, display.width, 4), np.float32)
         return _apply_format(Raster(pixels, display, display), read_format)
-    raster = read_media_raster(resolved, colorspace, alpha_mode, layer, subimage, auto_alpha=bool(auto_alpha))
+    # Localization (nodebased/localize.py): the pixels come from the local copy when the policy asks for one; the metadata below
+    # still names the file the sequence points at.
+    raster = read_media_raster(localize.localized(resolved, localizationPolicy), colorspace, alpha_mode, layer, subimage,
+                               auto_alpha=bool(auto_alpha))
     # Where the pixels came from, in Nuke's key names. Every value follows from the resolved file
     # (input/frame only when that file is the one the sequence names for this frame), so the Read's
     # cache key, which fingerprints the resolved file, already covers the metadata.
@@ -1459,6 +1470,10 @@ class Evaluator:
             # Scaling runs *after* curve resolution: a pixel-unit parameter must be scaled from the
             # value this frame actually uses, or an animated blur radius would proxy at its base.
             params = tiers.scale_params(kind, params, tier)
+            proxy_original = None
+            if kind == "Read" and _readproxy.active(params, tier):
+                # The proxy stands in for the file while a proxy tier is on (nodebased/readproxy.py).
+                proxy_original, params = params, _readproxy.proxy_params(params)
             if kind == "ContactSheet":
                 params["_contact_labels"] = [nodes[node["inputs"].get(f"clip{i}")]["name"]
                                              if node["inputs"].get(f"clip{i}") in nodes else f"clip{i}"
@@ -2459,6 +2474,18 @@ class Evaluator:
                 else:
                     stat = Path(resolved).stat()
                     fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
+            if kind == "Write" and params.get("reading") and params.get("path") and not node["disabled"]:
+                # Read file: the file is part of the answer, so a replaced or deleted file re-keys the Write.
+                from . import writenode
+                from .media import resolve_source_path
+                params = {**params, "_first": int(doc["time"]["first"]), "_last": int(doc["time"]["last"])}
+                number = writenode.read_back_number(params, frame)
+                resolved, _exists = resolve_source_path(params["path"], number, params.get("on_error", "error"))
+                try:
+                    stat = Path(resolved).stat() if resolved is not None else None
+                except OSError:
+                    stat = None
+                fingerprint = [str(resolved), number] + ([stat.st_size, stat.st_mtime_ns] if stat is not None else ["missing"])
             if kind == "Vectorfield" and params.get("cube_path"):
                 try:
                     stat = Path(params["cube_path"]).expanduser().stat()
@@ -3240,7 +3267,10 @@ class Evaluator:
                 if isinstance(raster, gpu2d.DeferredImage):
                     values[key] = raster          # an island node: resolved on the device when its exit node runs
                     continue
-                if tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:
+                if proxy_original is not None and not node["disabled"]:
+                    # The proxy file is already small: fit it to the canvas the full-size Read would have at this tier.
+                    raster = _readproxy.fit_to_tier(raster, proxy_original, frame, tier)
+                elif tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:
                     # A file cannot be decoded at a fraction of its size, so a Read is the one
                     # source that must decimate after the fact. Everything downstream of it still
                     # runs small, which is where the saving lives. Both windows move with the
@@ -3949,6 +3979,11 @@ class Evaluator:
         source = inputs[0]
         if kind in ("MinColor", "Sampler", "CurveTool"):
             return source
+        if kind == "Write" and p.get("reading") and str(p.get("path", "") or "").strip():
+            # Read file: the Write shows the file it wrote (nodebased/writenode.py `read_back`) in place of its input.
+            # With no file set there is nothing to read, so it passes its input on like any Write.
+            from . import writenode
+            return writenode.read_back(p, frame)
         if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile", "PlanarTracker"):
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
         if kind == "Shuffle":

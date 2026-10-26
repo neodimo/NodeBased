@@ -117,7 +117,16 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("frame_mode",), label="Frame mode"), KnobGroup("string", ("frame_expr",), label="Frame"),
         KnobGroup("int", ("origfirst",), label="Original first"), KnobGroup("int", ("origlast",), label="Original last"),
         KnobGroup("bool", ("raw",), label="Raw data"), KnobGroup("bool", ("premultiplied",), label="Premultiplied"),
-        KnobGroup("bool", ("auto_alpha",), label="Auto alpha")),
+        KnobGroup("bool", ("auto_alpha",), label="Auto alpha"),
+        # Localization, proxy and context variables (nodebased/localize.py, readproxy.py, pathcontext.py); the Reload and Update
+        # localization buttons sit under them in the panel.
+        KnobGroup("enum", ("localizationPolicy",), label="Localization policy"),
+        KnobGroup("file_read", ("proxy",), label="Proxy file"), KnobGroup("enum", ("proxy_format",), label="Proxy format"),
+        KnobGroup("int", ("reload",), label="Reload count"),
+        KnobGroup("string", ("key1",), label="Context key 1"), KnobGroup("string", ("value1",), label="Context value 1"),
+        KnobGroup("string", ("key2",), label="Context key 2"), KnobGroup("string", ("value2",), label="Context value 2"),
+        KnobGroup("string", ("key3",), label="Context key 3"), KnobGroup("string", ("value3",), label="Context value 3"),
+        KnobGroup("string", ("key4",), label="Context key 4"), KnobGroup("string", ("value4",), label="Context value 4")),
     "Constant": _groups(
         KnobGroup("enum", ("channels",)),
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -886,7 +895,14 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("views",), label="Views"), KnobGroup("enum", ("frame_mode",), label="Frame mode"),
         KnobGroup("string", ("frame_expr",), label="Frame"), KnobGroup("bool", ("create_directories",), label="Create directories"),
         KnobGroup("bool", ("use_limit",), label="Limit to range"), KnobGroup("int", ("first",), label="First frame"),
-        KnobGroup("int", ("last",), label="Last frame"), KnobGroup("enum", ("exr_compression",), label="EXR compression")),
+        KnobGroup("int", ("last",), label="Last frame"), KnobGroup("enum", ("exr_compression",), label="EXR compression"),
+        # Read file, render order and context variables (nodebased/writenode.py, pathcontext.py); the Render buttons sit under them.
+        KnobGroup("bool", ("reading",), label="Read file"), KnobGroup("enum", ("on_error",), label="Missing frames"),
+        KnobGroup("int", ("reload",), label="Reload count"), KnobGroup("int", ("render_order",), label="Render order"),
+        KnobGroup("string", ("key1",), label="Context key 1"), KnobGroup("string", ("value1",), label="Context value 1"),
+        KnobGroup("string", ("key2",), label="Context key 2"), KnobGroup("string", ("value2",), label="Context value 2"),
+        KnobGroup("string", ("key3",), label="Context key 3"), KnobGroup("string", ("value3",), label="Context value 3"),
+        KnobGroup("string", ("key4",), label="Context key 4"), KnobGroup("string", ("value4",), label="Context value 4")),
     "ReadBundle": _groups(
         KnobGroup("string", ("path",), label="Model output"),
         KnobGroup("string", ("bundle",), label="Bundle manifest"),

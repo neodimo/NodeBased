@@ -16,8 +16,16 @@ from pathlib import Path
 
 import numpy as np
 
+from . import pathcontext
+
 DEFAULTS = {"channels": "all", "colorspace": "Auto", "premultiplied": 0, "raw": 0, "views": "main", "frame_mode": "expression",
-            "frame_expr": "", "create_directories": 1, "first": 1, "last": 1, "use_limit": 0, "exr_compression": "zips"}
+            "frame_expr": "", "create_directories": 1, "first": 1, "last": 1, "use_limit": 0, "exr_compression": "zips",
+            # Fidelity step F: read the file back (`reading`, `on_error`, `reload`), the order Render all goes in
+            # (`render_order`), and the context variables of the path (nodebased/pathcontext.py).
+            "reading": 0, "on_error": "error", "reload": 0, "render_order": 1, **pathcontext.PARAMS}
+# These change what a Write shows or when it renders, not the bytes it writes.
+NOT_BYTES = ("create_directories", "first", "last", "use_limit", "frame_mode", "frame_expr", "views",
+             "reading", "on_error", "reload", "render_order", *pathcontext.PARAMS)
 KEYS = tuple(DEFAULTS)
 VIEW_CHOICES = ("main",)
 # What each output transform is called inside an EXR's `oiio:ColorSpace` tag, so Read's Auto finds its way back.
@@ -30,8 +38,7 @@ def extras(params):
 
 def active(params):
     """True when any Write knob here differs from the value that leaves Write as it was."""
-    return any(params.get(key, default) != default for key, default in DEFAULTS.items()
-               if key not in ("create_directories", "first", "last", "use_limit", "frame_mode", "frame_expr", "views"))
+    return any(params.get(key, default) != default for key, default in DEFAULTS.items() if key not in NOT_BYTES)
 
 
 # --------------------------------------------------------------------------------------------------- frames
@@ -62,6 +69,42 @@ def file_frame_number(params, frame, first_rendered):
     else:
         raise ValueError(f"Write: unknown frame mode {mode!r}")
     return int(round(value))
+
+
+# ------------------------------------------------------------------------------------------------ read file
+def first_rendered(params, time):
+    frames = frames_to_render(params, time, False)
+    return frames[0] if frames else int(time["first"])
+
+
+def read_back_number(params, frame):
+    """The number of the file a Write that is reading shows at timeline `frame`: the number it wrote into the name for that frame.
+    The document's range arrives in `_first` and `_last` (the evaluator adds them)."""
+    time = {"first": params.get("_first", frame), "last": params.get("_last", frame), "current": frame}
+    return file_frame_number(params, frame, first_rendered(params, time))
+
+
+def read_back(params, frame):
+    """The Raster of the file a Write with `reading` on points at, for timeline `frame`: the same reader as Read, at the file number
+    the Write wrote for that frame, with `on_error` (error, hold, black, checkerboard) for a frame that is not there."""
+    from . import imaging
+    path = str(params.get("path", "") or "").strip()
+    if not path:
+        raise ValueError("Write: Read file needs a file path")      # the evaluator passes the input on instead when none is set
+    number = read_back_number(params, frame)
+    space = "Raw" if int(params.get("raw", 0)) else str(params.get("colorspace", "Auto"))
+    alpha_mode = "Premultiplied" if int(params.get("premultiplied", 0)) else "Auto"
+    return imaging.read_image_raster(path, colorspace=space, alpha_mode=alpha_mode, frame=number,
+                                     missing=str(params.get("on_error", "error")))
+
+
+def render_order(document):
+    """The ids of the document's Write nodes in the order Render all renders them: lowest `render_order` first, ties in the order
+    the nodes were made."""
+    writes = [(int(node["params"].get("render_order", 1)), index, key)
+              for index, (key, node) in enumerate(document["nodes"].items())
+              if node["type"] == "Write" and not node.get("disabled")]
+    return [key for _order, _index, key in sorted(writes)]
 
 
 def check_views(params):
