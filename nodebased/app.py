@@ -8242,10 +8242,10 @@ class ProjectSettingsDialog(QDialog):
         self.max_panels.setValue(int(max_panels))
         self.max_panels.setObjectName("max-panels-spin")
         interface.addRow("Max properties panels", self.max_panels)
-        self.gpu_nodes = QCheckBox("Process Grade, Transform, Blur and Merge on the graphics card")
+        self.gpu_nodes = QCheckBox("Compute 2D nodes on the graphics card")
         self.gpu_nodes.setObjectName("gpu-nodes")
         self.gpu_nodes.setChecked(bool(gpu_nodes))
-        self.gpu_nodes.setToolTip("The 2D nodes of a comp stay on the card between nodes and come back once per frame. "
+        self.gpu_nodes.setToolTip("Grade, Transform, Blur and Merge stay on the card between nodes and come back once per frame. "
                                   "Takes effect at once. A card that cannot run them leaves the CPU nodes in use. "
                                   "It uses the graphics adapter chosen above.")
         interface.addRow("2D nodes", self.gpu_nodes)
@@ -11715,9 +11715,9 @@ class Window(QMainWindow):
     def gpu_nodes_note_text(self):
         state = self.gpu_nodes_state
         if playbackprefs.gpu_nodes_forced():
-            return f"{playbackprefs.GPU_NODES_ENV} is set, so this choice has no effect until it is unset."
+            return f"{playbackprefs.GPU_NODES_ENV} is set and decides this."
         if state.get("error"):
-            return f"The card refused: {state['error']}. The CPU nodes stay in use."
+            return f"The card refused ({state['error']}); the CPU nodes are in use."
         if state.get("active") and state.get("adapter"):
             info = state["adapter"]
             name = info.get("device") if isinstance(info, dict) else str(info)
@@ -11727,7 +11727,7 @@ class Window(QMainWindow):
     def workers_note_text(self):
         forced = [name for name in (playbackprefs.DECODE_WORKERS_ENV, playbackprefs.SOURCE_WORKERS_ENV)
                   if playbackprefs.workers_forced(name)]
-        return (f"{', '.join(forced)} is set, so that count follows it instead of this choice." if forced else "")
+        return (f"{' and '.join(forced)} decide{'s' if len(forced) == 1 else ''} the count." if forced else "")
 
     def project_settings(self):
         gpu_note = self.gpu_nodes_note_text()
@@ -15374,7 +15374,7 @@ class Window(QMainWindow):
         # measured graph; warming three future frames queued substantial reads for frames the
         # viewer skipped. One UHD frame is enough lead time for the reader pool. Proxy playback
         # remains cheap enough to retain the wider three-frame lead.
-        decode_ahead = self.future_frames(frame, count=1 if tier == 1 else 3) if self.playing else ()
+        decode_ahead = self.future_frames(frame, count=playbackprefs.decode_lead(tier)) if self.playing else ()
         viewport = None
         # A first preview, or one whose source canvas just changed size, has no scene extent
         # worth clamping against: request the complete data window so the first frame establishes

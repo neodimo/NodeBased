@@ -82,6 +82,8 @@ class DecodeAheadPool:
         self.hits = 0
         self.misses = 0
         self._spawned = 0
+        self._running = {}            # key -> Event, set when the decode running for that key ends (stored or dropped)
+        self.joins = 0
         with self._lock:
             self._start_workers_locked()
 
@@ -118,7 +120,22 @@ class DecodeAheadPool:
         with self._lock:
             self._epoch += 1
 
-    def get(self, key):
+    def get(self, key, join=False, cancel=None):
+        """The decoded frame for `key`, or None. With `join`, a decode of that key that is already running is waited
+        for (it ends sooner than a second decode of the same frame would) before giving up; a job still queued is not."""
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is not None:
+                self._entries.move_to_end(key)
+                self.hits += 1
+                return entry
+            running = self._running.get(key) if join else None
+            if running is None:
+                self.misses += 1
+                return None
+        while not running.wait(0.005):
+            if cancel is not None and cancel.is_set():
+                break
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
@@ -126,6 +143,7 @@ class DecodeAheadPool:
                 return None
             self._entries.move_to_end(key)
             self.hits += 1
+            self.joins += 1
             return entry
 
     def request(self, key, decode_fn):
@@ -164,10 +182,12 @@ class DecodeAheadPool:
                 self._tasks.task_done()
 
     def _run(self, key, decode_fn, epoch):
+        done = threading.Event()
         try:
             with self._lock:
                 if epoch != self._epoch:
                     return  # Superseded before decode started; skip the work entirely.
+                self._running[key] = done
             pixels = decode_fn()
             with self._lock:
                 if epoch != self._epoch:
@@ -176,6 +196,9 @@ class DecodeAheadPool:
         finally:
             with self._lock:
                 self._pending.pop(key, None)
+                if self._running.get(key) is done:
+                    del self._running[key]
+            done.set()
 
     def _put(self, key, pixels):
         size = int(pixels.nbytes)

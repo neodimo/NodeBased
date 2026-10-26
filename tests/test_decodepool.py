@@ -172,5 +172,86 @@ class DecodeAheadPoolTests(unittest.TestCase):
             pool.shutdown(wait=True, timeout=2)
 
 
+
+class DecodeJoinTests(unittest.TestCase):
+    """A walk that reaches a Read whose decode-ahead job is already running waits for it instead of decoding the same frame again."""
+
+    def pool(self, workers=1):
+        pool = DecodeAheadPool(max_workers=workers, budget_bytes=1 << 30)
+        self.addCleanup(pool.shutdown, True, 2)
+        return pool
+
+    def test_a_running_decode_is_joined_and_runs_once(self):
+        pool = self.pool()
+        started, release, calls = threading.Event(), threading.Event(), []
+
+        def decode():
+            calls.append(1)
+            started.set()
+            release.wait(5)
+            return np.zeros((2, 2, 4), np.float32)
+        pool.request("k", decode)
+        self.assertTrue(started.wait(5))
+        self.assertIsNone(pool.get("k"))                    # a plain get does not wait
+        found = []
+        joiner = threading.Thread(target=lambda: found.append(pool.get("k", join=True)))
+        joiner.start()
+        time.sleep(0.05)
+        self.assertTrue(joiner.is_alive())                  # waiting for the decode that is running
+        release.set()
+        joiner.join(5)
+        self.assertIsNotNone(found[0])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(pool.joins, 1)
+
+    def test_a_job_still_queued_is_not_waited_for(self):
+        pool = self.pool()
+        gate = threading.Event()
+        pool.request("busy", lambda: (gate.wait(5), np.zeros((1, 1, 4), np.float32))[1])
+        time.sleep(0.05)
+        pool.request("queued", lambda: np.zeros((1, 1, 4), np.float32))
+        began = time.monotonic()
+        self.assertIsNone(pool.get("queued", join=True))
+        self.assertLess(time.monotonic() - began, 0.5)
+        gate.set()
+
+    def test_cancelling_stops_the_wait_and_a_superseded_decode_gives_nothing(self):
+        pool = self.pool()
+        started, release = threading.Event(), threading.Event()
+        pool.request("k", lambda: (started.set(), release.wait(5), np.zeros((1, 1, 4), np.float32))[2])
+        self.assertTrue(started.wait(5))
+        cancel = threading.Event()
+        results = []
+        joiner = threading.Thread(target=lambda: results.append(pool.get("k", join=True, cancel=cancel)))
+        joiner.start()
+        time.sleep(0.05)
+        cancel.set()
+        joiner.join(5)
+        self.assertFalse(joiner.is_alive())
+        self.assertIsNone(results[0])
+        other = []
+        joiner = threading.Thread(target=lambda: other.append(pool.get("k", join=True)))
+        joiner.start()
+        time.sleep(0.05)
+        pool.bump_epoch()                                  # the seek makes the running decode's result worthless
+        release.set()
+        joiner.join(5)
+        self.assertIsNone(other[0])
+
+    def test_shutdown_wakes_a_joiner(self):
+        pool = self.pool()
+        started, release = threading.Event(), threading.Event()
+        pool.request("k", lambda: (started.set(), release.wait(5), np.zeros((1, 1, 4), np.float32))[2])
+        self.assertTrue(started.wait(5))
+        results = []
+        joiner = threading.Thread(target=lambda: results.append(pool.get("k", join=True)))
+        joiner.start()
+        time.sleep(0.05)
+        pool.shutdown()
+        release.set()
+        joiner.join(5)
+        self.assertFalse(joiner.is_alive())
+
+
 if __name__ == "__main__":
     unittest.main()

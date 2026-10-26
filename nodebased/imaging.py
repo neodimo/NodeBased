@@ -16,6 +16,7 @@ from PySide6.QtGui import QImage, QImageReader
 
 from . import cachetier
 from . import gpu2d
+from . import playbackprefs
 from . import gpupicture
 from . import groups
 from . import metadata
@@ -3357,7 +3358,7 @@ class Evaluator:
                         cached_read = None
                         if kind == "Read" and self.decode_pool is not None:
                             from .tileexec import _read_decode_key
-                            cached_read = self.decode_pool.get(_read_decode_key(params, frame))
+                            cached_read = self.decode_pool.get(_read_decode_key(params, frame), join=playbackprefs.decode_join(), cancel=cancel)
                         if kind == "Read" and isinstance(cached_read, Raster):
                             raster = cached_read
                         else:

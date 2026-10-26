@@ -25,6 +25,7 @@ DEFAULT_SOURCE_WORKERS = None
 MAX_DECODE_WORKERS = 4
 MAX_SOURCE_WORKERS = 3
 GPU_NODES_ENV = "NODEBASED_GPU_NODES"
+DECODE_LEAD_ENV = "NODEBASED_DECODE_AHEAD_FRAMES"
 DECODE_WORKERS_ENV = "NODEBASED_DECODE_AHEAD_WORKERS"
 SOURCE_WORKERS_ENV = "NODEBASED_SOURCE_WORKERS"
 
@@ -141,3 +142,21 @@ def source_workers(setting=None, cpus=None, environ=None):
 def workers_forced(name, environ=None):
     """True when the environment fixes this count, so the Settings choice has no effect."""
     return (os.environ if environ is None else environ).get(name) not in (None, "")
+
+
+def decode_lead(tier, environ=None):
+    """How many frames ahead of the playhead the decode pool is asked to decode: one at full size (a full-size frame
+    cannot keep up with the playhead, and frames the viewer skipped were decoded for nothing), three on a proxy tier.
+    `NODEBASED_DECODE_AHEAD_FRAMES` sets it outright, for the benchmarks."""
+    forced = (os.environ if environ is None else environ).get(DECODE_LEAD_ENV)
+    if forced:
+        try:
+            return max(1, min(8, int(forced)))
+        except ValueError:
+            pass
+    return 1 if tier == 1 else 3
+
+
+def decode_join(environ=None):
+    """Whether a walk that reaches a Read whose decode is already running waits for it. `NODEBASED_DECODE_JOIN=0` turns it off."""
+    return env_flag("NODEBASED_DECODE_JOIN", environ) is not False
