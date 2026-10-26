@@ -875,6 +875,143 @@ every later GPU test run took the lock. Plates were regenerated with the unchang
 Rerun: `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :183 --backend gpu2d --force-adapter integrated --label radeon8060s --frame-range 48 --passes 3 --budget-mb 512 --out-dir "$NB_RUN/pbb"` (`--env NODEBASED_ROTO_AHEAD=0` for the control,
 `--cpus 0-3 --env QT_SCALE_FACTOR=2` for the stand-in), `python tools/benchmark_gpu2d.py interaction --inputs "$NB_RUN/plates" --source-workers 1 --output i.json` and `taskset -c 0-3 python tools/benchmark_4k_viewport.py --source-workers 1 --json m2.json`; tests: `python -m unittest tests.test_rotoahead tests.test_sourcepool`.
 
+### R6-1: where the last 50 ms of the Radeon frame go, and the worker and GPU-node settings (10/26, step C of 3)
+
+Step B left the Radeon island at 15.2 to 15.9 fps with 47 to 53 ms of node stage even with the Roto matte ready. This step traces one played frame stage by stage, adds the two settings
+DiMo is to decide (decode and source workers; GPU nodes as the playback backend), each with today's behaviour as its default and a one-line flip, and measures both. Evidence is in
+`benchmarks/2d-gpu/R6-1/` under the `-1026c` names: `stages-*` (the stage tables, with the per-pass `*.stages.json.gz` and `*.timeline.json.gz` behind them), `summary-*`, `leaf-samples-*` (the
+line-level sampler), `ab-read-path-transform-tables-*` and `join-ab-*` (the interleaved A/B passes), `matrix-*` (the worker and GPU-node matrix, with `matrix-load-log-1026c.txt`), `lead-*`,
+`interaction-*` and `environment-1026c.json`. Every timing row is three fresh passes, rows interleaved where two configurations are compared, and a pass counts only when no integrator test suite
+was running at either end of it (the integrator's full suite ran over two of this step's measurement sessions, at 9:45 AM and 10:03 AM; the passes it touched were discarded and repeated).
+
+**Result.**
+
+- *The three largest stages of the 50.5 ms node stage* are the plate Read on the evaluating thread (14.2 ms), the island run (15.6 ms) and the CPU ColorCorrect (7.7 ms); Transform staging (5.7 ms) is next. The table and what would remove each follow.
+- *The frame is paced by the decode pipeline.* One decode thread decodes two 22 ms frames per 62 ms and the walk meets a plate it has to wait for or decode itself; making the walk's own lookups 7 ms faster moved 8.8 ms into an inline decode and the frame rate did not change.
+- *Kept: the walk waits for a decode that is already running* (`DecodeAheadPool.get(join=True)`) instead of decoding the same plate a second time. Radeon island, one decode worker, three interleaved passes: 16.44 to 16.49 fps and interval p95 67.5 to 77.9 ms become
+  16.56 to 16.93 fps and 63.8 to 67.0 ms; stand-in island with one decode worker 9.93 to 10.27 fps and p95 124 to 131 ms become 10.47 to 10.74 fps and 107 to 115 ms; CPU nodes and two decode workers unchanged. Turn it off with `NODEBASED_DECODE_JOIN=0`.
+- *Taken back: a memo of each Read's directory resolution and the kept Transform axis tables.* Both worked as built (the Read's lookups fell from 12.4 to 5.3 ms) and the frame rate did not move; see below.
+- *The harness's own stack sampler costs 0.7 fps* and was on in every earlier table; the Radeon island plays 16.1 to 16.7 fps with it off.
+- *Decode workers:* one decode worker at four CPUs (today none) is a clear gain on the stand-in (CPU nodes +6.5 percent, island +16 percent); a second decode worker adds 0.2 fps and 7 ms of p95 on the Radeon island and 0.2 fps on the stand-in's island, costs 0.1 fps on the stand-in's CPU nodes and
+  changes nothing on the RTX. Two source workers help the stand-in's island (+7 percent) and cost its CPU nodes 3 percent.
+- *GPU nodes:* a large gain wherever the integrated card is the one used (Radeon 16.2 to 16.9 fps against 7.4 to 7.8; knob drag 88 ms to 7 ms), a loss on the RTX 3080 Ti on its USB4 link (5.6 to 5.9 fps against 7.8, scrub 102 to 150 to 161 ms). The island opens on the adapter that
+  Settings → Graphics adapter names, and "Automatic" picks the discrete card, so a default-on island would land on the RTX here.
+- The 16 fps gate (interval p95 62.5 ms) is still not passed in any configuration (best single pass 63.4 ms) and 24 fps is not near (16.2 to 17.0 fps).
+
+**The stage table.** One played frame of the realistic comp on the Radeon island (48 frames, first lap, three fresh passes, the Roto read-ahead of step B on, the harness's stack sampler off; `tools/benchmark_gpu2d.py playback --stages --no-sampler`, then
+`tools/benchmark_gpu2d.py stages`). Every number is exclusive milliseconds per fresh frame on the thread that evaluates it (a stage's own time without the stages nested in it), averaged over the frames of a pass and then over the passes; the range is over the passes.
+
+| Stage on the evaluating thread | ms | range |
+|---|---|---|
+| **The plate Read** (first source, run by the walk): file lookups and cache handling | 11.3 | 10.2 to 12.2 |
+|   the same, decode run inline because the pool had not finished it | 2.9 | 0.9 to 5.4 |
+| **The island run**: upload to the card | 5.4 | 5.4 to 5.5 |
+|   kernels on the card (submit to done) | 5.1 | 5.0 to 5.1 |
+|   download: host copy into the picture | 2.6 | 2.5 to 2.6 |
+|   download: copy and map | 0.8 | 0.7 to 0.8 |
+|   host work: parameter blob, submission, buffers, encode | 1.8 | 1.6 to 2.0 |
+| **ColorCorrect** on the CPU kernels (the viewed node) | 7.7 | 7.5 to 7.9 |
+| Transform staging (plan and tables on the CPU) | 5.7 | 5.0 to 6.2 |
+| Wait at the Roto join (the matte was drawn ahead) | 1.2 | 1.0 to 1.5 |
+| Walk between nodes and the other staging | 0.8 | 0.8 to 0.8 |
+| *Evaluator walk, total* | 45.2 | 43.9 to 46.8 |
+| *Node stage* (the window's evaluation start to end; 5.3 ms of it is the window's own work around the walk) | 50.5 | 49.3 to 51.7 |
+
+The island run splits by the island's own counters (`upload_ms`, `encode_ms`, `gpu_ms`, `readback_map_ms`, `readback_host_ms`). In the same node stage the other threads were busy: the decode-ahead thread decoded for 43.5 ms (two 22 ms decodes per frame on one thread), the source
+workers drew mattes for 49.6 ms (27.9 ms for the frame in hand, 21.7 ms ahead) and evaluated the second Read for 10.5 ms. The same table with the stack sampler on (`stages-radeon8060s-island-with-sampler-1026c.json`) has a node stage of 53.0 ms (51.1 to 54.2).
+
+**The three largest stages, and what would remove each.**
+
+1. *The plate Read on the evaluating thread, 14.2 ms.* The walk evaluates the first source itself (the pool takes the others), and the frame comes from the decode pool only when that has finished it: in the first of the sampler-on passes the walk decoded the plate inline on 9 of 47 frames (18 to 30 ms each).
+   The other 11 ms are the walk's file-system lookups of the Read (41 system calls per Read, 33 of them `lstat` from three `Path.resolve` calls), which take 19 µs alone and 11 ms while the other threads run. What removes it: a second decode thread or a longer lead (the setting below and `NODEBASED_DECODE_AHEAD_FRAMES`;
+   on the Radeon island, three interleaved passes each, a lead of 2 with one worker gives 16.64 to 16.91 fps and a lead of 1 with two workers 16.53 to 16.99, against 16.22 to 16.52 today, and the two together no more (16.34 to 16.73; `lead-radeon8060s-island-1026c.json`)), and the join above. Making the lookups cheaper does not help on its own.
+2. *The island run, 15.6 ms.* Upload 5.4 ms (the plate, the background and the matte's alpha plane: 74 MB per frame, about 14 GB/s into the integrated card's memory), kernels 5.1 ms, download 3.3 ms (33 MB back, 2.6 ms of it the host copy out of the mapped buffer into the picture), 1.8 ms of host work.
+   What would remove it: uploading the sources as half floats (half the bytes; the colour ingest after decode produces float32, so the ingest would have to move to the card too) and keeping the finished frame on the card for the display transform instead of downloading it.
+3. *ColorCorrect on the CPU kernels, 7.7 ms.* The viewed node is not an island node, so the island's result comes back to the host and a full-frame float kernel runs on it. What would remove it: a ColorCorrect kernel in the island (a pointwise kernel), which also lets the frame stay on the card for the display transform, the same step as the download above.
+
+Transform staging, 5.7 ms, is the next stage. It takes 0.57 ms when nothing else runs and 5 to 6 ms while the source workers draw mattes.
+
+**What else runs costs the evaluating thread about 20 ms.** The same frame with the source pool off (`NODEBASED_SOURCE_WORKERS=0`, the Roto drawn inline, one pass, `stages-radeon8060s-island-serial-sources-1026c.json`, 13.7 fps): Transform staging 0.6 ms, the Read's lookups below 0.5 ms, ColorCorrect 5.1 ms, upload 4.7 ms, download copy 2.1 ms,
+and 43.9 ms for the Roto inline. A line-level sampler of the evaluating thread (`--leaf-sampler`, `leaf-samples-*`) puts all of the Read's 11 ms in `os.lstat` and `stat` calls. An isolated test (a thread drawing mattes beside a thread making the same calls) did not reproduce the slowdown, and changing the interpreter's thread switch
+interval to 1 ms and 0.5 ms gave 16.5 to 16.8 and 16.6 to 16.9 fps against 16.1 to 16.7, inside the pass spread, so the mechanism is not isolated here. A cheaper matte rasteriser (44 ms for a 1080p matte on one core today) would take the competition away; that is Roto's area.
+
+**The harness's stack sampler costs 0.7 fps.** `benchmark_2d_playback.py` samples every thread's stack every 2 ms, which takes the interpreter lock each time, and every earlier table of this document was measured with it on. The Radeon island with `--no-sampler` plays 16.1 to 16.7 fps (node stage 49.3 to 51.7 ms, p95 67.7 to 79.3 ms) against 15.3 to 16.1 fps (51.1 to 54.2 ms) with it, three passes each. The tables of steps A and B stay comparable
+with each other; the tables of this step say which they are.
+
+**Two changes tried and taken back** (`ab-read-path-transform-tables-radeon8060s-1026c.json`, commit `51882387` and its revert). (a) A memo of each Read's directory resolution (trusted while `stat` of the directory names the same device and inode; 9 tests, results identical to `Path.resolve` for plain files, links, retargeted links, missing files, relative paths and `..`) took the Read's lookups from 12.4 to 5.3 ms.
+(b) The Transform plan's axis tables, kept for the axis a frame did not move (5 tests, bit-identical plans, GPU gates unchanged on three adapters). Interleaved passes of the Radeon island, plain then changed, three each: 16.36 to 16.45 fps and a 51.9 ms node stage plain, 15.73 to 16.29 fps and 54.1 ms changed. The 7 ms the lookups gave back went to an inline decode of the same plate (2.8 to 11.6 ms): the walk reaches the Read sooner and finds the decode thread
+still busy. The pipeline is paced by the decode pool, and the join above is the change that addresses it.
+
+**The settings.** Three rows in Settings, in the Interface list under Max properties panels: *2D nodes* (the check box "Compute 2D nodes on the graphics card"), *Decode workers* and *Source workers* (Automatic, Off, 1, 2, 3, and 4 for decode). They are kept in the machine's preferences (`playback/gpu_nodes`, `playback/decode_workers`, `playback/source_workers`), never in the project. The defaults are three constants at the top of
+`nodebased/playbackprefs.py`; flipping one is that one line, and an artist who has chosen a value keeps it:
+
+| Constant | Today | Meaning |
+|---|---|---|
+| `DEFAULT_GPU_NODES` | `False` | Grade, Transform, Blur and Merge run on the CPU kernels |
+| `DEFAULT_DECODE_WORKERS` | `None` | automatic: one decode thread, none at four CPUs or fewer |
+| `DEFAULT_SOURCE_WORKERS` | `None` | automatic: none at three CPUs or fewer, one at four, up to three beyond (step B) |
+
+The environment overrides win over the saved choice, for the benchmarks, and Settings says so under the row when one is set: `NODEBASED_GPU_NODES=0|1`, `NODEBASED_DECODE_AHEAD_WORKERS=N` (0 now turns the pool off; it used to read as "use the default"), `NODEBASED_SOURCE_WORKERS=N`, `NODEBASED_DECODE_AHEAD_FRAMES=N` (how many frames ahead the decode pool is asked for: 1 at full size, 3 on a proxy tier) and `NODEBASED_DECODE_JOIN=0`.
+
+**A changed setting takes effect at once; nothing needs a restart.** The worker counts resize the two pools while the window runs (`DecodeAheadPool.resize`, `SourcePool.resize`: new threads start, surplus threads retire as each finishes the job it is on, a task nobody takes stays with the thread that joins it). The GPU nodes are installed or removed on the preview worker between two frames (`Window.apply_gpu_nodes`), so a frame in flight never sees the backend change under it; the evaluator's cache and the display and tile caches are cleared at the switch so no picture mixes both, and the frame is drawn again.
+The evaluator's disk tier is left alone: a result of either backend has the same digest and the two agree to within the gate (`abs(gpu - cpu) <= 2e-5 + 2e-5 * abs(cpu)`).
+
+**What the fallback does when the card refuses the island.** (1) No adapter, no wgpu, or a card that fails to compile the island's shaders: the CPU nodes stay in use, the status bar says "GPU nodes unavailable (reason); the CPU nodes stay in use", the Settings row repeats the reason, and the check box stays as chosen (switching it off clears the refusal, switching it on tries again). (2) The island refuses one node or graph (an unsupported Transform mode, a window larger than the card's budget): that node runs on its CPU kernel and the island carries on with the others.
+(3) A device lost while playing: the frame in hand reruns whole on the CPU nodes (same pixels), then the window drops the island with the message "the graphics device was lost"; switch the setting off and on to try again. (4) A frame with non-finite pixels is recomputed whole on the CPU, as before. The island opens on the adapter Settings → Graphics adapter names ("Automatic" prefers the discrete card).
+
+**Decode and source workers: measured** (`playback --no-sampler`, 48 frames, first lap, uncached, three clean passes per row, rows interleaved; fps / interval p95 in ms / node stage p50 in ms; ranges over the passes; `NODEBASED_DECODE_AHEAD_WORKERS` and `NODEBASED_SOURCE_WORKERS` set the rows, as the settings do). Today's defaults: Radeon and RTX box one decode worker and three source workers; the stand-in no decode worker and one source worker.
+
+| Radeon 8060S (integrated) | GPU nodes (island): fps / interval p95 ms / node stage ms | CPU nodes: fps / interval p95 ms / node stage ms |
+|---|---|---|
+| today's default | 16.20 to 16.62 / 69.0 to 81.2 / 48.6 to 51.7 | 7.42 to 7.81 / 140.8 to 146.1 / 122.1 to 129.8 |
+| 2 decode workers | 16.24 to 16.91 / 64.2 to 68.4 / 50.0 to 50.2 | 7.57 to 7.74 / 139.0 to 169.3 / 123.3 to 124.9 |
+
+| RTX 3080 Ti (USB4 link) | GPU nodes (island): fps / interval p95 ms / node stage ms | CPU nodes: fps / interval p95 ms / node stage ms |
+|---|---|---|
+| today's default | 5.62 to 5.93 / 206.3 to 209.6 / 179.3 to 185.1 | 7.74 to 7.78 / 140.5 to 147.8 / 122.7 to 125.7 |
+| 2 decode workers | 5.51 to 5.87 / 214.1 to 229.8 / 179.8 to 193.3 | 7.75 to 7.85 / 139.2 to 144.3 / 120.9 to 123.5 |
+
+| Four-CPU stand-in (Radeon, 4 CPUs, 2x scale) | GPU nodes (island): fps / interval p95 ms / node stage ms | CPU nodes: fps / interval p95 ms / node stage ms |
+|---|---|---|
+| today's default | 8.71 to 8.80 / 128.7 to 131.8 / 109.7 to 110.7 | 5.89 to 5.94 / 188.3 to 195.3 / 165.0 to 165.9 |
+| 1 decode worker | 10.11 to 10.27 / 125.8 to 129.2 / 60.7 to 80.7 | 6.28 to 6.33 / 173.7 to 177.3 / 152.1 to 154.7 |
+| 2 decode workers | 10.36 to 10.48 / 107.7 to 112.1 / 78.5 to 86.9 | 6.17 to 6.18 / 181.9 to 184.7 / 156.5 to 158.6 |
+| 2 source workers | 9.29 to 9.40 / 128.4 to 133.7 / 100.9 to 104.5 | 5.70 to 5.76 / 198.6 to 202.0 / 168.4 to 170.8 |
+| 1 decode + 2 source workers | 9.99 to 10.05 / 128.3 to 130.1 / 71.3 to 84.8 | 6.27 to 6.30 / 169.1 to 176.9 / 150.9 to 155.2 |
+
+
+On the Radeon and the RTX box the second decode worker changes the frame rate by at most 0.3 fps (inside the spread everywhere but the Radeon island's p95, 64 to 68 ms against 69 to 81 ms). On the stand-in a first decode worker lifts the island from 8.7 to 10.1 to 10.3 fps (the node stage from 110 to 61 to 81 ms) and the CPU nodes from 5.9 to 6.3 fps; a second adds 0.2 fps to the island (p95 108 to 112 ms against 126 to 129) and takes 0.1 fps
+from the CPU nodes; a second source worker helps the island (9.3 to 9.4 fps) and hurts the CPU nodes (5.7 fps).
+
+*Latency, on the stand-in and the other machines* (`tools/benchmark_gpu2d.py interaction`, the evaluator to ColorCorrect without a window, 24 samples per interaction, three passes; median ms, range over the passes). The decode pool works only while playing (`Window.request_preview` asks it for frames only when `self.playing`), so the decode setting cannot change these three; the source workers can.
+
+| Interaction | Stand-in CPU nodes: 0 / 1 (today) / 2 source workers | Stand-in GPU nodes: 0 / 1 / 2 | Radeon CPU / GPU nodes | RTX CPU / GPU nodes |
+|---|---|---|---|---|
+| Grade knob drag, sources cached | 87.9-88.7 / 87.5-89.1 / 87.0-88.2 | 6.6-6.8 / 6.8-7.5 / 6.8-6.9 | 86.9-88.2 / 6.4-7.0 | 87.2-88.0 / 17.7-18.2 |
+| Roto point drag, Reads cached | 47.1-48.3 / 49.7-50.4 / 49.2-50.5 | 34.4-34.5 / 35.4-36.0 / 35.8-36.1 | 48.3-49.9 / 35.9-36.7 | 48.7-49.2 / 52.9-53.4 |
+| Scrub to a frame nobody has computed | 149.4-150.9 / 114.6-117.3 / 120.2-121.0 | 89.2-89.7 / 70.7-71.1 / 60.7-61.5 | 102.4-103.7 / 42.0-43.6 | 101.6-103.9 / 150.3-161.0 |
+
+A second source worker costs the stand-in's CPU nodes 3 to 5 percent on a scrub and gains its island 14 percent; the knob drag does not move.
+
+**GPU nodes as the default: what the measurements say.**
+
+- *Gains:* every machine whose island runs on a card with fast access to memory. Radeon 8060S: 16.2 to 16.9 fps against 7.4 to 7.8 on the CPU nodes, a knob drag of 6.4 to 7.0 ms against 87 ms, a Roto point drag of 36 ms against 49 ms, a scrub of 42 to 44 ms against 102 ms. Four-CPU stand-in: 8.7 to 10.5 fps against 5.7 to 6.3, a knob drag of 7 ms against 88 ms, a scrub of 61 to 89 ms against 115 to 150 ms.
+- *Loses:* the RTX 3080 Ti on its USB4 link, which is the adapter "Automatic" picks on this machine: 5.5 to 5.9 fps against 7.7 to 7.9 on the CPU nodes, a scrub of 150 to 161 ms against 102 ms and a Roto point drag of 53 ms against 49 ms; only the knob drag wins (18 ms against 87 ms). The RTX 4070 laptop, the A6000 and Windows are unmeasured (Gonzo owns them).
+- *CPU-node machines do not change:* with the setting off the code path is today's (step B measured the always-on read-ahead up to 4 percent slower on CPU nodes; the gated read-ahead of that step leaves them at 7.4 to 7.8 fps), and a card that refuses leaves them there (see the fallback above).
+- *What a default-on island would need first:* a choice of adapter for the island that is not "the discrete card first" (a probe of the upload and download speed would do), since on a machine like this one the setting would send the island to the slower card; and the unmeasured machines.
+
+**Tests.** `tests/test_playbackprefs.py` (24 tests, 3 s): the defaults are today's and flip with one line; automatic counts equal the old CPU rules at 2, 3, 4, 6 and 16 CPUs; the environment wins; both settings round-trip through the saved preferences (including Off against Automatic); the Settings dialog shows and returns each choice; both pools grow and shrink while they live (three tasks at once need three workers; a shrunk pool retires idle workers; a pool of none runs the work on the joiner; a shut-down pool ignores a resize); a running window takes new counts without a restart and the
+environment fixes a count and says so; a card that refuses leaves the CPU nodes with a message; turning the GPU nodes on and off in a running window (on the software adapter) goes through the island, matches the CPU nodes within the gate on every frame and leaves the evaluator as before when turned off again; a choice changed while the card opens is applied afterwards; a card that loses its device is dropped with a message and the frame stays right;
+every worker count (0, 1, 2, 3) gives pixels identical to the serial evaluator. `tests/test_decodepool.py` (4 new): a running decode is joined and runs once, a queued job is not waited for, cancelling and a seek stop the wait, shutdown wakes a joiner. Neighbouring modules (`test_sourcepool`, `test_rotoahead`, `test_tileexec`, `test_playback_pipeline`, `test_perf_playback`, `test_benchmark_gpu2d`, `test_desktop` decode and settings tests) pass, 185 tests together.
+`tests.test_gpu2d`, `tests.test_playbackprefs`, `tests.test_rotoahead` and `tests.test_decodepool` pass on the default adapter (RTX 3080 Ti), the integrated Radeon and llvmpipe (134 tests each); every GPU run took `/tmp/nb-gpu.lock`.
+
+**Left out.** RTX 4070 laptop, A6000 and Windows rows stay unverified (Gonzo owns them). The tile executor's own Read path does not use the join; the realistic comp takes the full-frame evaluator (47 full-frame evaluations and no tile composes in a pass). The 240-frame rows were not repeated. The decode setting was not measured on a machine with a card on another bus than these three.
+
+**Needs Gonzo.** (1) The defaults: a first decode worker at four CPUs (`DEFAULT_DECODE_WORKERS = 1`, or the automatic rule) is the largest measured gain on the stand-in; the second decode worker adds little. (2) GPU nodes as the default: gains on the integrated card, loses on the RTX over USB4; the island needs its own adapter choice first. (3) The remaining stages: a cheaper matte rasteriser (Roto's area), ColorCorrect and the display transform on the card, half-float uploads.
+
+Rerun: the stage table is `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :183 --backend gpu2d --force-adapter integrated --label radeon8060s-1026c --frame-range 48 --passes 3 --budget-mb 512 --stages --no-sampler --out-dir "$NB_RUN/pb"` and then `python tools/benchmark_gpu2d.py stages --dir "$NB_RUN/pb" --prefix gpu2d-48-radeon8060s-1026c --output stages.json`;
+the matrix rows add `--env NODEBASED_DECODE_AHEAD_WORKERS=2` and the like (`--cpus 0-3 --env QT_SCALE_FACTOR=2` for the stand-in); interaction is `python tools/benchmark_gpu2d.py interaction --inputs "$NB_RUN/plates" --source-workers 1 --backend gpu2d --adapter integrated --output i.json`; tests `python -m unittest tests.test_playbackprefs tests.test_decodepool`.
+
 ## Lane 2 step notes
 
 ### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)

@@ -1,0 +1,178 @@
+{
+ "machine": "NVIDIA RTX 3080 Ti (default adapter, USB4 link), 1024 MB budget",
+ "method": "tools/benchmark_gpu2d.py playback, 48 frames, first lap, uncached, one fresh pass per row per round (rows interleaved), harness stack sampler off; a pass is clean when no integrator test suite was running at either end of it (the Radeon rows ran before any suite started and carry no log)",
+ "rows": {
+  "cpu nodes, 2 decode workers": {
+   "backend": "cpu",
+   "config": "d2",
+   "clean_passes": 3,
+   "fps": [
+    7.75,
+    7.85
+   ],
+   "interval_p95_ms": [
+    139.21,
+    144.35
+   ],
+   "node_stage_p50_ms": [
+    120.86,
+    123.53
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 7.852,
+     "interval_p95_ms": 139.211,
+     "node_stage_p50_ms": 120.861,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 7.754,
+     "interval_p95_ms": 141.895,
+     "node_stage_p50_ms": 122.92,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 7.844,
+     "interval_p95_ms": 144.352,
+     "node_stage_p50_ms": 123.535,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "cpu nodes, today's defaults": {
+   "backend": "cpu",
+   "config": "today",
+   "clean_passes": 3,
+   "fps": [
+    7.74,
+    7.78
+   ],
+   "interval_p95_ms": [
+    140.5,
+    147.81
+   ],
+   "node_stage_p50_ms": [
+    122.65,
+    125.67
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 7.777,
+     "interval_p95_ms": 140.79,
+     "node_stage_p50_ms": 123.551,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 7.783,
+     "interval_p95_ms": 140.502,
+     "node_stage_p50_ms": 122.649,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 7.739,
+     "interval_p95_ms": 147.812,
+     "node_stage_p50_ms": 125.665,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "gpu2d nodes, 2 decode workers": {
+   "backend": "gpu2d",
+   "config": "d2",
+   "clean_passes": 3,
+   "fps": [
+    5.51,
+    5.87
+   ],
+   "interval_p95_ms": [
+    214.08,
+    229.84
+   ],
+   "node_stage_p50_ms": [
+    179.75,
+    193.31
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 5.869,
+     "interval_p95_ms": 229.835,
+     "node_stage_p50_ms": 179.745,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 5.793,
+     "interval_p95_ms": 214.078,
+     "node_stage_p50_ms": 183.532,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 5.513,
+     "interval_p95_ms": 217.824,
+     "node_stage_p50_ms": 193.312,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "gpu2d nodes, today's defaults": {
+   "backend": "gpu2d",
+   "config": "today",
+   "clean_passes": 3,
+   "fps": [
+    5.62,
+    5.93
+   ],
+   "interval_p95_ms": [
+    206.32,
+    209.62
+   ],
+   "node_stage_p50_ms": [
+    179.27,
+    185.14
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 5.625,
+     "interval_p95_ms": 209.619,
+     "node_stage_p50_ms": 185.144,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 5.929,
+     "interval_p95_ms": 208.291,
+     "node_stage_p50_ms": 179.271,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 5.827,
+     "interval_p95_ms": 206.321,
+     "node_stage_p50_ms": 180.613,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  }
+ }
+}

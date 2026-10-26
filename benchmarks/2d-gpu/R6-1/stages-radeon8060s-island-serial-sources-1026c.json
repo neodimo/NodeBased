@@ -1,0 +1,117 @@
+{
+ "tool": "tools/benchmark_gpu2d.py stages",
+ "prefix": "gpu2d-48-radeon8060s-src0",
+ "passes": [
+  {
+   "case": "gpu2d-48-radeon8060s-src0-1",
+   "frames": 47,
+   "node_stage_ms": 67.747,
+   "walk_ms": 64.83,
+   "stages_ms": {
+    "kernel:Roto": 43.883,
+    "island kernels on the card (submit to done)": 5.52,
+    "kernel:ColorCorrect": 5.122,
+    "island upload (host to card)": 4.711,
+    "island download: host copy into the picture": 2.062,
+    "walk:frame": 1.492,
+    "island run: other host work (blob, submit, buffers)": 0.57,
+    "island stage:Transform": 0.567,
+    "island download: copy and map": 0.523,
+    "island encode (host)": 0.231,
+    "island stage:Grade": 0.062,
+    "island stage:Merge": 0.054,
+    "island stage:Blur": 0.032,
+    "island lock wait": 0.002
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 40.642
+   }
+  }
+ ],
+ "node_stage_ms": {
+  "mean": 67.747,
+  "min": 67.747,
+  "max": 67.747
+ },
+ "stages_ms": {
+  "kernel:Roto": {
+   "mean_ms": 43.883,
+   "min_ms": 43.883,
+   "max_ms": 43.883
+  },
+  "island kernels on the card (submit to done)": {
+   "mean_ms": 5.52,
+   "min_ms": 5.52,
+   "max_ms": 5.52
+  },
+  "kernel:ColorCorrect": {
+   "mean_ms": 5.122,
+   "min_ms": 5.122,
+   "max_ms": 5.122
+  },
+  "island upload (host to card)": {
+   "mean_ms": 4.711,
+   "min_ms": 4.711,
+   "max_ms": 4.711
+  },
+  "island download: host copy into the picture": {
+   "mean_ms": 2.062,
+   "min_ms": 2.062,
+   "max_ms": 2.062
+  },
+  "walk:frame": {
+   "mean_ms": 1.492,
+   "min_ms": 1.492,
+   "max_ms": 1.492
+  },
+  "island run: other host work (blob, submit, buffers)": {
+   "mean_ms": 0.57,
+   "min_ms": 0.57,
+   "max_ms": 0.57
+  },
+  "island stage:Transform": {
+   "mean_ms": 0.567,
+   "min_ms": 0.567,
+   "max_ms": 0.567
+  },
+  "island download: copy and map": {
+   "mean_ms": 0.523,
+   "min_ms": 0.523,
+   "max_ms": 0.523
+  },
+  "island encode (host)": {
+   "mean_ms": 0.231,
+   "min_ms": 0.231,
+   "max_ms": 0.231
+  },
+  "island stage:Grade": {
+   "mean_ms": 0.062,
+   "min_ms": 0.062,
+   "max_ms": 0.062
+  },
+  "island stage:Merge": {
+   "mean_ms": 0.054,
+   "min_ms": 0.054,
+   "max_ms": 0.054
+  },
+  "island stage:Blur": {
+   "mean_ms": 0.032,
+   "min_ms": 0.032,
+   "max_ms": 0.032
+  },
+  "island lock wait": {
+   "mean_ms": 0.002,
+   "min_ms": 0.002,
+   "max_ms": 0.002
+  }
+ },
+ "other_threads_busy_ms": {
+  "nodebased-decode-ahead: decode": {
+   "mean_ms": 40.642,
+   "min_ms": 40.642,
+   "max_ms": 40.642
+  }
+ },
+ "worker_thread_top_functions": [],
+ "note": "exclusive milliseconds per accepted fresh frame on the thread that evaluates it, averaged over the frames of a pass and then over the passes; 'walk: ...' is the evaluator's own time between its nodes (cache keys, digests, windows, Python); the island run is split by its counters; other_threads_busy_ms is what the source and decode workers did inside the same node stage (it overlaps, it is not added)"
+}

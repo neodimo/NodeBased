@@ -1,0 +1,50 @@
+{
+ "revision": "94533a9d8798a10dedc06fa18082d9cb50253dab",
+ "working_tree_dirty": true,
+ "fixture_file": "tests/fixtures/playback_comp.nbcomp",
+ "fixture_sha256": "697f157ac59ef14c54c9f34dd8ceb7b5d1603ecb18537f0ea682c4afa0bbca8f",
+ "variant_sha256": "ed8d631f8eaf6c98e8d564eaffe4f6f2a76fee7368908647539ab75449a966e1",
+ "frame_range": [
+  1,
+  48
+ ],
+ "host": "bazzite",
+ "os": "Linux-7.2.9-ogc3.1.fc44.x86_64-x86_64-with-glibc2.43",
+ "cpu": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+ "cpu_count": 32,
+ "python": "3.12.13",
+ "versions": {
+  "numpy": "2.5.3",
+  "PySide6": "6.11.2",
+  "wgpu": "0.32.0"
+ },
+ "adapters": [
+  {
+   "name": "NVIDIA GeForce RTX 3080 Ti",
+   "type": "discrete",
+   "backend": "Vulkan"
+  },
+  {
+   "name": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "type": "integrated",
+   "backend": "Vulkan"
+  },
+  {
+   "name": "llvmpipe (LLVM 22.1.8, 256 bits)",
+   "type": "software",
+   "backend": "Vulkan"
+  },
+  {
+   "name": "NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2",
+   "type": "Unknown",
+   "backend": "OpenGL"
+  }
+ ],
+ "nvidia_driver": "NVIDIA GeForce RTX 3080 Ti, 615.78.08",
+ "display": ":183",
+ "qt_platform": "xcb",
+ "force_adapter": "integrated",
+ "backend": "gpu2d",
+ "generator": "tools/benchmark_2d_playback.py --generate-inputs (make_inputs: half-float EXR, frame*19 shifted bands, moving oval)",
+ "command": "tools/benchmark_2d_playback.py --plate-pattern $NB_RUN/plates/plate.%04d.exr --background-pattern $NB_RUN/plates/background.%04d.exr --size 1080p --cache-mode uncached --display :183 --force-adapter integrated --adapter radeon8060s-1026c-nosamp --backend gpu2d --gpu-budget-mb 512 --seconds 12.0 --case gpu2d-48-radeon8060s-1026c-nosamp-1 --output $NB_RUN/pb1026c/gpu2d-48-radeon8060s-1026c-nosamp-1.json --timeline-output $NB_RUN/pb1026c/gpu2d-48-radeon8060s-1026c-nosamp-1.timeline.json --no-sampler --stage-trace $NB_RUN/pb1026c/gpu2d-48-radeon8060s-1026c-nosamp-1.stages.json"
+}

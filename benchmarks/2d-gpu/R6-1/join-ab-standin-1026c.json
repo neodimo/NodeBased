@@ -1,0 +1,86 @@
+{
+ "machine": "Four-CPU stand-in (Radeon 8060S, taskset -c 0-3, QT_SCALE_FACTOR=2), 48 frames, first lap, no stack sampler",
+ "method": "as the Radeon file, one decode worker (NODEBASED_DECODE_AHEAD_WORKERS=1)",
+ "rows": {
+  "CPU nodes, 1 decode worker, join off": [
+   {
+    "pass": 1,
+    "fps": 6.398,
+    "interval_p95_ms": 173.288,
+    "node_stage_p50_ms": 151.454
+   },
+   {
+    "pass": 2,
+    "fps": 6.278,
+    "interval_p95_ms": 181.61,
+    "node_stage_p50_ms": 153.613
+   },
+   {
+    "pass": 3,
+    "fps": 6.312,
+    "interval_p95_ms": 172.571,
+    "node_stage_p50_ms": 154.063
+   }
+  ],
+  "CPU nodes, 1 decode worker, join on": [
+   {
+    "pass": 1,
+    "fps": 6.315,
+    "interval_p95_ms": 171.647,
+    "node_stage_p50_ms": 154.329
+   },
+   {
+    "pass": 2,
+    "fps": 6.267,
+    "interval_p95_ms": 176.711,
+    "node_stage_p50_ms": 150.882
+   },
+   {
+    "pass": 3,
+    "fps": 6.333,
+    "interval_p95_ms": 172.571,
+    "node_stage_p50_ms": 152.097
+   }
+  ],
+  "GPU nodes, 1 decode worker, join off": [
+   {
+    "pass": 1,
+    "fps": 9.927,
+    "interval_p95_ms": 130.74,
+    "node_stage_p50_ms": 61.186
+   },
+   {
+    "pass": 2,
+    "fps": 10.27,
+    "interval_p95_ms": 124.229,
+    "node_stage_p50_ms": 63.837
+   },
+   {
+    "pass": 3,
+    "fps": 10.136,
+    "interval_p95_ms": 127.754,
+    "node_stage_p50_ms": 69.249
+   }
+  ],
+  "GPU nodes, 1 decode worker, join on": [
+   {
+    "pass": 1,
+    "fps": 10.741,
+    "interval_p95_ms": 107.305,
+    "node_stage_p50_ms": 67.124
+   },
+   {
+    "pass": 2,
+    "fps": 10.505,
+    "interval_p95_ms": 113.212,
+    "node_stage_p50_ms": 79.953
+   },
+   {
+    "pass": 3,
+    "fps": 10.473,
+    "interval_p95_ms": 114.897,
+    "node_stage_p50_ms": 65.191
+   }
+  ]
+ }
+}

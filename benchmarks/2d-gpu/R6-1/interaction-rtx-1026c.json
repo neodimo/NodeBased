@@ -1,0 +1,271 @@
+{
+ "tool": "tools/benchmark_gpu2d.py interaction",
+ "machine": "unrestricted, source pool 3 workers, island on the RTX 3080 Ti (USB4 link)",
+ "method": "Evaluator to ColorCorrect, no window; 24 samples per interaction, three passes per row, rows interleaved; knob drag = a new Grade multiply per sample with the sources cached, Roto point drag = a new point per sample with the Reads cached, scrub = 24 frames nobody has computed",
+ "passes": [
+  {
+   "backend": "cpu",
+   "source_workers": 3,
+   "pass": 1,
+   "interactions": {
+    "knob drag (Grade multiply, sources cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 87.479,
+      "p50": 87.196,
+      "p95": 89.914,
+      "p99": 90.098,
+      "max": 90.112,
+      "min": 85.723
+     },
+     "finite": true
+    },
+    "Roto point drag (Reads cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 49.801,
+      "p50": 49.164,
+      "p95": 52.108,
+      "p99": 58.015,
+      "max": 59.699,
+      "min": 48.168
+     },
+     "finite": true
+    },
+    "scrub (new frame, nothing cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 101.074,
+      "p50": 101.6,
+      "p95": 110.514,
+      "p99": 112.67,
+      "max": 113.235,
+      "min": 82.175
+     },
+     "finite": true
+    }
+   },
+   "adapter_choice": "default"
+  },
+  {
+   "backend": "cpu",
+   "source_workers": 3,
+   "pass": 2,
+   "interactions": {
+    "knob drag (Grade multiply, sources cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 87.246,
+      "p50": 87.221,
+      "p95": 89.669,
+      "p99": 89.904,
+      "max": 89.931,
+      "min": 84.405
+     },
+     "finite": true
+    },
+    "Roto point drag (Reads cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 48.784,
+      "p50": 48.831,
+      "p95": 50.428,
+      "p99": 51.047,
+      "max": 51.189,
+      "min": 46.833
+     },
+     "finite": true
+    },
+    "scrub (new frame, nothing cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 102.844,
+      "p50": 103.328,
+      "p95": 112.711,
+      "p99": 113.218,
+      "max": 113.294,
+      "min": 85.394
+     },
+     "finite": true
+    }
+   },
+   "adapter_choice": "default"
+  },
+  {
+   "backend": "cpu",
+   "source_workers": 3,
+   "pass": 3,
+   "interactions": {
+    "knob drag (Grade multiply, sources cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 87.854,
+      "p50": 87.957,
+      "p95": 89.869,
+      "p99": 90.194,
+      "max": 90.29,
+      "min": 84.463
+     },
+     "finite": true
+    },
+    "Roto point drag (Reads cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 49.069,
+      "p50": 48.749,
+      "p95": 50.674,
+      "p99": 53.705,
+      "max": 54.56,
+      "min": 47.231
+     },
+     "finite": true
+    },
+    "scrub (new frame, nothing cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 102.431,
+      "p50": 103.854,
+      "p95": 108.49,
+      "p99": 108.95,
+      "max": 109.009,
+      "min": 83.383
+     },
+     "finite": true
+    }
+   },
+   "adapter_choice": "default"
+  },
+  {
+   "backend": "gpu2d",
+   "source_workers": 3,
+   "pass": 1,
+   "interactions": {
+    "knob drag (Grade multiply, sources cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 18.352,
+      "p50": 18.226,
+      "p95": 19.851,
+      "p99": 20.144,
+      "max": 20.227,
+      "min": 16.857
+     },
+     "finite": true
+    },
+    "Roto point drag (Reads cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 53.932,
+      "p50": 52.934,
+      "p95": 57.516,
+      "p99": 65.853,
+      "max": 68.255,
+      "min": 51.633
+     },
+     "finite": true
+    },
+    "scrub (new frame, nothing cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 161.246,
+      "p50": 153.536,
+      "p95": 205.109,
+      "p99": 208.909,
+      "max": 210.035,
+      "min": 118.503
+     },
+     "finite": true
+    }
+   },
+   "adapter_choice": "default"
+  },
+  {
+   "backend": "gpu2d",
+   "source_workers": 3,
+   "pass": 2,
+   "interactions": {
+    "knob drag (Grade multiply, sources cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 17.926,
+      "p50": 17.91,
+      "p95": 18.631,
+      "p99": 18.822,
+      "max": 18.876,
+      "min": 16.932
+     },
+     "finite": true
+    },
+    "Roto point drag (Reads cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 53.949,
+      "p50": 53.254,
+      "p95": 57.006,
+      "p99": 58.383,
+      "max": 58.783,
+      "min": 51.735
+     },
+     "finite": true
+    },
+    "scrub (new frame, nothing cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 160.899,
+      "p50": 150.343,
+      "p95": 206.191,
+      "p99": 208.146,
+      "max": 208.613,
+      "min": 120.261
+     },
+     "finite": true
+    }
+   },
+   "adapter_choice": "default"
+  },
+  {
+   "backend": "gpu2d",
+   "source_workers": 3,
+   "pass": 3,
+   "interactions": {
+    "knob drag (Grade multiply, sources cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 17.931,
+      "p50": 17.724,
+      "p95": 19.685,
+      "p99": 19.866,
+      "max": 19.891,
+      "min": 16.427
+     },
+     "finite": true
+    },
+    "Roto point drag (Reads cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 53.77,
+      "p50": 53.356,
+      "p95": 56.997,
+      "p99": 58.893,
+      "max": 59.42,
+      "min": 51.562
+     },
+     "finite": true
+    },
+    "scrub (new frame, nothing cached)": {
+     "ms": {
+      "n": 24,
+      "mean": 162.501,
+      "p50": 161.002,
+      "p95": 205.324,
+      "p99": 205.451,
+      "max": 205.476,
+      "min": 118.828
+     },
+     "finite": true
+    }
+   },
+   "adapter_choice": "default"
+  }
+ ]
+}

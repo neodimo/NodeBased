@@ -1,0 +1,231 @@
+{
+ "tool": "tools/benchmark_gpu2d.py stages",
+ "prefix": "gpu2d-48-radeon8060s-1026c-nosamp",
+ "passes": [
+  {
+   "case": "gpu2d-48-radeon8060s-1026c-nosamp-1",
+   "frames": 47,
+   "node_stage_ms": 50.318,
+   "walk_ms": 44.862,
+   "stages_ms": {
+    "walk:Read": 11.005,
+    "kernel:ColorCorrect": 7.55,
+    "island stage:Transform": 6.222,
+    "island upload (host to card)": 5.356,
+    "island kernels on the card (submit to done)": 5.032,
+    "island download: host copy into the picture": 2.549,
+    "decode": 2.398,
+    "island run: other host work (blob, submit, buffers)": 1.581,
+    "join:Roto": 1.011,
+    "island download: copy and map": 0.744,
+    "walk:frame": 0.622,
+    "kernel:Read": 0.31,
+    "island encode (host)": 0.292,
+    "island stage:Grade": 0.065,
+    "island stage:Merge": 0.058,
+    "island stage:Blur": 0.039,
+    "join:Read": 0.027,
+    "island lock wait": 0.001
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 43.779,
+    "nodebased-source: kernel:Roto": 26.632,
+    "nodebased-source: ahead:roto": 23.588,
+    "nodebased-source: walk:Read": 11.769,
+    "nodebased-source: walk:Roto": 0.404
+   }
+  },
+  {
+   "case": "gpu2d-48-radeon8060s-1026c-nosamp-2",
+   "frames": 47,
+   "node_stage_ms": 49.344,
+   "walk_ms": 43.934,
+   "stages_ms": {
+    "walk:Read": 12.165,
+    "kernel:ColorCorrect": 7.623,
+    "island upload (host to card)": 5.389,
+    "island kernels on the card (submit to done)": 5.125,
+    "island stage:Transform": 4.997,
+    "island download: host copy into the picture": 2.535,
+    "island run: other host work (blob, submit, buffers)": 1.681,
+    "join:Roto": 1.536,
+    "decode": 0.89,
+    "island download: copy and map": 0.749,
+    "walk:frame": 0.663,
+    "island encode (host)": 0.337,
+    "island stage:Grade": 0.071,
+    "island stage:Merge": 0.07,
+    "island stage:Blur": 0.043,
+    "join:Read": 0.04,
+    "kernel:Read": 0.018,
+    "island lock wait": 0.001
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 42.421,
+    "nodebased-source: kernel:Roto": 27.108,
+    "nodebased-source: ahead:roto": 21.417,
+    "nodebased-source: walk:Read": 9.633,
+    "nodebased-source: walk:Roto": 0.457
+   }
+  },
+  {
+   "case": "gpu2d-48-radeon8060s-1026c-nosamp-3",
+   "frames": 47,
+   "node_stage_ms": 51.732,
+   "walk_ms": 46.811,
+   "stages_ms": {
+    "walk:Read": 9.709,
+    "kernel:ColorCorrect": 7.869,
+    "island stage:Transform": 5.943,
+    "island upload (host to card)": 5.462,
+    "decode": 5.435,
+    "island kernels on the card (submit to done)": 5.034,
+    "island download: host copy into the picture": 2.571,
+    "island run: other host work (blob, submit, buffers)": 1.273,
+    "join:Roto": 1.075,
+    "island download: copy and map": 0.79,
+    "walk:frame": 0.661,
+    "kernel:Read": 0.466,
+    "island encode (host)": 0.308,
+    "island stage:Grade": 0.063,
+    "island stage:Merge": 0.061,
+    "join:Read": 0.049,
+    "island stage:Blur": 0.04,
+    "island lock wait": 0.002
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 44.38,
+    "nodebased-source: kernel:Roto": 30.037,
+    "nodebased-source: ahead:roto": 19.949,
+    "nodebased-source: walk:Read": 9.936,
+    "nodebased-source: walk:Roto": 0.44
+   }
+  }
+ ],
+ "node_stage_ms": {
+  "mean": 50.465,
+  "min": 49.344,
+  "max": 51.732
+ },
+ "stages_ms": {
+  "walk:Read": {
+   "mean_ms": 10.96,
+   "min_ms": 9.709,
+   "max_ms": 12.165
+  },
+  "kernel:ColorCorrect": {
+   "mean_ms": 7.681,
+   "min_ms": 7.55,
+   "max_ms": 7.869
+  },
+  "island stage:Transform": {
+   "mean_ms": 5.721,
+   "min_ms": 4.997,
+   "max_ms": 6.222
+  },
+  "island upload (host to card)": {
+   "mean_ms": 5.403,
+   "min_ms": 5.356,
+   "max_ms": 5.462
+  },
+  "island kernels on the card (submit to done)": {
+   "mean_ms": 5.064,
+   "min_ms": 5.032,
+   "max_ms": 5.125
+  },
+  "decode": {
+   "mean_ms": 2.908,
+   "min_ms": 0.89,
+   "max_ms": 5.435
+  },
+  "island download: host copy into the picture": {
+   "mean_ms": 2.552,
+   "min_ms": 2.535,
+   "max_ms": 2.571
+  },
+  "island run: other host work (blob, submit, buffers)": {
+   "mean_ms": 1.512,
+   "min_ms": 1.273,
+   "max_ms": 1.681
+  },
+  "join:Roto": {
+   "mean_ms": 1.207,
+   "min_ms": 1.011,
+   "max_ms": 1.536
+  },
+  "island download: copy and map": {
+   "mean_ms": 0.761,
+   "min_ms": 0.744,
+   "max_ms": 0.79
+  },
+  "walk:frame": {
+   "mean_ms": 0.649,
+   "min_ms": 0.622,
+   "max_ms": 0.663
+  },
+  "island encode (host)": {
+   "mean_ms": 0.312,
+   "min_ms": 0.292,
+   "max_ms": 0.337
+  },
+  "kernel:Read": {
+   "mean_ms": 0.264,
+   "min_ms": 0.018,
+   "max_ms": 0.466
+  },
+  "island stage:Grade": {
+   "mean_ms": 0.066,
+   "min_ms": 0.063,
+   "max_ms": 0.071
+  },
+  "island stage:Merge": {
+   "mean_ms": 0.063,
+   "min_ms": 0.058,
+   "max_ms": 0.07
+  },
+  "island stage:Blur": {
+   "mean_ms": 0.04,
+   "min_ms": 0.039,
+   "max_ms": 0.043
+  },
+  "join:Read": {
+   "mean_ms": 0.039,
+   "min_ms": 0.027,
+   "max_ms": 0.049
+  },
+  "island lock wait": {
+   "mean_ms": 0.002,
+   "min_ms": 0.001,
+   "max_ms": 0.002
+  }
+ },
+ "other_threads_busy_ms": {
+  "nodebased-decode-ahead: decode": {
+   "mean_ms": 43.527,
+   "min_ms": 42.421,
+   "max_ms": 44.38
+  },
+  "nodebased-source: kernel:Roto": {
+   "mean_ms": 27.926,
+   "min_ms": 26.632,
+   "max_ms": 30.037
+  },
+  "nodebased-source: ahead:roto": {
+   "mean_ms": 21.651,
+   "min_ms": 19.949,
+   "max_ms": 23.588
+  },
+  "nodebased-source: walk:Read": {
+   "mean_ms": 10.446,
+   "min_ms": 9.633,
+   "max_ms": 11.769
+  },
+  "nodebased-source: walk:Roto": {
+   "mean_ms": 0.434,
+   "min_ms": 0.404,
+   "max_ms": 0.457
+  }
+ },
+ "worker_thread_top_functions": [],
+ "note": "exclusive milliseconds per accepted fresh frame on the thread that evaluates it, averaged over the frames of a pass and then over the passes; 'walk: ...' is the evaluator's own time between its nodes (cache keys, digests, windows, Python); the island run is split by its counters; other_threads_busy_ms is what the source and decode workers did inside the same node stage (it overlaps, it is not added)"
+}

@@ -1,0 +1,86 @@
+{
+ "machine": "AMD Radeon 8060S island, 512 MB budget, 48 frames, first lap, no stack sampler",
+ "method": "tools/benchmark_gpu2d.py playback, three interleaved passes per row; lead = NODEBASED_DECODE_AHEAD_FRAMES (frames the decode pool is asked for ahead of the playhead; 1 is today at full size), d = decode workers (NODEBASED_DECODE_AHEAD_WORKERS)",
+ "rows": {
+  "lead 1, 1 decode worker": [
+   {
+    "pass": 1,
+    "fps": 16.287,
+    "interval_p95_ms": 74.179,
+    "node_stage_p50_ms": 48.749
+   },
+   {
+    "pass": 2,
+    "fps": 16.216,
+    "interval_p95_ms": 69.987,
+    "node_stage_p50_ms": 48.966
+   },
+   {
+    "pass": 3,
+    "fps": 16.522,
+    "interval_p95_ms": 79.736,
+    "node_stage_p50_ms": 46.739
+   }
+  ],
+  "lead 1, 2 decode workers": [
+   {
+    "pass": 1,
+    "fps": 16.722,
+    "interval_p95_ms": 67.088,
+    "node_stage_p50_ms": 49.368
+   },
+   {
+    "pass": 2,
+    "fps": 16.525,
+    "interval_p95_ms": 66.574,
+    "node_stage_p50_ms": 52.147
+   },
+   {
+    "pass": 3,
+    "fps": 16.993,
+    "interval_p95_ms": 64.431,
+    "node_stage_p50_ms": 46.071
+   }
+  ],
+  "lead 2, 1 decode worker": [
+   {
+    "pass": 1,
+    "fps": 16.641,
+    "interval_p95_ms": 66.936,
+    "node_stage_p50_ms": 49.281
+   },
+   {
+    "pass": 2,
+    "fps": 16.914,
+    "interval_p95_ms": 64.387,
+    "node_stage_p50_ms": 42.928
+   },
+   {
+    "pass": 3,
+    "fps": 16.666,
+    "interval_p95_ms": 64.703,
+    "node_stage_p50_ms": 46.359
+   }
+  ],
+  "lead 2, 2 decode workers": [
+   {
+    "pass": 1,
+    "fps": 16.697,
+    "interval_p95_ms": 63.991,
+    "node_stage_p50_ms": 50.689
+   },
+   {
+    "pass": 2,
+    "fps": 16.731,
+    "interval_p95_ms": 67.174,
+    "node_stage_p50_ms": 48.366
+   },
+   {
+    "pass": 3,
+    "fps": 16.341,
+    "interval_p95_ms": 68.96,
+    "node_stage_p50_ms": 50.765
+   }
+  ]
+ }
+}

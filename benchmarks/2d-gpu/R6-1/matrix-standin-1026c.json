@@ -1,0 +1,436 @@
+{
+ "machine": "AMD Radeon 8060S on taskset -c 0-3 with QT_SCALE_FACTOR=2 (the four-CPU laptop stand-in), 512 MB budget",
+ "method": "tools/benchmark_gpu2d.py playback, 48 frames, first lap, uncached, one fresh pass per row per round (rows interleaved), harness stack sampler off; a pass is clean when no integrator test suite was running at either end of it (the Radeon rows ran before any suite started and carry no log)",
+ "rows": {
+  "cpu nodes, 1 decode worker": {
+   "backend": "cpu",
+   "config": "d1",
+   "clean_passes": 3,
+   "fps": [
+    6.28,
+    6.33
+   ],
+   "interval_p95_ms": [
+    173.66,
+    177.26
+   ],
+   "node_stage_p50_ms": [
+    152.12,
+    154.67
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 6.283,
+     "interval_p95_ms": 177.257,
+     "node_stage_p50_ms": 152.122,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 6.319,
+     "interval_p95_ms": 173.698,
+     "node_stage_p50_ms": 153.113,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 6.325,
+     "interval_p95_ms": 173.663,
+     "node_stage_p50_ms": 154.673,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "cpu nodes, 1 decode and 2 source workers": {
+   "backend": "cpu",
+   "config": "d1s2",
+   "clean_passes": 3,
+   "fps": [
+    6.27,
+    6.3
+   ],
+   "interval_p95_ms": [
+    169.05,
+    176.92
+   ],
+   "node_stage_p50_ms": [
+    150.93,
+    155.15
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 6.303,
+     "interval_p95_ms": 176.923,
+     "node_stage_p50_ms": 150.926,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 6.267,
+     "interval_p95_ms": 174.453,
+     "node_stage_p50_ms": 155.151,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 6.301,
+     "interval_p95_ms": 169.048,
+     "node_stage_p50_ms": 154.536,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "cpu nodes, 2 decode workers": {
+   "backend": "cpu",
+   "config": "d2",
+   "clean_passes": 3,
+   "fps": [
+    6.17,
+    6.18
+   ],
+   "interval_p95_ms": [
+    181.9,
+    184.67
+   ],
+   "node_stage_p50_ms": [
+    156.46,
+    158.55
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 6.168,
+     "interval_p95_ms": 183.136,
+     "node_stage_p50_ms": 158.553,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 6.182,
+     "interval_p95_ms": 184.668,
+     "node_stage_p50_ms": 157.83,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 6.166,
+     "interval_p95_ms": 181.903,
+     "node_stage_p50_ms": 156.463,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "cpu nodes, 2 source workers": {
+   "backend": "cpu",
+   "config": "s2",
+   "clean_passes": 3,
+   "fps": [
+    5.7,
+    5.76
+   ],
+   "interval_p95_ms": [
+    198.62,
+    202.02
+   ],
+   "node_stage_p50_ms": [
+    168.36,
+    170.78
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 5.737,
+     "interval_p95_ms": 201.128,
+     "node_stage_p50_ms": 170.779,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 5.761,
+     "interval_p95_ms": 202.018,
+     "node_stage_p50_ms": 168.358,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 5.7,
+     "interval_p95_ms": 198.622,
+     "node_stage_p50_ms": 169.765,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "cpu nodes, today's defaults": {
+   "backend": "cpu",
+   "config": "today",
+   "clean_passes": 3,
+   "fps": [
+    5.89,
+    5.94
+   ],
+   "interval_p95_ms": [
+    188.28,
+    195.28
+   ],
+   "node_stage_p50_ms": [
+    165.04,
+    165.86
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 5.887,
+     "interval_p95_ms": 190.281,
+     "node_stage_p50_ms": 165.783,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 5.942,
+     "interval_p95_ms": 188.285,
+     "node_stage_p50_ms": 165.862,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 5.928,
+     "interval_p95_ms": 195.278,
+     "node_stage_p50_ms": 165.042,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "gpu2d nodes, 1 decode worker": {
+   "backend": "gpu2d",
+   "config": "d1",
+   "clean_passes": 3,
+   "fps": [
+    10.11,
+    10.27
+   ],
+   "interval_p95_ms": [
+    125.77,
+    129.25
+   ],
+   "node_stage_p50_ms": [
+    60.67,
+    80.74
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 10.123,
+     "interval_p95_ms": 127.539,
+     "node_stage_p50_ms": 72.129,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 10.106,
+     "interval_p95_ms": 129.254,
+     "node_stage_p50_ms": 60.671,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 10.272,
+     "interval_p95_ms": 125.772,
+     "node_stage_p50_ms": 80.741,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "gpu2d nodes, 1 decode and 2 source workers": {
+   "backend": "gpu2d",
+   "config": "d1s2",
+   "clean_passes": 3,
+   "fps": [
+    9.99,
+    10.05
+   ],
+   "interval_p95_ms": [
+    128.31,
+    130.1
+   ],
+   "node_stage_p50_ms": [
+    71.26,
+    84.76
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 10.046,
+     "interval_p95_ms": 128.652,
+     "node_stage_p50_ms": 71.259,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 10.043,
+     "interval_p95_ms": 130.099,
+     "node_stage_p50_ms": 83.458,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 9.99,
+     "interval_p95_ms": 128.313,
+     "node_stage_p50_ms": 84.757,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "gpu2d nodes, 2 decode workers": {
+   "backend": "gpu2d",
+   "config": "d2",
+   "clean_passes": 3,
+   "fps": [
+    10.36,
+    10.48
+   ],
+   "interval_p95_ms": [
+    107.7,
+    112.11
+   ],
+   "node_stage_p50_ms": [
+    78.51,
+    86.86
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 10.476,
+     "interval_p95_ms": 107.7,
+     "node_stage_p50_ms": 82.22,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 10.358,
+     "interval_p95_ms": 111.958,
+     "node_stage_p50_ms": 86.855,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 10.394,
+     "interval_p95_ms": 112.111,
+     "node_stage_p50_ms": 78.512,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "gpu2d nodes, 2 source workers": {
+   "backend": "gpu2d",
+   "config": "s2",
+   "clean_passes": 3,
+   "fps": [
+    9.29,
+    9.4
+   ],
+   "interval_p95_ms": [
+    128.41,
+    133.67
+   ],
+   "node_stage_p50_ms": [
+    100.89,
+    104.48
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 9.286,
+     "interval_p95_ms": 133.674,
+     "node_stage_p50_ms": 102.867,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 9.31,
+     "interval_p95_ms": 132.457,
+     "node_stage_p50_ms": 104.485,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 9.405,
+     "interval_p95_ms": 128.41,
+     "node_stage_p50_ms": 100.895,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  },
+  "gpu2d nodes, today's defaults": {
+   "backend": "gpu2d",
+   "config": "today",
+   "clean_passes": 3,
+   "fps": [
+    8.71,
+    8.8
+   ],
+   "interval_p95_ms": [
+    128.67,
+    131.8
+   ],
+   "node_stage_p50_ms": [
+    109.68,
+    110.65
+   ],
+   "passes": [
+    {
+     "pass": 1,
+     "fps": 8.712,
+     "interval_p95_ms": 131.802,
+     "node_stage_p50_ms": 110.651,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 2,
+     "fps": 8.799,
+     "interval_p95_ms": 128.669,
+     "node_stage_p50_ms": 109.68,
+     "frames_traced": 47,
+     "clean": true
+    },
+    {
+     "pass": 3,
+     "fps": 8.788,
+     "interval_p95_ms": 128.848,
+     "node_stage_p50_ms": 110.107,
+     "frames_traced": 47,
+     "clean": true
+    }
+   ]
+  }
+ }
+}

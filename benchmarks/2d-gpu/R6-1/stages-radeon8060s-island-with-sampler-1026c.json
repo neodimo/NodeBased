@@ -1,0 +1,332 @@
+{
+ "tool": "tools/benchmark_gpu2d.py stages",
+ "prefix": "gpu2d-48-radeon8060s-1026c",
+ "passes": [
+  {
+   "case": "gpu2d-48-radeon8060s-1026c-1",
+   "frames": 47,
+   "node_stage_ms": 51.119,
+   "walk_ms": 46.514,
+   "stages_ms": {
+    "walk:Read": 10.77,
+    "kernel:ColorCorrect": 8.219,
+    "island upload (host to card)": 5.372,
+    "island kernels on the card (submit to done)": 5.262,
+    "island stage:Transform": 4.753,
+    "decode": 4.466,
+    "island download: host copy into the picture": 2.564,
+    "island run: other host work (blob, submit, buffers)": 1.509,
+    "join:Roto": 0.949,
+    "kernel:Read": 0.763,
+    "island download: copy and map": 0.685,
+    "walk:frame": 0.677,
+    "island encode (host)": 0.317,
+    "island stage:Grade": 0.069,
+    "island stage:Merge": 0.064,
+    "island stage:Blur": 0.042,
+    "join:Read": 0.033,
+    "island lock wait": 0.001
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 45.541,
+    "nodebased-source: kernel:Roto": 27.64,
+    "nodebased-source: ahead:roto": 21.534,
+    "nodebased-source: walk:Read": 11.366,
+    "nodebased-source: walk:Roto": 0.43
+   }
+  },
+  {
+   "case": "gpu2d-48-radeon8060s-1026c-2",
+   "frames": 47,
+   "node_stage_ms": 54.185,
+   "walk_ms": 49.987,
+   "stages_ms": {
+    "walk:Read": 10.716,
+    "kernel:ColorCorrect": 7.812,
+    "decode": 6.765,
+    "island stage:Transform": 5.678,
+    "island upload (host to card)": 5.554,
+    "island kernels on the card (submit to done)": 5.2,
+    "island download: host copy into the picture": 2.542,
+    "island run: other host work (blob, submit, buffers)": 1.519,
+    "join:Roto": 1.128,
+    "kernel:Read": 1.123,
+    "island download: copy and map": 0.792,
+    "walk:frame": 0.624,
+    "island encode (host)": 0.351,
+    "island stage:Grade": 0.06,
+    "island stage:Merge": 0.058,
+    "island stage:Blur": 0.039,
+    "join:Read": 0.026,
+    "island lock wait": 0.001
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 46.591,
+    "nodebased-source: kernel:Roto": 32.879,
+    "nodebased-source: ahead:roto": 18.4,
+    "nodebased-source: walk:Read": 10.645,
+    "nodebased-source: walk:Roto": 0.411
+   }
+  },
+  {
+   "case": "gpu2d-48-radeon8060s-1026c-3",
+   "frames": 47,
+   "node_stage_ms": 53.764,
+   "walk_ms": 49.261,
+   "stages_ms": {
+    "walk:Read": 12.29,
+    "kernel:ColorCorrect": 8.136,
+    "decode": 5.515,
+    "island upload (host to card)": 5.476,
+    "island kernels on the card (submit to done)": 5.094,
+    "island stage:Transform": 5.084,
+    "island download: host copy into the picture": 2.589,
+    "island run: other host work (blob, submit, buffers)": 1.313,
+    "join:Roto": 1.258,
+    "island download: copy and map": 0.711,
+    "walk:frame": 0.699,
+    "kernel:Read": 0.519,
+    "island encode (host)": 0.332,
+    "island stage:Grade": 0.07,
+    "island stage:Merge": 0.068,
+    "join:Read": 0.063,
+    "island stage:Blur": 0.043,
+    "island lock wait": 0.001
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 46.524,
+    "nodebased-source: kernel:Roto": 30.742,
+    "nodebased-source: ahead:roto": 20.797,
+    "nodebased-source: walk:Read": 12.36,
+    "nodebased-source: walk:Roto": 0.449
+   }
+  }
+ ],
+ "node_stage_ms": {
+  "mean": 53.023,
+  "min": 51.119,
+  "max": 54.185
+ },
+ "stages_ms": {
+  "walk:Read": {
+   "mean_ms": 11.258,
+   "min_ms": 10.716,
+   "max_ms": 12.29
+  },
+  "kernel:ColorCorrect": {
+   "mean_ms": 8.056,
+   "min_ms": 7.812,
+   "max_ms": 8.219
+  },
+  "decode": {
+   "mean_ms": 5.582,
+   "min_ms": 4.466,
+   "max_ms": 6.765
+  },
+  "island upload (host to card)": {
+   "mean_ms": 5.467,
+   "min_ms": 5.372,
+   "max_ms": 5.554
+  },
+  "island kernels on the card (submit to done)": {
+   "mean_ms": 5.185,
+   "min_ms": 5.094,
+   "max_ms": 5.262
+  },
+  "island stage:Transform": {
+   "mean_ms": 5.171,
+   "min_ms": 4.753,
+   "max_ms": 5.678
+  },
+  "island download: host copy into the picture": {
+   "mean_ms": 2.565,
+   "min_ms": 2.542,
+   "max_ms": 2.589
+  },
+  "island run: other host work (blob, submit, buffers)": {
+   "mean_ms": 1.447,
+   "min_ms": 1.313,
+   "max_ms": 1.519
+  },
+  "join:Roto": {
+   "mean_ms": 1.112,
+   "min_ms": 0.949,
+   "max_ms": 1.258
+  },
+  "kernel:Read": {
+   "mean_ms": 0.802,
+   "min_ms": 0.519,
+   "max_ms": 1.123
+  },
+  "island download: copy and map": {
+   "mean_ms": 0.729,
+   "min_ms": 0.685,
+   "max_ms": 0.792
+  },
+  "walk:frame": {
+   "mean_ms": 0.667,
+   "min_ms": 0.624,
+   "max_ms": 0.699
+  },
+  "island encode (host)": {
+   "mean_ms": 0.333,
+   "min_ms": 0.317,
+   "max_ms": 0.351
+  },
+  "island stage:Grade": {
+   "mean_ms": 0.066,
+   "min_ms": 0.06,
+   "max_ms": 0.07
+  },
+  "island stage:Merge": {
+   "mean_ms": 0.063,
+   "min_ms": 0.058,
+   "max_ms": 0.068
+  },
+  "join:Read": {
+   "mean_ms": 0.041,
+   "min_ms": 0.026,
+   "max_ms": 0.063
+  },
+  "island stage:Blur": {
+   "mean_ms": 0.041,
+   "min_ms": 0.039,
+   "max_ms": 0.043
+  },
+  "island lock wait": {
+   "mean_ms": 0.001,
+   "min_ms": 0.001,
+   "max_ms": 0.001
+  }
+ },
+ "other_threads_busy_ms": {
+  "nodebased-decode-ahead: decode": {
+   "mean_ms": 46.219,
+   "min_ms": 45.541,
+   "max_ms": 46.591
+  },
+  "nodebased-source: kernel:Roto": {
+   "mean_ms": 30.421,
+   "min_ms": 27.64,
+   "max_ms": 32.879
+  },
+  "nodebased-source: ahead:roto": {
+   "mean_ms": 20.244,
+   "min_ms": 18.4,
+   "max_ms": 21.534
+  },
+  "nodebased-source: walk:Read": {
+   "mean_ms": 11.457,
+   "min_ms": 10.645,
+   "max_ms": 12.36
+  },
+  "nodebased-source: walk:Roto": {
+   "mean_ms": 0.43,
+   "min_ms": 0.411,
+   "max_ms": 0.449
+  }
+ },
+ "worker_thread_top_functions": [
+  {
+   "function": "thread.py:_worker",
+   "share_of_walk_samples": 3.846
+  },
+  {
+   "function": "threading.py:run",
+   "share_of_walk_samples": 3.846
+  },
+  {
+   "function": "threading.py:_bootstrap_inner",
+   "share_of_walk_samples": 3.846
+  },
+  {
+   "function": "threading.py:_bootstrap",
+   "share_of_walk_samples": 3.846
+  },
+  {
+   "function": "benchmark_2d_playback.py:wrapper",
+   "share_of_walk_samples": 1.781
+  },
+  {
+   "function": "imaging.py:_evaluate_raster",
+   "share_of_walk_samples": 1.0
+  },
+  {
+   "function": "imaging.py:evaluate_raster",
+   "share_of_walk_samples": 1.0
+  },
+  {
+   "function": "app.py:render",
+   "share_of_walk_samples": 0.945
+  },
+  {
+   "function": "app.py:work",
+   "share_of_walk_samples": 0.945
+  },
+  {
+   "function": "benchmark_2d_playback.py:wrapped",
+   "share_of_walk_samples": 0.945
+  },
+  {
+   "function": "thread.py:run",
+   "share_of_walk_samples": 0.945
+  },
+  {
+   "function": "imaging.py:evaluate",
+   "share_of_walk_samples": 0.871
+  },
+  {
+   "function": "benchmark_2d_playback.py:evaluate",
+   "share_of_walk_samples": 0.871
+  },
+  {
+   "function": "imaging.py:_gpu2d_node",
+   "share_of_walk_samples": 0.414
+  },
+  {
+   "function": "gpu2d.py:_execute",
+   "share_of_walk_samples": 0.327
+  },
+  {
+   "function": "gpu2d.py:run",
+   "share_of_walk_samples": 0.327
+  },
+  {
+   "function": "benchmark_2d_playback.py:island_run",
+   "share_of_walk_samples": 0.327
+  },
+  {
+   "function": "imaging.py:_windowed_kernel_inner",
+   "share_of_walk_samples": 0.269
+  },
+  {
+   "function": "imaging.py:_windowed_kernel",
+   "share_of_walk_samples": 0.269
+  },
+  {
+   "function": "threading.py:wait",
+   "share_of_walk_samples": 0.24
+  },
+  {
+   "function": "sourcepool.py:result",
+   "share_of_walk_samples": 0.222
+  },
+  {
+   "function": "imaging.py:resolve",
+   "share_of_walk_samples": 0.222
+  },
+  {
+   "function": "benchmark_2d_playback.py:resolve",
+   "share_of_walk_samples": 0.222
+  },
+  {
+   "function": "imaging.py:__missing__",
+   "share_of_walk_samples": 0.222
+  },
+  {
+   "function": "imaging.py:evaluate_source",
+   "share_of_walk_samples": 0.199
+  }
+ ],
+ "note": "exclusive milliseconds per accepted fresh frame on the thread that evaluates it, averaged over the frames of a pass and then over the passes; 'walk: ...' is the evaluator's own time between its nodes (cache keys, digests, windows, Python); the island run is split by its counters; other_threads_busy_ms is what the source and decode workers did inside the same node stage (it overlaps, it is not added)"
+}

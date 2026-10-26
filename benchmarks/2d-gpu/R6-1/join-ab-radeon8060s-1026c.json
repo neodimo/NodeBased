@@ -1,0 +1,86 @@
+{
+ "machine": "AMD Radeon 8060S island, 512 MB budget, 48 frames, first lap, no stack sampler",
+ "method": "interleaved passes (join off, join on, ...); join off = NODEBASED_DECODE_JOIN=0 (the walk decodes a plate again while the pool is already decoding it), join on = the walk waits for the running decode",
+ "rows": {
+  "2 decode workers, join off": [
+   {
+    "pass": 1,
+    "fps": 16.338,
+    "interval_p95_ms": 67.586,
+    "node_stage_p50_ms": 47.191
+   },
+   {
+    "pass": 2,
+    "fps": 16.969,
+    "interval_p95_ms": 65.731,
+    "node_stage_p50_ms": 49.286
+   },
+   {
+    "pass": 3,
+    "fps": 16.885,
+    "interval_p95_ms": 67.26,
+    "node_stage_p50_ms": 50.423
+   }
+  ],
+  "1 decode worker (today), join off": [
+   {
+    "pass": 1,
+    "fps": 16.493,
+    "interval_p95_ms": 72.288,
+    "node_stage_p50_ms": 51.088
+   },
+   {
+    "pass": 2,
+    "fps": 16.44,
+    "interval_p95_ms": 77.927,
+    "node_stage_p50_ms": 50.831
+   },
+   {
+    "pass": 3,
+    "fps": 16.472,
+    "interval_p95_ms": 67.502,
+    "node_stage_p50_ms": 51.017
+   }
+  ],
+  "2 decode workers, join on": [
+   {
+    "pass": 1,
+    "fps": 16.712,
+    "interval_p95_ms": 68.785,
+    "node_stage_p50_ms": 49.068
+   },
+   {
+    "pass": 2,
+    "fps": 16.893,
+    "interval_p95_ms": 64.7,
+    "node_stage_p50_ms": 50.231
+   },
+   {
+    "pass": 3,
+    "fps": 16.309,
+    "interval_p95_ms": 84.622,
+    "node_stage_p50_ms": 48.744
+   }
+  ],
+  "1 decode worker (today), join on": [
+   {
+    "pass": 1,
+    "fps": 16.931,
+    "interval_p95_ms": 65.308,
+    "node_stage_p50_ms": 48.517
+   },
+   {
+    "pass": 2,
+    "fps": 16.56,
+    "interval_p95_ms": 63.829,
+    "node_stage_p50_ms": 49.103
+   },
+   {
+    "pass": 3,
+    "fps": 16.58,
+    "interval_p95_ms": 66.951,
+    "node_stage_p50_ms": 47.252
+   }
+  ]
+ }
+}
