@@ -895,7 +895,7 @@ was running at either end of it (the integrator's full suite ran over two of thi
 - *Decode workers:* one decode worker at four CPUs (today none) is a clear gain on the stand-in (CPU nodes +6.5 percent, island +16 percent); a second decode worker adds 0.2 fps and 7 ms of p95 on the Radeon island and 0.2 fps on the stand-in's island, costs 0.1 fps on the stand-in's CPU nodes and
   changes nothing on the RTX. Two source workers help the stand-in's island (+7 percent) and cost its CPU nodes 3 percent.
 - *GPU nodes:* a large gain wherever the integrated card is the one used (Radeon 16.2 to 16.9 fps against 7.4 to 7.8; knob drag 88 ms to 7 ms), a loss on the RTX 3080 Ti on its USB4 link (5.6 to 5.9 fps against 7.8, scrub 102 to 150 to 161 ms). The island opens on the adapter that
-  Settings → Graphics adapter names, and "Automatic" picks the discrete card, so a default-on island would land on the RTX here.
+  Settings → Graphics adapter names, and "Automatic" picked the discrete card, so a default-on island would have landed on the RTX here (step D: Automatic now picks the card that measures fastest for the island, see below).
 - The 16 fps gate (interval p95 62.5 ms) is still not passed in any configuration (best single pass 63.4 ms) and 24 fps is not near (16.2 to 17.0 fps).
 
 **The stage table.** One played frame of the realistic comp on the Radeon island (48 frames, first lap, three fresh passes, the Roto read-ahead of step B on, the harness's stack sampler off; `tools/benchmark_gpu2d.py playback --stages --no-sampler`, then
@@ -957,7 +957,7 @@ The environment overrides win over the saved choice, for the benchmarks, and Set
 The evaluator's disk tier is left alone: a result of either backend has the same digest and the two agree to within the gate (`abs(gpu - cpu) <= 2e-5 + 2e-5 * abs(cpu)`).
 
 **What the fallback does when the card refuses the island.** (1) No adapter, no wgpu, or a card that fails to compile the island's shaders: the CPU nodes stay in use, the status bar says "GPU nodes unavailable (reason); the CPU nodes stay in use", the Settings row repeats the reason, and the check box stays as chosen (switching it off clears the refusal, switching it on tries again). (2) The island refuses one node or graph (an unsupported Transform mode, a window larger than the card's budget): that node runs on its CPU kernel and the island carries on with the others.
-(3) A device lost while playing: the frame in hand reruns whole on the CPU nodes (same pixels), then the window drops the island with the message "the graphics device was lost"; switch the setting off and on to try again. (4) A frame with non-finite pixels is recomputed whole on the CPU, as before. The island opens on the adapter Settings → Graphics adapter names ("Automatic" prefers the discrete card).
+(3) A device lost while playing: the frame in hand reruns whole on the CPU nodes (same pixels), then the window drops the island with the message "the graphics device was lost"; switch the setting off and on to try again. (4) A frame with non-finite pixels is recomputed whole on the CPU, as before. The island opens on the adapter Settings → Graphics adapter names; with "Automatic" it opens on the card that measures fastest for the island (step D; step C opened the discrete card first).
 
 **Decode and source workers: measured** (`playback --no-sampler`, 48 frames, first lap, uncached, three clean passes per row, rows interleaved; fps / interval p95 in ms / node stage p50 in ms; ranges over the passes; `NODEBASED_DECODE_AHEAD_WORKERS` and `NODEBASED_SOURCE_WORKERS` set the rows, as the settings do). Today's defaults: Radeon and RTX box one decode worker and three source workers; the stand-in no decode worker and one source worker.
 
@@ -996,9 +996,9 @@ A second source worker costs the stand-in's CPU nodes 3 to 5 percent on a scrub 
 **GPU nodes as the default: what the measurements say.**
 
 - *Gains:* every machine whose island runs on a card with fast access to memory. Radeon 8060S: 16.2 to 16.9 fps against 7.4 to 7.8 on the CPU nodes, a knob drag of 6.4 to 7.0 ms against 87 ms, a Roto point drag of 36 ms against 49 ms, a scrub of 42 to 44 ms against 102 ms. Four-CPU stand-in: 8.7 to 10.5 fps against 5.7 to 6.3, a knob drag of 7 ms against 88 ms, a scrub of 61 to 89 ms against 115 to 150 ms.
-- *Loses:* the RTX 3080 Ti on its USB4 link, which is the adapter "Automatic" picks on this machine: 5.5 to 5.9 fps against 7.7 to 7.9 on the CPU nodes, a scrub of 150 to 161 ms against 102 ms and a Roto point drag of 53 ms against 49 ms; only the knob drag wins (18 ms against 87 ms). The RTX 4070 laptop, the A6000 and Windows are unmeasured (Gonzo owns them).
+- *Loses:* the RTX 3080 Ti on its USB4 link, which was the adapter "Automatic" picked on this machine (step D: it no longer does): 5.5 to 5.9 fps against 7.7 to 7.9 on the CPU nodes, a scrub of 150 to 161 ms against 102 ms and a Roto point drag of 53 ms against 49 ms; only the knob drag wins (18 ms against 87 ms). The RTX 4070 laptop, the A6000 and Windows are unmeasured (Gonzo owns them).
 - *CPU-node machines do not change:* with the setting off the code path is today's (step B measured the always-on read-ahead up to 4 percent slower on CPU nodes; the gated read-ahead of that step leaves them at 7.4 to 7.8 fps), and a card that refuses leaves them there (see the fallback above).
-- *What a default-on island would need first:* a choice of adapter for the island that is not "the discrete card first" (a probe of the upload and download speed would do), since on a machine like this one the setting would send the island to the slower card; and the unmeasured machines.
+- *What a default-on island would need first:* a choice of adapter for the island that is not "the discrete card first" (a probe of the upload and download speed would do), since on a machine like this one the setting would send the island to the slower card (step D builds it); and the unmeasured machines.
 
 **Tests.** `tests/test_playbackprefs.py` (24 tests, 3 s): the defaults are today's and flip with one line; automatic counts equal the old CPU rules at 2, 3, 4, 6 and 16 CPUs; the environment wins; both settings round-trip through the saved preferences (including Off against Automatic); the Settings dialog shows and returns each choice; both pools grow and shrink while they live (three tasks at once need three workers; a shrunk pool retires idle workers; a pool of none runs the work on the joiner; a shut-down pool ignores a resize); a running window takes new counts without a restart and the
 environment fixes a count and says so; a card that refuses leaves the CPU nodes with a message; turning the GPU nodes on and off in a running window (on the software adapter) goes through the island, matches the CPU nodes within the gate on every frame and leaves the evaluator as before when turned off again; a choice changed while the card opens is applied afterwards; a card that loses its device is dropped with a message and the frame stays right;
@@ -1011,6 +1011,90 @@ every worker count (0, 1, 2, 3) gives pixels identical to the serial evaluator. 
 
 Rerun: the stage table is `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :183 --backend gpu2d --force-adapter integrated --label radeon8060s-1026c --frame-range 48 --passes 3 --budget-mb 512 --stages --no-sampler --out-dir "$NB_RUN/pb"` and then `python tools/benchmark_gpu2d.py stages --dir "$NB_RUN/pb" --prefix gpu2d-48-radeon8060s-1026c --output stages.json`;
 the matrix rows add `--env NODEBASED_DECODE_AHEAD_WORKERS=2` and the like (`--cpus 0-3 --env QT_SCALE_FACTOR=2` for the stand-in); interaction is `python tools/benchmark_gpu2d.py interaction --inputs "$NB_RUN/plates" --source-workers 1 --backend gpu2d --adapter integrated --output i.json`; tests `python -m unittest tests.test_playbackprefs tests.test_decodepool`.
+
+### R6-1: Automatic picks the card the island is faster on, and the Read's file checks (10/26, step D of 4)
+
+Step C found the two things that decide whether "GPU nodes by default" can be offered: "Automatic" put the island on the RTX 3080 Ti, where it runs a quarter slower than the CPU nodes, while the integrated Radeon doubles them; and the plate Read spent its
+lookup time in `lstat`/`stat` calls. This step makes Automatic choose by measurement and cuts the Read's calls. Evidence is in `benchmarks/2d-gpu/R6-1/` under the `-1026d` names: `automatic-playback-*` (the Automatic rows), `island-probe-*` (the measurements Automatic keeps),
+`island-open-cost-*`, `automatic-discrete-only-*`, `interaction-automatic-*`, `syscalls-per-read-*`, `read-lookups-*`, `read-lookups-cpu-nodes-*`, `read-leaf-samples-*`, `environment-*` and `load-log-*`. Every timing row is three fresh passes with the rows interleaved, and every pass ran under `/tmp/nb-gpu.lock` with no integrator suite
+running (`load-log-1026d.txt`: 40 passes, `other_suites=0` in each).
+
+**Result.**
+
+- *Automatic picks the Radeon on this machine, and nothing else changed for an artist who names a card.* Realistic comp, 48 frames, first lap, island on: 17.26 to 17.37 fps where Automatic's old choice (the RTX) gave 5.69 to 6.11, against 7.95 to 8.04 on the CPU nodes. On the four-CPU stand-in: 9.00 to 9.04 fps against 3.86 to 3.99 and 6.06 to 6.08 on the CPU nodes.
+- *A machine whose only card is the slow one keeps the CPU nodes.* With the Radeon hidden from Automatic the RTX measures 89 ms against 32 ms for the same two nodes on the CPU, no card passes, the island does not open and Settings says why (`automatic-discrete-only-1026d.json`).
+- *The Read's lookups went from 27 system calls to 3 per evaluation* (41 to 5 for a played frame, which also asks for the decode pool's key). The plate Read stage fell from 10.2 to 7.9 ms on the Radeon island and the frame rate did not move (16.91 to 16.93 fps, 16.95 to 17.10 after): the 2.3 ms went to the next stage, as in step C.
+  On the CPU nodes, where the walk is the critical path, the change is a small gain: 7.86 to 7.94 fps becomes 7.97 to 8.02, and on the stand-in 5.95 to 6.00 becomes 6.05 to 6.07.
+- The 16 fps gate (interval p95 62.5 ms) is not passed in any configuration yet (best pass 63.4 ms in step C, 64.5 ms here); 24 fps is not near.
+
+**How Automatic chooses** (`nodebased/islandadapter.py`). The probe is one island frame in the pattern of the realistic comp, 1920 x 1080 in float: a plate, a background and a matte are uploaded, Grade and Merge run, the result is downloaded; a warming run, then five timed runs, the median of the whole run. The same two nodes run on the CPU kernels beside it.
+A card is eligible when its median is below the CPU nodes' median; the fastest eligible card wins, ties go to the discrete card, then to the name. When no card is eligible the CPU nodes stay in use and the reason is shown. Software adapters are not candidates.
+
+| Measured on this machine (median of five, ms) | Whole probe frame | Upload (75 MB) | Kernels | Download (33 MB) |
+|---|---|---|---|---|
+| RTX 3080 Ti (USB4, PCIe gen 4 x2) | 88.8 | 74.2 | 1.2 | 12.8 |
+| Radeon 8060S (integrated) | 8.2 | 4.3 | 2.7 | 1.5 |
+| The same two nodes on the CPU kernels (32 CPUs / the four-CPU stand-in) | 32.0 / 32.6 | | | |
+
+The probe's ratio to the CPU nodes against the realistic comp's node stage: Radeon 0.25 against 0.40, RTX 2.8 against 1.54 (island node stage over CPU-nodes node stage). Two points put the break-even at a probe ratio of about 1.6, so a threshold of 1.0 (the card must beat the CPU nodes on the probe) leaves room for the comp's other costs.
+
+- *Cached per card and driver.* The record is kept in the machine's preferences (`playback/island_probe`, one JSON text) under the adapter's identity (vendor, device, driver version, adapter type, backend); the CPU figure is kept under the processor count. A new card, a new driver or a new probe version measures again; nothing else does.
+- *Never during playback, never while the card is busy.* While a clip plays, or while another job holds `/tmp/nb-gpu.lock` (taken without waiting, held for the measurement only), the island does not open: the CPU nodes stay in use, the status bar says "GPU nodes waiting: ...", and the window asks again when playback stops and every 20 seconds after a busy lock. A stored measurement is used at once, during playback too.
+- *An explicit adapter is never overridden.* A card named in Settings → Graphics adapter or by `NODEBASED_ADAPTER` is used as named and is not measured. (That setting also names the 3D adapter; Automatic is the empty choice.)
+- *Settings shows the card and the reason.* With the island on, the 2D nodes row reads for example "Running on AMD Radeon 8060S Graphics (RADV STRIX_HALO). Automatic: measured 8 ms for a frame's upload, kernels and download, against 32 ms on the CPU nodes; NVIDIA GeForce RTX 3080 Ti took 89 ms." When no card passes it reads "No graphics card was faster than the CPU nodes in the measurement (...); the CPU nodes are in use."
+- *Cost.* The first Automatic open on this machine took 1.7 s in total (both cards opened, the CPU nodes and both cards timed, off the Qt thread), later opens 0 ms (`island-open-cost-1026d.json`).
+- *Switches.* `NODEBASED_ISLAND_PROBE=0` skips the measurement and keeps the old ranking (discrete first); `NODEBASED_ISLAND_PROBE_FILE=<path>` keeps the measurements in a file instead of the preferences (the benchmarks use it). `GPU2D.open("automatic")` is the call the app makes; the benchmarks take `--island-adapter automatic` (playback) and `--adapter automatic` (interaction).
+  A benchmark that runs under `flock /tmp/nb-gpu.lock` must also set `NODEBASED_GPU_LOCK_HELD=1`, or the measurement finds the lock busy and waits.
+
+**Automatic before and after** (`playback --no-sampler`, 48 frames, first lap, uncached, 1080p; fps / interval p95 ms / node stage p50 ms, range over three interleaved passes).
+
+| | Island, Automatic before (the discrete card first) | Island, Automatic now | CPU nodes |
+|---|---|---|---|
+| This machine | RTX 3080 Ti: 5.69 to 6.11 / 218.0 to 256.2 / 179.0 to 191.6 | Radeon 8060S: 17.26 to 17.37 / 64.5 to 66.7 / 47.7 to 50.4 | 7.95 to 8.04 / 137.4 to 139.7 / 119.8 to 122.1 |
+| Four-CPU stand-in (4 CPUs, 2x scale) | RTX 3080 Ti: 3.86 to 3.99 / 425.4 to 431.8 / 257.2 to 257.7 | Radeon 8060S: 9.00 to 9.04 / 118.5 to 119.5 / 105.8 to 107.4 | 6.06 to 6.08 / 178.9 to 183.8 / 161.3 to 161.8 |
+
+*Latency* (`interaction`, evaluator to ColorCorrect, 24 samples, source workers 1, median ms, three passes): Automatic (the Radeon) against the CPU nodes: Grade knob drag 6.9 to 7.0 against 87.6 to 89.3, Roto point drag 35.3 to 36.3 against 48.3 to 49.3, scrub to a frame nobody has computed 50.4 to 50.6 against 99.9 to 100.5.
+Automatic and `--adapter integrated` give the same numbers in the same session (scrub 50.6 to 51.2 and 50.5 to 50.7). The same Radeon rows at the step C commit and at this step, interleaved: scrub 51.3 to 52.0 and 50.3 to 50.6; step C's own table said 42 to 44 ms for the Radeon scrub, a figure this session's passes do not reproduce at either commit.
+
+**The Read's file checks.** One Read evaluation of the plate made 27 system calls (22 `lstat`, 5 `stat`); `syscalls-per-read-1026d.json` lists the sites. 22 came from two `Path.resolve()` calls that walked the directory chain of a file whose directories do not change: one in the Read's cache key (`imaging.py`), one in `localize.wanted`,
+which resolved every Read's path although no auto-localize folder was named, so nothing could match. The other five were `is_file`/`stat` calls on the same file. What changed (`media.file_identity`, `media.read_identity`):
+
+- `localize.wanted` returns before resolving when no auto-localize folder is named (11 calls).
+- The cache key, the decode pool's key and the tile path's key ask `read_identity` for existence, size, modified time and real path together: an `lstat` of the file and a `stat` of its directory. The directory's real path is kept while its device, inode, modified time and changed time are the same, so a retargeted link, a replaced or renamed directory and a new file in the directory all resolve again.
+  The file itself is never cached: its size and time are read for every evaluation, which is what makes a replaced file re-key the Read (tests: a file replaced during the session is read again without Reload; a directory link retargeted mid-session is followed; Reload still reads a file replaced with the same size and time; a symlinked frame, a relative or dotted path, a gap and a missing file take the old full lookup and agree with it).
+- `NODEBASED_READ_LOOKUP=0` goes back to `Path.resolve()` and `Path.stat()` for every call.
+
+| Radeon island, three interleaved passes, exclusive ms per fresh frame | `NODEBASED_READ_LOOKUP=0` | Now |
+|---|---|---|
+| Plate Read on the evaluating thread (includes the wait for the decode) | 9.7 to 10.4 | 7.0 to 9.2 |
+| of it, file lookups by the 1 ms line sampler (two passes) | 3.2 | 0.9 to 1.1 |
+| of it, waiting for the decode pool (same sampler) | 2.0 to 2.1 | 2.2 to 3.4 |
+| Transform staging | 4.5 to 5.8 | 8.8 to 11.5 |
+| Node stage | 46.2 to 47.8 | 49.1 to 51.4 |
+| Frame rate / interval p95 | 16.91 to 16.93 fps / 62.2 to 64.0 ms | 16.95 to 17.10 fps / 64.1 to 81.7 ms |
+
+The Read stage fell by about 2.3 ms and Transform staging grew by about 4.7 ms, as in step C, where the 7 ms given back by shorter lookups went to an inline decode: the evaluating thread, the decode thread and two matte workers all hold the interpreter lock, a shorter Read puts the walk at Transform staging while the matte workers draw, and the frame time follows the sum of their Python work. The Roto matte (44 ms for a 1080p matte on one core) is the largest piece of that sum;
+a faster matte rasteriser is the next step, after Lane 2's RotoPaint work merges (`nodebased/shapes.py` and `nodebased/paint.py` were not touched here).
+
+**GPU nodes as the default, with the new Automatic: gains and losses.**
+
+- *Gains:* every machine on which one card passes the probe. This machine: 17.3 fps against 8.0 on the CPU nodes, a knob drag of 7 ms against 88 ms, a Roto point drag of 36 ms against 49 ms, a scrub of 50 ms against 100 ms. Four-CPU stand-in: 9.0 against 6.1 fps. The island's pixels agree with the CPU nodes on the RTX 3080 Ti, the Radeon and llvmpipe (`tests.test_islandadapter`: the probe chain on each adapter).
+- *The loss step C found is gone:* the RTX 3080 Ti on its USB4 link (5.7 to 6.1 fps against 8.0) is not chosen when the Radeon is there, and the island does not open on it when it is the only card.
+- *Losses that remain:* (1) a card named in Settings is used as named, so naming the RTX still costs the quarter (the Settings tooltip says Automatic measures; the note under the row shows the card in use). (2) The first Automatic open costs 1.7 s once per card and driver, and the CPU nodes run until it is done; a measurement that cannot run (playback, a busy card) waits. (3) The probe is two nodes at 1080p; a card that wins narrowly on it could lose on a longer chain, which the threshold of 1.0 (break-even near 1.6) is chosen to avoid, from two machines' worth of evidence. (4) A machine where Windows hides the discrete card from the application offers Automatic only the integrated one, as before.
+- *CPU-node machines do not change:* with the setting off the code path is today's, and a machine where no card passes stays on the CPU nodes with a stated reason. The Read's change is a 1 to 2 percent gain there.
+- *Unmeasured:* the RTX 4070 laptop, the A6000 and Windows (Gonzo owns them); the thresholds and the probe size are constants in `islandadapter.py`.
+- *The default is still `DEFAULT_GPU_NODES = False`;* that is DiMo's call (asked 10/26 9:02 AM).
+
+**Tests.** `tests/test_islandadapter.py` (30 tests): the fastest passing card wins whatever order the cards are listed in; a discrete card with a fast link beats the integrated one; ties go to the discrete card; a card slower than the CPU nodes, or none at all, keeps the CPU nodes with the reason; software adapters and a card listed again through OpenGL are not candidates; a new driver, a new probe version or the processor count measures again and nothing else does;
+a named adapter is never measured; nothing is measured while a clip plays or while the real lock file is held by another descriptor, and a stored measurement is used during playback; a failed probe leaves the other card in charge and is not stored; the measurement runs under the lock; `NODEBASED_ISLAND_PROBE=0` keeps the old ranking; the stored measurements survive a new store object; `GPU2D.open("automatic")` reports a deferral and a refusal differently and carries the reason on the backend;
+the probe chain gives the same pixels on every adapter this machine has (within 2e-5 of the CPU kernels). `tests/test_playbackprefs.py` (4 new): a deferred answer is not asked for again in a loop and is retried when playback stops, stopping playback asks again, a refusal reads "No graphics card was faster ...", the Settings row names the card and the reason.
+`tests/test_readlookup.py` (26): identity equals `Path.resolve()` and `Path.stat()` for plain files, linked directories, linked files, retargeted links at two depths, relative and dotted paths, missing files and gaps; two calls when warm; the directory is resolved once for a played sequence and again when it changes; a replaced file and a retargeted link are read again; Reload still works; the tile path's key agrees; `localize.wanted` does not look the file up without a folder.
+The modules above and `tests.test_gpu2d`, `tests.test_rotoahead`, `tests.test_decodepool` and `tests.test_playbackprefs` pass on the default adapter (RTX 3080 Ti), the integrated Radeon and llvmpipe (194 tests each); every GPU run took `/tmp/nb-gpu.lock`. The neighbouring Read, cache, time and tile modules pass on the processor.
+
+**Needs Gonzo.** (1) The defaults, now that Automatic cannot send the island to the slower card on this machine: `DEFAULT_GPU_NODES` (the gains and losses above), `DEFAULT_DECODE_WORKERS`. (2) A faster matte rasteriser, after Lane 2's RotoPaint work merges: the frame time is the sum of the threads' Python work, and the matte is the largest piece. (3) The unmeasured machines.
+
+Rerun: Automatic against the old choice is `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :183 --backend gpu2d --island-adapter automatic --label auto --frame-range 48 --passes 3 --budget-mb 512 --no-sampler --out-dir "$NB_RUN/pb"` (`--island-adapter default` for the old choice, `--backend cpu` for the CPU nodes; set `NODEBASED_GPU_LOCK_HELD=1` and `NODEBASED_ISLAND_PROBE_FILE=$NB_RUN/island-probe.json` inside the lock);
+the Read rows add `--env NODEBASED_READ_LOOKUP=0`; interaction is `python tools/benchmark_gpu2d.py interaction --inputs "$NB_RUN/plates" --source-workers 1 --backend gpu2d --adapter automatic --output i.json`; tests `python -m unittest tests.test_islandadapter tests.test_readlookup tests.test_playbackprefs`.
 
 ## Lane 2 step notes
 

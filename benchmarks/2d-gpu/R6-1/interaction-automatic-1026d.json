@@ -1,0 +1,110 @@
+{
+ "note": "interaction latency (p50 ms of 24 samples per interaction, three passes), tools/benchmark_gpu2d.py interaction --source-workers 1; automatic = --adapter automatic (the Radeon), cpu = CPU nodes, orig/new = --adapter integrated at commit f90b6d84 against the step's code, interleaved",
+ "names": [
+  "Grade knob drag (sources cached)",
+  "Roto point drag (Reads cached)",
+  "scrub (new frame, nothing cached)"
+ ],
+ "automatic": [
+  [
+   7.0,
+   35.7,
+   50.4
+  ],
+  [
+   6.9,
+   35.3,
+   50.4
+  ],
+  [
+   7.0,
+   36.3,
+   50.6
+  ]
+ ],
+ "automatic_second_session": [
+  [
+   6.9,
+   36.3,
+   51.2
+  ],
+  [
+   7.0,
+   35.2,
+   50.8
+  ],
+  [
+   6.6,
+   35.0,
+   50.6
+  ]
+ ],
+ "integrated_forced": [
+  [
+   6.7,
+   35.4,
+   50.7
+  ],
+  [
+   6.9,
+   35.7,
+   50.6
+  ],
+  [
+   6.3,
+   35.0,
+   50.5
+  ]
+ ],
+ "cpu": [
+  [
+   89.3,
+   48.6,
+   99.9
+  ],
+  [
+   89.0,
+   48.3,
+   100.5
+  ],
+  [
+   87.6,
+   49.3,
+   100.1
+  ]
+ ],
+ "ab_f90b6d84": [
+  [
+   6.8,
+   35.8,
+   51.3
+  ],
+  [
+   7.3,
+   37.1,
+   52.0
+  ],
+  [
+   7.0,
+   36.0,
+   51.8
+  ]
+ ],
+ "ab_step_d": [
+  [
+   6.8,
+   35.6,
+   50.3
+  ],
+  [
+   6.8,
+   36.4,
+   50.6
+  ],
+  [
+   7.0,
+   35.3,
+   50.6
+  ]
+ ]
+}

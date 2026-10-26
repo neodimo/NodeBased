@@ -1,0 +1,39 @@
+{
+ "note": "line-level sampler (--leaf-sampler, 1 ms period, perturbs the run) of the evaluating thread inside the Read's walk span, Radeon island, two passes each; file_lookup counts samples in posixpath, pathlib and media.py",
+ "old (NODEBASED_READ_LOOKUP=0)": [
+  {
+   "frames": 47,
+   "walk_Read_samples_1ms": 244,
+   "file_lookup_samples": 148,
+   "file_lookup_ms_per_frame": 3.15,
+   "waiting_for_decode_samples": 96,
+   "waiting_ms_per_frame": 2.04
+  },
+  {
+   "frames": 47,
+   "walk_Read_samples_1ms": 251,
+   "file_lookup_samples": 152,
+   "file_lookup_ms_per_frame": 3.23,
+   "waiting_for_decode_samples": 98,
+   "waiting_ms_per_frame": 2.09
+  }
+ ],
+ "new": [
+  {
+   "frames": 47,
+   "walk_Read_samples_1ms": 205,
+   "file_lookup_samples": 44,
+   "file_lookup_ms_per_frame": 0.94,
+   "waiting_for_decode_samples": 159,
+   "waiting_ms_per_frame": 3.38
+  },
+  {
+   "frames": 47,
+   "walk_Read_samples_1ms": 158,
+   "file_lookup_samples": 53,
+   "file_lookup_ms_per_frame": 1.13,
+   "waiting_for_decode_samples": 105,
+   "waiting_ms_per_frame": 2.23
+  }
+ ]
+}

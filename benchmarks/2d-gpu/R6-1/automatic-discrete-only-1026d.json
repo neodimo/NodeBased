@@ -1,0 +1,6 @@
+{
+ "note": "this machine with only the discrete card offered to Automatic (islandadapter.CHOICES patched to ('discrete',)), stored measurements from the playback session",
+ "backend": null,
+ "open_error": "no graphics card was faster than the CPU nodes in the measurement (NVIDIA GeForce RTX 3080 Ti 89 ms; CPU nodes 32 ms)",
+ "open_deferred": false
+}

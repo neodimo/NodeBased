@@ -1,0 +1,70 @@
+{
+ "cpuread-old": [
+  {
+   "fps": 7.939,
+   "interval_p95_ms": 136.764,
+   "node_stage_p50_ms": 117.976
+  },
+  {
+   "fps": 7.864,
+   "interval_p95_ms": 140.906,
+   "node_stage_p50_ms": 118.616
+  },
+  {
+   "fps": 7.878,
+   "interval_p95_ms": 140.317,
+   "node_stage_p50_ms": 118.901
+  }
+ ],
+ "cpuread-new": [
+  {
+   "fps": 8.016,
+   "interval_p95_ms": 135.76,
+   "node_stage_p50_ms": 121.362
+  },
+  {
+   "fps": 7.972,
+   "interval_p95_ms": 135.006,
+   "node_stage_p50_ms": 121.281
+  },
+  {
+   "fps": 8.02,
+   "interval_p95_ms": 138.42,
+   "node_stage_p50_ms": 122.582
+  }
+ ],
+ "standread-old": [
+  {
+   "fps": 5.996,
+   "interval_p95_ms": 187.727,
+   "node_stage_p50_ms": 164.309
+  },
+  {
+   "fps": 5.953,
+   "interval_p95_ms": 189.214,
+   "node_stage_p50_ms": 163.044
+  },
+  {
+   "fps": 5.962,
+   "interval_p95_ms": 187.641,
+   "node_stage_p50_ms": 164.567
+  }
+ ],
+ "standread-new": [
+  {
+   "fps": 6.063,
+   "interval_p95_ms": 180.705,
+   "node_stage_p50_ms": 161.942
+  },
+  {
+   "fps": 6.069,
+   "interval_p95_ms": 181.01,
+   "node_stage_p50_ms": 161.994
+  },
+  {
+   "fps": 6.051,
+   "interval_p95_ms": 184.676,
+   "node_stage_p50_ms": 160.302
+  }
+ ]
+}

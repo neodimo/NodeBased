@@ -1,0 +1,76 @@
+{
+ "NVIDIA|NVIDIA GeForce RTX 3080 Ti|615.78.08|||DiscreteGPU|Vulkan": {
+  "download_ms": 12.78,
+  "kernel_ms": 1.2,
+  "kind": "discrete",
+  "ms": 88.75,
+  "name": "NVIDIA GeForce RTX 3080 Ti",
+  "runs_ms": [
+   88.14,
+   88.75,
+   88.82,
+   88.74,
+   89.89
+  ],
+  "size": [
+   1920,
+   1080
+  ],
+  "taken": "2026-10-26 15:31:12",
+  "upload_ms": 74.16,
+  "version": 1
+ },
+ "cpu|32|x86_64|Linux": {
+  "ms": 31.95,
+  "runs_ms": [
+   32.12,
+   32.07,
+   30.51,
+   31.95,
+   31.8
+  ],
+  "size": [
+   1920,
+   1080
+  ],
+  "taken": "2026-10-26 15:31:11",
+  "version": 1
+ },
+ "cpu|4|x86_64|Linux": {
+  "ms": 32.58,
+  "runs_ms": [
+   32.68,
+   32.65,
+   32.5,
+   32.58,
+   32.25
+  ],
+  "size": [
+   1920,
+   1080
+  ],
+  "taken": "2026-10-26 15:31:57",
+  "version": 1
+ },
+ "radv|AMD Radeon 8060S Graphics (RADV STRIX_HALO)|Mesa 26.2.4|||IntegratedGPU|Vulkan": {
+  "download_ms": 1.49,
+  "kernel_ms": 2.66,
+  "kind": "integrated",
+  "ms": 8.15,
+  "name": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+  "runs_ms": [
+   11.7,
+   8.36,
+   8.14,
+   8.15,
+   8.03
+  ],
+  "size": [
+   1920,
+   1080
+  ],
+  "taken": "2026-10-26 15:31:12",
+  "upload_ms": 4.31,
+  "version": 1
+ }
+}

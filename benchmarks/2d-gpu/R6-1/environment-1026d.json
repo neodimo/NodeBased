@@ -1,0 +1,21 @@
+{
+ "step": "R6-1 step D (10/26)",
+ "code_commits": {
+  "read_lookups": "6d3b9488 and e9dce4f7",
+  "automatic_adapter": "98066969"
+ },
+ "host": {
+  "cpus": 32,
+  "kernel": "7.2.9-ogc3.1.fc44.x86_64",
+  "python": "3.12.13",
+  "numpy": "2.5.3",
+  "wgpu": "0.32.0"
+ },
+ "adapters": {
+  "discrete": "NVIDIA GeForce RTX 3080 Ti, Vulkan, driver 615.78.08, USB4 enclosure, PCIe gen 4 x2 (step A transfer-rates files)",
+  "integrated": "AMD Radeon 8060S Graphics (RADV STRIX_HALO), Vulkan, Mesa 26.2.4",
+  "software": "llvmpipe (LLVM 22.1.8)"
+ },
+ "method": "tools/benchmark_gpu2d.py playback --no-sampler (48 frames, first lap, uncached, 1080p) driven by pb1026d.sh: one pass per call, rows interleaved before/after/cpu, three rounds; every pass took /tmp/nb-gpu.lock and ran with no integrator suite (load-log-1026d.txt, other_suites=0); the stand-in is taskset -c 0-3 with QT_SCALE_FACTOR=2; --island-adapter default is the island on the discrete card (Automatic before this step), --island-adapter automatic opens as the app does; the measurement kept in a file (NODEBASED_ISLAND_PROBE_FILE) so the machine's preferences stay untouched",
+ "read_lookup_rows": "batch-d2: --force-adapter integrated, --stages, NODEBASED_READ_LOOKUP=0 against the default, three interleaved rounds"
+}

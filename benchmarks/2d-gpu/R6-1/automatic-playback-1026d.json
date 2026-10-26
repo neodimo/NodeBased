@@ -1,0 +1,140 @@
+{
+ "full-before": [
+  {
+   "fps": 6.11,
+   "interval_p95_ms": 256.171,
+   "node_stage_p50_ms": 178.986,
+   "island_device": "NVIDIA GeForce RTX 3080 Ti",
+   "reason": null
+  },
+  {
+   "fps": 5.689,
+   "interval_p95_ms": 226.116,
+   "node_stage_p50_ms": 191.228,
+   "island_device": "NVIDIA GeForce RTX 3080 Ti",
+   "reason": null
+  },
+  {
+   "fps": 5.738,
+   "interval_p95_ms": 217.985,
+   "node_stage_p50_ms": 191.568,
+   "island_device": "NVIDIA GeForce RTX 3080 Ti",
+   "reason": null
+  }
+ ],
+ "full-after": [
+  {
+   "fps": 17.255,
+   "interval_p95_ms": 66.656,
+   "node_stage_p50_ms": 47.68,
+   "island_device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "reason": "Automatic: measured 8 ms for a frame's upload, kernels and download, against 32 ms on the CPU nodes; NVIDIA GeForce RTX 3080 Ti took 89 ms"
+  },
+  {
+   "fps": 17.371,
+   "interval_p95_ms": 64.451,
+   "node_stage_p50_ms": 50.392,
+   "island_device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "reason": "Automatic: measured 8 ms for a frame's upload, kernels and download, against 32 ms on the CPU nodes; NVIDIA GeForce RTX 3080 Ti took 89 ms"
+  },
+  {
+   "fps": 17.257,
+   "interval_p95_ms": 64.452,
+   "node_stage_p50_ms": 48.374,
+   "island_device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "reason": "Automatic: measured 8 ms for a frame's upload, kernels and download, against 32 ms on the CPU nodes; NVIDIA GeForce RTX 3080 Ti took 89 ms"
+  }
+ ],
+ "full-cpu": [
+  {
+   "fps": 8.04,
+   "interval_p95_ms": 139.672,
+   "node_stage_p50_ms": 119.776,
+   "island_device": null,
+   "reason": null
+  },
+  {
+   "fps": 7.97,
+   "interval_p95_ms": 139.038,
+   "node_stage_p50_ms": 122.059,
+   "island_device": null,
+   "reason": null
+  },
+  {
+   "fps": 7.952,
+   "interval_p95_ms": 137.44,
+   "node_stage_p50_ms": 120.324,
+   "island_device": null,
+   "reason": null
+  }
+ ],
+ "stand-before": [
+  {
+   "fps": 3.924,
+   "interval_p95_ms": 431.789,
+   "node_stage_p50_ms": 257.24,
+   "island_device": "NVIDIA GeForce RTX 3080 Ti",
+   "reason": null
+  },
+  {
+   "fps": 3.993,
+   "interval_p95_ms": 425.363,
+   "node_stage_p50_ms": 257.703,
+   "island_device": "NVIDIA GeForce RTX 3080 Ti",
+   "reason": null
+  },
+  {
+   "fps": 3.86,
+   "interval_p95_ms": 430.738,
+   "node_stage_p50_ms": 257.362,
+   "island_device": "NVIDIA GeForce RTX 3080 Ti",
+   "reason": null
+  }
+ ],
+ "stand-after": [
+  {
+   "fps": 9.02,
+   "interval_p95_ms": 118.765,
+   "node_stage_p50_ms": 107.288,
+   "island_device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "reason": "Automatic: measured 8 ms for a frame's upload, kernels and download, against 33 ms on the CPU nodes; NVIDIA GeForce RTX 3080 Ti took 89 ms"
+  },
+  {
+   "fps": 9.036,
+   "interval_p95_ms": 119.45,
+   "node_stage_p50_ms": 105.761,
+   "island_device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "reason": "Automatic: measured 8 ms for a frame's upload, kernels and download, against 33 ms on the CPU nodes; NVIDIA GeForce RTX 3080 Ti took 89 ms"
+  },
+  {
+   "fps": 9.005,
+   "interval_p95_ms": 118.519,
+   "node_stage_p50_ms": 107.429,
+   "island_device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "reason": "Automatic: measured 8 ms for a frame's upload, kernels and download, against 33 ms on the CPU nodes; NVIDIA GeForce RTX 3080 Ti took 89 ms"
+  }
+ ],
+ "stand-cpu": [
+  {
+   "fps": 6.083,
+   "interval_p95_ms": 180.264,
+   "node_stage_p50_ms": 161.368,
+   "island_device": null,
+   "reason": null
+  },
+  {
+   "fps": 6.056,
+   "interval_p95_ms": 183.848,
+   "node_stage_p50_ms": 161.838,
+   "island_device": null,
+   "reason": null
+  },
+  {
+   "fps": 6.079,
+   "interval_p95_ms": 178.911,
+   "node_stage_p50_ms": 161.337,
+   "island_device": null,
+   "reason": null
+  }
+ ]
+}

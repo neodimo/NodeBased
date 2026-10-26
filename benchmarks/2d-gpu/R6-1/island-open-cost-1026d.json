@@ -1,0 +1,24 @@
+{
+ "cold_open_and_measure_ms": 1719,
+ "stored_open_ms": 0,
+ "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "reason": "Automatic: measured 9 ms for a frame's upload, kernels and download, against 33 ms on the CPU nodes; NVIDIA GeForce RTX 3080 Ti took 89 ms",
+ "scores": [
+  {
+   "name": "NVIDIA GeForce RTX 3080 Ti",
+   "kind": "discrete",
+   "choice": "discrete",
+   "ms": 89.48,
+   "upload_ms": 74.16,
+   "download_ms": 13.24
+  },
+  {
+   "name": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "kind": "integrated",
+   "choice": "integrated",
+   "ms": 8.72,
+   "upload_ms": 4.32,
+   "download_ms": 1.51
+  }
+ ]
+}

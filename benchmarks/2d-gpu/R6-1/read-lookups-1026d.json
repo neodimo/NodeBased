@@ -1,0 +1,156 @@
+{
+ "old": [
+  {
+   "frames": 47,
+   "node_stage_ms": 46.18,
+   "walk_ms": 40.81,
+   "stages_ms": {
+    "walk:Read": 10.4,
+    "kernel:ColorCorrect": 7.85,
+    "island upload (host to card)": 5.69,
+    "island kernels on the card (submit to done)": 5.16,
+    "island stage:Transform": 4.52,
+    "island download: host copy into the picture": 2.49,
+    "island run: other host work (blob, submit, buffers)": 1.62,
+    "join:Roto": 1.29,
+    "island download: copy and map": 0.67,
+    "walk:frame": 0.62,
+    "island encode (host)": 0.32,
+    "island stage:Grade": 0.06,
+    "island stage:Merge": 0.06,
+    "island stage:Blur": 0.04,
+    "join:Read": 0.03,
+    "island lock wait": 0.0
+   },
+   "fps": 16.911,
+   "p95": 63.973
+  },
+  {
+   "frames": 47,
+   "node_stage_ms": 46.17,
+   "walk_ms": 40.76,
+   "stages_ms": {
+    "walk:Read": 10.42,
+    "kernel:ColorCorrect": 7.42,
+    "island upload (host to card)": 5.32,
+    "island kernels on the card (submit to done)": 5.2,
+    "island stage:Transform": 4.99,
+    "island download: host copy into the picture": 2.42,
+    "island run: other host work (blob, submit, buffers)": 1.86,
+    "join:Roto": 1.3,
+    "island download: copy and map": 0.66,
+    "walk:frame": 0.64,
+    "island encode (host)": 0.32,
+    "island stage:Grade": 0.07,
+    "island stage:Merge": 0.07,
+    "island stage:Blur": 0.04,
+    "join:Read": 0.02,
+    "island lock wait": 0.0
+   },
+   "fps": 16.92,
+   "p95": 62.158
+  },
+  {
+   "frames": 47,
+   "node_stage_ms": 47.8,
+   "walk_ms": 41.19,
+   "stages_ms": {
+    "walk:Read": 9.73,
+    "kernel:ColorCorrect": 7.32,
+    "island upload (host to card)": 5.87,
+    "island stage:Transform": 5.81,
+    "island kernels on the card (submit to done)": 5.28,
+    "island download: host copy into the picture": 2.68,
+    "island run: other host work (blob, submit, buffers)": 1.71,
+    "join:Roto": 1.04,
+    "walk:frame": 0.62,
+    "island download: copy and map": 0.62,
+    "island encode (host)": 0.31,
+    "island stage:Merge": 0.06,
+    "island stage:Grade": 0.06,
+    "island stage:Blur": 0.05,
+    "join:Read": 0.02,
+    "island lock wait": 0.0
+   },
+   "fps": 16.931,
+   "p95": 63.407
+  }
+ ],
+ "new": [
+  {
+   "frames": 47,
+   "node_stage_ms": 49.69,
+   "walk_ms": 44.05,
+   "stages_ms": {
+    "walk:Read": 9.19,
+    "island stage:Transform": 8.83,
+    "kernel:ColorCorrect": 7.96,
+    "island upload (host to card)": 5.62,
+    "island kernels on the card (submit to done)": 5.05,
+    "island download: host copy into the picture": 2.54,
+    "island run: other host work (blob, submit, buffers)": 1.51,
+    "join:Roto": 1.36,
+    "walk:frame": 0.72,
+    "island download: copy and map": 0.71,
+    "island encode (host)": 0.33,
+    "island stage:Merge": 0.07,
+    "island stage:Grade": 0.07,
+    "island stage:Blur": 0.05,
+    "join:Read": 0.03,
+    "island lock wait": 0.0
+   },
+   "fps": 16.949,
+   "p95": 65.427
+  },
+  {
+   "frames": 47,
+   "node_stage_ms": 51.39,
+   "walk_ms": 45.71,
+   "stages_ms": {
+    "island stage:Transform": 11.49,
+    "kernel:ColorCorrect": 7.69,
+    "walk:Read": 7.02,
+    "island upload (host to card)": 5.83,
+    "island kernels on the card (submit to done)": 4.96,
+    "join:Roto": 2.74,
+    "island download: host copy into the picture": 2.54,
+    "island run: other host work (blob, submit, buffers)": 1.42,
+    "island download: copy and map": 0.79,
+    "walk:frame": 0.69,
+    "island encode (host)": 0.33,
+    "island stage:Merge": 0.06,
+    "island stage:Grade": 0.06,
+    "island stage:Blur": 0.05,
+    "join:Read": 0.03,
+    "island lock wait": 0.0
+   },
+   "fps": 17.097,
+   "p95": 81.666
+  },
+  {
+   "frames": 47,
+   "node_stage_ms": 49.05,
+   "walk_ms": 43.53,
+   "stages_ms": {
+    "island stage:Transform": 9.05,
+    "kernel:ColorCorrect": 7.95,
+    "walk:Read": 7.54,
+    "island upload (host to card)": 6.07,
+    "island kernels on the card (submit to done)": 5.13,
+    "island download: host copy into the picture": 2.6,
+    "island run: other host work (blob, submit, buffers)": 1.83,
+    "join:Roto": 1.3,
+    "island download: copy and map": 0.72,
+    "walk:frame": 0.7,
+    "island encode (host)": 0.35,
+    "island stage:Grade": 0.07,
+    "island stage:Merge": 0.07,
+    "join:Read": 0.07,
+    "island stage:Blur": 0.05,
+    "island lock wait": 0.0
+   },
+   "fps": 16.995,
+   "p95": 64.124
+  }
+ ]
+}

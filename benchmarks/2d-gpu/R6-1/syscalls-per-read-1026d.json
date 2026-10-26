@@ -1,0 +1,29 @@
+{
+ "note": "system calls (os.stat and os.lstat) one Read evaluation of the realistic comp's plate makes, counted over four cold frames (the evaluator, no window, no decode pool); tool: statsites.py in the step's scratch (a patched os.stat/os.lstat counting the call site)",
+ "before": {
+  "commit": "f90b6d84",
+  "lstat": 22,
+  "stat": 5,
+  "per_read_frame": 27,
+  "sites": {
+   "imaging.py Read fingerprint, Path.resolve()": 11,
+   "localize.wanted, Path.resolve() (no auto-localize folder is set)": 11,
+   "resolve_source_path is_file (digest and read kernel)": 2,
+   "Path.stat() in the fingerprint": 1,
+   "stat inside the fingerprint's resolve": 1,
+   "stat inside localize.wanted's resolve": 1
+  }
+ },
+ "after": {
+  "commit": "e9dce4f7",
+  "lstat": 1,
+  "stat": 2,
+  "per_read_frame": 3,
+  "sites": {
+   "read_identity: lstat of the file": 1,
+   "read_identity: stat of its directory": 1,
+   "resolve_source_path is_file in the read kernel": 1
+  }
+ },
+ "played_frame_note": "a played frame adds the decode pool's key (read_identity again: 2 calls), 5 calls against 54 before"
+}
