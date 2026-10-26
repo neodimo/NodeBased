@@ -9898,13 +9898,25 @@ class Window(QMainWindow):
         self.playback_auto_proxy_index = self.proxy.currentIndex()
         self.proxy.setCurrentIndex(index)
 
+    def _follow_clock_ramp_tier(self):
+        """The ramp lowered its frames further (a slow first frame: the card's shader clock is down) or brought them back: draw the tier it
+        names from the next request on, without a request of its own."""
+        want = self._clock_ramp.scale
+        if self.proxy.currentData() == want or self.playback_auto_proxy_index is None:
+            return
+        index = self.proxy.findData(want)
+        if index >= 0:
+            self.proxy.blockSignals(True)
+            self.proxy.setCurrentIndex(index)
+            self.proxy.blockSignals(False)
+
     def _end_clock_ramp(self):
         """The card is up (`cardclock.Ramp.switch`): the next frame is drawn at the tier the artist chose. The tier is put back without
         a new request, which would cancel the frame in flight and cost the picture it was drawing."""
         self._clock_ramp = None
         self._clock_ramp_lowered = False
         index = self.playback_auto_proxy_index
-        if index is not None and self.proxy.currentData() == CLOCK_RAMP_TIER:
+        if index is not None and self.proxy.currentData() in (CLOCK_RAMP_TIER, 2 * CLOCK_RAMP_TIER):
             self.playback_auto_proxy_index = None
             self._adapt_warm = 1
             self._adapt_recent = []
@@ -9927,6 +9939,8 @@ class Window(QMainWindow):
         _trace_mark("tick")
         if self._clock_ramp is not None and self._clock_ramp.switch:
             self._end_clock_ramp()
+        elif self._clock_ramp is not None:
+            self._follow_clock_ramp_tier()
         # A wakeup within PLAYBACK_TICK_SLACK of the frame boundary counts as on it: `_next_playback_interval_ms` moves its deadline
         # on from that close, so a tick 0.06 ms short of the boundary that did not advance the playhead lost the whole slot (10/23:
         # one 84 ms gap in about every third 3 s of the smoke, splats and glass scene, whose frame fills 40 of the 41.7 ms).

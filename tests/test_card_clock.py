@@ -58,8 +58,16 @@ def fake_state(device=None):
     return {"wgpu": types.SimpleNamespace(BufferUsage=usage), "device": device or Device(), "info": {"adapter_type": "DiscreteGPU"}}
 
 
+def never_lower(test):
+    """The canned 22 ms frames of the older tests are the idle link's, not a slow shader clock: they must not lower the ramp."""
+    patch = unittest.mock.patch.object(cardclock, "SLOW_FRAME_FRACTION", 10.0)
+    patch.start()
+    test.addCleanup(patch.stop)
+
+
 class RampTests(unittest.TestCase):
     def setUp(self):
+        never_lower(self)
         self.clock = Clock()
         self.addCleanup(lambda: cardclock._active.__setitem__(0, None))
 
@@ -104,6 +112,7 @@ class RampTests(unittest.TestCase):
 
 class AfterFrameTests(unittest.TestCase):
     def setUp(self):
+        never_lower(self)
         self.clock = Clock()
         self.device = Device()
         self.state = fake_state(self.device)
@@ -217,6 +226,95 @@ class AfterFrameTests(unittest.TestCase):
         ramp.finish()
         self.frame(0.022)
         self.assertEqual(self.device.submitted, [])
+
+
+class LoweredRampTests(unittest.TestCase):
+    """A scene the idle shader clock slows down (the smoke, splats and glass scene: 40 to 47 ms of waiting on the card for each of its first
+    four half-size frames, 22 then 8 once the clock has risen; the RTX, 10/25) draws the frames after a slow first frame at a quarter of the
+    chosen size until the wait has fallen, then at half size, then at the chosen size. Each test fails without the part it names."""
+
+    def setUp(self):
+        self.clock = Clock()
+        self.state = fake_state()
+        patch = unittest.mock.patch.object(cardclock.time, "sleep", lambda seconds: None)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(lambda: cardclock._active.__setitem__(0, None))
+        self.ramp = cardclock.Ramp(1 / 24, clock=self.clock)
+
+    def frame(self, seconds, megabytes=8, step=0.0417):
+        self.clock.now += step
+        cardclock.after_frame(self.state, int(megabytes * 2 ** 20), seconds)
+
+    def test_a_first_frame_the_card_kept_most_of_the_frame_time_lowers_the_next_frames_to_a_quarter(self):
+        self.assertEqual(self.ramp.scale, 2)
+        self.frame(0.040)
+        self.assertTrue(self.ramp.lowered)
+        self.assertEqual(self.ramp.scale, 4)
+
+    def test_a_quick_first_frame_leaves_the_half_size_alone(self):
+        self.frame(0.0055)          # the furnished room
+        self.frame(0.0036)          # the cube
+        self.assertFalse(self.ramp.lowered)
+        self.assertEqual(self.ramp.scale, 2)
+
+    def test_the_frames_go_back_to_half_size_when_the_wait_has_fallen_to_two_thirds_of_the_first_quarter_frame(self):
+        self.frame(0.040)
+        self.frame(0.017, megabytes=2)          # the first frame at a quarter
+        self.frame(0.016, megabytes=2)
+        self.assertTrue(self.ramp.lowered)
+        self.frame(0.0096, megabytes=2)         # the clock has risen
+        self.assertFalse(self.ramp.lowered)
+        self.assertEqual(self.ramp.scale, 2)
+
+    def test_the_frames_go_back_to_half_size_after_the_longest_time_whatever_the_wait(self):
+        self.frame(0.040)
+        self.frame(0.017, megabytes=2)
+        self.frame(0.017, megabytes=2, step=cardclock.LOWER_MAX_SECONDS)
+        self.assertFalse(self.ramp.lowered)
+
+    def test_it_lowers_once(self):
+        self.frame(0.040)
+        self.frame(0.017, megabytes=2)
+        self.frame(0.008, megabytes=2)
+        self.assertFalse(self.ramp.lowered)
+        self.frame(0.040)
+        self.assertFalse(self.ramp.lowered)
+        self.assertEqual(self.ramp.scale, 2)
+
+    def test_the_frames_at_a_quarter_do_not_decide_whether_the_link_is_up(self):
+        self.frame(0.040)
+        for _ in range(8):
+            self.frame(0.003, megabytes=2, step=0.1)         # fast because they are small, until the cap sends them back
+            if not self.ramp.lowered:
+                break
+        self.assertFalse(self.ramp.up)
+
+    def test_the_link_is_up_when_the_half_size_frames_wait_under_a_third_of_the_slow_first_frame(self):
+        self.frame(0.040)
+        self.frame(0.017, megabytes=2)
+        self.frame(0.0096, megabytes=2)
+        self.clock.now += cardclock.MIN_SECONDS
+        self.frame(0.020)                      # half size again, the clock up, the link still half asleep
+        self.frame(0.020)
+        self.assertFalse(self.ramp.up)
+        self.frame(0.008)
+        self.frame(0.008)                      # 8 ms, a third of 40
+        self.assertTrue(self.ramp.up)
+
+    def test_a_readback_buffer_made_at_a_quarter_is_sized_for_the_chosen_size(self):
+        self.frame(0.040)
+        self.assertEqual(self.ramp.scale ** 2, 16)         # gpu3d._staging_buffer makes the buffer the chosen size will need
+
+    def test_the_hold_before_the_switch_comes_from_the_half_size_frames(self):
+        self.frame(0.040)
+        self.frame(0.017, megabytes=2)
+        self.frame(0.0096, megabytes=2)
+        self.clock.now += cardclock.MIN_SECONDS
+        self.frame(0.004)
+        self.frame(0.004)
+        self.assertTrue(self.ramp.up)
+        self.assertEqual(self.ramp.hold_frames, 2)          # 3 times 4 ms, as for a ramp that never lowered
 
 
 class StartRampTests(unittest.TestCase):
@@ -342,6 +440,25 @@ class WindowRampTests(unittest.TestCase):
         self.assertEqual(self.window.proxy.currentData(), 1)
         self.assertIsNone(self.window._clock_ramp)
         self.assertIsNone(cardclock._active[0])
+
+    def test_the_tick_draws_the_tier_the_lowered_ramp_names_and_brings_it_back_without_a_request(self):
+        self.play(self.ramp)
+        with unittest.mock.patch.object(self.window, "request_preview") as request:
+            self.ramp.scale = 4
+            self.window.playback_tick()
+            self.assertEqual(self.window.proxy.currentData(), 4)
+            self.ramp.scale = 2
+            self.window.playback_tick()
+            self.assertEqual(self.window.proxy.currentData(), 2)
+        self.assertIsNotNone(self.window.playback_auto_proxy_index)
+
+    def test_the_switch_from_a_quarter_puts_the_chosen_tier_back_too(self):
+        self.play(self.ramp)
+        self.ramp.scale = 4
+        self.window.playback_tick()
+        self.window._end_clock_ramp()
+        self.assertEqual(self.window.proxy.currentData(), 1)
+        self.assertIsNone(self.window.playback_auto_proxy_index)
 
     def test_the_tick_makes_the_switch_when_the_ramp_says_so(self):
         self.play(self.ramp)

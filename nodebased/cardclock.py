@@ -64,6 +64,13 @@ TAPER_SECONDS = 2.0
 HOLD_FACTOR = 3.0
 HOLD_MAX_SECONDS = 0.060
 HOLD_STEP_SECONDS = 0.010
+# A scene the idle shader clock slows down (the smoke, splats and glass scene: its half-size frames wait 40 to 47 ms on the card for the first
+# four frames, 22 and then 8 ms once the clock has risen; 10/25) draws the frames after a slow first frame at a quarter of the chosen size
+# (the card waits 17 ms) until a frame has waited under LOWER_EXIT_FACTOR of the first one at that size or LOWER_MAX_SECONDS have passed, then
+# at half size as before. A first frame is slow when the card kept it longer than SLOW_FRAME_FRACTION of the frame time.
+SLOW_FRAME_FRACTION = 0.5
+LOWER_EXIT_FACTOR = 0.65
+LOWER_MAX_SECONDS = 0.8
 
 _active = [None]           # the Ramp of the play that is starting, while its frames are drawn at the lower size
 
@@ -73,7 +80,13 @@ class Ramp:
 
     def __init__(self, budget, clock=time.monotonic, scale=2):
         self.budget = float(budget)
-        self.scale = max(1, int(scale))      # the frames run at 1/scale of the chosen size along each side
+        self.base_scale = max(1, int(scale))
+        self.scale = self.base_scale         # the frames run at 1/scale of the chosen size along each side (twice the base while lowered)
+        self.lowered = False       # a slow first frame: the frames run at twice the base scale until the card's clock has risen
+        self.lowered_at = None
+        self.lowered_first = None  # the card's wait for the first frame at the lowest size
+        self.lowered_done = False  # lowering happens once per ramp
+        self.baseline = None       # what `observe` compares with when the first frames were not all at the base scale
         self.clock = clock
         self.began = clock()
         self.times = []
@@ -94,10 +107,30 @@ class Ramp:
         elapsed = self.clock() - self.began
         if elapsed >= MAX_SECONDS:
             self.up = True
-        elif elapsed >= MIN_SECONDS and len(self.times) >= 5:
-            baseline = sorted(self.times[:3])[1]
+        elif elapsed >= MIN_SECONDS and len(self.times) >= (3 if self.baseline is not None else 5):
+            baseline = self.baseline if self.baseline is not None else sorted(self.times[:3])[1]
             self.up = max(self.times[-2:]) <= UP_FACTOR * baseline
         return self.up
+
+    def lower(self, seconds):
+        """The card waited `seconds` for a frame at the base scale. A first frame that kept it longer than SLOW_FRAME_FRACTION of the frame time
+        means the shader clock is down: the frames that follow run at twice the base scale (see LOWER_EXIT_FACTOR), and the link-up test
+        compares the base-scale frames after them with this one."""
+        if self.lowered_done or self.up or len(self.times) > 2 or seconds <= SLOW_FRAME_FRACTION * self.budget:
+            return
+        self.lowered = self.lowered_done = True
+        self.lowered_at = self.clock()
+        self.baseline = max(self.times)
+        self.scale = self.base_scale * 2
+
+    def observe_lowered(self, seconds):
+        """A frame at twice the base scale: back to the base scale once the card has waited under LOWER_EXIT_FACTOR of the first one, or
+        after LOWER_MAX_SECONDS."""
+        if self.lowered_first is None:
+            self.lowered_first = float(seconds)
+        elif seconds <= LOWER_EXIT_FACTOR * self.lowered_first or self.clock() - self.lowered_at >= LOWER_MAX_SECONDS:
+            self.lowered = False
+            self.scale = self.base_scale
 
     def finish(self):
         """The play has stopped: the extra copies stop."""
@@ -140,8 +173,11 @@ def after_frame(state, readback_bytes, seconds):
     ramp = _active[0]
     if ramp is None:
         return
-    if not ramp.up:
+    if ramp.lowered:
+        ramp.observe_lowered(seconds)
+    elif not ramp.up:
         ramp.observe(seconds)
+        ramp.lower(seconds)
     if ramp.up and ramp.up_at is None:
         ramp.up_at = ramp.clock()
         # A frame at the chosen size arrives longer after its frame starts than one at the lower size (about three times the readback
