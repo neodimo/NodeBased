@@ -20,6 +20,7 @@ import copy
 import json
 import unittest
 
+from nodebased import ops2d_chrome
 from nodebased.core import CHOICES, Dispatcher, LIMITS, OUTPUT_TYPES, SPECS
 from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor, _compute_node_digests
@@ -113,7 +114,12 @@ VALUE_OVERRIDES = {
     ("Expression", "expr_g"): "g*0.5",
     ("Expression", "expr_b"): "b*0.5",
     ("Expression", "expr_a"): "a*0.5",
+    ("Shuffle", "in2"): "rgba",
 }
+
+# Optional inputs a kind needs wired before every param can take a second value: Shuffle's
+# `fromInput1`/`fromInput2` may name input A, which is an error while A is unwired.
+WIRED_OPTIONAL_INPUTS = {"Shuffle": ("A",)}
 
 
 def _alt_curve(decoded):
@@ -141,6 +147,10 @@ def _alt_value(kind, param, default):
             decoded = None
         if isinstance(decoded, dict) and "points" in decoded and "interpolation" in decoded:
             return json.dumps(_alt_curve(decoded), separators=(",", ":"))
+    if ops2d_chrome.is_open_choice(kind, param):
+        # Channel/layer pickers of the shared node chrome: an appended string is not a channel.
+        offered = ops2d_chrome.suggestions(param)
+        return next(c for c in offered if c != default)
     choices = CHOICES.get(param)
     if choices:
         return next((c for c in choices if c != default), choices[0])
@@ -169,7 +179,7 @@ def _build_graph(kind):
     """A Dispatcher with one node of `kind`, its required inputs wired to distinct Constants."""
     d = Dispatcher()
     d.execute({"op": "create", "type": kind, "id": "n", "params": {}})
-    for index, slot in enumerate(SPECS[kind]["inputs"]):
+    for index, slot in enumerate(list(SPECS[kind]["inputs"]) + list(WIRED_OPTIONAL_INPUTS.get(kind, ()))):
         source_id = f"src{index}"
         d.execute({"op": "create", "type": "Constant", "id": source_id,
                    "params": {"width": 64, "height": 64, "red": 0.5, "green": 0.3,
