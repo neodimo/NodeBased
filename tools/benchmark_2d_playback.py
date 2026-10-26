@@ -445,11 +445,18 @@ def run_window(args):
             'counters_total':gpu_backend.counters.snapshot(),'islands':island_rows,
             'method':'gpu_ms = submit until the small flags readback returns (every pass done); upload_ms = host write_buffer calls; '
                      'readback_ms = copy and map of the finished image; wall_ms per island includes all of them'}
+    # The island rows are stamped on the perf_counter clock and the frame rows on the trace clock; this offset joins them
+    # (tools/benchmark_gpu2d.py playback assigns each island to the accepted frame whose evaluation contains it).
+    result['trace_offset_ms']=round(offset_ms,3)
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
     if args.timeline_output:
         pathlib.Path(args.timeline_output).parent.mkdir(parents=True,exist_ok=True)
-        pathlib.Path(args.timeline_output).write_text(json.dumps({k:result[k] for k in ('case','pipeline','direct_picture','adapter','force_adapter','resolution','cache_mode','duration_s','achieved_fps','first_pass_fps','frame_interval_ms','handoff_ms','frames_dropped_counted','conversion_stage_drops','display_conversions_8bit','fresh_frame_timeline')},indent=1)+'\n')
+        compact={k:result[k] for k in ('case','pipeline','direct_picture','adapter','force_adapter','resolution','cache_mode','duration_s','achieved_fps','first_pass_fps','frame_interval_ms','handoff_ms','frames_dropped_counted','conversion_stage_drops','display_conversions_8bit','fresh_frame_timeline','trace_offset_ms','backend')}
+        compact['first_pass_frames']=result['first_pass_frames']
+        if result.get('gpu2d'):
+            compact['gpu2d']={k:result['gpu2d'][k] for k in ('device','cold_shader_setup_ms','islands','method')}
+        pathlib.Path(args.timeline_output).write_text(json.dumps(compact,indent=1)+'\n')
     win.close()
     field_keys=('adapter','resolution','playback_proxy_enabled','playback_tiers','achieved_fps',
                 'first_pass_fps','post_stop_full_resolution_ms','status_line')

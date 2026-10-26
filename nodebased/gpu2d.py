@@ -95,6 +95,8 @@ class Counters:
     encode_ms: float = 0.0
     gpu_ms: float = 0.0          # submit until the device reports the work done (bounded completion)
     readback_ms: float = 0.0
+    readback_map_ms: float = 0.0     # of readback_ms: the copy submission and the wait for the map (device to host transfer)
+    readback_host_ms: float = 0.0    # of readback_ms: the host copy out of the mapped buffer into the Raster
     cpu_boundaries: list = field(default_factory=list)
     nodes_on_gpu: dict = field(default_factory=dict)
     live_bytes: int = 0
@@ -103,7 +105,7 @@ class Counters:
     _NUMERIC = ("runs", "uploads", "upload_bytes", "upload_cache_hits", "downloads", "download_bytes",
                 "intermediate_readbacks", "submissions", "dispatches", "allocations", "frees", "pool_hits",
                 "nonfinite_fallbacks", "pipeline_compiles", "shader_compile_ms", "upload_ms", "encode_ms",
-                "gpu_ms", "readback_ms")
+                "gpu_ms", "readback_ms", "readback_map_ms", "readback_host_ms")
 
     def snapshot(self):
         row = {name: getattr(self, name) for name in self._NUMERIC}
@@ -1081,6 +1083,7 @@ class GPU2D:
                 flag_staging.unmap()
             gpu_done = time.perf_counter()
             pixels = None
+            mapped_at = gpu_done
             if not flag_word & 1:
                 staging = self._staging_buffer(out_bytes)
                 copy = device.create_command_encoder()
@@ -1088,6 +1091,7 @@ class GPU2D:
                 device.queue.submit([copy.finish()])
                 counters.submissions += 1
                 staging.map_sync(wgpu.MapMode.READ)
+                mapped_at = time.perf_counter()
                 try:
                     mapped = staging.read_mapped(0, out_bytes, copy=False)
                     pixels = np.frombuffer(mapped, np.float32, out_bytes // 4).reshape(final.data.height, final.data.width, 4).copy()
@@ -1102,6 +1106,8 @@ class GPU2D:
         self._trim_pool_to(self.budget // 2)
         counters.gpu_ms += (gpu_done - submitted) * 1000
         counters.readback_ms += (done - gpu_done) * 1000
+        counters.readback_map_ms += (mapped_at - gpu_done) * 1000
+        counters.readback_host_ms += (done - mapped_at) * 1000
         counters.downloads += 1
         counters.download_bytes += (out_bytes if pixels is not None else 0) + 16
         if pixels is None:
