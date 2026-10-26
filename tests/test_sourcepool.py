@@ -92,7 +92,8 @@ class TaskTests(unittest.TestCase):
             pool.shutdown(wait=True, timeout=2)
 
     def test_the_worker_count_is_clamped_and_follows_the_cpu_count(self):
-        self.assertEqual(sourcepool.default_workers(4), 0)
+        self.assertEqual(sourcepool.default_workers(4), sourcepool.FOUR_CPU_WORKERS)
+        self.assertEqual(sourcepool.default_workers(3), 0)
         self.assertEqual(sourcepool.default_workers(2), 0)
         self.assertEqual(sourcepool.default_workers(6), 3)
         self.assertEqual(sourcepool.default_workers(5), 2)

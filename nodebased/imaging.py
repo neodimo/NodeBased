@@ -890,6 +890,15 @@ class Evaluator:
         self.source_pool = None
         self._lock = threading.RLock()
         self._source_sizes = {}
+        # Roto read-ahead (nodebased/rotoahead.py): a worker thread computing one Roto for a frame the
+        # walk has not reached marks itself in `_ahead_local`, and the digest it works on in
+        # `_ahead_inflight`, so a walk that arrives at the same digest waits for it instead of
+        # rasterising the same matte beside it. Entries live only while the worker computes.
+        self._ahead_local = threading.local()
+        self._ahead_inflight = {}
+        self.ahead_runs = 0
+        self.ahead_cached = 0
+        self.ahead_joins = 0
         self.cache = OrderedDict()
         self.bytes = 0
         # Roto coverage is independent of the connected plate's frame. Keep a separate bounded
@@ -1237,6 +1246,51 @@ class Evaluator:
                      isinstance(scene_later, scene3d.Scene) else base_scene, camera_later)
             prints.append(["later", *digests])
         return moments, later, ["motion", *prints]
+
+    def read_ahead_node(self, doc, key, frame, tier, cancel):
+        """Compute one source node (a Roto with no input) for `frame`, before the walk of that frame reaches it.
+
+        This is the nested `evaluate_raster` the source pool runs for a source, so the result enters the cache under the
+        key the walk will compute and the walk's own lookup finds it. Meant for a worker thread: while this runs, a walk that
+        arrives at the same digest waits for it (`_ahead_gate`). Returns the digest. Its errors stay in the caller's task: the
+        walk that needs the frame computes the node itself and raises the same error on the same node. A set `cancel` stops it
+        before the result is stored.
+        """
+        done = threading.Event()
+        local = self._ahead_local
+        local.done = done
+        try:
+            raster, digest = self.evaluate_raster(doc, key, cancel=cancel, frame=frame, tier=tier, typed=True,
+                                                  return_digest=True)
+            if isinstance(raster, Raster):
+                self._source_sizes[key] = int(raster.nbytes)
+            return digest
+        finally:
+            local.done = None
+            with self._lock:
+                for digest_key in [d for d, event in self._ahead_inflight.items() if event is done]:
+                    del self._ahead_inflight[digest_key]
+            done.set()
+
+    def _ahead_gate(self, digest, cancel):
+        """At a Roto's digest: a read-ahead worker announces the matte it is about to compute, a walk waits for one
+        already running on the same digest. Nothing here waits for work that has not started."""
+        mine = getattr(self._ahead_local, "done", None)
+        with self._lock:
+            if mine is not None:
+                if digest in self.cache:
+                    self.ahead_cached += 1
+                elif digest not in self._ahead_inflight:
+                    self._ahead_inflight[digest] = mine
+                    self.ahead_runs += 1
+                return
+            running = self._ahead_inflight.get(digest)
+        if running is None:
+            return
+        self.ahead_joins += 1
+        while not running.wait(0.02):
+            if cancel is not None and cancel.is_set():
+                raise Cancelled()
 
     # The nodes with no input to wait for that are worth a thread of their own. Text is left out (Qt
     # painting belongs to the thread that owns the application) and so are the cheap constants.
@@ -2821,6 +2875,8 @@ class Evaluator:
             digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes,
                                                 node.get("input_outputs", {}), fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
+            if kind == "Roto" and (self._ahead_inflight or getattr(self._ahead_local, "done", None) is not None):
+                self._ahead_gate(digest, cancel)
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
             with self._lock:
@@ -3287,6 +3343,8 @@ class Evaluator:
                                     scale_window(raster.data, tier, decimated.shape[1], decimated.shape[0]),
                                     raster.display.scaled(tier), layer_rasters, raster.meta)
                 raster.pixels.flags.writeable = False
+                if cancel is not None and cancel.is_set() and getattr(self._ahead_local, "done", None) is not None:
+                    raise Cancelled()       # a read-ahead that was cancelled while it computed stores nothing
                 if not fractional_frame or cache_fractional:
                     self._store(digest, raster)
             values[key] = raster

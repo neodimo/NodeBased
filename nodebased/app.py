@@ -93,6 +93,7 @@ from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTEN
 from .cachetier import DiskCache, SharedMemoryBudget
 from .decodepool import DecodeAheadPool
 from .sourcepool import SourcePool
+from .rotoahead import RotoAhead
 from .tileexec import TileExecutor
 from .tiles import TileCache, TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
@@ -8770,10 +8771,13 @@ class Window(QMainWindow):
             self.decode_pool = DecodeAheadPool(max_workers=0 if available_cpus <= 4 else None)
         self.evaluator.decode_pool = self.decode_pool
         # The independent sources of one frame (Reads, Roto, generators) compute side by side on a few
-        # workers, joined where the walk reaches each node -- sourcepool.py. Off at four CPUs or fewer,
-        # like the decode-ahead pool, and with NODEBASED_SOURCE_WORKERS=0.
+        # workers, joined where the walk reaches each node -- sourcepool.py. Off at three CPUs or fewer
+        # and with NODEBASED_SOURCE_WORKERS=0; two workers at four CPUs (measured, docs/PERFORMANCE.md).
         self.source_pool = SourcePool()
         self.evaluator.source_pool = self.source_pool
+        # While a played frame is finished and shown, the pool computes the Roto matte of the next frames
+        # (rotoahead.py); NODEBASED_ROTO_AHEAD=0 turns it off.
+        self.roto_ahead = RotoAhead(self.evaluator, self.source_pool)
         # Preview takes the tile path when every upstream node supports it. The executor reports
         # an explicit fallback for unsupported graphs; export remains the reference evaluator.
         self.tile_executor = TileExecutor(
@@ -9709,6 +9713,16 @@ class Window(QMainWindow):
         target = min(max(time_range["current"] + delta, time_range["first"]), time_range["last"])
         self.set_time(current=target)
 
+    def _viewport_is_whole_frame(self, viewport):
+        """True unless the view is zoomed onto a small part of the picture: there the tiles draw just that part of the
+        Roto (tileexec.py), and a whole-frame matte computed ahead would never be used."""
+        if viewport is None:
+            return True
+        canvas = self.viewer.sceneRect()
+        full = max(1.0, canvas.width() * canvas.height())
+        x0, y0, x1, y1 = viewport
+        return max(0, x1 - x0) * max(0, y1 - y0) / full >= 0.80
+
     def future_frames(self, frame, count=3):
         """Return bounded forward read-ahead order, looping inside the comp range."""
         time_range = self.dispatcher.document["time"]
@@ -9783,6 +9797,7 @@ class Window(QMainWindow):
             if saved_spills is not None:
                 self.evaluator.disk_spills_enabled = saved_spills
             self._playback_saved_disk_spills = None
+            self.roto_ahead.cancel()          # a stopped (or turned-round) playback keeps no read-ahead
         if hasattr(self, "state_word"):
             self.refresh_state_word()
         forward = start and self.play_direction > 0
@@ -14898,6 +14913,7 @@ class Window(QMainWindow):
             # just made irrelevant. See decodepool.py -- a job already dispatched to OIIO still
             # runs to completion, but its result is discarded rather than stored.
             self.decode_pool.bump_epoch()
+            self.roto_ahead.cancel()
             self._cancel_staged()
         if (self.playing and not playhead_only and target
                 and not self._selected_tier_is_cached(snapshot, target, frame, tier)):
@@ -14921,6 +14937,9 @@ class Window(QMainWindow):
                             if not self._selected_tier_is_cached(snapshot, target, future, tier)]
             if decode_ahead:
                 self.tile_executor.prefetch_reads(snapshot, target, decode_ahead)
+        if target and self.playing and self.roto_ahead.active and self._viewport_is_whole_frame(viewport):
+            # The frame in hand is being evaluated and shown: its successors' Roto mattes compute on the source pool.
+            self.roto_ahead.schedule(snapshot, target, self.future_frames(frame, count=self.roto_ahead.frames), tier)
         # The normal 35 ms coalescing window is useful for paused property edits. A live drag
         # already has its own gesture cadence and needs the first coarse picture promptly.
         self.timer.start(0 if self.playing or live_preview else 35)
@@ -16576,7 +16595,8 @@ class Window(QMainWindow):
         self.queue_panel.runner.shutdown(wait=False, cancel_futures=True)
         self.job_queue._pool.shutdown(wait=False, cancel_futures=True)
         self.decode_pool.shutdown()
-        self.source_pool.shutdown()
+        self.roto_ahead.cancel()
+        self.source_pool.shutdown(wait=True, timeout=2)
         if self.server:
             self.server.close()
         QApplication.instance().removeEventFilter(self)
