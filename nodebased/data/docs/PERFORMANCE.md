@@ -447,11 +447,8 @@ desktop-class RTX and on the RTX 4070 laptop (unverified; Gonzo owns those runs)
 
 **Findings recorded for steps B and C.**
 
-- Cubic Transform with rotation or scale, next to a very bright pixel: the device differs from the CPU by up to 2.5e-5 at one pixel
-  when a 50.0 pixel sits beside values near 0.4 (the pixel gate is 2e-5). Against an exact float64 evaluation the CPU is off by 8e-6
-  and the device by 1.7e-5; both are float32 weight rounding amplified by the neighbour. The translation-only cubic path the fixture
-  uses is exact to 2.4e-7. Pinned in `test_known_limit_cubic_rotation_next_to_an_extreme_hdr_value`; step B decides between a
-  more careful weight evaluation and a CPU boundary for that case. No tolerance was widened.
+- Cubic Transform next to a very bright pixel (a 50.0 pixel among values near 0.4) differed from the CPU by up to 2.5e-5 in step A.
+  Resolved in step B (below): the gate now holds with a worst ratio of 0.006 on all three adapters.
 - CPU behaviour reproduced on purpose: `Transform` with `clamp` on and a whole-pixel vertical map zero-pads the rows the source does
   not cover (`_resample_cubic_separable` crops and pads rows), where the general path replicates the edge. The device copies that.
   Needs Lane 2 to say whether the CPU path is intended.
@@ -464,6 +461,74 @@ Rerun: `python tools/benchmark_2d_playback.py --plate-pattern "$NB_RUN/plates/pl
 on a private X display, then `python tools/summarize_2d_playback.py run.json`; the pixel check is
 `python tools/check_gpu2d_fixture.py --inputs "$NB_RUN/plates" --size 1080p --frames 1 24 48 --adapter default`; tests with
 `python /path/force-adapter.py integrated|cpu tests.test_gpu2d` for the other two adapters.
+
+### R6-1: the pixel and failure gates (10/25, step B of 3)
+
+Step B turns the step A check into the full R6-1 part 3 gate set: `tests/test_gpu2d.py` (62 tests) passes on the RTX 3080 Ti, the
+Radeon 8060S and llvmpipe (software), with every finite channel inside `abs(gpu - cpu) <= 2e-5 + 2e-5 * abs(cpu)`. The tolerance
+was not widened; two kernel defects were found and fixed instead. The A6000, the RTX 4070 laptop and Windows D3D12 were not available:
+those rows are **unverified**, and Gonzo owns them.
+
+**What the tests cover** (all with the CPU nodes as truth, through `Evaluator._windowed_kernel`, so windows, mask and mix are the real ones):
+negative and HDR values with 6.0 and 50.0 spikes; alpha exactly 0 and 1 including colour at alpha 0; masks and mix 0, partial and 1 on
+every node; odd, 1-pixel and 65 by 1 windows at data origins from -1000 to 4000; border impulses; fractional translations, rotation,
+non-uniform scale, pivot, skew, invert, clamp and black-outside for nearest, bilinear and cubic; every Merge operation, both input orders;
+Blur radii 0.2 to 4; a seeded sweep of 400 random parameter sets per node; non-finite inputs and results; and the realistic comp frame by
+frame (a full 48-frame animation walked every eighth frame, the extrapolated frames 60 to 240, a 480 by 270 frame and a proxy tier),
+each with one download, no intermediate readback and no CPU boundary.
+
+**Pixel results** (`benchmarks/2d-gpu/R6-1/kernel-gates-*-1025.json`; the node rows are the worst over every comparison of that node,
+"Fixture" is the 23 realistic-comp comparisons; the pass limit for the gate ratio is 1):
+
+| Adapter | Node | Comparisons | Max abs error | Mean | p99 | Worst gate ratio |
+|---|---|---:|---:|---:|---:|---:|
+| RTX 3080 Ti | Grade | 154 | 7.6e-6 | 2.4e-9 | 4.8e-7 | 0.0058 |
+| RTX 3080 Ti | Blur | 229 | 3.8e-6 | 4.1e-10 | 1.1e-7 | 0.0047 |
+| RTX 3080 Ti | Transform | 723 | 1.9e-6 | 7.6e-10 | 2.4e-7 | 0.0060 |
+| RTX 3080 Ti | Merge | 405 | 1.2e-4 | 2.0e-9 | 9.5e-7 | 0.0082 |
+| RTX 3080 Ti | Fixture | 23 | 6.0e-8 | 5.6e-10 | 3.0e-8 | 0.0019 |
+| Radeon 8060S | Grade / Blur / Transform / Merge | 154 / 229 / 723 / 405 | 7.6e-6 / 3.8e-6 / 4.8e-7 / 1.2e-4 | 3.7e-9 / 7.4e-10 / 4.5e-11 / 1.9e-9 | 4.8e-7 / 1.2e-7 / 6.0e-8 / 9.5e-7 | 0.0074 / 0.0056 / 0.0043 / 0.0078 |
+| Radeon 8060S | Fixture | 23 | 6.0e-8 | 1.5e-9 | 3.0e-8 | 0.0020 |
+| llvmpipe | Grade / Blur / Transform / Merge | 154 / 229 / 723 / 405 | 0 / 0 / 2.8e-14 / 1.2e-7 | 0 / 0 / 2.2e-20 / 4.7e-12 | 0 / 0 / 0 / 3.0e-8 | 0 / 0 / 0 / 0.0032 |
+| llvmpipe | Fixture | 23 | 0 | 0 | 0 | 0 |
+
+The Merge maximum is large in absolute terms only because the test images hold values near 50. At full 1080p the realistic comp
+(`pixels-stepB-48-*` for frames 1 to 48, `pixels-stepB-240-*` for the extrapolated frames 49 to 240, the Merge and ColorCorrect outputs, 34
+comparisons per adapter) differs by at most 6e-8 on the RTX and the Radeon (gate ratio 0.002) and by exactly 0 on llvmpipe, with one
+download, zero intermediate readbacks and no CPU boundary on every frame. A further 6,400 random node parameter sets per adapter
+(four seeds of 1,600, outside the committed sweep) all passed; the worst gate ratio was 0.010.
+
+**Two kernel defects found and fixed.**
+
+- *The sample fraction.* The Transform shader built a source coordinate from two separately rounded float32 pieces, so the fraction could
+  be off by about 1e-7; next to a 50.0 pixel the cubic filter turned that into 4e-5, past the gate. The tables now carry each coordinate
+  as an exact integer part plus a 48-bit fixed-point fraction in two 24-bit limbs, the shader sums them in integers and rounds once, as
+  the CPU's float64 coordinate does when it casts its fraction.
+- *The CPU's two cubic paths.* The translation-only (separable) path builds its Catmull-Rom weights in float64 and casts once; the
+  general path builds them in float32. The device now takes the separable path's weights from a table the host computes with the CPU's
+  own expression, and evaluates the general path's float32 weights with every intermediate behind an opaque bit-mask
+  (`rounded`, a mask of all ones read from the parameters) so that no driver can fuse a multiply into the next add or reorder the
+  polynomial. Without the mask the Radeon and llvmpipe reorder the weight polynomial (8,478 of 24,001 test weights differed by up to
+  1e-6) and the fused tap sums moved the result by a further factor of ten on the RTX; with it the weights match the CPU bit for bit on all three.
+
+**Explicit CPU boundaries, named** (each counted as a reported boundary, never guessed): Blur radius above 4 (the CPU switches to float64
+cumulative sums; a float32 port cannot match them inside the gate); Transform motion blur; Merge operations without a kernel
+(anything outside the 19 in `MERGE_OPS`, such as overlay); a Merge with an unwired input or mismatched display windows; a window larger than a
+quarter of the byte budget or than the device's storage binding; non-finite input pixels, and non-finite results (the whole frame is
+recomputed on the CPU, which gives the CPU's exact values); a lost device, after which the island stays off until reopened.
+
+**Failure behaviour, checked with a fake device (no hardware) and with the real ones:** no device (open returns None with the reason, the
+benchmark raises instead of silently running on the CPU, the evaluator default stays CPU); unsupported parameter or mode (a CPU boundary);
+over budget (refused at the first allocation, nothing submitted, nothing leaked); cancellation (before any device work, and between
+passes of a half-built island: no submission, the next frame runs on the same device); device loss (a failed submission or allocation raises
+`DeviceLost`, every resident image becomes stale, the evaluator reruns that frame on the CPU and serves the following frames from the
+CPU); stale generation (a resident source cached under an earlier device epoch is never reused and is re-uploaded; a cancelled frame
+leaves no cached result, so the same evaluator renders the next generation correctly).
+
+Rerun: `python /path/force-adapter.py integrated tests.test_gpu2d` (and `cpu`, or no wrapper for the default card); set `NB_GPU2D_STATS=file.json`
+to write the table above. The 1080p check is `python tools/check_gpu2d_fixture.py --inputs "$NB_RUN/plates" --size 1080p --frames 1 2 6 12 18 24 30 36 42 47 48 --adapter default`
+(add `--last 240` and frames 49 to 240 for the extrapolated range). Regenerated EXR sources carry a capture date, so their file hashes
+change on each generation; the pixels do not.
 
 ## Lane 2 step notes
 

@@ -1,0 +1,577 @@
+{
+ "adapter": {
+  "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+  "backend": "Vulkan",
+  "adapter_type": "CPU",
+  "driver": null,
+  "driver_info": null,
+  "budget_bytes": 1073741824,
+  "max_binding_bytes": 134217728,
+  "label": "cpu"
+ },
+ "size": [
+  1920,
+  1080
+ ],
+ "tier": 1,
+ "frames": [
+  {
+   "target": "merge",
+   "frame": 49,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 3,
+    "upload_bytes": 74649600,
+    "upload_cache_hits": 0,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 9,
+    "allocations": 12,
+    "frees": 0,
+    "pool_hits": 1,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 7,
+    "shader_compile_ms": 49.39863695472013,
+    "upload_ms": 20.471468975301832,
+    "encode_ms": 49.79660302342381,
+    "gpu_ms": 111.618256996735,
+    "readback_ms": 17.30076399690006,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 210772000,
+    "peak_bytes": 210772000
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 60,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 2,
+    "frees": 0,
+    "pool_hits": 5,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 18.180868006311357,
+    "encode_ms": 0.2843009860953316,
+    "gpu_ms": 39.51176999544259,
+    "readback_ms": 3.3664200018392876,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 277880864,
+    "peak_bytes": 277880864
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 100,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 2,
+    "frees": 0,
+    "pool_hits": 5,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 20.504048006841913,
+    "encode_ms": 0.2788119891192764,
+    "gpu_ms": 20.848086991463788,
+    "readback_ms": 3.3802690013544634,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 344989728,
+    "peak_bytes": 344989728
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 150,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 2,
+    "frees": 0,
+    "pool_hits": 5,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 2.8347850020509213,
+    "encode_ms": 0.3048509970540181,
+    "gpu_ms": 40.87979000178166,
+    "readback_ms": 3.3192510018125176,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 412098592,
+    "peak_bytes": 412098592
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 200,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 1,
+    "frees": 0,
+    "pool_hits": 6,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 15.985492995241657,
+    "encode_ms": 0.20693300757557154,
+    "gpu_ms": 23.383512001601048,
+    "readback_ms": 3.2937119976850227,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 240,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 2.674589995876886,
+    "encode_ms": 0.19059401529375464,
+    "gpu_ms": 22.463168992544524,
+    "readback_ms": 3.3042720024241135,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 49,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 2.793216990539804,
+    "encode_ms": 0.1345950149698183,
+    "gpu_ms": 22.21446600742638,
+    "readback_ms": 3.3747499983292073,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 60,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 2.9597919929074124,
+    "encode_ms": 0.13264600420370698,
+    "gpu_ms": 23.0294020002475,
+    "readback_ms": 2.664921004907228,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 100,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 3.1097869941731915,
+    "encode_ms": 0.1382059999741614,
+    "gpu_ms": 23.325123998802155,
+    "readback_ms": 2.573253004811704,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 150,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 3.0437389941653237,
+    "encode_ms": 0.13638600648846477,
+    "gpu_ms": 22.991883000941016,
+    "readback_ms": 2.4495770048815757,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 200,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 3.0317700002342463,
+    "encode_ms": 0.11244599591009319,
+    "gpu_ms": 22.492609001346864,
+    "readback_ms": 2.6240509905619547,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 240,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 2.887763999751769,
+    "encode_ms": 0.11689600069075823,
+    "gpu_ms": 23.68319199013058,
+    "readback_ms": 2.63261201325804,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  }
+ ],
+ "worst": {
+  "merge": {
+   "max_abs": 0.0,
+   "mean_abs": 0.0,
+   "p99_abs": 0.0,
+   "max_gate_ratio": 0.0,
+   "violations": 0,
+   "all_windows_match": true,
+   "downloads_per_frame": [
+    1
+   ],
+   "intermediate_readbacks": 0,
+   "cpu_boundaries": []
+  },
+  "colorcorrect": {
+   "max_abs": 0.0,
+   "mean_abs": 0.0,
+   "p99_abs": 0.0,
+   "max_gate_ratio": 0.0,
+   "violations": 0,
+   "all_windows_match": true,
+   "downloads_per_frame": [
+    1
+   ],
+   "intermediate_readbacks": 0,
+   "cpu_boundaries": []
+  }
+ },
+ "gate": "pass",
+ "gate_rule": "every finite channel abs(gpu-cpu) <= 2e-05 + 2e-05*abs(cpu)"
+}

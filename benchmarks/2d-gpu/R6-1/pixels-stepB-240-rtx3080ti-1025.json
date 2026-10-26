@@ -1,0 +1,577 @@
+{
+ "adapter": {
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "backend": "Vulkan",
+  "adapter_type": "DiscreteGPU",
+  "driver": null,
+  "driver_info": null,
+  "budget_bytes": 1073741824,
+  "max_binding_bytes": 2147483644,
+  "label": "default"
+ },
+ "size": [
+  1920,
+  1080
+ ],
+ "tier": 1,
+ "frames": [
+  {
+   "target": "merge",
+   "frame": 49,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 8.603936822207515e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0011920897122848562,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 3,
+    "upload_bytes": 74649600,
+    "upload_cache_hits": 0,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 9,
+    "allocations": 12,
+    "frees": 0,
+    "pool_hits": 1,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 7,
+    "shader_compile_ms": 43.58227099874057,
+    "upload_ms": 76.53378999384586,
+    "encode_ms": 47.98364000453148,
+    "gpu_ms": 37.20828199584503,
+    "readback_ms": 13.721391005674377,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 210772000,
+    "peak_bytes": 210772000
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 60,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 9.295334092478793e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0011920842553707687,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 2,
+    "frees": 0,
+    "pool_hits": 5,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 65.01819301047362,
+    "encode_ms": 0.24804199347272515,
+    "gpu_ms": 1.5697530034231022,
+    "readback_ms": 12.965084009920247,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 277880864,
+    "peak_bytes": 277880864
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 100,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 9.755911315821176e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.001192050605504489,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 2,
+    "frees": 0,
+    "pool_hits": 5,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 64.86078699526843,
+    "encode_ms": 0.22342400916386396,
+    "gpu_ms": 1.3845490029780194,
+    "readback_ms": 13.372820991207846,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 344989728,
+    "peak_bytes": 344989728
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 150,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 9.069651253041026e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0011920897122848562,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 2,
+    "frees": 0,
+    "pool_hits": 5,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 65.00996298564132,
+    "encode_ms": 4.612902019289322,
+    "gpu_ms": 1.639381007407792,
+    "readback_ms": 13.023912004427984,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 412098592,
+    "peak_bytes": 412098592
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 200,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 5.960464477539063e-08,
+    "mean_abs": 9.722962329843606e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.00198615412238205,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 1,
+    "frees": 0,
+    "pool_hits": 6,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 64.9938540009316,
+    "encode_ms": 0.2628009970067069,
+    "gpu_ms": 1.5356340009020641,
+    "readback_ms": 13.17341800313443,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "merge",
+   "frame": 240,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 8.946181128168086e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0011920767521954715,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 65.0808700156631,
+    "encode_ms": 0.21202398056630045,
+    "gpu_ms": 1.4091880002524704,
+    "readback_ms": 12.8806459979387,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 49,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 8.603936822207515e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0011920897122848562,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 64.965914003551,
+    "encode_ms": 0.16782499733380973,
+    "gpu_ms": 1.2811119959224015,
+    "readback_ms": 13.350722001632676,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 60,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 9.295334092478793e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0011920842553707687,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 65.33575299545191,
+    "encode_ms": 0.3831289941444993,
+    "gpu_ms": 1.4249980013119057,
+    "readback_ms": 13.0094820051454,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 100,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 9.755911315821176e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.001192050605504489,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 65.14092900033575,
+    "encode_ms": 0.21475399262271821,
+    "gpu_ms": 1.3065410021226853,
+    "readback_ms": 13.532647004467435,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 150,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 9.069651253041026e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0011920897122848562,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 64.9163759953808,
+    "encode_ms": 0.18393401114735752,
+    "gpu_ms": 1.4028580044396222,
+    "readback_ms": 12.874125997768715,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 200,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 5.960464477539063e-08,
+    "mean_abs": 9.722962329843606e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.00198615412238205,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 92.31558001192752,
+    "encode_ms": 0.15888398047536612,
+    "gpu_ms": 11.370021995389834,
+    "readback_ms": 45.87370301305782,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  },
+  {
+   "target": "colorcorrect",
+   "frame": 240,
+   "windows_match": true,
+   "error": {
+    "channels": 8411840,
+    "max_abs": 2.9802322387695312e-08,
+    "mean_abs": 8.946181128168086e-11,
+    "p99_abs": 0.0,
+    "max_gate_ratio": 0.0011920767521954715,
+    "violations": 0,
+    "nonfinite_match": true
+   },
+   "counters": {
+    "runs": 1,
+    "uploads": 2,
+    "upload_bytes": 66355200,
+    "upload_cache_hits": 1,
+    "downloads": 1,
+    "download_bytes": 33647376,
+    "intermediate_readbacks": 0,
+    "submissions": 2,
+    "dispatches": 8,
+    "allocations": 0,
+    "frees": 0,
+    "pool_hits": 7,
+    "nonfinite_fallbacks": 0,
+    "pipeline_compiles": 0,
+    "shader_compile_ms": 0.0,
+    "upload_ms": 92.33265901275445,
+    "encode_ms": 0.17987498722504824,
+    "gpu_ms": 11.39450998743996,
+    "readback_ms": 45.27239101298619,
+    "cpu_boundaries": [],
+    "nodes_on_gpu": {
+     "Grade": 1,
+     "Transform": 1,
+     "Blur": 1,
+     "Merge": 1
+    },
+    "live_bytes": 445653024,
+    "peak_bytes": 445653024
+   }
+  }
+ ],
+ "worst": {
+  "merge": {
+   "max_abs": 5.960464477539063e-08,
+   "mean_abs": 9.232329490260032e-11,
+   "p99_abs": 0.0,
+   "max_gate_ratio": 0.00198615412238205,
+   "violations": 0,
+   "all_windows_match": true,
+   "downloads_per_frame": [
+    1
+   ],
+   "intermediate_readbacks": 0,
+   "cpu_boundaries": []
+  },
+  "colorcorrect": {
+   "max_abs": 5.960464477539063e-08,
+   "mean_abs": 9.232329490260032e-11,
+   "p99_abs": 0.0,
+   "max_gate_ratio": 0.00198615412238205,
+   "violations": 0,
+   "all_windows_match": true,
+   "downloads_per_frame": [
+    1
+   ],
+   "intermediate_readbacks": 0,
+   "cpu_boundaries": []
+  }
+ },
+ "gate": "pass",
+ "gate_rule": "every finite channel abs(gpu-cpu) <= 2e-05 + 2e-05*abs(cpu)"
+}

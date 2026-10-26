@@ -1,0 +1,49 @@
+{
+  "adapter": {
+    "device": "llvmpipe (LLVM 22.1.8, 256 bits)",
+    "backend": "Vulkan",
+    "adapter_type": "CPU",
+    "driver": null,
+    "driver_info": null,
+    "budget_bytes": 1073741824,
+    "max_binding_bytes": 134217728,
+    "label": "default"
+  },
+  "kinds": {
+    "Fixture": {
+      "comparisons": 23,
+      "max_error": 0.0,
+      "mean_error": 0.0,
+      "p99_error": 0.0,
+      "worst_gate_ratio": 0.0
+    },
+    "Grade": {
+      "comparisons": 154,
+      "max_error": 0.0,
+      "mean_error": 0.0,
+      "p99_error": 0.0,
+      "worst_gate_ratio": 0.0
+    },
+    "Blur": {
+      "comparisons": 229,
+      "max_error": 0.0,
+      "mean_error": 0.0,
+      "p99_error": 0.0,
+      "worst_gate_ratio": 0.0
+    },
+    "Transform": {
+      "comparisons": 723,
+      "max_error": 2.842170943040401e-14,
+      "mean_error": 2.1807027417813482e-20,
+      "p99_error": 0.0,
+      "worst_gate_ratio": 1.4210854715201598e-09
+    },
+    "Merge": {
+      "comparisons": 405,
+      "max_error": 1.1920928955078125e-07,
+      "mean_error": 4.646885442926258e-12,
+      "p99_error": 2.9802322387695312e-08,
+      "worst_gate_ratio": 0.0032362061566880407
+    }
+  }
+}

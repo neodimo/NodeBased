@@ -1,0 +1,49 @@
+{
+  "adapter": {
+    "device": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+    "backend": "Vulkan",
+    "adapter_type": "IntegratedGPU",
+    "driver": null,
+    "driver_info": null,
+    "budget_bytes": 1073741824,
+    "max_binding_bytes": 2147483644,
+    "label": "default"
+  },
+  "kinds": {
+    "Fixture": {
+      "comparisons": 23,
+      "max_error": 5.960464477539063e-08,
+      "mean_error": 1.4797618686483113e-09,
+      "p99_error": 2.9802322387695312e-08,
+      "worst_gate_ratio": 0.0019859029487640212
+    },
+    "Grade": {
+      "comparisons": 154,
+      "max_error": 7.62939453125e-06,
+      "mean_error": 3.6988797901630146e-09,
+      "p99_error": 4.76837158203125e-07,
+      "worst_gate_ratio": 0.007429344335102656
+    },
+    "Blur": {
+      "comparisons": 229,
+      "max_error": 3.814697265625e-06,
+      "mean_error": 7.427662264564342e-10,
+      "p99_error": 1.1920928955078125e-07,
+      "worst_gate_ratio": 0.005594164615006794
+    },
+    "Transform": {
+      "comparisons": 723,
+      "max_error": 4.76837158203125e-07,
+      "mean_error": 4.454970582542869e-11,
+      "p99_error": 5.960464477539063e-08,
+      "worst_gate_ratio": 0.00432470957412855
+    },
+    "Merge": {
+      "comparisons": 405,
+      "max_error": 0.0001220703125,
+      "mean_error": 1.93779779478193e-09,
+      "p99_error": 9.5367431640625e-07,
+      "worst_gate_ratio": 0.0077585014361374076
+    }
+  }
+}

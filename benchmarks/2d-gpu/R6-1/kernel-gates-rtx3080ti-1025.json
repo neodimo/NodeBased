@@ -1,0 +1,49 @@
+{
+  "adapter": {
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "backend": "Vulkan",
+    "adapter_type": "DiscreteGPU",
+    "driver": null,
+    "driver_info": null,
+    "budget_bytes": 1073741824,
+    "max_binding_bytes": 2147483644,
+    "label": "default"
+  },
+  "kinds": {
+    "Fixture": {
+      "comparisons": 23,
+      "max_error": 5.960464477539063e-08,
+      "mean_error": 5.618892173285052e-10,
+      "p99_error": 2.9802322387695312e-08,
+      "worst_gate_ratio": 0.0019221853248070316
+    },
+    "Grade": {
+      "comparisons": 154,
+      "max_error": 7.62939453125e-06,
+      "mean_error": 2.4217871548900354e-09,
+      "p99_error": 4.76837158203125e-07,
+      "worst_gate_ratio": 0.005779048706169239
+    },
+    "Blur": {
+      "comparisons": 229,
+      "max_error": 3.814697265625e-06,
+      "mean_error": 4.0813565814337735e-10,
+      "p99_error": 1.0550022125244202e-07,
+      "worst_gate_ratio": 0.00465742670467872
+    },
+    "Transform": {
+      "comparisons": 723,
+      "max_error": 1.9073486328125e-06,
+      "mean_error": 7.628634274035482e-10,
+      "p99_error": 2.384185791015625e-07,
+      "worst_gate_ratio": 0.005954713569642965
+    },
+    "Merge": {
+      "comparisons": 405,
+      "max_error": 0.0001220703125,
+      "mean_error": 2.0414836050861406e-09,
+      "p99_error": 9.5367431640625e-07,
+      "worst_gate_ratio": 0.008236815021314818
+    }
+  }
+}
