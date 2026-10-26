@@ -51,13 +51,16 @@ class DefaultsTests(unittest.TestCase):
             cfg = chrome.filter_config(kind, SPECS[kind]["params"])
             for has_mask in (False, True):
                 with self.subTest(kind=kind, has_mask=has_mask):
-                    self.assertFalse(cfg.active(has_mask))
+                    # A kind whose own kernel ignores the mask input (Roto) has the wrapper gate a wired mask.
+                    self.assertEqual(cfg.active(has_mask), has_mask and kind in chrome.WRAPPER_GATED)
 
     def test_the_wrapper_with_nothing_changed_gives_the_kernels_own_pixels_with_a_mask_and_mix(self):
         """The wrapper's gating is the kernels' own: forced on, with every knob at its default, it reproduces
         the old path for every node it covers, with a wired mask and a mix below one."""
         rng_image, rng_mask = image(), matte()
         for kind in chrome.FILTER_CHROME:
+            if kind in chrome.WRAPPER_GATED:
+                continue                                  # its kernel has no mask gating of its own to reproduce
             spec = SPECS[kind]
             slots = list(spec["inputs"]) + list(spec.get("optional_inputs", []))
             inputs = [None] * len(slots)
@@ -87,7 +90,8 @@ class DefaultsTests(unittest.TestCase):
                 self.assertEqual((params["unpremult"], params["invert_unpremult"]), ("none", 0), kind)
             if channels is not None and kind not in chrome.NATIVE_CHANNELS:
                 self.assertEqual(params["channels"], channels, kind)
-            self.assertIn("mix", params, kind)
+            if kind not in chrome.WRAPPER_GATED:           # Nuke's Roto has no mix
+                self.assertIn("mix", params, kind)
 
     def test_an_old_document_without_the_knobs_loads_with_the_defaults_and_renders_the_same(self):
         graph = Graph()

@@ -55,6 +55,9 @@ FILTER_CHROME = {
     # The Draw nodes have Nuke's mask strip too; their background is the `image` input, or transparent black.
     "Ramp": (None, True, False), "Radial": (None, True, False), "Rectangle": (None, True, False),
     "Noise": (None, True, False), "Text": (None, True, False), "Grid": (None, True, False),
+    # Roto's mask input and mask channel gate its result against the bg (or transparent black); `channels` limits which
+    # channels it may write (the guide's Roto lists `channels` on its tracking tab, so its default here is "all").
+    "Roto": ("all", True, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.
@@ -63,6 +66,8 @@ NATIVE_CHANNELS = frozenset({
     "Sharpen", "Median", "Glow", "Soften", "Defocus", "ZDefocus", "DirBlur", "EdgeBlur", "Erode", "Laplacian",
 })
 NATIVE_VALUES = frozenset({"rgb", "rgba", "alpha"})
+# Kinds whose own kernel does not read the mask input: the wrapper gates a wired mask for them, even with every chrome knob unchanged.
+WRAPPER_GATED = frozenset({"Roto"})
 # Merge-like nodes gate against input B (Nuke's background); everything else gates against its first input.
 B_INPUT = frozenset({"Merge", "Dissolve", "ChannelMerge"})
 
@@ -72,6 +77,7 @@ FILTER_PARAM_NAMES = ("channels", "maskChannelInput", "invert_mask", "inject", "
 
 # Draw nodes: kind -> {default of each knob it gains}. `invert` and `premultiply_mode` of Roto are its own.
 DRAW_KINDS_WITH_CHROME = ("Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid")
+BLANK_BACKGROUND_KINDS = DRAW_KINDS_WITH_CHROME + ("Roto",)       # with no image wired they draw on transparent black
 DRAW_DEFAULTS = {"output": "rgba", "premult": "none", "cliptype": "format", "replace": 0, "invert": 0, "opacity": 1.0}
 DRAW_CHROME = {kind: dict(DRAW_DEFAULTS) for kind in DRAW_KINDS_WITH_CHROME}
 DRAW_CHROME["Roto"] = {"output": "alpha", "cliptype": "format", "replace": 0, "opacity": 1.0}
@@ -233,7 +239,7 @@ class FilterConfig:
             return True
         if self.mask_channel != "none":
             return True
-        if has_mask and (self.invert_mask or self.inject):
+        if has_mask and (self.invert_mask or self.inject or self.kind in WRAPPER_GATED):
             return True
         return False
 
@@ -280,7 +286,10 @@ def needs_full_frame(kind, p):
     if kind in ("Roto", "RotoPaint"):
         # Their tiles are rasterised straight from the shape list, so the Draw strip runs on the whole image.
         draw = draw_config(kind, p)
-        return bool(draw is not None and (draw.replace or draw.opacity != 1.0 or draw.output != draw.default_output))
+        if draw is not None and (draw.replace or draw.opacity != 1.0 or draw.output != draw.default_output):
+            return True
+        cfg = filter_config(kind, p)
+        return bool(cfg is not None and cfg.active(False))
     cfg = filter_config(kind, p)
     if cfg is None:
         return False
@@ -366,7 +375,7 @@ def run_evaluator(kind, p, inputs, inner, spec, force=False):
     source = inputs[index] if len(inputs) > index else None
     slot = mask_slot(spec)
     mask = inputs[slot] if slot is not None and len(inputs) > slot else None
-    blank = source is None and kind in DRAW_KINDS_WITH_CHROME          # a Draw node with no image draws on transparent black
+    blank = source is None and kind in BLANK_BACKGROUND_KINDS          # a Draw node with no image draws on transparent black
     if cfg is None or (source is None and not blank) or not (force or cfg.active(mask is not None)):
         return inner(kind, p, inputs)
     if blank:
@@ -491,7 +500,7 @@ def run_tile(kind, p, inputs, inner, spec, buffered_region, force=False):
     source = inputs[index] if len(inputs) > index else None
     slot = mask_slot(spec)
     mask = inputs[slot] if slot is not None and len(inputs) > slot else None
-    blank = source is None and kind in DRAW_KINDS_WITH_CHROME
+    blank = source is None and kind in BLANK_BACKGROUND_KINDS
     if cfg is None or (source is None and not blank) or not (force or cfg.active(mask is not None)):
         return inner(p, inputs)
     if blank:

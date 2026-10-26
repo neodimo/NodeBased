@@ -505,7 +505,7 @@ SPECS = {
     # see docs/ROTO_TRACKING.md. A wired optional "bg" is Nuke's Roto input: the plate passes
     # through and the shape's coverage becomes its alpha, at the plate's own format. Nuke's
     # premultiply control defaults to none.
-    "Roto": {"inputs": [], "optional_inputs": ["bg"], "params": {"width": 960, "height": 540, "invert": 0, "premultiply_mode": "none"}},
+    "Roto": {"inputs": [], "optional_inputs": ["bg", "mask"], "params": {"width": 960, "height": 540, "invert": 0, "premultiply_mode": "none"}},
     # RotoPaint filters a plate and stores ordered shapes/strokes in node_data. The optional
     # second image is the reveal source; clone samples from the plate at a source frame.
     # D1: "Detect specks..." samples dustbust_frame_start..dustbust_frame_end and proposes clone
@@ -1407,6 +1407,8 @@ def bypass_slot(node):
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     if kind in DRAW_KINDS:
         return "image"
+    if kind == "Roto":
+        return "bg"      # Nuke's disabled Roto passes its background input (a transparent frame when none is wired)
     if kind == "Group":
         from .groups import group_slots
         return next(iter(group_slots(node)), None)   # the lowest-numbered input; None with no Input node
@@ -2143,6 +2145,7 @@ def _add_roto_bg_slot(nodes):
             continue
         if node.get("type") == "Roto" and isinstance(node.get("inputs"), dict):
             node["inputs"].setdefault("bg", None)
+            node["inputs"].setdefault("mask", None)       # Nuke's Roto mask input (fidelity step C)
         if node.get("type") == "Shuffle" and isinstance(node.get("inputs"), dict):
             node["inputs"].setdefault("A", None)      # the second input of Nuke's two-input Shuffle
         graph = node.get("graph")

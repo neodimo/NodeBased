@@ -95,7 +95,8 @@
   "Roto": {
    "nodebased": "Roto",
    "inputs": [
-    {"nodebased": "bg", "nuke": "bg", "kind": "mapped"}
+    {"nodebased": "bg", "nuke": "bg", "kind": "mapped"},
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
    "knobs": [
     {"nodebased": ["width", "height"], "nuke": ["format"], "kind": "components", "reason": "NodeBased sizes a generator with width/height; Nuke sets the format knob"},
@@ -109,9 +110,13 @@
     {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
     {"nodebased": ["cliptype"], "nuke": ["cliptype"], "kind": "same"},
     {"nodebased": ["replace"], "nuke": ["replace"], "kind": "same"},
-    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"}
+    {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
    ],
-   "skip_default": ["format"]
+   "skip_default": ["format", "channels"]
   },
   "Text": {
    "nodebased": "Text",

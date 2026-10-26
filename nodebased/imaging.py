@@ -2559,7 +2559,7 @@ class Evaluator:
                     # instead, exactly as an unwired bypass on any other optional-image slot would.
                     if sources and sources[0] is not None:
                         raster = values[sources[0]]
-                    elif kind in _DRAW_KINDS:
+                    elif kind in _DRAW_KINDS or kind == "Roto":
                         raster = Raster.of(np.zeros((int(params["height"]), int(params["width"]), 4),
                                                      np.float32))
                     elif sources and sources[0] is None:
@@ -2986,6 +2986,14 @@ class Evaluator:
         channel, invert, inject, un-premultiply by) is at its defaults runs its own kernel exactly as before;
         a changed chrome knob runs that kernel with the chrome off and applies it around the result
         (nodebased/ops2d_chrome.py)."""
+        if kind == "Roto":
+            # The mask strip (mask input, mask channel, invert, inject, channels) wraps the draw strip, which wraps the matte.
+            from .core import SPECS
+            return _chrome.run_evaluator(
+                kind, p, inputs,
+                lambda k, q, i: _chrome.run_roto(
+                    k, q, i, lambda k2, q2, i2: Evaluator._windowed_kernel_inner(k2, q2, i2, frame, data, cancel, progress, roto_rasterizer)),
+                SPECS[kind])
         if kind in _chrome.FILTER_CHROME:
             from .core import SPECS
             return _chrome.run_evaluator(

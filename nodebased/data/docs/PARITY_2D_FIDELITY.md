@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 62.7 / 100** (167 nodes scored, rank-weighted; 64.6 counting only the nodes NodeBased has).
+**Overall fidelity: 63.4 / 100** (167 nodes scored, rank-weighted; 65.3 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -26,7 +26,7 @@ Per node, five components, each a fraction from 0 to 1:
 | Group | Rank-weighted | Plain mean | Nodes |
 |---|---|---|---|
 | Image | 25.4 | 25.1 | 6 |
-| Draw | 55.4 | 50.2 | 17 |
+| Draw | 62.5 | 51.5 | 17 |
 | Time | 56.2 | 53.3 | 13 |
 | Channel | 87.4 | 81.0 | 5 |
 | Color | 69.3 | 68.5 | 34 |
@@ -57,7 +57,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 29.5 | 18 (10/75) | 100 | 50 | 0 | - | no fixture |
+| 1 | Roto | `Roto` | supported | 52.1 | 18 (10/75) | 100 | 100 | 80 | - | no fixture |
 | 2 | Text | `Text` | supported | 63.9 | 38 (12/41) | 79 | 100 | 100 | - | no fixture |
 | 3 | Rectangle | `Rectangle` | supported | 88.6 | 81 (9/13) | 91 | 100 | 100 | - | no fixture |
 | 4 | Ramp | `Ramp` | supported | 92.2 | 89 (9/10) | 83 | 100 | 100 | - | no fixture |
@@ -279,10 +279,10 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
-| 1 | Roto (Draw #1) | `Roto` | 70.55 | 29.5 | 65 secondary knobs missing; sockets missing: `mask`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 2 | Read (Image #1) | `Read` | 67.69 | 32.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `format`, `proxy`, `proxy_format`, `first`, `before`, `last` and 8 more; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
-| 3 | Grade (Color #1) | `Grade` | 58.88 | 41.1 | primary knobs missing: `blackpoint`, `whitepoint`, `black`, `white`, `gamma`, `reverse`, `black_clamp`, `white_clamp`; node chrome missing: mask fringe; formula cases failing: `grade_affine`, `grade_default_clamps`, `grade_levels`, `grade_gamma` |
-| 4 | Write (Image #2) | `Write` | 48.36 | 3.3 | primary knobs missing: `proxy`, `frame_mode`, `frame`, `colorspace`, `premultiplied`, `raw`, `views`, `create_directories` and 9 more; 37 secondary knobs missing; node chrome missing: channels selector |
+| 1 | Read (Image #1) | `Read` | 67.69 | 32.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `format`, `proxy`, `proxy_format`, `first`, `before`, `last` and 8 more; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
+| 2 | Grade (Color #1) | `Grade` | 58.88 | 41.1 | primary knobs missing: `blackpoint`, `whitepoint`, `black`, `white`, `gamma`, `reverse`, `black_clamp`, `white_clamp`; node chrome missing: mask fringe; formula cases failing: `grade_affine`, `grade_default_clamps`, `grade_levels`, `grade_gamma` |
+| 3 | Write (Image #2) | `Write` | 48.36 | 3.3 | primary knobs missing: `proxy`, `frame_mode`, `frame`, `colorspace`, `premultiplied`, `raw`, `views`, `create_directories` and 9 more; 37 secondary knobs missing; node chrome missing: channels selector |
+| 4 | Roto (Draw #1) | `Roto` | 47.88 | 52.1 | 65 secondary knobs missing; node chrome missing: mask fringe |
 | 5 | Merge (Merge #1) | `Merge` | 47.45 | 52.5 | primary knobs missing: `sRGB`, `screen_alpha`, `metainput`, `rangeinput`, `Achannels`, `Bchannels`, `output`, `also_merge`; node chrome missing: mask fringe, bbox handling; formula cases failing: `merge_color-burn`, `merge_color-dodge`, `merge_divide`, `merge_geometric`, `merge_hard-light`, `merge_multiply` and 2 more |
 | 6 | Blur (Filter #1) | `Blur` | 45.56 | 54.4 | primary knobs missing: `filter`, `quality`, `crop`; node chrome missing: mask fringe |
 | 7 | TimeOffset (Time #1) | `TimeOffset` | 44.44 | 55.6 | primary knobs missing: `rounding_mode`, `enable_path_mask`, `mask_patterns`, `inject_mask` |

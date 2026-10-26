@@ -496,6 +496,9 @@ class TileExecutor:
             if node.get("input_outputs"):
                 # Named output layers are carried only by the full-frame Raster representation.
                 return False
+            if node["type"] == "Roto" and isinstance(node.get("inputs"), dict) and node["inputs"].get("mask") is not None:
+                # A wired Roto mask gates the result against the bg; Roto tiles are drawn straight from the shapes.
+                return False
             if _chrome.needs_full_frame(node["type"], node["params"]):
                 # A chrome knob that names a layer reads Raster.layers, which only the whole-image path has.
                 return False
