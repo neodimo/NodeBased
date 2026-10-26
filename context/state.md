@@ -1,5 +1,25 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (7:05 PM on 2026-10-25 PDT)
+
+`main` moved `6e6e65d6` -> `a85129fe` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a85129fe` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1025-1855.log`, started 6:55 PM): **Ran 6417 tests in 501.693 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, Claude Sonnet 5.5), step B of 3: the GPU island matches CPU pixels everywhere, and fails safely.** Commits:
+  - `4304619d` R6-1 step B notes: pixel and failure gate results on the RTX 3080 Ti, Radeon 8060S and llvmpipe (62 tests, 1080p realistic comp frames 1 to 240, 6,400 random parameter sets per adapter), the two kernel defects found, the named CPU boundaries; evidence under benchmarks/2d-gpu/R6-1
+  - `d0c08906` R6-1 part 3: the GPU island's pixel and failure gates: exact sample fractions and CPU-order cubic weights fix the Transform differences next to extreme HDR values; tests/test_gpu2d.py grows to 62 tests (mix, alpha, impulses, tiny and far windows, seeded sweep, non-finite, fake-device failure cases) and passes on the RTX 3080 Ti, Radeon 8060S and llvmpipe
+  Diff: 13 files changed, 5692 insertions(+), 55 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D on the GPU, Claude Sonnet 5.5) (6:35 PM on 2026-10-25 PDT)
 
 `main` moved `2a5fcaa6` -> `695b0796` (lane commits cherry-picked onto main in lane order) and then to this

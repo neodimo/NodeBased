@@ -1,3 +1,9 @@
+## 2026-10-25 — continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) step B of 3: the GPU island matches CPU pixels everywhere, and fails safely (integrator tick)
+
+- **What was done:** `main` `6e6e65d6` -> `a85129fe` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `a85129fe`: Ran 6417 tests in 501.693 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-25 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step B of N: the shared Nuke node controls on every 2D node, plus Nuke's two-input Shuffle, Lane 8 (2D on the GPU, Claude Sonnet 5.5) step A of 3: the four-node GPU island runs the realistic comp, with zero readbacks between its kernels (integrator tick)
 
 - **What was done:** `main` `2a5fcaa6` -> `695b0796` plus this docs commit. Evidence and per-lane commit
