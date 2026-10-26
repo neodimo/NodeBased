@@ -65,12 +65,17 @@ HOLD_FACTOR = 3.0
 HOLD_MAX_SECONDS = 0.060
 HOLD_STEP_SECONDS = 0.010
 # A scene the idle shader clock slows down (the smoke, splats and glass scene: its half-size frames wait 40 to 47 ms on the card for the first
-# four frames, 22 and then 8 ms once the clock has risen; 10/25) draws the frames after a slow first frame at a quarter of the chosen size
-# (the card waits 17 ms) until a frame has waited under LOWER_EXIT_FACTOR of the first one at that size or LOWER_MAX_SECONDS have passed, then
-# at half size as before. A first frame is slow when the card kept it longer than SLOW_FRAME_FRACTION of the frame time.
-SLOW_FRAME_FRACTION = 0.5
-LOWER_EXIT_FACTOR = 0.65
+# four frames, 22 and then 8 ms once the clock has risen, and spend 25 ms more on the processor, so they arrive 70 ms apart; 10/25) draws the
+# frames after a slow one at a quarter of the chosen size (the card waits 17 ms) until a frame at a quarter waits under LOWER_EXIT_FRACTION of
+# the frame time, or LOWER_MAX_SECONDS have passed, then at half size. A frame among the first three is slow when the card kept it longer than
+# SLOW_FRAME_FRACTION of the frame time or it came SLOW_PERIOD_SECONDS after the one before (the gate on the interval between pictures is
+# 54 ms; the furnished room's idle-clock frames arrive 44 to 50 ms apart and are left alone). The link-up test compares with the slow frame
+# only when the quarter-size frames went on for LOWER_KEEP_FRAMES (a clock that stayed down).
+SLOW_FRAME_FRACTION = 0.85
+SLOW_PERIOD_SECONDS = 0.052
+LOWER_EXIT_FRACTION = 0.35
 LOWER_MAX_SECONDS = 0.8
+LOWER_KEEP_FRAMES = 3
 
 _active = [None]           # the Ramp of the play that is starting, while its frames are drawn at the lower size
 
@@ -84,9 +89,10 @@ class Ramp:
         self.scale = self.base_scale         # the frames run at 1/scale of the chosen size along each side (twice the base while lowered)
         self.lowered = False       # a slow first frame: the frames run at twice the base scale until the card's clock has risen
         self.lowered_at = None
-        self.lowered_first = None  # the card's wait for the first frame at the lowest size
+        self.lowered_frames = 0    # frames drawn at twice the base scale
         self.lowered_done = False  # lowering happens once per ramp
         self.baseline = None       # what `observe` compares with when the first frames were not all at the base scale
+        self.last_frame_at = None  # when the previous frame was read back
         self.clock = clock
         self.began = clock()
         self.times = []
@@ -112,25 +118,29 @@ class Ramp:
             self.up = max(self.times[-2:]) <= UP_FACTOR * baseline
         return self.up
 
-    def lower(self, seconds):
-        """The card waited `seconds` for a frame at the base scale. A first frame that kept it longer than SLOW_FRAME_FRACTION of the frame time
-        means the shader clock is down: the frames that follow run at twice the base scale (see LOWER_EXIT_FACTOR), and the link-up test
-        compares the base-scale frames after them with this one."""
-        if self.lowered_done or self.up or len(self.times) > 2 or seconds <= SLOW_FRAME_FRACTION * self.budget:
+    def lower(self, seconds, period=None):
+        """The card waited `seconds` for a frame at the base scale, which came `period` seconds after the one before. A slow frame among the
+        first three (see SLOW_FRAME_FRACTION and SLOW_PERIOD_SECONDS) means the shader clock is down: the frames that follow run at twice the
+        base scale (see LOWER_EXIT_FRACTION), and the link-up test compares the base-scale frames after them with the slowest of the first."""
+        if self.lowered_done or self.up or len(self.times) > 3:
+            return
+        if seconds <= SLOW_FRAME_FRACTION * self.budget and not (period is not None and period > SLOW_PERIOD_SECONDS):
             return
         self.lowered = self.lowered_done = True
         self.lowered_at = self.clock()
         self.baseline = max(self.times)
         self.scale = self.base_scale * 2
+        self.lowered_frames = 0
 
     def observe_lowered(self, seconds):
-        """A frame at twice the base scale: back to the base scale once the card has waited under LOWER_EXIT_FACTOR of the first one, or
-        after LOWER_MAX_SECONDS."""
-        if self.lowered_first is None:
-            self.lowered_first = float(seconds)
-        elif seconds <= LOWER_EXIT_FACTOR * self.lowered_first or self.clock() - self.lowered_at >= LOWER_MAX_SECONDS:
+        """A frame at twice the base scale: back to the base scale once the card has waited under LOWER_EXIT_FRACTION of the frame time, or
+        after LOWER_MAX_SECONDS. A clock that came up at once (a few frames) leaves the link-up test as it was."""
+        self.lowered_frames += 1
+        if seconds <= LOWER_EXIT_FRACTION * self.budget or self.clock() - self.lowered_at >= LOWER_MAX_SECONDS:
             self.lowered = False
             self.scale = self.base_scale
+            if self.lowered_frames < LOWER_KEEP_FRAMES:
+                self.baseline = None
 
     def finish(self):
         """The play has stopped: the extra copies stop."""
@@ -173,11 +183,14 @@ def after_frame(state, readback_bytes, seconds):
     ramp = _active[0]
     if ramp is None:
         return
+    now = ramp.clock()
+    period = None if ramp.last_frame_at is None else now - ramp.last_frame_at
+    ramp.last_frame_at = now
     if ramp.lowered:
         ramp.observe_lowered(seconds)
     elif not ramp.up:
         ramp.observe(seconds)
-        ramp.lower(seconds)
+        ramp.lower(seconds, period)
     if ramp.up and ramp.up_at is None:
         ramp.up_at = ramp.clock()
         # A frame at the chosen size arrives longer after its frame starts than one at the lower size (about three times the readback

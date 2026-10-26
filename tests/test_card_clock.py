@@ -60,9 +60,10 @@ def fake_state(device=None):
 
 def never_lower(test):
     """The canned 22 ms frames of the older tests are the idle link's, not a slow shader clock: they must not lower the ramp."""
-    patch = unittest.mock.patch.object(cardclock, "SLOW_FRAME_FRACTION", 10.0)
-    patch.start()
-    test.addCleanup(patch.stop)
+    for name in ("SLOW_FRAME_FRACTION", "SLOW_PERIOD_SECONDS"):
+        patch = unittest.mock.patch.object(cardclock, name, 10.0)
+        patch.start()
+        test.addCleanup(patch.stop)
 
 
 class RampTests(unittest.TestCase):
@@ -258,14 +259,33 @@ class LoweredRampTests(unittest.TestCase):
         self.assertFalse(self.ramp.lowered)
         self.assertEqual(self.ramp.scale, 2)
 
-    def test_the_frames_go_back_to_half_size_when_the_wait_has_fallen_to_two_thirds_of_the_first_quarter_frame(self):
+    def test_the_frames_go_back_to_half_size_when_the_wait_has_fallen_under_a_third_of_the_frame_time(self):
         self.frame(0.040)
-        self.frame(0.017, megabytes=2)          # the first frame at a quarter
+        self.frame(0.017, megabytes=2)          # the first frame at a quarter: the clock is still down
         self.frame(0.016, megabytes=2)
         self.assertTrue(self.ramp.lowered)
         self.frame(0.0096, megabytes=2)         # the clock has risen
         self.assertFalse(self.ramp.lowered)
         self.assertEqual(self.ramp.scale, 2)
+
+    def test_a_scene_whose_quarter_size_frames_are_quick_at_once_goes_back_after_one_and_keeps_the_usual_link_test(self):
+        self.frame(0.010)
+        self.frame(0.012, step=0.070)           # arrived 70 ms after the one before: the smoke scene's slow second frame
+        self.assertTrue(self.ramp.lowered)
+        self.frame(0.007, megabytes=2)
+        self.assertFalse(self.ramp.lowered)
+        self.assertIsNone(self.ramp.baseline)
+
+    def test_frames_that_arrive_44_to_50_ms_apart_are_left_at_half_size(self):
+        for step in (0.044, 0.050, 0.048, 0.046):         # the furnished room on the idle clock
+            self.frame(0.024, step=step)
+        self.assertFalse(self.ramp.lowered)
+
+    def test_a_slow_frame_after_the_first_three_does_not_lower_the_ramp(self):
+        for _ in range(3):
+            self.frame(0.010)
+        self.frame(0.010, step=0.080)
+        self.assertFalse(self.ramp.lowered)
 
     def test_the_frames_go_back_to_half_size_after_the_longest_time_whatever_the_wait(self):
         self.frame(0.040)
@@ -292,7 +312,8 @@ class LoweredRampTests(unittest.TestCase):
 
     def test_the_link_is_up_when_the_half_size_frames_wait_under_a_third_of_the_slow_first_frame(self):
         self.frame(0.040)
-        self.frame(0.017, megabytes=2)
+        for _ in range(3):
+            self.frame(0.017, megabytes=2)
         self.frame(0.0096, megabytes=2)
         self.clock.now += cardclock.MIN_SECONDS
         self.frame(0.020)                      # half size again, the clock up, the link still half asleep
@@ -308,7 +329,8 @@ class LoweredRampTests(unittest.TestCase):
 
     def test_the_hold_before_the_switch_comes_from_the_half_size_frames(self):
         self.frame(0.040)
-        self.frame(0.017, megabytes=2)
+        for _ in range(3):
+            self.frame(0.017, megabytes=2)
         self.frame(0.0096, megabytes=2)
         self.clock.now += cardclock.MIN_SECONDS
         self.frame(0.004)
