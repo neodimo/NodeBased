@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from nodebased.core import CHOICES, LIMITS, SPECS, bypass_slot
+from nodebased import keyerknobs
 from nodebased.imaging import Evaluator
 from nodebased.tiers import Region, input_regions
 from tests.test_2d_parity_step_k1 import DISC, SCREEN, Graph, disc_frame, evaluator_pixels, screen_graph, tile_pixels
@@ -124,8 +125,10 @@ class BlendTilePathTests(unittest.TestCase):
 
 
 def key(image, inside=None, outside=None, clean=None, mask=None, **params):
-    return Evaluator._kernel("ScreenKeyer", dict(SPECS["ScreenKeyer"]["params"], **params),
-                             [image, inside, outside, clean, mask])
+    # The keyer as an older document has it: step H's knobs at the values that leave it as it was (their own tests are in
+    # tests/test_2d_fidelity_h_keyers.py).
+    return Evaluator._kernel("ScreenKeyer", dict(SPECS["ScreenKeyer"]["params"], **keyerknobs.upgrade_params("ScreenKeyer"),
+                                                 **params), [image, inside, outside, clean, mask])
 
 
 def matte(image, **kw):
@@ -247,7 +250,7 @@ class ScreenKeyerBiasColourTests(unittest.TestCase):
 
 class ScreenKeyerW3GraphTests(unittest.TestCase):
     def test_registration_and_slot_order(self):
-        self.assertEqual(SPECS["ScreenKeyer"]["optional_inputs"], ["inside", "outside", "clean", "mask"])
+        self.assertEqual(SPECS["ScreenKeyer"]["optional_inputs"], ["inside", "outside", "clean", "mask", "bg"])
         for name in SPECS["ScreenKeyer"]["params"]:
             with self.subTest(param=name):
                 self.assertTrue(name in LIMITS or name in CHOICES or name == "mix", name)

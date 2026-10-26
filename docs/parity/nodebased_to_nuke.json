@@ -2355,7 +2355,9 @@
     {"nodebased": ["hue_center", "hue_width", "hue_softness", "sat_min", "sat_max"], "nuke": ["lut"], "kind": "components", "reason": "NodeBased replaces Nuke's hue/saturation curve with range params"},
     {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["output_enabled"], "nuke": ["output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', the switch that lets the key write its channel"},
+    {"nodebased": ["output_channel"], "nuke": ["output#2"], "kind": "renamed", "reason": "same control under another name; Nuke's second `output` knob names the channel the key writes (rgba.alpha)"}
    ],
    "skip_default": ["lut"]
   },
@@ -2366,7 +2368,8 @@
     {"nodebased": "inside", "nuke": "InM", "kind": "mapped"},
     {"nodebased": "outside", "nuke": "OutM", "kind": "mapped"},
     {"nodebased": "clean", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
-    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "bg", "nuke": "bg", "kind": "mapped"}
    ],
    "knobs": [
     {"nodebased": ["screen_red", "screen_green", "screen_blue"], "nuke": ["screenColor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
@@ -2388,9 +2391,33 @@
     {"nodebased": ["edge_grade_saturation"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["edge_width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["bias_colours"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["unpremultiply_result"], "nuke": ["unPreMultiply"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `unPreMultiply`"},
+    {"nodebased": ["use_alpha_bias_for_despill"], "nuke": ["gangBiases"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `gangBiases`"},
+    {"nodebased": ["screen_despot_black"], "nuke": ["screenDespotBlack"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenDespotBlack`"},
+    {"nodebased": ["screen_despot_white"], "nuke": ["screenDespotWhite"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenDespotWhite`"},
+    {"nodebased": ["screen_replace"], "nuke": ["screenReplaceMethod"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `screenReplaceMethod`"},
+    {"nodebased": ["mid_point"], "nuke": ["midPoint"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `midPoint`"},
+    {"nodebased": ["shadow_gain"], "nuke": ["lowGain"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `lowGain`"},
+    {"nodebased": ["midtone_gain"], "nuke": ["midGain"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `midGain`"},
+    {"nodebased": ["highlight_gain"], "nuke": ["highGain"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `highGain`"},
+    {"nodebased": ["source_alpha"], "nuke": ["sourceAlphaHandling"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `sourceAlphaHandling`"},
+    {"nodebased": ["inside_replace"], "nuke": ["insideReplaceMethod"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `insideReplaceMethod`"},
+    {"nodebased": ["source_x_method"], "nuke": ["SourceXMethod"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `SourceXMethod`"},
+    {"nodebased": ["source_y_method"], "nuke": ["SourceYMethod"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `SourceYMethod`"},
+    {"nodebased": ["source_crop_left"], "nuke": ["SourceCropL"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `SourceCropL`"},
+    {"nodebased": ["source_crop_right"], "nuke": ["SourceCropR"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `SourceCropR`"},
+    {"nodebased": ["source_crop_bottom"], "nuke": ["SourceCropB"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `SourceCropB`"},
+    {"nodebased": ["source_crop_top"], "nuke": ["SourceCropT"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `SourceCropT`"},
+    {"nodebased": ["inside_component"], "nuke": ["insideComponent"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `insideComponent`"},
+    {"nodebased": ["outside_component"], "nuke": ["outsideComponent"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `outsideComponent`"},
+    {"nodebased": ["screen_replace_red", "screen_replace_green", "screen_replace_blue"], "nuke": ["screenReplaceColour"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["inside_replace_red", "inside_replace_green", "inside_replace_blue"], "nuke": ["insideReplaceColour"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["source_edge_red", "source_edge_green", "source_edge_blue"], "nuke": ["SourceEdgeColour"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": [], "nuke": ["about"], "kind": "unsupported", "reason": "Nuke's About button opens the plug-in's credits and version box; NodeBased has no plug-in credits window to open"}
    ],
-   "value_map": {"show": {"final": "final result"}}
+   "value_map": {"show": {"final": "final result"}},
+   "skip_default": ["insideComponent", "outsideComponent"]
   },
   "Primatte": {
    "nodebased": null,

@@ -23,6 +23,7 @@ from . import metadata
 from . import pathmask as _pathmask
 from . import readproxy as _readproxy
 from . import ops2d_chrome as _chrome
+from . import keyerknobs as _keyerknobs
 from . import shapes
 from . import sourcepool
 from . import tiers
@@ -4036,8 +4037,8 @@ class Evaluator:
             # Image plus the optional inside, outside, clean-plate and mix-mask inputs, all fitted to the
             # image's own rectangle (pointwise after the matte's shrink and softness, so no window grows).
             source = inputs[0]
-            others = [inputs[i] if len(inputs) > i else None for i in (1, 2, 3, 4)]
-            for name, other in zip(("inside", "outside", "clean", "mask"), others):
+            others = [inputs[i] if len(inputs) > i else None for i in (1, 2, 3, 4, 5)]
+            for name, other in zip(("inside", "outside", "clean", "mask", "bg"), others):
                 if other is not None and other.display != source.display:
                     raise ValueError(
                         f"ScreenKeyer {name} display window {other.display} does not match the image "
@@ -5271,11 +5272,11 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "ScreenKeyer":
             # Slots: image, inside, outside, clean, mask.
-            extra = [inputs[i] if len(inputs) > i else None for i in (1, 2, 3, 4)]
-            for name, other in zip(("inside", "outside", "clean", "mask"), extra):
+            extra = [inputs[i] if len(inputs) > i else None for i in (1, 2, 3, 4, 5)]
+            for name, other in zip(("inside", "outside", "clean", "mask", "bg"), extra):
                 if other is not None and other.shape != inputs[0].shape:
                     raise ValueError(f"ScreenKeyer {name} must match the image's format in M0")
-            filtered = Evaluator._screen_keyer(inputs[0], p, inside=extra[0], outside=extra[1], clean=extra[2])
+            filtered = Evaluator._screen_keyer(inputs[0], p, inside=extra[0], outside=extra[1], clean=extra[2], bg=extra[4])
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=extra[3], mix=p.get("mix", 1.0))
         if kind == "IBKColor":
             filtered = Evaluator._ibk_color(inputs[0], p)
@@ -6030,7 +6031,11 @@ class Evaluator:
                                                                + balance * plate[..., second:second + 1])
             key_diff = np.where(plate_diff > 1e-4, plate_diff, np.float32(key_diff))
         saturation = diff / key_diff - float(p.get("alpha_bias", 0.0))
-        return np.clip(1.0 - saturation * float(p.get("screen_gain", 1.0)), 0.0, 1.0).astype(np.float32)
+        gain = float(p.get("screen_gain", 1.0))
+        tuning = _keyerknobs.tuning_gain(rgb, p)
+        if tuning is not None:
+            gain = gain * tuning               # Keylight's tuning: the gain follows the source's luminance
+        return np.clip(1.0 - saturation * gain, 0.0, 1.0).astype(np.float32)
 
     @staticmethod
     def _screen_clip(matte, p):
@@ -6047,11 +6052,14 @@ class Evaluator:
         return clipped.astype(np.float32)
 
     @staticmethod
-    def _screen_matte_final(rgb, p, clean=None, inside=None, outside=None):
+    def _screen_matte_final(rgb, p, clean=None, inside=None, outside=None, parts=False):
         """The finished matte: screen difference, clip and rollback, then shrink/grow (positive
         grows the screen, i.e. minimum filters the matte) and softness (a Gaussian, sigma = size / 3),
-        then the garbage mattes: the `inside` input's alpha forces foreground (matte = max) and the
-        `outside` input's alpha forces background (matte *= 1 - outside, so outside wins an overlap)."""
+        then the despot (black holes filled, white specks removed), then the garbage mattes: the
+        `inside` input's mask forces foreground (matte = max) and the `outside` input's mask forces
+        background (matte *= 1 - outside, so outside wins an overlap). Which part of each input forms
+        its mask is `inside_component` / `outside_component` (alpha by default). With `parts` the
+        screen matte, the inside mask and the outside mask come back as well."""
         matte = Evaluator._screen_clip(Evaluator._screen_matte(rgb, p, clean), p)
         shrink = float(p.get("screen_shrink", 0.0))
         if abs(shrink) >= 0.5:
@@ -6063,18 +6071,31 @@ class Evaluator:
             matte = Evaluator._gaussian_axis(Evaluator._gaussian_axis(matte, radius, sigma, axis=1),
                                              radius, sigma, axis=0)
         matte = np.clip(matte, 0.0, 1.0)
+        matte = _keyerknobs.despot(matte, abs(float(p.get("screen_despot_black", 0.0))),
+                                   abs(float(p.get("screen_despot_white", 0.0))), Evaluator._box_extreme)
+        screen = matte
+        inside_mask = outside_mask = None
         if inside is not None:
-            matte = np.maximum(matte, inside[..., 3:4])
+            inside_mask = _keyerknobs.component(inside, p.get("inside_component", "alpha"))
+            matte = np.maximum(matte, inside_mask)
         if outside is not None:
-            matte = matte * (1.0 - outside[..., 3:4])
-        return np.clip(matte, 0.0, 1.0).astype(np.float32)
+            outside_mask = _keyerknobs.component(outside, p.get("outside_component", "alpha"))
+            matte = matte * (1.0 - outside_mask)
+        matte = np.clip(matte, 0.0, 1.0).astype(np.float32)
+        if parts:
+            return matte, screen, inside_mask, outside_mask
+        return matte
 
     @staticmethod
-    def _screen_keyer(image, p, inside=None, outside=None, clean=None):
+    def _screen_keyer(image, p, inside=None, outside=None, clean=None, bg=None):
         """Keylight-style screen-difference keyer (docs/PARITY_2D.md). `view` picks the output:
-        final (despilled colour premultiplied by the matte), status (0 background, 1 foreground,
-        mid-grey for every pixel the matte leaves neither), screen_matte (the matte as grey and
-        alpha) or intermediate (the despilled colour with the input's alpha, no matte)."""
+        final (despilled colour premultiplied by the matte, or straight with `unpremultiply_result`),
+        status (0 background, 1 foreground, mid-grey for every pixel the matte leaves neither),
+        screen_matte (the matte as grey and alpha), intermediate (the despilled colour with the
+        input's alpha, no matte), source and source_alpha (the cropped source and its alpha as grey),
+        inside_mask and outside_mask (the garbage mattes as grey) and composite (the premultiplied
+        result over the `bg` input, black when none is wired)."""
+        image = _keyerknobs.crop_source(image, p)
         rgb = image[..., :3]
         key_rgb = rgb
         preblur = abs(float(p.get("screen_preblur", 0.0)))
@@ -6082,7 +6103,10 @@ class Evaluator:
             radius, sigma = int(math.ceil(preblur)), preblur / 3.0
             key_rgb = Evaluator._gaussian_axis(Evaluator._gaussian_axis(rgb, radius, sigma, axis=1),
                                                radius, sigma, axis=0)
-        matte = Evaluator._screen_matte_final(key_rgb, p, clean, inside, outside)
+        matte, screen, inside_mask, outside_mask = Evaluator._screen_matte_final(key_rgb, p, clean, inside, outside, parts=True)
+        # Keylight's Source Alpha "normal": the source's own alpha limits the matte.
+        if p.get("source_alpha", "ignore") == "normal":
+            matte = (matte * image[..., 3:4]).astype(np.float32)
         view = p.get("keyer_view", "final")
         if view == "screen_matte":
             return np.concatenate([matte, matte, matte, matte], axis=2).astype(np.float32)
@@ -6090,11 +6114,21 @@ class Evaluator:
             partial = (matte > 0.0) & (matte < 1.0)
             grey = np.where(partial, 0.5, matte).astype(np.float32)
             return np.concatenate([grey, grey, grey, np.ones_like(grey)], axis=2)
+        if view == "source":
+            return image.astype(np.float32)
+        if view in ("source_alpha", "inside_mask", "outside_mask"):
+            grey = {"source_alpha": image[..., 3:4], "inside_mask": inside_mask, "outside_mask": outside_mask}[view]
+            if grey is None:
+                grey = np.zeros_like(matte)
+            return np.concatenate([grey, grey, grey, grey], axis=2).astype(np.float32)
         key = np.array([p.get("screen_red", 0.1), p.get("screen_green", 0.8), p.get("screen_blue", 0.2)],
                        dtype=np.float32)
         bias = float(p.get("despill_bias", 0.5))
         if p.get("bias_colours"):
             bias = Evaluator._bias_weight(Evaluator._bias_colour(p, "despill_bias"), int(np.argmax(key)), bias)
+        if p.get("use_alpha_bias_for_despill"):
+            # Keylight's gangBiases: the despill leans the way the alpha bias does.
+            bias = Evaluator._bias_weight(Evaluator._bias_colour(p, "alpha_bias"), int(np.argmax(key)), bias)
         despilled = Evaluator._despill(rgb, key, bias)
         gain = float(p.get("edge_grade_gain", 1.0))
         gamma = float(p.get("edge_grade_gamma", 1.0))
@@ -6113,8 +6147,24 @@ class Evaluator:
             luma = np.sum(graded * np.array([0.2126, 0.7152, 0.0722], np.float32), axis=2, keepdims=True)
             graded = luma + (graded - luma) * saturation
         despilled = despilled * (1.0 - edge) + graded * edge
+        # Replacement: what stands where the screen showed through (the semi-transparent part of the matte) and where the
+        # inside mask turned the picture opaque.
+        method = p.get("screen_replace", "none")
+        if method != "none":
+            share = np.where((matte > 0.0) & (matte < 1.0), 1.0 - matte, 0.0).astype(np.float32)
+            despilled = _keyerknobs.replace(method, despilled, rgb, share, _keyerknobs.replace_colour(p, "screen_replace"))
+        method = p.get("inside_replace", "none")
+        if method != "none" and inside_mask is not None:
+            share = np.clip(inside_mask - screen, 0.0, 1.0).astype(np.float32)
+            despilled = _keyerknobs.replace(method, despilled, rgb, share, _keyerknobs.replace_colour(p, "inside_replace"))
         if view == "intermediate":
             return np.concatenate([despilled, image[..., 3:4]], axis=2).astype(np.float32)
+        if view == "composite":
+            behind = np.zeros_like(image) if bg is None else bg
+            premultiplied = despilled * matte + behind[..., :3] * (1.0 - matte)
+            return np.concatenate([premultiplied, matte + behind[..., 3:4] * (1.0 - matte)], axis=2).astype(np.float32)
+        if p.get("unpremultiply_result"):
+            return np.concatenate([despilled, matte], axis=2).astype(np.float32)
         return np.concatenate([despilled * matte, matte], axis=2).astype(np.float32)
 
     @staticmethod
@@ -6233,6 +6283,9 @@ class Evaluator:
         alpha = (hue_gate * sat_gate).astype(np.float32)
         if p.get("invert"):
             alpha = 1.0 - alpha
+        if "output_enabled" in p or "output_channel" in p:
+            # Nuke's output switch and channel: the matte goes to the chosen channel (the alpha by default).
+            return _keyerknobs.hue_output(image, alpha, p)
         return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
 
     @staticmethod

@@ -267,8 +267,9 @@ def _screen_keyer_support(params):
     def reach(name):
         size = abs(float(params.get(name, 0.0)))
         return 0 if size < 0.5 else int(math.ceil(size))
+    from .keyerknobs import despot_reach
     return (reach("screen_preblur") + reach("screen_shrink") + reach("screen_softness")
-            + reach("edge_width"))
+            + reach("edge_width") + despot_reach(params))
 
 
 def _screen_keyer_rule(params, region, arity):
@@ -737,7 +738,7 @@ PIXEL_UNIT_PARAMS = {
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
     "IBKColor": ("fill_size", "screen_erode"),
-    "ScreenKeyer": ("screen_shrink", "screen_softness"),
+    "ScreenKeyer": ("screen_shrink", "screen_softness", "screen_despot_black", "screen_despot_white"),
     "Grain": ("red_size", "green_size", "blue_size"),
     "Flare": ("position_x", "position_y", "length", "size"),
     "Glint": ("length",), "Sparkles": ("size",),

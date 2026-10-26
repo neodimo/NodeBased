@@ -1515,8 +1515,10 @@ class TileExecutor:
             image = image_artifact.pixels
             aligned = [_align_artifact_to(a, image_artifact.region) if a is not None else None
                        for a in inputs[1:4]]
+            bg_artifact = inputs[5] if len(inputs) > 5 and inputs[5] is not None else None
+            bg = None if bg_artifact is None else _align_artifact_to(bg_artifact, image_artifact.region)
             filtered = imaging.Evaluator._screen_keyer(image, params, inside=aligned[0], outside=aligned[1],
-                                                       clean=aligned[2])
+                                                       clean=aligned[2], bg=bg)
             mask_artifact = inputs[4] if len(inputs) > 4 and inputs[4] is not None else None
             if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:
                 mh, mw = mask_artifact.pixels.shape[:2]

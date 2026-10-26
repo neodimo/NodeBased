@@ -234,6 +234,13 @@ def step_g_params(kind):
     return {**cornerpinknobs.upgrade_params(kind), **profilenode.upgrade_params(kind), **trackerknobs.upgrade_params(kind)}
 
 
+def step_h_params(kind):
+    """The knobs fidelity step H added (the keyers, RotoPaint, Precomp, the time and metadata nodes, CurveTool, AddMix,
+    DropShadow, Glow, Median, Shuffle, STMap and KeyMix), at the values that leave an older document's node as it was."""
+    from . import keyerknobs
+    return {**keyerknobs.upgrade_params(kind)}
+
+
 def upgrade_nodes(nodes):
     """Give an older document's nodes the chrome knobs at their no-change defaults. Walks Group graphs."""
     for node in nodes.values():
@@ -241,7 +248,7 @@ def upgrade_nodes(nodes):
             continue
         params = node.get("params")
         added = spec_params(node.get("type"))
-        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type")), **step_f_params(node.get("type")), **step_g_params(node.get("type"))}
+        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type")), **step_f_params(node.get("type")), **step_g_params(node.get("type")), **step_h_params(node.get("type"))}
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)
@@ -401,6 +408,10 @@ def needs_full_frame(kind, p):
             return True
         cfg = filter_config(kind, p)
         return bool(cfg is not None and cfg.active(False))
+    if kind == "ScreenKeyer":
+        from . import keyerknobs
+        if keyerknobs.needs_full_frame(kind, p):
+            return True      # a crop is a fraction of the whole picture, which a tile does not hold
     if kind in ("Blur", "Sharpen", "Soften"):
         from . import blurknobs
         if blurknobs.needs_full_frame(kind, p):

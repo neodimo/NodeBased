@@ -198,7 +198,7 @@ class ScreenKeyerGraphTests(unittest.TestCase):
         for name in SPECS["ScreenKeyer"]["params"]:
             with self.subTest(param=name):
                 self.assertTrue(name in LIMITS or name in CHOICES or name == "mix", name)
-        self.assertEqual(CHOICES["keyer_view"], ["final", "status", "screen_matte", "intermediate"])
+        self.assertEqual(CHOICES["keyer_view"][:4], ["final", "status", "screen_matte", "intermediate"])
 
     def test_evaluator_graph_end_to_end(self):
         g = Graph()

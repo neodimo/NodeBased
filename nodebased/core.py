@@ -177,6 +177,7 @@ from . import cornerpinknobs as _cornerpinknobs
 from . import profilenode as _profilenode
 from . import trackerknobs as _trackerknobs
 from . import viewerknobs as _viewerknobs
+from . import keyerknobs as _keyerknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -740,7 +741,7 @@ SPECS = {
     # fields -- see docs/PARITY_2D.md's note on the simplification.
     "HueKeyer": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
-                           "sat_min": 0.0, "sat_max": 1.0, "invert": 0, "mix": 1.0}},
+                           "sat_min": 0.0, "sat_max": 1.0, "invert": 0, "mix": 1.0, **_keyerknobs.new_params("HueKeyer")}},
     # ChromaKeyer (step K1): a colour key on an RGB `key` colour picked from the screen. Alpha ramps
     # from 0 at `key_tolerance` to 1 at `key_tolerance + key_softness` in units of the key colour's
     # own distance from grey, on brightness-normalised colour so shadowed screen keys like lit
@@ -778,7 +779,9 @@ SPECS = {
     # pixel; and `bias_colours`, which takes the matte's channel balance from `alpha_bias_*` and the
     # despill's from `despill_bias_*` (the second of the two non-screen channels' share of their sum)
     # instead of `screen_balance` and `despill_bias`.
-    "ScreenKeyer": {"inputs": ["image"], "optional_inputs": ["inside", "outside", "clean", "mask"],
+    # Step H adds Keylight's `bg` input (the Composite view's background; last so the slots before it keep their places) and
+    # its Tuning, Screen Matte, Inside Mask, Crops and result knobs (nodebased/keyerknobs.py).
+    "ScreenKeyer": {"inputs": ["image"], "optional_inputs": ["inside", "outside", "clean", "mask", "bg"],
                     "params": {"screen_red": 0.1, "screen_green": 0.8, "screen_blue": 0.2,
                               "screen_gain": 1.0, "screen_balance": 0.5, "despill_bias": 0.5,
                               "alpha_bias": 0.0, "clip_black": 0.0, "clip_white": 1.0,
@@ -787,7 +790,8 @@ SPECS = {
                               "edge_grade_saturation": 1.0, "edge_width": 1.0,
                               "bias_colours": 0, "alpha_bias_red": 0.5, "alpha_bias_green": 0.5,
                               "alpha_bias_blue": 0.5, "despill_bias_red": 0.5, "despill_bias_green": 0.5,
-                              "despill_bias_blue": 0.5, "keyer_view": "final", "mix": 1.0}},
+                              "despill_bias_blue": 0.5, "keyer_view": "final", "mix": 1.0,
+                              **_keyerknobs.new_params("ScreenKeyer")}},
     # Cryptomatte (step K3): an ID matte from the Cryptomatte layer set of a multichannel EXR (docs/PARITY_2D.md).
     # `crypto_layer` names the set (empty = the first), `matte_list` lists the names (or `<raw ids>`)
     # to extract, `crypto_view` picks the output. Whole-image path only: it reads named layers.
@@ -1624,6 +1628,15 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "bias_colours": (0, 1), "alpha_bias_red": (0.0, 1.0), "alpha_bias_green": (0.0, 1.0),
           "alpha_bias_blue": (0.0, 1.0), "despill_bias_red": (0.0, 1.0), "despill_bias_green": (0.0, 1.0),
           "despill_bias_blue": (0.0, 1.0),
+          # Keylight's step H knobs (nodebased/keyerknobs.py).
+          "unpremultiply_result": (0, 1), "use_alpha_bias_for_despill": (0, 1),
+          "screen_despot_black": (0.0, 50.0), "screen_despot_white": (0.0, 50.0),
+          "screen_replace_red": (0.0, 10.0), "screen_replace_green": (0.0, 10.0), "screen_replace_blue": (0.0, 10.0),
+          "mid_point": (0.0, 1.0), "shadow_gain": (0.0, 10.0), "midtone_gain": (0.0, 10.0), "highlight_gain": (0.0, 10.0),
+          "inside_replace_red": (0.0, 10.0), "inside_replace_green": (0.0, 10.0), "inside_replace_blue": (0.0, 10.0),
+          "source_edge_red": (0.0, 1000.0), "source_edge_green": (0.0, 1000.0), "source_edge_blue": (0.0, 1000.0),
+          "source_crop_left": (0.0, 1.0), "source_crop_right": (0.0, 1.0), "source_crop_bottom": (0.0, 1.0),
+          "source_crop_top": (0.0, 1.0),
           # HueKeyer's simplified hue + saturation range.
           "hue_center": (0.0, 360.0), "hue_width": (0.0, 360.0), "hue_softness": (0.0, 180.0),
           "sat_min": (0.0, 1.0), "sat_max": (0.0, 1.0),
@@ -2009,7 +2022,11 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            # IBKColor and IBKGizmo (step K1).
            "screen_type": ["green", "blue"],
            # ScreenKeyer's output view (step K2).
-           "keyer_view": ["final", "status", "screen_matte", "intermediate"],
+           "keyer_view": list(_keyerknobs.KEYER_VIEWS),
+           "screen_replace": list(_keyerknobs.REPLACE_METHODS), "inside_replace": list(_keyerknobs.REPLACE_METHODS),
+           "source_alpha": list(_keyerknobs.SOURCE_ALPHA), "source_x_method": list(_keyerknobs.CROP_METHODS),
+           "source_y_method": list(_keyerknobs.CROP_METHODS), "inside_component": list(_keyerknobs.COMPONENTS),
+           "outside_component": list(_keyerknobs.COMPONENTS),
            # Cryptomatte's output view (step K3).
            "crypto_view": ["final", "matte", "colors"],
            # Keyer's keyed quantity (group c3).
