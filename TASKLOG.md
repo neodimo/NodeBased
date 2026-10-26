@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step G of N: the Viewer and the Tracker take Nuke's knobs, plus Profile and CornerPin (resume) (integrator tick)
+
+- **What was done:** `main` `9b0e1102` -> `53933a67` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `53933a67`: Ran 7062 tests in 520.382 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) step B of 2: the Roto matte is ready before the frame needs it, and four-CPU machines get the source workers (integrator tick)
 
 - **What was done:** `main` `abae80a5` -> `65306a50` plus this docs commit. Evidence and per-lane commit

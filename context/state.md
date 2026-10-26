@@ -1,5 +1,27 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:15 AM on 2026-10-26 PDT)
+
+`main` moved `9b0e1102` -> `53933a67` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `53933a67` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-1003.log`, started 10:03 AM): **Ran 7062 tests in 520.382 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step G of N: the Viewer and the Tracker take Nuke's knobs, plus Profile and CornerPin (resume).** Commits:
+  - `1015b884` viewerknobs: a document with no settings uses the default Viewer knobs (the playback-tick tests drive a bare document; the step G Viewer knobs raised KeyError there)
+  - `268d08ff` 2D fidelity G part 4: the Viewer takes Nuke's knobs (frame range and lock, frame increment, apply LUT to colour channels only, ignore pixel aspect, prevent auto zoom, show overscan and overscan, full frame processing, safe zone, format centre, centre f-stop, shutter angle, use GPU for viewer) in settings.viewer.knobs with a Viewer settings window and the viewer_knobs command; the Direct picture draws the same guides and hands back what the card cannot make; a Tracker's own transform knobs reach its cache key; the mapping, docs and the re-scored report (85.4)
+  - `59ae6856` 2D fidelity G part 3: the Tracker takes Nuke's matching options (pre-track filter, luminance change, clamp, max error, predict, pattern grab behaviours, snap to markers), the transform modes (none, 1pt, remove and add jitter) with the live-link switch and its own Transform knobs, per-track T/R/S and pattern and search areas, and the Add, Delete, Select all and Average tracks buttons; the mapping and the re-scored report
+  - `8d0e46f5` 2D fidelity G parts 1 and 2: CornerPin takes enable1 to enable4, an extra matrix, clamp, black outside, shutter motion blur and the Copy 'from', Copy 'to' and Set to input buttons (new CornerPin defaults to cubic); Profile takes a frame range, channels and an open-profile-panel window; the mapping and the re-scored report (83.6 to 84.3)
+  Diff: 29 files changed, 3496 insertions(+), 235 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (9:15 AM on 2026-10-26 PDT)
 
 `main` moved `abae80a5` -> `65306a50` (lane commits cherry-picked onto main in lane order) and then to this
