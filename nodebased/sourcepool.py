@@ -159,6 +159,7 @@ class SourcePool:
         self._queue = deque()
         self._ahead = deque()
         self._threads = []
+        self._spawned = 0
         self._shutdown = False
         self._in_flight = 0
         self.peak_in_flight = 0
@@ -205,9 +206,24 @@ class SourcePool:
 
     def _start_workers_locked(self):
         while len(self._threads) < self.max_workers:
-            thread = threading.Thread(target=self._worker, name=f"nodebased-source-{len(self._threads)}", daemon=True)
+            thread = threading.Thread(target=self._worker, name=f"nodebased-source-{self._spawned}", daemon=True)
+            self._spawned += 1
             self._threads.append(thread)
             thread.start()
+
+    def resize(self, workers):
+        """Change the number of workers while the pool lives (a setting changed in the app). More threads start
+        with the next task; fewer retire as each finishes the task it is on, and a task no worker takes stays
+        with the thread that joins it."""
+        workers = max(0, min(MAX_WORKERS, int(workers)))
+        with self._cond:
+            if self._shutdown or workers == self.max_workers:
+                return
+            self.max_workers = workers
+            self.ahead_limit = max(1, workers // 2)
+            if workers and (self._queue or self._ahead):
+                self._start_workers_locked()
+            self._cond.notify_all()
 
     def _take_locked(self):
         """The next task for a worker: a source of the frame in hand first, then read-ahead (one stream at
@@ -241,6 +257,11 @@ class SourcePool:
                 task = None
                 while task is None:
                     if self._shutdown:
+                        return
+                    if len(self._threads) > self.max_workers:       # the pool shrank: this idle worker retires
+                        current = threading.current_thread()
+                        if current in self._threads:
+                            self._threads.remove(current)
                         return
                     task = self._take_locked()
                     if task is None:

@@ -58,8 +58,8 @@ def default_workers() -> int:
     if raw:
         try:
             value = int(raw)
-            if value > 0:
-                return value
+            if value >= 0:
+                return value        # 0 turns the pool off, as NODEBASED_SOURCE_WORKERS=0 does for the source pool
         except ValueError:
             pass
     return DEFAULT_WORKERS
@@ -81,11 +81,30 @@ class DecodeAheadPool:
         self._epoch = 0
         self.hits = 0
         self.misses = 0
-        for index in range(self.max_workers):
+        self._spawned = 0
+        with self._lock:
+            self._start_workers_locked()
+
+    def _start_workers_locked(self):
+        while len(self._threads) < self.max_workers:
             thread = threading.Thread(target=self._worker,
-                                      name=f"nodebased-decode-ahead-{index}", daemon=True)
-            thread.start()
+                                      name=f"nodebased-decode-ahead-{self._spawned}", daemon=True)
+            self._spawned += 1
             self._threads.append(thread)
+            thread.start()
+
+    def resize(self, workers):
+        """Change the number of decode threads while the pool lives (a setting changed in the app). More
+        threads start at once; fewer retire as each finishes the decode it is on, queued work keeps its place."""
+        workers = max(0, int(workers))
+        with self._lock:
+            if self._shutdown or workers == self.max_workers:
+                return
+            surplus = len(self._threads) - workers
+            self.max_workers = workers
+            self._start_workers_locked()
+            for _ in range(max(0, surplus)):
+                self._tasks.put(None)           # one retirement notice per surplus thread, behind the queued decodes
 
     @property
     def epoch(self) -> int:
@@ -128,6 +147,10 @@ class DecodeAheadPool:
             task = self._tasks.get()
             try:
                 if task is None:
+                    with self._lock:
+                        current = threading.current_thread()
+                        if current in self._threads:
+                            self._threads.remove(current)
                     return
                 key, decode_fn, epoch = task
                 try:
@@ -187,16 +210,18 @@ class DecodeAheadPool:
                 self._epoch += 1
                 while True:
                     try:
-                        key, _decode_fn, _epoch = self._tasks.get_nowait()
+                        task = self._tasks.get_nowait()
                     except queue.Empty:
                         break
-                    self._pending.pop(key, None)
+                    if task is not None:         # a retirement notice from `resize` has no key
+                        self._pending.pop(task[0], None)
                     self._tasks.task_done()
                 for _ in self._threads:
                     self._tasks.put(None)
+            threads = list(self._threads)
         if wait:
             deadline = None if timeout is None else time.monotonic() + float(timeout)
-            for thread in self._threads:
+            for thread in threads:
                 remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
                 thread.join(remaining)
 

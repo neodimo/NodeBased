@@ -94,8 +94,10 @@ from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTEN
                      sequence_path, sequence_pattern)
 from .cachetier import DiskCache, SharedMemoryBudget
 from .decodepool import DecodeAheadPool
+from . import sourcepool
 from .sourcepool import SourcePool
 from .rotoahead import RotoAhead
+from . import playbackprefs
 from .tileexec import TileExecutor
 from .tiles import TileCache, TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
@@ -749,6 +751,9 @@ class Preferences:
     DIRECT_EDIT = "interface/direct_picture_edit"
     DIRECT_MAIN = "interface/direct_picture_main"
     GRAPHICS_ADAPTER = gpu3d.ADAPTER_SETTING
+    PLAYBACK_GPU_NODES = "playback/gpu_nodes"
+    PLAYBACK_DECODE_WORKERS = "playback/decode_workers"
+    PLAYBACK_SOURCE_WORKERS = "playback/source_workers"
     WORKSPACE = "workspace"
 
     def __init__(self):
@@ -814,6 +819,40 @@ class Preferences:
             self._store.setValue(self.GRAPHICS_ADAPTER, str(name))
         else:
             self._store.remove(self.GRAPHICS_ADAPTER)
+        self._store.sync()
+
+    def gpu_nodes(self):
+        """Whether Grade, Transform, Blur and Merge run on the graphics card while playing and editing
+        (`playbackprefs.DEFAULT_GPU_NODES` until the artist chooses)."""
+        return playbackprefs.parse_flag(self._store.value(self.PLAYBACK_GPU_NODES, None),
+                                        playbackprefs.DEFAULT_GPU_NODES)
+
+    def set_gpu_nodes(self, enabled):
+        self._store.setValue(self.PLAYBACK_GPU_NODES, bool(enabled))
+        self._store.sync()
+
+    def decode_workers(self):
+        """Threads decoding the Read frames ahead of the playhead; None is automatic."""
+        return playbackprefs.parse_workers(self._store.value(self.PLAYBACK_DECODE_WORKERS, None),
+                                           playbackprefs.MAX_DECODE_WORKERS)
+
+    def set_decode_workers(self, count):
+        self._set_workers(self.PLAYBACK_DECODE_WORKERS, count, playbackprefs.MAX_DECODE_WORKERS)
+
+    def source_workers(self):
+        """Threads computing the independent sources of one frame side by side; None is automatic."""
+        return playbackprefs.parse_workers(self._store.value(self.PLAYBACK_SOURCE_WORKERS, None),
+                                           playbackprefs.MAX_SOURCE_WORKERS)
+
+    def set_source_workers(self, count):
+        self._set_workers(self.PLAYBACK_SOURCE_WORKERS, count, playbackprefs.MAX_SOURCE_WORKERS)
+
+    def _set_workers(self, key, count, maximum):
+        count = playbackprefs.parse_workers(count, maximum)
+        if count is None:
+            self._store.remove(key)
+        else:
+            self._store.setValue(key, int(count))
         self._store.sync()
 
     def display_cache_float32(self):
@@ -8104,6 +8143,8 @@ class PreviewSignals(QObject):
     thumbnail = Signal(str, str, object)
     # Progress inside one slow frame: (payload, stage, fraction, info). See renderprogress.py.
     progress = Signal(object, str, float, object)
+    # The GPU nodes were switched on, off or refused by the card: (result dict). See Window.apply_gpu_nodes.
+    gpu_nodes = Signal(object)
 
 
 class ProjectSettingsDialog(QDialog):
@@ -8117,7 +8158,9 @@ class ProjectSettingsDialog(QDialog):
 
     def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
                  max_panels=5, cache_float32=False, auto_3d=False,
-                 adapters=(), graphics_adapter="", graph_opengl=False, direct_edit=True, adapter_now=None):
+                 adapters=(), graphics_adapter="", graph_opengl=False, direct_edit=True, adapter_now=None,
+                 gpu_nodes=False, gpu_nodes_note="", decode_workers=None, source_workers=None,
+                 automatic_workers=(0, 0), workers_note=""):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -8199,6 +8242,32 @@ class ProjectSettingsDialog(QDialog):
         self.max_panels.setValue(int(max_panels))
         self.max_panels.setObjectName("max-panels-spin")
         interface.addRow("Max properties panels", self.max_panels)
+        self.gpu_nodes = QCheckBox("Process Grade, Transform, Blur and Merge on the graphics card")
+        self.gpu_nodes.setObjectName("gpu-nodes")
+        self.gpu_nodes.setChecked(bool(gpu_nodes))
+        self.gpu_nodes.setToolTip("The 2D nodes of a comp stay on the card between nodes and come back once per frame. "
+                                  "Takes effect at once. A card that cannot run them leaves the CPU nodes in use. "
+                                  "It uses the graphics adapter chosen above.")
+        interface.addRow("2D nodes", self.gpu_nodes)
+        self.gpu_nodes_note = QLabel(gpu_nodes_note)
+        self.gpu_nodes_note.setWordWrap(True)
+        self.gpu_nodes_note.setObjectName("gpu-nodes-note")
+        self.gpu_nodes_note.setVisible(bool(gpu_nodes_note))
+        interface.addRow("", self.gpu_nodes_note)
+        self.decode_workers = self._workers_combo("decode-workers", playbackprefs.MAX_DECODE_WORKERS,
+                                                  decode_workers, automatic_workers[0])
+        self.decode_workers.setToolTip("Threads that decode the Read frames ahead of the playhead. Takes effect at once.")
+        interface.addRow("Decode workers", self.decode_workers)
+        self.source_workers = self._workers_combo("source-workers", playbackprefs.MAX_SOURCE_WORKERS,
+                                                  source_workers, automatic_workers[1])
+        self.source_workers.setToolTip("Threads that compute the Reads, Roto and generators of one frame side by side. "
+                                       "Takes effect at once.")
+        interface.addRow("Source workers", self.source_workers)
+        self.workers_note = QLabel(workers_note)
+        self.workers_note.setWordWrap(True)
+        self.workers_note.setObjectName("workers-note")
+        self.workers_note.setVisible(bool(workers_note))
+        interface.addRow("", self.workers_note)
         layout.addLayout(interface)
         theme_note = QLabel("The theme is stored per machine, not in the project: a comp handed to "
                             "another artist keeps their colours, not yours. Node colours stay fixed "
@@ -8241,6 +8310,16 @@ class ProjectSettingsDialog(QDialog):
         buttons.addWidget(cancel)
         buttons.addWidget(apply)
         layout.addLayout(buttons)
+
+    @staticmethod
+    def _workers_combo(name, maximum, current, automatic):
+        combo = QComboBox()
+        combo.setObjectName(name)
+        combo.addItem(f"Automatic ({int(automatic)} on this machine)", None)
+        for count in range(0, int(maximum) + 1):
+            combo.addItem("Off" if count == 0 else str(count), count)
+        combo.setCurrentIndex(max(0, combo.findData(current)))
+        return combo
 
     def changes(self):
         return {"color": {"view": self.view.currentText()},
@@ -8828,19 +8907,14 @@ class Window(QMainWindow):
         # integrated stand-in lost ~11% throughput to even one concurrent decoder. Respect the
         # process CPU affinity (important for laptop/cgroup workers); an explicit pool override
         # remains available for measured deployments.
-        try:
-            available_cpus = len(os.sched_getaffinity(0))
-        except (AttributeError, OSError):
-            available_cpus = os.cpu_count() or 1
-        if "NODEBASED_DECODE_AHEAD_WORKERS" in os.environ:
-            self.decode_pool = DecodeAheadPool()
-        else:
-            self.decode_pool = DecodeAheadPool(max_workers=0 if available_cpus <= 4 else None)
+        # The counts come from Settings (Playback), the environment overrides and, with neither, that automatic rule
+        # (playbackprefs.py); a change in Settings resizes the pools at once (apply_playback_workers).
+        self.decode_pool = DecodeAheadPool(max_workers=playbackprefs.decode_workers(self.preferences.decode_workers()))
         self.evaluator.decode_pool = self.decode_pool
         # The independent sources of one frame (Reads, Roto, generators) compute side by side on a few
         # workers, joined where the walk reaches each node -- sourcepool.py. Off at three CPUs or fewer
         # and with NODEBASED_SOURCE_WORKERS=0; one worker at four CPUs (measured, docs/PERFORMANCE.md).
-        self.source_pool = SourcePool()
+        self.source_pool = SourcePool(max_workers=playbackprefs.source_workers(self.preferences.source_workers()))
         self.evaluator.source_pool = self.source_pool
         # While a played frame is finished and shown, the pool computes the Roto matte of the next frames
         # (rotoahead.py); NODEBASED_ROTO_AHEAD=0 turns it off.
@@ -8861,6 +8935,11 @@ class Window(QMainWindow):
         self.signals.interim.connect(self.preview_interim)
         self.signals.progress.connect(self.preview_progress)
         self.signals.thumbnail.connect(self.thumbnail_ready)
+        self.signals.gpu_nodes.connect(self.gpu_nodes_ready)
+        # The GPU nodes (Settings, Playback): off until chosen. The card is opened on the preview worker so the window
+        # does not wait for it, and a card that refuses leaves the CPU nodes in use (apply_gpu_nodes).
+        self.gpu_nodes_state = {"active": False, "error": None, "adapter": None, "pending": False}
+        self.apply_gpu_nodes()
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(35)
@@ -11548,7 +11627,111 @@ class Window(QMainWindow):
             self.display_view.setCurrentText(view)
             self.display_view.blockSignals(False)
 
+    GPU_NODES_BUDGET_MB = 512
+
+    def apply_playback_workers(self):
+        """Resize the decode and source pools to the saved choice (or the environment's); takes effect at once."""
+        decode = playbackprefs.decode_workers(self.preferences.decode_workers())
+        source = playbackprefs.source_workers(self.preferences.source_workers())
+        self.decode_pool.resize(decode)
+        self.source_pool.resize(source)
+        return decode, source
+
+    def apply_gpu_nodes(self, announce=False):
+        """Bring the evaluator in line with the GPU nodes choice (or NODEBASED_GPU_NODES) without a restart.
+
+        The card is opened, or released, on the preview worker, between two frames, so a frame in flight never
+        sees the backend change under it. The caches are cleared at the switch so no picture mixes both."""
+        want = playbackprefs.gpu_nodes_wanted(self.preferences.gpu_nodes())
+        state = self.gpu_nodes_state
+        if want and self.evaluator.gpu2d is None and not state["pending"]:
+            state["pending"] = True
+            self.executor.submit(self._install_gpu_nodes, announce)
+        elif not want and (self.evaluator.gpu2d is not None or state["error"]):
+            if self.evaluator.gpu2d is not None:
+                self.executor.submit(self._remove_gpu_nodes, announce)
+            else:
+                state.update(error=None)
+
+    def _install_gpu_nodes(self, announce):
+        """Preview worker: open the island on the adapter Settings chose and install it on the evaluator."""
+        from . import gpu2d
+        result = {"active": False, "error": None, "adapter": None, "announce": announce}
+        try:
+            override = os.environ.get("NODEBASED_GPU2D_MB")
+            budget = (int(override) if override else self.GPU_NODES_BUDGET_MB) << 20
+            backend = gpu2d.GPU2D.open("default", budget)
+            if backend is None:
+                result["error"] = gpu2d.GPU2D.open_error or "no graphics device"
+            else:
+                backend.warm()
+                self.evaluator.clear()
+                self.evaluator.gpu2d = backend
+                result.update(active=True, adapter=backend.describe())
+        except Exception as exc:        # a card that refuses to open or to compile the island leaves the CPU nodes in use
+            result["error"] = f"{type(exc).__name__}: {exc}"
+            self.evaluator.gpu2d = None
+        self.signals.gpu_nodes.emit(result)
+
+    def _remove_gpu_nodes(self, announce, reason=None):
+        backend = self.evaluator.gpu2d
+        self.evaluator.gpu2d = None
+        self.evaluator.clear()
+        if backend is not None:
+            try:
+                backend.release_all()
+            except Exception:
+                pass
+        self.signals.gpu_nodes.emit({"active": False, "error": reason, "adapter": None, "announce": announce,
+                                     "removed": True})
+
+    def gpu_nodes_ready(self, result):
+        """Qt thread: the GPU nodes were installed, removed or refused; say so and draw the frame again."""
+        state = self.gpu_nodes_state
+        state.update(active=bool(result.get("active")), error=result.get("error"), adapter=result.get("adapter"),
+                     pending=False)
+        self.display_cache.clear()
+        self.tile_executor.cache.clear()
+        self.request_preview()
+        if result.get("active"):
+            message = "GPU nodes on: Grade, Transform, Blur and Merge run on the graphics card"
+        elif result.get("error"):
+            message = f"GPU nodes unavailable ({result['error']}); the CPU nodes stay in use"
+        else:
+            message = "GPU nodes off: the CPU nodes are in use"
+        if result.get("announce") or result.get("error"):
+            self.statusBar().showMessage(message, 10000)
+        # A choice made while the card was opening is applied now (the answer above may already be stale).
+        if playbackprefs.gpu_nodes_wanted(self.preferences.gpu_nodes()) != bool(result.get("active")) and not result.get("error"):
+            self.apply_gpu_nodes(announce=bool(result.get("announce")))
+
+    def _check_gpu_nodes_lost(self):
+        """Qt thread, after a frame: a card that lost its device is dropped for good, with a message."""
+        backend = self.evaluator.gpu2d
+        if backend is not None and getattr(backend, "lost", False) and not self.gpu_nodes_state.get("pending"):
+            self.gpu_nodes_state["pending"] = True
+            self.executor.submit(self._remove_gpu_nodes, True, "the graphics device was lost")
+
+    def gpu_nodes_note_text(self):
+        state = self.gpu_nodes_state
+        if playbackprefs.gpu_nodes_forced():
+            return f"{playbackprefs.GPU_NODES_ENV} is set, so this choice has no effect until it is unset."
+        if state.get("error"):
+            return f"The card refused: {state['error']}. The CPU nodes stay in use."
+        if state.get("active") and state.get("adapter"):
+            info = state["adapter"]
+            name = info.get("device") if isinstance(info, dict) else str(info)
+            return f"Running on {name}."
+        return ""
+
+    def workers_note_text(self):
+        forced = [name for name in (playbackprefs.DECODE_WORKERS_ENV, playbackprefs.SOURCE_WORKERS_ENV)
+                  if playbackprefs.workers_forced(name)]
+        return (f"{', '.join(forced)} is set, so that count follows it instead of this choice." if forced else "")
+
     def project_settings(self):
+        gpu_note = self.gpu_nodes_note_text()
+        shown_gpu_nodes = playbackprefs.gpu_nodes_wanted(self.preferences.gpu_nodes())
         dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self,
                                        theme=self.theme_name, thumbnails=self.show_thumbnails,
                                        accent=self.accent_color, max_panels=self.panel_cap,
@@ -11558,7 +11741,14 @@ class Window(QMainWindow):
                                        adapter_now=gpu3d.adapter_choice(),
                                        graphics_adapter=self.preferences.graphics_adapter(),
                                        graph_opengl=self.preferences.graph_opengl(),
-                                       direct_edit=self.preferences.direct_edit())
+                                       direct_edit=self.preferences.direct_edit(),
+                                       gpu_nodes=shown_gpu_nodes,
+                                       gpu_nodes_note=gpu_note,
+                                       decode_workers=self.preferences.decode_workers(),
+                                       source_workers=self.preferences.source_workers(),
+                                       automatic_workers=(playbackprefs.automatic_decode_workers(sourcepool.available_cpus()),
+                                                          playbackprefs.automatic_source_workers(sourcepool.available_cpus())),
+                                       workers_note=self.workers_note_text())
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -11580,6 +11770,15 @@ class Window(QMainWindow):
             if dialog.graph_opengl.isChecked() != self.preferences.graph_opengl():
                 self.preferences.set_graph_opengl(dialog.graph_opengl.isChecked())
                 self.statusBar().showMessage("Node graph drawing changed: restart NodeBased to use it", 8000)
+            if dialog.gpu_nodes.isChecked() != shown_gpu_nodes:
+                self.preferences.set_gpu_nodes(dialog.gpu_nodes.isChecked())
+                self.apply_gpu_nodes(announce=True)
+            if (dialog.decode_workers.currentData() != self.preferences.decode_workers()
+                    or dialog.source_workers.currentData() != self.preferences.source_workers()):
+                self.preferences.set_decode_workers(dialog.decode_workers.currentData())
+                self.preferences.set_source_workers(dialog.source_workers.currentData())
+                decode, source = self.apply_playback_workers()
+                self.statusBar().showMessage(f"Workers changed: {decode} decode, {source} source", 6000)
             new_cache_float32 = dialog.cache_float32.isChecked()
             if new_cache_float32 != self.preferences.display_cache_float32():
                 self.preferences.set_display_cache_float32(new_cache_float32)
@@ -15537,6 +15736,8 @@ class Window(QMainWindow):
         one is converted and shown. Everything else about the frame waits for `preview_ready`."""
         request, cancel = payload
         _trace_mark("evaluated")
+        if self.evaluator.gpu2d is not None:
+            self._check_gpu_nodes_lost()
         cancel.released = True
         self.preview_queue.finish(cancel)
         self.busy = False
@@ -16949,6 +17150,13 @@ class Window(QMainWindow):
         self.decode_pool.shutdown()
         self.roto_ahead.cancel()
         self.source_pool.shutdown(wait=True, timeout=2)
+        backend = self.evaluator.gpu2d
+        if backend is not None:
+            self.evaluator.gpu2d = None
+            try:
+                backend.release_all()
+            except Exception:
+                pass
         if self.server:
             self.server.close()
         QApplication.instance().removeEventFilter(self)
