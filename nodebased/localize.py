@@ -35,11 +35,14 @@ def wanted(policy, path):
         return True
     if policy != DEFAULT_POLICY:
         return False
+    folders = auto_folders()
+    if not folders:         # no folder is named: nothing can match, so the file's real path is not looked up (a played Read asked every frame)
+        return False
     try:
         target = Path(path).expanduser().resolve()
     except OSError:
         return False
-    return any(folder == target or folder in target.parents for folder in auto_folders())
+    return any(folder == target or folder in target.parents for folder in folders)
 
 
 def applies(params):

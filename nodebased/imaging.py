@@ -2605,8 +2605,8 @@ class Evaluator:
                     fingerprint = ["<black>", source_frame, str(Path(reference).resolve()),
                                    stat.st_size, stat.st_mtime_ns]
                 else:
-                    stat = Path(resolved).stat()
-                    fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
+                    from .media import file_identity
+                    fingerprint = list(file_identity(resolved))
             if kind == "Write" and params.get("reading") and params.get("path") and not node["disabled"]:
                 # Read file: the file is part of the answer, so a replaced or deleted file re-keys the Write.
                 from . import writenode

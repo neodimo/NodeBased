@@ -183,8 +183,8 @@ def _compute_node_digests(document, tier, frame, solve=None):
                     fingerprint = ["<black>", source_frame, str(Path(reference).resolve()),
                                    stat.st_size, stat.st_mtime_ns]
             else:
-                stat = Path(resolved).stat()
-                fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
+                from .media import file_identity
+                fingerprint = list(file_identity(resolved))
         if kind == "ReadBundle":
             from .bundle import fingerprint as bundle_fingerprint
             fingerprint = bundle_fingerprint(params, frame)

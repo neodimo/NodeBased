@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import re
+import stat as stat_module
 import tempfile
 import numpy as np
 from .color import to_working, WORKING
@@ -185,6 +186,51 @@ def nearest_sequence_path(path, frame):
         return None
     nearest = min(available, key=lambda value: (abs(value - frame), value))
     return sequence_path(path, nearest)
+
+
+# A played Read looks its file up once per frame, and every system call of that lookup lets go of the interpreter lock and waits to
+# take it back while the other threads (decoders, the matte workers) run: 27 calls cost the walk 11 ms of a 50 ms frame
+# (docs/PERFORMANCE.md, "Lane 8 step notes", 10/26 step C), 22 of them from `Path.resolve()` walking the directory chain of a
+# file whose directories do not change. `file_identity` asks for the same three facts (real path, size, modified time) with two
+# calls: the file's own `lstat` and a `stat` of its directory. The real path of a directory is kept while that directory's
+# device, inode, modified and changed times are the same, so a retargeted link, a replaced directory and a renamed folder all
+# resolve again. The file is never cached: its size and time are read for every evaluation, which is what makes a replaced file
+# re-key the Read. `NODEBASED_READ_LOOKUP=0` goes back to `Path.resolve()` and `Path.stat()`.
+_DIRECTORY_MEMO = {}
+_DIRECTORY_MEMO_LIMIT = 256
+
+
+def lookup_memo_enabled(environ=None):
+    return (os.environ if environ is None else environ).get('NODEBASED_READ_LOOKUP', '1').strip().lower() not in ('0', 'false', 'no', 'off')
+
+
+def clear_directory_memo():
+    _DIRECTORY_MEMO.clear()
+
+
+def file_identity(path):
+    """(real path, size, modified time in ns) of the file `path` names, the values the Read's cache key is made of.
+
+    Same answer as `str(Path(path).resolve())` with `Path(path).stat()` (OSError when the file is missing); two system calls
+    for a plain file in a directory that did not change since the last call, the full `Path.resolve()` otherwise."""
+    text = os.fspath(path)
+    if lookup_memo_enabled() and os.path.isabs(text) and '..' not in re.split(r'[\\/]', text) and not text.endswith(('/', os.sep)):
+        parent, name = os.path.split(os.path.normpath(text))
+        if name and name != '.':
+            info = os.lstat(text)
+            if stat_module.S_ISREG(info.st_mode):         # a link or anything else takes the full path below
+                directory = os.stat(parent)
+                token = (directory.st_dev, directory.st_ino, directory.st_mtime_ns, directory.st_ctime_ns)
+                memo = _DIRECTORY_MEMO.get(parent)
+                if memo is None or memo[0] != token:
+                    memo = (token, os.path.realpath(parent))
+                    if len(_DIRECTORY_MEMO) >= _DIRECTORY_MEMO_LIMIT:
+                        _DIRECTORY_MEMO.clear()
+                    _DIRECTORY_MEMO[parent] = memo
+                return os.path.join(memo[1], name), info.st_size, info.st_mtime_ns
+    resolved = Path(text)
+    info = resolved.stat()
+    return str(resolved.resolve()), info.st_size, info.st_mtime_ns
 
 
 def resolve_source_path(path, frame, missing='error'):
