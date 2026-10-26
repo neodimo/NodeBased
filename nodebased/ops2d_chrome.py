@@ -89,6 +89,40 @@ DRAW_CHROME["Roto"] = {"output": "alpha", "cliptype": "format", "replace": 0, "o
 DRAW_CHROME["RotoPaint"] = {"output": "rgba", "cliptype": "format", "replace": 0, "opacity": 1.0}
 DRAW_PARAM_NAMES = ("output", "premult", "cliptype", "replace", "invert", "opacity")
 CLIP_TYPES = ("no clip", "bbox", "format", "union bbox + format", "intersect bbox + format")
+MAX_CLIP_PIXELS = 1 << 26        # a clip region larger than this (67 million pixels) is refused rather than allocated
+
+
+def natural_box(kind, p):
+    """The area a Rectangle or Radial occupies on its own (its soft edge falls inside the box): what `no clip` lets it draw
+    into, past the format and past the incoming picture. None for the shapes with no finite extent of their own (Ramp, Noise,
+    Grid, Text)."""
+    from .tiers import Region
+    if kind not in ("Rectangle", "Radial"):
+        return None
+    return Region(int(p["box_x"]), int(p["box_y"]), int(p["box_width"]), int(p["box_height"]))
+
+
+def clip_region(cliptype, fmt, bbox, natural=None):
+    """The rectangle a Draw node may draw into for Nuke's `clip to`: the format, the incoming bounding box `bbox` (the
+    format when nothing is wired), their union or intersection, or with `no clip` the union widened to the shape's own area."""
+    box = fmt if bbox is None else bbox
+    if cliptype == "format":
+        region = fmt
+    elif cliptype == "bbox":
+        region = box
+    elif cliptype == "union bbox + format":
+        region = box.union(fmt)
+    elif cliptype == "intersect bbox + format":
+        region = box.intersect(fmt)
+    elif cliptype == "no clip":
+        region = box.union(fmt)
+        if natural is not None and not natural.is_empty:
+            region = region.union(natural)
+    else:
+        raise ValueError(f"Unknown clip to {cliptype!r}; choose one of {', '.join(CLIP_TYPES)}")
+    if region.width * region.height > MAX_CLIP_PIXELS:
+        raise ValueError(f"The clip region {region.width} x {region.height} is too large to draw")
+    return region
 
 # Suggested values of the open-ended knobs. A layer name typed into one is also accepted.
 CHANNEL_CHOICES = ["rgb", "rgba", "alpha", "all", "none", "red", "green", "blue"]
@@ -312,10 +346,12 @@ def needs_full_frame(kind, p):
     if kind in ("Roto", "RotoPaint"):
         # Their tiles are rasterised straight from the shape list, so the Draw strip runs on the whole image.
         draw = draw_config(kind, p)
-        if draw is not None and (draw.replace or draw.opacity != 1.0 or draw.output != draw.default_output):
+        if draw is not None and (draw.replace or draw.opacity != 1.0 or draw.output != draw.default_output or draw.cliptype != "format"):
             return True
         cfg = filter_config(kind, p)
         return bool(cfg is not None and cfg.active(False))
+    if kind in DRAW_KINDS_WITH_CHROME and str(p.get("cliptype", "format")) != "format":
+        return True      # a clip other than the format moves the output window, which tiles of the format cannot hold
     if kind in ("Premult", "Unpremult") and not _is_rgba_token(p.get("premult_by", "rgba.alpha")):
         return True      # divides or multiplies by a layer channel, which only the whole-image path can read
     cfg = filter_config(kind, p)
@@ -688,7 +724,7 @@ def run_roto(kind, p, inputs, inner):
     from .raster import Raster
 
     cfg = draw_config(kind, p)
-    if cfg is None or not (cfg.replace or cfg.opacity != 1.0 or cfg.output != cfg.default_output):
+    if cfg is None or not (cfg.replace or cfg.opacity != 1.0 or cfg.output != cfg.default_output or cfg.cliptype != "format"):
         return inner(kind, p, inputs)
     background = inputs[0] if inputs else None
     work = list(inputs)
@@ -712,4 +748,13 @@ def run_roto(kind, p, inputs, inner):
             pixels = (base + opacity * (pixels - base)).astype(np.float32)
     if cfg.output != cfg.default_output:
         pixels = restrict(base, pixels, parse_channels(cfg.output))
+    if cfg.cliptype != "format":
+        # Clip to: the output reaches only as far as the clip says; what lies beyond it is dropped.
+        region = clip_region(cfg.cliptype, result.display, None if background is None else background.data)
+        clipped = np.zeros((region.height, region.width, 4), np.float32)
+        overlap = region.intersect(box)
+        if not overlap.is_empty:
+            clipped[overlap.y - region.y:overlap.bottom - region.y, overlap.x - region.x:overlap.right - region.x] = \
+                pixels[overlap.y - box.y:overlap.bottom - box.y, overlap.x - box.x:overlap.right - box.x]
+        return Raster(clipped, region, result.display, result.layers, result.meta)
     return Raster(pixels, box, result.display, result.layers, result.meta)

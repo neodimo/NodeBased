@@ -3269,6 +3269,16 @@ class Evaluator:
                 raise ValueError(
                     f"Mask display window {mask.display} does not match {kind}'s own format {out}; "
                     "no silent resampling is performed")
+            cliptype = str(p.get("cliptype", "format"))
+            if cliptype != "format":
+                # Nuke's `clip to`: the node draws into, and outputs, the clip region instead of the format.
+                region = _chrome.clip_region(cliptype, out, None if image is None else image.data, _chrome.natural_box(kind, p))
+                background = (image.fit(region) if image is not None else np.zeros((region.height, region.width, 4), np.float32))
+                shape = Evaluator._draw_shape(kind, p, region.x, region.y, region.width, region.height, frame)
+                composited = _chrome.compose_draw(kind, p, shape, background)
+                pixels = Evaluator._apply_mask_mix(background, composited,
+                                                   mask.fit(region) if mask is not None else None, p.get("mix", 1.0))
+                return Raster(pixels, region, out)
             background = image.fit(out) if image is not None else np.zeros((height, width, 4), np.float32)
             shape = Evaluator._draw_shape(kind, p, 0, 0, width, height, frame)
             composited = _chrome.compose_draw(kind, p, shape, background)

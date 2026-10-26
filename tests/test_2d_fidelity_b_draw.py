@@ -136,7 +136,9 @@ class OptionTests(unittest.TestCase):
         gate = matte * 0.6
         np.testing.assert_allclose(out, composited * gate + background * (1.0 - gate), atol=1e-5)
 
-    def test_cliptype_is_accepted_and_every_setting_draws_the_same_pixels(self):
+    def test_cliptype_is_accepted_and_with_nothing_wired_every_setting_shows_the_same_format(self):
+        """Step C made the clip change the output window (tests/test_2d_fidelity_c_clip.py); with no image wired and the
+        shape inside the format, every setting still shows the same picture in the format."""
         base = evaluator_pixels(drawn("Rectangle").doc, "node")
         for clip in chrome.CLIP_TYPES:
             g = drawn("Rectangle", dict(cliptype=clip))
