@@ -12261,6 +12261,13 @@ class Window(QMainWindow):
                 button = QPushButton("Analyze")
                 button.clicked.connect(analyze_curve_tool)
                 form.addRow(button)
+            if node["type"] == "FrameHold":
+                # Nuke's setToCurrentFrame: first frame becomes the frame the playhead is on.
+                set_current = QPushButton("Set to current frame")
+                set_current.setObjectName("framehold-set-to-current-frame")
+                set_current.clicked.connect(lambda _checked=False, k=key: self.commit_param(
+                    k, "first_frame", float(self.graph_document()["time"]["current"])))
+                form.addRow(set_current)
             if node["type"] in ("Histogram", "Sampler", "MinColor", "MatchGrade"):
                 readout = QLabel("Analyze the configured frame range")
                 readout.setWordWrap(True)

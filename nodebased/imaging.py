@@ -22,6 +22,7 @@ from . import metadata
 from . import ops2d_chrome as _chrome
 from . import shapes
 from . import tiers
+from . import timeknobs
 from . import tracker
 from .raster import Raster, as_array, scale_window
 from .tiers import Region
@@ -680,6 +681,32 @@ def _append_clip_plan(doc_nodes, node, params, frame):
     return [(slot, first + frame - starts[i], 1.0)]
 
 
+def _input_clip_range(doc, key):
+    """The frame range of the clip at `key`, the way a Nuke input states it: a FrameRange or TimeClip upstream, a Read's
+    own first and last, else the timeline's."""
+    nodes = doc["nodes"]
+    span = _branch_frame_range(nodes, key)
+    if span is not None:
+        return span
+    seen = set()
+    while key is not None and key not in seen:
+        seen.add(key)
+        node = nodes[key]
+        if node["type"] == "Read" and not node["disabled"]:
+            first, last = int(node["params"].get("first", 0)), int(node["params"].get("last", 0))
+            if (first, last) != (0, 0):
+                return (min(first, last), max(first, last))
+            break
+        if node["disabled"] or node["type"] in ("Dot", "NoOp", "PostageStamp"):
+            from .core import bypass_slot
+            slot = bypass_slot(node)
+            key = None if slot is None else node["inputs"].get(slot)
+            continue
+        break
+    timeline = doc.get("time", {})
+    return (int(timeline.get("first", 1)), int(timeline.get("last", 100)))
+
+
 def _time_remap_frame(kind, params, frame):
     """The frame a time-remapping node's input is evaluated at, given the timeline `frame` the
     node itself is being evaluated at.
@@ -700,21 +727,11 @@ def _time_remap_frame(kind, params, frame):
     not consult them.
     """
     frame = int(frame)
-    if kind == "TimeOffset":
-        offset = int(params.get("time_offset", 0))
-        return frame + offset if params.get("reverse") else frame - offset
-    if kind == "FrameHold":
-        first = int(params.get("first_frame", 1))
-        increment = int(params.get("increment", 0))
-        if increment <= 0 or frame <= first:
-            return first
-        return first + ((frame - first) // increment) * increment
-    if kind == "Retime":
-        input_start = float(params.get("input_range_start", 0))
-        output_start = float(params.get("output_range_start", 0))
-        speed = float(params.get("speed", 1.0))
-        return int(round(input_start + (frame - output_start) * speed))
-    if kind in ("TimeClip", "FrameRange"):
+    if kind in timeknobs.KINDS:
+        # Nuke's knobs (nodebased/timeknobs.py) decide it; with no input clip to ask, the range is the frame itself.
+        samples = timeknobs.plan(kind, params, frame, (frame, frame)).samples
+        return samples[0][0] if samples else frame
+    if kind == "FrameRange":
         return _time_clip_frame(kind, params, frame)[0]   # the "black" flag lives on that function
     raise ValueError(f"{kind} is not a single-input time-remapping kind")
 
@@ -2522,12 +2539,38 @@ class Evaluator:
                         remap_raster = Raster((a.pixels * np.float32(1.0 - weight)
                                                + b.pixels * np.float32(weight)), a.data, a.display)
                         fingerprint.append(round(weight, 9))
+                elif kind in timeknobs.KINDS:
+                    # Nuke's four retiming nodes (nodebased/timeknobs.py): a plan of input frames with weights (one for
+                    # a whole-frame node, several for Retime's box filter), a black flag and TimeClip's fade gain.
+                    source_key = node["inputs"][_SPECS[kind]["inputs"][0]]
+                    time_plan = timeknobs.plan(kind, params, frame, _input_clip_range(doc, source_key))
+                    parts = [self.evaluate_raster(doc, target=source_key, cancel=cancel, frame=sample_frame,
+                                                  tier=tier, typed=True, return_digest=True)
+                             for sample_frame, _ in time_plan.samples]
+                    if not parts:
+                        sized = self.evaluate_raster(doc, target=source_key, cancel=cancel, frame=time_plan.size_frame,
+                                                     tier=tier, typed=True, return_digest=True)
+                        remap_raster = Raster(np.zeros_like(sized[0].pixels), sized[0].data, sized[0].display,
+                                              meta=sized[0].meta)
+                        fingerprint = ["time_remap", sized[1], "black"]
+                    elif len(parts) == 1:
+                        remap_raster = parts[0][0]
+                        fingerprint = ["time_remap", parts[0][1]]
+                    else:
+                        base = parts[0][0]
+                        if any(r.pixels.shape != base.pixels.shape or r.data != base.data or r.display != base.display
+                               for r, _ in parts):
+                            raise ValueError(f"{node['name']}: retimed frames need matching formats")
+                        blended = sum(r.pixels * np.float32(w) for (r, _), (_, w) in zip(parts, time_plan.samples))
+                        remap_raster = Raster(blended.astype(np.float32), base.data, base.display, meta=base.meta)
+                        fingerprint = ["time_remap", *(d for _, d in parts), *(w for _, w in time_plan.samples)]
+                    if time_plan.gain != 1.0:
+                        remap_raster = Raster((remap_raster.pixels * np.float32(time_plan.gain)).astype(np.float32),
+                                              remap_raster.data, remap_raster.display, meta=remap_raster.meta)
+                        fingerprint.append(round(time_plan.gain, 9))
                 else:
                     black = False
-                    if kind in ("TimeClip", "FrameRange"):
-                        effective_frame, black = _time_clip_frame(kind, params, frame)
-                    else:
-                        effective_frame = _time_remap_frame(kind, params, frame)
+                    effective_frame, black = _time_clip_frame(kind, params, frame)
                     source_key = node["inputs"][_SPECS[kind]["inputs"][0]]
                     remap_raster, remap_digest = self.evaluate_raster(
                         doc, target=source_key, cancel=cancel, frame=effective_frame, tier=tier,

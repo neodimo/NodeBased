@@ -187,6 +187,18 @@ def step_c_params(kind):
     return {}
 
 
+def step_d_params(kind):
+    """The knobs fidelity step D added (the time nodes, the keyers and the small channel nodes), at the values that leave an
+    older document's node as it was. Where Nuke's default differs the new node gets Nuke's and an old one gets this."""
+    from . import timeknobs
+    out = timeknobs.upgrade_params(kind)
+    out.update(KEYER_UPGRADE.get(kind, {}))
+    return out
+
+
+KEYER_UPGRADE = {}
+
+
 def upgrade_nodes(nodes):
     """Give an older document's nodes the chrome knobs at their no-change defaults. Walks Group graphs."""
     for node in nodes.values():
@@ -194,7 +206,7 @@ def upgrade_nodes(nodes):
             continue
         params = node.get("params")
         added = spec_params(node.get("type"))
-        added = {**added, **step_c_params(node.get("type"))}
+        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type"))}
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

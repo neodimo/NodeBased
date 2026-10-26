@@ -10,6 +10,9 @@ from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor, SUPPORTED_TILED_KINDS
 
 GROUP_C4 = ("TimeOffset", "FrameHold", "Retime")
+# A new Retime follows Nuke (unlocked ranges, a box filter, hold); these tests state the plain nearest-frame mapping they were written for.
+LEGACY_RETIME = dict(input_range_start=0, output_range_start=0, input_range_start_lock=1, output_range_start_lock=1,
+                     retime_before="continue", retime_after="continue", retime_filter="nearest")
 
 
 class Graph:
@@ -100,14 +103,14 @@ class WorkedExampleTests(unittest.TestCase):
     def test_retime_speed_two_at_output_frame_four_shows_input_frame_eight(self):
         g = Graph()
         animated_plate(g, keys=((8, 0.77), (4, 0.11)))
-        g.add("node", "Retime", dict(speed=2.0), image="plate")
+        g.add("node", "Retime", dict(speed=2.0, **LEGACY_RETIME), image="plate")
         out = evaluator_pixels(g.doc, "node", frame=4)
         self.assertAlmostEqual(float(out[0, 0, 0]), 0.77, places=5)
 
     def test_retime_range_starts_shift_the_anchor(self):
         g = Graph()
         animated_plate(g, keys=((11, 0.42),))
-        g.add("node", "Retime", dict(input_range_start=1, output_range_start=1, speed=2.0),
+        g.add("node", "Retime", dict(speed=2.0, **{**LEGACY_RETIME, "input_range_start": 1, "output_range_start": 1}),
              image="plate")
         # effective = 1 + (frame - 1) * 2; frame 6 -> 1 + 5*2 = 11.
         out = evaluator_pixels(g.doc, "node", frame=6)
@@ -121,7 +124,7 @@ class TilePathParityTests(unittest.TestCase):
     def test_all_three_kinds_fall_back_and_match_the_evaluator(self):
         for kind, params in (("TimeOffset", dict(time_offset=3)),
                              ("FrameHold", dict(first_frame=2, increment=0)),
-                             ("Retime", dict(speed=0.5))):
+                             ("Retime", dict(speed=0.5, **LEGACY_RETIME))):
             with self.subTest(kind=kind):
                 self.assertNotIn(kind, SUPPORTED_TILED_KINDS)
                 g = Graph()
@@ -138,7 +141,7 @@ class BypassTests(unittest.TestCase):
 
     def visible_params(self, kind):
         return {"TimeOffset": dict(time_offset=4), "FrameHold": dict(first_frame=1, increment=0),
-               "Retime": dict(speed=3.0)}[kind]
+               "Retime": dict(speed=3.0, **LEGACY_RETIME)}[kind]
 
     def test_bypassed_kind_passes_the_current_frame_not_the_remapped_one(self):
         for kind in GROUP_C4:

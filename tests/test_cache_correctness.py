@@ -116,6 +116,7 @@ VALUE_OVERRIDES = {
     ("Expression", "expr_b"): "b*0.5",
     ("Expression", "expr_a"): "a*0.5",
     ("Shuffle", "in2"): "rgba",
+    ("TimeClip", "frame_expr"): "frame + 1",      # fidelity step D: Nuke's frame knob, a formula in `frame`
 }
 
 # Optional inputs a kind needs wired before every param can take a second value: Shuffle's

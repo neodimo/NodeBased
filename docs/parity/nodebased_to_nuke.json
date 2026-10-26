@@ -484,8 +484,10 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
    "knobs": [
-    {"nodebased": ["reverse"], "nuke": ["reverse_input"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Reverse Input', scripting name `reverse_input`"},
-    {"nodebased": ["time_offset"], "nuke": ["time_offset"], "kind": "same"}
+    {"nodebased": ["rounding_mode"], "nuke": ["rounding_mode"], "kind": "same"},
+    {"nodebased": ["time_offset"], "nuke": ["time_offset"], "kind": "same"},
+    {"nodebased": ["reverse_input"], "nuke": ["reverse_input"], "kind": "same"},
+    {"nodebased": ["reverse"], "kind": "extra", "reason": "NodeBased-only: the flip of the offset's direction this node had before `reverse_input`; kept so older documents draw the same"}
    ]
   },
   "FrameHold": {
@@ -494,7 +496,9 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["rounding_mode"], "nuke": ["rounding_mode"], "kind": "same"},
     {"nodebased": ["first_frame"], "nuke": ["firstFrame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `firstFrame`"},
+    {"nodebased": [], "nuke": ["setToCurrentFrame"], "kind": "panel", "reason": "the Set to current frame button in the properties panel (it writes first_frame); a button, not a node param"},
     {"nodebased": ["increment"], "nuke": ["increment"], "kind": "same"}
    ]
   },
@@ -505,10 +509,19 @@
    ],
    "knobs": [
     {"nodebased": ["input_range_start"], "nuke": ["input.first"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input range', scripting name `input.first`"},
+    {"nodebased": ["input_range_start_lock"], "nuke": ["input.first_lock"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `input.first_lock`"},
     {"nodebased": ["input_range_end"], "nuke": ["input.last"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input range', scripting name `input.last`"},
+    {"nodebased": ["input_range_end_lock"], "nuke": ["input.last_lock"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `input.last_lock`"},
+    {"nodebased": ["reverse"], "nuke": ["reverse"], "kind": "same"},
     {"nodebased": ["output_range_start"], "nuke": ["output.first"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output range', scripting name `output.first`"},
+    {"nodebased": ["output_range_start_lock"], "nuke": ["output.first_lock"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `output.first_lock`"},
     {"nodebased": ["output_range_end"], "nuke": ["output.last"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output range', scripting name `output.last`"},
-    {"nodebased": ["speed"], "nuke": ["speed"], "kind": "same"}
+    {"nodebased": ["output_range_end_lock"], "nuke": ["output.last_lock"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `output.last_lock`"},
+    {"nodebased": ["speed"], "nuke": ["speed"], "kind": "same"},
+    {"nodebased": ["retime_before"], "nuke": ["before"], "kind": "renamed", "reason": "same control under another name (`before` is TimeClip's four-value choice in NodeBased's parameter table; Retime's has `continue` too)"},
+    {"nodebased": ["retime_after"], "nuke": ["after"], "kind": "renamed", "reason": "same control under another name (`after` is TimeClip's four-value choice in NodeBased's parameter table; Retime's has `continue` too)"},
+    {"nodebased": ["retime_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name (`filter` is Transform's and Tracker's choice in NodeBased's parameter table)"},
+    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"}
    ]
   },
   "TimeClip": {
@@ -517,12 +530,19 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["fade_in"], "nuke": ["fadeIn"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `fadeIn`"},
+    {"nodebased": ["fade_out"], "nuke": ["fadeOut"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `fadeOut`"},
     {"nodebased": ["first"], "nuke": ["first"], "kind": "same"},
-    {"nodebased": ["last"], "nuke": ["last"], "kind": "same"},
     {"nodebased": ["before"], "nuke": ["before"], "kind": "same"},
+    {"nodebased": ["last"], "nuke": ["last"], "kind": "same"},
     {"nodebased": ["after"], "nuke": ["after"], "kind": "same"},
+    {"nodebased": ["frame_mode"], "nuke": ["frame_mode"], "kind": "same"},
+    {"nodebased": ["frame_expr"], "kind": "extra", "reason": "the `frame` knob's expression or number that frame mode reads (Nuke's guide table has no row for it; its scripting name is `frame`)"},
+    {"nodebased": ["origfirst"], "nuke": ["origfirst"], "kind": "same"},
+    {"nodebased": ["origlast"], "nuke": ["origlast"], "kind": "same"},
+    {"nodebased": ["reverse"], "nuke": ["reverse"], "kind": "same"},
     {"nodebased": ["frame_range_type"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["time_offset"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["time_offset"], "kind": "extra", "reason": "NodeBased-only: the whole-frame offset this node had before Nuke's `frame` knob; it applies after the frame knob and is kept so older documents draw the same"}
    ]
   },
   "FrameRange": {

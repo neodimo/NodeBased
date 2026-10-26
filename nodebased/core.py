@@ -166,6 +166,7 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
          "lens_cx": 0.0, "lens_cy": 0.0}
 
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
+from . import timeknobs as _timeknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -810,11 +811,17 @@ SPECS = {
     # steps forward every "increment" frames. Retime is the simplified nearest-frame version: a
     # frame maps from the output range onto the input range, anchored at each range's start and
     # scaled by "speed" -- see docs/PARITY_2D.md's note on the simplification (no frame blending).
-    "TimeOffset": {"inputs": ["image"], "params": {"time_offset": 0, "reverse": 0}},
-    "FrameHold": {"inputs": ["image"], "params": {"first_frame": 1, "increment": 0}},
+    # Fidelity step D (nodebased/timeknobs.py): Nuke's own knobs on top. `time_offset`, `first_frame` and `increment` are
+    # numbers of frames that may be fractional ("Fractional time"); `reverse` stays as the legacy flip of the offset's
+    # direction and `reverse_input` is Nuke's (flip the clip about its range). Retime's locks decide whether a range
+    # knob or the input clip's own range is used; its before / after / filter are `retime_*` because those names belong
+    # to other nodes' choices.
+    "TimeOffset": {"inputs": ["image"], "params": {"time_offset": 0.0, "reverse": 0, **_timeknobs.new_params("TimeOffset")}},
+    "FrameHold": {"inputs": ["image"], "params": {"first_frame": 1.0, "increment": 0.0, **_timeknobs.new_params("FrameHold")}},
     "Retime": {"inputs": ["image"],
-              "params": {"input_range_start": 0, "input_range_end": 100,
-                        "output_range_start": 0, "output_range_end": 100, "speed": 1.0}},
+              "params": {"input_range_start": 1, "input_range_end": 100,
+                        "output_range_start": 1, "output_range_end": 100, "speed": 1.0,
+                        **_timeknobs.new_params("Retime")}},
     # TimeClip/FrameRange/AppendClip (step 4b) are the same kind of producer with its own time
     # mapping (no mask, no mix). TimeClip: the input is evaluated at `frame - time_offset`; frames
     # outside [first, last] (when "frame_range_type" is "custom"; "all" ignores the range) follow
@@ -826,7 +833,7 @@ SPECS = {
     # "length<i>" knob (0 skips the clip); "dissolve" frames cross-fade consecutive clips.
     "TimeClip": {"inputs": ["image"],
                  "params": {"first": 1, "last": 100, "frame_range_type": "custom",
-                            "before": "hold", "after": "hold", "time_offset": 0}},
+                            "before": "hold", "after": "hold", "time_offset": 0, **_timeknobs.new_params("TimeClip")}},
     "FrameRange": {"inputs": ["image"],
                    "params": {"first_frame": 1, "last_frame": 100, "before": "hold", "after": "hold"}},
     "AppendClip": {"inputs": [], "optional_inputs": [f"clip{i}" for i in range(8)],
@@ -1602,7 +1609,9 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # FrameHold default); "reverse" is a plain 0/1 flag like "invert".
           "time_offset": (-1000000, 1000000), "reverse": (0, 1),
           "first_frame": (-1000000, 1000000), "increment": (0, 1000000),
-          "lookup": (-1000000.0, 1000000.0),
+          "lookup": (-1000000.0, 1000000.0), "fade_in": (0.0, 1000000.0), "fade_out": (0.0, 1000000.0),
+          "reverse_input": (0, 1), "input_range_start_lock": (0, 1), "input_range_end_lock": (0, 1),
+          "output_range_start_lock": (0, 1), "output_range_end_lock": (0, 1),
           "input_range_start": (-1000000, 1000000), "input_range_end": (-1000000, 1000000),
           "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
           "speed": (-1000.0, 1000.0),
@@ -1882,6 +1891,8 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "autocrop_mode": ["alpha", "color"],
            "before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],
            "frame_range_type": ["custom", "all"],
+           "rounding_mode": list(_timeknobs.ROUNDING_MODES), "retime_before": list(_timeknobs.RETIME_RANGE),
+           "retime_after": list(_timeknobs.RETIME_RANGE), "retime_filter": list(_timeknobs.RETIME_FILTERS),
            "splat_orientation": ["as_authored", "colmap"],
            "splat_colorspace": ["srgb", "linear"],
            "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],

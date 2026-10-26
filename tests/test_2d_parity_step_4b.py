@@ -64,7 +64,7 @@ class TimeClipTests(unittest.TestCase):
     def clip(self, **params):
         g = Graph()
         frame_plate(g, "plate")
-        g.add("node", "TimeClip", dict(first=5, last=8, **params), image="plate")
+        g.add("node", "TimeClip", dict(first=5, last=8, fade_in=0, fade_out=0, **params), image="plate")
         return g
 
     def test_inside_the_range_passes_the_frame_through(self):
@@ -110,7 +110,7 @@ class TimeClipTests(unittest.TestCase):
     def test_time_offset_shifts_before_the_range_is_applied(self):
         g = Graph()
         frame_plate(g, "plate")
-        g.add("node", "TimeClip", dict(frame_range_type="all", time_offset=2), image="plate")
+        g.add("node", "TimeClip", dict(frame_range_type="all", time_offset=2, fade_in=0, fade_out=0), image="plate")
         self.assertAlmostEqual(red_at(g, "node", 10), 0.4, places=5)   # frame 10 - 2 = 8
         g.d.execute(dict(op="set", id="node", param="frame_range_type", value="custom"))
         g.d.execute(dict(op="set", id="node", param="first", value=1))
@@ -246,7 +246,7 @@ class TilePathTests(unittest.TestCase):
         cases = []
         g = Graph()
         frame_plate(g, "plate")
-        g.add("node", "TimeClip", dict(first=5, last=8, after="bounce", time_offset=1), image="plate")
+        g.add("node", "TimeClip", dict(first=5, last=8, after="bounce", time_offset=1, fade_in=0, fade_out=0), image="plate")
         cases.append((g, 12))
         g = Graph()
         frame_plate(g, "plate")
@@ -265,7 +265,7 @@ class TilePathTests(unittest.TestCase):
 
 class BypassTests(unittest.TestCase):
     def test_bypassed_single_input_kinds_pass_the_current_frame(self):
-        for kind, params in (("TimeClip", dict(first=5, last=8, time_offset=3)),
+        for kind, params in (("TimeClip", dict(first=5, last=8, time_offset=3, fade_in=0, fade_out=0)),
                              ("FrameRange", dict(first_frame=5, last_frame=8))):
             with self.subTest(kind=kind):
                 g = Graph()
@@ -300,7 +300,7 @@ class BypassTests(unittest.TestCase):
         evaluator an edit upstream has to show through a bypassed time node."""
         g = Graph()
         g.add("plate", "Constant", dict(red=0.3, green=0.4, blue=0.6, alpha=1.0))
-        g.add("node", "TimeClip", dict(first=5, last=8), image="plate")
+        g.add("node", "TimeClip", dict(first=5, last=8, fade_in=0, fade_out=0), image="plate")
         g.bypass("node")
         ev = Evaluator()
         doc = dict(g.doc, view="node")
@@ -322,7 +322,7 @@ class SpecCoverageTests(unittest.TestCase):
         for kind in GROUP_4B:
             for name in SPECS[kind]["params"]:
                 with self.subTest(kind=kind, param=name):
-                    self.assertTrue(name in LIMITS or name in CHOICES)
+                    self.assertTrue(name in LIMITS or name in CHOICES or isinstance(SPECS[kind]["params"][name], str))
         for name in ("before", "after"):
             self.assertEqual(CHOICES[name], ["hold", "loop", "bounce", "black"])
 
