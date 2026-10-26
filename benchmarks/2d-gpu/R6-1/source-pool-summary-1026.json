@@ -1,0 +1,633 @@
+{
+ "tool": "aggregate of tools/benchmark_gpu2d.py playback, 10/26",
+ "playback": {
+  "cpu-48-radeon8060s-src0": {
+   "passes": 3,
+   "fps_range": [
+    6.662,
+    6.693
+   ],
+   "interval_p50": "149.0 to 151.0",
+   "interval_p95": "162.3 to 170.5",
+   "interval_p99": "166.6 to 177.2",
+   "node_stage": "142.8 to 143.5",
+   "fps": "6.66 to 6.69",
+   "first_picture": "194 to 219",
+   "display_conversion": "18.3 to 18.5"
+  },
+  "cpu-48-radeon8060s-src3": {
+   "passes": 3,
+   "fps_range": [
+    6.99,
+    7.579
+   ],
+   "interval_p50": "131.1 to 142.1",
+   "interval_p95": "151.4 to 164.4",
+   "interval_p99": "157.6 to 172.4",
+   "node_stage": "124.9 to 136.3",
+   "fps": "6.99 to 7.58",
+   "first_picture": "212 to 217",
+   "display_conversion": "19.1 to 20.0"
+  },
+  "cpu-48-radeon8060s-standin-src2": {
+   "passes": 3,
+   "fps_range": [
+    5.21,
+    5.646
+   ],
+   "interval_p50": "176.5 to 195.6",
+   "interval_p95": "199.3 to 215.1",
+   "interval_p99": "211.4 to 227.7",
+   "node_stage": "175.8 to 188.1",
+   "fps": "5.21 to 5.65",
+   "first_picture": "251 to 270",
+   "display_conversion": "38.0 to 40.3"
+  },
+  "cpu-48-radeon8060s-standin-srcdefault": {
+   "passes": 3,
+   "fps_range": [
+    4.752,
+    4.812
+   ],
+   "interval_p50": "208.9 to 213.0",
+   "interval_p95": "221.8 to 229.4",
+   "interval_p99": "225.2 to 231.4",
+   "node_stage": "206.5 to 209.9",
+   "fps": "4.75 to 4.81",
+   "first_picture": "254 to 263",
+   "display_conversion": "36.4 to 37.1"
+  },
+  "cpu-48-rtx3080ti-src0": {
+   "passes": 3,
+   "fps_range": [
+    6.745,
+    6.748
+   ],
+   "interval_p50": "146.7 to 148.2",
+   "interval_p95": "161.3 to 164.5",
+   "interval_p99": "165.7 to 169.1",
+   "node_stage": "138.8 to 142.0",
+   "fps": "6.75",
+   "first_picture": "201 to 230",
+   "display_conversion": "17.9 to 18.1"
+  },
+  "cpu-48-rtx3080ti-src3": {
+   "passes": 3,
+   "fps_range": [
+    7.695,
+    7.746
+   ],
+   "interval_p50": "128.7 to 130.5",
+   "interval_p95": "138.9 to 143.5",
+   "interval_p99": "144.8 to 147.3",
+   "node_stage": "120.3 to 122.4",
+   "fps": "7.70 to 7.75",
+   "first_picture": "197 to 214",
+   "display_conversion": "17.2 to 18.8"
+  },
+  "cpu-240-radeon8060s-src0": {
+   "passes": 3,
+   "fps_range": [
+    8.801,
+    8.91
+   ],
+   "interval_p50": "103.2 to 104.2",
+   "interval_p95": "155.8 to 160.4",
+   "interval_p99": "164.9 to 183.0",
+   "node_stage": "96.4 to 97.7",
+   "fps": "8.80 to 8.91",
+   "first_picture": "207 to 239",
+   "display_conversion": "17.6 to 17.7"
+  },
+  "cpu-240-radeon8060s-src3": {
+   "passes": 3,
+   "fps_range": [
+    8.83,
+    9.211
+   ],
+   "interval_p50": "103.6 to 105.0",
+   "interval_p95": "136.4 to 152.5",
+   "interval_p99": "144.1 to 164.4",
+   "node_stage": "97.4 to 98.5",
+   "fps": "8.83 to 9.21",
+   "first_picture": "207 to 256",
+   "display_conversion": "17.7 to 18.1"
+  },
+  "gpu2d-48-radeon8060s-da2-src0": {
+   "passes": 3,
+   "fps_range": [
+    12.964,
+    13.098
+   ],
+   "interval_p50": "75.8 to 76.3",
+   "interval_p95": "81.0 to 84.2",
+   "interval_p99": "81.7 to 88.2",
+   "node_stage": "68.3 to 70.2",
+   "fps": "12.96 to 13.10",
+   "first_picture": "116 to 119",
+   "display_conversion": "19.3 to 19.4"
+  },
+  "gpu2d-48-radeon8060s-da2-src3": {
+   "passes": 3,
+   "fps_range": [
+    12.399,
+    12.61
+   ],
+   "interval_p50": "78.9 to 80.5",
+   "interval_p95": "85.6 to 87.7",
+   "interval_p99": "89.2 to 90.7",
+   "node_stage": "71.4 to 71.9",
+   "fps": "12.40 to 12.61",
+   "first_picture": "123 to 128",
+   "display_conversion": "19.6 to 20.4"
+  },
+  "gpu2d-48-radeon8060s-src0": {
+   "passes": 3,
+   "fps_range": [
+    12.891,
+    13.251
+   ],
+   "interval_p50": "74.9 to 77.2",
+   "interval_p95": "81.5 to 84.8",
+   "interval_p99": "82.2 to 88.9",
+   "node_stage": "67.6 to 70.8",
+   "fps": "12.89 to 13.25",
+   "first_picture": "116 to 123",
+   "display_conversion": "18.1 to 19.4"
+  },
+  "gpu2d-48-radeon8060s-src3": {
+   "passes": 3,
+   "fps_range": [
+    12.203,
+    12.874
+   ],
+   "interval_p50": "76.3 to 81.6",
+   "interval_p95": "83.5 to 90.0",
+   "interval_p99": "88.8 to 93.0",
+   "node_stage": "69.9 to 72.9",
+   "fps": "12.20 to 12.87",
+   "first_picture": "120 to 132",
+   "display_conversion": "18.8 to 20.7"
+  },
+  "gpu2d-48-radeon8060s-standin-src2": {
+   "passes": 3,
+   "fps_range": [
+    8.817,
+    9.036
+   ],
+   "interval_p50": "110.1 to 114.9",
+   "interval_p95": "129.3 to 140.8",
+   "interval_p99": "134.1 to 148.1",
+   "node_stage": "107.8 to 110.1",
+   "fps": "8.82 to 9.04",
+   "first_picture": "151 to 161",
+   "display_conversion": "39.2 to 43.5"
+  },
+  "gpu2d-48-radeon8060s-standin-srcdefault": {
+   "passes": 3,
+   "fps_range": [
+    7.167,
+    7.314
+   ],
+   "interval_p50": "135.9 to 138.5",
+   "interval_p95": "147.6 to 155.2",
+   "interval_p99": "157.7 to 162.5",
+   "node_stage": "132.3 to 135.9",
+   "fps": "7.17 to 7.31",
+   "first_picture": "176 to 184",
+   "display_conversion": "36.5 to 37.3"
+  },
+  "gpu2d-48-rtx3080ti-src0": {
+   "passes": 3,
+   "fps_range": [
+    4.768,
+    5.147
+   ],
+   "interval_p50": "221.1 to 226.3",
+   "interval_p95": "240.3 to 278.1",
+   "interval_p99": "266.4 to 394.8",
+   "node_stage": "207.8 to 217.8",
+   "fps": "4.77 to 5.15",
+   "first_picture": "190 to 199",
+   "display_conversion": "19.2 to 19.8"
+  },
+  "gpu2d-48-rtx3080ti-src3": {
+   "passes": 3,
+   "fps_range": [
+    4.64,
+    4.866
+   ],
+   "interval_p50": "223.2 to 227.2",
+   "interval_p95": "241.9 to 398.5",
+   "interval_p99": "350.2 to 401.4",
+   "node_stage": "212.1 to 217.0",
+   "fps": "4.64 to 4.87",
+   "first_picture": "196 to 212",
+   "display_conversion": "19.2 to 19.8"
+  },
+  "gpu2d-240-radeon8060s-src0": {
+   "passes": 3,
+   "fps_range": [
+    17.256,
+    17.616
+   ],
+   "interval_p50": "55.0 to 56.3",
+   "interval_p95": "77.1 to 79.5",
+   "interval_p99": "80.0 to 85.8",
+   "node_stage": "51.7 to 53.0",
+   "fps": "17.26 to 17.62",
+   "first_picture": "113 to 118",
+   "display_conversion": "17.0 to 17.2"
+  },
+  "gpu2d-240-radeon8060s-src3": {
+   "passes": 3,
+   "fps_range": [
+    17.027,
+    17.159
+   ],
+   "interval_p50": "56.5 to 59.3",
+   "interval_p95": "80.6 to 86.0",
+   "interval_p99": "87.3 to 91.0",
+   "node_stage": "53.5 to 55.1",
+   "fps": "17.03 to 17.16",
+   "first_picture": "124 to 134",
+   "display_conversion": "16.8 to 17.1"
+  }
+ },
+ "step_c_playback": {
+  "cpu-48-llvmpipe": {
+   "passes": 3,
+   "fps_range": [
+    6.586,
+    6.711
+   ],
+   "interval_p50": "147.4 to 152.6",
+   "interval_p95": "164.3 to 168.3",
+   "interval_p99": "165.3 to 171.0",
+   "node_stage": "142.5 to 145.9",
+   "fps": "6.59 to 6.71",
+   "first_picture": "198 to 220",
+   "display_conversion": "17.7 to 18.5"
+  },
+  "cpu-48-radeon8060s": {
+   "passes": 3,
+   "fps_range": [
+    6.653,
+    6.729
+   ],
+   "interval_p50": "147.8 to 150.0",
+   "interval_p95": "164.8 to 166.1",
+   "interval_p99": "166.1 to 173.3",
+   "node_stage": "140.9 to 143.6",
+   "fps": "6.65 to 6.73",
+   "first_picture": "201 to 216",
+   "display_conversion": "18.0 to 18.6"
+  },
+  "cpu-48-radeon8060s-standin": {
+   "passes": 3,
+   "fps_range": [
+    4.717,
+    4.806
+   ],
+   "interval_p50": "208.7 to 212.4",
+   "interval_p95": "222.0 to 233.5",
+   "interval_p99": "224.1 to 235.7",
+   "node_stage": "205.1 to 209.8",
+   "fps": "4.72 to 4.81",
+   "first_picture": "253 to 260",
+   "display_conversion": "36.5 to 37.0"
+  },
+  "cpu-48-rtx3080ti": {
+   "passes": 3,
+   "fps_range": [
+    6.636,
+    6.745
+   ],
+   "interval_p50": "149.2 to 151.0",
+   "interval_p95": "161.0 to 163.6",
+   "interval_p99": "166.5 to 169.0",
+   "node_stage": "139.4 to 145.2",
+   "fps": "6.64 to 6.75",
+   "first_picture": "201 to 222",
+   "display_conversion": "17.8 to 18.3"
+  },
+  "cpu-240-radeon8060s": {
+   "passes": 3,
+   "fps_range": [
+    8.854,
+    8.932
+   ],
+   "interval_p50": "102.9 to 104.4",
+   "interval_p95": "154.8 to 157.3",
+   "interval_p99": "162.6 to 163.7",
+   "node_stage": "97.1 to 97.9",
+   "fps": "8.85 to 8.93",
+   "first_picture": "202 to 206",
+   "display_conversion": "17.4 to 17.6"
+  },
+  "cpu-240-rtx3080ti": {
+   "passes": 3,
+   "fps_range": [
+    8.776,
+    8.947
+   ],
+   "interval_p50": "103.2 to 104.7",
+   "interval_p95": "154.2 to 159.1",
+   "interval_p99": "163.2 to 169.2",
+   "node_stage": "97.3 to 98.3",
+   "fps": "8.78 to 8.95",
+   "first_picture": "199 to 235",
+   "display_conversion": "17.6 to 17.8"
+  },
+  "gpu2d-48-llvmpipe": {
+   "passes": 3,
+   "fps_range": [
+    9.897,
+    10.362
+   ],
+   "interval_p50": "94.5 to 98.4",
+   "interval_p95": "112.0 to 115.8",
+   "interval_p99": "119.3 to 128.9",
+   "node_stage": "87.1 to 92.2",
+   "fps": "9.90 to 10.36",
+   "first_picture": "165 to 176",
+   "display_conversion": "17.7 to 19.2"
+  },
+  "gpu2d-48-radeon8060s": {
+   "passes": 3,
+   "fps_range": [
+    12.966,
+    13.494
+   ],
+   "interval_p50": "74.2 to 75.4",
+   "interval_p95": "78.3 to 86.5",
+   "interval_p99": "79.1 to 91.2",
+   "node_stage": "67.7 to 71.1",
+   "fps": "12.97 to 13.49",
+   "first_picture": "109 to 115",
+   "display_conversion": "18.1 to 19.5"
+  },
+  "gpu2d-48-radeon8060s-standin": {
+   "passes": 3,
+   "fps_range": [
+    7.11,
+    7.256
+   ],
+   "interval_p50": "137.7 to 141.5",
+   "interval_p95": "147.7 to 154.3",
+   "interval_p99": "158.2 to 164.2",
+   "node_stage": "134.0 to 135.8",
+   "fps": "7.11 to 7.26",
+   "first_picture": "171 to 174",
+   "display_conversion": "36.6 to 37.2"
+  },
+  "gpu2d-48-rtx3080ti": {
+   "passes": 3,
+   "fps_range": [
+    4.657,
+    4.945
+   ],
+   "interval_p50": "221.8 to 226.5",
+   "interval_p95": "229.8 to 354.4",
+   "interval_p99": "383.6 to 395.2",
+   "node_stage": "210.8 to 217.7",
+   "fps": "4.66 to 4.95",
+   "first_picture": "185 to 195",
+   "display_conversion": "18.7 to 19.4"
+  },
+  "gpu2d-240-radeon8060s": {
+   "passes": 3,
+   "fps_range": [
+    16.904,
+    17.428
+   ],
+   "interval_p50": "54.8 to 57.0",
+   "interval_p95": "78.7 to 79.9",
+   "interval_p99": "81.6 to 85.2",
+   "node_stage": "51.9 to 53.6",
+   "fps": "16.90 to 17.43",
+   "first_picture": "112 to 122",
+   "display_conversion": "17.0 to 17.9"
+  },
+  "gpu2d-240-rtx3080ti": {
+   "passes": 3,
+   "fps_range": [
+    5.144,
+    5.363
+   ],
+   "interval_p50": "183.4 to 185.9",
+   "interval_p95": "254.4 to 276.0",
+   "interval_p99": "321.7 to 368.4",
+   "node_stage": "175.3 to 177.5",
+   "fps": "5.14 to 5.36",
+   "first_picture": "189 to 199",
+   "display_conversion": "18.3 to 18.8"
+  }
+ },
+ "graph": {
+  "cpu-radeon8060s-src0": {
+   "passes": 3,
+   "wall_p50": "136.0 to 146.8",
+   "wall_p95": "141.1 to 244.4",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "Blur": "20.2 to 21.3",
+    "ColorCorrect": "0.1",
+    "Grade": "11.2 to 12.4",
+    "Merge": "21.2 to 22.4",
+    "Read": "33.3 to 37.2",
+    "Roto": "23.9 to 25.6",
+    "Transform": "24.1 to 26.0"
+   }
+  },
+  "cpu-radeon8060s-src3": {
+   "passes": 3,
+   "wall_p50": "102.3 to 103.4",
+   "wall_p95": "108.8 to 110.9",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "Blur": "19.6 to 20.0",
+    "ColorCorrect": "0.1",
+    "Grade": "12.4 to 12.6",
+    "Merge": "21.3 to 21.5",
+    "Read": "42.2 to 43.3",
+    "Roto": "29.5 to 30.0",
+    "Transform": "23.4 to 23.7"
+   }
+  },
+  "cpu-radeon8060s-standin-src0": {
+   "passes": 3,
+   "wall_p50": "150.1 to 150.8",
+   "wall_p95": "155.4 to 156.4",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "Blur": "19.9",
+    "ColorCorrect": "0.1",
+    "Grade": "11.0 to 11.6",
+    "Merge": "21.2 to 21.3",
+    "Read": "49.0 to 49.2",
+    "Roto": "23.7",
+    "Transform": "23.7 to 24.0"
+   }
+  },
+  "cpu-radeon8060s-standin-src2": {
+   "passes": 3,
+   "wall_p50": "121.1 to 122.2",
+   "wall_p95": "128.2 to 130.4",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "Blur": "19.5 to 19.6",
+    "ColorCorrect": "0.1",
+    "Grade": "12.5 to 12.9",
+    "Merge": "21.2 to 21.5",
+    "Read": "79.3 to 82.2",
+    "Roto": "43.4 to 44.9",
+    "Transform": "23.3 to 23.9"
+   }
+  },
+  "cpu-rtx3080ti-src0": {
+   "passes": 3,
+   "wall_p50": "136.5 to 137.2",
+   "wall_p95": "142.9 to 143.9",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "Blur": "20.1 to 20.3",
+    "ColorCorrect": "0.1",
+    "Grade": "11.2 to 11.7",
+    "Merge": "21.5 to 21.6",
+    "Read": "33.5 to 33.7",
+    "Roto": "23.9 to 24.0",
+    "Transform": "24.1 to 24.3"
+   }
+  },
+  "cpu-rtx3080ti-src3": {
+   "passes": 3,
+   "wall_p50": "101.3 to 102.4",
+   "wall_p95": "108.4 to 109.8",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "Blur": "19.7",
+    "ColorCorrect": "0.1",
+    "Grade": "11.9 to 12.4",
+    "Merge": "21.1 to 21.4",
+    "Read": "41.6 to 42.2",
+    "Roto": "29.3 to 30.3",
+    "Transform": "23.4"
+   }
+  },
+  "gpu2d-radeon8060s-src0": {
+   "passes": 3,
+   "wall_p50": "74.0 to 74.4",
+   "wall_p95": "80.6 to 85.3",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "ColorCorrect": "0.1",
+    "Read": "33.5 to 33.6",
+    "Roto": "24.9 to 25.0",
+    "island run (upload, passes, readback)": "13.6 to 13.7",
+    "island staging": "0.6"
+   }
+  },
+  "gpu2d-radeon8060s-src3": {
+   "passes": 3,
+   "wall_p50": "42.3 to 42.7",
+   "wall_p95": "46.7 to 48.7",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "ColorCorrect": "0.1",
+    "Read": "42.3 to 43.6",
+    "Roto": "29.7 to 30.2",
+    "island run (upload, passes, readback)": "11.5 to 11.7",
+    "island staging": "0.7"
+   }
+  },
+  "gpu2d-radeon8060s-standin-src0": {
+   "passes": 3,
+   "wall_p50": "89.0 to 90.2",
+   "wall_p95": "91.2 to 92.2",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "ColorCorrect": "0.1",
+    "Read": "49.3 to 49.7",
+    "Roto": "24.7 to 24.9",
+    "island run (upload, passes, readback)": "13.3 to 13.6",
+    "island staging": "0.6"
+   }
+  },
+  "gpu2d-radeon8060s-standin-src2": {
+   "passes": 3,
+   "wall_p50": "60.3 to 60.7",
+   "wall_p95": "63.1 to 64.8",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "ColorCorrect": "0.1",
+    "Read": "81.8 to 83.5",
+    "Roto": "43.8 to 45.7",
+    "island run (upload, passes, readback)": "12.7 to 12.8",
+    "island staging": "0.6 to 0.7"
+   }
+  },
+  "gpu2d-rtx3080ti-src0": {
+   "passes": 3,
+   "wall_p50": "221.9 to 223.0",
+   "wall_p95": "237.2 to 243.4",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "ColorCorrect": "0.1",
+    "Read": "33.6 to 34.0",
+    "Roto": "24.9 to 25.1",
+    "island run (upload, passes, readback)": "161.7 to 162.0",
+    "island staging": "0.6"
+   }
+  },
+  "gpu2d-rtx3080ti-src3": {
+   "passes": 3,
+   "wall_p50": "130.0 to 194.0",
+   "wall_p95": "204.6 to 206.6",
+   "frames": [
+    1,
+    48
+   ],
+   "kernel_ms_p50_by_kind": {
+    "ColorCorrect": "0.1",
+    "Read": "46.4 to 48.6",
+    "Roto": "32.7 to 35.3",
+    "island run (upload, passes, readback)": "98.2 to 161.1",
+    "island staging": "0.7 to 0.8"
+   }
+  }
+ }
+}

@@ -1,0 +1,489 @@
+{
+ "tool": "tools/benchmark_gpu2d.py playback",
+ "label": "radeon8060s-src3",
+ "backend": "gpu2d",
+ "frame_range": 240,
+ "force_adapter": "integrated",
+ "cpus": null,
+ "env": [
+  "NODEBASED_SOURCE_WORKERS=3"
+ ],
+ "passes": [
+  {
+   "case": "gpu2d-240-radeon8060s-src3-1",
+   "adapter": "radeon8060s-src3",
+   "backend": "gpu2d",
+   "frames_in_first_pass": 240,
+   "fresh_frames_traced": 240,
+   "first_pass_fps": 17.159,
+   "total_duration_ms": 14011.878,
+   "mean_interval_ms": 58.107,
+   "interval_ms": {
+    "n": 239,
+    "mean": 58.107,
+    "p50": 56.548,
+    "p95": 80.634,
+    "p99": 87.733,
+    "max": 90.653
+   },
+   "first_picture_latency_ms": 124.242,
+   "latency_ms": {
+    "n": 240,
+    "mean": 76.82,
+    "p50": 76.386,
+    "p95": 101.421,
+    "p99": 112.957,
+    "max": 128.685
+   },
+   "node_evaluation_ms": {
+    "n": 240,
+    "mean": 52.787,
+    "p50": 53.483,
+    "p95": 75.729,
+    "p99": 85.248,
+    "max": 99.431
+   },
+   "display_conversion_ms": {
+    "n": 240,
+    "mean": 17.406,
+    "p50": 17.078,
+    "p95": 20.445,
+    "p99": 21.625,
+    "max": 48.055
+   },
+   "frames_dropped_counted": 80,
+   "gpu2d": {
+    "cold_shader_setup_ms": 28.83,
+    "island_wall_ms": {
+     "n": 1063,
+     "mean": 12.053,
+     "p50": 11.653,
+     "p95": 14.852,
+     "p99": 23.941,
+     "max": 26.922
+    },
+    "island_gpu_ms": {
+     "n": 1063,
+     "mean": 4.684,
+     "p50": 4.774,
+     "p95": 5.935,
+     "p99": 6.397,
+     "max": 7.16
+    },
+    "island_upload_ms": {
+     "n": 1063,
+     "mean": 4.169,
+     "p50": 3.678,
+     "p95": 6.01,
+     "p99": 13.548,
+     "max": 17.631
+    },
+    "island_readback_ms": {
+     "n": 1063,
+     "mean": 2.249,
+     "p50": 2.116,
+     "p95": 3.198,
+     "p99": 3.867,
+     "max": 7.074
+    },
+    "runs": 1063,
+    "downloads_per_run": [
+     1
+    ],
+    "intermediate_readbacks": 0,
+    "cpu_boundaries": []
+   },
+   "accounting": {
+    "frames_joined": 240,
+    "island_share_of_node_evaluation": 0.2286,
+    "node_evaluation_ms": {
+     "n": 240,
+     "mean": 52.787,
+     "p50": 53.483,
+     "p95": 75.729,
+     "p99": 85.248,
+     "max": 99.431,
+     "min": 25.097
+    },
+    "island_wall_ms": {
+     "n": 240,
+     "mean": 12.069,
+     "p50": 11.5,
+     "p95": 15.856,
+     "p99": 23.941,
+     "max": 25.719,
+     "min": 9.044
+    },
+    "upload_ms": {
+     "n": 240,
+     "mean": 4.051,
+     "p50": 3.58,
+     "p95": 6.04,
+     "p99": 13.528,
+     "max": 15.718,
+     "min": 2.844
+    },
+    "encode_ms": {
+     "n": 240,
+     "mean": 0.164,
+     "p50": 0.151,
+     "p95": 0.245,
+     "p99": 0.318,
+     "max": 0.452,
+     "min": 0.112
+    },
+    "gpu_ms": {
+     "n": 240,
+     "mean": 4.683,
+     "p50": 4.723,
+     "p95": 6.041,
+     "p99": 6.277,
+     "max": 6.732,
+     "min": 3.675
+    },
+    "readback_ms": {
+     "n": 240,
+     "mean": 2.429,
+     "p50": 2.345,
+     "p95": 3.315,
+     "p99": 3.829,
+     "max": 7.074,
+     "min": 1.515
+    },
+    "outside_island_ms": {
+     "n": 240,
+     "mean": 40.718,
+     "p50": 41.764,
+     "p95": 60.754,
+     "p99": 69.287,
+     "max": 85.319,
+     "min": 13.121
+    }
+   },
+   "accepted_frames_over_total": [
+    240,
+    240
+   ],
+   "wall_seconds": 62.4
+  },
+  {
+   "case": "gpu2d-240-radeon8060s-src3-2",
+   "adapter": "radeon8060s-src3",
+   "backend": "gpu2d",
+   "frames_in_first_pass": 240,
+   "fresh_frames_traced": 240,
+   "first_pass_fps": 17.027,
+   "total_duration_ms": 14124.289,
+   "mean_interval_ms": 58.556,
+   "interval_ms": {
+    "n": 239,
+    "mean": 58.556,
+    "p50": 58.904,
+    "p95": 86.015,
+    "p99": 91.0,
+    "max": 93.0
+   },
+   "first_picture_latency_ms": 129.406,
+   "latency_ms": {
+    "n": 240,
+    "mean": 76.991,
+    "p50": 76.671,
+    "p95": 107.053,
+    "p99": 114.705,
+    "max": 142.805
+   },
+   "node_evaluation_ms": {
+    "n": 240,
+    "mean": 52.869,
+    "p50": 54.68,
+    "p95": 79.15,
+    "p99": 83.716,
+    "max": 113.903
+   },
+   "display_conversion_ms": {
+    "n": 240,
+    "mean": 17.343,
+    "p50": 16.848,
+    "p95": 20.749,
+    "p99": 24.533,
+    "max": 53.337
+   },
+   "frames_dropped_counted": 85,
+   "gpu2d": {
+    "cold_shader_setup_ms": 29.241,
+    "island_wall_ms": {
+     "n": 1093,
+     "mean": 11.916,
+     "p50": 11.498,
+     "p95": 14.512,
+     "p99": 23.381,
+     "max": 26.317
+    },
+    "island_gpu_ms": {
+     "n": 1093,
+     "mean": 4.608,
+     "p50": 4.699,
+     "p95": 5.812,
+     "p99": 6.266,
+     "max": 7.412
+    },
+    "island_upload_ms": {
+     "n": 1093,
+     "mean": 4.082,
+     "p50": 3.57,
+     "p95": 5.65,
+     "p99": 13.536,
+     "max": 14.934
+    },
+    "island_readback_ms": {
+     "n": 1093,
+     "mean": 2.282,
+     "p50": 2.112,
+     "p95": 3.306,
+     "p99": 3.75,
+     "max": 7.408
+    },
+    "runs": 1093,
+    "downloads_per_run": [
+     1
+    ],
+    "intermediate_readbacks": 0,
+    "cpu_boundaries": []
+   },
+   "accounting": {
+    "frames_joined": 240,
+    "island_share_of_node_evaluation": 0.2362,
+    "node_evaluation_ms": {
+     "n": 240,
+     "mean": 52.869,
+     "p50": 54.68,
+     "p95": 79.15,
+     "p99": 83.716,
+     "max": 113.903,
+     "min": 23.956
+    },
+    "island_wall_ms": {
+     "n": 240,
+     "mean": 12.49,
+     "p50": 11.88,
+     "p95": 15.858,
+     "p99": 23.698,
+     "max": 25.859,
+     "min": 9.428
+    },
+    "upload_ms": {
+     "n": 240,
+     "mean": 4.212,
+     "p50": 3.646,
+     "p95": 5.808,
+     "p99": 13.51,
+     "max": 14.934,
+     "min": 2.849
+    },
+    "encode_ms": {
+     "n": 240,
+     "mean": 0.166,
+     "p50": 0.152,
+     "p95": 0.245,
+     "p99": 0.313,
+     "max": 0.369,
+     "min": 0.109
+    },
+    "gpu_ms": {
+     "n": 240,
+     "mean": 4.726,
+     "p50": 4.739,
+     "p95": 6.146,
+     "p99": 6.837,
+     "max": 7.412,
+     "min": 3.669
+    },
+    "readback_ms": {
+     "n": 240,
+     "mean": 2.569,
+     "p50": 2.548,
+     "p95": 3.493,
+     "p99": 4.051,
+     "max": 7.408,
+     "min": 1.525
+    },
+    "outside_island_ms": {
+     "n": 240,
+     "mean": 40.379,
+     "p50": 42.785,
+     "p95": 65.684,
+     "p99": 68.62,
+     "max": 98.138,
+     "min": 12.881
+    }
+   },
+   "accepted_frames_over_total": [
+    240,
+    240
+   ],
+   "wall_seconds": 62.4
+  },
+  {
+   "case": "gpu2d-240-radeon8060s-src3-3",
+   "adapter": "radeon8060s-src3",
+   "backend": "gpu2d",
+   "frames_in_first_pass": 240,
+   "fresh_frames_traced": 240,
+   "first_pass_fps": 17.077,
+   "total_duration_ms": 14084.755,
+   "mean_interval_ms": 58.37,
+   "interval_ms": {
+    "n": 239,
+    "mean": 58.37,
+    "p50": 59.251,
+    "p95": 82.415,
+    "p99": 87.338,
+    "max": 88.198
+   },
+   "first_picture_latency_ms": 134.216,
+   "latency_ms": {
+    "n": 240,
+    "mean": 77.311,
+    "p50": 77.733,
+    "p95": 106.342,
+    "p99": 115.993,
+    "max": 147.738
+   },
+   "node_evaluation_ms": {
+    "n": 240,
+    "mean": 52.556,
+    "p50": 55.076,
+    "p95": 76.242,
+    "p99": 86.267,
+    "max": 115.72
+   },
+   "display_conversion_ms": {
+    "n": 240,
+    "mean": 17.952,
+    "p50": 16.905,
+    "p95": 25.058,
+    "p99": 28.044,
+    "max": 58.828
+   },
+   "frames_dropped_counted": 73,
+   "gpu2d": {
+    "cold_shader_setup_ms": 28.318,
+    "island_wall_ms": {
+     "n": 1090,
+     "mean": 11.866,
+     "p50": 11.573,
+     "p95": 14.313,
+     "p99": 22.081,
+     "max": 39.236
+    },
+    "island_gpu_ms": {
+     "n": 1090,
+     "mean": 4.651,
+     "p50": 4.753,
+     "p95": 5.886,
+     "p99": 6.339,
+     "max": 8.937
+    },
+    "island_upload_ms": {
+     "n": 1090,
+     "mean": 4.03,
+     "p50": 3.617,
+     "p95": 5.521,
+     "p99": 13.09,
+     "max": 21.714
+    },
+    "island_readback_ms": {
+     "n": 1090,
+     "mean": 2.261,
+     "p50": 2.056,
+     "p95": 3.177,
+     "p99": 3.942,
+     "max": 29.674
+    },
+    "runs": 1090,
+    "downloads_per_run": [
+     1
+    ],
+    "intermediate_readbacks": 0,
+    "cpu_boundaries": []
+   },
+   "accounting": {
+    "frames_joined": 240,
+    "island_share_of_node_evaluation": 0.2306,
+    "node_evaluation_ms": {
+     "n": 240,
+     "mean": 52.556,
+     "p50": 55.076,
+     "p95": 76.242,
+     "p99": 86.267,
+     "max": 115.72,
+     "min": 23.833
+    },
+    "island_wall_ms": {
+     "n": 240,
+     "mean": 12.119,
+     "p50": 11.772,
+     "p95": 14.935,
+     "p99": 21.564,
+     "max": 23.241,
+     "min": 9.253
+    },
+    "upload_ms": {
+     "n": 240,
+     "mean": 3.94,
+     "p50": 3.665,
+     "p95": 4.714,
+     "p99": 12.457,
+     "max": 13.253,
+     "min": 2.805
+    },
+    "encode_ms": {
+     "n": 240,
+     "mean": 0.171,
+     "p50": 0.153,
+     "p95": 0.257,
+     "p99": 0.47,
+     "max": 0.759,
+     "min": 0.111
+    },
+    "gpu_ms": {
+     "n": 240,
+     "mean": 4.786,
+     "p50": 4.795,
+     "p95": 6.155,
+     "p99": 6.562,
+     "max": 6.708,
+     "min": 3.582
+    },
+    "readback_ms": {
+     "n": 240,
+     "mean": 2.466,
+     "p50": 2.377,
+     "p95": 3.535,
+     "p99": 4.204,
+     "max": 7.203,
+     "min": 1.538
+    },
+    "outside_island_ms": {
+     "n": 240,
+     "mean": 40.437,
+     "p50": 42.771,
+     "p95": 62.06,
+     "p99": 72.827,
+     "max": 102.045,
+     "min": 13.802
+    }
+   },
+   "accepted_frames_over_total": [
+    240,
+    240
+   ],
+   "wall_seconds": 62.4
+  }
+ ],
+ "median": {
+  "first_pass_fps": 17.077,
+  "interval_p95_ms": 82.415,
+  "node_evaluation_p50_ms": 54.68
+ }
+}

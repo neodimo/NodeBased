@@ -685,6 +685,111 @@ llvmpipe row, and `taskset -c 0-3` with `QT_SCALE_FACTOR=2` through `playback --
 tests with `python -m unittest tests.test_gpu2d tests.test_benchmark_gpu2d` (and the same through
 `run/force-adapter.py integrated|cpu`): 68 tests pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.
 
+### R6-1: the independent sources of one frame on worker threads (10/26, source-pool step A of 1)
+
+Step C found the Radeon's 74 ms graph frame made of two Read decodes (33.5 ms), the Roto matte (25.0 ms) and the island (13.6 ms), computed one
+after the other. This step computes the independent sources side by side and measures it. Evidence is in `benchmarks/2d-gpu/R6-1/` under the `-1026`
+names (`graph-*`, `playback-*`, `source-pool-summary-1026.json`, `source-pool-environment-1026.json`, `playback-summary-*-staticroto-1026.json`).
+
+**Result.** The graph evaluated without a window gets much faster; the real playback window gets the same or a little faster, and the Radeon's
+island row does not move. Measured, three fresh passes per row (details below):
+
+- Whole graph, no window, 48 frames, p50 of the frame: Radeon island 74.0 to 74.4 ms to 42.3 to 42.7 ms; CPU kernels 136.0 to 146.8 ms to 102.3 to
+  103.4 ms (RTX 3080 Ti: 136.5 to 137.2 ms to 101.3 to 102.4 ms).
+- Real window, CPU nodes, 48 frames: 6.66 to 6.69 fps become 6.99 to 7.58 fps on the Radeon box (node stage 142.8 to 143.5 ms become 124.9 to 136.3 ms), and 6.75 fps becomes
+  7.70 to 7.75 fps with the RTX selected (node stage 138.8 to 142.0 ms become 120.3 to 122.4 ms).
+- Real window, Radeon island, 48 frames: 12.89 to 13.25 fps serial and 12.20 to 12.87 fps with the pool (interval p95 81.5 to 84.8 ms and 83.5 to
+  90.0 ms), and 240 frames 17.26 to 17.62 fps and 17.03 to 17.16 fps (p95 77.1 to 79.5 ms and 80.6 to 86.0 ms).
+- **The Radeon does not reach 24 fps on the realistic comp and does not pass the 16 fps gate (interval p95 62.5 ms) in any row.** The 240-frame
+  clip averages 17 fps, as in step C, with a p95 of 80 ms or more.
+
+**What was built.**
+
+- `nodebased/sourcepool.py`: `SourcePool`, a few daemon threads that run `SourceTask`s. A task is claimed exactly once, by a worker or by the thread
+  that joins it; the joining thread runs any task no worker has started, so no work waits in a queue and a pool that has shut down (or has no workers)
+  hands nothing to a stopped executor ("cannot schedule new futures after shutdown" is the message `concurrent.futures` raises, which Windows CI showed in the desktop tests on 10/25;
+  this pool does not use it). Workers never wait for another task and no lock is held while a source computes, so the pool has no wait cycle with the
+  decode-ahead pool, the GPU lock or the evaluator's cache lock. Memory in flight is bounded by the worker count and a byte budget (10% of the cache
+  memory, at least 256 MiB, `NODEBASED_SOURCE_POOL_MB`; each source is assumed to hold the size it produced last time, 64 MiB before that); a worker that would pass
+  the budget leaves the task to the joining thread.
+- Workers: none at four CPUs or fewer (the same rule as the decode-ahead pool, read from the process affinity), otherwise up to three
+  (`CPUs - 3`, at most 3). `NODEBASED_SOURCE_WORKERS` sets the count outright (0 turns the pool off). `Window` installs the pool on its evaluator and
+  shuts it down at close; a bare `Evaluator()` has none and walks serially as before.
+- `Evaluator.evaluate_raster` starts every source with no connected input (Read, Roto, Noise, Ramp, Radial, Rectangle, Grid, Checker; not Text, which paints with Qt)
+  when a walk has two or more of them, each as a nested `evaluate_raster` of that one node. The nested call takes the same cache key, disk tier,
+  decimation and error as the walk would, so the cache keys are unchanged. A source is joined by the first node that reads its value or digest, so
+  a Grade, Transform and Blur run while a Roto computes, and any source nobody read is joined after the walk. When a node fails, the earliest failing source in
+  graph order is the error raised, which is the serial walk's order. Cancellation reaches the nested calls through the same event; when the call
+  ends, by any route, unstarted tasks are dropped and running ones are waited for, so no source work outlives the call.
+- The retained results (`_store`, the hit and miss counters) and the two Roto matte caches take a lock; the disk spill of an evicted result runs outside it.
+- `tools/benchmark_gpu2d.py graph --source-workers N` (default 0, the step C method). Playback passes choose the count with
+  `--env NODEBASED_SOURCE_WORKERS=N`.
+
+**Tests** (`tests/test_sourcepool.py`, 22 tests, 0.9 s). Pooled pixels and digests equal the serial evaluator's bit for bit on every node, frame and tier 1 and 2; the cache
+keys, hit and miss counters, bytes and Roto matte counters equal the serial walk's; two Reads decode at the same moment (a two-party barrier inside the decode); a
+Grade-side kernel runs while a slow Roto computes; one or both Reads missing give the serial error text for every target; a failure earlier in the walk wins over a
+failing source; cancelling mid-walk raises `Cancelled` and leaves nothing in flight or queued; no source work remains running after a failing call; a shut-down pool
+and a one-source byte budget still give the serial pixels; a disabled or connected node is not launched; the `Window` installs and closes the pool.
+
+**Whole graph, no window** (`benchmark_gpu2d.py graph`, Radeon and RTX boxes at 32 CPUs, three workers; the stand-in is `taskset -c 0-3` with two workers forced;
+frame p50 / p95 in milliseconds, range over three passes):
+
+| Row | Serial (0 workers) | Source pool |
+|---|---|---|
+| CPU kernels, Radeon box | 136.0 to 146.8 / 141.1 to 244.4 | 102.3 to 103.4 / 108.8 to 110.9 |
+| CPU kernels, RTX box | 136.5 to 137.2 / 142.9 to 143.9 | 101.3 to 102.4 / 108.4 to 109.8 |
+| Island on the Radeon | 74.0 to 74.4 / 80.6 to 85.3 | 42.3 to 42.7 / 46.7 to 48.7 |
+| Island on the RTX 3080 Ti | 221.9 to 223.0 / 237.2 to 243.4 | 130.0 to 194.0 / 204.6 to 206.6 (the link renegotiates between passes) |
+| Stand-in, CPU kernels | 150.1 to 150.8 / 155.4 to 156.4 | 121.1 to 122.2 / 128.2 to 130.4 |
+| Stand-in, island on the Radeon | 89.0 to 90.2 / 91.2 to 92.2 | 60.3 to 60.7 / 63.1 to 64.8 |
+
+The per-node rows in the graph files add busy time over threads: with the pool the Radeon island frame reads Read 42.3 to 43.6 ms, Roto 29.7 to 30.2 ms and the
+island 11.5 to 11.7 ms, while the frame took 42.3 to 42.7 ms. Running the sources together slows each of them (Read 33.5 to 42.5 ms, Roto 25.0 to 30.0 ms) and the
+chain beside them (Grade 11.4 to 12.5 ms), so the gain is smaller than the sum. The step C estimate for the island frame was 39 ms; the measurement is 42.5 ms.
+
+**Real window** (`benchmark_gpu2d.py playback`, uncached, first lap, three passes per row; ranges cover the passes; "Step C" is the 10/25 result on the same fixture,
+"Serial" is today's run with `NODEBASED_SOURCE_WORKERS=0`, "Pool" has three workers except on the stand-in; interval in milliseconds, node stage is the median
+node-evaluation stage in the timeline):
+
+| Row | Step C fps / p95 / node stage | Serial fps / p95 / node stage | Pool fps / p95 / node stage |
+|---|---|---|---|
+| Radeon, 48 frames, CPU nodes | 6.65 to 6.73 / 164.8 to 166.1 / 140.9 to 143.6 | 6.66 to 6.69 / 162.3 to 170.5 / 142.8 to 143.5 | 6.99 to 7.58 / 151.4 to 164.4 / 124.9 to 136.3 |
+| Radeon, 48 frames, island | 12.97 to 13.49 / 78.3 to 86.5 / 67.7 to 71.1 | 12.89 to 13.25 / 81.5 to 84.8 / 67.6 to 70.8 | 12.20 to 12.87 / 83.5 to 90.0 / 69.9 to 72.9 |
+| Radeon, 240 frames, CPU nodes | 8.85 to 8.93 / 154.8 to 157.3 / 97.1 to 97.9 | 8.80 to 8.91 / 155.8 to 160.4 / 96.4 to 97.7 | 8.83 to 9.21 / 136.4 to 152.5 / 97.4 to 98.5 |
+| Radeon, 240 frames, island | 16.90 to 17.43 / 78.7 to 79.9 / 51.9 to 53.6 | 17.26 to 17.62 / 77.1 to 79.5 / 51.7 to 53.0 | 17.03 to 17.16 / 80.6 to 86.0 / 53.5 to 55.1 |
+| RTX 3080 Ti, 48 frames, CPU nodes | 6.64 to 6.75 / 161.0 to 163.6 / 139.4 to 145.2 | 6.75 / 161.3 to 164.5 / 138.8 to 142.0 | 7.70 to 7.75 / 138.9 to 143.5 / 120.3 to 122.4 |
+| RTX 3080 Ti, 48 frames, island | 4.66 to 4.95 / 229.8 to 354.4 / 210.8 to 217.7 | 4.77 to 5.15 / 240.3 to 278.1 / 207.8 to 217.8 | 4.64 to 4.87 / 241.9 to 398.5 / 212.1 to 217.0 |
+| Stand-in (4 CPUs, 2x scale), 48 frames, CPU nodes | 4.72 to 4.81 / 222.0 to 233.5 / 205.1 to 209.8 | default, no workers: 4.75 to 4.81 / 221.8 to 229.4 / 206.5 to 209.9 | 2 workers forced: 5.21 to 5.65 / 199.3 to 215.1 / 175.8 to 188.1 |
+| Stand-in, 48 frames, island | 7.11 to 7.26 / 147.7 to 154.3 / 134.0 to 135.8 | default, no workers: 7.17 to 7.31 / 147.6 to 155.2 / 132.3 to 135.9 | 2 workers forced: 8.82 to 9.04 / 129.3 to 140.8 / 107.8 to 110.1 |
+
+**Why the window gains less than the graph.** What the windows show (these are measurements; the causes are not established):
+
+- The preview worker's call stacks (the harness's sampling profile) in the Radeon island pass: with serial sources 718 of its 1243 samples (58%) are inside the Roto matte; with
+  the pool 650 of 1242 (52%) are the worker waiting in the join for a source and 107 are it running one itself. The Roto is the longest source and the island cannot
+  start before it, so the frame takes about the Roto plus the island plus the rest, with or without a second thread.
+- A variant of the fixture whose Roto shape does not move (the matte is computed once and cached; `playback-summary-gpu2d-48-radeon8060s-staticroto-1026.json`) plays at 17.7 to
+  18.2 fps with the pool and 17.9 to 18.0 fps without, interval p95 65.7 to 72.2 ms and 67.9 to 73.3 ms, node stage 47.0 to 54.4 ms and 48.0 to 52.6 ms. A Roto that costs nothing would
+  therefore lift the Radeon island row from 13 to about 18 fps, which still misses the 62.5 ms p95 gate and 24 fps. The window sits near 50 ms of node stage with the matte cached.
+- Two decode-ahead workers (`NODEBASED_DECODE_AHEAD_WORKERS=2`) instead of one, with and without the pool, leave the Radeon island row at 12.4 to 12.6 fps (pool) and 13.0 to 13.1 fps
+  (serial); node stage 71.4 to 71.9 ms and 68.3 to 70.3 ms.
+- Where the decode-ahead pool is off (four CPUs or fewer) the pool does help the window (stand-in rows above: +0.5 to +0.8 fps on the CPU nodes and +1.5 to +1.9 fps on the island, node stage about 20 to 30 ms shorter in both).
+  The default there stays at zero workers, as required; whether to switch two workers on at four CPUs is Gonzo's call.
+
+**Do the Radeon rows reach 16 and 24 fps?** No. Fresh playback of the 48-frame lap runs at 12.2 to 12.9 fps with the pool (12.9 to 13.3 fps serial), the 240-frame clip at 17.0 to 17.2 fps with a p95 of 80.6 to 86.0 ms
+(the 62.5 ms gate fails, as in step C), and no row comes near 24 fps (41.67 ms). The island frame in the serial graph reached 42.5 ms, 0.8 ms over the 24 fps interval, and the window adds the
+display conversion, the hand-off and the other threads on top of it.
+
+**Left out.** RTX 4070 laptop, A6000 and Windows rows stay unverified (Gonzo owns them); the llvmpipe playback rows were not repeated; the RTX 240-frame rows were not repeated (the 48-frame island row is bound by the PCI
+link whatever the sources do). Plate files were regenerated with the unchanged generator; EXR headers carry a creation time, so their file hashes differ from `inputs-1080p-240.sha256`.
+An early targeted run of `tests.test_gpu2d` and `tests.test_benchmark_gpu2d` (28 s) ran on the RTX 3080 Ti without `/tmp/nb-gpu.lock`; every measurement and the final GPU test runs took it.
+
+**Needs Gonzo.** (1) Decide whether to turn two source workers on at four CPUs (the stand-in gains 0.5 to 1.9 fps; the decode-ahead pool, which an earlier test found to slow that size down, is
+off there). (2) The longest source, the animated Roto matte, decides the Radeon island frame; computing the next frame's matte while this frame's island runs (a read-ahead like the decode-ahead pool, using
+the source pool) would remove up to the 13 to 18 fps difference measured above, and it needs the app's next-frames list; this step did not build it. (3) The remaining 50 ms of node stage with a free Roto is unexplained.
+
+Rerun: `python tools/benchmark_gpu2d.py graph --inputs "$NB_RUN/plates" --backend gpu2d --adapter integrated --budget-mb 512 --label radeon8060s --source-workers 3 --output g.json`
+(`--source-workers 0` for the serial walk) and `python tools/benchmark_gpu2d.py playback ... --env NODEBASED_SOURCE_WORKERS=3`; tests: `python -m unittest tests.test_sourcepool`.
+
 ## Lane 2 step notes
 
 ### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)

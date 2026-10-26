@@ -1,0 +1,165 @@
+{
+ "tool": "tools/benchmark_gpu2d.py playback",
+ "label": "radeon8060s-src3",
+ "backend": "cpu",
+ "frame_range": 48,
+ "force_adapter": "integrated",
+ "cpus": null,
+ "env": [
+  "NODEBASED_SOURCE_WORKERS=3"
+ ],
+ "passes": [
+  {
+   "case": "cpu-48-radeon8060s-src3-1",
+   "adapter": "radeon8060s-src3",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 7.016,
+   "total_duration_ms": 6794.898,
+   "mean_interval_ms": 143.004,
+   "interval_ms": {
+    "n": 46,
+    "mean": 143.004,
+    "p50": 142.055,
+    "p95": 158.684,
+    "p99": 165.618,
+    "max": 167.261
+   },
+   "first_picture_latency_ms": 216.724,
+   "latency_ms": {
+    "n": 47,
+    "mean": 165.458,
+    "p50": 164.375,
+    "p95": 187.099,
+    "p99": 204.259,
+    "max": 216.724
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 136.601,
+    "p50": 135.447,
+    "p95": 158.83,
+    "p99": 160.693,
+    "max": 160.71
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 20.293,
+    "p50": 19.934,
+    "p95": 22.86,
+    "p99": 38.973,
+    "max": 52.431
+   },
+   "frames_dropped_counted": 7,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ],
+   "wall_seconds": 14.3
+  },
+  {
+   "case": "cpu-48-radeon8060s-src3-2",
+   "adapter": "radeon8060s-src3",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 6.99,
+   "total_duration_ms": 6810.502,
+   "mean_interval_ms": 143.33,
+   "interval_ms": {
+    "n": 46,
+    "mean": 143.33,
+    "p50": 141.445,
+    "p95": 164.407,
+    "p99": 172.356,
+    "max": 173.947
+   },
+   "first_picture_latency_ms": 217.34,
+   "latency_ms": {
+    "n": 47,
+    "mean": 167.017,
+    "p50": 163.094,
+    "p95": 198.625,
+    "p99": 210.149,
+    "max": 217.34
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 137.679,
+    "p50": 136.26,
+    "p95": 160.598,
+    "p99": 172.257,
+    "max": 176.037
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 20.888,
+    "p50": 19.957,
+    "p95": 26.982,
+    "p99": 48.496,
+    "max": 57.317
+   },
+   "frames_dropped_counted": 6,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ],
+   "wall_seconds": 14.3
+  },
+  {
+   "case": "cpu-48-radeon8060s-src3-3",
+   "adapter": "radeon8060s-src3",
+   "backend": "cpu",
+   "frames_in_first_pass": 48,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 7.579,
+   "total_duration_ms": 6287.09,
+   "mean_interval_ms": 132.078,
+   "interval_ms": {
+    "n": 46,
+    "mean": 132.078,
+    "p50": 131.062,
+    "p95": 151.363,
+    "p99": 157.567,
+    "max": 158.973
+   },
+   "first_picture_latency_ms": 211.513,
+   "latency_ms": {
+    "n": 47,
+    "mean": 153.9,
+    "p50": 152.235,
+    "p95": 181.571,
+    "p99": 204.942,
+    "max": 211.513
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 126.163,
+    "p50": 124.909,
+    "p95": 142.818,
+    "p99": 158.076,
+    "max": 163.207
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 19.561,
+    "p50": 19.126,
+    "p95": 22.195,
+    "p99": 42.183,
+    "max": 58.108
+   },
+   "frames_dropped_counted": 7,
+   "accepted_frames_over_total": [
+    47,
+    48
+   ],
+   "wall_seconds": 14.3
+  }
+ ],
+ "median": {
+  "first_pass_fps": 7.016,
+  "interval_p95_ms": 158.684,
+  "node_evaluation_p50_ms": 135.447
+ }
+}

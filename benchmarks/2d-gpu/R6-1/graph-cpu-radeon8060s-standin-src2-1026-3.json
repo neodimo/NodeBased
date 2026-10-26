@@ -1,0 +1,830 @@
+{
+ "tool": "tools/benchmark_gpu2d.py graph",
+ "label": "radeon8060s-standin-src2",
+ "backend": "cpu",
+ "adapter_choice": "integrated",
+ "source_workers": 2,
+ "size": [
+  1920,
+  1080
+ ],
+ "frames": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45,
+  46,
+  47,
+  48
+ ],
+ "environment": {
+  "revision": "7728b652f06ae48af1623a7ed04714afff0e3f09",
+  "working_tree_dirty": false,
+  "fixture_sha256": "697f157ac59ef14c54c9f34dd8ceb7b5d1603ecb18537f0ea682c4afa0bbca8f",
+  "host": "bazzite",
+  "os": "Linux-7.2.9-ogc3.1.fc44.x86_64-x86_64-with-glibc2.43",
+  "cpu": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "cpu_count": 32,
+  "python": "3.12.13",
+  "versions": {
+   "numpy": "2.5.3",
+   "wgpu": "0.32.0",
+   "PySide6": "6.11.2"
+  },
+  "nvidia_smi": "NVIDIA GeForce RTX 3080 Ti, 615.78.08, 12288 MiB, 1, 4, 2, 16",
+  "command": "tools/benchmark_gpu2d.py graph --inputs $NB_RUN/plates --backend cpu --adapter integrated --budget-mb 512 --label radeon8060s-standin-src2 --frames 1-48 --source-workers 2 --output $NB_RUN/g1026/graph-cpu-radeon8060s-standin-src2-3.json",
+  "disk_cache": "0",
+  "timing_method": "bounded completion: gpu_ms = queue submit until a 16-byte flags readback returns (every pass finished); upload_ms = host write_buffer calls; readback_ms = copy and map of the finished image; exec_ms = stage + encode + passes to completion (no source upload, no terminal readback); total_ms = stage start until the Raster is on the host; no GPU timestamp queries (feature not enabled on the shared device)"
+ },
+ "cold_shader_setup_ms": null,
+ "note": "evaluation of the whole fixture to ColorCorrect (source_workers 0 is serial: Read decodes inline, both Reads add up under Read; above 0 the sources run on worker threads and the per-kind rows are busy time summed over threads while wall_ms stays the frame), no window and no display conversion; kernel_ms_by_node_kind times every CPU kernel call by node kind, and under the island the island rows hold the staging and the run (upload, passes, terminal readback) in place of the Grade, Transform, Blur and Merge kernels",
+ "wall_ms": {
+  "n": 48,
+  "mean": 120.276,
+  "p50": 121.084,
+  "p95": 129.394,
+  "p99": 133.183,
+  "max": 134.801,
+  "min": 95.467
+ },
+ "kernel_ms_by_node_kind": {
+  "Blur": {
+   "n": 48,
+   "mean": 19.525,
+   "p50": 19.55,
+   "p95": 20.402,
+   "p99": 20.575,
+   "max": 20.627,
+   "min": 18.07
+  },
+  "ColorCorrect": {
+   "n": 48,
+   "mean": 0.061,
+   "p50": 0.061,
+   "p95": 0.067,
+   "p99": 0.069,
+   "max": 0.07,
+   "min": 0.056
+  },
+  "Grade": {
+   "n": 48,
+   "mean": 12.633,
+   "p50": 12.732,
+   "p95": 13.995,
+   "p99": 14.124,
+   "max": 14.199,
+   "min": 11.006
+  },
+  "Merge": {
+   "n": 48,
+   "mean": 21.445,
+   "p50": 21.456,
+   "p95": 23.115,
+   "p99": 23.233,
+   "max": 23.278,
+   "min": 19.215
+  },
+  "Read": {
+   "n": 48,
+   "mean": 79.435,
+   "p50": 79.865,
+   "p95": 86.772,
+   "p99": 89.632,
+   "max": 89.669,
+   "min": 62.877
+  },
+  "Roto": {
+   "n": 48,
+   "mean": 42.557,
+   "p50": 43.379,
+   "p95": 48.17,
+   "p99": 49.331,
+   "max": 49.884,
+   "min": 26.768
+  },
+  "Transform": {
+   "n": 48,
+   "mean": 23.106,
+   "p50": 23.35,
+   "p95": 28.344,
+   "p99": 28.708,
+   "max": 28.978,
+   "min": 5.474
+  }
+ },
+ "samples": [
+  {
+   "frame": 1,
+   "wall_ms": 105.052,
+   "nodes_ms": {
+    "Roto": 45.449,
+    "Read": 83.528,
+    "Grade": 12.32,
+    "Transform": 5.474,
+    "Blur": 19.711,
+    "Merge": 20.006,
+    "ColorCorrect": 0.067
+   },
+   "finite": true
+  },
+  {
+   "frame": 2,
+   "wall_ms": 129.954,
+   "nodes_ms": {
+    "Read": 89.669,
+    "Roto": 47.706,
+    "Grade": 12.153,
+    "Transform": 28.17,
+    "Blur": 20.517,
+    "Merge": 20.215,
+    "ColorCorrect": 0.066
+   },
+   "finite": true
+  },
+  {
+   "frame": 3,
+   "wall_ms": 122.588,
+   "nodes_ms": {
+    "Roto": 31.795,
+    "Read": 83.245,
+    "Grade": 13.452,
+    "Transform": 22.892,
+    "Blur": 19.495,
+    "Merge": 20.786,
+    "ColorCorrect": 0.065
+   },
+   "finite": true
+  },
+  {
+   "frame": 4,
+   "wall_ms": 120.916,
+   "nodes_ms": {
+    "Read": 78.345,
+    "Roto": 48.181,
+    "Grade": 13.588,
+    "Transform": 23.76,
+    "Blur": 19.787,
+    "Merge": 20.658,
+    "ColorCorrect": 0.07
+   },
+   "finite": true
+  },
+  {
+   "frame": 5,
+   "wall_ms": 121.492,
+   "nodes_ms": {
+    "Read": 84.022,
+    "Roto": 48.707,
+    "Grade": 12.815,
+    "Transform": 21.403,
+    "Blur": 20.085,
+    "Merge": 20.78,
+    "ColorCorrect": 0.063
+   },
+   "finite": true
+  },
+  {
+   "frame": 6,
+   "wall_ms": 124.918,
+   "nodes_ms": {
+    "Roto": 40.737,
+    "Read": 85.001,
+    "Grade": 12.008,
+    "Transform": 24.181,
+    "Blur": 20.444,
+    "Merge": 21.097,
+    "ColorCorrect": 0.065
+   },
+   "finite": true
+  },
+  {
+   "frame": 7,
+   "wall_ms": 126.644,
+   "nodes_ms": {
+    "Read": 78.108,
+    "Roto": 47.767,
+    "Grade": 12.726,
+    "Transform": 28.375,
+    "Blur": 20.324,
+    "Merge": 21.33,
+    "ColorCorrect": 0.068
+   },
+   "finite": true
+  },
+  {
+   "frame": 8,
+   "wall_ms": 121.132,
+   "nodes_ms": {
+    "Roto": 44.439,
+    "Read": 86.357,
+    "Grade": 12.157,
+    "Transform": 20.293,
+    "Blur": 19.702,
+    "Merge": 20.464,
+    "ColorCorrect": 0.064
+   },
+   "finite": true
+  },
+  {
+   "frame": 9,
+   "wall_ms": 134.801,
+   "nodes_ms": {
+    "Read": 72.253,
+    "Roto": 43.261,
+    "Grade": 13.437,
+    "Transform": 24.419,
+    "Blur": 19.851,
+    "Merge": 22.238,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 10,
+   "wall_ms": 126.024,
+   "nodes_ms": {
+    "Read": 82.531,
+    "Roto": 46.32,
+    "Grade": 13.003,
+    "Transform": 22.816,
+    "Blur": 20.172,
+    "Merge": 22.175,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 11,
+   "wall_ms": 121.639,
+   "nodes_ms": {
+    "Roto": 44.322,
+    "Read": 83.148,
+    "Grade": 11.006,
+    "Transform": 23.654,
+    "Blur": 19.2,
+    "Merge": 21.255,
+    "ColorCorrect": 0.064
+   },
+   "finite": true
+  },
+  {
+   "frame": 12,
+   "wall_ms": 119.084,
+   "nodes_ms": {
+    "Read": 80.855,
+    "Roto": 43.497,
+    "Grade": 12.12,
+    "Transform": 19.342,
+    "Blur": 19.749,
+    "Merge": 21.682,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 13,
+   "wall_ms": 123.455,
+   "nodes_ms": {
+    "Read": 72.828,
+    "Roto": 44.04,
+    "Grade": 13.562,
+    "Transform": 28.144,
+    "Blur": 19.34,
+    "Merge": 20.449,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 14,
+   "wall_ms": 123.195,
+   "nodes_ms": {
+    "Read": 83.444,
+    "Roto": 47.95,
+    "Grade": 11.37,
+    "Transform": 23.089,
+    "Blur": 19.94,
+    "Merge": 21.101,
+    "ColorCorrect": 0.064
+   },
+   "finite": true
+  },
+  {
+   "frame": 15,
+   "wall_ms": 125.715,
+   "nodes_ms": {
+    "Roto": 43.684,
+    "Read": 86.995,
+    "Grade": 12.992,
+    "Transform": 24.304,
+    "Blur": 19.489,
+    "Merge": 20.368,
+    "ColorCorrect": 0.06
+   },
+   "finite": true
+  },
+  {
+   "frame": 16,
+   "wall_ms": 113.521,
+   "nodes_ms": {
+    "Read": 70.45,
+    "Roto": 38.155,
+    "Grade": 12.738,
+    "Transform": 24.038,
+    "Blur": 19.396,
+    "Merge": 21.268,
+    "ColorCorrect": 0.064
+   },
+   "finite": true
+  },
+  {
+   "frame": 17,
+   "wall_ms": 121.696,
+   "nodes_ms": {
+    "Read": 72.844,
+    "Roto": 46.159,
+    "Grade": 13.26,
+    "Transform": 23.062,
+    "Blur": 19.87,
+    "Merge": 22.506,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 18,
+   "wall_ms": 131.358,
+   "nodes_ms": {
+    "Read": 79.94,
+    "Roto": 46.825,
+    "Grade": 14.039,
+    "Transform": 27.985,
+    "Blur": 20.069,
+    "Merge": 23.155,
+    "ColorCorrect": 0.063
+   },
+   "finite": true
+  },
+  {
+   "frame": 19,
+   "wall_ms": 108.584,
+   "nodes_ms": {
+    "Read": 75.057,
+    "Roto": 43.031,
+    "Grade": 13.201,
+    "Transform": 19.472,
+    "Blur": 19.707,
+    "Merge": 20.845,
+    "ColorCorrect": 0.065
+   },
+   "finite": true
+  },
+  {
+   "frame": 20,
+   "wall_ms": 126.496,
+   "nodes_ms": {
+    "Read": 81.548,
+    "Roto": 46.747,
+    "Grade": 13.545,
+    "Transform": 27.771,
+    "Blur": 19.656,
+    "Merge": 21.96,
+    "ColorCorrect": 0.064
+   },
+   "finite": true
+  },
+  {
+   "frame": 21,
+   "wall_ms": 110.504,
+   "nodes_ms": {
+    "Read": 72.375,
+    "Grade": 12.015,
+    "Roto": 49.884,
+    "Transform": 21.845,
+    "Blur": 19.553,
+    "Merge": 19.515,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 22,
+   "wall_ms": 123.277,
+   "nodes_ms": {
+    "Read": 81.606,
+    "Roto": 45.079,
+    "Grade": 11.731,
+    "Transform": 22.84,
+    "Blur": 20.275,
+    "Merge": 21.726,
+    "ColorCorrect": 0.063
+   },
+   "finite": true
+  },
+  {
+   "frame": 23,
+   "wall_ms": 116.476,
+   "nodes_ms": {
+    "Roto": 39.145,
+    "Read": 82.798,
+    "Grade": 12.086,
+    "Transform": 21.058,
+    "Blur": 19.66,
+    "Merge": 19.215,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 24,
+   "wall_ms": 128.353,
+   "nodes_ms": {
+    "Read": 82.325,
+    "Roto": 48.149,
+    "Grade": 12.592,
+    "Transform": 28.02,
+    "Blur": 20.627,
+    "Merge": 21.036,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 25,
+   "wall_ms": 120.617,
+   "nodes_ms": {
+    "Read": 76.767,
+    "Roto": 41.472,
+    "Grade": 13.12,
+    "Transform": 27.797,
+    "Blur": 20.256,
+    "Merge": 20.129,
+    "ColorCorrect": 0.062
+   },
+   "finite": true
+  },
+  {
+   "frame": 26,
+   "wall_ms": 115.489,
+   "nodes_ms": {
+    "Read": 80.088,
+    "Roto": 46.226,
+    "Grade": 13.676,
+    "Transform": 19.887,
+    "Blur": 19.657,
+    "Merge": 19.679,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 27,
+   "wall_ms": 118.865,
+   "nodes_ms": {
+    "Read": 81.978,
+    "Roto": 45.567,
+    "Grade": 12.035,
+    "Transform": 22.775,
+    "Blur": 19.546,
+    "Merge": 20.215,
+    "ColorCorrect": 0.064
+   },
+   "finite": true
+  },
+  {
+   "frame": 28,
+   "wall_ms": 117.991,
+   "nodes_ms": {
+    "Roto": 38.517,
+    "Read": 82.309,
+    "Grade": 11.969,
+    "Transform": 22.616,
+    "Blur": 19.522,
+    "Merge": 19.518,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 29,
+   "wall_ms": 128.308,
+   "nodes_ms": {
+    "Roto": 41.063,
+    "Read": 85.23,
+    "Grade": 11.086,
+    "Transform": 28.404,
+    "Blur": 20.253,
+    "Merge": 21.288,
+    "ColorCorrect": 0.063
+   },
+   "finite": true
+  },
+  {
+   "frame": 30,
+   "wall_ms": 119.53,
+   "nodes_ms": {
+    "Roto": 32.558,
+    "Read": 89.59,
+    "Grade": 11.673,
+    "Transform": 18.399,
+    "Blur": 19.958,
+    "Merge": 20.755,
+    "ColorCorrect": 0.056
+   },
+   "finite": true
+  },
+  {
+   "frame": 31,
+   "wall_ms": 125.343,
+   "nodes_ms": {
+    "Read": 79.79,
+    "Roto": 47.697,
+    "Grade": 13.414,
+    "Transform": 27.653,
+    "Blur": 19.368,
+    "Merge": 21.467,
+    "ColorCorrect": 0.063
+   },
+   "finite": true
+  },
+  {
+   "frame": 32,
+   "wall_ms": 121.036,
+   "nodes_ms": {
+    "Read": 74.504,
+    "Roto": 46.792,
+    "Grade": 11.569,
+    "Transform": 23.179,
+    "Blur": 20.093,
+    "Merge": 21.546,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 33,
+   "wall_ms": 120.376,
+   "nodes_ms": {
+    "Read": 80.59,
+    "Roto": 41.591,
+    "Grade": 12.82,
+    "Transform": 23.749,
+    "Blur": 18.707,
+    "Merge": 22.783,
+    "ColorCorrect": 0.059
+   },
+   "finite": true
+  },
+  {
+   "frame": 34,
+   "wall_ms": 121.937,
+   "nodes_ms": {
+    "Roto": 33.05,
+    "Read": 83.377,
+    "Grade": 13.209,
+    "Transform": 23.871,
+    "Blur": 18.454,
+    "Merge": 22.111,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 35,
+   "wall_ms": 119.704,
+   "nodes_ms": {
+    "Read": 79.243,
+    "Roto": 41.18,
+    "Grade": 13.209,
+    "Transform": 22.912,
+    "Blur": 19.142,
+    "Merge": 22.571,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 36,
+   "wall_ms": 126.079,
+   "nodes_ms": {
+    "Read": 78.939,
+    "Roto": 43.26,
+    "Grade": 13.941,
+    "Transform": 28.287,
+    "Blur": 19.12,
+    "Merge": 23.04,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 37,
+   "wall_ms": 108.752,
+   "nodes_ms": {
+    "Read": 74.223,
+    "Roto": 39.231,
+    "Grade": 14.024,
+    "Transform": 19.75,
+    "Blur": 18.62,
+    "Merge": 21.444,
+    "ColorCorrect": 0.061
+   },
+   "finite": true
+  },
+  {
+   "frame": 38,
+   "wall_ms": 120.223,
+   "nodes_ms": {
+    "Roto": 39.415,
+    "Read": 77.228,
+    "Grade": 12.861,
+    "Transform": 23.787,
+    "Blur": 19.431,
+    "Merge": 23.007,
+    "ColorCorrect": 0.057
+   },
+   "finite": true
+  },
+  {
+   "frame": 39,
+   "wall_ms": 119.789,
+   "nodes_ms": {
+    "Read": 79.016,
+    "Roto": 45.621,
+    "Grade": 14.199,
+    "Transform": 21.257,
+    "Blur": 18.833,
+    "Merge": 23.278,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 40,
+   "wall_ms": 118.119,
+   "nodes_ms": {
+    "Roto": 35.883,
+    "Read": 79.201,
+    "Grade": 12.689,
+    "Transform": 23.522,
+    "Blur": 18.757,
+    "Merge": 22.539,
+    "ColorCorrect": 0.057
+   },
+   "finite": true
+  },
+  {
+   "frame": 41,
+   "wall_ms": 115.942,
+   "nodes_ms": {
+    "Roto": 38.599,
+    "Read": 78.7,
+    "Grade": 12.658,
+    "Transform": 19.434,
+    "Blur": 18.916,
+    "Merge": 22.213,
+    "ColorCorrect": 0.064
+   },
+   "finite": true
+  },
+  {
+   "frame": 42,
+   "wall_ms": 114.874,
+   "nodes_ms": {
+    "Read": 71.808,
+    "Roto": 39.394,
+    "Grade": 12.173,
+    "Transform": 28.978,
+    "Blur": 18.79,
+    "Merge": 21.633,
+    "ColorCorrect": 0.06
+   },
+   "finite": true
+  },
+  {
+   "frame": 43,
+   "wall_ms": 124.044,
+   "nodes_ms": {
+    "Roto": 26.768,
+    "Read": 78.82,
+    "Grade": 11.219,
+    "Transform": 23.76,
+    "Blur": 18.866,
+    "Merge": 23.182,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 44,
+   "wall_ms": 108.256,
+   "nodes_ms": {
+    "Read": 72.065,
+    "Grade": 11.689,
+    "Roto": 45.097,
+    "Transform": 21.882,
+    "Blur": 18.07,
+    "Merge": 22.636,
+    "ColorCorrect": 0.057
+   },
+   "finite": true
+  },
+  {
+   "frame": 45,
+   "wall_ms": 123.139,
+   "nodes_ms": {
+    "Roto": 42.709,
+    "Read": 81.608,
+    "Grade": 11.81,
+    "Transform": 24.395,
+    "Blur": 18.981,
+    "Merge": 22.312,
+    "ColorCorrect": 0.057
+   },
+   "finite": true
+  },
+  {
+   "frame": 46,
+   "wall_ms": 114.222,
+   "nodes_ms": {
+    "Roto": 38.591,
+    "Read": 79.288,
+    "Grade": 11.145,
+    "Transform": 21.966,
+    "Blur": 18.973,
+    "Merge": 21.862,
+    "ColorCorrect": 0.065
+   },
+   "finite": true
+  },
+  {
+   "frame": 47,
+   "wall_ms": 128.259,
+   "nodes_ms": {
+    "Read": 62.877,
+    "Roto": 43.088,
+    "Grade": 13.132,
+    "Transform": 27.868,
+    "Blur": 19.463,
+    "Merge": 22.328,
+    "ColorCorrect": 0.058
+   },
+   "finite": true
+  },
+  {
+   "frame": 48,
+   "wall_ms": 95.467,
+   "nodes_ms": {
+    "Read": 76.38,
+    "Roto": 38.32,
+    "Grade": 13.125,
+    "Transform": 6.54,
+    "Blur": 18.788,
+    "Merge": 22.017,
+    "ColorCorrect": 0.062
+   },
+   "finite": true
+  }
+ ]
+}
