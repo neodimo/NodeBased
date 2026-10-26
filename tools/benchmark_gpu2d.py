@@ -598,6 +598,8 @@ def cmd_playback(args):
                "--timeline-output", str(timeline)]
         if args.frame_range != 48:
             cmd += ["--frame-range", str(args.frame_range)]
+        if getattr(args, "stages", False):
+            cmd += ["--stage-trace", str(out_dir / f"{case}.stages.json")]
         if args.cpus:                  # the laptop stand-in: four CPUs (pair with --env QT_SCALE_FACTOR=2)
             cmd = ["taskset", "-c", args.cpus] + cmd
         env = {**os.environ, "PYTHONPATH": str(ROOT), "DISPLAY": args.display, "NODEBASED_DISK_CACHE": "0"}
@@ -623,6 +625,137 @@ def cmd_playback(args):
     (out_dir / f"summary-{args.backend}-{args.frame_range}-{args.label}.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(json.dumps(summary["median"]))
     return 0 if len(good) == args.passes else 1
+
+
+def exclusive_times(spans):
+    """Per-label exclusive time of one thread's spans (each span's own time less the spans nested inside it)."""
+    spans = sorted(spans, key=lambda s: (s[2], -s[3]))
+    totals, stack = {}, []        # stack of [label, end, child_time]
+    def close(entry, end):
+        label, _, children, begin = entry
+        totals[label] = totals.get(label, 0.0) + (end - begin) - children
+    for _, label, begin, end in spans:
+        while stack and stack[-1][1] <= begin + 1e-9:
+            done = stack.pop()
+            close(done, done[1])
+            if stack:
+                stack[-1][2] += done[1] - done[3]
+        stack.append([label, end, 0.0, begin])
+    while stack:
+        done = stack.pop()
+        close(done, done[1])
+        if stack:
+            stack[-1][2] += done[1] - done[3]
+    return totals
+
+
+def stage_rows(stages_path, timeline_path):
+    """One pass: per accepted fresh frame, where the evaluating thread's node stage went (exclusive ms per stage, the
+    island run split by its counters) and what the other threads did meanwhile (busy ms inside the node stage)."""
+    st = json.loads(pathlib.Path(stages_path).read_text())
+    tl = json.loads(pathlib.Path(timeline_path).read_text())
+    limit = tl.get("first_pass_frames") or None
+    frames = sorted((f for f in st["frames"] if "shown" in f["points_ms"] and "eval_begin" in f["points_ms"] and "eval_end" in f["points_ms"]),
+                    key=lambda f: f["points_ms"]["shown"])
+    if limit:
+        frames = frames[:limit]
+    by_thread = {}
+    for span in st["spans"]:
+        by_thread.setdefault(span[0], []).append(span)
+    islands = st.get("islands") or []
+    rows = []
+    for f in frames:
+        begin, end = f["points_ms"]["eval_begin"], f["points_ms"]["eval_end"]
+        top = None
+        for thread, spans in by_thread.items():
+            if not thread.startswith("nodebased-preview"):
+                continue
+            for s in spans:
+                if s[1].startswith("walk:") and s[2] >= begin - 1.5 and s[3] <= end + 1.5 and (top is None or s[3] - s[2] > top[3] - top[2]):
+                    top = s
+        if top is None:
+            continue
+        evaluator = [s for s in by_thread[top[0]] if top[2] - 1e-6 <= s[2] and s[3] <= top[3] + 1e-6]
+        excl = exclusive_times(evaluator)
+        row = {"node_stage_ms": end - begin, "walk_ms": top[3] - top[2], "stages": {}, "other_threads": {}}
+        run_total = excl.pop("island run", 0.0)
+        island = next((i for i in islands if top[2] - 1 <= i["t_ms"] <= top[3] + 1), None)
+        if island is not None and run_total:
+            parts = {"island upload (host to card)": island["upload_ms"], "island encode (host)": island["encode_ms"],
+                     "island kernels on the card (submit to done)": island["gpu_ms"],
+                     "island download: copy and map": island["readback_map_ms"], "island download: host copy into the picture": island["readback_host_ms"]}
+            row["stages"].update(parts)
+            row["stages"]["island run: other host work (blob, submit, buffers)"] = max(0.0, run_total - sum(parts.values()))
+        elif run_total:
+            row["stages"]["island run (not split)"] = run_total
+        row["stages"].update(excl)
+        for thread, spans in by_thread.items():
+            if thread == top[0]:
+                continue
+            clipped = [(t, l, max(a, begin), min(b, end)) for t, l, a, b in spans if b > begin and a < end]
+            for label, value in exclusive_times(clipped).items():
+                if value > 0:
+                    row["other_threads"][f"{thread.rsplit('-', 1)[0]}: {label}"] = row["other_threads"].get(f"{thread.rsplit('-', 1)[0]}: {label}", 0.0) + value
+        rows.append(row)
+    return rows, st
+
+
+def cmd_stages(args):
+    """Average the stage files of the passes under --dir for one case prefix (<backend>-<range>-<label>-<n>)."""
+    directory = pathlib.Path(args.dir)
+    passes = sorted(directory.glob(f"{args.prefix}-[0-9].stages.json"))
+    if not passes:
+        raise SystemExit(f"no {args.prefix}-N.stages.json under {directory}")
+    per_pass, all_stage, all_other, profiles = [], {}, {}, []
+    for path in passes:
+        timeline = path.with_name(path.name.replace(".stages.json", ".timeline.json"))
+        rows, st = stage_rows(path, timeline)
+        if not rows:
+            continue
+        n = len(rows)
+        stage_means = {}
+        for r in rows:
+            for k, v in r["stages"].items():
+                stage_means[k] = stage_means.get(k, 0.0) + v / n
+        other_means = {}
+        for r in rows:
+            for k, v in r["other_threads"].items():
+                other_means[k] = other_means.get(k, 0.0) + v / n
+        per_pass.append({"case": path.name.replace(".stages.json", ""), "frames": n,
+                         "node_stage_ms": round(sum(r["node_stage_ms"] for r in rows) / n, 3),
+                         "walk_ms": round(sum(r["walk_ms"] for r in rows) / n, 3),
+                         "stages_ms": {k: round(v, 3) for k, v in sorted(stage_means.items(), key=lambda kv: -kv[1])},
+                         "other_threads_busy_ms": {k: round(v, 3) for k, v in sorted(other_means.items(), key=lambda kv: -kv[1])}})
+        for k, v in stage_means.items():
+            all_stage.setdefault(k, []).append(v)
+        for k, v in other_means.items():
+            all_other.setdefault(k, []).append(v)
+        profiles.append(st.get("sampling_profile", {}).get("worker", {}))
+    passes_n = len(per_pass)
+    def mean_rows(source):
+        out = {}
+        for k, values in source.items():
+            values = values + [0.0] * (passes_n - len(values))
+            out[k] = {"mean_ms": round(float(np.mean(values)), 3), "min_ms": round(min(values), 3), "max_ms": round(max(values), 3)}
+        return dict(sorted(out.items(), key=lambda kv: -kv[1]["mean_ms"]))
+    merged = {}
+    for prof in profiles:
+        for k, v in prof.items():
+            merged[k] = merged.get(k, 0) + v
+    walk_samples = max(merged.get("imaging.py:evaluate_raster", 0), 1)
+    top_python = [{"function": k, "share_of_walk_samples": round(v / walk_samples, 3)} for k, v in sorted(merged.items(), key=lambda kv: -kv[1])[:25]]
+    report = {"tool": "tools/benchmark_gpu2d.py stages", "prefix": args.prefix, "passes": per_pass,
+              "node_stage_ms": {"mean": round(float(np.mean([p["node_stage_ms"] for p in per_pass])), 3),
+                                "min": min(p["node_stage_ms"] for p in per_pass), "max": max(p["node_stage_ms"] for p in per_pass)},
+              "stages_ms": mean_rows(all_stage), "other_threads_busy_ms": mean_rows(all_other), "worker_thread_top_functions": top_python,
+              "note": "exclusive milliseconds per accepted fresh frame on the thread that evaluates it, averaged over the frames of a pass and then over the passes; "
+                      "'walk: ...' is the evaluator's own time between its nodes (cache keys, digests, windows, Python); the island run is split by its counters; "
+                      "other_threads_busy_ms is what the source and decode workers did inside the same node stage (it overlaps, it is not added)"}
+    out = pathlib.Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=1) + "\n")
+    print(json.dumps({"node_stage_ms": report["node_stage_ms"], "top": list(report["stages_ms"].items())[:10]}, indent=1))
+    return 0
 
 
 def cmd_resummarize(args):
@@ -814,8 +947,14 @@ def main():
     pb.add_argument("--budget-mb", type=int, default=1024)
     pb.add_argument("--cpus", help="restrict the run to these CPUs with taskset, e.g. 0-3")
     pb.add_argument("--env", action="append", default=[], metavar="NAME=VALUE", help="extra environment for the run (repeatable), e.g. QT_SCALE_FACTOR=2")
+    pb.add_argument("--stages", action="store_true", help="also write <case>.stages.json: every thread span of the run (see the `stages` command)")
     pb.add_argument("--out-dir", required=True, type=pathlib.Path)
     pb.set_defaults(fn=cmd_playback)
+    sg = sub.add_parser("stages", help="where the node stage of a played frame goes, from the --stages files of one case prefix")
+    sg.add_argument("--dir", required=True)
+    sg.add_argument("--prefix", required=True, help="<backend>-<range>-<label>, e.g. gpu2d-48-radeon8060s-1026c")
+    sg.add_argument("--output", required=True)
+    sg.set_defaults(fn=cmd_stages)
     tb = sub.add_parser("table", help="combine kernel passes of each tier into one compact summary and a table")
     tb.add_argument("--kernels", nargs="+", required=True)
     tb.add_argument("--output")

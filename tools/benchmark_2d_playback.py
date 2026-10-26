@@ -337,6 +337,47 @@ def run_window(args):
             finally: mark('worker_end',job_id=job_id,job=job_name,thread=threading.current_thread().name)
         return original_submit(wrapped,*a,**kw)
     win.executor.submit=submit
+    # Optional stage trace (--stage-trace): every span below is one thread's busy interval on the perf_counter clock the
+    # island rows already use; tools/benchmark_gpu2d.py stages attributes each played frame's node stage to them.
+    stage_spans=[]; stage_joins=[]
+    if args.stage_trace:
+        def spanned(label_of, fn):
+            def wrapper(*wa,**wk):
+                t0=time.perf_counter()
+                try: return fn(*wa,**wk)
+                finally: stage_spans.append((threading.current_thread().name,label_of(*wa,**wk),t0,time.perf_counter()))
+            return wrapper
+        original_kernel=imaging.Evaluator.__dict__['_windowed_kernel'].__func__
+        imaging.Evaluator._windowed_kernel=staticmethod(spanned(lambda kind,*a,**kw:'kernel:'+str(kind),original_kernel))
+        def walk_label(document,target=None,*a,**kw):
+            node=document.get('nodes',{}).get(target) if isinstance(target,str) else None
+            return 'walk:'+(node['type'] if node else 'frame')
+        win.evaluator.evaluate_raster=spanned(walk_label,win.evaluator.evaluate_raster)
+        original_ahead=win.evaluator.read_ahead_node
+        win.evaluator.read_ahead_node=spanned(lambda *a,**kw:'ahead:roto',original_ahead)
+        original_resolve=imaging._SourceScope.resolve
+        def resolve(scope,key):
+            kind=scope.kinds.get(key,'source'); t0=time.perf_counter(); done=scope.tasks[key].claimed
+            try: return original_resolve(scope,key)
+            finally:
+                t1=time.perf_counter(); stage_spans.append((threading.current_thread().name,'join:'+str(kind),t0,t1))
+                stage_joins.append({'kind':kind,'key':key,'t_ms':round((t0-trace_origin)*1000,3),'wait_ms':round((t1-t0)*1000,3),'claimed_before_join':bool(done)})
+        imaging._SourceScope.resolve=resolve
+        original_decode=media.read_media_raster
+        media.read_media_raster=spanned(lambda *a,**kw:'decode',original_decode)
+        original_stage_fn=None
+        if gpu_backend is not None:
+            gpu_backend.stage=spanned(lambda kind,*a,**kw:'island stage:'+str(kind),gpu_backend.stage)
+            class TimedLock:
+                def __init__(self,inner): self.inner=inner
+                def __enter__(self):
+                    t0=time.perf_counter(); self.inner.acquire(); stage_spans.append((threading.current_thread().name,'island lock wait',t0,time.perf_counter())); return self
+                def __exit__(self,*e): self.inner.release(); return False
+                def acquire(self,*a,**k): return self.inner.acquire(*a,**k)
+                def release(self): return self.inner.release()
+            gpu_backend._lock=TimedLock(gpu_backend._lock)
+            traced_run=gpu_backend.run
+            gpu_backend.run=spanned(lambda *a,**kw:'island run',traced_run)
     sampler=threading.Thread(target=sample_stacks,name='playback-sampler',daemon=True); sampler.start()
     def begin():
         sample_start[0]=time.perf_counter(); sample_stop[0]=sample_start[0]+args.seconds
@@ -455,6 +496,15 @@ def run_window(args):
     # The island rows are stamped on the perf_counter clock and the frame rows on the trace clock; this offset joins them
     # (tools/benchmark_gpu2d.py playback assigns each island to the accepted frame whose evaluation contains it).
     result['trace_offset_ms']=round(offset_ms,3)
+    if args.stage_trace:
+        pathlib.Path(args.stage_trace).parent.mkdir(parents=True,exist_ok=True)
+        pathlib.Path(args.stage_trace).write_text(json.dumps({
+            'case':args.case,'trace_offset_ms':result['trace_offset_ms'],'window_ms':[sample_start_ms,sample_stop_ms],
+            'spans':[[t,l,round((a-trace_origin)*1000,3),round((b-trace_origin)*1000,3)] for t,l,a,b in stage_spans],
+            'joins':stage_joins,'islands':island_rows,
+            'frames':[{'points_ms':{k:round(v+offset_ms,3) for k,v in r['points_ms'].items()},'generation':r.get('generation')} for r in in_window],
+            'sampling_profile':sample_counts,
+            'source_pool':result.get('source_pool')})+'\n')
     pathlib.Path(args.output).parent.mkdir(parents=True,exist_ok=True)
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
     if args.timeline_output:
@@ -489,6 +539,7 @@ def main():
     p.add_argument('--force-adapter',choices=('default','integrated','cpu'),default='default')
     p.add_argument('--no-pipeline',action='store_true',help='restore the one-thread order: evaluate, convert, show, then the next frame')
     p.add_argument('--timeline-output',type=pathlib.Path,help='write only the per-frame stage timeline (compact JSON) here')
+    p.add_argument('--stage-trace',type=pathlib.Path,help='write every thread span of the run (kernels, decodes, joins, island stage and run) here; slows the run by a few percent')
     p.add_argument('--direct-picture',action='store_true',
                    help='route finished linear frames through the optional Direct picture viewer')
     p.add_argument('--case',default='1080p')
