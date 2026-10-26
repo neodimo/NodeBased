@@ -38,6 +38,12 @@ undo/redo, or edit mutation. A guarded `batch` is one atomic edit and one undo s
 - `viewer_mask`: optional `mask` (`format`, `1.33`, `1.66`, `1.78`, `1.85`, `2.35`, `2.40`) and `mode`
   (`none`, `lines`, `half`, `full`); display-only format mask, stored in `settings.viewer.masks` and absent
   while it is the default.
+- `viewer_knobs`: any subset of Nuke's Viewer knobs, stored in `settings.viewer.knobs` and absent while every one
+  is at its default: `frame_range` (`first-last`, empty for the project's range), `frame_range_lock`,
+  `frame_increment` (1 or more), `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `overscan` (pixels),
+  `full_frame_processing`, `safe_zone` (`no guides`, `title safe`, `action safe`, `title and action safe`),
+  `format_center`, `center_fstop`, `shutter_angle` and `use_gpu_for_viewer`. Display and transport only: no knob
+  changes a pixel the graph produces.
 - `time`: any subset of `first`, `last`, `current`, and `fps`. The resulting
   range is validated atomically; use `describe` to discover limits and current
   values.

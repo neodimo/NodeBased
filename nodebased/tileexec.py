@@ -115,8 +115,10 @@ def _tracked_transform_params(document, node_id, kind, params, frame, tier):
     from . import tracker
     payload = document.get("node_data", {}).get(node_id, {"tracks": []})
     payload = tiers.scale_node_data(kind, payload, tier)
-    return {**params, **tracker.solve(payload, frame, params,
-                                      force_stabilise=(kind == "Stabilize"))}
+    solved = tracker.solve(payload, frame, params, force_stabilise=(kind == "Stabilize"))
+    if kind == "Tracker":
+        solved["own_transform"] = tracker.own_transform_key(params)
+    return {**params, **solved}
 
 
 def _compute_node_digests(document, tier, frame, solve=None):

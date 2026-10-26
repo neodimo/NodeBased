@@ -454,7 +454,8 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
     transform (`v ** (1 / gamma)`, sign kept), and the clipping warning tests that same adjusted
     scene-linear value and paints over the displayable buffer only.
     """
-    if not _cropped and CARD_PICTURE:
+    on_card = CARD_PICTURE and (look or {}).get("gpu", True)       # the viewer's "use GPU for viewer" knob
+    if not _cropped and on_card:
         made = gpupicture.take(frame, exposure, channel, background, view, look)       # a played 3D frame's picture, made by the render card
         if made is not None:
             return made
@@ -469,7 +470,15 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         rgb8[box] = view8[:, :crop.width() * 3].reshape(rows, crop.width(), 3)
         return QImage(rgb8.data, rgb8.shape[1], rgb8.shape[0], rgb8.strides[0], QImage.Format.Format_RGB888).copy()
     alpha = frame[..., 3:4]
-    if channel == "A":
+    if channel == "A" and not (look or {}).get("rgb_only", True):
+        # The viewer's "apply LUT to colour channels only" is off: gain, gamma and the view transform act on the alpha as well.
+        from .color import display_rgb
+        straight = np.repeat(alpha, 3, axis=2) * (2.0 ** exposure if exposure else 1.0)
+        gamma = float((look or {}).get("gamma", 1.0))
+        if gamma != 1.0:
+            straight = np.sign(straight) * np.abs(straight) ** np.float32(1.0 / gamma)
+        rgb = display_rgb(straight, view, owned=True)
+    elif channel == "A":
         rgb = np.repeat(alpha, 3, axis=2)
     else:
         rgb = frame[..., :3] * (2.0 ** exposure) if exposure else frame[..., :3]
@@ -482,7 +491,7 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         # on exactly those pixels. Same order here: divide out alpha, transform, re-associate.
         opaque = OPAQUE_SHORTCUT and bool(alpha.min() >= 1.0)
         gamma = float((look or {}).get("gamma", 1.0))
-        if (opaque and CARD_PICTURE and gamma == 1.0 and not exposure and channel in ("RGB", "RGBA") and background != "checker"
+        if (opaque and on_card and gamma == 1.0 and not exposure and channel in ("RGB", "RGBA") and background != "checker"
                 and not (look or {}).get("zebra") and view in _GPU_PREFERRED_VIEWS and frame.dtype == np.float32
                 and frame.ndim == 3 and frame.shape[2] == 4 and frame.flags.c_contiguous):
             picture = _card_picture(frame, view)
@@ -1644,8 +1653,10 @@ class Evaluator:
                     if not isinstance(linked_track, dict) or linked_track.get("kind") != "TrackerTrack":
                         raise ValueError("Tracker: track input must come from Reconcile3D")
                     payload = tiers.scale_node_data("Tracker", {"tracks": [linked_track["track"]]}, tier)
-                params = {**params, **tracker.solve(payload, frame, params,
-                                                      force_stabilise=(kind == "Stabilize"))}
+                solved = tracker.solve(payload, frame, params, force_stabilise=(kind == "Stabilize"))
+                if kind == "Tracker":
+                    solved["own_transform"] = tracker.own_transform_key(params)
+                params = {**params, **solved}
             # Only required slots (those listed in SPECS[kind]["inputs"]) must be wired; optional
             # slots — like the new "mask" input on image-filter nodes — are allowed to be None and
             # the kernel treats that as identity (mask.a = 1, no extra gating).

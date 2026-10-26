@@ -392,6 +392,13 @@ def _fit(entries):
     return rotate, scale, origin, moved
 
 
+def own_transform_key(params):
+    """The node's own transform knobs as a string. A solved transform replaces them while the live link is on, so they would
+    leave a cached picture's key alone; carried in the effective parameters, an edit to one still changes the key (and
+    recomputes a picture it did not change), which is what the cache rule asks of every parameter."""
+    return ",".join(f"{name}={params.get(name, default)}" for name, default in IDENTITY.items())
+
+
 def manual_transform(params):
     """The node's own transform knobs, as the six solved fields: what a Tracker applies when its live link is off or its mode is none."""
     return {name: float(params.get(name, default)) for name, default in IDENTITY.items()}

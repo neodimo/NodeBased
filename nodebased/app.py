@@ -83,8 +83,10 @@ from . import directviewer
 from . import carddisplay
 from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE, VIEWER_INPUT_COUNT,
                    VIEWER_MASK_MODES, VIEWER_MASKS, VIEWER_PROXY_TIERS, VIEWER_ROI_DEFAULT,
-                   viewer_look, viewer_masks, viewer_proxy, viewer_roi, viewer_state)
+                   viewer_knobs, viewer_look, viewer_masks, viewer_proxy, viewer_roi, viewer_state)
 from . import viewframe
+from . import viewerknobs
+from .viewersettings import ViewerSettings
 from . import compare as compare_model
 from .bundle import write_frame as write_bundle_frame
 from . import metadata as metadata_module
@@ -1528,6 +1530,8 @@ class Viewer(PanZoomView):
     def __init__(self, window):
         self.window = window
         self.format_rect = None
+        self.pixel_stretch = 1.0       # how much wider than tall a pixel is drawn (the Viewer's pixel aspect knobs)
+        self.fit_margin = 0.0          # scene units kept clear around the picture when it is fitted (show overscan)
         self._overlay_view = None      # set while render_overlay paints for the direct picture
         self._overlay_images = [None, None]
         self._hit_zoom = None          # logical pixels per scene unit while the direct picture drives the hit tests
@@ -1732,18 +1736,29 @@ class Viewer(PanZoomView):
             hook()
         top, bottom = self.insets
         rect = self.scene().itemsBoundingRect()
-        if rect.isEmpty() or not (top or bottom):
+        margin, stretch = self.fit_margin, self.pixel_stretch
+        if rect.isEmpty() or not (top or bottom or margin or stretch != 1.0):
             return super().fit()
-        target = rect.adjusted(-24, -24, 24, 24)
+        target = rect.adjusted(-24 - margin, -24 - margin, 24 + margin, 24 + margin)
         viewport = self.viewport().rect()
         room = max(viewport.height() - top - bottom, 1)
-        scale = min(viewport.width() / target.width(), room / target.height())
+        # A pixel drawn `stretch` times wider than tall: the picture is as tall as its height over `stretch`.
+        scale = min(viewport.width() / target.width(), room * stretch / target.height())
         self.resetTransform()
-        self.scale(scale, scale)
+        self.scale(scale, scale / stretch)
         # The picture's middle goes to the middle of the free band: the view's own middle is
         # (top - bottom) / 2 pixels above it.
-        self.centerOn(target.center().x(), target.center().y() - (top - bottom) / (2 * scale))
+        self.centerOn(target.center().x(), target.center().y() - (top - bottom) * stretch / (2 * scale))
         self.auto_fit = True
+
+    def set_pixel_stretch(self, stretch):
+        """Draw pixels `stretch` times wider than tall, keeping the horizontal zoom and the centre of the view."""
+        stretch = float(stretch)
+        if abs(stretch - self.pixel_stretch) < 1e-9:
+            return
+        old, self.pixel_stretch = self.pixel_stretch, stretch
+        self.scale(1.0, old / stretch)
+        self.viewport().update()
 
     def report_zoom(self):
         """Tell the corner readout the zoom, once per change (called from every paint)."""
@@ -3859,6 +3874,40 @@ class Viewer(PanZoomView):
         painter.drawRect(rect)
         painter.restore()
 
+    def _draw_viewer_guides(self, painter):
+        """The Viewer knobs' guides: the safe zones, the format's centre, and the format's edge and overscan margin. Display only;
+        painted by the Viewer and, through `render_overlay`, over the Direct picture."""
+        rect = self.format_rect
+        knobs = viewer_knobs(self.window.dispatcher.document)
+        zone, centre, overscan = knobs["safe_zone"], knobs["format_center"], knobs["show_overscan"]
+        if rect is None or (zone == "no guides" and not centre and not overscan):
+            return
+        painter.save()
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        width, height = rect.width(), rect.height()
+        if zone != "no guides":
+            pen = QPen(QColor("#7fd1ff"))
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            for x0, y0, x1, y1 in viewerknobs.safe_rects(width, height, zone):
+                painter.drawRect(QRectF(rect.left() + x0, rect.top() + y0, x1 - x0, y1 - y0))
+        if overscan:
+            pen = QPen(QColor("#f4c542"), 1, Qt.PenStyle.DashLine)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.drawRect(rect)
+            x0, y0, x1, y1 = viewerknobs.overscan_rect(width, height, knobs["overscan"])
+            painter.drawRect(QRectF(rect.left() + x0, rect.top() + y0, x1 - x0, y1 - y0))
+        if centre:
+            pen = QPen(QColor("#7fd1ff"))
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            arm = 12.0 / max(abs(self.view_zoom()), 0.05)
+            cx, cy = rect.center().x(), rect.center().y()
+            painter.drawLine(QLineF(cx - arm, cy, cx + arm, cy))
+            painter.drawLine(QLineF(cx, cy - arm, cx, cy + arm))
+        painter.restore()
+
     def _draw_roi_and_masks(self, painter):
         document = self.window.dispatcher.document
         masks = viewer_masks(document)
@@ -4372,6 +4421,7 @@ class Viewer(PanZoomView):
         # and the size is in the bottom-left corner readout.
         self._draw_roi_and_masks(painter)
         self._draw_overscan_edge(painter)
+        self._draw_viewer_guides(painter)
 
     def hit_press(self, scene_pos, button, modifiers, pressure=1.0):
         """A press at a scene point. True when a handle, pick or drag took it; the Viewer and the direct
@@ -9742,8 +9792,7 @@ class Window(QMainWindow):
 
     def future_frames(self, frame, count=3):
         """Return bounded forward read-ahead order, looping inside the comp range."""
-        time_range = self.dispatcher.document["time"]
-        first, last = time_range["first"], time_range["last"]
+        first, last = viewerknobs.playback_range(self.dispatcher.document)
         span = last - first + 1
         step = -1 if getattr(self, "play_direction", 1) < 0 else 1
         return [first + ((frame - first + step * offset) % span)
@@ -9761,10 +9810,16 @@ class Window(QMainWindow):
         self.toggle_playback(True, direction)
 
     def go_to_start(self):
-        self.set_time(current=self.dispatcher.document["time"]["first"])
+        self.set_time(current=viewerknobs.playback_range(self.dispatcher.document)[0])
 
     def go_to_end(self):
-        self.set_time(current=self.dispatcher.document["time"]["last"])
+        self.set_time(current=viewerknobs.playback_range(self.dispatcher.document)[1])
+
+    def step_increment(self, direction):
+        """The viewer's << and >> steps: `frame_increment` frames back or forward, held at the edge of the viewer's range."""
+        if self.playing:
+            self.toggle_playback(False)
+        self.set_time(current=viewerknobs.step_target(self.dispatcher.document, direction))
 
     def step_key(self, direction):
         """Jump to the previous (-1) or next (+1) keyframe in view; stays put when there is none."""
@@ -9828,9 +9883,10 @@ class Window(QMainWindow):
             time_range = self.dispatcher.document["time"]
             # Playing once from the far end starts again from the other end, as Nuke does.
             if self.loop_mode == "once":
-                end = time_range["last"] if self.play_direction > 0 else time_range["first"]
-                if time_range["current"] == end and time_range["first"] != time_range["last"]:
-                    self.set_time(current=time_range["first"] if self.play_direction > 0 else time_range["last"])
+                low, high = viewerknobs.playback_range(self.dispatcher.document)
+                end = high if self.play_direction > 0 else low
+                if time_range["current"] == end and low != high:
+                    self.set_time(current=low if self.play_direction > 0 else high)
                     time_range = self.dispatcher.document["time"]
             self.playback_origin_frame = time_range["current"]
             self.playback_origin_time = time.monotonic()
@@ -9993,7 +10049,8 @@ class Window(QMainWindow):
             self._realtime_light_updated = time.monotonic()
             self.update_realtime_light()
         bounded_frames = min(elapsed_frames, self.playback_frames_rendered)
-        target, finished = playhead_at(time_range["first"], time_range["last"], self.playback_origin_frame,
+        first, last = viewerknobs.playback_range(self.dispatcher.document)
+        target, finished = playhead_at(first, last, self.playback_origin_frame,
                                        bounded_frames, self.play_direction, self.loop_mode)
         bake = self._fluid_edit_bake
         if bake is not None and not bake["done"] and self.play_direction > 0:
@@ -10146,6 +10203,16 @@ class Window(QMainWindow):
             action.setShortcut(QKeySequence(shortcut(section, description)))
             action.triggered.connect(lambda checked=False, fn=callback: fn())
             menu.addAction(action)
+        # The Viewer's frame increment (Nuke's << and >> buttons) and its settings window.
+        for name, direction in (("Back by the frame increment", -1), ("Forward by the frame increment", 1)):
+            action = QAction(name, self)
+            action.setObjectName("step-increment-back" if direction < 0 else "step-increment-forward")
+            action.triggered.connect(lambda checked=False, d=direction: self.step_increment(d))
+            time_menu.addAction(action)
+        settings_action = QAction("Viewer settings…", self)
+        settings_action.setObjectName("viewer-settings-action")
+        settings_action.triggered.connect(lambda checked=False: self.open_viewer_settings())
+        edit.addAction(settings_action)
         workspace_menu = self.menuBar().addMenu("Workspace")
         workspace_menu.setObjectName("workspace-menu")
         nodes_action = QAction("Show Nodes panel", self, checkable=True)
@@ -11017,6 +11084,45 @@ class Window(QMainWindow):
             self.viewer_display.setCurrentText(look["display"])
             self.viewer_display.blockSignals(False)
 
+    def set_viewer_knobs(self, **changes):
+        """Store Nuke's Viewer knobs (frame range, increment, safe zone ...) in the document; one undo step."""
+        current = viewer_knobs(self.dispatcher.document)
+        if all(current[name] == value for name, value in changes.items()):
+            return
+        self.command({"op": "viewer_knobs", **changes})
+
+    def open_viewer_settings(self):
+        if getattr(self, "viewer_settings", None) is None:
+            self.viewer_settings = ViewerSettings(self)
+        self.viewer_settings.sync()
+        self.viewer_settings.show()
+        self.viewer_settings.raise_()
+        return self.viewer_settings
+
+    def sync_viewer_knobs(self):
+        """Bring the settings window and the viewer's view to the document's Viewer knobs (undo, load, agent edits)."""
+        if getattr(self, "viewer_settings", None) is not None:
+            self.viewer_settings.sync()
+        self._apply_viewer_knobs()
+
+    def _apply_viewer_knobs(self):
+        """What the Viewer knobs change on the viewer itself: the overscan margin, the pixel aspect, the gain label, the guides."""
+        document = self.dispatcher.document
+        knobs = viewer_knobs(document)
+        viewer = self.viewer
+        margin = float(knobs["overscan"]) if knobs["show_overscan"] else 0.0
+        stretch = viewerknobs.stretch(document)
+        changed = margin != viewer.fit_margin or stretch != viewer.pixel_stretch
+        viewer.fit_margin = margin
+        viewer.set_pixel_stretch(stretch)
+        if changed and viewer.auto_fit and viewer.format_rect is not None:
+            viewer.fit()
+        if not hasattr(self, "_exposure_tip"):
+            self._exposure_tip = self.exposure.toolTip()
+        label = viewerknobs.exposure_label(self.exposure.value(), knobs, document["time"]["fps"])
+        self.exposure.setToolTip(f"{self._exposure_tip}\nAs exposure: {label}")
+        viewer.viewport().update()
+
     def set_viewer_roi(self, **changes):
         current = viewer_roi(self.dispatcher.document)
         if changes.get("on") and "rect" not in changes and current["rect"] == VIEWER_ROI_DEFAULT["rect"]:
@@ -11093,8 +11199,15 @@ class Window(QMainWindow):
         return self.display_view.currentText() if chosen == "Project view" else chosen
 
     def look_args(self, document=None):
-        look = viewer_look(document or self.dispatcher.document)
-        return {"gamma": look["gamma"], "zebra": look["zebra"]}
+        document = document or self.dispatcher.document
+        look, knobs = viewer_look(document), viewer_knobs(document)
+        args = {"gamma": look["gamma"], "zebra": look["zebra"]}
+        # Only a knob off its default adds a key, so the picture of an older document is keyed and converted as it was.
+        if not knobs["rgb_only"]:
+            args["rgb_only"] = False
+        if not knobs["use_gpu_for_viewer"]:
+            args["gpu"] = False
+        return args
 
     @staticmethod
     def _moves_only(cmd):
@@ -11138,6 +11251,7 @@ class Window(QMainWindow):
         self.viewer.sync_inputs()
         self.sync_viewer_look()
         self.sync_viewer_frame()
+        self.sync_viewer_knobs()
         if sync_settings:
             self.sync_project_settings()
         self.update_title()
@@ -15160,7 +15274,7 @@ class Window(QMainWindow):
             # submission (nodebased/gpupicture.py) and the conversion stage takes it instead of converting the float frame.
             plain_look = (request.display and self.pipeline_playback and not exposure
                           and channel in ("RGB", "RGBA") and background != "checker"
-                          and not look.get("zebra") and float(look.get("gamma", 1.0)) == 1.0
+                          and not look.get("zebra") and float(look.get("gamma", 1.0)) == 1.0 and look.get("gpu", True)
                           and compare_model.active_b(request.document)[1] is None)
             plain = plain_look and request.playing
             if plain:
@@ -15213,7 +15327,8 @@ class Window(QMainWindow):
                 if tiled:
                     bounds = self.tile_executor.canvas_region(request.document, target,
                                                               frame=request.frame, tier=request.tier)
-                    if request.display and request.viewport is not None:
+                    if (request.display and request.viewport is not None
+                            and not viewerknobs.knobs_of(request.document)["full_frame_processing"]):
                         x0, y0, x1, y1 = request.viewport
                         # The viewport is in scene units (full resolution); the bounds are at the request's tier.
                         # A proxy-tier drag preview with the view zoomed onto the lower right used to ask for a
@@ -15228,6 +15343,10 @@ class Window(QMainWindow):
                         render_region = TileRegion(ox0, oy0, max(0, ox1 - ox0), max(0, oy1 - oy0),
                                                    full_x=bounds.x, full_y=bounds.y,
                                                    full_width=bounds.width, full_height=bounds.height)
+                        if render_region.width <= 0 or render_region.height <= 0:
+                            # The view sits wholly off the picture (a locked zoom after the picture shrank): nothing is
+                            # visible, and an empty region is not a frame, so the whole frame is evaluated instead.
+                            render_region = bounds
                     else:
                         render_region = bounds
                 roi = viewer_roi(request.document)
@@ -15261,7 +15380,7 @@ class Window(QMainWindow):
                                                    crop.left():crop.left() + crop.width()]
                     height, width = cached_or_cropped.shape[:2]
                     image = None
-                    if request.display and self._direct_linear_for(request, view, cached_or_cropped):
+                    if request.display and self._direct_linear_for(request, view, cached_or_cropped, channel):
                         image = carddisplay.LazyPicture(cached_or_cropped, exposure, channel, background, view, look)
                     elif request.display:
                         # The picture for this exact frame, region and display setup is kept from
@@ -15346,7 +15465,7 @@ class Window(QMainWindow):
                                        is_data=static or _is_data_target(request.document, target),
                                        lazy=True)
                 _trace_mark("cache_put")
-                direct = request.display and self._direct_linear_for(request, view, frame)
+                direct = request.display and self._direct_linear_for(request, view, frame, channel)
                 if request.display and not direct and self._pipelines(request):
                     proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                     def build_fresh(pixels=frame, key=(display_key, region_key, exposure, channel, background,
@@ -15432,12 +15551,18 @@ class Window(QMainWindow):
             if len(self.preview_queue):
                 self.start_preview()
 
-    def _direct_linear_for(self, request, view, frame=None):
+    def _direct_linear_for(self, request, view, frame=None, channel=None):
         """Runs on the worker. True when this frame goes to the direct viewer as floats and skips
         `to_qimage`: the direct picture is up, the card can run `view` and the frame fits the card (a larger
         one is converted here, on the worker, and the Viewer shows it). Playing or paused alike: one path for
         both. A B buffer is added to the picture afterwards (`_compare_outputs`) when the pair fits too."""
         if not getattr(self, "_direct_linear_on", False):
+            return False
+        # Viewer knobs the card's shader does not carry: the Viewer's own conversion shows the picture instead.
+        knobs = viewerknobs.knobs_of(request.document)
+        if (not knobs["use_gpu_for_viewer"]
+                or (not knobs["rgb_only"] and (channel or self.channels.currentText()) == "A")
+                or viewerknobs.stretch(request.document) != 1.0):
             return False
         limits = getattr(self, "_direct_limits", None)
         if frame is not None and limits and directviewer.too_large(
@@ -15539,7 +15664,7 @@ class Window(QMainWindow):
             if cached is None:
                 continue
             height, width = cached.shape[:2]
-            if request.display and self._direct_linear_for(request, view, cached):
+            if request.display and self._direct_linear_for(request, view, cached, channel):
                 if compare_model.active_b(request.document)[1] is not None:
                     return      # a stand-in without B would drop the card's wipe for a frame; the real picture follows
                 image = carddisplay.LazyPicture(cached, exposure, channel, background, view, look)
@@ -15699,8 +15824,11 @@ class Window(QMainWindow):
             # An Undistort frame is shown whole, overscan included: the format guide stays on the display window inside it.
             format_rect = QRectF(shown[0] * scale, shown[1] * scale, shown[2] * scale, shown[3] * scale)
         self.viewer.draw_format_overlay(format_rect)
+        self._apply_viewer_knobs()
         if self.viewer._initial_fit_pending:
             self.viewer._fit_initial_image()
+        elif viewer_knobs(self.dispatcher.document)["zoom_lock"]:
+            pass        # "prevent auto zoom": a picture of another size leaves the artist's view where it is
         elif (abs(previous.width() - scene_rect.width()) > self.PROXY_ROUNDING_PX
               or abs(previous.height() - scene_rect.height()) > self.PROXY_ROUNDING_PX):
             # A different picture size (not the few pixels a 1/8 proxy rounds up to) frames it again;
@@ -16030,6 +16158,16 @@ class Window(QMainWindow):
         inspector.set_direct_memory(presenter.retained_bytes(), presenter.staging_bytes(),
                                     b_texture_bytes=presenter.b_texture_bytes())
 
+    def _direct_declined(self, message):
+        """The Direct picture cannot show what a Viewer knob asks for: say so once, and bring the Viewer forward when the
+        Direct picture is the main viewer."""
+        if message != getattr(self, "_direct_refusal_shown", ""):
+            self.statusBar().showMessage(message, 8000)
+        self._direct_refusal_shown = message
+        if (self.preferences.direct_main() and self._dock_front["direct"] and not self.viewer_dock.isFloating()
+                and self.direct_dock in self.tabifiedDockWidgets(self.viewer_dock)):
+            self._bring_forward(self.viewer_dock)
+
     def _direct_handed_over(self, accepted):
         """After a hand-over: name a refusal (too large for the card) once, keep the card limits for the
         worker, and refresh the memory line when the cache inspector shows it."""
@@ -16139,6 +16277,12 @@ class Window(QMainWindow):
 
     def _offer_direct(self, image, scale, render_region, scene_rect, generation):
         if not self._direct_shown():
+            return
+        aspect = viewerknobs.stretch(self.dispatcher.document)
+        if aspect != 1.0:
+            # The Direct picture draws square pixels only: the Viewer, which stretches them, keeps the picture.
+            self._direct_declined(f"The Direct picture shows square pixels; the Viewer shows this format's pixel aspect "
+                                  f"of {aspect:g}.")
             return
         if render_region is not None:
             rect = (render_region.x * scale, render_region.y * scale, image.width() * scale, image.height() * scale)

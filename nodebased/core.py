@@ -159,7 +159,7 @@ VIEWER_PROXY_TIERS = (1, 2, 4, 8)
 VIEWER_MASKS = ("format", "1.33", "1.66", "1.78", "1.85", "2.35", "2.40")
 VIEWER_MASK_MODES = ("none", "lines", "half", "full")
 VIEWER_MASKS_DEFAULT = {"mask": "format", "mode": "none"}
-VIEWER_EXTRA_KEYS = ("look", "roi", "proxy", "masks")
+VIEWER_EXTRA_KEYS = ("look", "roi", "proxy", "masks", "knobs")
 # Lens distortion (Rendering 13 step L1): Brown-Conrady radial and tangential terms about a principal point,
 # in film-back units (nodebased/lensmodel.py). Zeros are no lens, which is what every older camera was.
 _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p2": 0.0,
@@ -176,6 +176,7 @@ from . import timeknobs as _timeknobs
 from . import cornerpinknobs as _cornerpinknobs
 from . import profilenode as _profilenode
 from . import trackerknobs as _trackerknobs
+from . import viewerknobs as _viewerknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -2151,6 +2152,11 @@ def viewer_look(doc):
     return {**VIEWER_LOOK_DEFAULT, **doc["settings"]["viewer"].get("look", {})}
 
 
+def viewer_knobs(doc):
+    """The viewer's Nuke knobs (frame range, increment, safe zone ...), with the defaults where the document stores none."""
+    return _viewerknobs.knobs_of(doc)
+
+
 def viewer_roi(doc):
     roi = doc["settings"]["viewer"].get("roi", VIEWER_ROI_DEFAULT)
     return {"on": roi["on"], "rect": list(roi["rect"])}
@@ -2763,6 +2769,8 @@ def validate_settings(settings):
         raise ValueError(f"settings.viewer.proxy must be one of {list(VIEWER_PROXY_TIERS)}")
     if "masks" in viewer:
         _validate_masks(viewer["masks"])
+    if "knobs" in viewer:
+        _viewerknobs.validate(viewer["knobs"])
     if viewer["background"] not in ("black", "checker"):
         raise ValueError("Viewer background must be black or checker")
     if "inputs" in viewer:
@@ -3123,7 +3131,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "viewer_knobs", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -3291,6 +3299,21 @@ class Dispatcher:
             else:
                 doc["settings"]["viewer"]["masks"] = masks
             return dict(masks)
+        if op == "viewer_knobs":
+            knobs = viewer_knobs(doc)
+            for name in _viewerknobs.DEFAULT:
+                if name in cmd:
+                    knobs[name] = cmd[name]
+            unknown = set(cmd) - set(_viewerknobs.DEFAULT) - {"op"}
+            if unknown:
+                raise ValueError(f"viewer_knobs: unknown knobs {sorted(unknown)}")
+            _viewerknobs.validate(knobs)
+            knobs = _viewerknobs.normalised(knobs)
+            if knobs == _viewerknobs.DEFAULT:
+                doc["settings"]["viewer"].pop("knobs", None)
+            else:
+                doc["settings"]["viewer"]["knobs"] = knobs
+            return dict(knobs)
         if op == "reference":
             key = cmd.get("id")
             if not isinstance(key, str) or key not in nodes:

@@ -154,3 +154,21 @@ For playback:
   rectangle, `half` darkens the outside to half, `full` to black. `format` is the frame's own aspect
   (so it darkens nothing unless the frame is not the shape it says it is). Nothing about a mask
   reaches the evaluator, the cache or an export.
+
+## Viewer knobs: frame range, increment and the Direct picture
+
+Nuke's Viewer knobs are viewer state saved in `settings.viewer.knobs` (`nodebased/viewerknobs.py`, the Viewer settings window
+in the Edit menu, the `viewer_knobs` command). Those that touch playback and the picture:
+
+- **Frame range and lock.** `frame_range` (`first-last`, empty for none) cut down to the project's range is the range playback,
+  read-ahead, Home and End use; with `frame_range_lock` off the typed range is kept but the viewer follows the project's.
+  Only the viewer's choice of the next frame changes: the playback clock, the pacing and the source scheduling are untouched.
+- **Frame increment.** The Time menu's Back and Forward by the frame increment jump `frame_increment` frames, held at the
+  edge of the viewer's range.
+- **Full frame processing.** The viewer asks for the whole frame where it would ask only for the part a zoomed view shows. A
+  view that has been moved wholly off a smaller picture (zoom lock) also asks for the whole frame instead of an empty region.
+- **Picture knobs and the Direct picture.** The Direct picture draws the Viewer's overlays, so the safe zones, the format centre
+  and the overscan outlines appear on it. A picture the card's shader cannot make goes through the Viewer's own conversion
+  instead: alpha shown through the view transform (`rgb_only` off) and `use_gpu_for_viewer` off. A format whose pixel aspect
+  is not 1, drawn at that aspect (`ignore_pixel_aspect` off), stays on the Viewer: the Direct picture draws square pixels, says so in
+  the status bar and, when it is the main viewer, brings the Viewer forward.
