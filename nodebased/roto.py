@@ -170,8 +170,8 @@ def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
     return (matte / SUBSAMPLES).astype(np.float32)
 
 
-def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear", origin=(0, 0)):
-    """Rasterise an open cubic as round-capped, round-joined stroke coverage."""
+def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear", origin=(0, 0), caps=("rounded", "rounded")):
+    """Rasterise an open cubic as stroke coverage, round-joined, with the start and end caps `caps` (rounded, square or butt)."""
     h, w = int(height), int(width)
     vertices = []
     offsets = []
@@ -200,12 +200,19 @@ def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="l
     px, py = xx.astype(np.float32) + ox + .5, yy.astype(np.float32) + oy + .5
     best = np.full((h, w), np.inf, dtype=np.float32)
     local_feather = np.zeros((h, w), dtype=np.float32)
+    capped = tuple(caps) != ("rounded", "rounded")
+    if capped:
+        nearest = np.full((h, w), -1, dtype=np.int32)
+        reach = np.zeros((h, w), dtype=np.float32)           # distance past the nearest segment's end (positive) or start (negative); 0 inside
+        across = np.zeros((h, w), dtype=np.float32)
+        last_segment = -1
     for index, (p0, p1) in enumerate(zip(vertices[:-1], vertices[1:])):
         vx, vy = p1 - p0
         denom = vx*vx + vy*vy
         if denom <= 1e-12:
             continue
-        t = np.clip(((px-p0[0])*vx + (py-p0[1])*vy) / denom, 0.0, 1.0)
+        t_raw = ((px-p0[0])*vx + (py-p0[1])*vy) / denom
+        t = np.clip(t_raw, 0.0, 1.0)
         dist = np.hypot(px-(p0[0]+t*vx), py-(p0[1]+t*vy))
         take = dist < best
         normal = np.asarray((vy, -vx), dtype=np.float64) / math.sqrt(denom)
@@ -213,7 +220,24 @@ def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="l
                         (offsets[index][1] * (1-t) + offsets[index+1][1] * t) * normal[1])
         np.copyto(best, dist, where=take)
         np.copyto(local_feather, offset, where=take)
+        if capped:
+            length = math.sqrt(denom)
+            np.copyto(nearest, index, where=take)
+            np.copyto(reach, (np.where(t_raw < 0.0, t_raw, np.where(t_raw > 1.0, t_raw - 1.0, 0.0)) * length).astype(np.float32), where=take)
+            np.copyto(across, np.abs((px-p0[0])*vy - (py-p0[1])*vx).astype(np.float32) / np.float32(length), where=take)
+            last_segment = index
     half = max(0.0, float(stroke_width)) * .5
+    if capped and last_segment >= 0:
+        first_segment = next((i for i, (a, b) in enumerate(zip(vertices[:-1], vertices[1:])) if (b[0]-a[0])**2 + (b[1]-a[1])**2 > 1e-12), 0)
+        for cap, segment, outside in ((caps[0], first_segment, reach < 0), (caps[1], last_segment, reach > 0)):
+            if cap == "rounded":
+                continue
+            beyond = (nearest == segment) & outside
+            if cap == "butt":
+                best[beyond] = np.inf               # nothing past the end point
+            else:
+                # square: the stroke runs on for half its width past the end, with straight sides
+                best[beyond] = np.where(np.abs(reach[beyond]) <= half, across[beyond], np.inf)
     extent = float(feather) + local_feather
     alpha = np.where(extent >= 0,
                      np.where(best <= half, 1.0,
@@ -418,22 +442,34 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
         if stats is not None:
             stats["rasterised_shapes"] = stats.get("rasterised_shapes", 0) + 1
         samples = shape.get("_motion_samples", ())
+        only_samples = bool(shape.get("_motion_only")) and bool(samples)
+        power = float(shape.get("falloff_power", 1.0))
         falloff = shape.get("feather_falloff", "linear")
 
         def render_cover():
             if not shape.get("closed", True):
-                layers = [shape["points"], *samples]
+                layers = [shape["points"], *samples] if not only_samples else list(samples)
+                caps = (shape.get("cap_start", "rounded"), shape.get("cap_end", "rounded"))
                 covers = [stroke_coverage(points, sw, sh, shape.get("stroke_width", 1.0),
-                                          shape["feather"], falloff, origin=(sx0, sy0))
+                                          shape["feather"], falloff, origin=(sx0, sy0), caps=caps)
                           for points in layers]
                 result = sum(covers) / len(covers)
             elif shape.get("feather_model", "box") == "edge":
-                layers = [shape["points"], *samples]
+                layers = [shape["points"], *samples] if not only_samples else list(samples)
                 covers = [edge_feather(points, coverage(points, sw, sh, origin=(sx0, sy0),
                                        flattened_cache=flattened_cache), shape["feather"], falloff,
                                        origin=(sx0, sy0), flattened_cache=flattened_cache)
                           for points in layers]
                 result = sum(covers) / len(covers)
+            elif only_samples:
+                # Motion blur with an explicit shutter: the mean over every sample time, the current frame included only if sampled.
+                result = sum(coverage(points, sw, sh, origin=(sx0, sy0), flattened_cache=flattened_cache)
+                             for points in samples) / len(samples)
+                result = np.clip(feather(result, shape["feather"]), 0.0, 1.0)
+                if falloff == "smooth":
+                    result = result * result * (3.0 - 2.0 * result)
+                elif falloff == "gaussian":
+                    result = np.exp(-4.0 * np.square(1.0 - result)).astype(np.float32)
             else:
                 result = coverage(shape["points"], sw, sh, origin=(sx0, sy0),
                                   flattened_cache=flattened_cache)
@@ -446,6 +482,10 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
                     result = result * result * (3.0 - 2.0 * result)
                 elif falloff == "gaussian":
                     result = np.exp(-4.0 * np.square(1.0 - result)).astype(np.float32)
+            if power != 1.0:
+                # Feather falloff (a number): the coverage raised to it, so below 1 the feather holds opaque longer
+                # (0 is a hard edge out to the feather's reach) and above 1 it drops away faster.
+                result = np.where(result > 0.0, np.power(np.maximum(result, 0.0), power), 0.0).astype(np.float32)
             return 1.0 - result if inverted else result
 
         cover = (render_cover() if shape_cache is None else

@@ -116,7 +116,7 @@ class MappingTests(unittest.TestCase):
             nuke_sockets = {i["name"] for i in NUKE["nodes"][key]["inputs"]}
             with self.subTest(pair=key):
                 for e in pair["knobs"]:
-                    self.assertIn(e["kind"], {"same", "renamed", "components", "panel", "extra"})
+                    self.assertIn(e["kind"], {"same", "renamed", "components", "panel", "extra", "unsupported"})
                     if e["kind"] == "same":
                         self.assertEqual(e["nodebased"], e["nuke"])
                     if e["kind"] != "same":

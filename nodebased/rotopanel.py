@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
                                QPushButton, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit,
-                               QColorDialog, QLabel, QToolButton)
+                               QColorDialog, QLabel, QToolButton, QSpinBox)
 
 
 def build_panel(window, key):
@@ -245,7 +245,9 @@ def build_panel(window, key):
                 ("scale_x", "Scale X", -1000, 1000, .01),
                 ("scale_y", "Scale Y", -1000, 1000, .01),
                 ("center_x", "Center X", -65536, 65536, 1),
-                ("center_y", "Center Y", -65536, 65536, 1)):
+                ("center_y", "Center Y", -65536, 65536, 1),
+                ("skew_x", "Skew X", -89, 89, 1),
+                ("skew_y", "Skew Y", -89, 89, 1)):
             spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-transform-{field}-{i}")
             spin.setRange(lo, hi); spin.setSingleStep(step); spin.setKeyboardTracking(False)
             default = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"][field]
@@ -259,6 +261,80 @@ def build_panel(window, key):
                 object_name=f"roto-shape-key-transform-{field}-{i}")
             button.setAccessibleName(f"{label} key"); row.addWidget(button)
             layout.addWidget(QLabel(label)); layout.addLayout(row)
+        def plain(field, value):
+            """Set a setting that is a plain value on the shape (a flag, a choice, a whole number), not an animatable scalar."""
+            entries = current()
+            if i < len(entries):
+                entries[i][field] = value
+                save(entries, i)
+        def plain_transform(field, value):
+            entries = current()
+            if i < len(entries):
+                entries[i].setdefault("transform", {})[field] = value
+                save(entries, i)
+        def plain_check(field, label, default):
+            box = QCheckBox(label); box.setObjectName("roto-shape-" + field); box.setChecked(bool(shape.get(field, default)))
+            box.toggled.connect(lambda v, f=field: plain(f, bool(v))); layout.addWidget(box)
+        def plain_combo(field, label, values, default, setter=None):
+            combo = QComboBox(); combo.setObjectName("roto-shape-" + field)
+            for val in values: combo.addItem(val.replace("_", " ").capitalize(), val)
+            source = shape.get("transform", {}) if setter is plain_transform else shape
+            combo.setCurrentIndex(max(0, combo.findData(source.get(field, default))))
+            combo.currentIndexChanged.connect(lambda idx, f=field, c=combo: (setter or plain)(f, c.itemData(idx)))
+            layout.addWidget(QLabel(label)); layout.addWidget(combo)
+        def plain_spin(field, label, lo, hi, step, default, whole=False):
+            if whole:
+                spin = QSpinBox(); spin.setRange(int(lo), int(hi)); spin.setValue(int(shape.get(field, default)))
+            else:
+                spin = QDoubleSpinBox(); spin.setRange(lo, hi); spin.setSingleStep(step); spin.setValue(float(shape.get(field, default)))
+            spin.setObjectName("roto-shape-" + field); spin.setKeyboardTracking(False)
+            spin.editingFinished.connect(lambda f=field, w=spin: plain(f, int(w.value()) if whole else float(w.value())))
+            layout.addWidget(QLabel(label)); layout.addWidget(spin)
+        plain_combo("skew_order", "Skew order", ("XY", "YX"), "XY", plain_transform)
+        plain_check("feather_on", "Feather on", True)
+        plain_spin("falloff_power", "Feather falloff", 0.0, 16.0, 0.1, 1.0)
+        plain_spin("motion_blur_samples", "Motion blur samples", 1, 64, 1, 1, whole=True)
+        plain_spin("motion_blur_shutter", "Motion blur shutter", 0.0, 8.0, 0.05, 0.5)
+        plain_combo("motion_blur_offset_type", "Motion blur shutter offset", shape_model.OFFSET_TYPES, "start")
+        plain_spin("motion_blur_offset", "Motion blur custom offset", -8.0, 8.0, 0.05, 0.0)
+        life = shape.get("lifetime") or {"type": "all"}
+        def set_life(part, value):
+            now = dict(shape.get("lifetime") or {"type": "all"})
+            now[part] = value
+            if now["type"] == "range" and now.get("end", now.get("start", 1)) < now.get("start", 1):
+                now["end"] = now["start"]
+            if now["type"] == "all":
+                now = {"type": "all"}
+            plain("lifetime", now)
+        life_type = QComboBox(); life_type.setObjectName("roto-shape-lifetime-type")
+        for val in shape_model.LIFETIME_TYPES: life_type.addItem(val.replace("_", " ").capitalize(), val)
+        life_type.setCurrentIndex(max(0, life_type.findData(life.get("type", "all"))))
+        life_type.currentIndexChanged.connect(lambda idx: set_life("type", life_type.itemData(idx)))
+        layout.addWidget(QLabel("Lifetime")); layout.addWidget(life_type)
+        for part, label in (("start", "Lifetime from"), ("end", "Lifetime to")):
+            spin = QSpinBox(); spin.setRange(-100000, 100000); spin.setObjectName("roto-shape-lifetime-" + part)
+            spin.setValue(int(life.get(part, 1))); spin.setKeyboardTracking(False)
+            spin.editingFinished.connect(lambda p_=part, w=spin: set_life(p_, int(w.value())))
+            layout.addWidget(QLabel(label)); layout.addWidget(spin)
+        if shape.get("closed", True) is False:
+            plain_combo("cap_start", "Start cap", shape_model.END_CAPS, "rounded")
+            plain_combo("cap_end", "End cap", shape_model.END_CAPS, "rounded")
+        matrix_edit = QLineEdit(", ".join(f"{v:g}" for v in shape["extra_matrix"]) if shape.get("extra_matrix") else "")
+        matrix_edit.setObjectName("roto-shape-extra_matrix"); matrix_edit.setPlaceholderText("16 numbers, row by row; empty for none")
+        def set_matrix():
+            text = matrix_edit.text().strip()
+            try:
+                values = [float(part) for part in text.replace(",", " ").split()] if text else None
+            except ValueError:
+                return
+            if values is None or len(values) == 16:
+                entries = current()
+                if i < len(entries):
+                    if values is None: entries[i].pop("extra_matrix", None)
+                    else: entries[i]["extra_matrix"] = values
+                    save(entries, i)
+        matrix_edit.editingFinished.connect(set_matrix)
+        layout.addWidget(QLabel("Extra matrix")); layout.addWidget(matrix_edit)
         for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",("over","plus","minus","multiply"))):
             combo=QComboBox(); combo.setObjectName("roto-shape-"+field)
             for val in values: combo.addItem(val.title(),val)

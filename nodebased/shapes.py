@@ -47,9 +47,18 @@ SHAPE_LIMITS = {
     "rotate": (-360000.0, 360000.0), "scale_x": (-1000.0, 1000.0),
     "scale_y": (-1000.0, 1000.0), "center_x": (-65536.0, 65536.0),
     "center_y": (-65536.0, 65536.0),
+    "skew_x": (-89.0, 89.0), "skew_y": (-89.0, 89.0),
 }
 TRANSFORM_DEFAULTS = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
-                     "scale_x": 1.0, "scale_y": 1.0, "center_x": 0.0, "center_y": 0.0}
+                     "scale_x": 1.0, "scale_y": 1.0, "center_x": 0.0, "center_y": 0.0,
+                     "skew_x": 0.0, "skew_y": 0.0}
+SKEW_ORDERS = ("XY", "YX")
+# Roto's per-shape and global motion blur (Nuke's Motion Blur tab), lifetime and open-spline end caps.
+OFFSET_TYPES = ("centred", "start", "end", "custom")
+LIFETIME_TYPES = ("all", "single", "start_to", "to_end", "range")
+END_CAPS = ("rounded", "square", "butt")
+MOTION_BLUR_FIELDS = ("motion_blur_samples", "motion_blur_shutter", "motion_blur_offset_type", "motion_blur_offset")
+MOTION_BLUR_DEFAULTS = {"samples": 1, "shutter": 0.5, "offset_type": "start", "offset": 0.0}
 POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
 FEATHER_POINT_FIELDS = ("feather_x", "feather_y")
 
@@ -114,7 +123,8 @@ def resolve_scalar(value, frame, name=None):
         resolved = float(value)
     else:
         curve = value.get("curve")
-        resolved = float(evaluate_curve(curve, int(frame)) if curve else value["value"])
+        at = int(frame) if float(frame).is_integer() else float(frame)      # a motion-blur sample may fall between frames
+        resolved = float(evaluate_curve(curve, at) if curve else value["value"])
     if name is not None:
         lo, hi = SHAPE_LIMITS[name]
         resolved = min(max(resolved, lo), hi)
@@ -123,7 +133,8 @@ def resolve_scalar(value, frame, name=None):
 
 def validate_shape(shape, where):
     required = {"name", "mode", "opacity", "feather", "points"}
-    optional = {"visible", "locked", "invert", "feather_falloff", "feather_model", "color", "blend_mode", "motion_blur", "track_link", "transform", "track_follow", "closed", "stroke_width"}
+    optional = {"visible", "locked", "invert", "feather_falloff", "feather_model", "color", "blend_mode", "motion_blur", "track_link", "transform", "track_follow", "closed", "stroke_width",
+                "feather_on", "falloff_power", "lifetime", "extra_matrix", "cap_start", "cap_end", *MOTION_BLUR_FIELDS}
     if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
         raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
     if not isinstance(shape["name"], str) or not 1 <= len(shape["name"]) <= 128:
@@ -139,6 +150,33 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.feather_model is unsupported")
     if any(k in shape and type(shape[k]) is not bool for k in ("visible", "locked", "invert", "motion_blur")):
         raise ValueError(f"{where}: visibility, lock, invert and motion blur flags must be booleans")
+    if "feather_on" in shape and type(shape["feather_on"]) is not bool:
+        raise ValueError(f"{where}.feather_on must be a boolean")
+    if "falloff_power" in shape and not (_is_number(shape["falloff_power"]) and 0.0 <= shape["falloff_power"] <= 16.0):
+        raise ValueError(f"{where}.falloff_power must be a number between 0 and 16")
+    for field in ("cap_start", "cap_end"):
+        if shape.get(field, "rounded") not in END_CAPS:
+            raise ValueError(f"{where}.{field} must be one of {list(END_CAPS)}")
+    if "motion_blur_samples" in shape and not (type(shape["motion_blur_samples"]) is int and 1 <= shape["motion_blur_samples"] <= 64):
+        raise ValueError(f"{where}.motion_blur_samples must be a whole number between 1 and 64")
+    if "motion_blur_shutter" in shape and not (_is_number(shape["motion_blur_shutter"]) and 0.0 <= shape["motion_blur_shutter"] <= 8.0):
+        raise ValueError(f"{where}.motion_blur_shutter must be a number between 0 and 8")
+    if shape.get("motion_blur_offset_type", "start") not in OFFSET_TYPES:
+        raise ValueError(f"{where}.motion_blur_offset_type must be one of {list(OFFSET_TYPES)}")
+    if "motion_blur_offset" in shape and not (_is_number(shape["motion_blur_offset"]) and -8.0 <= shape["motion_blur_offset"] <= 8.0):
+        raise ValueError(f"{where}.motion_blur_offset must be a number between -8 and 8")
+    life = shape.get("lifetime")
+    if life is not None:
+        if (not isinstance(life, dict) or life.get("type") not in LIFETIME_TYPES
+                or set(life) - {"type", "start", "end"}
+                or any(k in life and type(life[k]) is not int for k in ("start", "end"))):
+            raise ValueError(f"{where}.lifetime defines a type ({', '.join(LIFETIME_TYPES)}) and whole-number start and end frames")
+        if life["type"] == "range" and life.get("end", 0) < life.get("start", 0):
+            raise ValueError(f"{where}.lifetime range ends before it starts")
+    matrix = shape.get("extra_matrix")
+    if matrix is not None and (not isinstance(matrix, list) or len(matrix) != 16 or not all(_is_number(v) for v in matrix)
+                               or any(abs(v) > 65536 for v in matrix)):
+        raise ValueError(f"{where}.extra_matrix must be 16 finite numbers (a 4 x 4 matrix, row by row)")
     if shape.get("feather_falloff", "linear") not in ("linear", "smooth", "gaussian"):
         raise ValueError(f"{where}.feather_falloff is unsupported")
     if shape.get("blend_mode", "over") not in ("over", "plus", "minus", "multiply"):
@@ -151,8 +189,10 @@ def validate_shape(shape, where):
     if shape.get("track_follow", "translate") not in ("translate", "full", "planar"):
         raise ValueError(f"{where}.track_follow must be translate or full")
     transform = shape.get("transform", {})
-    if not isinstance(transform, dict) or set(transform) - set(TRANSFORM_DEFAULTS):
+    if not isinstance(transform, dict) or set(transform) - set(TRANSFORM_DEFAULTS) - {"skew_order"}:
         raise ValueError(f"{where}.transform contains unsupported fields")
+    if transform.get("skew_order", "XY") not in SKEW_ORDERS:
+        raise ValueError(f"{where}.transform.skew_order must be one of {list(SKEW_ORDERS)}")
     for field in TRANSFORM_DEFAULTS:
         validate_scalar(transform.get(field, TRANSFORM_DEFAULTS[field]), field, f"{where}.transform")
     color = shape.get("color", [1.0, 1.0, 1.0, 1.0])
@@ -365,67 +405,174 @@ def empty_payload(kind):
     return {slot: []} if slot else None
 
 
-def resolve_shapes(payload, frame):
+def motion_blur_plan(shape, params=None):
+    """The motion-blur settings that apply to one shape, or None when it is sharp.
+
+    Nuke's Motion Blur tab has per-shape settings and global ones. The node's `shape_motionblur_on` (default on) lets the
+    shapes' own settings count; `global_motionblur_on` applies the global samples, shutter and offset to every shape that
+    has no motion blur of its own. A shape saved before these settings existed (only `motion_blur: true`) keeps its
+    original three-sample blur across the neighbouring frames, which is the plan `{"legacy": True}`."""
+    params = params or {}
+    shapes_on = bool(params.get("shape_motionblur_on", 1))
+    own = bool(shape.get("motion_blur", False)) and shapes_on
+    if own:
+        if not any(key in shape for key in MOTION_BLUR_FIELDS):
+            return {"legacy": True}
+        return {"samples": int(shape.get("motion_blur_samples", MOTION_BLUR_DEFAULTS["samples"])),
+                "shutter": float(shape.get("motion_blur_shutter", MOTION_BLUR_DEFAULTS["shutter"])),
+                "offset_type": shape.get("motion_blur_offset_type", MOTION_BLUR_DEFAULTS["offset_type"]),
+                "offset": float(shape.get("motion_blur_offset", MOTION_BLUR_DEFAULTS["offset"]))}
+    if params.get("global_motionblur_on", 0) and not shape.get("motion_blur", False):
+        return {"samples": int(params.get("global_motionblur", 1)),
+                "shutter": float(params.get("global_motionblur_shutter", 0.5)),
+                "offset_type": str(params.get("global_motionblur_shutter_offset_type", "start")),
+                "offset": float(params.get("global_motionblur_shutter_offset", 0.0))}
+    return None
+
+
+def motion_blur_times(plan, frame):
+    """The frames a shutter plan samples: `samples + 1` evenly spaced times across the open shutter, ends included."""
+    shutter = max(0.0, plan["shutter"])
+    kind = plan["offset_type"]
+    if kind == "centred":
+        start = frame - shutter / 2.0
+    elif kind == "end":
+        start = frame - shutter
+    elif kind == "custom":
+        start = frame + plan["offset"]
+    else:
+        start = float(frame)
+    n = max(1, int(plan["samples"]))
+    return [start + shutter * i / n for i in range(n + 1)]
+
+
+def in_lifetime(life, frame):
+    """True when a shape with this lifetime exists at `frame` (Nuke's lifetime type, from and to)."""
+    if not life or life.get("type", "all") == "all":
+        return True
+    start, end = life.get("start", 1), life.get("end", 1)
+    kind = life["type"]
+    if kind == "single":
+        return int(frame) == start
+    if kind == "start_to":
+        return int(frame) <= end
+    if kind == "to_end":
+        return int(frame) >= start
+    return start <= int(frame) <= end
+
+
+def resolve_shapes(payload, frame, params=None):
     """Resolve every animatable scalar in a Roto payload at `frame`.
 
     Returned shapes are plain numbers throughout, which is what both the rasteriser and the cache
     digest consume — the digest hashes the *resolved* payload so a static shape keeps its cache
     entry across a scrub while an animated one re-keys. See docs/ANIMATION.md.
+
+    `params` is the Roto node's own parameters; only its global motion-blur settings are read from it.
     """
-    shapes = []
-    for shape in (payload or {}).get("shapes", []):
-        def points_at(at_frame):
-            return [{**{field: resolve_scalar(point[field], at_frame, field) for field in POINT_FIELDS},
-                     **{field: resolve_scalar(point.get(field, 0.0), at_frame, field)
-                        for field in FEATHER_POINT_FIELDS}}
-                    for point in shape["points"]]
-        resolved_points = points_at(frame)
-        center_x = (min(p["x"] for p in resolved_points) + max(p["x"] for p in resolved_points)) / 2.0
-        center_y = (min(p["y"] for p in resolved_points) + max(p["y"] for p in resolved_points)) / 2.0
-        resolved = {
-            "name": shape["name"],
-            "mode": shape["mode"],
-            "opacity": resolve_scalar(shape["opacity"], frame, "opacity"),
-            "feather": resolve_scalar(shape["feather"], frame, "feather"),
-            "closed": shape.get("closed", True),
-            "stroke_width": resolve_scalar(shape.get("stroke_width", 1.0), frame, "stroke_width"),
-            "feather_model": shape.get("feather_model", "box"),
-            "points": resolved_points,
-            "transform": {field: resolve_scalar(shape.get("transform", {}).get(field,
-                              center_x if field == "center_x" else center_y if field == "center_y" else default), frame, field)
-                          for field, default in TRANSFORM_DEFAULTS.items()},
-            "track_follow": shape.get("track_follow", "translate"),
-        }
-        for field, default in (("visible", True), ("locked", False), ("invert", False),
-                               ("feather_falloff", "linear"), ("color", [1, 1, 1, 1]),
-                               ("blend_mode", "over"), ("motion_blur", False)):
-            resolved[field] = copy_value = shape.get(field, default)
-            if field == "color":
-                resolved[field] = [resolve_scalar(channel, frame, "opacity") for channel in copy_value]
-        if resolved["motion_blur"]:
-            # A compact one-frame shutter centered on the current frame. Static shapes naturally
-            # collapse to one sample; keyed shapes acquire temporal coverage in the same raster path.
-            resolved["_motion_samples"] = [points_at(int(frame) - 1), points_at(int(frame) + 1)]
-        apply_shape_transform(resolved)
-        shapes.append(resolved)
-    return shapes
+    return [_resolve_shape(shape, frame, params, blur=True) for shape in (payload or {}).get("shapes", [])]
+
+
+def _resolve_shape(shape, frame, params, blur):
+    def points_at(at_frame):
+        return [{**{field: resolve_scalar(point[field], at_frame, field) for field in POINT_FIELDS},
+                 **{field: resolve_scalar(point.get(field, 0.0), at_frame, field)
+                    for field in FEATHER_POINT_FIELDS}}
+                for point in shape["points"]]
+    resolved_points = points_at(frame)
+    center_x = (min(p["x"] for p in resolved_points) + max(p["x"] for p in resolved_points)) / 2.0
+    center_y = (min(p["y"] for p in resolved_points) + max(p["y"] for p in resolved_points)) / 2.0
+    resolved = {
+        "name": shape["name"],
+        "mode": shape["mode"],
+        "opacity": resolve_scalar(shape["opacity"], frame, "opacity"),
+        "feather": resolve_scalar(shape["feather"], frame, "feather"),
+        "closed": shape.get("closed", True),
+        "stroke_width": resolve_scalar(shape.get("stroke_width", 1.0), frame, "stroke_width"),
+        "feather_model": shape.get("feather_model", "box"),
+        "points": resolved_points,
+        "transform": {field: resolve_scalar(shape.get("transform", {}).get(field,
+                          center_x if field == "center_x" else center_y if field == "center_y" else default), frame, field)
+                      for field, default in TRANSFORM_DEFAULTS.items()},
+        "track_follow": shape.get("track_follow", "translate"),
+    }
+    if shape.get("transform", {}).get("skew_order", "XY") != "XY":
+        resolved["transform"]["skew_order"] = shape["transform"]["skew_order"]
+    for field, default in (("visible", True), ("locked", False), ("invert", False),
+                           ("feather_falloff", "linear"), ("color", [1, 1, 1, 1]),
+                           ("blend_mode", "over"), ("motion_blur", False)):
+        resolved[field] = copy_value = shape.get(field, default)
+        if field == "color":
+            resolved[field] = [resolve_scalar(channel, frame, "opacity") for channel in copy_value]
+    # Settings added with the Nuke parity pass: each appears in the resolved shape only when it differs from the default,
+    # so the resolved payload of an older document (and its cache digest) is unchanged.
+    if shape.get("feather_on", True) is False:
+        resolved["feather"] = 0.0
+        for point in resolved_points:
+            point["feather_x"] = point["feather_y"] = 0.0
+    if shape.get("falloff_power", 1.0) != 1.0:
+        resolved["falloff_power"] = float(shape["falloff_power"])
+    for field in ("cap_start", "cap_end"):
+        if shape.get(field, "rounded") != "rounded":
+            resolved[field] = shape[field]
+    if shape.get("extra_matrix") is not None:
+        resolved["extra_matrix"] = [float(v) for v in shape["extra_matrix"]]
+    if not in_lifetime(shape.get("lifetime"), frame):
+        resolved["visible"] = False
+    plan = motion_blur_plan(shape, params) if blur else None
+    if plan is not None and plan.get("legacy"):
+        # A compact one-frame shutter centered on the current frame. Static shapes naturally
+        # collapse to one sample; keyed shapes acquire temporal coverage in the same raster path.
+        resolved["motion_blur"] = True
+        resolved["_motion_samples"] = [points_at(int(frame) - 1), points_at(int(frame) + 1)]
+    elif plan is not None and plan["shutter"] > 0:
+        # Each sample is the whole shape (animated points and transform) at its own time, already transformed.
+        sets = []
+        for at in motion_blur_times(plan, frame):
+            sets.append(_resolve_shape(shape, at, params, blur=False)["points"])      # transformed by the call itself
+        resolved["motion_blur"] = True
+        resolved["_motion_samples"] = sets
+        resolved["_motion_only"] = True
+        resolved["_motion_final"] = True
+    apply_shape_transform(resolved)
+    return resolved
+
+
+def _skew_matrix(t):
+    """The 2 x 2 skew of a shape transform as (a, b, c, d): skew X then Y for order XY, Y then X for order YX (degrees)."""
+    kx = (1.0, math.tan(math.radians(t.get("skew_x", 0.0))), 0.0, 1.0)
+    ky = (1.0, 0.0, math.tan(math.radians(t.get("skew_y", 0.0))), 1.0)
+    first, second = (kx, ky) if t.get("skew_order", "XY") == "XY" else (ky, kx)
+    return (second[0]*first[0] + second[1]*first[2], second[0]*first[1] + second[1]*first[3],
+            second[2]*first[0] + second[3]*first[2], second[2]*first[1] + second[3]*first[3])
 
 
 def apply_shape_transform(shape):
-    """Apply the resolved Nuke-style shape transform to points and tangent vectors in place."""
+    """Apply the resolved Nuke-style shape transform to points and tangent vectors in place.
+
+    About the centre: skew, then scale, then rotate, then translate. A shape's `extra_matrix` (Nuke's 4 x 4 `transform_matrix`
+    knob, row by row) is applied last, to image coordinates."""
     t = shape.get("transform", TRANSFORM_DEFAULTS)
     cx, cy = t["center_x"], t["center_y"]
     sx, sy = t["scale_x"], t["scale_y"]
     angle = math.radians(t["rotate"])
     c, s = math.cos(angle), math.sin(angle)
+    skewed = bool(t.get("skew_x", 0.0) or t.get("skew_y", 0.0))
+    k = _skew_matrix(t) if skewed else None
+    matrix = shape.get("extra_matrix")
+    area = abs(sx * sy) * (abs(k[0]*k[3] - k[1]*k[2]) if skewed else 1.0)
+    if matrix is not None:
+        area *= abs(matrix[0]*matrix[5] - matrix[1]*matrix[4])
     if shape.get("feather_model") == "edge":
-        shape["feather"] *= math.sqrt(abs(sx * sy))
-    shape["stroke_width"] *= math.sqrt(abs(sx * sy))
+        shape["feather"] *= math.sqrt(area)
+    shape["stroke_width"] *= math.sqrt(area)
     def vector(x, y):
+        if skewed:
+            x, y = k[0]*x + k[1]*y, k[2]*x + k[3]*y
         x, y = x * sx, y * sy
         return c * x - s * y, s * x + c * y
     point_sets = [shape["points"]]
-    if shape.get("feather_model") == "edge":
+    if shape.get("feather_model") == "edge" and not shape.get("_motion_final"):
         point_sets.extend(shape.get("_motion_samples", []))
     for point_set in point_sets:
         for point in point_set:
@@ -434,6 +581,12 @@ def apply_shape_transform(shape):
             point["y"] = cy + y + t["translate_y"]
             for xfield, yfield in (("in_x", "in_y"), ("out_x", "out_y"), ("feather_x", "feather_y")):
                 point[xfield], point[yfield] = vector(point.get(xfield, 0.0), point.get(yfield, 0.0))
+            if matrix is not None:
+                point["x"], point["y"] = (matrix[0]*point["x"] + matrix[1]*point["y"] + matrix[3],
+                                          matrix[4]*point["x"] + matrix[5]*point["y"] + matrix[7])
+                for xfield, yfield in (("in_x", "in_y"), ("out_x", "out_y"), ("feather_x", "feather_y")):
+                    vx, vy = point.get(xfield, 0.0), point.get(yfield, 0.0)
+                    point[xfield], point[yfield] = matrix[0]*vx + matrix[1]*vy, matrix[4]*vx + matrix[5]*vy
 
 
 def feather_handle_points(points, feather):
@@ -568,9 +721,10 @@ def unresolve_feather_vector(vector, shape, document, frame):
     return x, y
 
 
-def resolve_roto_shapes(payload, frame, document=None, tier=1):
-    """Resolve transforms and tracker links for both the evaluator and viewer overlay."""
-    resolved = resolve_shapes(payload, frame)
+def resolve_roto_shapes(payload, frame, document=None, tier=1, params=None):
+    """Resolve transforms and tracker links for both the evaluator and viewer overlay. `params` are the Roto node's own
+    (its global motion blur)."""
+    resolved = resolve_shapes(payload, frame, params)
     if document is None:
         return resolved
     from . import tracker as tracker_model
@@ -604,7 +758,7 @@ def resolve_roto_shapes(payload, frame, document=None, tier=1):
             if shape.get("feather_model") == "edge":
                 shape["feather"] *= abs(sx)
             point_sets = [shape["points"]]
-            if shape.get("feather_model") == "edge":
+            if shape.get("feather_model") == "edge" or shape.get("_motion_final"):
                 point_sets.extend(shape.get("_motion_samples", []))
             for point_set in point_sets:
                 for point in point_set:
@@ -620,9 +774,11 @@ def resolve_roto_shapes(payload, frame, document=None, tier=1):
                 continue
             dx = (resolve_scalar(track["x"], frame, "x") - resolve_scalar(track["x"], reference, "x")) / tier
             dy = (resolve_scalar(track["y"], frame, "y") - resolve_scalar(track["y"], reference, "y")) / tier
-            for point in shape["points"]:
-                point["x"] += dx
-                point["y"] += dy
+            for point_set in ([shape["points"], *shape.get("_motion_samples", [])] if shape.get("_motion_final")
+                              else [shape["points"]]):
+                for point in point_set:
+                    point["x"] += dx
+                    point["y"] += dy
     return resolved
 
 

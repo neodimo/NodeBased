@@ -1151,8 +1151,8 @@ class Evaluator:
     def _roto_shape_matte(self, shape, bounds, canvas, render):
         """Reuse one resolved shape's coverage when a neighbouring shape changes."""
         geometry = {key: shape[key] for key in (
-            "points", "_motion_samples", "closed", "stroke_width", "feather",
-            "feather_model", "feather_falloff", "invert") if key in shape}
+            "points", "_motion_samples", "_motion_only", "closed", "stroke_width", "feather",
+            "feather_model", "feather_falloff", "invert", "falloff_power", "cap_start", "cap_end") if key in shape}
         payload = [canvas, bounds, geometry]
         key = hashlib.sha256(json.dumps(payload, sort_keys=True,
                                         separators=(",", ":")).encode()).digest()
@@ -1479,7 +1479,7 @@ class Evaluator:
                 params["position_x"] += delta_x / tier
                 params["position_y"] += delta_y / tier
             if kind == "Roto":
-                data = shapes.resolve_roto_shapes(payload, frame, doc, tier)
+                data = shapes.resolve_roto_shapes(payload, frame, doc, tier, params)
             elif kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
                 if kind == "GridWarpTracker":
                     tracker_id = params.get("tracker_id", "")

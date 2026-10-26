@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 80.1 / 100** (167 nodes scored, rank-weighted; 82.5 counting only the nodes NodeBased has).
+**Overall fidelity: 81.0 / 100** (167 nodes scored, rank-weighted; 83.4 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -26,7 +26,7 @@ Per node, five components, each a fraction from 0 to 1:
 | Group | Rank-weighted | Plain mean | Nodes |
 |---|---|---|---|
 | Image | 55.2 | 49.1 | 6 |
-| Draw | 63.9 | 51.9 | 17 |
+| Draw | 71.9 | 53.4 | 17 |
 | Time | 74.3 | 63.1 | 13 |
 | Channel | 95.5 | 95.8 | 5 |
 | Color | 90.6 | 72.9 | 34 |
@@ -57,7 +57,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 56.1 | 18 (10/75) | 100 | 100 | 100 | - | no fixture |
+| 1 | Roto | `Roto` | supported | 81.8 | 66 (48/75) | 100 | 100 | 100 | - | no fixture |
 | 2 | Text | `Text` | supported | 63.9 | 38 (12/41) | 79 | 100 | 100 | - | no fixture |
 | 3 | Rectangle | `Rectangle` | supported | 88.6 | 81 (9/13) | 91 | 100 | 100 | - | no fixture |
 | 4 | Ramp | `Ramp` | supported | 92.2 | 89 (9/10) | 83 | 100 | 100 | - | no fixture |
@@ -279,12 +279,12 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
-| 1 | Roto (Draw #1) | `Roto` | 43.88 | 56.1 | 65 secondary knobs missing |
-| 2 | Read (Image #1) | `Read` | 36.70 | 63.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `proxy`, `proxy_format`, `reload`; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
-| 3 | TimeOffset (Time #1) | `TimeOffset` | 33.33 | 66.7 | primary knobs missing: `enable_path_mask`, `mask_patterns`, `inject_mask` |
-| 4 | Write (Image #2) | `Write` | 24.42 | 51.2 | primary knobs missing: `proxy`, `render_order`, `Render`, `reading`, `on_error`, `reload`, `read_all_lines`; 37 secondary knobs missing |
-| 5 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
-| 6 | Tracker (Transform #3) | `Tracker` | 18.47 | 44.6 | primary knobs missing: `add_track`, `del_tracks`, `select_all`, `average_tracks`; 45 secondary knobs missing |
+| 1 | Read (Image #1) | `Read` | 36.70 | 63.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `proxy`, `proxy_format`, `reload`; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
+| 2 | TimeOffset (Time #1) | `TimeOffset` | 33.33 | 66.7 | primary knobs missing: `enable_path_mask`, `mask_patterns`, `inject_mask` |
+| 3 | Write (Image #2) | `Write` | 24.42 | 51.2 | primary knobs missing: `proxy`, `render_order`, `Render`, `reading`, `on_error`, `reload`, `read_all_lines`; 37 secondary knobs missing |
+| 4 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
+| 5 | Tracker (Transform #3) | `Tracker` | 18.47 | 44.6 | primary knobs missing: `add_track`, `del_tracks`, `select_all`, `average_tracks`; 45 secondary knobs missing |
+| 6 | Roto (Draw #1) | `Roto` | 18.23 | 81.8 | 27 secondary knobs missing |
 | 7 | Text (Draw #2) | `Text` | 18.04 | 63.9 | primary knobs missing: `yjustify`, `index`, `global_font_scale`, `font_width`, `font_height`, `kerning`, `tracking`, `baseline_shift` and 1 more; 20 secondary knobs missing |
 | 8 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
 | 9 | Profile (Image #7) | `Profile` | 14.29 | 0.0 | primary knobs missing: `frame_range`, `open_profile_panel`; node chrome missing: channels selector |

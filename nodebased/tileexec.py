@@ -1037,7 +1037,8 @@ class TileExecutor:
         if cache_key not in digests:
             payload = tiers.scale_node_data(
                 "Roto", self._unbaked_document.get("node_data", {}).get(node_id), tier)
-            resolved = shapes.resolve_roto_shapes(payload, frame, self._unbaked_document, tier)
+            resolved = shapes.resolve_roto_shapes(payload, frame, self._unbaked_document, tier,
+                                                  self._unbaked_document["nodes"][node_id]["params"])
             encoded = json.dumps(resolved, sort_keys=True, allow_nan=False,
                                  separators=(",", ":")).encode()
             digests[cache_key] = hashlib.sha256(encoded).hexdigest()
@@ -1051,7 +1052,7 @@ class TileExecutor:
         resolved = self._roto_shapes_cache.get(shape_key)
         if resolved is None:
             payload = tiers.scale_node_data("Roto", document.get("node_data", {}).get(node_id), tier)
-            resolved = shapes.resolve_roto_shapes(payload, frame, document, tier)
+            resolved = shapes.resolve_roto_shapes(payload, frame, document, tier, params)
             self._roto_shapes_cache[shape_key] = resolved
         matte = roto.rasterise(resolved, params["width"], params["height"],
                                bool(params.get("invert", 0)),

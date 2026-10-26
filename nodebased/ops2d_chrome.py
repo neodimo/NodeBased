@@ -218,6 +218,14 @@ def step_e_params(kind):
     return out
 
 
+def step_f_params(kind):
+    """The knobs fidelity step F added (Roto's node-level settings, Text, the time nodes' path mask, Read and Write), at the
+    values that leave an older document's node as it was."""
+    from . import rotoknobs
+    out = rotoknobs.upgrade_params(kind)
+    return out
+
+
 def upgrade_nodes(nodes):
     """Give an older document's nodes the chrome knobs at their no-change defaults. Walks Group graphs."""
     for node in nodes.values():
@@ -225,7 +233,7 @@ def upgrade_nodes(nodes):
             continue
         params = node.get("params")
         added = spec_params(node.get("type"))
-        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type"))}
+        added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type")), **step_f_params(node.get("type"))}
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)
@@ -380,6 +388,8 @@ def needs_full_frame(kind, p):
         # Their tiles are rasterised straight from the shape list, so the Draw strip runs on the whole image.
         draw = draw_config(kind, p)
         if draw is not None and (draw.replace or draw.opacity != 1.0 or draw.output != draw.default_output or draw.cliptype != "format"):
+            return True
+        if output_mask_layer(kind, p):
             return True
         cfg = filter_config(kind, p)
         return bool(cfg is not None and cfg.active(False))
@@ -768,6 +778,14 @@ def compose_draw(kind, p, shape, background):
     return restrict(background, over, selected)
 
 
+def output_mask_layer(kind, p):
+    """The layer name Roto's `outputMask` writes the matte to, or None when it is "none" (or a node without the knob)."""
+    if kind != "Roto":
+        return None
+    name = str(p.get("outputMask", "none")).strip()
+    return None if name.lower() in ("", "none") else name
+
+
 def run_roto(kind, p, inputs, inner):
     """Roto and RotoPaint's Draw chrome around the node's own result (Raster level). The background is the
     wired `bg` (Roto) or `image` (RotoPaint) input, or transparent black when Roto has none.
@@ -778,7 +796,9 @@ def run_roto(kind, p, inputs, inner):
     from .raster import Raster
 
     cfg = draw_config(kind, p)
-    if cfg is None or not (cfg.replace or cfg.opacity != 1.0 or cfg.output != cfg.default_output or cfg.cliptype != "format"):
+    mask_layer = output_mask_layer(kind, p)
+    if cfg is None or not (cfg.replace or cfg.opacity != 1.0 or cfg.output != cfg.default_output or cfg.cliptype != "format"
+                           or mask_layer):
         return inner(kind, p, inputs)
     background = inputs[0] if inputs else None
     work = list(inputs)
@@ -800,6 +820,11 @@ def run_roto(kind, p, inputs, inner):
                 pixels[..., :3] *= opacity
         else:
             pixels = (base + opacity * (pixels - base)).astype(np.float32)
+    layers = result.layers
+    if mask_layer:
+        # Output mask: the shapes' matte (after opacity) is also written, in all four channels, to the layer of that name.
+        matte = np.repeat(pixels[..., 3:4], 4, axis=2).astype(np.float32)
+        layers = {**(layers or {}), mask_layer: Raster(matte, box, result.display)}
     if cfg.output != cfg.default_output:
         pixels = restrict(base, pixels, parse_channels(cfg.output))
     if cfg.cliptype != "format":
@@ -810,5 +835,11 @@ def run_roto(kind, p, inputs, inner):
         if not overlap.is_empty:
             clipped[overlap.y - region.y:overlap.bottom - region.y, overlap.x - region.x:overlap.right - region.x] = \
                 pixels[overlap.y - box.y:overlap.bottom - box.y, overlap.x - box.x:overlap.right - box.x]
-        return Raster(clipped, region, result.display, result.layers, result.meta)
-    return Raster(pixels, box, result.display, result.layers, result.meta)
+        if layers is not result.layers and mask_layer:
+            clipped_layer = np.zeros((region.height, region.width, 4), np.float32)
+            if not overlap.is_empty:
+                clipped_layer[overlap.y - region.y:overlap.bottom - region.y, overlap.x - region.x:overlap.right - region.x] = \
+                    layers[mask_layer].pixels[overlap.y - box.y:overlap.bottom - box.y, overlap.x - box.x:overlap.right - box.x]
+            layers = {**layers, mask_layer: Raster(clipped_layer, region, result.display)}
+        return Raster(clipped, region, result.display, layers, result.meta)
+    return Raster(pixels, box, result.display, layers, result.meta)

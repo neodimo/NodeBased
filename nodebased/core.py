@@ -168,6 +168,7 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
+from . import rotoknobs as _rotoknobs
 from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
 from . import timeknobs as _timeknobs
@@ -525,7 +526,8 @@ SPECS = {
     # see docs/ROTO_TRACKING.md. A wired optional "bg" is Nuke's Roto input: the plate passes
     # through and the shape's coverage becomes its alpha, at the plate's own format. Nuke's
     # premultiply control defaults to none.
-    "Roto": {"inputs": [], "optional_inputs": ["bg", "mask"], "params": {"width": 960, "height": 540, "invert": 0, "premultiply_mode": "none"}},
+    "Roto": {"inputs": [], "optional_inputs": ["bg", "mask"], "params": {"width": 960, "height": 540, "invert": 0, "premultiply_mode": "none",
+                                                                    **_rotoknobs.new_params("Roto")}},
     # RotoPaint filters a plate and stores ordered shapes/strokes in node_data. The optional
     # second image is the reveal source; clone samples from the plate at a source frame.
     # D1: "Detect specks..." samples dustbust_frame_start..dustbust_frame_end and proposes clone
@@ -2058,6 +2060,9 @@ from . import ops2d_chrome as _chrome
 for _kind in (*_chrome.FILTER_CHROME, *_chrome.DRAW_CHROME):
     for _name, _default in _chrome.spec_params(_kind).items():
         SPECS[_kind]["params"].setdefault(_name, _default)
+CHOICES["global_motionblur_shutter_offset_type"] = ["start", "centred", "end", "custom"]
+LIMITS.update({"shape_motionblur_on": (0, 1), "global_motionblur_on": (0, 1), "global_motionblur": (1, 64),
+               "global_motionblur_shutter": (0.0, 8.0), "global_motionblur_shutter_offset": (-8.0, 8.0)})
 CHOICES["channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["cliptype"] = list(_chrome.CLIP_TYPES)
 # Shuffle's two routing slots (fidelity step B): R, G, B, A read the first, R2, G2, B2, A2 the second.

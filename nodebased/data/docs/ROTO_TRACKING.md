@@ -223,6 +223,43 @@ Deterministic, CPU, NumPy:
    edge outline together with its control points.
 5. Combine into the accumulated matte per `mode`, scaled by `opacity`.
 
+### Shape and node settings from the Nuke parity pass (fidelity step F)
+
+Every setting below is optional. A shape saved without it draws exactly as before, and its resolved form (and so its cache digest)
+carries nothing new. The scorer pairs each with the Nuke knob of the same job (`docs/PARITY_2D_FIDELITY.md`); where this document
+gives a reading of the guide's one-line description, that reading is NodeBased's and has not been compared with a Nuke render.
+
+Per shape, in the payload:
+
+* `feather_on` (default true). False draws the hard outline: the shape's feather width and every point's feather offset are ignored.
+* `falloff_power` (0 to 16, default 1). Nuke's numeric *feather falloff*. The feathered coverage is raised to this power, so 1 is
+  the unchanged ramp, below 1 the feather holds opaque longer (0 is a hard edge out to the feather's reach) and above 1 it drops away
+  faster. It acts after the linear, smooth or Gaussian choice.
+* `transform.skew_x`, `transform.skew_y` (degrees, animatable) and `transform.skew_order` (`XY` or `YX`). About the centre, the
+  skew comes first, then the scale, then the rotation, then the translation. Order `XY` shears X then Y.
+* `extra_matrix`: 16 numbers, row by row (Nuke's 4 x 4 `transform_matrix`). Applied last, to image coordinates: `x' = m0 x + m1 y + m3`,
+  `y' = m4 x + m5 y + m7`. A stroke's width follows the matrix's scale; at a proxy tier the translation column is divided by the tier.
+* Motion blur. `motion_blur` (the switch) with `motion_blur_samples` (1 to 64), `motion_blur_shutter` (frames, 0 to 8),
+  `motion_blur_offset_type` (`start`, `centred`, `end`, `custom`) and `motion_blur_offset` (frames, for `custom`). The shape,
+  transform included, is drawn at `samples + 1` evenly spaced times across the open shutter, ends included, and the pictures are
+  averaged. The shutter opens at the frame (`start`), straddles it (`centred`), closes at it (`end`) or opens `offset` frames from it
+  (`custom`). A shape saved with only `motion_blur: true` keeps its original blur across the two neighbouring frames.
+* `lifetime`: `{"type": "all" | "single" | "start_to" | "to_end" | "range", "start": frame, "end": frame}`. The shape exists only
+  on the frames the type selects (`single` at `start`, `start_to` up to `end`, `to_end` from `start`, `range` from `start` to `end`).
+* `cap_start`, `cap_end` (`rounded`, `square`, `butt`; open splines only). Rounded is the original end. Butt stops at the end point.
+  Square runs on half the stroke width past it with straight sides.
+
+Per node, in `params`: `outputMask` (a layer name, default `none`) also writes the matte, after the node's opacity, to that layer in
+all four channels; a node with it set renders whole, not in tiles. `shape_motionblur_on` (default on) lets the shapes' own motion
+blur settings count. `global_motionblur_on` (default off) with `global_motionblur`, `global_motionblur_shutter`,
+`global_motionblur_shutter_offset_type` and `global_motionblur_shutter_offset` applies one set of motion blur settings to every shape
+that has none of its own.
+
+Not honoured, with the reason in `docs/parity/nodebased_to_nuke.json`: the clone and reveal source knobs (`shape_source`,
+`source_*`; RotoPaint holds the source stage), the stereo `view` and `stereo_offset` (no views to choose), the spline `key` spinner
+(keys are set with the key button beside each field), and the tracking tab (`pretrack_filter` to `reference_frame`; a shape follows
+a Tracker or PlanarTracker through `track_link`).
+
 ## Tracker
 
 ```

@@ -525,7 +525,14 @@ KNOB_LAYOUT = {
     "Roto": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("bool", ("invert",)),
-        KnobGroup("enum", ("premultiply_mode",), label="Premultiply")),
+        KnobGroup("enum", ("premultiply_mode",), label="Premultiply"),
+        KnobGroup("string", ("outputMask",), label="Output mask"),
+        KnobGroup("bool", ("shape_motionblur_on",), label="Shape motion blur"),
+        KnobGroup("bool", ("global_motionblur_on",), label="Global motion blur"),
+        KnobGroup("int", ("global_motionblur",), label="Global samples"),
+        KnobGroup("float_slider", ("global_motionblur_shutter",), label="Global shutter", soft_range=(0, 2)),
+        KnobGroup("enum", ("global_motionblur_shutter_offset_type",), label="Global shutter offset"),
+        KnobGroup("float", ("global_motionblur_shutter_offset",), label="Global custom offset")),
     "RotoPaint": _groups(
         KnobGroup("int", ("dustbust_frame_start",), label="Detect from frame"),
         KnobGroup("int", ("dustbust_frame_end",), label="Detect to frame"),
