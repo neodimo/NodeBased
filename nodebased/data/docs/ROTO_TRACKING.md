@@ -577,6 +577,51 @@ Roto and tracker gestures have priority over this handle. In particular, a
 Transform handle never consumes a Roto point edit or tracker point-picking
 click.
 
+### RotoPaint settings from the Nuke parity pass (fidelity step H)
+
+Every setting below is optional and an older document draws as it did. Per item in the payload, on shapes and strokes alike:
+
+* `locked` (boolean). The viewer refuses to edit the item. No pixel changes, as in Nuke.
+* `source`: `color` (default), `foreground` or `background`. What the item paints. A shape paints white and a stroke its colour under
+  `color`; `foreground` paints the `input2` image where the item draws (black when nothing is wired); `background` paints the node's
+  plate, which is how a stroke puts the plate back over earlier paint. Strokes use it with the paint tool.
+* `transform` (translate, rotate, scale, skew, centre, skew order, each animatable) and `extra_matrix`: the Transform tab, with the
+  arithmetic of Roto's shapes (the section above). A stroke's points move with it and its brush size follows the transform's
+  scale (the square root of its area).
+* `motion_blur`, `motion_blur_samples`, `motion_blur_shutter`, `motion_blur_offset_type`, `motion_blur_offset`: the Motion Blur tab,
+  also as Roto has it. A stroke is drawn at each of the `samples + 1` times across the shutter and the pictures are averaged; a stroke
+  that does not move is sharp. The node's `shape_motionblur_on` and `global_motionblur*` params work as Roto's do.
+
+Shapes also take Roto's own shape settings: `feather_on`, `falloff_power`, `feather_falloff`, `feather_model`, `invert`, `closed`,
+`stroke_width`, `cap_start`, `cap_end` and `lifetime`. A shape outside its lifetime is hidden.
+
+Strokes:
+
+* `effect` (0 to 4096, default 0). The Stroke tab's effect parameter: for blur and sharpen the filter radius in pixels, for smear how
+  far the colour is dragged, for dodge and burn the strength. 0 keeps the brush's own settings.
+* `dynamic_hardness` (boolean). Pressure scales the hardness along the stroke.
+* `buildup` (boolean). Overlapping dabs add up, `1 - (1 - a)(1 - a_dab)`, instead of the strongest dab alone setting the opacity.
+* `write_on`: `{"start": s, "end": e}`, fractions of the path's length. Only that stretch is drawn; the cut ends are interpolated.
+* The Clone tab: `source_transform` (`rotate` in degrees, `scale_x`, `scale_y`, `skew_x`, `skew_y`, `skew_order`, `center_x`,
+  `center_y`) turns, scales and skews the source about its centre before the source offset moves it; `source_round` rounds the offset
+  to whole pixels; `source_black_outside` makes pixels the source does not cover black and transparent instead of repeating its edge;
+  `source_filter` (`impulse`, `cubic`, `keys`, `simon`, `rifman`, `mitchell`, `parzen`, `notch`) is the resampling filter, `impulse`
+  (the nearest pixel, the original behaviour) when none is named. The guide names the eight filters and gives no formula: `cubic` and
+  `keys` are the Keys cubic convolution (a = -0.5), `simon` and `rifman` the same family with a = -0.75 and -1, `mitchell` the
+  Mitchell-Netravali filter (B = C = 1/3), `parzen` the cubic B-spline and `notch` the two-pixel tent. These readings are
+  NodeBased's and have not been compared with a Nuke render.
+
+Per node, in `params`: `premultiply_mode` (`none`, `rgb`, `rgba`; Nuke's `premultiply`) multiplies the colour (and with `rgba` the
+alpha) by the alpha of the painted result before the mask and mix. `outputMask` (a layer name, default `none`) also writes the
+coverage of everything the node drew, the alpha it leaves on an empty canvas, scaled by `opacity`, to that layer in all four channels;
+a node with it set renders whole, not in tiles. The node has Nuke's mask strip: `channels` (default `all`), `maskChannelInput`,
+`invert_mask`, `inject` and `fringe`, around the paint as they are around every filter, and the global motion blur knobs of Roto.
+A stroke whose clone source is rotated, scaled, skewed or filtered renders whole, not in tiles.
+
+Not honoured, with the reason in `docs/parity/nodebased_to_nuke.json`: the stereo `view`, `stereo_offset` and `source_view`, the
+spline `key` spinner, the `format` knob (the node keeps the wired image's format), and the tracking tab (`pretrack_filter` to
+`reference_frame`).
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.

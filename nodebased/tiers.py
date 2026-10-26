@@ -886,7 +886,14 @@ def scale_node_data(kind: str, payload, tier: int):
                                 for field, scalar in point.items()} for point in value]
             elif name in PIXEL_UNIT_SCALARS:
                 entry[name] = scaled_scalar(value)
-            elif name == "extra_matrix" and kind == "Roto":
+            elif kind == "RotoPaint" and name == "transform" and isinstance(value, dict):
+                entry[name] = {f: (scaled_scalar(v) if f in ("translate_x", "translate_y", "center_x", "center_y") else v)
+                               for f, v in value.items()}
+            elif kind == "RotoPaint" and name == "source_transform" and isinstance(value, dict):
+                entry[name] = {f: (v / tier if f in ("center_x", "center_y") else v) for f, v in value.items()}
+            elif kind == "RotoPaint" and name == "effect":
+                entry[name] = value / tier
+            elif name == "extra_matrix" and kind in ("Roto", "RotoPaint"):
                 entry[name] = [v / tier if index in (3, 7, 11) else v for index, v in enumerate(value)]   # the translation column
             elif kind == "RotoPaint" and name == "brush" and item.get("kind") == "stroke":
                 entry[name] = {**value, "size": value["size"] / tier}

@@ -5,6 +5,8 @@ import math
 
 import numpy as np
 
+from . import paintknobs
+
 
 def active(stroke, frame):
     life = stroke["lifetime"]
@@ -18,12 +20,16 @@ def active(stroke, frame):
     return frame >= life["first"]
 
 
-def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0, 0)):
+def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0, 0), dynamic_hardness=False,
+                   buildup_opacity=None):
     """Stroke coverage in 0..1: the max over a chain of round dabs along the point path.
 
     A dab is solid out to `hardness` of its radius and falls off smoothly from there to the rim
     (hardness 1 is a hard edge with a one pixel antialiased rim, 0 a falloff across the whole
     radius), like Nuke's brush hardness. Pressure scales both the dab's radius and its strength.
+    With `dynamic_hardness` pressure scales the hardness along the stroke too. With `buildup_opacity` the dabs add up
+    (`1 - (1 - a)(1 - a_dab)`, a dab's strength being `buildup_opacity` times its pressure and falloff) and the grid is the
+    finished alpha rather than a coverage still to be scaled by the brush opacity.
     """
     ox, oy = map(int, origin)
     yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
@@ -39,11 +45,16 @@ def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0
             x, y = x0 + t*(x1-x0), y0 + t*(y1-y0)
             pressure = p0 + t*(p1-p0)
             radius = max(0.25, size * pressure * 0.5)
+            dab_hardness = hardness * pressure if dynamic_hardness else hardness
             d = np.sqrt((xx + ox + 0.5 - x)**2 + (yy + oy + 0.5 - y)**2)
-            ramp = np.clip((radius + 0.5 - d) / ((1.0 - hardness) * radius + 1.0), 0, 1)
-            if hardness < 1.0:
+            ramp = np.clip((radius + 0.5 - d) / ((1.0 - dab_hardness) * radius + 1.0), 0, 1)
+            if dab_hardness < 1.0:
                 ramp = ramp * ramp * (3.0 - 2.0 * ramp)
-            coverage = np.maximum(coverage, ramp * pressure)
+            if buildup_opacity is None:
+                coverage = np.maximum(coverage, ramp * pressure)
+            else:
+                dab = np.clip(ramp * pressure * buildup_opacity, 0.0, 1.0)
+                coverage = 1.0 - (1.0 - coverage) * (1.0 - dab)
     return coverage
 
 
@@ -62,11 +73,21 @@ def _stroke_region(width, height, points, size, origin=(0, 0)):
 
 
 def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
-                 source_origin=(0, 0), source_bounds=None):
+                 source_origin=(0, 0), source_bounds=None, plate=None):
     if not active(stroke, frame) or not stroke["visible"]:
         return image
+    write_on = stroke.get("write_on")
+    if write_on:
+        # Write on: only the part of the path between the two fractions of its length is drawn.
+        points = paintknobs.write_on_points(stroke["points"], write_on["start"], write_on["end"])
+        if not points:
+            return image
+        stroke = dict(stroke, points=points)
     tool, blend = stroke["tool"], stroke["blend"]
-    if tool == "paint" and blend == "over":
+    dynamic = bool(stroke.get("dynamic_hardness", False))
+    buildup = bool(stroke.get("buildup", False))
+    paint_source = stroke.get("source", "color")
+    if tool == "paint" and blend == "over" and paint_source == "color":
         # Most brush marks touch a small part of a tile. Rasterise and composite only that
         # footprint; scanning the whole tile for every dab made a new stroke invalidate hundreds
         # of thousands of pixels it could never affect.
@@ -77,10 +98,16 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
             return image
         x0, y0, x1, y1 = bounds
         local_origin = (int(origin[0]) + x0, int(origin[1]) + y0)
-        coverage = _distance_grid(x1 - x0, y1 - y0, stroke["points"],
-                                  brush["size"], brush["spacing"],
-                                  brush["hardness"], local_origin)
-        alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
+        if dynamic or buildup:
+            coverage = _distance_grid(x1 - x0, y1 - y0, stroke["points"], brush["size"], brush["spacing"],
+                                      brush["hardness"], local_origin, dynamic,
+                                      float(brush["opacity"]) if buildup else None)
+            alpha = coverage[..., None] * np.float32(stroke["opacity"] if buildup else brush["opacity"] * stroke["opacity"])
+        else:
+            coverage = _distance_grid(x1 - x0, y1 - y0, stroke["points"],
+                                      brush["size"], brush["spacing"],
+                                      brush["hardness"], local_origin)
+            alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
         rgba = np.asarray(stroke["color"], np.float32)
         inverse = np.float32(1.0) - alpha
         source_patch = image[y0:y1, x0:x1]
@@ -95,11 +122,22 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
     base = image
     ox, oy = map(int, origin)
     brush = stroke["brush"]
-    coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"],
-                              brush["size"], brush["spacing"], brush["hardness"], origin)
-    alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
+    if dynamic or buildup:
+        coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"], brush["size"], brush["spacing"],
+                                  brush["hardness"], origin, dynamic, float(brush["opacity"]) if buildup else None)
+        alpha = coverage[..., None] * np.float32(stroke["opacity"] if buildup else brush["opacity"] * stroke["opacity"])
+    else:
+        coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"],
+                                  brush["size"], brush["spacing"], brush["hardness"], origin)
+        alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
     tool = stroke["tool"]
-    if tool == "paint":
+    if tool == "paint" and paint_source != "color":
+        # Source foreground paints the node's second image, background the plate; either shows where the stroke is.
+        picture = reveal if paint_source == "foreground" else (plate if plate is not None else source)
+        target = np.zeros_like(base) if picture is None else np.asarray(picture, np.float32)[..., :4]
+        if target.shape != base.shape:
+            target = np.zeros_like(base)
+    elif tool == "paint":
         rgba = np.asarray(stroke["color"], np.float32)
         if blend == "over":
             # The common paint/over case has a constant source colour. Broadcast that colour
@@ -119,18 +157,26 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
         dx, dy = stroke["source_offset"]
         h, w = base.shape[:2]
         sy, sx = np.mgrid[0:h, 0:w]
-        sx = np.rint(sx + ox - dx).astype(int)
-        sy = np.rint(sy + oy - dy).astype(int)
-        if source_bounds is None:
-            sx = np.clip(sx, 0, source.shape[1]-1)
-            sy = np.clip(sy, 0, source.shape[0]-1)
+        if any(k in stroke for k in ("source_transform", "source_round", "source_filter", "source_black_outside")):
+            # The Clone tab: the source rotated, scaled and skewed about its centre, the offset optionally rounded, read under
+            # the chosen filter (impulse, the nearest pixel, unless one is named), outside the source repeated or black.
+            xf, yf = paintknobs.clone_coordinates(stroke, sx + ox, sy + oy)
+            target = paintknobs.sample_source(source, np.asarray(xf, np.float32), np.asarray(yf, np.float32),
+                                              stroke.get("source_filter", "impulse"), source_origin, source_bounds,
+                                              bool(stroke.get("source_black_outside", False)))
         else:
-            bx, by, bw, bh = source_bounds
-            sx = np.clip(sx, bx, bx + bw - 1) - int(source_origin[0])
-            sy = np.clip(sy, by, by + bh - 1) - int(source_origin[1])
-            sx = np.clip(sx, 0, source.shape[1]-1)
-            sy = np.clip(sy, 0, source.shape[0]-1)
-        target = source[sy, sx]
+            sx = np.rint(sx + ox - dx).astype(int)
+            sy = np.rint(sy + oy - dy).astype(int)
+            if source_bounds is None:
+                sx = np.clip(sx, 0, source.shape[1]-1)
+                sy = np.clip(sy, 0, source.shape[0]-1)
+            else:
+                bx, by, bw, bh = source_bounds
+                sx = np.clip(sx, bx, bx + bw - 1) - int(source_origin[0])
+                sy = np.clip(sy, by, by + bh - 1) - int(source_origin[1])
+                sx = np.clip(sx, 0, source.shape[1]-1)
+                sy = np.clip(sy, 0, source.shape[0]-1)
+            target = source[sy, sx]
         patch_blend = float(stroke.get("patch_blend", 0.0))
         if patch_blend > 0:
             # DustBust patch synthesis (2D parity plan 13, step E2): fill the stroke's own
@@ -147,7 +193,7 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
         # a single fixed 3x3 average; reuses the Blur node's own separable filter (roto.py's
         # feather does the same) so this can never drift from it.
         from .imaging import Evaluator
-        radius = max(1.0, brush["size"] / 6.0)
+        radius = paintknobs.effective_effect(stroke, max(1.0, brush["size"] / 6.0))
         blurred = Evaluator._box_blur_axis(Evaluator._box_blur_axis(base, radius, axis=1), radius, axis=0)
         target = blurred if tool == "blur" else np.clip(base + 1.5 * (base - blurred), 0, None)
     elif tool == "smear":
@@ -159,7 +205,7 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
             dx, dy = points[-1]["x"] - points[0]["x"], points[-1]["y"] - points[0]["y"]
         length = math.hypot(dx, dy)
         if length > 1e-6:
-            reach = min(length, brush["size"] * 0.5)
+            reach = min(length, paintknobs.effective_effect(stroke, brush["size"] * 0.5))
             ux, uy = dx / length * reach, dy / length * reach
             h, w = base.shape[:2]
             yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
@@ -171,9 +217,9 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
     elif tool == "dodge":
         # brush["strength"] replaces a fixed 0.2 lift; 0.2 is still the default, so an old stroke
         # migrated without the field renders the same pixels.
-        target = base + (1-base)*brush["strength"]
+        target = base + (1-base)*min(1.0, paintknobs.effective_effect(stroke, brush["strength"]))
     else:
-        target = base*(1.0-brush["strength"])
+        target = base*(1.0-min(1.0, paintknobs.effective_effect(stroke, brush["strength"])))
     if blend == "over" or tool == "eraser":
         out = target * alpha + base * (1-alpha)
     elif blend == "add":
@@ -191,6 +237,7 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
 def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
               canvas_size=None):
     out = image.copy()
+    plate = image
     for item in items:
         delta = item.get("_track_delta", (0.0, 0.0))
         if delta != (0.0, 0.0) and list(delta) != [0.0, 0.0]:
@@ -202,29 +249,51 @@ def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
                             else item["source_frame"])
             clone_raster = clone_map.get(source_frame)
             clone_source = source if clone_raster is None else clone_raster.fit(clone_raster.data)
-            out = apply_stroke(out, item, frame,
-                               source=clone_source[..., :4] if hasattr(clone_source, "shape") else source,
-                               reveal=reveal, origin=origin,
-                               source_origin=item.get("_clone_source_origins", {}).get(source_frame, origin),
-                               source_bounds=item.get("_clone_source_bounds", {}).get(source_frame))
+            clone_source = clone_source[..., :4] if hasattr(clone_source, "shape") else source
+            origins = item.get("_clone_source_origins", {}).get(source_frame, origin)
+            bounds = item.get("_clone_source_bounds", {}).get(source_frame)
+            samples = item.get("_motion_samples")
+            if samples:
+                # Motion blur: the stroke drawn at each shutter time over the same picture, the results averaged.
+                acc = np.zeros_like(out)
+                for points in samples:
+                    acc += apply_stroke(out, dict(item, points=points), frame, source=clone_source, reveal=reveal,
+                                        origin=origin, source_origin=origins, source_bounds=bounds,
+                                        plate=plate if item.get("source") == "background" else None)
+                out = (acc / np.float32(len(samples))).astype(np.float32)
+            else:
+                out = apply_stroke(out, item, frame, source=clone_source, reveal=reveal, origin=origin,
+                                   source_origin=origins, source_bounds=bounds,
+                                   plate=plate if item.get("source") == "background" else None)
         else:
             from . import roto
-            shape = {k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
+            if any(k in item for k in ("transform", "extra_matrix", "feather_falloff", "falloff_power", "invert", "closed",
+                                       "stroke_width", "cap_start", "cap_end", "feather_model", "_motion_samples")):
+                shape = item          # resolved with Roto's own settings: the rasteriser reads them
+            else:
+                shape = {k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
             full_w, full_h = canvas_size or (image.shape[1], image.shape[0])
             matte = roto.rasterise([shape], full_w, full_h,
                                    region=(origin[0], origin[1], image.shape[1], image.shape[0]))[..., 3:4]
             alpha = matte * np.float32(item["opacity"] if item["visible"] else 0.0)
             base = out.copy()
+            colour = np.float32(1.0)             # a shape paints white unless it paints a picture
+            picture = paintknobs.shape_picture(item, plate, reveal, base)
+            if picture is not None:
+                colour = picture[..., :3]
             if item["blend"] == "over":
-                out = np.concatenate((alpha + base[..., :3] * (1-alpha),
+                out = np.concatenate((alpha * colour + base[..., :3] * (1-alpha),
                                       alpha + base[..., 3:4] * (1-alpha)), axis=-1)
             elif item["blend"] == "add":
-                out = base.copy(); out[..., :3] = np.clip(base[..., :3] + alpha, 0, 1)
+                out = base.copy(); out[..., :3] = np.clip(base[..., :3] + alpha * colour, 0, 1)
                 out[..., 3:4] = alpha + base[..., 3:4] * (1-alpha)
             elif item["blend"] == "multiply":
                 out = base.copy(); out[..., :3] = base[..., :3]  # multiply by the white matte layer
+                if picture is not None:
+                    out[..., :3] = base[..., :3] * (1 - alpha) + base[..., :3] * colour * alpha
                 out[..., 3:4] = alpha + base[..., 3:4] * (1-alpha)
             elif item["blend"] == "screen":
-                out = base.copy(); out[..., :3] = 1 - (1-base[..., :3]) * (1-alpha)
+                out = base.copy(); out[..., :3] = 1 - (1-base[..., :3]) * (1-alpha * colour)
                 out[..., 3:4] = alpha + base[..., 3:4] * (1-alpha)
+            out = out.astype(np.float32)
     return out

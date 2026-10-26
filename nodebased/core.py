@@ -178,6 +178,7 @@ from . import profilenode as _profilenode
 from . import trackerknobs as _trackerknobs
 from . import viewerknobs as _viewerknobs
 from . import keyerknobs as _keyerknobs
+from . import paintknobs as _paintknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
@@ -547,7 +548,8 @@ SPECS = {
     # passes through, exactly like every other mask+mix node) and `mix` fades the whole layer.
     "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2", "mask"],
                   "params": {"dustbust_frame_start": 1, "dustbust_frame_end": 100, "dustbust_sensitivity": 0.5,
-                             "dustbust_patch_blend": 0.5, "mix": 1.0}},
+                             "dustbust_patch_blend": 0.5, "mix": 1.0,
+                             **_paintknobs.new_params("RotoPaint")}},
     # Ramp/Radial/Rectangle/Noise/Text are the lane's group (c2) Draw-menu generators: like
     # Constant/Checker/Roto they state their own format (width/height) rather than inheriting one,
     # but unlike those three they also take an optional "image" input the shape is composited over

@@ -24,6 +24,7 @@ from . import pathmask as _pathmask
 from . import readproxy as _readproxy
 from . import ops2d_chrome as _chrome
 from . import keyerknobs as _keyerknobs
+from . import paintknobs
 from . import shapes
 from . import sourcepool
 from . import tiers
@@ -1627,7 +1628,7 @@ class Evaluator:
                 else:
                     data = shapes.resolve_warp_data(kind, payload, frame)
             elif kind == "RotoPaint":
-                data = shapes.resolve_paint_items(payload, frame)
+                data = shapes.resolve_paint_items(payload, frame, params)
                 raw_items = (payload or {}).get("items", [])
                 for item, stored in zip(data, raw_items):
                     follow = stored.get("follow_track") if stored.get("kind") == "stroke" else None
@@ -3418,7 +3419,7 @@ class Evaluator:
         channel, invert, inject, un-premultiply by) is at its defaults runs its own kernel exactly as before;
         a changed chrome knob runs that kernel with the chrome off and applies it around the result
         (nodebased/ops2d_chrome.py)."""
-        if kind == "Roto":
+        if kind in ("Roto", "RotoPaint"):
             # The mask strip (mask input, mask channel, invert, inject, channels) wraps the draw strip, which wraps the matte.
             from .core import SPECS
             return _chrome.run_evaluator(
@@ -4007,9 +4008,17 @@ class Evaluator:
                 raise ValueError("RotoPaint mask must match the plate format")
             painted = paint.rasterise(source.fit(out), data or [], frame,
                                       source=source.fit(out), reveal=None if reveal is None else reveal.fit(out))
+            layers = source.layers
+            layer_name = _chrome.output_mask_layer("RotoPaint", p)
+            if layer_name:
+                # Output mask: the coverage of everything drawn, as the alpha it leaves on an empty canvas.
+                empty = np.zeros(painted.shape, np.float32)
+                covered = paint.rasterise(empty, data or [], frame, source=empty, reveal=None)[..., 3:4]
+                layers = {**(layers or {}), layer_name: Raster(np.repeat(covered, 4, axis=2).astype(np.float32), out, source.display)}
+            painted = paintknobs.premultiply(painted, p)
             pixels = Evaluator._apply_mask_mix(source.fit(out), painted,
                                                None if mask is None else mask.fit(out), p.get("mix", 1.0))
-            return Raster(pixels, out, source.display, source.layers, source.meta)
+            return Raster(pixels, out, source.display, layers, source.meta)
         if kind in ("Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain"):
             source = inputs[0]
             plate = inputs[1] if kind == "ScannedGrain" and len(inputs) > 1 else None

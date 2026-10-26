@@ -298,17 +298,20 @@ def validate_payload(kind, payload, where):
             if not isinstance(item, dict) or item.get("kind") not in ("shape", "stroke"):
                 raise ValueError(f"{at}: expected a shape or stroke item")
             if item["kind"] == "shape":
+                from . import paintknobs
                 required_shape = {"kind", "name", "mode", "opacity", "feather", "points", "blend", "visible"}
-                if set(item) != required_shape:
+                if not required_shape.issubset(item) or set(item) - required_shape - set(paintknobs.SHAPE_ITEM_FIELDS):
                     raise ValueError(f"{at}: malformed layered shape")
-                shape = {k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
-                validate_shape(shape, at)
+                paintknobs.validate_shape_extras(item, at)          # the five required fields too, and the item's own settings
                 if item["blend"] not in ("over", "add", "multiply", "screen") or type(item["visible"]) is not bool:
                     raise ValueError(f"{at}: invalid shape layer settings")
             else:
                 required = {"kind", "name", "points", "brush", "tool", "lifetime", "color", "source_offset", "source_frame", "opacity", "blend", "visible", "follow_track", "patch_blend"}
-                if set(item) != required or not isinstance(item["name"], str) or not 1 <= len(item["name"]) <= 128:
+                from . import paintknobs
+                if (not required.issubset(item) or set(item) - required - set(paintknobs.STROKE_ITEM_FIELDS)
+                        or not isinstance(item["name"], str) or not 1 <= len(item["name"]) <= 128):
                     raise ValueError(f"{at}: malformed paint stroke")
+                paintknobs.validate_stroke_extras(item, at)
                 if item["tool"] not in ("paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"):
                     raise ValueError(f"{at}.tool is unsupported")
                 if not _is_number(item["patch_blend"]) or not 0 <= item["patch_blend"] <= 1:
@@ -842,13 +845,25 @@ def resolve_warp_data(kind, payload, frame):
     return None
 
 
-def resolve_paint_items(payload, frame):
-    """Return frame-resolved ordered RotoPaint items. Legacy Roto payloads are untouched."""
+def resolve_paint_items(payload, frame, params=None):
+    """Return frame-resolved ordered RotoPaint items. Legacy Roto payloads are untouched.
+
+    `params` is the RotoPaint node's own parameters; only its global motion-blur settings are read from it. A shape carrying
+    Roto's settings (a transform, feather falloff, caps, motion blur) is resolved as a Roto shape; a stroke with a transform or
+    motion blur gets its points transformed and, for motion blur, one set of points per shutter sample."""
+    from . import paintknobs
     items = []
     for item in (payload or {}).get("items", []):
         resolved = dict(item)
         if item["kind"] == "shape":
-            resolved.update(resolve_shapes({"shapes": [{k: item[k] for k in
-                              ("name", "mode", "opacity", "feather", "points")}]}, frame)[0])
+            if paintknobs.needs_resolving(item) or any(k in item for k in paintknobs.SHAPE_ITEM_FIELDS) or params:
+                shape = paintknobs.shape_input(item)
+            else:
+                shape = {k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
+            visible = bool(item.get("visible", True))
+            resolved.update(_resolve_shape(shape, frame, params, blur=True))
+            resolved["visible"] = visible and resolved["visible"]       # outside its lifetime a shape is hidden, as in Roto
+        elif paintknobs.needs_resolving(item) or (params and (params.get("global_motionblur_on", 0))):
+            resolved = paintknobs.resolve_stroke(item, frame, params or {})
         items.append(resolved)
     return items

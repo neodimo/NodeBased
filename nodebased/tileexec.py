@@ -48,6 +48,7 @@ from . import cachetier
 from . import groups
 from . import imaging
 from . import ops2d_chrome as _chrome
+from . import paintknobs
 from . import shapes
 from . import tiers
 from .animation import resolve_document
@@ -508,6 +509,10 @@ class TileExecutor:
                     if item.get("kind") == "stroke"):
                 # DustBust border diffusion reads across the full painted region.
                 return False
+            if node["type"] == "RotoPaint" and paintknobs.items_need_full_frame(
+                    document.get("node_data", {}).get(node_id, {}).get("items", [])):
+                # A clone read through a rotated, scaled or filtered source can reach anywhere in it.
+                return False
             if node.get("input_outputs"):
                 # Named output layers are carried only by the full-frame Raster representation.
                 return False
@@ -776,7 +781,7 @@ class TileExecutor:
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
         halo = resolve_halo(kind, params)
         if kind == "RotoPaint" and not node["disabled"]:
-            extra = self._rotopaint_halo(document, node_id, frame, tier)
+            extra = self._rotopaint_halo(document, node_id, frame, tier, params)
             halo = (max(halo[0], extra), max(halo[1], extra))
         cache_region = dataclasses.replace(region, halo_x=halo[0], halo_y=halo[1])
 
@@ -826,8 +831,12 @@ class TileExecutor:
             raw = self._roto_tile(document, node_id, node, params, frame, tier, buffered_region,
                                   node_digests, cancel)
         elif kind == "RotoPaint" and not node["disabled"]:
-            raw = self._rotopaint_tile(document, node_id, node, params, inputs, frame, tier,
-                                       buffered_region, node_digests, cancel)
+            # The mask strip (mask channel, invert, inject, fringe, channels) wraps the paint when one of its knobs is changed.
+            raw = _chrome.run_tile(
+                kind, params, inputs,
+                lambda q, i: self._rotopaint_tile(document, node_id, node, q, i, frame, tier,
+                                                  buffered_region, node_digests, cancel),
+                SPECS[kind], buffered_region)
         else:
             raw = self._evaluate_tile_kernel(kind, params, inputs, buffered_region, frame)
         bh, bw = buffered_region.height, buffered_region.width
@@ -1095,20 +1104,20 @@ class TileExecutor:
         return result
 
     @staticmethod
-    def _rotopaint_halo(document, node_id, frame, tier):
+    def _rotopaint_halo(document, node_id, frame, tier, params=None):
         payload = tiers.scale_node_data("RotoPaint", document.get("node_data", {}).get(node_id), tier)
-        items = shapes.resolve_paint_items(payload, frame)
+        items = shapes.resolve_paint_items(payload, frame, params)
         reach = 0
         for item in items:
             if item.get("kind") != "stroke":
                 continue
             brush = item["brush"]
             if item["tool"] in ("blur", "sharpen"):
-                reach += int(round(max(1.0, float(brush["size"]) / 6.0)))
+                reach += int(round(paintknobs.effective_effect(item, max(1.0, float(brush["size"]) / 6.0))))
             elif item["tool"] == "smear" and len(item["points"]) >= 2:
                 length = math.hypot(item["points"][-1]["x"] - item["points"][0]["x"],
                                     item["points"][-1]["y"] - item["points"][0]["y"])
-                reach += int(math.ceil(min(length, float(brush["size"]) * .5)))
+                reach += int(math.ceil(min(length, paintknobs.effective_effect(item, float(brush["size"]) * .5))))
         return reach
 
     def _rotopaint_tile(self, document, node_id, node, params, inputs, frame, tier,
@@ -1124,7 +1133,7 @@ class TileExecutor:
         items = self._paint_items_cache.get(item_key)
         if items is None:
             payload = tiers.scale_node_data("RotoPaint", document.get("node_data", {}).get(node_id), tier)
-            items = shapes.resolve_paint_items(payload, frame)
+            items = shapes.resolve_paint_items(payload, frame, params)
             self._paint_items_cache[item_key] = items
         payload = tiers.scale_node_data("RotoPaint", document.get("node_data", {}).get(node_id), tier)
         stored = (payload or {}).get("items", [])
@@ -1152,10 +1161,12 @@ class TileExecutor:
                             if item["source_frame"] == "relative" else int(item["source_frame"]))
             dx, dy = item["source_offset"]
             source_bounds = self.canvas_region(self._unbaked_document, image_id, source_frame, tier)
-            sx0 = max(source_bounds.x, int(math.floor(region.x-dx))-1)
-            sy0 = max(source_bounds.y, int(math.floor(region.y-dy))-1)
-            sx1 = min(source_bounds.right, int(math.ceil(region.right-dx))+1)
-            sy1 = min(source_bounds.bottom, int(math.ceil(region.bottom-dy))+1)
+            # The window the stroke reads, kept to at least one pixel so a tile that reads wholly beyond the source's edge still
+            # finds the edge pixel the whole-image path repeats there.
+            sx0 = min(max(source_bounds.x, int(math.floor(region.x-dx))-1), source_bounds.right-1)
+            sy0 = min(max(source_bounds.y, int(math.floor(region.y-dy))-1), source_bounds.bottom-1)
+            sx1 = max(sx0+1, min(source_bounds.right, int(math.ceil(region.right-dx))+1))
+            sy1 = max(sy0+1, min(source_bounds.bottom, int(math.ceil(region.bottom-dy))+1))
             clone_region = TileRegion(sx0, sy0, max(0, sx1-sx0), max(0, sy1-sy0),
                                       full_width=source_bounds.width, full_height=source_bounds.height,
                                       full_x=source_bounds.x, full_y=source_bounds.y)
@@ -1173,6 +1184,7 @@ class TileExecutor:
             finally:
                 self._unbaked_document = previous_doc
             clone_bounds = tiers.Region(sx0, sy0, clone_region.width, clone_region.height)
+            item["_clone_frame"] = source_frame             # on the first frame "the previous frame" is the first, not frame 0
             item.setdefault("_clone_sources", {})[source_frame] = Raster(
                 clone_artifact.pixels, clone_bounds, source_bounds)
             item.setdefault("_clone_source_origins", {})[source_frame] = (sx0, sy0)
@@ -1182,6 +1194,7 @@ class TileExecutor:
         painted = paint.rasterise(base, items, frame, source=base, reveal=reveal,
                                   origin=(region.x, region.y),
                                   canvas_size=(region.full_width, region.full_height))
+        painted = paintknobs.premultiply(painted, params)
         return Evaluator._apply_mask_mix(base, painted, mask=mask, mix=params.get("mix", 1.0))
 
     def _temporal_tile(self, node_id, kind, node, params, frame, tier, buffered_region,

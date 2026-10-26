@@ -60,6 +60,9 @@ FILTER_CHROME = {
     # Roto's mask input and mask channel gate its result against the bg (or transparent black); `channels` limits which
     # channels it may write (the guide's Roto lists `channels` on its tracking tab, so its default here is "all").
     "Roto": ("all", True, False),
+    # RotoPaint (fidelity step H) has the same mask strip and `channels`; its kernel gates a wired mask itself, so the strip only
+    # wraps it when a chrome knob is changed.
+    "RotoPaint": ("all", True, False),
     # Nuke's Premult and Unpremult carry `channels` and nothing else of the strip; their kernels do rgb / rgba / alpha themselves.
     "Premult": ("rgb", False, False), "Unpremult": ("rgb", False, False),
 }
@@ -237,8 +240,8 @@ def step_g_params(kind):
 def step_h_params(kind):
     """The knobs fidelity step H added (the keyers, RotoPaint, Precomp, the time and metadata nodes, CurveTool, AddMix,
     DropShadow, Glow, Median, Shuffle, STMap and KeyMix), at the values that leave an older document's node as it was."""
-    from . import keyerknobs
-    return {**keyerknobs.upgrade_params(kind)}
+    from . import keyerknobs, paintknobs
+    return {**keyerknobs.upgrade_params(kind), **paintknobs.upgrade_params(kind)}
 
 
 def upgrade_nodes(nodes):
@@ -800,8 +803,8 @@ def compose_draw(kind, p, shape, background):
 
 
 def output_mask_layer(kind, p):
-    """The layer name Roto's `outputMask` writes the matte to, or None when it is "none" (or a node without the knob)."""
-    if kind != "Roto":
+    """The layer name Roto's or RotoPaint's `outputMask` writes the matte to, or None when it is "none" (or a node without the knob)."""
+    if kind not in ("Roto", "RotoPaint"):
         return None
     name = str(p.get("outputMask", "none")).strip()
     return None if name.lower() in ("", "none") else name
@@ -844,7 +847,11 @@ def run_roto(kind, p, inputs, inner):
     layers = result.layers
     if mask_layer:
         # Output mask: the shapes' matte (after opacity) is also written, in all four channels, to the layer of that name.
-        matte = np.repeat(pixels[..., 3:4], 4, axis=2).astype(np.float32)
+        if kind == "RotoPaint" and result.layers and mask_layer in result.layers:
+            # RotoPaint's matte is the coverage of everything the node drew (computed by its kernel), scaled by `opacity`.
+            matte = (result.layers[mask_layer].fit(box) * np.float32(cfg.opacity)).astype(np.float32)
+        else:
+            matte = np.repeat(pixels[..., 3:4], 4, axis=2).astype(np.float32)
         layers = {**(layers or {}), mask_layer: Raster(matte, box, result.display)}
     if cfg.output != cfg.default_output:
         pixels = restrict(base, pixels, parse_channels(cfg.output))
