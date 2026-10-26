@@ -539,7 +539,7 @@ def _inherited_metadata(kind, images, params=None):
     """The metadata a node's result carries when the kernel set none: the main input's, which for the
     two-input Merge family is B (the background pipe), as in Nuke. A Copy follows its `metainput`."""
     from .core import MERGE_LIKE_KINDS
-    if kind == "Copy" and params is not None and len(images) >= 2:
+    if kind in ("Copy", "Merge") and params is not None and len(images) >= 2 and "metainput" in params:
         from .smallnodes import copy_meta
         return copy_meta(params, images)
     order = images[1::-1] if kind in MERGE_LIKE_KINDS else images
@@ -715,7 +715,7 @@ def _stated_clip_range(nodes, key, seen):
             if (first, last) != (0, 0) and (kind == "Read" or last > first):
                 return (min(first, last), max(first, last))
             return None
-        if kind == "Copy":
+        if kind in ("Copy", "Merge") and "rangeinput" in params:
             from .smallnodes import copy_range
             spans = []
             for slot in copy_range(params):
@@ -3491,12 +3491,19 @@ class Evaluator:
                 # as it did before bounding boxes existed. Differing *data* windows is now normal:
                 # that is a plate with overscan merged over one without, which must work.
                 raise ValueError(f"{kind} inputs must have matching formats in M0")
-            out = a.data.union(b.data)
+            if kind == "Merge":
+                from . import mergeknobs
+                out = mergeknobs.bbox_window(p, a.data, b.data)         # union, intersection, A or B
+            else:
+                out = a.data.union(b.data)
             mask = inputs[2] if len(inputs) > 2 else None
             if mask is not None and mask.display != b.display:
                 raise ValueError(
                     f"Mask display window {mask.display} does not match {kind} B {b.display}; "
                     "no silent resampling is performed")
+            if kind == "Merge" and mergeknobs.uses_layers(p):
+                pixels, named = mergeknobs.merge_raster(p, a, b, mask, out, Evaluator._merge_op, b.display)
+                return Raster(pixels, out, b.display, named)
             layers = [a.fit(out), b.fit(out)] + ([] if mask is None else [mask.fit(out)])
             return Raster(Evaluator._kernel(kind, p, layers, frame, origin=(out.x, out.y)), out, b.display)
         if kind == "Switch":
@@ -5177,7 +5184,7 @@ class Evaluator:
             mask = inputs[2] if len(inputs) > 2 else None
             if a.shape != b.shape:
                 raise ValueError("Merge inputs must have matching formats in M0")
-            return Evaluator._merge_gated(p.get("operation", "over"), a, b, p["mix"], mask)
+            return Evaluator._merge_node(p, a, b, mask)
         if kind in ("Premult", "Unpremult"):
             return Evaluator._premult_array(kind, p, inputs[0])
         if kind == "Dot":
@@ -5191,6 +5198,15 @@ class Evaluator:
                 raise ValueError(f"Switch 'which'={which} is out of range for {len(choices)} wired inputs")
             return choices[which].copy()
         raise ValueError(f"No kernel for {kind}")
+
+    @staticmethod
+    def _merge_node(p, a, b, mask=None):
+        """Merge's arrays: the old arithmetic while the step-E knobs (video colorspace, alpha masking, channel sets) are off,
+        else `mergeknobs.merge_arrays`. The evaluator and the tile executor both call this."""
+        from . import mergeknobs
+        if mergeknobs.array_default(p):
+            return Evaluator._merge_gated(p.get("operation", "over"), a, b, p["mix"], mask)
+        return mergeknobs.merge_arrays(p, a, b, mask, Evaluator._merge_op)
 
     @staticmethod
     def _merge_gated(op, a, b, mix, mask=None):
@@ -5242,9 +5258,12 @@ class Evaluator:
         if op == "minus":
             return a - b
         if op == "multiply":
-            return a * b
+            # The guide: AB, but A where both are negative (two negatives must not make a positive).
+            return np.where((a < 0) & (b < 0), a, a * b).astype(np.float32)
         if op == "screen":
-            return a + b - a * b
+            # The guide: A+B-AB where both are inside 0..1, otherwise the larger of the two.
+            inside = (a > 0) & (a < 1) & (b > 0) & (b < 1)
+            return np.where(inside, a + b - a * b, np.maximum(a, b)).astype(np.float32)
         if op == "max":
             return np.maximum(a, b)
         if op == "min":
@@ -5252,9 +5271,9 @@ class Evaluator:
         if op == "difference":
             return np.abs(a - b)
         if op == "divide":
-            # Element-wise safe divide: where |B| <= epsilon the output is zero.
-            safe = np.where(np.abs(b) > 1e-6, b, np.float32(1.0))
-            return np.where(np.abs(b) > 1e-6, a / safe, np.float32(0.0)).astype(np.float32)
+            # The guide: A/B where B is above 0, otherwise A.
+            safe = np.where(b > 0, b, np.float32(1.0))
+            return np.where(b > 0, a / safe, a).astype(np.float32)
         if op == "mask":
             # Nuke "mask": B's RGB modulated by A's alpha (the foreground's shape clips the background).
             return b * aa
@@ -5279,8 +5298,58 @@ class Evaluator:
 
     @staticmethod
     def _merge_op_extra(op, a, b, aa, ba):
-        """The eleven Nuke operations added in step 3a, shared by `_merge_op` (aa/ba are the
-        alpha slices) and `_channel_merge_op` (aa/ba are the channel values themselves).
+        """Merge's operations past the basic ones, to the algorithms the Nuke 17 reference guide states (fidelity step E);
+        `aa` / `ba` are the A and B alpha slices. Where a stated formula divides by zero the result is the limit chosen below, so
+        zero and HDR inputs always give finite values.
+
+        disjoint-over: A+B(1-a)/b, or A+B where a+b < 1; B(1-a)/b is dropped where b is 0. conjoint-over: A+B(1-a/b), or A where
+        a > b; A alone where b is 0. geometric: 2AB/(A+B) where A and B are both above 0, else 0. color-dodge: B/max(1-A, B), 0
+        where that divisor is 0. color-burn: 1-(1-B)/max(A, 1-B), 1 where that divisor is 0. hard-light: 2AB if 2A < 1, else
+        1-2(1-A)(1-B) if A and B are below 1, else 0. soft-light: 2AB+B(1-AB) if AB < 1, else 2AB. overlay: 2AB if 2B < 1, else
+        1-2(1-A)(1-B)."""
+        zero = np.float32(0.0)
+        one = np.float32(1.0)
+        two = np.float32(2.0)
+        if op == "matte":
+            return a * aa + b * (1 - aa)
+        if op == "disjoint-over":
+            safe = np.where(ba != 0, ba, one)
+            tail = np.where(ba != 0, b * (1 - aa) / safe, zero)
+            return np.where(aa + ba < 1, a + b, a + tail).astype(np.float32)
+        if op == "conjoint-over":
+            safe = np.where(ba != 0, ba, one)
+            ratio = np.where(ba != 0, aa / safe, one)
+            return np.where((aa > ba) | (ba == 0), a, a + b * (1 - ratio)).astype(np.float32)
+        if op == "copy":
+            return a.copy()
+        if op == "exclusion":
+            return a + b - 2 * a * b
+        if op == "geometric":
+            both = (a > 0) & (b > 0)
+            total = np.where(both, a + b, one)
+            return np.where(both, two * a * b / total, zero).astype(np.float32)
+        if op == "overlay":
+            return np.where(two * b < 1, two * a * b, 1 - two * (1 - a) * (1 - b)).astype(np.float32)
+        if op == "hard-light":
+            return np.where(two * a < 1, two * a * b,
+                            np.where((a < 1) & (b < 1), 1 - two * (1 - a) * (1 - b), zero)).astype(np.float32)
+        if op == "soft-light":
+            ab = a * b
+            return np.where(ab < 1, two * ab + b * (1 - ab), two * ab).astype(np.float32)
+        if op == "color-dodge":
+            top = np.maximum(1 - a, b)
+            safe = np.where(top != 0, top, one)
+            return np.where(top != 0, b / safe, zero).astype(np.float32)
+        if op == "color-burn":
+            top = np.maximum(a, 1 - b)
+            safe = np.where(top != 0, top, one)
+            return np.where(top != 0, 1 - (1 - b) / safe, one).astype(np.float32)
+        raise ValueError(f"Unknown merge operation: {op}")
+
+    @staticmethod
+    def _legacy_merge_op_extra(op, a, b, aa, ba):
+        """The eleven Nuke operations added in step 3a as ChannelMerge has always computed them (aa/ba are the
+        channel values themselves). Merge itself follows the guide's algorithms since fidelity step E: see `_merge_op_extra`.
 
         Formulas follow Foundry's documented merge algorithms. Division convention: every
         divisor with magnitude <= 1e-6 is treated as unusable and the guarded term is replaced
@@ -5378,7 +5447,7 @@ class Evaluator:
             return b - a
         if op == "hypot":
             return np.sqrt(a * a + b * b)
-        return Evaluator._merge_op_extra(op, a, b, aa, ba)
+        return Evaluator._legacy_merge_op_extra(op, a, b, aa, ba)
 
     # Channel sets for the "channels" knob on Invert/Clamp/Multiply/Add/Gamma. "rgba" reaches
     # alpha too; the default "rgb" leaves it untouched, matching Nuke's own default.

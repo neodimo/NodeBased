@@ -133,7 +133,9 @@ CHANNEL_CHOICES = ["rgb", "rgba", "alpha", "all", "none", "red", "green", "blue"
 MASK_CHANNEL_CHOICES = ["none", "rgba.alpha", "rgba.red", "rgba.green", "rgba.blue", "rgba.luminance"]
 UNPREMULT_CHOICES = ["none", "rgba.alpha", "rgba.red", "rgba.green", "rgba.blue"]
 PREMULT_BY_CHOICES = ["rgba.alpha", "rgba.red", "rgba.green", "rgba.blue", "rgba.luminance"]       # Premult / Unpremult: there is always a divisor
+MERGE_CHANNEL_CHOICES = ["rgba", "rgb", "alpha", "none", "red", "green", "blue"]
 OUTPUT_CHOICES = ["rgba", "rgb", "alpha", "red", "green", "blue", "none"]
+MERGE_OPEN_CHOICES = ("Achannels", "Bchannels", "merge_output", "also_merge")
 OPEN_CHOICE_PARAMS = frozenset({"channels", "maskChannelInput", "unpremult", "output", "premult"})
 
 _COMPONENT = {"R": 0, "X": 0, "U": 0, "G": 1, "Y": 1, "V": 1, "B": 2, "Z": 2, "A": 3, "W": 3}
@@ -165,6 +167,8 @@ def is_open_choice(kind, name):
         return True              # Write's channels (fidelity step C) take a layer name too
     if name == "premult_by":
         return kind in ("Premult", "Unpremult")
+    if kind == "Merge" and name in MERGE_OPEN_CHOICES:
+        return True              # Merge's channel sets (fidelity step E) take a layer name too
     if name not in OPEN_CHOICE_PARAMS:
         return False
     if name in ("output", "premult"):
@@ -175,7 +179,9 @@ def is_open_choice(kind, name):
 def suggestions(name):
     """The words offered in a chrome knob's drop-down."""
     return {"channels": CHANNEL_CHOICES, "maskChannelInput": MASK_CHANNEL_CHOICES, "unpremult": UNPREMULT_CHOICES,
-            "output": OUTPUT_CHOICES, "premult": UNPREMULT_CHOICES, "premult_by": PREMULT_BY_CHOICES}[name]
+            "output": OUTPUT_CHOICES, "premult": UNPREMULT_CHOICES, "premult_by": PREMULT_BY_CHOICES,
+            "Achannels": MERGE_CHANNEL_CHOICES, "Bchannels": MERGE_CHANNEL_CHOICES, "merge_output": MERGE_CHANNEL_CHOICES,
+            "also_merge": ["none", "all"]}[name]
 
 
 def step_c_params(kind):
@@ -205,8 +211,9 @@ def step_d_params(kind):
 def step_e_params(kind):
     """The knobs fidelity step E added (Grade, Merge, Blur, Sharpen and Soften), at the values that leave an older document's
     node as it was."""
-    from . import gradeknobs
+    from . import gradeknobs, mergeknobs
     out = gradeknobs.upgrade_params(kind)
+    out.update(mergeknobs.upgrade_params(kind))
     return out
 
 
@@ -375,6 +382,10 @@ def needs_full_frame(kind, p):
             return True
         cfg = filter_config(kind, p)
         return bool(cfg is not None and cfg.active(False))
+    if kind == "Merge":
+        from . import mergeknobs
+        if mergeknobs.needs_full_frame(p):
+            return True      # a bounding box other than the union moves the output window, and layers are not in tiles
     if kind in DRAW_KINDS_WITH_CHROME and str(p.get("cliptype", "format")) != "format":
         return True      # a clip other than the format moves the output window, which tiles of the format cannot hold
     if kind in ("Premult", "Unpremult") and not _is_rgba_token(p.get("premult_by", "rgba.alpha")):

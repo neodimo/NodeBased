@@ -2179,7 +2179,16 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["sRGB"], "nuke": ["sRGB"], "kind": "same"},
+    {"nodebased": ["screen_alpha"], "nuke": ["screen_alpha"], "kind": "same"},
+    {"nodebased": ["merge_bbox"], "nuke": ["bbox"], "kind": "renamed", "reason": "`bbox` is already GridWarp's source / union choice in the shared CHOICES; Merge's is union, intersection, A or B"},
+    {"nodebased": ["metainput"], "nuke": ["metainput"], "kind": "same"},
+    {"nodebased": ["rangeinput"], "nuke": ["rangeinput"], "kind": "same"},
+    {"nodebased": ["Achannels"], "nuke": ["Achannels"], "kind": "same"},
+    {"nodebased": ["Bchannels"], "nuke": ["Bchannels"], "kind": "same"},
+    {"nodebased": ["merge_output"], "nuke": ["output"], "kind": "renamed", "reason": "`output` is already the image / stmap choice of the warp nodes in the shared CHOICES; Merge's is a channel set"},
+    {"nodebased": ["also_merge"], "nuke": ["also_merge"], "kind": "same"}
    ]
   },
   "Premult": {

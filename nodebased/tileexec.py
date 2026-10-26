@@ -1566,9 +1566,7 @@ class TileExecutor:
                     return b_pixels.astype(np.float32)
                 b_pixels = np.zeros_like(a_pixels)
             if kind == "Merge":
-                return imaging.Evaluator._merge_gated(params.get("operation", "over"), a_pixels,
-                                                      b_pixels, params["mix"],
-                                                      mask_pixels).astype(np.float32)
+                return imaging.Evaluator._merge_node(params, a_pixels, b_pixels, mask_pixels).astype(np.float32)
             # Dissolve/Keymix/Copy/ChannelMerge/Difference already apply their own mask+mix gate
             # inside `_kernel`, so the raw aligned arrays go straight in, mirroring the full-frame path.
             layers = [a_pixels, b_pixels] + ([] if mask_pixels is None else [mask_pixels])

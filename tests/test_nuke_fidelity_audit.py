@@ -258,7 +258,7 @@ class FormulaCaseTests(unittest.TestCase):
         results = {c.id: audit.run_case(c) for c in cases.CASES}
         for ok in ("merge_over", "merge_plus", "merge_xor", "invert_rgb", "premult_default", "keymix_default", "colormatrix_rows"):
             self.assertEqual(results[ok]["status"], "pass", ok)
-        self.assertEqual(results["merge_divide"]["status"], "fail")        # NodeBased divides to 0 where B <= 0; the guide says A
+        self.assertEqual(results["merge_divide"]["status"], "pass")        # A where B <= 0, as the guide says
         self.assertEqual(results["clamp_to_values"]["status"], "inexpressible")
         self.assertEqual(results["grade_levels"]["status"], "pass")
         self.assertEqual(results["merge_matte"]["status"], "not scored")

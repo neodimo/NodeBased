@@ -168,6 +168,7 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
+from . import mergeknobs as _mergeknobs
 from . import timeknobs as _timeknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
@@ -650,8 +651,10 @@ SPECS = {
                              "tracking_channels": "luminance", "filter": "bilinear", "mix": 1.0}},
     # Merge's optional mask gates the merge per pixel exactly as `mix` gates it globally: where
     # mask.a is 0 the output is B untouched. Added in v11; see `upgrade_document`.
+    # Merge's Nuke knobs (fidelity step E, nodebased/mergeknobs.py): the video colorspace, alpha masking, `merge_bbox` (Nuke's `bbox`),
+    # `metainput` / `rangeinput`, the A and B channel sets, `merge_output` (Nuke's `output`) and `also_merge`.
     "Merge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
-              "params": {"operation": "over", "mix": 1.0}},
+              "params": {"operation": "over", "mix": 1.0, **_mergeknobs.new_params("Merge")}},
     # Dissolve/Keymix/Copy/ChannelMerge are Nuke's other Merge-toolbar two-input nodes; all four
     # share Merge's own mask + mix contract (Foundry's Merge2 base class every one of them
     # inherits from) and MERGE_LIKE_KINDS bypass/windowing convention.
@@ -2070,6 +2073,8 @@ LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000)
                "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})
 # Grade's Nuke knobs (fidelity step E). `black` and `white` are shared names (Log2Lin, Histogram), so Grade's wider ranges are its own.
 LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
+LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1)})
+CHOICES["merge_bbox"] = list(_mergeknobs.BBOX_CHOICES)
 NODE_LIMITS["Grade"] = {"black": (-1000.0, 1000.0), "white": (-1000.0, 1000.0), "blackpoint": (-1000.0, 1000.0)}
 
 

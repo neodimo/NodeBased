@@ -133,6 +133,14 @@ class MappingTests(unittest.TestCase):
                 backend.stage("Grade", params("Grade", **extra), [source, matte])
         backend.stage("Grade", params("Grade", fringe=1), [source])         # no mask wired: nothing to take the edge of
 
+    def test_a_merge_with_a_step_e_knob_stays_on_the_cpu(self):
+        for over in ({"sRGB": 1}, {"screen_alpha": 1}, {"Achannels": "rgb"}, {"Bchannels": "red"}, {"merge_output": "alpha"},
+                     {"merge_bbox": "A"}, {"merge_bbox": "intersection"}, {"also_merge": "all"}, {"Achannels": "fx"}, {"metainput": "A"}):
+            with self.subTest(over=over), self.assertRaises(gpu2d.Unsupported):
+                gpu2d.map_merge(params("Merge", **over))
+        self.assertEqual(gpu2d.map_merge(params("Merge", rangeinput="A"))["name"], "over")       # the range is not a pixel matter
+        self.assertEqual(gpu2d.map_merge(params("Merge", merge_bbox="union", metainput="B"))["name"], "over")
+
     def test_blur_mapping_rounds_like_the_cpu_and_limits_the_validated_radii(self):
         self.assertEqual(gpu2d.map_blur(params("Blur", radius=0.4))["radius"], 0)
         self.assertEqual(gpu2d.map_blur(params("Blur", radius=2.0))["radius"], 2)

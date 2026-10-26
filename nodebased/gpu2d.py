@@ -143,15 +143,15 @@ def map_grade(p):
             "offset": float(np.float32(offset)), "use_offset": offset != 0.0,
             "mix": mix,
         }
-    if p.get("reverse", 0):
+    if gradeknobs._get(p, "reverse"):
         raise Unsupported("Grade reverse has no GPU kernel yet")
     slope, shift = gradeknobs.terms(p)
-    gamma = float(p.get("gamma", 1.0))
+    gamma = float(gradeknobs._get(p, "gamma"))
     return {
         "mode": 1, "identity": False, "slope": float(np.float32(slope)), "shift": float(np.float32(shift)),
         "alpha_offset": float(np.float32(gradeknobs.alpha_offset(p))),
         "gamma_inv": float(np.float32(1.0 / gamma)), "use_gamma": gamma != 1.0,
-        "black_clamp": bool(p.get("black_clamp", 0)), "white_clamp": bool(p.get("white_clamp", 0)),
+        "black_clamp": bool(gradeknobs._get(p, "black_clamp")), "white_clamp": bool(gradeknobs._get(p, "white_clamp")),
         "mix": mix,
     }
 
@@ -169,9 +169,18 @@ def map_blur(p):
 
 def map_merge(p):
     """Merge's parameters (``Evaluator._merge_gated``)."""
+    from . import mergeknobs
     op = p.get("operation", "over")
     if op not in MERGE_OPS:
         raise Unsupported(f"Merge operation {op!r} has no GPU kernel yet")
+    # The step-E knobs (video colorspace, alpha masking, channel sets, layers, the output box, metadata from) have no kernel here:
+    # such a Merge runs on the CPU rather than having a knob silently ignored.
+    if not mergeknobs.array_default(p):
+        raise Unsupported("Merge video colorspace, alpha masking or channel sets have no GPU kernel yet")
+    if mergeknobs.needs_full_frame(p):
+        raise Unsupported("Merge output box or layers have no GPU kernel yet")
+    if str(p.get("metainput", "B")) != "B":
+        raise Unsupported("Merge metadata from A has no GPU path yet")
     return {"op": MERGE_OPS.index(op), "name": op, "mix": float(p["mix"])}
 
 
@@ -654,15 +663,18 @@ fn merge_op(op: i32, a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
         case 1: { return b + a * (1.0 - ba); }
         case 2: { return a + b; }
         case 3: { return a - b; }
-        case 4: { return a * b; }
-        case 5: { return a + b - a * b; }
+        case 4: { return select(a * b, a, (a < vec4<f32>(0.0)) & (b < vec4<f32>(0.0))); }
+        case 5: {
+            let inside = (a > vec4<f32>(0.0)) & (a < vec4<f32>(1.0)) & (b > vec4<f32>(0.0)) & (b < vec4<f32>(1.0));
+            return select(max(a, b), a + b - a * b, inside);
+        }
         case 6: { return max(a, b); }
         case 7: { return min(a, b); }
         case 8: { return abs(a - b); }
         case 9: {
-            let usable = abs(b) > vec4<f32>(1e-6);
+            let usable = b > vec4<f32>(0.0);
             let safe = select(vec4<f32>(1.0), b, usable);
-            return select(vec4<f32>(0.0), a / safe, usable);
+            return select(a, a / safe, usable);
         }
         case 10: { return b * aa; }
         case 11: { return b * (1.0 - aa); }

@@ -41,42 +41,47 @@ def upgrade_params(kind):
     return dict(OLD) if kind in KINDS else {}
 
 
+def _get(p, name):
+    """A knob of `p`; a parameter dict that predates the knob reads as an older document's node (the OLD value)."""
+    return p.get(name, OLD.get(name, 0.0))
+
+
 def is_legacy(p):
     """True when every step-E knob is at the value that leaves the node's old arithmetic untouched (the old path then runs
     byte for byte)."""
-    return (float(p.get("blackpoint", 0.0)) == 0.0 and float(p.get("whitepoint", 1.0)) == 1.0
-            and float(p.get("black", 0.0)) == 0.0 and float(p.get("white", 1.0)) == 1.0
-            and float(p.get("gamma", 1.0)) == 1.0 and not p.get("reverse", 0)
-            and not p.get("black_clamp", 0) and not p.get("white_clamp", 0)
-            and (bool(p.get("offset_by_alpha", 0)) or float(p.get("offset", 0.0)) == 0.0))
+    return (float(_get(p, "blackpoint")) == 0.0 and float(_get(p, "whitepoint")) == 1.0
+            and float(_get(p, "black")) == 0.0 and float(_get(p, "white")) == 1.0
+            and float(_get(p, "gamma")) == 1.0 and not _get(p, "reverse")
+            and not _get(p, "black_clamp") and not _get(p, "white_clamp")
+            and (bool(_get(p, "offset_by_alpha")) or float(p.get("offset", 0.0)) == 0.0))
 
 
 def terms(p):
     """`(slope, shift)` of the linear ramp as plain floats: `shift` is the part that does not depend on alpha. The slope carries
     `exposure` and `multiply`; `offset` joins the shift unless it follows alpha (`offset_by_alpha`)."""
-    span = float(p.get("whitepoint", 1.0)) - float(p.get("blackpoint", 0.0))
+    span = float(_get(p, "whitepoint")) - float(_get(p, "blackpoint"))
     if abs(span) < SPAN_FLOOR:
         span = SPAN_FLOOR if span >= 0 else -SPAN_FLOOR
     slope = (2.0 ** float(p.get("exposure", 0.0))) * float(p.get("multiply", 1.0)) * (
-        float(p.get("white", 1.0)) - float(p.get("black", 0.0))) / span
-    flat_offset = 0.0 if p.get("offset_by_alpha", 0) else float(p.get("offset", 0.0))
-    shift = flat_offset + float(p.get("black", 0.0)) - slope * float(p.get("blackpoint", 0.0))
+        float(_get(p, "white")) - float(_get(p, "black"))) / span
+    flat_offset = 0.0 if _get(p, "offset_by_alpha") else float(p.get("offset", 0.0))
+    shift = flat_offset + float(_get(p, "black")) - slope * float(_get(p, "blackpoint"))
     return slope, shift
 
 
 def alpha_offset(p):
     """The offset that is scaled by alpha (0 for a node whose offset is Nuke's flat one)."""
-    return float(p.get("offset", 0.0)) if p.get("offset_by_alpha", 0) else 0.0
+    return float(p.get("offset", 0.0)) if _get(p, "offset_by_alpha") else 0.0
 
 
 def grade_rgb(rgb, alpha, p):
     """Grade applied to an (h, w, 3) float array, `alpha` its (h, w, 1) alpha. Returns float32."""
     slope, shift = terms(p)
     follow = alpha_offset(p)
-    gamma = float(p.get("gamma", 1.0))
-    black_clamp, white_clamp = bool(p.get("black_clamp", 0)), bool(p.get("white_clamp", 0))
+    gamma = float(_get(p, "gamma"))
+    black_clamp, white_clamp = bool(_get(p, "black_clamp")), bool(_get(p, "white_clamp"))
     shifted = np.float32(shift)
-    if p.get("reverse", 0):
+    if _get(p, "reverse"):
         # Undo the gamma first, then the ramp: x = ((y ** gamma) - B) / A.
         y = rgb.astype(np.float32)
         if gamma != 1.0:

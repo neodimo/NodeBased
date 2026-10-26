@@ -78,16 +78,21 @@ class NewMergeOperationTests(unittest.TestCase):
     def test_overlay_at_exactly_half_returns_a_from_both_branches(self):
         self.check("overlay", px(0.3, 0.9, 0.0, 1.0), px(0.5, 0.5, 0.5, 1.0), (0.3, 0.9, 0.0, 1.0))
 
-    def test_hard_light_is_overlay_with_roles_swapped(self):
-        a = px(0.25, 0.75, 0.5, 1.0)
-        b = px(0.6, 0.3, 0.9, 1.0)
+    def test_hard_light_is_overlay_with_roles_swapped_inside_zero_to_one(self):
+        a = px(0.25, 0.75, 0.5, 0.5)
+        b = px(0.6, 0.3, 0.9, 0.9)
         np.testing.assert_allclose(merge("hard-light", a, b), merge("overlay", b, a), atol=1e-7)
-        self.check("hard-light", px(0.25, 0.75, 0.0, 1.0), px(0.6, 0.3, 0.0, 1.0),
-                   (2 * 0.25 * 0.6, 1 - 2 * 0.25 * 0.7, 0.0, 1.0))
+        self.check("hard-light", px(0.25, 0.75, 0.0, 0.5), px(0.6, 0.3, 0.0, 0.5),
+                   (2 * 0.25 * 0.6, 1 - 2 * 0.25 * 0.7, 0.0, 1 - 2 * 0.5 * 0.5))
+
+    def test_hard_light_is_zero_where_a_or_b_reaches_one(self):
+        # The guide: 2AB if 2A < 1, otherwise 1-2(1-A)(1-B) if A and B are below 1, otherwise 0.
+        self.check("hard-light", px(1.0, 0.75, 0.75, 1.0), px(0.5, 1.0, 0.5, 1.0), (0.0, 0.0, 1 - 2 * 0.25 * 0.5, 0.0))
 
     def test_soft_light_both_branches(self):
-        # A=B=0.5: AB=.25 -> .5*(1+.5*.75)=0.6875 ; A=B=2 (HDR): AB=4 -> 2AB=8 ; alpha AB=1 -> 2
-        self.check("soft-light", px(0.5, 2.0, 0.0, 1.0), px(0.5, 2.0, 0.0, 1.0), (0.6875, 8.0, 0.0, 2.0))
+        # The guide: 2AB + B(1-AB) if AB < 1, otherwise 2AB. A=B=0.5: AB=.25 -> .5 + .5*.75 = 0.875 ;
+        # A=B=2 (HDR): AB=4 -> 8 ; alpha 1 x 1: AB=1 is not below 1 -> 2
+        self.check("soft-light", px(0.5, 2.0, 0.0, 1.0), px(0.5, 2.0, 0.0, 1.0), (0.875, 8.0, 0.0, 2.0))
 
     def test_color_dodge(self):
         # B/(1-A): 0.3/0.5 = 0.6

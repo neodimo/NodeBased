@@ -98,10 +98,10 @@ class MergeOperationTests(unittest.TestCase):
         a = np.array([[[1.0, 0.5, 0.25, 0.5]]], np.float32)
         b = np.array([[[0.0, 0.0, 2.0, 2.0]]], np.float32)
         result = _op("divide", a, b)
-        # Where |B| == 0, output is exactly 0 (no NaN/inf).
+        # The guide: A/B where B is above 0, otherwise A (so no NaN/inf, and two negatives never make a positive).
         self.assertTrue(np.isfinite(result).all())
-        np.testing.assert_array_equal(result[0, 0, :2], np.zeros((2,), np.float32))
-        # Where |B| > 0, normal division.
+        np.testing.assert_array_equal(result[0, 0, :2], np.array([1.0, 0.5], np.float32))
+        # Where B > 0, normal division.
         np.testing.assert_allclose(result[0, 0, 2:], [0.125, 0.25], rtol=1e-6)
 
     def test_mask_modulates_b_with_a_alpha(self):
@@ -158,7 +158,10 @@ class MergeOperationTests(unittest.TestCase):
         a[0, 0, 3] = b[0, 0, 3] = 1.5  # both alphas > 1
         np.testing.assert_allclose(_op("plus", a, b), a + b)
         np.testing.assert_allclose(_op("minus", a, b), a - b)
-        np.testing.assert_allclose(_op("screen", a, b), a + b - a * b)
+        # The guide's screen is A+B-AB only inside 0..1 and the larger of the two outside it, so HDR values never go negative.
+        np.testing.assert_allclose(_op("screen", a, b), np.maximum(a, b))
+        np.testing.assert_allclose(_op("screen", np.full((1, 1, 4), 0.5, np.float32), np.full((1, 1, 4), 0.25, np.float32)),
+                                   np.full((1, 1, 4), 0.5 + 0.25 - 0.125, np.float32))
         self.assertTrue((_op("plus", a, b) > 1.0).all())
 
     def test_negative_premultiplied_inputs(self):
