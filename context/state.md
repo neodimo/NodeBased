@@ -1,5 +1,34 @@
 # Lane 6 — 2026-10-23 step A finish 1 (PARTIAL)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D on the GPU, Claude Sonnet 5.5) (6:35 PM on 2026-10-25 PDT)
+
+`main` moved `2a5fcaa6` -> `695b0796` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `695b0796` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1025-1825.log`, started 6:25 PM): **Ran 6393 tests in 500.272 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step B of N: the shared Nuke node controls on every 2D node, plus Nuke's two-input Shuffle.** Commits:
+  - `b8f5820d` 2D fidelity B: the cache-correctness test tries real channel names on the shared node chrome's pickers and wires Shuffle's A input
+  - `9365a84d` 2D fidelity B: the Draw nodes take the mask strip, and the fidelity report is re-scored (54.5 to 62.7)
+  - `44302179` Nuke reference pack runs on Nuke Non-commercial: one Python file per case for nuke -t
+  - `f63d170b` 2D fidelity B: Nuke's shared node chrome on the filter, colour and Draw nodes, and the two-input Shuffle
+  Diff: 19 files changed, 2406 insertions(+), 351 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D on the GPU, Claude Sonnet 5.5), step A of 3: the four-node GPU island runs the realistic comp, with zero readbacks between its kernels.** Commits:
+  - `69900d7d` R6-1 step A closeout: masks cross the bus as their alpha plane only, encode time no longer counts uploads, the pixel check refreshed on three adapters, the preliminary island playback runs and the transfer rates recorded, and the Lane 8 step notes in docs/PERFORMANCE.md
+  - `855acd21` R6-1 part 2: opt-in GPU-resident island for Grade, Transform, Blur and Merge (nodebased/gpu2d.py): float32 compute passes on one device, zero intermediate readbacks, one readback at the exit, CPU as the default; fixture frames match the CPU within 2.4e-7 on the RTX 3080 Ti, Radeon 8060S and llvmpipe
+  - `ae2f176f` R6-1 part 1: CPU baseline of the realistic comp on this revision (48 fresh frames and 240 distinct frames, RTX 3080 Ti three passes, Radeon 8060S and llvmpipe one), with a summarizer for the gate statistics, the input hashes and the environment record
+  - `6c1fd46f` 2D playback benchmark: backend switch (cpu default, gpu2d opt-in), sustained frame range, warm-up on sacrificial frames, and a full environment record (revision, fixture and variant hashes, hardware, drivers)
+  Diff: 28 files changed, 6818 insertions(+), 3 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (3:25 PM on 2026-10-25 PDT)
 
 `main` moved `5eccc56c` -> `b84823f5` (lane commits cherry-picked onto main in lane order) and then to this
