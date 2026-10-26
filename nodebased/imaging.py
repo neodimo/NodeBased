@@ -2631,7 +2631,7 @@ class Evaluator:
                     # instead, exactly as an unwired bypass on any other optional-image slot would.
                     if sources and sources[0] is not None:
                         raster = values[sources[0]]
-                    elif kind in _DRAW_KINDS or kind == "Roto":
+                    elif kind in _DRAW_KINDS:
                         raster = Raster.of(np.zeros((int(params["height"]), int(params["width"]), 4),
                                                      np.float32))
                     elif sources and sources[0] is None:

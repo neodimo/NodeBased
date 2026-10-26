@@ -1418,8 +1418,6 @@ def bypass_slot(node):
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     if kind in DRAW_KINDS:
         return "image"
-    if kind == "Roto":
-        return "bg"      # Nuke's disabled Roto passes its background input (a transparent frame when none is wired)
     if kind == "Group":
         from .groups import group_slots
         return next(iter(group_slots(node)), None)   # the lowest-numbered input; None with no Input node

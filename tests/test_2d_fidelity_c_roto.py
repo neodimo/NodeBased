@@ -1,13 +1,13 @@
 """Fidelity step C, part 1: Roto takes Nuke's mask input and the shared mask and channels controls. Pixel
-assertions per option, the tile path (which renders a masked Roto whole) against the evaluator, bypass, and
-old documents."""
+assertions per option, the tile path (which renders a masked Roto whole) against the evaluator, and old documents. (A Roto
+cannot be disabled: the dispatcher refuses it, tests/test_2d_parity_group_c2.py.)"""
 import copy
 import unittest
 
 import numpy as np
 
 from nodebased import ops2d_chrome as chrome
-from nodebased.core import SPECS, Dispatcher, bypass_slot, empty_document, upgrade_document, validate
+from nodebased.core import SPECS, Dispatcher, empty_document, upgrade_document, validate
 from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor
 from tests.test_roto_ui import triangle
@@ -118,12 +118,6 @@ class TileAndBypassTests(unittest.TestCase):
                     got = executor.render_region(doc, "r", region, frame=1, tier=1) if hasattr(executor, "render_region") else \
                         executor.compose_region(doc, "r", region, frame=1, tier=1).pixels
                     np.testing.assert_allclose(got, expected, atol=1e-6)
-
-    def test_bypass_passes_the_bg(self):
-        doc = document(mask=0.25, invert_mask=1)
-        doc["nodes"]["r"]["disabled"] = True
-        plate = render(doc, "plate").pixels
-        np.testing.assert_array_equal(render(doc).pixels, plate)
 
 
 class OldDocumentTests(unittest.TestCase):

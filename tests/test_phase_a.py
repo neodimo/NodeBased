@@ -485,8 +485,9 @@ class SpecAndChoicesTests(unittest.TestCase):
     def test_premult_and_unpremult_are_single_input_nodes(self):
         self.assertEqual(SPECS["Premult"]["inputs"], ["image"])
         self.assertEqual(SPECS["Unpremult"]["inputs"], ["image"])
-        self.assertEqual(SPECS["Premult"]["params"], {})
-        self.assertEqual(SPECS["Unpremult"]["params"], {})
+        # Nuke's channels, `by` channel and invert arrived in fidelity step C; their defaults are the plain multiply.
+        for kind in ("Premult", "Unpremult"):
+            self.assertEqual(SPECS[kind]["params"], {"channels": "rgb", "premult_by": "rgba.alpha", "invert": 0})
 
     def test_dispatcher_creates_premult_unpremult_with_valid_params(self):
         d = Dispatcher(empty_document())
