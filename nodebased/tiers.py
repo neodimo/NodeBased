@@ -337,6 +337,10 @@ def _crop_rule(params, region, arity):
     # Crop zeroes everything outside its rectangle, so pixels outside it are generated, not read.
     rect = Region(int(params.get("x", 0)), int(params.get("y", 0)),
                   int(params.get("width", 0)), int(params.get("height", 0)))
+    if not params.get("crop", 1):
+        # Black outside off: the area beyond the picture takes the picture's outermost pixels, which can lie
+        # anywhere in the box.
+        return [rect] + [region] * (arity - 1)
     return [region.intersect(rect)] + [region] * (arity - 1)
 
 
@@ -729,7 +733,7 @@ PIXEL_UNIT_PARAMS = {
     "CopyRectangle": ("area_x", "area_y", "area_r", "area_t"),
     "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
-    "Crop": ("x", "y", "width", "height"),
+    "Crop": ("x", "y", "width", "height", "crop_softness"),
     # Reformat's "scale" is a unitless ratio (like Transform's own "scale"), not a pixel count, so
     # it is deliberately absent here; width/height are the format's own pixel size and are the
     # only state a named-format preset resolves into (see core._resolve_reformat_format), which is

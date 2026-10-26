@@ -2326,7 +2326,11 @@
    ],
    "knobs": [
     {"nodebased": ["x", "y", "width", "height"], "nuke": ["box"], "kind": "components", "reason": "NodeBased stores the box as x, y, width, height; Nuke's knob is one x, y, r, t value"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["crop_softness"], "nuke": ["softness"], "kind": "renamed", "reason": "same control under another name (`softness` is the 0 to 1 edge softness of the shapes in NodeBased's parameter table); pixels, as in Nuke"},
+    {"nodebased": ["reformat"], "nuke": ["reformat"], "kind": "same"},
+    {"nodebased": ["intersect"], "nuke": ["intersect"], "kind": "same"},
+    {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"}
    ],
    "skip_default": ["box"]
   },

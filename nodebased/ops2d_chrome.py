@@ -130,6 +130,19 @@ def suggestions(name):
             "output": OUTPUT_CHOICES, "premult": UNPREMULT_CHOICES}[name]
 
 
+def step_c_params(kind):
+    """The knobs fidelity step C added to Read, Write and Crop, at the values that leave an older document's node as it was."""
+    if kind == "Read":
+        from .readknobs import DEFAULTS
+        return dict(DEFAULTS)
+    if kind == "Write":
+        from .writenode import DEFAULTS
+        return dict(DEFAULTS)
+    if kind == "Crop":
+        return {"crop_softness": 0.0, "reformat": 0, "intersect": 1, "crop": 1}
+    return {}
+
+
 def upgrade_nodes(nodes):
     """Give an older document's nodes the chrome knobs at their no-change defaults. Walks Group graphs."""
     for node in nodes.values():
@@ -137,12 +150,7 @@ def upgrade_nodes(nodes):
             continue
         params = node.get("params")
         added = spec_params(node.get("type"))
-        if node.get("type") == "Read":
-            from .readknobs import DEFAULTS as read_defaults       # Read's Nuke knobs (fidelity step C)
-            added = {**added, **read_defaults}
-        elif node.get("type") == "Write":
-            from .writenode import DEFAULTS as write_defaults      # Write's Nuke knobs (fidelity step C)
-            added = {**added, **write_defaults}
+        added = {**added, **step_c_params(node.get("type"))}
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

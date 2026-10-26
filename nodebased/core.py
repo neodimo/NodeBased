@@ -407,7 +407,10 @@ SPECS = {
                                                  "shutter_offset": "centred", "custom_offset": 0.0,
                                                  "samples": 4, "center_x": 0.0, "center_y": 0.0,
                                                  "filter": "cubic", "mix": 1.0}},
-    "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0}},
+    # Crop's Nuke knobs (fidelity step C): crop_softness (the guide's `softness`; pixels, and apart from the 0..1 `softness` of the
+    # shapes), reformat, intersect (on here, which is what Crop always did; Nuke's default is off) and crop ("black outside").
+    "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0,
+                                                                          "crop_softness": 0.0, "reformat": 0, "intersect": 1, "crop": 1}},
     # Reformat is the lane's step 2c5 "real format model" (docs/PARITY_2D.md): unlike Transform/
     # Crop/Mirror it changes the *display* window itself, not just the data window -- see
     # `imaging.Evaluator._windowed_kernel`'s dedicated "Reformat" branch. The document-level named-
@@ -2034,6 +2037,7 @@ CHOICES["read_format"] = ["file", *REFORMAT_FORMATS]
 CHOICES["views"] = list(_WRITE_VIEWS)
 CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none"]
 LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1)})
+LIMITS.update({"crop_softness": (0.0, 100000.0), "reformat": (0, 1), "intersect": (0, 1), "crop": (0, 1)})
 LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000),
                "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})
 

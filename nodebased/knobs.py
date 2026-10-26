@@ -382,6 +382,9 @@ KNOB_LAYOUT = {
     "Crop": _groups(
         KnobGroup("int", ("x",)), KnobGroup("int", ("y",)),
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
+        # Nuke's Crop knobs (fidelity step C).
+        KnobGroup("float", ("crop_softness",), label="Softness"), KnobGroup("bool", ("reformat",), label="Reformat"),
+        KnobGroup("bool", ("intersect",), label="Intersect"), KnobGroup("bool", ("crop",), label="Black outside"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Reformat": _groups(
         KnobGroup("enum", ("reformat_type",), label="Type"),

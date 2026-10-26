@@ -299,6 +299,8 @@ class ProxyTierTests(unittest.TestCase):
                        "fill_size", "screen_erode", "filter_size",
                        # Step K2: ScreenKeyer shrink/grow and softness are pixel lengths.
                        "screen_shrink", "screen_softness",
+                       # Fidelity step C: Crop's softness is a pixel length (the guide's `softness`).
+                       "crop_softness",
                        # Step 5b: Grain's per-channel sizes and CopyRectangle's area box are pixel lengths.
                        "red_size", "green_size", "blue_size", "area_x", "area_y", "area_r", "area_t", "position_x", "position_y",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",

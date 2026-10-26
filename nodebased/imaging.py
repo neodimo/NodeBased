@@ -3699,7 +3699,10 @@ class Evaluator:
                 filtered = Evaluator._filtered_pixels(kind, p, source, out, frame)
                 pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                    None if mask is None else mask.fit(out), mix)
-            return Raster(pixels, out, source.display)
+            display = source.display
+            if kind == "Crop" and p.get("reformat", 0):
+                display = Region(int(p["x"]), int(p["y"]), int(p["width"]), int(p["height"]))     # Nuke's reformat: the box is the format
+            return Raster(pixels, out, display)
         # Pointwise and pass-through kinds: Viewer, Write, NoOp, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
         if kind in ("MinColor", "Sampler", "CurveTool"):
@@ -4420,8 +4423,10 @@ class Evaluator:
         if kind == "Crop":
             # Crop's whole meaning is "the output is this rectangle". Shrinking the data window
             # here is what stops every downstream node from computing over discarded area.
-            return source.data.intersect(Region(int(p["x"]), int(p["y"]),
-                                                int(p["width"]), int(p["height"])))
+            box = Region(int(p["x"]), int(p["y"]), int(p["width"]), int(p["height"]))
+            # Nuke's `intersect`: on, the output box is the crop box cut to the incoming box; off, it is the crop
+            # box itself and can reach outside the incoming one.
+            return source.data.intersect(box) if p.get("intersect", 1) else box
         if kind in ("Transform", "Tracker", "Stabilize"):
             return Evaluator._transformed_window(source.data, p)
         if kind == "CornerPin":
@@ -4575,11 +4580,26 @@ class Evaluator:
             return transform(kind, p, source.fit(out))
         if kind == "Crop":
             pixels = np.zeros((out.height, out.width, 4), dtype=np.float32)
-            keep = out.intersect(source.data).intersect(
-                Region(int(p["x"]), int(p["y"]), int(p["width"]), int(p["height"])))
-            if not keep.is_empty:
-                pixels[keep.y - out.y:keep.bottom - out.y,
-                       keep.x - out.x:keep.right - out.x] = source.fit(keep)
+            box = Region(int(p["x"]), int(p["y"]), int(p["width"]), int(p["height"]))
+            inside = out.intersect(box)
+            if inside.is_empty or source.data.is_empty:
+                return pixels
+            rows = slice(inside.y - out.y, inside.bottom - out.y)
+            cols = slice(inside.x - out.x, inside.right - out.x)
+            if p.get("crop", 1):
+                # Black outside: only the incoming picture is kept; the rest of the box is transparent black.
+                keep = inside.intersect(source.data)
+                if not keep.is_empty:
+                    pixels[keep.y - out.y:keep.bottom - out.y, keep.x - out.x:keep.right - out.x] = source.fit(keep)
+            else:
+                # Black outside off: the area beyond the incoming picture takes its outermost pixels.
+                data = source.data
+                ys = np.clip(np.arange(inside.y, inside.bottom), data.y, data.bottom - 1) - data.y
+                xs = np.clip(np.arange(inside.x, inside.right), data.x, data.right - 1) - data.x
+                pixels[rows, cols] = source.pixels[np.ix_(ys, xs)]
+            vignette = Evaluator._crop_vignette(box, inside, p.get("crop_softness", 0.0))
+            if vignette is not None:
+                pixels[rows, cols] *= vignette
             return pixels
         if kind in ("Transform", "Tracker", "Stabilize"):
             return Evaluator._transform(source.pixels, p["translate_x"], p["translate_y"], p["rotate"],
@@ -7580,6 +7600,21 @@ class Evaluator:
         return Evaluator._box_blur_axis(Evaluator._box_blur_axis(image, radius, axis=1), radius, axis=0)
 
     @staticmethod
+    def _crop_vignette(box, region, softness):
+        """Crop's `softness`: a (h, w, 1) multiplier over `region`, or None at 0. Each pixel centre fades linearly from 1 at
+        `softness` pixels inside the box edge to 0 at the edge itself; the horizontal and vertical ramps multiply, so the
+        corners fade twice. The guide states only that the edges are vignetted to black over the softness; the ramp's shape
+        is NodeBased's reading of it."""
+        softness = float(softness)
+        if softness <= 0.0 or region.is_empty:
+            return None
+        xs = np.arange(region.x, region.right, dtype=np.float32) + np.float32(0.5)
+        ys = np.arange(region.y, region.bottom, dtype=np.float32) + np.float32(0.5)
+        fx = np.clip(np.minimum(xs - box.x, box.right - xs) / np.float32(softness), 0.0, 1.0)
+        fy = np.clip(np.minimum(ys - box.y, box.bottom - ys) / np.float32(softness), 0.0, 1.0)
+        return (fy[:, None] * fx[None, :])[..., None].astype(np.float32)
+
+    @staticmethod
     def _crop(source, p):
         # Masks to a rectangle without resizing the canvas, matching Transform's fixed-bounds format.
         frame = np.zeros_like(source)
@@ -7588,6 +7623,10 @@ class Evaluator:
         right, bottom = min(w, p["x"] + p["width"]), min(h, p["y"] + p["height"])
         if left < right and top < bottom:
             frame[top:bottom, left:right] = source[top:bottom, left:right]
+            vignette = Evaluator._crop_vignette(Region(p["x"], p["y"], p["width"], p["height"]),
+                                                Region(left, top, right - left, bottom - top), p.get("crop_softness", 0.0))
+            if vignette is not None:
+                frame[top:bottom, left:right] *= vignette
         return frame
 
     @staticmethod

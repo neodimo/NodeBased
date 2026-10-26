@@ -356,7 +356,7 @@ class PanelChevron(QToolButton):
 
 PANEL_NODE_HELP = {
     "Merge": "A over B · scene-linear, premultiplied. Inputs must have matching dimensions. An optional mask gates the merge: where mask.a is 0, the result is B.",
-    "Crop": "Masks to a rectangle in fixed image bounds; the canvas is not resized.",
+    "Crop": "Keeps the part of the image inside a box. Softness vignettes the edges; Black outside, Intersect and Reformat follow Nuke's Crop.",
     "Blur": "Separable box blur with radius measured in pixels.",
     "ColorCorrect": "As in Nuke: master, shadows, midtones and highlights, each with saturation, contrast, gamma, gain and offset, on unpremultiplied colour. The Ranges curves set what counts as shadow and highlight by luminance; midtones are the rest.",
     "Shuffle": "Remaps output channels from any input channel or the constants 0 and 1.",
