@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) step B of 2: the Roto matte is ready before the frame needs it, and four-CPU machines get the source workers (integrator tick)
+
+- **What was done:** `main` `abae80a5` -> `65306a50` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `65306a50`: Ran 6937 tests in 507.830 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) step A of 1: the first full-size frame after a rest reuses the scene packed for the half-size frames (resume 2) (finish 1) (integrator tick)
 
 - **What was done:** `main` `9a7a1fca` -> `f30486f2` plus this docs commit. Evidence and per-lane commit

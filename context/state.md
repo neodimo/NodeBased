@@ -1,5 +1,26 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (9:15 AM on 2026-10-26 PDT)
+
+`main` moved `abae80a5` -> `65306a50` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `65306a50` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-0900.log`, started 9:00 AM): **Ran 6937 tests in 507.830 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, Claude Sonnet 5.5), step B of 2: the Roto matte is ready before the frame needs it, and four-CPU machines get the source workers.** Commits:
+  - `c49872a9` R6-1 Roto read-ahead: measurements and notes. The Radeon island gains 24 to 29 percent on 48 frames, the four-CPU stand-in 1.0 to 1.4 fps, the CPU nodes are unchanged
+  - `00f1ac07` Roto read-ahead only where the Roto is the long part of the frame; one source worker at four CPUs; latency options for the benchmarks
+  - `209a9bfe` Roto read-ahead: while a played frame is finished and shown, the source pool computes the Roto matte of the next frames
+  Diff: 184 files changed, 17997 insertions(+), 33 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (5:45 AM on 2026-10-26 PDT)
 
 `main` moved `9a7a1fca` -> `f30486f2` (lane commits cherry-picked onto main in lane order) and then to this
