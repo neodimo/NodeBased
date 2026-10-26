@@ -535,10 +535,13 @@ def write_png(path, frame):
 _FRAME_METADATA_KINDS = ("ModifyMetaData", "AddTimeCode", "BurnIn")
 
 
-def _inherited_metadata(kind, images):
+def _inherited_metadata(kind, images, params=None):
     """The metadata a node's result carries when the kernel set none: the main input's, which for the
-    two-input Merge family is B (the background pipe), as in Nuke."""
+    two-input Merge family is B (the background pipe), as in Nuke. A Copy follows its `metainput`."""
     from .core import MERGE_LIKE_KINDS
+    if kind == "Copy" and params is not None and len(images) >= 2:
+        from .smallnodes import copy_meta
+        return copy_meta(params, images)
     order = images[1::-1] if kind in MERGE_LIKE_KINDS else images
     # Inputs are not always rasters (Relight takes a Camera, 3D nodes take scenes): only rasters carry meta.
     return next((m for m in (getattr(image, "meta", None) for image in order) if m is not None), None)
@@ -681,30 +684,51 @@ def _append_clip_plan(doc_nodes, node, params, frame):
     return [(slot, first + frame - starts[i], 1.0)]
 
 
-def _input_clip_range(doc, key):
-    """The frame range of the clip at `key`, the way a Nuke input states it: a FrameRange or TimeClip upstream, a Read's
-    own first and last, else the timeline's."""
+def _input_clip_range(doc, key, _seen=None):
+    """The frame range of the clip at `key`, the way a Nuke input states it: a FrameRange or TimeClip upstream, a Read's own
+    first and last, a Constant that states a range, a Copy's `rangeinput`, else the timeline's."""
     nodes = doc["nodes"]
     span = _branch_frame_range(nodes, key)
     if span is not None:
         return span
-    seen = set()
+    found = _stated_clip_range(nodes, key, set())
+    if found is not None:
+        return found
+    timeline = doc.get("time", {})
+    return (int(timeline.get("first", 1)), int(timeline.get("last", 100)))
+
+
+def _stated_clip_range(nodes, key, seen):
+    """A range some node upstream of `key` states: None when none does."""
     while key is not None and key not in seen:
         seen.add(key)
         node = nodes[key]
-        if node["type"] == "Read" and not node["disabled"]:
-            first, last = int(node["params"].get("first", 0)), int(node["params"].get("last", 0))
-            if (first, last) != (0, 0):
-                return (min(first, last), max(first, last))
-            break
-        if node["disabled"] or node["type"] in ("Dot", "NoOp", "PostageStamp"):
+        kind, params = node["type"], node["params"]
+        if node["disabled"] or kind in ("Dot", "NoOp", "PostageStamp"):
             from .core import bypass_slot
             slot = bypass_slot(node)
             key = None if slot is None else node["inputs"].get(slot)
             continue
-        break
-    timeline = doc.get("time", {})
-    return (int(timeline.get("first", 1)), int(timeline.get("last", 100)))
+        if kind in ("Read", "Constant"):
+            first, last = int(params.get("first", 0)), int(params.get("last", 0))
+            # A Read states its range when it has one; a Constant only when it spans more than the one frame it defaults to.
+            if (first, last) != (0, 0) and (kind == "Read" or last > first):
+                return (min(first, last), max(first, last))
+            return None
+        if kind == "Copy":
+            from .smallnodes import copy_range
+            spans = []
+            for slot in copy_range(params):
+                source = node["inputs"].get(slot)
+                found = None if source is None else (_branch_frame_range(nodes, source)
+                                                     or _stated_clip_range(nodes, source, set(seen)))
+                if found is not None:
+                    spans.append(found)
+            return (min(a for a, _ in spans), max(b for _, b in spans)) if spans else None
+        if kind in ("FrameRange", "TimeClip"):
+            return _branch_frame_range(nodes, key)
+        return None
+    return None
 
 
 def _time_remap_frame(kind, params, frame):
@@ -3056,7 +3080,7 @@ class Evaluator:
                                 kind, params, images, frame, data, cancel=cancel, progress=self,
                                 roto_rasterizer=(self._roto_matte if kind == "Roto" else None))
                     if raster.meta is None and not any(raster is image for image in images):
-                        raster.meta = _inherited_metadata(kind, images)
+                        raster.meta = _inherited_metadata(kind, images, params)
                 if isinstance(raster, gpu2d.DeferredImage):
                     values[key] = raster          # an island node: resolved on the device when its exit node runs
                     continue
@@ -3609,9 +3633,10 @@ class Evaluator:
         if kind == "Remove":
             source = inputs[0]
             if not source.layers: return source
-            names = {n.strip() for n in str(p.get("layers", "")).split(",") if n.strip()}
+            from .smallnodes import remove_keeps, remove_names
+            names = remove_names(p)
             keep_mode = p.get("remove_operation", "remove") == "keep"
-            layers = {name: value for name, value in source.layers.items() if ((name in names) == keep_mode)}
+            layers = {name: value for name, value in source.layers.items() if remove_keeps(name, names, keep_mode)}
             return Raster(source.pixels, source.data, source.display, layers, source.meta)
         if kind == "ZDefocus":
             source = inputs[0]
@@ -3814,8 +3839,11 @@ class Evaluator:
         meta = source.meta
         if kind == "ModifyMetaData":
             meta = metadata.modify(meta, p["edits"], frame)
-        elif kind == "CopyMetaData" and other is not None:
-            meta = metadata.copy(meta, other.meta, p["keys"])
+        elif kind == "CopyMetaData":
+            from .smallnodes import merge_metadata
+            meta = merge_metadata(p, source.meta, None if other is None else other.meta, other is not None) or None
+            if meta is None and not source.meta:
+                return source
         elif kind == "AddTimeCode":
             meta = dict(meta or {})
             meta[metadata.TIMECODE_KEY] = metadata.timecode_at(
@@ -4849,8 +4877,8 @@ class Evaluator:
             # change rippling through every node. See docs/TIME_MODEL.md.
             return read_image(**p, frame=frame)
         if kind == "Constant":
-            color = np.array([p["red"] * p["alpha"], p["green"] * p["alpha"], p["blue"] * p["alpha"], p["alpha"]], dtype=np.float32)
-            return np.broadcast_to(color, (p["height"], p["width"], 4)).copy()
+            from .smallnodes import constant_color
+            return np.broadcast_to(constant_color(p), (p["height"], p["width"], 4)).copy()
         if kind == "Checker":
             size = max(float(p["size"]), 1.0)
             x = (np.floor(np.arange(p["width"], dtype=np.float64) / size).astype(np.int32) & 1)
@@ -5359,8 +5387,9 @@ class Evaluator:
     @staticmethod
     def _invert(image, p):
         out = image.copy()
+        clamp = bool(p.get("clamp", 0))       # Nuke's clamp: the inversion stays in 0 to 1, so superblacks and superwhites are cut
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
-            out[..., c] = 1.0 - image[..., c]
+            out[..., c] = np.clip(1.0 - image[..., c], 0.0, 1.0) if clamp else 1.0 - image[..., c]
         return out
 
     @staticmethod
@@ -5430,9 +5459,19 @@ class Evaluator:
         # Alpha only; RGB passes through untouched (Nuke's own Keyer never recolours, it only
         # writes a new matte for whatever's downstream -- typically a Premult -- to use).
         rgb = image[..., :3]
-        r, g, b = rgb[..., 0:1], rgb[..., 1:2], rgb[..., 2:3]
+        if p.get("key_input", "rgb") == "rgba.alpha":
+            channel = image[..., 3:4]            # the matte is pulled from the alpha, as if it were a grey image
+            r = g = b = channel
+        else:
+            r, g, b = rgb[..., 0:1], rgb[..., 1:2], rgb[..., 2:3]
         op = p.get("keyer_operation", "luminance")
-        if op == "luminance":
+        if op == "redscreen":                    # a screen channel minus the larger of the other two
+            value = r - np.maximum(g, b)
+        elif op == "greenscreen":
+            value = g - np.maximum(r, b)
+        elif op == "bluescreen":
+            value = b - np.maximum(r, g)
+        elif op == "luminance":
             value = 0.2126 * r + 0.7152 * g + 0.0722 * b
         elif op == "red":
             value = r
@@ -5454,7 +5493,14 @@ class Evaluator:
                                       p.get("range_c", 1.0), p.get("range_d", 1.0))
         if p.get("invert"):
             alpha = 1.0 - alpha
-        return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+        output = p.get("key_output", "rgba.alpha")
+        combine = p.get("key_combine", "replace")
+        if output == "rgba.alpha" and combine == "replace":
+            return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+        if output == "none":
+            return image.astype(np.float32)
+        from .smallnodes import write_matte
+        return write_matte(image, alpha, output, combine)
 
     # --- Keyer-menu group K1: ChromaKeyer, IBKColor, IBKGizmo ------------------------------------
 
@@ -5475,10 +5521,21 @@ class Evaluator:
                        dtype=np.float32)
         key_y = max(float(0.2126 * key[0] + 0.7152 * key[1] + 0.0722 * key[2]), 1e-3)
         n_key = key / key_y
-        scale = max(float(np.linalg.norm(n_key - 1.0)), 1e-3)
+        # `screen_balance` weighs the two channels that are not the screen's against each other (0.5 weighs them alike) and
+        # `screen_gain` divides the chroma distance, so more gain keys more.
+        balance = float(p.get("screen_balance", 0.5))
         y = Evaluator._luma(rgb)
         normalised = rgb / np.maximum(y, 1e-3)
-        dist = np.linalg.norm(normalised - n_key, axis=-1, keepdims=True) / scale
+        if balance == 0.5:
+            scale = max(float(np.linalg.norm(n_key - 1.0)), 1e-3)
+            chroma = np.linalg.norm(normalised - n_key, axis=-1, keepdims=True) / scale
+        else:
+            weights = np.ones(3, dtype=np.float32)
+            first, second = Evaluator._screen_channels(int(np.argmax(key)))
+            weights[first], weights[second] = 2.0 * (1.0 - balance), 2.0 * balance
+            scale = max(float(np.sqrt(np.sum(weights * (n_key - 1.0) ** 2))), 1e-3)
+            chroma = np.sqrt(np.sum(weights * (normalised - n_key) ** 2, axis=-1, keepdims=True)) / scale
+        dist = chroma / max(float(p.get("screen_gain", 1.0)), 1e-6)
         dist = dist + float(p.get("luma_gain", 0.0)) * np.abs(y - key_y) / key_y
         softness = max(float(p.get("key_softness", 0.3)), 1e-6)
         alpha = np.clip((dist - float(p.get("key_tolerance", 0.35))) / softness, 0.0, 1.0)
@@ -5487,6 +5544,14 @@ class Evaluator:
             alpha = alpha + (1.0 - alpha) * np.clip(1.0 - y / shadow, 0.0, 1.0)
         highlight = float(p.get("highlight_level", 1000000.0))
         alpha = alpha + (1.0 - alpha) * np.clip((y - highlight) / max(0.1 * highlight, 1e-6), 0.0, 1.0)
+        # `chroma_gain` returns opacity to pixels whose colour is away from the screen's (a matte with fewer see-through
+        # patches in the foreground, with harder edges); the black and white points then cut and stretch the whole matte.
+        chroma_gain = float(p.get("chroma_gain", 0.0))
+        if chroma_gain > 0.0:
+            alpha = alpha + (1.0 - alpha) * np.clip(chroma_gain * np.clip(chroma, 0.0, 1.0), 0.0, 1.0)
+        black_point, white_point = float(p.get("black_point", 0.0)), float(p.get("white_point", 1.0))
+        if black_point != 0.0 or white_point != 1.0:
+            alpha = np.clip((alpha - black_point) / max(white_point - black_point, 1e-6), 0.0, 1.0)
         return alpha.astype(np.float32)
 
     @staticmethod
@@ -5512,6 +5577,9 @@ class Evaluator:
         alpha = Evaluator._chroma_key_alpha(rgb, p)
         if p.get("invert"):
             alpha = 1.0 - alpha
+        if p.get("key_view", "final result") == "intermediate result":
+            # The source as it came, with the matte this node pulled: for keying in passes.
+            return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
         if p.get("despill", 1):
             key = np.array([p.get("key_red", 0.1), p.get("key_green", 0.8), p.get("key_blue", 0.2)],
                            dtype=np.float32)
@@ -7079,6 +7147,9 @@ class Evaluator:
                 continue
             _, src_channel = source.split(".")
             out[..., index[out_channel]] = a[..., index[src_channel]]
+        if str(p.get("channels", "none")) not in ("", "none"):
+            from .smallnodes import copy_layer_channels
+            out = copy_layer_channels(a, out, p["channels"])      # Nuke's `channels`: whole channels, A over B
         return out
 
     @staticmethod
@@ -7089,7 +7160,13 @@ class Evaluator:
         number first), `offset` and `gain` shaping it, output is B's colour with the new alpha."""
         diff = np.max(np.abs(a[..., :3] - b[..., :3]), axis=-1, keepdims=True)
         alpha = np.clip((diff - p.get("offset", 0.0)) * p.get("gain", 1.0), 0.0, 1.0)
-        return np.concatenate([b[..., :3], alpha], axis=2).astype(np.float32)
+        if not p.get("output_enabled", 1):
+            return b.astype(np.float32)       # Nuke: a disabled output is the same as the channel set to none
+        channel = p.get("output_channel", "rgba.alpha")
+        if channel == "rgba.alpha":
+            return np.concatenate([b[..., :3], alpha], axis=2).astype(np.float32)
+        from .smallnodes import write_matte
+        return write_matte(b, alpha, channel)
 
     @staticmethod
     def _channel_merge(a, b, p):

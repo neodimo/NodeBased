@@ -76,7 +76,10 @@
    "inputs": [],
    "knobs": [
     {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
-    {"nodebased": ["width", "height"], "nuke": ["format"], "kind": "components", "reason": "NodeBased sizes a generator with width/height; Nuke sets the format knob"}
+    {"nodebased": ["width", "height"], "nuke": ["format"], "kind": "components", "reason": "NodeBased sizes a generator with width/height; Nuke sets the format knob"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["first"], "nuke": ["first"], "kind": "same"},
+    {"nodebased": ["last"], "nuke": ["last"], "kind": "same"}
    ],
    "skip_default": ["format"]
   },
@@ -718,7 +721,15 @@
     {"nodebased": ["copy_green"], "nuke": ["from1", "to1"], "kind": "components", "reason": "one copy pair per output channel"},
     {"nodebased": ["copy_blue"], "nuke": ["from2", "to2"], "kind": "components", "reason": "one copy pair per output channel"},
     {"nodebased": ["copy_alpha"], "nuke": ["from3", "to3"], "kind": "components", "reason": "one copy pair per output channel"},
-    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"}
+    {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["metainput"], "nuke": ["metainput"], "kind": "same"},
+    {"nodebased": ["rangeinput"], "nuke": ["rangeinput"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
    ],
    "skip_default": ["from0", "to0", "from1", "to1", "from2", "to2", "from3", "to3"]
   },
@@ -747,7 +758,10 @@
    ],
    "knobs": [
     {"nodebased": ["remove_operation"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
-    {"nodebased": ["layers"], "nuke": ["channels"], "kind": "renamed", "reason": "the layers to keep or remove"}
+    {"nodebased": ["layers"], "nuke": ["channels"], "kind": "renamed", "reason": "the layers to keep or remove"},
+    {"nodebased": ["channels2"], "nuke": ["channels2"], "kind": "same"},
+    {"nodebased": ["channels3"], "nuke": ["channels3"], "kind": "same"},
+    {"nodebased": ["channels4"], "nuke": ["channels4"], "kind": "same"}
    ]
   },
   "Grade": {
@@ -820,7 +834,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
-    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"}
+    {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["clamp"], "nuke": ["clamp"], "kind": "same"}
    ]
   },
   "Saturation": {
@@ -1909,7 +1924,11 @@
     {"nodebased": ["range_c"], "nuke": ["range#4"], "kind": "renamed", "reason": "C point"},
     {"nodebased": ["range_d"], "nuke": ["range#5"], "kind": "renamed", "reason": "D point"},
     {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["key_input"], "nuke": ["input"], "kind": "renamed", "reason": "same control under another name (`input` is the node's input socket in NodeBased); the layer the key reads: rgb, or the alpha"},
+    {"nodebased": ["key_output"], "nuke": ["output"], "kind": "renamed", "reason": "same control under another name (`output` is the Draw nodes' channel set in NodeBased's parameter table); the channel the matte goes into, or none"},
+    {"nodebased": ["key_combine"], "nuke": ["combine"], "kind": "renamed", "reason": "same control under another name; how the matte joins what the channel holds"},
+    {"nodebased": [], "nuke": ["range"], "kind": "panel", "reason": "the label of the four range points A, B, C and D, which NodeBased shows as four number fields (range_a to range_d)"}
    ],
    "value_map": {"operation": {"luminance": "luminance key"}}
   },
@@ -1930,7 +1949,13 @@
     {"nodebased": ["highlight_level"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["despill"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["invert"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["key_view"], "nuke": ["_view"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_view`"},
+    {"nodebased": ["screen_gain"], "nuke": ["_screenGain"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_screenGain`"},
+    {"nodebased": ["screen_balance"], "nuke": ["_screenBalance"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_screenBalance`"},
+    {"nodebased": ["chroma_gain"], "nuke": ["_chromaGain"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_chromaGain`"},
+    {"nodebased": ["white_point"], "nuke": ["_whitePoint"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_whitePoint`"},
+    {"nodebased": ["black_point"], "nuke": ["_blackPoint"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_blackPoint`"}
    ],
    "skip_default": ["despillBias"]
   },
@@ -1944,7 +1969,9 @@
    "knobs": [
     {"nodebased": ["offset"], "nuke": ["offset"], "kind": "same"},
     {"nodebased": ["gain"], "nuke": ["gain"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["output_enabled"], "nuke": ["output"], "kind": "renamed", "reason": "the checkbox that enables the output channel; off is the channel set to none"},
+    {"nodebased": ["output_channel"], "nuke": ["output#2"], "kind": "renamed", "reason": "the output channel that follows the checkbox, the guide's second `output`"}
    ]
   },
   "HueKeyer": {
@@ -2717,7 +2744,11 @@
     {"nodebased": "meta", "nuke": "Meta", "kind": "mapped"}
    ],
    "knobs": [
-    {"nodebased": ["keys"], "nuke": ["metadatafilter"], "kind": "renamed", "reason": "keys to copy"}
+    {"nodebased": ["keys"], "nuke": ["metadatafilter"], "kind": "renamed", "reason": "keys to copy"},
+    {"nodebased": ["merge_mode"], "nuke": ["mergeMode"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `mergeMode`"},
+    {"nodebased": ["keys_mode"], "nuke": ["metadatafilterMode"], "kind": "renamed", "reason": "same control under another name; NodeBased's list has one more choice, `exact keys`, the key list this node had before"},
+    {"nodebased": ["image_keys"], "nuke": ["imageMetadatafilter"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `imageMetadatafilter`"},
+    {"nodebased": ["image_keys_mode"], "nuke": ["imageMetadatafilterMode"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `imageMetadatafilterMode`"}
    ]
   },
   "AddTimeCode": {

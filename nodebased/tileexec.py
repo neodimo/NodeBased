@@ -77,10 +77,8 @@ def _full_image(node, frame):
     if node["type"] == "Read":
         pixels = imaging.read_image(**params)
     elif node["type"] == "Constant":
-        alpha = float(params["alpha"])
-        color = np.array([float(params["red"]) * alpha, float(params["green"]) * alpha,
-                          float(params["blue"]) * alpha, alpha], dtype=np.float32)
-        pixels = np.broadcast_to(color, (int(params["height"]), int(params["width"]), 4)).copy()
+        from .smallnodes import constant_color
+        pixels = np.broadcast_to(constant_color(params), (int(params["height"]), int(params["width"]), 4)).copy()
     elif node["type"] == "Checker":
         h, w = int(params["height"]), int(params["width"])
         size = max(1, int(params["size"]))
@@ -371,10 +369,8 @@ def _full_image_with_params(node, params, frame):
     if node["type"] == "Read":
         pixels = imaging.read_image(**params)
     elif node["type"] == "Constant":
-        alpha = float(params["alpha"])
-        color = np.array([float(params["red"]) * alpha, float(params["green"]) * alpha,
-                          float(params["blue"]) * alpha, alpha], dtype=np.float32)
-        pixels = np.broadcast_to(color, (int(params["height"]), int(params["width"]), 4)).copy()
+        from .smallnodes import constant_color
+        pixels = np.broadcast_to(constant_color(params), (int(params["height"]), int(params["width"]), 4)).copy()
     elif node["type"] == "Checker":
         h, w = int(params["height"]), int(params["width"])
         size = max(1, int(params["size"]))
@@ -1601,9 +1597,10 @@ def _tile_layers(kind, params, inputs, pixels, region, disabled=False):
     if disabled:
         pass
     elif kind == "Remove":
-        names = {part.strip() for part in str(params.get("layers", "")).split(",") if part.strip()}
+        from .smallnodes import remove_keeps, remove_names
+        names = remove_names(params)
         keep = params.get("remove_operation", "remove") == "keep"
-        layers = {name: arr for name, arr in layers.items() if (name in names) == keep}
+        layers = {name: arr for name, arr in layers.items() if remove_keeps(name, names, keep)}
     elif kind == "Shuffle":
         layers = {}
     elif kind == "ShuffleCopy":

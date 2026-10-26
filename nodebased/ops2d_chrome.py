@@ -52,6 +52,8 @@ FILTER_CHROME = {
     "VectorBlur": ("all", True, False), "EdgeExtend": ("rgb", False, False), "EdgeDetect": ("all", False, False),
     "HueKeyer": ("rgb", False, False),
     "Merge": (None, True, False), "Dissolve": ("all", True, False), "ChannelMerge": (None, True, False),
+    # Copy (fidelity step D) has the mask strip and (un)premult by; its own `channels` copies layers from A and is not the strip's.
+    "Copy": (None, True, True),
     # The Draw nodes have Nuke's mask strip too; their background is the `image` input, or transparent black.
     "Ramp": (None, True, False), "Radial": (None, True, False), "Rectangle": (None, True, False),
     "Noise": (None, True, False), "Text": (None, True, False), "Grid": (None, True, False),
@@ -74,7 +76,7 @@ MIXLESS = frozenset({"Roto", "Premult", "Unpremult"})
 # Kinds whose own kernel does not read the mask input: the wrapper gates a wired mask for them, even with every chrome knob unchanged.
 WRAPPER_GATED = frozenset({"Roto"})
 # Merge-like nodes gate against input B (Nuke's background); everything else gates against its first input.
-B_INPUT = frozenset({"Merge", "Dissolve", "ChannelMerge"})
+B_INPUT = frozenset({"Merge", "Dissolve", "ChannelMerge", "Copy"})
 
 MASK_DEFAULTS = {"maskChannelInput": "none", "invert_mask": 0, "inject": 0}
 PREMULT_DEFAULTS = {"unpremult": "none", "invert_unpremult": 0}
@@ -190,13 +192,10 @@ def step_c_params(kind):
 def step_d_params(kind):
     """The knobs fidelity step D added (the time nodes, the keyers and the small channel nodes), at the values that leave an
     older document's node as it was. Where Nuke's default differs the new node gets Nuke's and an old one gets this."""
-    from . import timeknobs
+    from . import smallnodes, timeknobs
     out = timeknobs.upgrade_params(kind)
-    out.update(KEYER_UPGRADE.get(kind, {}))
+    out.update(smallnodes.upgrade_params(kind))
     return out
-
-
-KEYER_UPGRADE = {}
 
 
 def upgrade_nodes(nodes):

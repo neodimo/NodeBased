@@ -166,6 +166,7 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
          "lens_cx": 0.0, "lens_cy": 0.0}
 
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
+from . import smallnodes as _smallnodes
 from . import timeknobs as _timeknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
@@ -176,7 +177,10 @@ SPECS = {
                                       "frame_offset": 0, "missing": "error",
                                       # Nuke's Read knobs that change what is read (nodebased/readknobs.py); every default is the Read of before.
                                       **{key: value for key, value in _READ_KNOB_DEFAULTS.items()}}},
-    "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0}},
+    # Constant's Nuke knobs (fidelity step D, nodebased/smallnodes.py): `channels` it contains and the `first` / `last` frame range
+    # it states to the nodes downstream (Retime and TimeOffset read it when it spans more than one frame).
+    "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0,
+                                          **_smallnodes.new_params("Constant")}},
     "Checker": {"inputs": [], "params": {"width": 960, "height": 540, "size": 64}},
     "Grade": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0}},
     # ColorCorrect as in Nuke (properties overhaul, 10/18): master, shadows, midtones and highlights, each with
@@ -194,7 +198,7 @@ SPECS = {
     # and Gamma deliberately reuse Grade's "multiply"/"offset" and ColorCorrect's "gamma" param
     # names (and their existing LIMITS) rather than inventing a parallel "value" name: the math is
     # the identical knob, just alone on its own node, exactly as lanes.md's ranked list frames it.
-    "Invert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"channels": "rgb", "mix": 1.0}},
+    "Invert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"channels": "rgb", "mix": 1.0, **_smallnodes.new_params("Invert")}},
     "Clamp": {"inputs": ["image"], "optional_inputs": ["mask"],
               "params": {"minimum": 0.0, "maximum": 1.0, "clamp_min": 1, "clamp_max": 1,
                         "channels": "rgb", "mix": 1.0}},
@@ -296,7 +300,7 @@ SPECS = {
     "ZSlice": {"inputs": ["image"], "optional_inputs": ["depth", "mask"],
                "params": {"depth_layer": "depth.Z", "near": 0.0001, "far": 1.0, "falloff": 0.0,
                           "depth_math": "depth", "zslice_output": "matte", "mix": 1.0}},
-    "Remove": {"inputs": ["image"], "params": {"remove_operation": "remove", "layers": ""}},
+    "Remove": {"inputs": ["image"], "params": {"remove_operation": "remove", "layers": "", **_smallnodes.new_params("Remove")}},
     # DirBlur (step 3b) is Nuke's directional blur. blur_type: linear blurs along `angle` over
     # `length` pixels; zoom smears toward/away from (center_x, center_y) over `length` percent;
     # radial smears around it over a sweep of `angle` degrees. The centre is in canvas pixels
@@ -701,7 +705,7 @@ SPECS = {
     # Shuffle's CHOICES with a different option list (routes from A, B or a constant).
     "Copy": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
              "params": {"copy_red": "none", "copy_green": "none", "copy_blue": "none",
-                       "copy_alpha": "none", "mix": 1.0}},
+                       "copy_alpha": "none", "mix": 1.0, **_smallnodes.new_params("Copy")}},
     "ChannelMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                      "params": {"a_channel": "A.a", "b_channel": "B.a", "out_channel": "A",
                                "operation": "over", "mix": 1.0}},
@@ -711,7 +715,8 @@ SPECS = {
     # above range_d) into alpha; it honours the single-image mask + mix contract like Saturation.
     "Keyer": {"inputs": ["image"], "optional_inputs": ["mask"],
               "params": {"keyer_operation": "luminance", "range_a": 0.0, "range_b": 0.0,
-                        "range_c": 1.0, "range_d": 1.0, "invert": 0, "mix": 1.0}},
+                        "range_c": 1.0, "range_d": 1.0, "invert": 0, "mix": 1.0,
+                        **_smallnodes.new_params("Keyer")}},
     # HueKeyer: a hue range with softness (hue_center/hue_width/hue_softness, degrees) plus a hard
     # saturation range (sat_min/sat_max). Nuke's own HueKeyer knobs are collapsed to these numeric
     # fields -- see docs/PARITY_2D.md's note on the simplification.
@@ -730,7 +735,7 @@ SPECS = {
                               "key_tolerance": 0.35, "key_softness": 0.3, "luma_gain": 0.0,
                               "shadow_level": 0.02, "highlight_level": 1000000.0,
                               "despill": 1, "despill_bias": 0.5, "premultiply": 0, "invert": 0,
-                              "mix": 1.0}},
+                              "mix": 1.0, **_smallnodes.new_params("ChromaKeyer")}},
     # IBKColor (step K1): builds a clean screen plate from a blue or green screen by repeated
     # edge-aware filling (docs/PARITY_2D.md). `fill_size` is Nuke's `size` (renamed: `size` is a
     # global LIMITS key with a minimum of 1), `screen_erode` its `erode`.
@@ -789,7 +794,7 @@ SPECS = {
     # text slots with the Text node's rasteriser; slot text takes [frame] and [metadata key].
     "ViewMetaData": {"inputs": ["image"], "params": {}},
     "ModifyMetaData": {"inputs": ["image"], "params": {"edits": ""}},
-    "CopyMetaData": {"inputs": ["image"], "optional_inputs": ["meta"], "params": {"keys": ""}},
+    "CopyMetaData": {"inputs": ["image"], "optional_inputs": ["meta"], "params": {"keys": "", **_smallnodes.new_params("CopyMetaData")}},
     "CompareMetaData": {"inputs": ["image"], "optional_inputs": ["other"], "params": {}},
     "AddTimeCode": {"inputs": ["image"], "params": {"timecode": "00:00:00:00", "fps": 24.0, "start_frame": 1,
                                                     "drop_frame": 0}},
@@ -802,7 +807,7 @@ SPECS = {
     # ColorCorrect's "gain" param names/LIMITS rather than inventing new ones (same convention as
     # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.
     "Difference": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
-                   "params": {"offset": 0.0, "gain": 1.0, "mix": 1.0}},
+                   "params": {"offset": 0.0, "gain": 1.0, "mix": 1.0, **_smallnodes.new_params("Difference")}},
     # TimeOffset/FrameHold/Retime are the lane's group (c4) Time-menu nodes: each is a producer
     # with its own time mapping (`nodebased.imaging._time_remap_frame`, docs/TIME_MODEL.md) rather
     # than a pixel kernel, so none takes a mask or mix -- Nuke's own Time-menu nodes don't have
@@ -1610,7 +1615,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "time_offset": (-1000000, 1000000), "reverse": (0, 1),
           "first_frame": (-1000000, 1000000), "increment": (0, 1000000),
           "lookup": (-1000000.0, 1000000.0), "fade_in": (0.0, 1000000.0), "fade_out": (0.0, 1000000.0),
-          "reverse_input": (0, 1), "input_range_start_lock": (0, 1), "input_range_end_lock": (0, 1),
+          "reverse_input": (0, 1), "chroma_gain": (0.0, 10.0), "white_point": (0.0, 10.0), "black_point": (0.0, 10.0),
+          "output_enabled": (0, 1), "input_range_start_lock": (0, 1), "input_range_end_lock": (0, 1),
           "output_range_start_lock": (0, 1), "output_range_end_lock": (0, 1),
           "input_range_start": (-1000000, 1000000), "input_range_end": (-1000000, 1000000),
           "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
@@ -1891,6 +1897,11 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "autocrop_mode": ["alpha", "color"],
            "before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],
            "frame_range_type": ["custom", "all"],
+           "key_input": list(_smallnodes.KEY_INPUTS), "key_output": list(_smallnodes.KEY_OUTPUTS),
+           "key_combine": list(_smallnodes.KEY_COMBINES), "key_view": list(_smallnodes.KEY_VIEWS),
+           "output_channel": list(_smallnodes.OUTPUT_CHANNELS), "merge_mode": list(_smallnodes.MERGE_MODES),
+           "keys_mode": list(_smallnodes.FILTER_MODES), "image_keys_mode": list(_smallnodes.FILTER_MODES),
+           "metainput": list(_smallnodes.FROM_INPUT), "rangeinput": list(_smallnodes.FROM_INPUT),
            "rounding_mode": list(_timeknobs.ROUNDING_MODES), "retime_before": list(_timeknobs.RETIME_RANGE),
            "retime_after": list(_timeknobs.RETIME_RANGE), "retime_filter": list(_timeknobs.RETIME_FILTERS),
            "splat_orientation": ["as_authored", "colmap"],
@@ -1981,7 +1992,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            # Cryptomatte's output view (step K3).
            "crypto_view": ["final", "matte", "colors"],
            # Keyer's keyed quantity (group c3).
-           "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max"],
+           "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max", "redscreen", "greenscreen", "bluescreen"],
            # Reformat (group 2c5).
            "reformat_type": ["to_format", "scale", "to_box"],
            "format": list(REFORMAT_FORMATS) + ["Custom"],

@@ -119,8 +119,10 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("raw",), label="Raw data"), KnobGroup("bool", ("premultiplied",), label="Premultiplied"),
         KnobGroup("bool", ("auto_alpha",), label="Auto alpha")),
     "Constant": _groups(
+        KnobGroup("enum", ("channels",)),
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
-        KnobGroup("color", ("red", "green", "blue", "alpha"))),
+        KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("int", ("first",), label="First frame"), KnobGroup("int", ("last",), label="Last frame")),
     "Checker": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("int", ("size",))),
@@ -147,7 +149,8 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("radius",), soft_range=(0, 100)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Invert": _groups(
-        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("enum", ("channels",)), KnobGroup("bool", ("clamp",)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Clamp": _groups(
         KnobGroup("float_slider", ("minimum",), soft_range=(-1, 1)),
         KnobGroup("float_slider", ("maximum",), soft_range=(0, 4)),
@@ -208,7 +211,9 @@ KNOB_LAYOUT = {
     "ZDefocus": _groups(KnobGroup("string", ("depth_layer",), label="Depth layer"), KnobGroup("float", ("focal_plane",)), KnobGroup("float", ("depth_of_field",)), KnobGroup("float_slider", ("max_size",), label="Maximum size", soft_range=(0, 50)), KnobGroup("enum", ("depth_math",)), KnobGroup("enum", ("bokeh_shape",)), KnobGroup("int", ("blade_count",)), KnobGroup("float", ("blade_rotation",)), KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ZMerge": _groups(KnobGroup("string", ("depth_layer",), label="Depth layer"), KnobGroup("enum", ("depth_math",)), KnobGroup("float", ("smoothing",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ZSlice": _groups(KnobGroup("string", ("depth_layer",), label="Depth layer"), KnobGroup("float", ("near",)), KnobGroup("float", ("far",)), KnobGroup("float", ("falloff",)), KnobGroup("enum", ("depth_math",)), KnobGroup("enum", ("zslice_output",), label="Output"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "Remove": _groups(KnobGroup("enum", ("remove_operation",), label="Operation"), KnobGroup("string", ("layers",), label="Layers")),
+    "Remove": _groups(KnobGroup("enum", ("remove_operation",), label="Operation"), KnobGroup("string", ("layers",), label="Layers"),
+                      KnobGroup("string", ("channels2",), label="And"), KnobGroup("string", ("channels3",), label="And more"),
+                      KnobGroup("string", ("channels4",), label="And again")),
     "DirBlur": _groups(
         KnobGroup("enum", ("blur_type",), label="Type"),
         KnobGroup("float_slider", ("angle",), label="Angle", soft_range=(-180, 180)),
@@ -613,12 +618,17 @@ KNOB_LAYOUT = {
     "Copy": _groups(
         KnobGroup("enum", ("copy_red",)), KnobGroup("enum", ("copy_green",)),
         KnobGroup("enum", ("copy_blue",)), KnobGroup("enum", ("copy_alpha",)),
+        KnobGroup("string", ("channels",), label="Layer copy"),
+        KnobGroup("enum", ("metainput",), label="Metadata from"), KnobGroup("enum", ("rangeinput",), label="Range from"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ChannelMerge": _groups(
         KnobGroup("enum", ("a_channel",)), KnobGroup("enum", ("b_channel",)),
         KnobGroup("enum", ("operation",)), KnobGroup("enum", ("out_channel",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Keyer": _groups(
+        KnobGroup("enum", ("key_input",), label="Input"),
+        KnobGroup("enum", ("key_output",), label="Output"),
+        KnobGroup("enum", ("key_combine",), label="Combine"),
         KnobGroup("enum", ("keyer_operation",), label="Operation"),
         KnobGroup("float_slider", ("range_a",), label="A", soft_range=(0, 1)),
         KnobGroup("float_slider", ("range_b",), label="B", soft_range=(0, 1)),
@@ -633,7 +643,13 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("sat_max",), label="Saturation max", soft_range=(0, 1)),
         KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ChromaKeyer": _groups(
+        KnobGroup("enum", ("key_view",), label="View"),
         KnobGroup("color", ("key_red", "key_green", "key_blue"), label="Key colour"),
+        KnobGroup("float_slider", ("screen_gain",), label="Screen gain", soft_range=(0, 4)),
+        KnobGroup("float_slider", ("screen_balance",), label="Screen balance", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("chroma_gain",), label="Chroma gain", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("white_point",), label="White point", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("black_point",), label="Black point", soft_range=(0, 1)),
         KnobGroup("float_slider", ("key_tolerance",), label="Tolerance", soft_range=(0, 1)),
         KnobGroup("float_slider", ("key_softness",), label="Softness", soft_range=(0, 1)),
         KnobGroup("float_slider", ("luma_gain",), label="Luminance gain", soft_range=(0, 2)),
@@ -694,6 +710,8 @@ KNOB_LAYOUT = {
     "Difference": _groups(
         KnobGroup("float_slider", ("offset",), soft_range=(-1, 1)),
         KnobGroup("float_slider", ("gain",), soft_range=(0, 4)),
+        KnobGroup("bool", ("output_enabled",), label="Output"),
+        KnobGroup("enum", ("output_channel",), label="Output channel"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "TimeOffset": _groups(
         KnobGroup("enum", ("rounding_mode",), label="Mode"),
@@ -745,7 +763,10 @@ KNOB_LAYOUT = {
     "PostageStamp": _groups(KnobGroup("bool", ("hide_input",), label="Hide input")),
     "ViewMetaData": [], "CompareMetaData": [],
     "ModifyMetaData": _groups(KnobGroup("multiline", ("edits",), label="Edits")),
-    "CopyMetaData": _groups(KnobGroup("string", ("keys",), label="Keys")),
+    "CopyMetaData": _groups(
+        KnobGroup("enum", ("merge_mode",), label="Metadata from"),
+        KnobGroup("string", ("keys",), label="Meta copy only"), KnobGroup("enum", ("keys_mode",), label="Meta within"),
+        KnobGroup("string", ("image_keys",), label="Image copy only"), KnobGroup("enum", ("image_keys_mode",), label="Image within")),
     "AddTimeCode": _groups(KnobGroup("string", ("timecode",), label="Start timecode"),
                            KnobGroup("float", ("fps",), label="FPS"), KnobGroup("int", ("start_frame",)),
                            KnobGroup("bool", ("drop_frame",), label="Drop frame")),
