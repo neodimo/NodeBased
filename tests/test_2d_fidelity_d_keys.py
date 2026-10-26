@@ -152,6 +152,71 @@ class ChromaKeyerTests(unittest.TestCase):
         np.testing.assert_array_equal(run("ChromaKeyer", pixels), Evaluator._chroma_keyer(pixels, legacy))
 
 
+class ChromaKeyerSecondaryTests(unittest.TestCase):
+    base = ChromaKeyerTests.base
+
+    def out(self, pixel, **knobs):
+        return run("ChromaKeyer", pixel, **{**self.base, **knobs})[0, 0]
+
+    def test_the_alpha_bias_colour_sets_the_balance(self):
+        key = np.array(KEY, np.float32)
+        pixel = chroma_pixel(0.6)
+        # a bias colour with no red leans on the second non-screen channel (blue): the same as screen_balance 1
+        self.assertAlmostEqual(float(self.out(pixel, alpha_bias_red=0.0, alpha_bias_green=0.5, alpha_bias_blue=1.0)[3]),
+                               float(self.out(pixel, screen_balance=1.0)[3]), places=6)
+        self.assertAlmostEqual(float(self.out(pixel, alpha_bias_red=1.0, alpha_bias_green=0.5, alpha_bias_blue=0.0)[3]),
+                               float(self.out(pixel, screen_balance=0.0)[3]), places=6)
+        self.assertAlmostEqual(float(self.out(pixel, alpha_bias_red=0.2, alpha_bias_green=0.9, alpha_bias_blue=0.2)[3]),
+                               float(self.out(pixel)[3]), places=6)          # equal red and blue weigh them alike
+        self.assertTrue(key.shape == (3,))
+
+    def test_inside_mask_adds_the_source_alpha_to_the_matte(self):
+        pixel = chroma_pixel(0.5).copy()
+        pixel[0, 0, 3] = 0.4
+        ignored = float(self.out(pixel)[3])
+        added = float(self.out(pixel, inside_mask="source alpha")[3])
+        self.assertAlmostEqual(ignored, 0.5, places=4)
+        self.assertAlmostEqual(added, 0.5 + 0.4 * 0.5, places=4)
+
+    def test_the_custom_despill_bias_is_used_only_when_enabled(self):
+        spilled = np.array([[[0.6, 0.9, 0.2, 1.0]]], np.float32)
+        by_red = float(self.out(spilled, despill=1, despill_bias=0.0, override_despill_bias=1)[1])
+        self.assertAlmostEqual(by_red, 0.6, places=6)
+        self.assertAlmostEqual(float(self.out(spilled, despill=1, despill_bias=0.0, override_despill_bias=0)[1]), 0.4, places=6)  # 0.5 of each
+
+    def replaced(self, mode, **knobs):
+        """A pixel at chroma 0.5 (matte 0.5) whose matte chroma gain lifts to 0.75: delta = 0.25."""
+        return self.out(chroma_pixel(0.5), despill=0, chroma_gain=1.0, replace_mode=mode, **knobs)
+
+    def test_replace_modes(self):
+        pixel = chroma_pixel(0.5)[0, 0]
+        ignore = self.replaced("ignore")
+        np.testing.assert_allclose(ignore[:3], pixel[:3], atol=1e-6)
+        hard = self.replaced("edge hard color", replace_red=1.0, replace_green=0.0, replace_blue=0.5, replace_amount=0.8)
+        np.testing.assert_allclose(hard[:3], pixel[:3] + 0.25 * 0.8 * np.array([1.0, 0.0, 0.5]), atol=1e-5)
+        linear = self.replaced("edge linear color")
+        np.testing.assert_allclose(linear[:3], pixel[:3], atol=1e-6)        # without despill, the despilled image is the original
+        soft = self.replaced("edge soft color", replace_red=1.0, replace_green=1.0, replace_blue=1.0)
+        want = 0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]
+        added = pixel[:3] + 0.25
+        have = 0.2126 * added[0] + 0.7152 * added[1] + 0.0722 * added[2]
+        np.testing.assert_allclose(soft[:3], added * (1 + 0.25 * (want / have - 1)), atol=1e-5)
+
+    def test_linear_brings_back_the_original_where_the_matte_rose(self):
+        pixel = chroma_pixel(0.5)
+        despilled = run("ChromaKeyer", pixel, **{**self.base, "despill": 1, "chroma_gain": 1.0})[0, 0]
+        linear = run("ChromaKeyer", pixel, **{**self.base, "despill": 1, "chroma_gain": 1.0, "replace_mode": "edge linear color"})[0, 0]
+        np.testing.assert_allclose(linear[:3], despilled[:3] + (pixel[0, 0, :3] - despilled[:3]) * 0.25, atol=1e-6)
+
+    def test_the_matte_fix_counts_the_black_and_white_points_too(self):
+        off = self.out(chroma_pixel(0.5), despill=0, black_point=0.1, white_point=0.6, replace_mode="edge hard color")
+        on = self.out(chroma_pixel(0.5), despill=0, black_point=0.1, white_point=0.6, replace_mode="edge hard color",
+                      replace_alpha_diff=1)
+        pixel = chroma_pixel(0.5)[0, 0, :3]
+        np.testing.assert_allclose(off[:3], pixel, atol=1e-6)                       # nothing changed the matte but the points
+        np.testing.assert_allclose(on[:3], pixel + 0.3, atol=1e-5)                  # 0.5 -> 0.8: delta 0.3 of white added
+
+
 class DifferenceTests(unittest.TestCase):
     def test_the_alpha_is_the_default_output(self):
         a, b = one(0.2, 0.2, 0.2, 1.0), one(0.5, 0.2, 0.3, 0.9)
@@ -193,7 +258,10 @@ class PathTests(unittest.TestCase):
                   dict(key_input="rgba.alpha", range_a=0.2, range_b=0.7), dict(key_output="rgba.red", keyer_operation="green"),
                   dict(key_combine="union", keyer_operation="blue", range_b=0.4), dict(key_combine="intersect", key_output="rgba.blue")),
         "ChromaKeyer": (dict(), dict(screen_gain=2.0), dict(screen_balance=0.2), dict(chroma_gain=0.7), dict(black_point=0.2, white_point=0.8),
-                        dict(key_view="intermediate result", despill=1, premultiply=1), dict(screen_gain=0.5, screen_balance=0.9, chroma_gain=0.3)),
+                        dict(key_view="intermediate result", despill=1, premultiply=1), dict(screen_gain=0.5, screen_balance=0.9, chroma_gain=0.3),
+                        dict(alpha_bias_red=0.9, alpha_bias_blue=0.1), dict(inside_mask="source alpha"),
+                        dict(chroma_gain=0.6, replace_mode="edge hard color", replace_red=0.2), dict(chroma_gain=0.6, replace_mode="edge soft color"),
+                        dict(chroma_gain=0.6, replace_mode="edge linear color", despill=1, premultiply=1)),
         "Difference": (dict(), dict(output_enabled=0), dict(output_channel="rgba.green", gain=2.0), dict(output_channel="rgba.red")),
     }
 
@@ -234,7 +302,8 @@ class PathTests(unittest.TestCase):
                     old["nodes"]["n"]["params"].pop(name)
                 loaded = upgrade_document(old)
                 validate(loaded)
-                self.assertEqual(loaded["nodes"]["n"]["params"], document["nodes"]["n"]["params"])
+                # where Nuke's default differs the older node keeps what it did (the custom despill bias stays on)
+                self.assertEqual(loaded["nodes"]["n"]["params"], {**document["nodes"]["n"]["params"], **smallnodes.OLD[kind]})
                 np.testing.assert_array_equal(Evaluator().evaluate_raster(loaded, target="n").pixels,
                                               Evaluator().evaluate_raster(document, target="n").pixels)
 

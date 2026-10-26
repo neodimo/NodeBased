@@ -128,8 +128,8 @@ class ChromaKeyerPixelTests(unittest.TestCase):
 
     def test_despill_bias_weights_red_against_blue(self):
         spilled = np.array([[[0.6, 0.9, 0.2, 1.0]]], dtype=np.float32)
-        red_led = self.key(spilled, despill_bias=0.0)[0, 0, 1]
-        blue_led = self.key(spilled, despill_bias=1.0)[0, 0, 1]
+        red_led = self.key(spilled, despill_bias=0.0, override_despill_bias=1)[0, 0, 1]
+        blue_led = self.key(spilled, despill_bias=1.0, override_despill_bias=1)[0, 0, 1]
         self.assertAlmostEqual(float(red_led), 0.6, places=6)
         self.assertAlmostEqual(float(blue_led), 0.2, places=6)
 

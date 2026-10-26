@@ -1955,7 +1955,14 @@
     {"nodebased": ["screen_balance"], "nuke": ["_screenBalance"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_screenBalance`"},
     {"nodebased": ["chroma_gain"], "nuke": ["_chromaGain"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_chromaGain`"},
     {"nodebased": ["white_point"], "nuke": ["_whitePoint"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_whitePoint`"},
-    {"nodebased": ["black_point"], "nuke": ["_blackPoint"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_blackPoint`"}
+    {"nodebased": ["black_point"], "nuke": ["_blackPoint"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_blackPoint`"},
+    {"nodebased": ["alpha_bias_red", "alpha_bias_green", "alpha_bias_blue"], "nuke": ["_alphaBias"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["inside_mask"], "nuke": ["_insideMask"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_insideMask`"},
+    {"nodebased": ["override_despill_bias"], "nuke": ["_overrideDespillBias"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_overrideDespillBias`"},
+    {"nodebased": ["replace_mode"], "nuke": ["_replace"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_replace`"},
+    {"nodebased": ["replace_alpha_diff"], "nuke": ["_replaceAlphaDiff"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_replaceAlphaDiff`"},
+    {"nodebased": ["replace_red", "replace_green", "replace_blue"], "nuke": ["_replaceColor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
+    {"nodebased": ["replace_amount"], "nuke": ["_replaceAmount"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_replaceAmount`"}
    ],
    "skip_default": ["despillBias"]
   },

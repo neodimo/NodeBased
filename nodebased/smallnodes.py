@@ -21,11 +21,15 @@ NEW = {
                      "image_keys_mode": "keys and values"},
     "Keyer": {"key_input": "rgb", "key_output": "rgba.alpha", "key_combine": "replace"},
     "ChromaKeyer": {"screen_gain": 1.0, "screen_balance": 0.5, "chroma_gain": 0.0, "white_point": 1.0,
-                    "black_point": 0.0, "key_view": "final result"},
+                    "black_point": 0.0, "key_view": "final result", "alpha_bias_red": 0.5, "alpha_bias_green": 0.5,
+                    "alpha_bias_blue": 0.5, "inside_mask": "ignore", "override_despill_bias": 0, "replace_mode": "ignore",
+                    "replace_alpha_diff": 0, "replace_red": 1.0, "replace_green": 1.0, "replace_blue": 1.0,
+                    "replace_amount": 1.0},
     "Difference": {"output_enabled": 1, "output_channel": "rgba.alpha"},
 }
 OLD = {kind: dict(values) for kind, values in NEW.items()}
 OLD["CopyMetaData"]["keys_mode"] = "exact keys"          # the key list always named whole keys
+OLD["ChromaKeyer"]["override_despill_bias"] = 1           # despill_bias always applied; Nuke's default leaves it off
 
 MERGE_MODES = ("Image + Meta", "Meta only", "Meta + Image", "Image only")
 FILTER_MODES = ("keys and values", "keys only", "values only", "exact keys")
@@ -35,6 +39,8 @@ KEY_OUTPUTS = ("rgba.alpha", "rgba.red", "rgba.green", "rgba.blue", "none")
 OUTPUT_CHANNELS = ("rgba.alpha", "rgba.red", "rgba.green", "rgba.blue")
 KEY_COMBINES = ("replace", "intersect", "union")
 KEY_VIEWS = ("final result", "intermediate result")
+INSIDE_MASKS = ("ignore", "source alpha")
+REPLACE_MODES = ("ignore", "edge hard color", "edge linear color", "edge soft color")
 _OUTPUT_INDEX = {"rgba.red": 0, "rgba.green": 1, "rgba.blue": 2, "rgba.alpha": 3}
 
 

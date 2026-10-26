@@ -5509,7 +5509,7 @@ class Evaluator:
         return 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
 
     @staticmethod
-    def _chroma_key_alpha(rgb, p):
+    def _chroma_key_alpha(rgb, p, stages=False):
         """Alpha of a chroma key: the distance of a pixel's brightness-normalised colour from the
         key colour's, in units of the key colour's own distance from neutral grey (so 0 is the
         screen, about 1 is a grey, above 1 is a hue on the far side of it), ramped from 0 at
@@ -5524,6 +5524,10 @@ class Evaluator:
         # `screen_balance` weighs the two channels that are not the screen's against each other (0.5 weighs them alike) and
         # `screen_gain` divides the chroma distance, so more gain keys more.
         balance = float(p.get("screen_balance", 0.5))
+        bias = Evaluator._bias_colour(p, "alpha_bias")
+        if not np.allclose(bias, 0.5):
+            # A colour picked from a foreground that the screen's balance makes see-through sets the balance itself.
+            balance = Evaluator._bias_weight(bias, int(np.argmax(key)), balance)
         y = Evaluator._luma(rgb)
         normalised = rgb / np.maximum(y, 1e-3)
         if balance == 0.5:
@@ -5547,11 +5551,15 @@ class Evaluator:
         # `chroma_gain` returns opacity to pixels whose colour is away from the screen's (a matte with fewer see-through
         # patches in the foreground, with harder edges); the black and white points then cut and stretch the whole matte.
         chroma_gain = float(p.get("chroma_gain", 0.0))
+        raw = mid = alpha
         if chroma_gain > 0.0:
             alpha = alpha + (1.0 - alpha) * np.clip(chroma_gain * np.clip(chroma, 0.0, 1.0), 0.0, 1.0)
+            mid = alpha
         black_point, white_point = float(p.get("black_point", 0.0)), float(p.get("white_point", 1.0))
         if black_point != 0.0 or white_point != 1.0:
             alpha = np.clip((alpha - black_point) / max(white_point - black_point, 1e-6), 0.0, 1.0)
+        if stages:
+            return raw.astype(np.float32), mid.astype(np.float32), alpha.astype(np.float32)
         return alpha.astype(np.float32)
 
     @staticmethod
@@ -5574,19 +5582,45 @@ class Evaluator:
     @staticmethod
     def _chroma_keyer(image, p):
         rgb = image[..., :3]
-        alpha = Evaluator._chroma_key_alpha(rgb, p)
+        raw, mid, alpha = Evaluator._chroma_key_alpha(rgb, p, stages=True)
+        delta = (alpha if p.get("replace_alpha_diff") else mid) - raw      # the opacity the corrections gave back
         if p.get("invert"):
             alpha = 1.0 - alpha
+        if p.get("inside_mask", "ignore") == "source alpha":
+            # Keying in passes: what earlier keys left in the alpha adds to this one (a union of the two mattes).
+            alpha = alpha + image[..., 3:4] * (1.0 - alpha)
         if p.get("key_view", "final result") == "intermediate result":
             # The source as it came, with the matte this node pulled: for keying in passes.
             return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+        original = rgb
         if p.get("despill", 1):
             key = np.array([p.get("key_red", 0.1), p.get("key_green", 0.8), p.get("key_blue", 0.2)],
                            dtype=np.float32)
-            rgb = Evaluator._despill(rgb, key, float(p.get("despill_bias", 0.5)))
+            bias = float(p.get("despill_bias", 0.5)) if p.get("override_despill_bias", 1) else 0.5
+            rgb = Evaluator._despill(rgb, key, bias)
+        mode = p.get("replace_mode", "ignore")
+        if mode != "ignore":
+            rgb = Evaluator._replace_edge(mode, rgb, original, delta, p)
         if p.get("premultiply"):
             rgb = rgb * alpha
         return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _replace_edge(mode, despilled, original, delta, p):
+        """Nuke's replace modes for the pixels whose matte the corrections changed. `hard` adds `replace_amount` of the
+        replace colour for any increase in alpha; `linear` brings back (or takes away) that share of the original pixel,
+        screen colour and all; `soft` is hard with the added light scaled so the pixel keeps the original's luminance."""
+        amount = float(p.get("replace_amount", 1.0))
+        if mode == "edge linear color":
+            return despilled + (original - despilled) * delta
+        colour = np.array([p.get("replace_red", 1.0), p.get("replace_green", 1.0), p.get("replace_blue", 1.0)], dtype=np.float32)
+        share = np.clip(delta, 0.0, None) * amount
+        hard = despilled + share * colour
+        if mode != "edge soft color":
+            return hard
+        want, have = Evaluator._luma(original), Evaluator._luma(hard)
+        factor = 1.0 + np.clip(share, 0.0, 1.0) * (want / np.maximum(have, 1e-6) - 1.0)
+        return hard * factor
 
     @staticmethod
     def _bias_weight(colour, dominant, fallback):
