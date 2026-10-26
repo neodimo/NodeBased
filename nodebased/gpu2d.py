@@ -38,8 +38,8 @@ KINDS = ("Grade", "Transform", "Blur", "Merge")
 
 # Blur radii whose GPU result is validated against the CPU kernel. The CPU uses a float32 shifted
 # sum up to radius 4 (the algorithm the shader repeats operation for operation) and float64
-# cumulative sums above it; wider radii stay on the CPU until the float32 accumulation is
-# measured against that path (step B of the spike).
+# cumulative sums above it; a float32 port of those cannot match them inside the pixel gate, so
+# wider radii stay an explicit CPU boundary (step B of the spike).
 BLUR_VALIDATED_MAX = 4
 
 MERGE_OPS = ("over", "under", "plus", "minus", "multiply", "screen", "max", "min", "difference",
@@ -162,10 +162,34 @@ _FILTERS = {"nearest": 0, "bilinear": 1, "cubic": 2}
 
 
 def _split(values):
-    """float64 coordinates as an exact integer part and a float32 fraction (both float32 arrays)."""
+    """float64 coordinates as an exact integer part (a float32 array) and the fraction as two 24-bit fixed-point
+    limbs (float32 arrays holding integers below 2**24): the fraction is ``f1 / 2**24 + f0 / 2**48``, exact to
+    3.6e-15. The shader adds a column term and a row term in integers, then rounds the sum to float32 once, which is
+    what the CPU's float64 coordinate does when it casts its fraction: summing two float32 fractions would not."""
     values = np.asarray(values, np.float64)
     whole = np.floor(values)
-    return whole.astype(np.float32), (values - whole).astype(np.float32)
+    fraction = (values - whole) * 16777216.0
+    high = np.floor(fraction)
+    low = np.floor((fraction - high) * 16777216.0)
+    return whole.astype(np.float32), high.astype(np.float32), low.astype(np.float32)
+
+
+def _separable_weight(distance):
+    """``Evaluator._resample_cubic_separable``'s Catmull-Rom weight, expression for expression: the distance is a
+    float64 difference there (float32 coordinate minus an int32 tap index) and only the result is cast to float32."""
+    a = -0.5
+    absolute = np.abs(distance)
+    square, cube = absolute * absolute, absolute * absolute * absolute
+    return np.where(absolute <= 1, (a + 2) * cube - (a + 3) * square + 1,
+                    a * cube - 5 * a * square + 8 * a * absolute - 4 * a).astype(np.float32)
+
+
+def _separable_weights(coordinates, length, clamp):
+    """The four tap weights of every coordinate along one axis, shape ``(n, 4)`` float32 (taps -1, 0, +1, +2)."""
+    if clamp:
+        coordinates = np.clip(coordinates, 0.0, max(0.0, length - 1.0))
+    base = np.floor(coordinates).astype(np.int32)
+    return np.stack([_separable_weight(coordinates - (base + offset)) for offset in (-1, 0, 1, 2)], axis=-1)
 
 
 @dataclass
@@ -176,8 +200,10 @@ class TransformPlan:
     clamp: bool = False
     black_outside: bool = False
     zero_rows: bool = False         # rows the source does not cover are zero even with clamp (see map_transform)
-    tables: np.ndarray | None = None   # float32, 4*(w+h) columns/rows terms of the sample coordinates
+    tables: np.ndarray | None = None   # float32, 6*(w+h): integer part and two fraction limbs of each axis's column and row terms;
+                                       # a separable cubic adds 4*(w+h) exact tap weights (see `weighted`)
     mix: float = 1.0
+    weighted: bool = False          # the cubic weights come from the table: the CPU's separable path builds them in float64
 
 
 def map_transform(p, src: Region, dst: Region):
@@ -214,16 +240,20 @@ def map_transform(p, src: Region, dst: Region):
     separable_cubic = filt == "cubic" and rotate % 360.0 == 0 and scale == 1.0 and plain
     w, h = dst.width, dst.height
     zeros_w, zeros_h = np.zeros(w, np.float32), np.zeros(h, np.float32)
-    zero_rows = False
+    zero_rows = weighted = False
     if separable_cubic:
         # The CPU builds these two vectors in float32; reproduce them with the same expressions.
         x = np.arange(w, dtype=np.float32) + dst.x + 0.5
         y = np.arange(h, dtype=np.float32) + dst.y + 0.5
         sx = x + np.float32(inverse[0, 2]) - 0.5 - src.x
         sy = y + np.float32(inverse[1, 2]) - 0.5 - src.y
-        sx_ci, sx_cf = _split(sx)
-        sy_ri, sy_rf = _split(sy)
-        tables = np.concatenate([sx_ci, sx_cf, zeros_h, zeros_h, zeros_w, zeros_w, sy_ri, sy_rf])
+        sx_ci, sx_c1, sx_c0 = _split(sx)
+        sy_ri, sy_r1, sy_r0 = _split(sy)
+        tables = np.concatenate([sx_ci, sx_c1, sx_c0, zeros_h, zeros_h, zeros_h,
+                                 zeros_w, zeros_w, zeros_w, sy_ri, sy_r1, sy_r0,
+                                 _separable_weights(sx, src.width, clamp).reshape(-1),
+                                 _separable_weights(sy, src.height, clamp).reshape(-1)])
+        weighted = True
         # `_resample_cubic_separable` handles a whole-pixel vertical map by cropping and zero-padding rows,
         # even with `clamp` on (the horizontal pass still clamps). The device reproduces that exactly.
         zero_rows = bool(sy.size and float(sy[0]).is_integer()
@@ -231,12 +261,11 @@ def map_transform(p, src: Region, dst: Region):
     else:
         gx = (np.arange(w, dtype=np.float32) + dst.x + 0.5).astype(np.float64)
         gy = (np.arange(h, dtype=np.float64) + dst.y + 0.5)
-        sx_ci, sx_cf = _split(inverse[0, 0] * gx)
-        sx_ri, sx_rf = _split(inverse[0, 1] * gy + inverse[0, 2] - 0.5 - src.x)
-        sy_ci, sy_cf = _split(inverse[1, 0] * gx)
-        sy_ri, sy_rf = _split(inverse[1, 1] * gy + inverse[1, 2] - 0.5 - src.y)
-        tables = np.concatenate([sx_ci, sx_cf, sx_ri, sx_rf, sy_ci, sy_cf, sy_ri, sy_rf])
-    return TransformPlan("sample", (0, 0), _FILTERS[filt], clamp, black, zero_rows, np.ascontiguousarray(tables, np.float32), mix)
+        columns_x, rows_x = _split(inverse[0, 0] * gx), _split(inverse[0, 1] * gy + inverse[0, 2] - 0.5 - src.x)
+        columns_y, rows_y = _split(inverse[1, 0] * gx), _split(inverse[1, 1] * gy + inverse[1, 2] - 0.5 - src.y)
+        tables = np.concatenate([*columns_x, *rows_x, *columns_y, *rows_y])
+    return TransformPlan("sample", (0, 0), _FILTERS[filt], clamp, black, zero_rows,
+                         np.ascontiguousarray(tables, np.float32), mix, weighted)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -455,14 +484,50 @@ fn tap(ix: i32, iy: i32, clamped: bool) -> vec4<f32> {
     if (ix < 0 || iy < 0 || ix >= sw || iy >= sh) { return vec4<f32>(0.0); }
     return src[u32(iy) * u32(sw) + u32(ix)];
 }
+// The CPU rounds every product on its own before adding it. A GPU compiler may fuse a multiply with the add that
+// follows it (one rounding instead of two), which shows next to an extreme HDR value. Passing each product through
+// an AND with an all-ones mask taken from the parameters (r1.w = -1, opaque to the compiler) keeps the two roundings.
+fn rounded(x: vec4<f32>) -> vec4<f32> {
+    return bitcast<vec4<f32>>(bitcast<vec4<u32>>(x) & vec4<u32>(bitcast<u32>(p.r1.w)));
+}
+fn rounded1(x: f32) -> f32 {
+    return bitcast<f32>(bitcast<u32>(x) & bitcast<u32>(p.r1.w));
+}
 fn cubic_w(t: f32) -> f32 {
+    // Every intermediate goes through `rounded1`: the weight is a difference of terms several times larger than
+    // itself, so a compiler that reorders or fuses the polynomial (the Radeon and software drivers do) moves it by
+    // up to 1e-6, which an extreme HDR neighbour turns into a visible error. The order below is the CPU's.
     let a = -0.5;
-    let at = abs(t); let at2 = at * at; let at3 = at2 * at;
-    if (at <= 1.0) { return (a + 2.0) * at3 - (a + 3.0) * at2 + 1.0; }
-    return a * at3 - 5.0 * a * at2 + 8.0 * a * at - 4.0 * a;
+    let at = abs(t);
+    let at2 = rounded1(at * at);
+    let at3 = rounded1(at2 * at);
+    if (at <= 1.0) {
+        let u = rounded1(rounded1((a + 2.0) * at3) - rounded1((a + 3.0) * at2));
+        return rounded1(u + 1.0);
+    }
+    let u = rounded1(rounded1(a * at3) - rounded1(5.0 * a * at2));
+    let v = rounded1(u + rounded1(8.0 * a * at));
+    return rounded1(v - 4.0 * a);
 }
 fn cubic_weights(f: f32) -> vec4<f32> {
     return vec4<f32>(cubic_w(f + 1.0), cubic_w(f), cubic_w(f - 1.0), cubic_w(f - 2.0));
+}
+// One source coordinate = column term + row term, each an exact integer part and a 48-bit fixed-point fraction.
+// Returns the integer part and the fraction rounded once to float32.
+struct Coord { x: i32, y: f32 };
+fn coord_int(base: u32, w: u32, h: u32, ix: u32, iy: u32) -> Coord {
+    let c_i = base + ix; let c_1 = base + w + ix; let c_0 = base + 2u * w + ix;
+    let r_i = base + 3u * w + iy; let r_1 = base + 3u * w + h + iy; let r_0 = base + 3u * w + 2u * h + iy;
+    var low = u32(tbl[c_0]) + u32(tbl[r_0]);
+    let carry_low = low >> 24u;
+    low = low & 0xFFFFFFu;
+    var high = u32(tbl[c_1]) + u32(tbl[r_1]) + carry_low;
+    let carry_high = high >> 24u;
+    high = high & 0xFFFFFFu;
+    var result: Coord;
+    result.x = i32(tbl[c_i] + tbl[r_i] + f32(carry_high));
+    result.y = f32(high) * 5.9604644775390625e-8 + f32(low) * 3.552713678800501e-15;
+    return result;
 }
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -476,16 +541,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     } else {
         let w = u32(p.out_r.z); let h = u32(p.out_r.w);
         let ix = gid.x; let iy = gid.y;
-        let o_sx_ci = 0u; let o_sx_cf = w; let o_sx_ri = 2u * w; let o_sx_rf = 2u * w + h;
-        let o_sy_ci = 2u * w + 2u * h; let o_sy_cf = 3u * w + 2u * h; let o_sy_ri = 4u * w + 2u * h; let o_sy_rf = 4u * w + 3u * h;
-        let cfx = tbl[o_sx_cf + ix] + tbl[o_sx_rf + iy];
-        let carx = select(0.0, 1.0, cfx >= 1.0);
-        var xi = i32(tbl[o_sx_ci + ix] + tbl[o_sx_ri + iy] + carx);
-        var xf = cfx - carx;
-        let cfy = tbl[o_sy_cf + ix] + tbl[o_sy_rf + iy];
-        let cary = select(0.0, 1.0, cfy >= 1.0);
-        var yi = i32(tbl[o_sy_ci + ix] + tbl[o_sy_ri + iy] + cary);
-        var yf = cfy - cary;
+        // tbl: per axis (x, then y) the column terms (w entries each: integer part, high limb, low limb), then the
+        // row terms (h entries each). A coordinate is column + row; its fraction is summed as integers.
+        let ax_len = 3u * (w + h);
+        let sx_i = coord_int(0u, w, h, ix, iy);
+        let sy_i = coord_int(ax_len, w, h, ix, iy);
+        var xi = sx_i.x; var xf = sx_i.y;
+        var yi = sy_i.x; var yf = sy_i.y;
         let sw = p.r0.z; let sh = p.r0.w;
         let clamped = (p.i0.w & 1) != 0;
         let black = (p.i0.w & 2) != 0;
@@ -508,10 +570,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             f = tap(nx, ny, clamped);
         } else if (filt == 1) {
             let wx0 = 1.0 - xf; let wy0 = 1.0 - yf;
-            f = tap(xi, yi, clamped) * wx0 * wy0 + tap(xi + 1, yi, clamped) * xf * wy0
-              + tap(xi, yi + 1, clamped) * wx0 * yf + tap(xi + 1, yi + 1, clamped) * xf * yf;
+            f = rounded(tap(xi, yi, clamped) * wx0 * wy0) + rounded(tap(xi + 1, yi, clamped) * xf * wy0)
+              + rounded(tap(xi, yi + 1, clamped) * wx0 * yf) + rounded(tap(xi + 1, yi + 1, clamped) * xf * yf);
         } else {
-            let wx = cubic_weights(xf); let wy = cubic_weights(yf);
+            var wx = cubic_weights(xf); var wy = cubic_weights(yf);
+            if ((p.i0.w & 8) != 0) {
+                let wb = 6u * (w + h);
+                wx = vec4<f32>(tbl[wb + 4u * ix], tbl[wb + 4u * ix + 1u], tbl[wb + 4u * ix + 2u], tbl[wb + 4u * ix + 3u]);
+                let wr = wb + 4u * w + 4u * iy;
+                wy = vec4<f32>(tbl[wr], tbl[wr + 1u], tbl[wr + 2u], tbl[wr + 3u]);
+            }
             var total = vec4<f32>(0.0);
             for (var dy = 0; dy < 4; dy = dy + 1) {
                 let wyv = wy[dy];
@@ -519,9 +587,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     var row = vec4<f32>(0.0);
                     for (var dx = 0; dx < 4; dx = dx + 1) {
                         let wxv = wx[dx];
-                        if (wxv != 0.0) { row = row + tap(xi - 1 + dx, yi - 1 + dy, clamped) * wxv; }
+                        if (wxv != 0.0) { row = row + rounded(tap(xi - 1 + dx, yi - 1 + dy, clamped) * wxv); }
                     }
-                    total = total + row * wyv;
+                    total = total + rounded(row * wyv);
                 }
             }
             f = total;
@@ -1131,10 +1199,10 @@ class GPU2D:
             plan = node.plan
             mbuf, mbytes, mrect, has_mask = mask_info(ins[1] if len(ins) > 1 else None)
             blend = 1 if (has_mask or plan.mix != 1.0) else 0
-            flags_word = (1 if plan.clamp else 0) | (2 if plan.black_outside else 0) | (4 if plan.zero_rows else 0)
+            flags_word = (1 if plan.clamp else 0) | (2 if plan.black_outside else 0) | (4 if plan.zero_rows else 0) | (8 if plan.weighted else 0)
             mode = 0 if plan.mode == "copy" else 1
             tbl, tbl_bytes = table if table is not None else (zero, 16)
-            slot = add_params(_params(_rect(dst), _rect(source.data), (plan.filter, plan.shift[0], plan.shift[1], 0), mrect,
+            slot = add_params(_params(_rect(dst), _rect(source.data), (plan.filter, plan.shift[0], plan.shift[1], -1), mrect,
                                       (has_mask, blend, mode, flags_word), (0.0, 0.0, 0.0, 0.0), (0.0, 0.0, 0.0, plan.mix)))
             passes.append((self._pipeline("transform"), [(0, source.buffer, source.nbytes), (1, mbuf, mbytes),
                                                         (2, out.buffer, out.nbytes), (4, tbl, tbl_bytes)], slot, groups, 3))
