@@ -625,8 +625,9 @@ class AnimationThroughTileExecutorTests(unittest.TestCase):
         d = Dispatcher()
         d.execute({"op": "create", "type": "Checker", "id": "plate",
                    "params": {"width": 288, "height": 192, "size": 24}})
+        # A box blur: the contrast check below was written for it (a new Blur is gaussian, as Nuke's is).
         d.execute({"op": "create", "type": "Blur", "id": "blur",
-                   "params": {"radius": 0.0, "mix": 1.0}})
+                   "params": {"radius": 0.0, "mix": 1.0, "kernel_filter": "box"}})
         d.execute({"op": "connect", "id": "blur", "input": "image", "source": "plate"})
         d.execute({"op": "create", "type": "Grade", "id": "grade",
                    "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0}})

@@ -1456,7 +1456,10 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "`filter` is already Transform's pixel-filter choice in the shared CHOICES; the blur's is box, triangle, quadratic or gaussian"},
+    {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["quality"], "nuke": ["quality"], "kind": "same"}
    ]
   },
   "Sharpen": {
@@ -1473,7 +1476,12 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "`filter` is already Transform's pixel-filter choice in the shared CHOICES; the blur's is box, triangle, quadratic or gaussian"},
+    {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["quality"], "nuke": ["quailty"], "kind": "renamed", "reason": "the guide spells this knob `quailty`"},
+    {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
+    {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"}
    ]
   },
   "Erode (filter)": {
@@ -1542,7 +1550,13 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "`filter` is already Transform's pixel-filter choice in the shared CHOICES; the blur's is box, triangle, quadratic or gaussian"},
+    {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["quality"], "nuke": ["quailty"], "kind": "renamed", "reason": "the guide spells this knob `quailty`"},
+    {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
+    {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"},
+    {"nodebased": ["amount"], "nuke": ["amount"], "kind": "same"}
    ]
   },
   "DropShadow": {

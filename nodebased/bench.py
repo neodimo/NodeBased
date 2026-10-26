@@ -61,8 +61,8 @@ def build_graph(width: int, height: int) -> dict:
         "plate": node("plate", "Checker", {}, width=width, height=height, size=64),
         "wash": node("wash", "Constant", {}, width=width, height=height,
                      red=0.2, green=0.05, blue=0.4, alpha=0.5),
-        "grade": node("grade", "Grade", {"image": "plate"}, exposure=0.75, multiply=1.1),
-        "blur": node("blur", "Blur", {"image": "grade"}, radius=12.0),
+        "grade": node("grade", "Grade", {"image": "plate"}, exposure=0.75, multiply=1.1, black_clamp=0),   # the comp the numbers began with: no clamp, a box blur
+        "blur": node("blur", "Blur", {"image": "grade"}, radius=12.0, kernel_filter="box"),
         "xform": node("xform", "Transform", {"image": "blur"},
                       translate_x=17.0, translate_y=-9.0, rotate=6.0, scale=1.05,
                       center_x=width / 2, center_y=height / 2, filter="bilinear"),

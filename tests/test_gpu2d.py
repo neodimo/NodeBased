@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from nodebased import gpu2d, gradeknobs
+from nodebased import blurknobs, gpu2d, gradeknobs
 from nodebased.cancellation import Cancelled
 from nodebased.core import SPECS
 from nodebased.imaging import Evaluator
@@ -31,6 +31,8 @@ OLD_GRADE = gradeknobs.OLD          # an older document's Grade: no clamp, an al
 
 def params(kind, **over):
     p = dict(SPECS[kind]["params"])
+    if kind == "Blur":
+        p.update(blurknobs.OLD["Blur"])         # the device has the box blur; a new Blur is gaussian and stays on the CPU (below)
     p.update(over)
     return p
 
@@ -132,6 +134,18 @@ class MappingTests(unittest.TestCase):
             with self.subTest(extra=extra), self.assertRaises(gpu2d.Unsupported):
                 backend.stage("Grade", params("Grade", **extra), [source, matte])
         backend.stage("Grade", params("Grade", fringe=1), [source])         # no mask wired: nothing to take the edge of
+
+    def test_a_blur_that_is_not_the_plain_box_stays_on_the_cpu(self):
+        self.assertEqual(SPECS["Blur"]["params"]["kernel_filter"], "gaussian")          # a new Blur follows Nuke
+        with self.assertRaises(gpu2d.Unsupported):
+            gpu2d.map_blur(dict(SPECS["Blur"]["params"], radius=2))
+        for over in ({"kernel_filter": "triangle"}, {"kernel_filter": "quadratic"}, {"kernel_filter": "gaussian"}, {"crop": 0}):
+            with self.subTest(over=over), self.assertRaises(gpu2d.Unsupported):
+                gpu2d.map_blur(params("Blur", radius=2, **over))
+        with self.assertRaises(gpu2d.Unsupported):                       # wider than its quality limit: scaled down on the CPU
+            gpu2d.map_blur(params("Blur", radius=3, quality=2.0))
+        self.assertEqual(gpu2d.map_blur(params("Blur", radius=3, quality=3.0))["radius"], 3)
+        self.assertEqual(gpu2d.map_blur(params("Blur", radius=3, kernel_filter="box"))["radius"], 3)
 
     def test_a_merge_with_a_step_e_knob_stays_on_the_cpu(self):
         for over in ({"sRGB": 1}, {"screen_alpha": 1}, {"Achannels": "rgb"}, {"Bchannels": "red"}, {"merge_output": "alpha"},

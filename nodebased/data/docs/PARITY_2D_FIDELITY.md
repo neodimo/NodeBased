@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 78.0 / 100** (167 nodes scored, rank-weighted; 80.3 counting only the nodes NodeBased has).
+**Overall fidelity: 80.1 / 100** (167 nodes scored, rank-weighted; 82.5 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -30,7 +30,7 @@ Per node, five components, each a fraction from 0 to 1:
 | Time | 74.3 | 63.1 | 13 |
 | Channel | 95.5 | 95.8 | 5 |
 | Color | 90.6 | 72.9 | 34 |
-| Filter | 62.1 | 56.5 | 32 |
+| Filter | 81.1 | 60.5 | 32 |
 | Keyer | 81.5 | 58.1 | 11 |
 | Merge | 94.1 | 88.1 | 12 |
 | Transform | 77.1 | 57.1 | 20 |
@@ -147,12 +147,12 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Blur | `Blur` | supported | 58.1 | 25 (1/4) | 86 | 100 | 100 | - | no fixture |
-| 2 | Sharpen | `Sharpen` | supported | 58.6 | 29 (2/7) | 75 | 100 | 100 | - | no fixture |
+| 1 | Blur | `Blur` | supported | 98.7 | 100 (4/4) | 90 | 100 | 100 | - | no fixture |
+| 2 | Sharpen | `Sharpen` | supported | 97.9 | 100 (7/7) | 85 | 100 | 100 | - | no fixture |
 | 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | - | no fixture |
 | 4 | Median | `Median` | supported | 71.4 | 50 (1/2) | 86 | 100 | 100 | - | no fixture |
 | 5 | Glow | `Glow` | supported | 63.4 | 36 (4/11) | 80 | 100 | 100 | - | no fixture |
-| 6 | Soften | `Soften` | supported | 50.5 | 14 (1/7) | 71 | 100 | 100 | - | no fixture |
+| 6 | Soften | `Soften` | supported | 97.9 | 100 (7/7) | 85 | 100 | 100 | - | no fixture |
 | 7 | DropShadow | `DropShadow` | supported | 48.7 | 56 (5/9) | 20 | 50 | - | - | no fixture |
 | 8 | Defocus | `Defocus` | supported | 66.3 | 40 (2/5) | 88 | 100 | 100 | - | no fixture |
 | 8 | ZDefocus | `ZDefocus` | supported | 56.5 | 27 (8/36) | 64 | 100 | 100 | - | no fixture |
@@ -280,35 +280,35 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
 | 1 | Roto (Draw #1) | `Roto` | 43.88 | 56.1 | 65 secondary knobs missing |
-| 2 | Blur (Filter #1) | `Blur` | 41.90 | 58.1 | primary knobs missing: `filter`, `quality`, `crop` |
-| 3 | Read (Image #1) | `Read` | 36.70 | 63.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `proxy`, `proxy_format`, `reload`; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
-| 4 | TimeOffset (Time #1) | `TimeOffset` | 33.33 | 66.7 | primary knobs missing: `enable_path_mask`, `mask_patterns`, `inject_mask` |
-| 5 | Write (Image #2) | `Write` | 24.42 | 51.2 | primary knobs missing: `proxy`, `render_order`, `Render`, `reading`, `on_error`, `reload`, `read_all_lines`; 37 secondary knobs missing |
-| 6 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
-| 7 | Sharpen (Filter #2) | `Sharpen` | 20.71 | 58.6 | primary knobs missing: `minimum`, `maximum`, `filter`, `quailty`, `crop` |
-| 8 | Tracker (Transform #3) | `Tracker` | 18.47 | 44.6 | primary knobs missing: `add_track`, `del_tracks`, `select_all`, `average_tracks`; 45 secondary knobs missing |
-| 9 | Text (Draw #2) | `Text` | 18.04 | 63.9 | primary knobs missing: `yjustify`, `index`, `global_font_scale`, `font_width`, `font_height`, `kerning`, `tracking`, `baseline_shift` and 1 more; 20 secondary knobs missing |
-| 10 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
-| 11 | Profile (Image #7) | `Profile` | 14.29 | 0.0 | primary knobs missing: `frame_range`, `open_profile_panel`; node chrome missing: channels selector |
-| 12 | NoTimeBlur (Time #9) | - | 11.11 | 0.0 | no node (PARITY_2D.md Time #9) |
-| 13 | FrameHold (Time #2) | `FrameHold` | 9.09 | 81.8 | 3 secondary knobs missing: `enable_path_mask`, `mask_patterns`, `inject_mask` |
-| 14 | Root (Other #11) | - | 9.09 | 0.0 | no node: per-script project settings (PARITY_2D.md Other #11) |
-| 15 | Keylight (Keyer #5) | `ScreenKeyer` | 8.69 | 56.6 | primary knobs missing: `unPreMultiply`, `gangBiases`; 21 secondary knobs missing; sockets missing: `bg` |
-| 16 | RotoPaint (Draw #7) | `RotoPaint` | 8.41 | 41.2 | primary knobs missing: `premultiply`; 65 secondary knobs missing; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 17 | HueKeyer (Keyer #4) | `HueKeyer` | 8.33 | 66.7 | primary knobs missing: `output`, `output#2` |
-| 18 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 19 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 20 | CornerPin2D (Transform #6) | `CornerPin` | 8.27 | 50.4 | primary knobs missing: `enable1`, `enable2`, `enable3`, `enable4`, `copy_from_to`, `transform_matrix`, `clamp`, `black_outside` and 4 more; 2 secondary knobs missing: `set_to_input`, `copy_from_to#2` |
-| 21 | Soften (Filter #6) | `Soften` | 8.25 | 50.5 | primary knobs missing: `minimum`, `maximum`, `amount`, `filter`, `quailty`, `crop` |
-| 22 | Precomp (Other #10) | `Precomp` | 8.12 | 18.8 | primary knobs missing: `reload_script`, `open`, `render`, `reading`, `on_error`, `reload_write`; 1 secondary knob missing: `use_output` |
-| 23 | AddTimeCode (Metadata #4) | `AddTimeCode` | 8.06 | 67.8 | primary knobs missing: `metafps`, `useFrame` |
-| 24 | CurveTool (Image #6) | `CurveTool` | 7.78 | 53.3 | primary knobs missing: `operation`, `go`; 3 secondary knobs missing: `color`, `ccrange`, `avgframes`; node chrome missing: channels selector |
-| 25 | AddMix (Merge #7) | `AddMix` | 7.62 | 46.7 | primary knobs missing: `A`, `B`, `output`, `premultiplied`, `nonlinear`, `lut` |
-| 26 | AppendClip (Time #6) | `AppendClip` | 7.41 | 55.6 | primary knobs missing: `fadeIn`, `fadeOut`, `lastFrame`, `meta_from_first` |
-| 27 | DropShadow (Filter #7) | `DropShadow` | 7.33 | 48.7 | primary knobs missing: `enable_dropshadow_effect`, `inherit_input_color`, `size`, `operation`; sockets missing: `bg` |
-| 28 | Glow (Filter #5) | `Glow` | 7.32 | 63.4 | primary knobs missing: `saturation`, `W`, `nonlinear`, `effect_only`, `filter`, `quality`, `crop` |
-| 29 | BurnIn (Other #7) | `BurnIn` | 7.31 | 48.9 | primary knobs missing: `burnIn_opacity`, `burnIn_xpadding`, `burnIn_yPadding`, `fontstyle`, `burnIn_textScale`, `burnIn_topMiddle`, `burnIn_bottomMiddle`; 3 secondary knobs missing: `burnIn_backgroundColor`, `burnIn_backgroundXBorder`, `burnIn_backgroundYBorder` |
-| 30 | Median (Filter #4) | `Median` | 7.14 | 71.4 | primary knobs missing: `ignore_top_line` |
+| 2 | Read (Image #1) | `Read` | 36.70 | 63.3 | primary knobs missing: `localizationPolicy`, `updateLocalization`, `proxy`, `proxy_format`, `reload`; 12 secondary knobs missing: `key1`, `value1`, `key2`, `value2`, `key3` ... |
+| 3 | TimeOffset (Time #1) | `TimeOffset` | 33.33 | 66.7 | primary knobs missing: `enable_path_mask`, `mask_patterns`, `inject_mask` |
+| 4 | Write (Image #2) | `Write` | 24.42 | 51.2 | primary knobs missing: `proxy`, `render_order`, `Render`, `reading`, `on_error`, `reload`, `read_all_lines`; 37 secondary knobs missing |
+| 5 | Viewer (Image #3) | `Viewer` | 23.08 | 30.8 | primary knobs missing: `frame_range`, `frame_range_lock`, `frame_increment`, `rgb_only`, `ignore_pixel_aspect`, `zoom_lock`, `show_overscan`, `full_frame_processing` and 10 more; node chrome missing: channels selector |
+| 6 | Tracker (Transform #3) | `Tracker` | 18.47 | 44.6 | primary knobs missing: `add_track`, `del_tracks`, `select_all`, `average_tracks`; 45 secondary knobs missing |
+| 7 | Text (Draw #2) | `Text` | 18.04 | 63.9 | primary knobs missing: `yjustify`, `index`, `global_font_scale`, `font_width`, `font_height`, `kerning`, `tracking`, `baseline_shift` and 1 more; 20 secondary knobs missing |
+| 8 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
+| 9 | Profile (Image #7) | `Profile` | 14.29 | 0.0 | primary knobs missing: `frame_range`, `open_profile_panel`; node chrome missing: channels selector |
+| 10 | NoTimeBlur (Time #9) | - | 11.11 | 0.0 | no node (PARITY_2D.md Time #9) |
+| 11 | FrameHold (Time #2) | `FrameHold` | 9.09 | 81.8 | 3 secondary knobs missing: `enable_path_mask`, `mask_patterns`, `inject_mask` |
+| 12 | Root (Other #11) | - | 9.09 | 0.0 | no node: per-script project settings (PARITY_2D.md Other #11) |
+| 13 | Keylight (Keyer #5) | `ScreenKeyer` | 8.69 | 56.6 | primary knobs missing: `unPreMultiply`, `gangBiases`; 21 secondary knobs missing; sockets missing: `bg` |
+| 14 | RotoPaint (Draw #7) | `RotoPaint` | 8.41 | 41.2 | primary knobs missing: `premultiply`; 65 secondary knobs missing; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 15 | HueKeyer (Keyer #4) | `HueKeyer` | 8.33 | 66.7 | primary knobs missing: `output`, `output#2` |
+| 16 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 17 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 18 | CornerPin2D (Transform #6) | `CornerPin` | 8.27 | 50.4 | primary knobs missing: `enable1`, `enable2`, `enable3`, `enable4`, `copy_from_to`, `transform_matrix`, `clamp`, `black_outside` and 4 more; 2 secondary knobs missing: `set_to_input`, `copy_from_to#2` |
+| 19 | Precomp (Other #10) | `Precomp` | 8.12 | 18.8 | primary knobs missing: `reload_script`, `open`, `render`, `reading`, `on_error`, `reload_write`; 1 secondary knob missing: `use_output` |
+| 20 | AddTimeCode (Metadata #4) | `AddTimeCode` | 8.06 | 67.8 | primary knobs missing: `metafps`, `useFrame` |
+| 21 | CurveTool (Image #6) | `CurveTool` | 7.78 | 53.3 | primary knobs missing: `operation`, `go`; 3 secondary knobs missing: `color`, `ccrange`, `avgframes`; node chrome missing: channels selector |
+| 22 | AddMix (Merge #7) | `AddMix` | 7.62 | 46.7 | primary knobs missing: `A`, `B`, `output`, `premultiplied`, `nonlinear`, `lut` |
+| 23 | AppendClip (Time #6) | `AppendClip` | 7.41 | 55.6 | primary knobs missing: `fadeIn`, `fadeOut`, `lastFrame`, `meta_from_first` |
+| 24 | DropShadow (Filter #7) | `DropShadow` | 7.33 | 48.7 | primary knobs missing: `enable_dropshadow_effect`, `inherit_input_color`, `size`, `operation`; sockets missing: `bg` |
+| 25 | Glow (Filter #5) | `Glow` | 7.32 | 63.4 | primary knobs missing: `saturation`, `W`, `nonlinear`, `effect_only`, `filter`, `quality`, `crop` |
+| 26 | BurnIn (Other #7) | `BurnIn` | 7.31 | 48.9 | primary knobs missing: `burnIn_opacity`, `burnIn_xpadding`, `burnIn_yPadding`, `fontstyle`, `burnIn_textScale`, `burnIn_topMiddle`, `burnIn_bottomMiddle`; 3 secondary knobs missing: `burnIn_backgroundColor`, `burnIn_backgroundXBorder`, `burnIn_backgroundYBorder` |
+| 27 | Median (Filter #4) | `Median` | 7.14 | 71.4 | primary knobs missing: `ignore_top_line` |
+| 28 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 29 | Shuffle (Channel #1) | `Shuffle` | 6.67 | 93.3 | 1 secondary knob missing: `out2` |
+| 30 | Group (Other #5) | `Group` | 6.67 | 0.0 | primary knobs missing: `lock_connections`; sockets missing: `unnamed` |
 
 ## Formula cases
 

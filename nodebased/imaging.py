@@ -4523,6 +4523,10 @@ class Evaluator:
             return Evaluator._transformed_window(source.data, p)
         if kind == "CornerPin":
             return Evaluator._cornerpin_window(source.data, p)
+        if kind in ("Blur", "Sharpen", "Soften") and not p.get("crop", 1):
+            # "Crop to format" off: the window grows by the filter's reach, the new edge being transparent black.
+            from . import blurknobs
+            return blurknobs.grown_window(kind, p, source.data)
         # Grade, ColorCorrect and Blur are all in-place with respect to geometry. Blur notably does
         # NOT grow its box: growing it would change the box filter's edge handling from "extend the
         # edge pixel" to "average in transparent black", which is a visible change to every
@@ -4708,7 +4712,7 @@ class Evaluator:
         if kind == "ColorCorrect":
             return Evaluator._color_correct(source.fit(out), p)
         if kind == "Blur":
-            return Evaluator._blur(source.fit(out), p)
+            return Evaluator._blur(source.fit(out), p, (out.x, out.y))
         if kind == "Invert":
             return Evaluator._invert(source.fit(out), p)
         if kind == "Clamp":
@@ -4747,7 +4751,7 @@ class Evaluator:
         if kind == "Median":
             return Evaluator._median(source.fit(out), p)
         if kind == "Sharpen":
-            return Evaluator._sharpen(source.fit(out), p)
+            return Evaluator._sharpen(source.fit(out), p, (out.x, out.y))
         if kind in ("Matrix", "Laplacian"):
             return Evaluator._matrix(source.fit(out), p, laplacian=kind == "Laplacian")
         if kind == "EdgeDetect": return Evaluator._edge_detect(source.fit(out), p)
@@ -4757,7 +4761,7 @@ class Evaluator:
         if kind == "Glow":
             return Evaluator._glow(source.fit(out), p)
         if kind == "Soften":
-            return Evaluator._soften(source.fit(out), p)
+            return Evaluator._soften(source.fit(out), p, (out.x, out.y))
         if kind == "Defocus":
             return Evaluator._defocus(source.fit(out), p)
         if kind == "Bilateral":
@@ -4919,7 +4923,7 @@ class Evaluator:
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Blur":
-            filtered = Evaluator._blur(inputs[0], p)
+            filtered = Evaluator._blur(inputs[0], p, origin)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("Transform", "Tracker", "Stabilize"):
@@ -5001,7 +5005,7 @@ class Evaluator:
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Sharpen":
-            filtered = Evaluator._sharpen(inputs[0], p)
+            filtered = Evaluator._sharpen(inputs[0], p, origin)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("Matrix", "Laplacian"):
@@ -5035,7 +5039,7 @@ class Evaluator:
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Soften":
-            filtered = Evaluator._soften(inputs[0], p)
+            filtered = Evaluator._soften(inputs[0], p, origin)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Defocus":
@@ -6165,17 +6169,11 @@ class Evaluator:
         return hard.astype(np.float32)
 
     @staticmethod
-    def _sharpen(image, p):
-        # Unsharp mask: add back `amount` of the high-frequency detail a box blur removed.
-        # A flat image has no detail (blurred == image), so it is the identity at any amount.
-        amount = p.get("sharpen_amount", 0.5)
-        size = p.get("sharpen_size", 1.0)
-        blurred = Evaluator._blur(image, {"radius": size})
-        detail = image - blurred
-        out = image.copy()
-        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
-            out[..., c] = image[..., c] + detail[..., c] * amount
-        return out
+    def _sharpen(image, p, origin=(0, 0)):
+        # Unsharp mask: add back `amount` of the high-frequency detail a blur removed (nodebased/blurknobs.py: filter, quality, value
+        # range). A flat image has no detail (blurred == image), so it is the identity at any amount.
+        from . import blurknobs
+        return blurknobs.sharpen(image, p, Evaluator._CHANNEL_SETS, origin)
 
     @staticmethod
     def _glow(image, p):
@@ -6314,22 +6312,13 @@ class Evaluator:
         return out.astype(np.float32)
 
     @staticmethod
-    def _soften(image, p):
-        # Nuke's Soften: a Gaussian-leaning blur. `soften_size` is the kernel's pixel reach:
-        # sigma = size / 3, truncated at ceil(size) pixels (three sigma), which is exactly the
-        # padded support `tiers._support_rule` declares, so tiles have every neighbour they read.
-        # Below the same 0.5 cut-off the other padded filters use, it is the identity.
-        size = abs(float(p.get("soften_size", 4.0)))
-        if size < 0.5:
-            return image.copy()
-        radius = int(math.ceil(size))
-        sigma = size / 3.0
-        soft = Evaluator._gaussian_axis(Evaluator._gaussian_axis(image, radius, sigma, axis=1),
-                                        radius, sigma, axis=0)
-        out = image.copy()
-        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
-            out[..., c] = soft[..., c]
-        return out
+    def _soften(image, p, origin=(0, 0)):
+        # Nuke's Soften: a Gaussian-leaning blur by default. `soften_size` is the kernel's pixel reach: sigma = size / 3, truncated at
+        # ceil(size) pixels (three sigma), which is exactly the padded support `tiers._support_rule` declares, so tiles have every
+        # neighbour they read. Below the same 0.5 cut-off the other padded filters use, it is the identity. The filter shape, quality,
+        # amount and value range are in nodebased/blurknobs.py.
+        from . import blurknobs
+        return blurknobs.soften(image, p, Evaluator._CHANNEL_SETS, origin)
 
     @staticmethod
     def _disc_radii(p):
@@ -7824,11 +7813,11 @@ class Evaluator:
             raise ValueError(f"Expression node: {error}") from None
 
     @staticmethod
-    def _blur(image, p):
-        radius = p["radius"]
-        if radius < 0.5:
-            return image.copy()
-        return Evaluator._box_blur_axis(Evaluator._box_blur_axis(image, radius, axis=1), radius, axis=0)
+    def _blur(image, p, origin=(0, 0)):
+        # A box blur unless the node says otherwise (filter, quality: nodebased/blurknobs.py). `origin` is the array's top-left
+        # canvas pixel, which only the quality scaling reads.
+        from . import blurknobs
+        return blurknobs.blur(image, p, origin)
 
     @staticmethod
     def _premult_array(kind, p, pixels, by=None):

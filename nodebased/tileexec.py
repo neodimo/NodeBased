@@ -1361,7 +1361,7 @@ class TileExecutor:
             elif kind == "ColorCorrect":
                 filtered = imaging.Evaluator._color_correct(image, params)
             elif kind == "Blur":
-                filtered = imaging.Evaluator._blur(image, params)
+                filtered = imaging.Evaluator._blur(image, params, (image_artifact.region.x, image_artifact.region.y))
             elif kind == "Invert":
                 filtered = imaging.Evaluator._invert(image, params)
             elif kind == "Clamp":
@@ -1401,7 +1401,7 @@ class TileExecutor:
             elif kind == "Median":
                 filtered = imaging.Evaluator._median(image, params)
             elif kind == "Sharpen":
-                filtered = imaging.Evaluator._sharpen(image, params)
+                filtered = imaging.Evaluator._sharpen(image, params, (image_artifact.region.x, image_artifact.region.y))
             elif kind in ("Matrix", "Laplacian"):
                 filtered = imaging.Evaluator._matrix(image, params, laplacian=kind == "Laplacian")
             elif kind == "EdgeDetect": filtered = imaging.Evaluator._edge_detect(image, params)
@@ -1411,7 +1411,7 @@ class TileExecutor:
             elif kind == "Glow":
                 filtered = imaging.Evaluator._glow(image, params)
             elif kind == "Soften":
-                filtered = imaging.Evaluator._soften(image, params)
+                filtered = imaging.Evaluator._soften(image, params, (image_artifact.region.x, image_artifact.region.y))
             elif kind == "Defocus":
                 filtered = imaging.Evaluator._defocus(image, params)
             elif kind == "Bilateral":

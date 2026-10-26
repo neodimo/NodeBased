@@ -96,7 +96,7 @@ Today's 2D node set is the 164 kinds above (the node catalogue's Image through O
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Grade | supported | `Grade` (exposure/multiply/offset), plus mask + mix. |
+| 1 | Grade | supported | `Grade`: `exposure`, `multiply` and `offset` keep their meaning, and Nuke's `blackpoint`, `whitepoint`, `black` (lift), `white` (gain), `gamma`, `reverse`, `black_clamp` and `white_clamp` are added (fidelity step E): slope `multiply * 2^exposure * (white - black) / (whitepoint - blackpoint)`, shift `offset + black - slope * blackpoint`, then gamma, then the clamps; `reverse` runs it backwards. `exposure` is a stop count, so it multiplies the slope by `2^exposure`; `offset` is Nuke's `add`, scaled by alpha only on an older document's node (`offset_by_alpha`). A new node clamps black as Nuke does; an older one never did. Plus mask + mix and the shared mask strip with `fringe`. |
 | 2 | ColorCorrect | supported | `ColorCorrect` (lift/gamma/gain/saturation), plus mask + mix. |
 | 3 | Invert | supported | `Invert`, plus mask + mix. A `channels` knob (rgb/rgba/alpha) selects what gets inverted; `rgb` (the default) leaves alpha untouched, matching Nuke. Fidelity step D: `clamp` keeps the inverted values between 0 and 1, cutting superblacks and superwhites. |
 | 4 | Saturation | supported | `Saturation`, plus mask + mix. Same luma-weighted math as `ColorCorrect.saturation`, split onto its own scrub-friendly node with no channels knob (inherently RGB), matching Nuke. |
@@ -125,12 +125,12 @@ Today's 2D node set is the 164 kinds above (the node catalogue's Image through O
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Blur | supported | `Blur`, separable box filter, plus mask + mix. |
-| 2 | Sharpen | supported | `Sharpen`, unsharp mask (`amount`/`size` knobs, Nuke's own names), plus mask + mix and a `channels` knob. |
+| 1 | Blur | supported | `Blur`: separable, with Nuke's `filter` (`kernel_filter`: box, triangle, quadratic or gaussian), `quality` (a wider blur is made on a scaled-down picture) and `crop` (off lets the data window grow by the filter's reach); a new node is gaussian as Nuke's is, an older one a box. Plus mask + mix and the shared mask strip with `fringe`. |
+| 2 | Sharpen | supported | `Sharpen`, unsharp mask (`amount`/`size` knobs, Nuke's own names) with Nuke's `filter`, `quality`, `crop`, `minimum` and `maximum` (the pixel values the effect works on; our reading, the guide does not describe them), plus mask + mix and a `channels` knob. |
 | 3 | Erode (filter) | supported | `ErodeFilter` adds size and box/triangle/quadratic/Gaussian filtering beside the hard fast `Erode`/`Dilate`, with mask + mix and a padded rule, matching Nuke's four `filter` choices. A fractional size blends the hard erosions at the surrounding integer radii by how far it sits between them; box ramps linearly, triangle and quadratic are progressively smoother polynomial ease curves (Nuke's documented box-to-gaussian smoothness ordering), and gaussian additionally softens the blended result with a post-erode blur. Foundry does not publish the exact analytic response, so the falloff curve shapes are this repository's own, unverified against Nuke. |
 | 4 | Median | supported | `Median`, square despeckle window (`size`), plus mask + mix and a `channels` knob. |
 | 5 | Glow | supported | `Glow`, threshold + size + brightness + tint, added back over the input, plus mask + mix and a `channels` knob. |
-| 6 | Soften | supported | `Soften`, plus mask + mix and `channels`. `soften_size` is the kernel's pixel reach: a separable Gaussian with sigma = size / 3, truncated at `ceil(size)` pixels (three sigma) and renormalised so weights sum to exactly 1; below 0.5 it is the identity. Its padded region rule in `tiers.py` is Blur's (`ceil(size)` pixels of halo), so tiles are seamless, asserted against the full-frame evaluator. No per-axis size: `Blur` has none either. |
+| 6 | Soften | supported | `Soften`, plus mask + mix and `channels`, and Nuke's `filter`, `quality`, `crop`, `minimum`, `maximum` and `amount` (how far from the picture to the soft one). `soften_size` is the kernel's pixel reach: a separable Gaussian with sigma = size / 3, truncated at `ceil(size)` pixels (three sigma) and renormalised so weights sum to exactly 1; below 0.5 it is the identity. Its padded region rule in `tiers.py` is Blur's (`ceil(size)` pixels of halo), so tiles are seamless, asserted against the full-frame evaluator. No per-axis size: `Blur` has none either. |
 | 7 | DropShadow | supported | `DropShadow`, plus mask + mix. Knobs `angle` (degrees, counter-clockwise from +x with y up, so -45 points down and right), `distance`, `shadow_size`, `opacity` and the shadow `red`/`green`/`blue` (default black). `shadow_size` is Nuke's `size`, renamed because `size` is a global `LIMITS` key with a minimum of 1 and a different meaning on `Checker` and `Noise`. The input's alpha is moved by (`distance`, `angle`) rounded to whole pixels, blurred with the `Soften` kernel (sigma = `shadow_size` / 3, reach `ceil(shadow_size)`), scaled by `opacity`, tinted, and composited UNDER the input (`out = input + shadow * (1 - input alpha)` on premultiplied RGBA), so opaque input pixels are untouched, opacity 0 and a transparent input are the identity, and a semi-transparent input shows the shadow through it. Outside the frame counts as transparent (zero fill). Like `Blur` the output stays inside the input's data window, so a shadow that falls off it is clipped rather than growing the box. Padded region rule in `tiers.py`: `ceil(distance) + ceil(shadow_size)`, tiles asserted against the full-frame evaluator. Not covered: Nuke's shadow-only output and multi-shadow layering. |
 | 8 | Defocus / ZDefocus | supported | `Defocus` remains supported. `ZDefocus` reads `depth` from source Render3D/multichannel layers or a wired depth image; `focal_plane`, `depth_of_field`, `max_size` and `depth_math` (`depth` or `1/depth`) set its focus response. The viewer picker sets the focal plane. Depth-ordered disc, polygon (`blade_count`/`blade_rotation`) and wired-image bokeh kernels blur farther samples while protecting foreground edges. Named depth layers and wired depth images feed the tile kernel; source layer arrays survive the defocus and cache, including proxy tiers and ROI. Tests assert focus, far radius and blade directions. |
 | 9 | DirBlur | supported | `DirBlur`, plus mask + mix and `channels`; all three of Nuke's types landed, chosen by `blur_type` (`linear`, `radial`, `zoom`). Each output pixel averages bilinear samples along a path through it, weights summing to 1, so a single pixel keeps its energy. `linear`: a box of `length` pixels along `angle` (degrees, counter-clockwise from +x with y up, as in Nuke), whole-pixel taps with the two end taps weighted by coverage, so `length` 8 is exactly eight pixels and `length` 1 or less is the identity. `zoom`: samples on the ray through `center_x`/`center_y`, scale 1 ± `length` / 200 (`length` is a percentage). `radial`: samples on the circle about the centre over a sweep of `angle` degrees (`length` unused). The centre is in canvas pixels and defaults to the middle of the default 960x540 format. Only `linear` is on the tile path, with a padded region rule of `ceil(length / 2) + 1` pixels, asserted against the full-frame evaluator across several tiles; `zoom` and `radial` read from anywhere in the frame, so `TileExecutor.supports_tiled` sends a graph containing one to the full-frame evaluator, the precedent Transform and Mirror set. Not covered: Nuke's per-type extras (`fade`, `samples` control, motion-vector input). |
@@ -166,7 +166,7 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Merge | supported | `Merge` with mask + mix and all 30 of Nuke's documented operations (see below); the last eleven landed in step 3a. |
+| 1 | Merge | supported | `Merge` with mask + mix and all 30 of Nuke's documented operations, each to the guide's stated algorithm (see below); plus Nuke's video colorspace (`sRGB`), alpha masking (`screen_alpha`), `bbox` (`merge_bbox`: union, intersection, A, B), `metainput`, `rangeinput`, `Achannels`, `Bchannels`, `output` (`merge_output`) and `also_merge`, and the shared mask strip with `fringe`. |
 | 2 | Premult | supported | `Premult`. Fidelity step C: `channels` (rgb, rgba, alpha, one channel, or a set; layers by name on the whole-image path), `premult_by` (Nuke's `alpha`: any channel, `rgba.luminance` or a layer channel) and `invert`. |
 | 3 | Unpremult | supported | `Unpremult`. Fidelity step C: the same three knobs; a divisor that is not above zero leaves the pixel as it is. |
 | 4 | Switch | supported | `Switch` (two inputs; Nuke's goes to any number). `Switch` is not in `SUPPORTED_TILED_KINDS`, so a graph containing an enabled one runs on the full-frame evaluator. |
@@ -183,44 +183,40 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 
 ### Merge operations
 
-`MERGE_OPERATIONS` in `nodebased/core.py` now holds all 30 of Nuke's operations: `atop`,
+`MERGE_OPERATIONS` in `nodebased/core.py` holds all 30 of Nuke's operations: `atop`,
 `average`, `color-burn`, `color-dodge`, `conjoint-over`, `copy`, `difference`, `disjoint-over`,
 `divide`, `exclusion`, `from`, `geometric`, `hard-light`, `hypot`, `in`, `mask`, `matte`, `max`,
 `min`, `minus`, `multiply`, `out`, `over`, `overlay`, `plus`, `screen`, `soft-light`, `stencil`,
-`under`, `xor`. Verified against Foundry's documented algorithms
-(`learn.foundry.com/.../merge_operations.html`): the `_merge_op` formulas in `imaging.py` match
-Nuke's documented algorithms, so the operations are correctness-checked, not just present.
-`average`, `from` and `hypot` landed 2026-09-21 (group (a)); the remaining eleven landed in step 3a
-(2026-09-24). Tests: `tests/test_phase_a.py::MergeOperationTests` and
-`tests/test_2d_parity_group_3a_merge.py` (hand-computed pixels for every new operation, including
-the branch edges), the mix=0/mix=1/HDR/negative-input tests that iterate `CHOICES["operation"]`,
-and `tests/test_tileexec.py::MergeMaskTests::test_tiled_masked_merge_matches_the_reference_for_every_operation`
+`under`, `xor`. Since fidelity step E every operation except `matte` is the algorithm the Nuke 17
+reference guide states (`tools/nuke_fidelity_cases.py` holds the guide's formulas and
+`tools/audit_nuke_fidelity.py` runs all thirty against them on a fixture with negative and HDR values: 29 of 29 scored cases
+pass). `matte`, whose guide text (`screen(A,a,B,b) if A==a, ...`) cannot be implemented without guessing, keeps `A*a + B*(1-a)`.
+Tests: `tests/test_phase_a.py::MergeOperationTests`, `tests/test_2d_parity_group_3a_merge.py` (hand-computed pixels, including the
+branch edges), `tests/test_2d_fidelity_e_merge.py` (every operation against the guide), the mix=0/mix=1/HDR/negative-input tests
+that iterate `CHOICES["operation"]`, and `tests/test_tileexec.py::MergeMaskTests::test_tiled_masked_merge_matches_the_reference_for_every_operation`
 (tile path parity, which picks up new operations automatically).
 
-The eleven added in step 3a, with the formulas as implemented (A foreground, B background, `a` and
-`b` the alphas, all per channel including alpha, premultiplied inputs):
+The operations whose formula differs from the plain textbook one, as implemented (A foreground, B background, `a` and `b` the
+alphas, all per channel including alpha):
 
 | Operation | Formula |
 |---|---|
-| `matte` | `A*a + B*(1-a)` |
-| `disjoint-over` | `A + B` where `a + b < 1`, else `A + B*(1-a)/b` |
-| `conjoint-over` | `A` where `a > b`, else `A + B*(1 - a/b)` |
-| `copy` | `A` |
-| `exclusion` | `A + B - 2AB` |
-| `geometric` | `2AB/(A+B)` |
-| `overlay` | `2AB` where `B < 0.5`, else `1 - 2(1-A)(1-B)` (multiply and screen, rescaled so the halves meet at B = 0.5) |
-| `hard-light` | `overlay` with A and B swapped |
-| `soft-light` | `B(2A + B(1-AB))` where `AB < 1`, else `2AB` (Foundry's documented test, on the raw product) |
-| `color-dodge` | `B/(1-A)` |
-| `color-burn` | `1 - (1-B)/A` |
+| `matte` | `A*a + B*(1-a)` (not scored) |
+| `disjoint-over` | `A + B` where `a + b < 1`, else `A + B*(1-a)/b` (`A` alone where `b` is 0) |
+| `conjoint-over` | `A` where `a > b`, else `A + B*(1 - a/b)` (`A` alone where `b` is 0) |
+| `multiply` | `A*B`, but `A` where both are negative |
+| `divide` | `A/B` where `B > 0`, else `A` |
+| `screen` | `A + B - A*B` where `0 < A < 1` and `0 < B < 1`, else `max(A, B)` |
+| `geometric` | `2AB/(A+B)` where `A` and `B` are both above 0, else 0 |
+| `overlay` | `2AB` where `2B < 1`, else `1 - 2(1-A)(1-B)` |
+| `hard-light` | `2AB` where `2A < 1`, else `1 - 2(1-A)(1-B)` where `A` and `B` are below 1, else 0 |
+| `soft-light` | `2AB + B(1-AB)` where `AB < 1`, else `2AB` |
+| `color-dodge` | `B / max(1-A, B)` (0 where that divisor is 0) |
+| `color-burn` | `1 - (1-B) / max(A, 1-B)` (1 where that divisor is 0) |
 
-Division convention (HDR and zero inputs always give finite results): any divisor with magnitude
-at most 1e-6 counts as unusable and the term takes a fixed limit. `disjoint-over`: the
-`B*(1-a)/b` term is 0 where `b` is unusable. `conjoint-over`: the result is `A` where `b` is
-unusable. `geometric`: 0 where `A+B` is unusable. `color-dodge`: 1 where `1-A` is unusable and
-`B > 0`, otherwise 0 (so A at or above 1 saturates rather than flipping sign). `color-burn`: 0
-where `A` is unusable, except 1 when `B >= 1`. `ChannelMerge` shares the same vocabulary and the
-same helper, with each channel value standing in for its own alpha.
+Where a stated formula divides by zero the result is the limit named in brackets, so zero and HDR inputs always give finite
+values. `ChannelMerge` shares the vocabulary and each channel value stands in for its own alpha, but keeps the formulas it has
+always computed (`_legacy_merge_op_extra`); it is not part of this step.
 
 ## Transform
 
@@ -525,3 +521,5 @@ and falloff monotonicity. A 1920 × 1080 square with feather 50 rendered in
 **2026-10-25, fidelity step C (complete).** The biggest gaps outside the four GPU nodes (Grade, Blur, Merge and Transform keep their knobs and formulas for the step after Lane 8). Roto gains its mask input, the shared mask channel, invert, inject and channels Read takes Nuke's time mapping (the `frame` knob in expression, start-at and offset modes; the clip range `first` / `last` with hold, loop, bounce or black before and after; the original range, whose outside follows on error, now with checkerboard), the `format` override (as `read_format`), `raw`, `premultiplied` and `auto_alpha`. Write takes `channels`, the output transform and `raw`, `premultiplied`, `views`, the file-name frame number, create directories, the range limit and the EXR compression, in `nodebased/writenode.py`, which the window's render and the tests share. Crop takes `softness`, `reformat`, `intersect` and "black outside". Premult and Unpremult take `channels`, the `by` channel and `invert`. "Clip to" now changes pixels on Ramp, Radial, Rectangle, Noise, Text, Grid, Roto and RotoPaint: the output window is the format (as before), the incoming picture's box, their union or their intersection, or with no clip the union widened to a Rectangle's or Radial's own box; any clip other than the format is rendered on the whole-image path. Every default draws, reads and writes what the node did before, old documents load with the defaults and no schema bump, and the golden images are unchanged. Where a NodeBased default differs from the guide's it keeps the old behaviour and shows in the report as a default mismatch: Crop `intersect` (on), Read `auto_alpha` (on), Write `channels` (all) and `create_directories` (on). Left unpaired: Read's proxy, localization and metadata key rows, Write's TIFF, JPEG and movie options, proxy, render order and read-back, Roto's per-shape fields beyond those already paired, its transform and motion-blur tabs, and every node's mask fringe.
 
 **2026-10-25, fidelity step D (complete).** The time nodes, the keyers and the small channel nodes take Nuke's knobs; overall fidelity goes from 67.7 to 73.8. TimeOffset, FrameHold, Retime and TimeClip (`nodebased/timeknobs.py`, evaluator only like the other time nodes) have rounding modes (whole frames round down, fractional time keeps the exact time), `reverse_input` about the input clip's range, Retime's four range locks, `reverse`, `before` / `after` (continue, loop, bounce, hold, black, with the guide's 20 frame examples asserted frame by frame), `filter` none / nearest / box and `shutter`, and TimeClip's `frame_mode`, original range, `reverse` and fades; the FrameHold panel has a Set to current frame button. Keyer has the screen operations and `input` / `output` / `combine`; ChromaKeyer has screen gain and balance, chroma gain, black and white points, alpha bias, inside mask, the custom despill bias, the replace modes and its intermediate view; Difference has its output. Constant has `channels` and a `first` / `last` range, Invert `clamp`, Copy the mask strip with `channels`, `metainput` and `rangeinput`, Remove `channels2` to `channels4`, and CopyMetaData Nuke's merge modes and search filters (`nodebased/smallnodes.py`). Every pixel claim has a hand-computed test, tiles equal the evaluator where the kernel is on the tile path, and old documents load with the values that keep them drawing the same, without a schema bump: where a new node follows Nuke's default and the old behaviour differs the older node keeps its own (Retime's locks, `continue` and nearest; TimeClip with no fades; the ChromaKeyer's custom despill bias on; CopyMetaData's exact key list). Our readings where the guide gives no formula: TimeClip's fade `(k + 1) / (fade + 1)`, the box filter's cell weights, ChromaKeyer's chroma gain and balance, and the screen operations (the screen channel minus the larger of the other two). Left unpaired: the path-mask knobs of TimeOffset and FrameHold (they choose scene-graph prims), Retime's `warp` curve, Copy's `bbox`, and every node's mask fringe.
+
+**2026-10-26, fidelity step E (complete).** Grade, Merge, Blur, Sharpen and Soften take Nuke's knobs, and every masked node gets Nuke's mask fringe; overall fidelity goes from 73.8 to 80.1 (Grade 41.1 to 100, Merge 52.5 to 100, Blur 54.4 to 98.7, Sharpen 54.8 to 97.9, Soften 46.5 to 97.9; the 42 other nodes with a mask strip each gain a few points for the fringe). Grade (`nodebased/gradeknobs.py`) has `blackpoint`, `whitepoint`, `black` (lift), `white` (gain), `gamma`, `reverse`, `black_clamp` and `white_clamp` in Nuke's long-standing form (the guide states the knobs, not the formula): slope `multiply * 2^exposure * (white - black) / (whitepoint - blackpoint)`, shift `offset + black - slope * blackpoint`, then `** (1 / gamma)` where positive, then the clamps; `reverse` is the opposite gamma, then the opposite ramp. A new Grade clamps black as Nuke does and its offset is flat; an older document's node never clamped and keeps its alpha-scaled offset (`offset_by_alpha`), and runs the old arithmetic byte for byte. Merge (`nodebased/mergeknobs.py`) computes every operation as the guide states (multiply, divide, screen, geometric, hard-light, soft-light, color-dodge and color-burn changed; ChannelMerge keeps its old formulas) and has the video colorspace (`sRGB`: the sRGB curve, mirrored about zero), alpha masking (`screen_alpha`), the output box (`merge_bbox`: union, intersection, A or B, evaluated on the whole image), `metainput` and `rangeinput` as on Copy, `Achannels` and `Bchannels` (a channel left out counts as zero), `output` (the rest is B) and `also_merge`; a channel set can name a layer, which the whole-image path reads. Blur, Sharpen and Soften (`nodebased/blurknobs.py`) have `filter` (`kernel_filter`: box, triangle, quadratic or gaussian, as separable kernels over the size, gaussian being sigma = size / 3 stopped at the size), `quality` (a filter wider than it is made on a picture averaged down by a whole factor and scaled back up linearly, as the guide describes) and `crop` (off grows the data window by the filter's reach, the new edge transparent black); Sharpen and Soften also have `minimum` and `maximum` (the pixel values the effect works on; the guide does not describe them, so that reading is ours), and Soften an `amount`. A new Blur and Sharpen are gaussian, an older one a box. The shared mask strip has `fringe` on every node that has the mask strip and Nuke's guide gives one (not the Draw generators): the effect applies only on the soft edge of the mask, weighted `1 - |2m - 1|`; the ramp is our reading of "only apply the effect to the edge of the mask". The GPU island runs Grade's new arithmetic and the corrected multiply, screen and divide on the card (checked on the RTX 3080 Ti, the integrated Radeon and llvmpipe); a reversed Grade, a Merge with a new knob, a Blur that is not the plain box, and any node whose channel or mask strip is changed stay on the CPU rather than having a knob ignored. Left out: a Nuke render to compare with, path masks, `matte` (the guide text cannot be implemented without guessing), and Sharpen and Soften's clipping of an oversize bounding box to the format.

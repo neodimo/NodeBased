@@ -163,6 +163,11 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Blur": _groups(
         KnobGroup("float_slider", ("radius",), soft_range=(0, 100)),
+        KnobGroup("enum", ("kernel_filter",), label="Filter", help="The blur's shape: box is the fastest, gaussian the smoothest."),
+        KnobGroup("float_slider", ("quality",), label="Quality", soft_range=(1, 100),
+                  help="The largest filter size worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
+        KnobGroup("bool", ("crop",), label="Crop to format",
+                  help="Keep the bounding box as it comes in. Off lets it grow by the size of the blur."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Invert": _groups(
         KnobGroup("enum", ("channels",)), KnobGroup("bool", ("clamp",)),
@@ -196,6 +201,13 @@ KNOB_LAYOUT = {
     "Sharpen": _groups(
         KnobGroup("float_slider", ("sharpen_amount",), label="Amount", soft_range=(0, 2)),
         KnobGroup("float_slider", ("sharpen_size",), label="Size", soft_range=(0, 20)),
+        KnobGroup("float", ("minimum",), label="Minimum", help="The lowest pixel value the effect works on; a lower value passes unchanged."),
+        KnobGroup("float", ("maximum",), label="Maximum", help="The highest pixel value the effect works on; a higher value passes unchanged."),
+        KnobGroup("enum", ("kernel_filter",), label="Filter", help="The blur's shape: box is the fastest, gaussian the smoothest."),
+        KnobGroup("float_slider", ("quality",), label="Quality", soft_range=(1, 100),
+                  help="The largest filter size worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
+        KnobGroup("bool", ("crop",), label="Crop to format",
+                  help="Keep the bounding box as it comes in. Off lets it grow by the size of the blur."),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Matrix": _groups(
         KnobGroup("enum", ("matrix_size",), label="Size"),
@@ -216,6 +228,15 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Soften": _groups(
         KnobGroup("float_slider", ("soften_size",), label="Size", soft_range=(0, 100)),
+        KnobGroup("float_slider", ("amount",), label="Amount", soft_range=(0, 2),
+                  help="How far from the picture to the soft one: 1 is all the way."),
+        KnobGroup("float", ("minimum",), label="Minimum", help="The lowest pixel value the effect works on; a lower value passes unchanged."),
+        KnobGroup("float", ("maximum",), label="Maximum", help="The highest pixel value the effect works on; a higher value passes unchanged."),
+        KnobGroup("enum", ("kernel_filter",), label="Filter", help="The blur's shape: box is the fastest, gaussian the smoothest."),
+        KnobGroup("float_slider", ("quality",), label="Quality", soft_range=(1, 100),
+                  help="The largest filter size worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
+        KnobGroup("bool", ("crop",), label="Crop to format",
+                  help="Keep the bounding box as it comes in. Off lets it grow by the size of the blur."),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Defocus": _groups(
         KnobGroup("float_slider", ("defocus",), label="Defocus", soft_range=(0, 100)),

@@ -14,7 +14,11 @@ How the pieces fit (research spike R6-1, ``briefs/proposed/R6-1-resident-four-no
   CPU kernels, so the default behaviour (``gpu2d = None``) is unchanged.
 * One small ``map_*`` function per node turns the node's parameters into the shader inputs.
   New Nuke knobs on Grade, Blur or Merge later mean a change to that mapping (plus a fallback
-  for the new mode), not a rewrite of the kernels.
+  for the new mode), not a rewrite of the kernels. The knobs of fidelity step E are handled so:
+  Grade's levels, gamma and clamps run on the device (``gradeknobs`` carries the arithmetic);
+  Grade ``reverse``, any Merge with a new knob, a Blur that is not the plain in-limit box with
+  crop on, and any node whose shared channel or mask strip is changed (``_check_chrome``) raise
+  Unsupported and run on the CPU: the island never ignores a knob.
 * Windows follow the CPU rules exactly (``_filter_window``, union for Merge, ``fit`` zero-fill):
   every shader fetches an input through its data window and returns zero outside it.
 * Pipelines and the parameter ring are cached per device; storage buffers are pooled and
@@ -158,6 +162,14 @@ def map_grade(p):
 
 def map_blur(p):
     """Blur's parameters (``Evaluator._blur``: separable edge-padded box blur of integer radius)."""
+    from . import blurknobs
+    # The step-E knobs: only the box filter, within the quality limit and without a growing window, has a kernel here.
+    if blurknobs._get("Blur", p, "kernel_filter") != "box":
+        raise Unsupported(f"Blur filter {p['kernel_filter']!r} has no GPU kernel yet")
+    if blurknobs.scale_factor("Blur", p) > 1:
+        raise Unsupported("Blur wider than its quality limit is scaled down, which has no GPU kernel yet")
+    if not blurknobs._get("Blur", p, "crop"):
+        raise Unsupported("Blur with crop to format off grows its window")
     radius = p["radius"]
     if radius < 0.5:
         return {"radius": 0, "scale": 1.0, "mix": float(p.get("mix", 1.0))}

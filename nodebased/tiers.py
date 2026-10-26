@@ -147,8 +147,8 @@ def _generator(params, region, arity):
 def _blur_rule(params, region, arity):
     # Two separable box passes: the horizontal pass reaches `radius` in x, the vertical in y.
     # Below the kernel's own 0.5 cut-off the node is a copy, so it reads only what it is asked for.
-    radius = float(params.get("radius", 0.0))
-    support = 0 if radius < 0.5 else int(math.ceil(radius))
+    from . import blurknobs
+    support = blurknobs.halo("Blur", params)             # the reach; more when `quality` scales the picture down (blurknobs.py)
     image = region.expand(support, support)
     # The mask gates the *result*, so it is only ever sampled at the output pixels themselves.
     return [image] + [region] * (arity - 1)
@@ -186,7 +186,16 @@ def _support_rule(param_name):
 _erode_rule = _support_rule("erode_size")
 _dilate_rule = _support_rule("dilate_size")
 _median_rule = _support_rule("median_size")
-_sharpen_rule = _support_rule("sharpen_size")
+def _blurknobs_rule(kind):
+    """`_support_rule` for Sharpen and Soften, whose reach also grows when `quality` scales the picture down."""
+    def rule(params, region, arity):
+        from . import blurknobs
+        support = blurknobs.halo(kind, params)
+        return [region.expand(support, support)] + [region] * (arity - 1)
+    return rule
+
+
+_sharpen_rule = _blurknobs_rule("Sharpen")
 def _matrix_rule(params, region, arity):
     """Matrix and Laplacian read `matrix_size // 2` neighbours on each side (1 for 3x3; Laplacian is 3x3)."""
     support = int(str(params.get("matrix_size", "3")) or 3) // 2
@@ -208,7 +217,7 @@ def _convolve_rule(params, region, arity):
     support = size // 2
     return [region.expand(support, support), Region(0, 0, size, size)] + [region] * (arity - 2)
 _glow_rule = _support_rule("glow_size")
-_soften_rule = _support_rule("soften_size")
+_soften_rule = _blurknobs_rule("Soften")
 
 
 def _edge_blur_rule(params, region, arity):

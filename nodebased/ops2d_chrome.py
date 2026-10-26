@@ -211,9 +211,10 @@ def step_d_params(kind):
 def step_e_params(kind):
     """The knobs fidelity step E added (Grade, Merge, Blur, Sharpen and Soften), at the values that leave an older document's
     node as it was."""
-    from . import gradeknobs, mergeknobs
+    from . import blurknobs, gradeknobs, mergeknobs
     out = gradeknobs.upgrade_params(kind)
     out.update(mergeknobs.upgrade_params(kind))
+    out.update(blurknobs.upgrade_params(kind))
     return out
 
 
@@ -382,6 +383,10 @@ def needs_full_frame(kind, p):
             return True
         cfg = filter_config(kind, p)
         return bool(cfg is not None and cfg.active(False))
+    if kind in ("Blur", "Sharpen", "Soften"):
+        from . import blurknobs
+        if blurknobs.needs_full_frame(kind, p):
+            return True      # a window that grows, or a picture scaled down to fit `quality`, is not a tile's business
     if kind == "Merge":
         from . import mergeknobs
         if mergeknobs.needs_full_frame(p):

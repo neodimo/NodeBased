@@ -169,6 +169,7 @@ from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
 from . import mergeknobs as _mergeknobs
+from . import blurknobs as _blurknobs
 from . import timeknobs as _timeknobs
 from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
@@ -197,7 +198,8 @@ SPECS = {
         "shadows_curve": '{"interpolation":"smooth","points":[[0,1],[0.09,0]]}',
         "highlights_curve": '{"interpolation":"smooth","points":[[0.5,0],[1,1]]}',
         "mix": 1.0}},
-    "Blur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"radius": 8.0, "mix": 1.0}},
+    # Blur, Sharpen and Soften take Nuke's filter shape, quality limit and "crop to format" (fidelity step E, nodebased/blurknobs.py).
+    "Blur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"radius": 8.0, "mix": 1.0, **_blurknobs.new_params("Blur")}},
     # Invert/Clamp/Multiply/Add/Gamma/Saturation are Nuke's Color-toolbar nodes that split a
     # single knob each out of Grade/ColorCorrect into its own scrub-friendly node. Multiply, Add
     # and Gamma deliberately reuse Grade's "multiply"/"offset" and ColorCorrect's "gamma" param
@@ -225,7 +227,8 @@ SPECS = {
     "Median": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"median_size": 1.0, "channels": "rgba", "mix": 1.0}},
     "Sharpen": {"inputs": ["image"], "optional_inputs": ["mask"],
-                "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0}},
+                "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0,
+                           **_blurknobs.new_params("Sharpen")}},
     "Matrix": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"matrix_size": "3", "normalize": 0, **{f"weight{i}": (1.0 if i == 4 else 0.0) for i in range(49)}, "mix": 1.0}},
     "Convolve": {"inputs": ["image", "kernel"], "optional_inputs": ["mask"], "params": {"kernel_size": "1", "mix": 1.0}},
@@ -247,7 +250,7 @@ SPECS = {
     # Soften (step 3a) is Nuke's Filter-menu Soften: a Gaussian-leaning sibling of Blur's box
     # filter. Its own "soften_size" name for the same reason as the other padded filters.
     "Soften": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"soften_size": 4.0, "channels": "rgba", "mix": 1.0}},
+               "params": {"soften_size": 4.0, "channels": "rgba", "mix": 1.0, **_blurknobs.new_params("Soften")}},
     # Exposure (step 3a) is Nuke's standalone Color-menu Exposure. Knob names follow the reference
     # guide (channels, blackpoint, gang, red/green/blue); Nuke's "mode" is `exposure_mode` here
     # because CHOICES is keyed globally by parameter name and "mode" already belongs to Tracker.
@@ -2073,8 +2076,10 @@ LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000)
                "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})
 # Grade's Nuke knobs (fidelity step E). `black` and `white` are shared names (Log2Lin, Histogram), so Grade's wider ranges are its own.
 LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
-LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1)})
+LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0)})
+CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
 CHOICES["merge_bbox"] = list(_mergeknobs.BBOX_CHOICES)
+NODE_LIMITS["Sharpen"] = NODE_LIMITS["Soften"] = {"minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0)}
 NODE_LIMITS["Grade"] = {"black": (-1000.0, 1000.0), "white": (-1000.0, 1000.0), "blackpoint": (-1000.0, 1000.0)}
 
 

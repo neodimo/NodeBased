@@ -455,13 +455,11 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
     the halo is the caller's job when the request is in tier space.
     """
     params = params or {}
-    if kind == "Blur":
-        import math
-        radius = float(params.get("radius", 0.0))
-        # Mirror `_blur_rule`: the kernel reaches `ceil(radius)` pixels each way (the box-blur
-        # window is 2r+1, with r=round(radius); the round-up is what makes the rule slightly
-        # conservative, which matches the actual filter support).
-        support = 0 if radius < 0.5 else int(math.ceil(radius))
+    if kind in ("Blur", "Sharpen", "Soften"):
+        # Mirror `tiers._blur_rule`: the kernel reaches `ceil(size)` pixels each way (a box blur's window is 2r+1 with
+        # r = round(size), so the round-up is slightly conservative); a `quality` that scales the picture down adds two blocks.
+        from . import blurknobs
+        support = blurknobs.halo(kind, params)
         return (support, support)
     if kind == "Convolve":
         size = int(str(params.get("kernel_size", "1")) or 1)
@@ -480,12 +478,11 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         if params.get("filter_type", "box") == "gaussian" and support:
             support += int(math.ceil(max(1.0, size * 0.5)))
         return (support, support)
-    if kind in ("Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften"):
+    if kind in ("Erode", "Dilate", "Median", "Glow"):
         import math
         # Same "ceil the pixel-radius param" rule as Blur, mirroring tiers.py's per-kind rule.
         param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size",
-                "Sharpen": "sharpen_size", "Glow": "glow_size",
-                "Soften": "soften_size"}[kind]
+                "Glow": "glow_size"}[kind]
         size = abs(float(params.get(param, 0.0)))
         support = 0 if size < 0.5 else int(math.ceil(size))
         return (support, support)
