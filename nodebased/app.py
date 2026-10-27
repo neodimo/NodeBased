@@ -12852,6 +12852,7 @@ class Window(QMainWindow):
                 hint.setWordWrap(True)
                 form.addRow(hint)
             if node["type"] == "RotoPaint":
+                from . import paintknobs
                 draw_shape = QPushButton("Draw shape…")
                 draw_shape.setToolTip("Click polygon points in the viewer, then Enter to commit · Esc cancels")
                 draw_shape.clicked.connect(lambda checked=False, k=key: self.begin_roto_draw(k))
@@ -13093,7 +13094,7 @@ class Window(QMainWindow):
                         if idx >= len(entries): return
                         target = entries[idx]
                         for step in path[:-1]:
-                            target = target[step]
+                            target = target.setdefault(step, {})
                         target[path[-1]] = value
                         self.command({"op": "set_paint_items", "id": k, "items": entries})
 
@@ -13122,6 +13123,78 @@ class Window(QMainWindow):
                     layer_opacity_field.setValue(edit_item["opacity"])
                     layer_opacity_field.valueChanged.connect(lambda value: update_layer(("opacity",), float(value)))
                     form.addRow("Opacity", layer_opacity_field)
+                    # These are settings of the existing item.  The controls above the layer list
+                    # configure the next stroke only, so keep this group deliberately explicit.
+                    source_field = ElidingComboBox()
+                    source_field.setObjectName("rotopaint-layer-source")
+                    for value in paintknobs.SOURCES: source_field.addItem(value.title(), value)
+                    source_field.setCurrentIndex(source_field.findData(edit_item.get("source", "color")))
+                    source_field.currentIndexChanged.connect(
+                        lambda idx2, box=source_field: update_layer(("source",), box.itemData(idx2)))
+                    form.addRow("Source", source_field)
+                    locked_field = QCheckBox("Lock layer")
+                    locked_field.setObjectName("rotopaint-layer-locked")
+                    locked_field.setChecked(edit_item.get("locked", False))
+                    locked_field.toggled.connect(lambda value: update_layer(("locked",), bool(value)))
+                    form.addRow(locked_field)
+
+                    def item_spin(name, label, lo, hi, step, default, path=None):
+                        field = QDoubleSpinBox()
+                        field.setObjectName("rotopaint-layer-" + name)
+                        field.setRange(lo, hi); field.setSingleStep(step)
+                        route = path or (name,)
+                        value = edit_item
+                        for part in route:
+                            value = value.get(part, {}) if isinstance(value, dict) else {}
+                        field.setValue(float(value if isinstance(value, (int, float)) else default))
+                        field.valueChanged.connect(lambda v, p=route: update_layer(p, float(v)))
+                        form.addRow(label, field)
+
+                    transform = edit_item.get("transform", {})
+                    transform_toggle = QToolButton()
+                    transform_toggle.setObjectName("rotopaint-layer-transform-toggle")
+                    transform_toggle.setText("▾ Transform")
+                    transform_toggle.setCheckable(True); transform_toggle.setChecked(bool(transform))
+                    form.addRow(transform_toggle)
+                    transform_body = QWidget(); transform_form = QFormLayout(transform_body)
+                    transform_form.setContentsMargins(0, 0, 0, 0)
+                    transform_body.setVisible(bool(transform))
+                    transform_toggle.toggled.connect(transform_body.setVisible)
+                    for tname, label, default, lo, hi, step in (
+                            ("translate_x", "Translate X", 0.0, -65536, 65536, 1.0),
+                            ("translate_y", "Translate Y", 0.0, -65536, 65536, 1.0),
+                            ("rotate", "Rotate", 0.0, -360000, 360000, 1.0),
+                            ("scale_x", "Scale X", 1.0, -1000, 1000, .01),
+                            ("scale_y", "Scale Y", 1.0, -1000, 1000, .01),
+                            ("center_x", "Center X", 0.0, -65536, 65536, 1.0),
+                            ("center_y", "Center Y", 0.0, -65536, 65536, 1.0),
+                            ("skew_x", "Skew X", 0.0, -89, 89, 1.0),
+                            ("skew_y", "Skew Y", 0.0, -89, 89, 1.0)):
+                        field = QDoubleSpinBox(); field.setObjectName("rotopaint-layer-transform-" + tname)
+                        field.setRange(lo, hi); field.setSingleStep(step); field.setValue(float(transform.get(tname, default)))
+                        field.valueChanged.connect(lambda v, n=tname: update_layer(("transform", n), float(v)))
+                        transform_form.addRow(label, field)
+                    skew_order = ElidingComboBox(); skew_order.setObjectName("rotopaint-layer-transform-skew-order")
+                    for value in shape_model.SKEW_ORDERS: skew_order.addItem(value, value)
+                    skew_order.setCurrentIndex(skew_order.findData(transform.get("skew_order", "XY")))
+                    skew_order.currentIndexChanged.connect(
+                        lambda idx2, box=skew_order: update_layer(("transform", "skew_order"), box.itemData(idx2)))
+                    transform_form.addRow("Skew order", skew_order)
+                    form.addRow(transform_body)
+                    motion_blur = QCheckBox("Motion blur")
+                    motion_blur.setObjectName("rotopaint-layer-motion-blur")
+                    motion_blur.setChecked(edit_item.get("motion_blur", False))
+                    motion_blur.toggled.connect(lambda value: update_layer(("motion_blur",), bool(value)))
+                    form.addRow(motion_blur)
+                    item_spin("motion-blur-samples", "Motion blur samples", 1, 64, 1, 1, ("motion_blur_samples",))
+                    item_spin("motion-blur-shutter", "Motion blur shutter", 0, 8, .05, .5, ("motion_blur_shutter",))
+                    blur_offset = ElidingComboBox(); blur_offset.setObjectName("rotopaint-layer-motion-blur-offset-type")
+                    for value in shape_model.OFFSET_TYPES: blur_offset.addItem(value.replace("_", " ").title(), value)
+                    blur_offset.setCurrentIndex(blur_offset.findData(edit_item.get("motion_blur_offset_type", "start")))
+                    blur_offset.currentIndexChanged.connect(
+                        lambda idx2, box=blur_offset: update_layer(("motion_blur_offset_type",), box.itemData(idx2)))
+                    form.addRow("Motion blur offset", blur_offset)
+                    item_spin("motion-blur-offset", "Custom motion blur offset", -8, 8, .05, 0, ("motion_blur_offset",))
                     if edit_item["kind"] == "shape":
                         mode_field = ElidingComboBox()
                         mode_field.setObjectName("rotopaint-layer-mode")
@@ -13135,6 +13208,25 @@ class Window(QMainWindow):
                         feather_field.setRange(0.0, 500.0); feather_field.setValue(edit_item["feather"])
                         feather_field.valueChanged.connect(lambda value: update_layer(("feather",), float(value)))
                         form.addRow("Feather", feather_field)
+                        for field_name, label, default in (("invert", "Invert", False), ("closed", "Closed", True),
+                                                          ("feather_on", "Feather on", True)):
+                            field = QCheckBox(label); field.setObjectName("rotopaint-layer-" + field_name)
+                            field.setChecked(edit_item.get(field_name, default))
+                            field.toggled.connect(lambda value, n=field_name: update_layer((n,), bool(value)))
+                            form.addRow(field)
+                        item_spin("stroke-width", "Stroke width", 0, 4096, .5, 1, ("stroke_width",))
+                        item_spin("falloff-power", "Feather falloff", 0, 16, .1, 1, ("falloff_power",))
+                        for name, label, values, default in (
+                                ("feather-falloff", "Feather falloff type", ("linear", "smooth", "gaussian"), "linear"),
+                                ("feather-model", "Feather model", ("box", "edge"), "box"),
+                                ("cap-start", "Start cap", shape_model.END_CAPS, "rounded"),
+                                ("cap-end", "End cap", shape_model.END_CAPS, "rounded")):
+                            field = ElidingComboBox(); field.setObjectName("rotopaint-layer-" + name)
+                            for value in values: field.addItem(value.replace("_", " ").title(), value)
+                            param = name.replace("-", "_")
+                            field.setCurrentIndex(field.findData(edit_item.get(param, default)))
+                            field.currentIndexChanged.connect(lambda idx2, n=param, box=field: update_layer((n,), box.itemData(idx2)))
+                            form.addRow(label, field)
                     else:
                         form.addRow("Tool", QLabel(edit_item["tool"].title()))
                         for title, bkey, lo, hi, step in (
@@ -13147,6 +13239,42 @@ class Window(QMainWindow):
                             field.setValue(edit_item["brush"][bkey])
                             field.valueChanged.connect(lambda value, bk=bkey: update_layer(("brush", bk), float(value)))
                             form.addRow(title, field)
+                        item_spin("effect", "Effect", 0, 4096, .1, 0, ("effect",))
+                        for field_name, label in (("dynamic_hardness", "Dynamic hardness"), ("buildup", "Build up"),
+                                                  ("source_round", "Round clone source"),
+                                                  ("source_black_outside", "Black outside clone source")):
+                            field = QCheckBox(label); field.setObjectName("rotopaint-layer-" + field_name.replace("_", "-"))
+                            field.setChecked(edit_item.get(field_name, False))
+                            field.toggled.connect(lambda value, n=field_name: update_layer((n,), bool(value)))
+                            form.addRow(field)
+                        # Validation requires the two write-on ends together, so changing either
+                        # field writes the complete pair in one dispatcher command.
+                        write_on = edit_item.get("write_on", {})
+                        def write_on_field(name, label, default):
+                            field = QDoubleSpinBox(); field.setObjectName("rotopaint-layer-write-on-" + name)
+                            field.setRange(0, 1); field.setSingleStep(.01)
+                            field.setValue(float(write_on.get(name, default)))
+                            def set_write_on(value, part=name):
+                                pair = dict(current_layer_items(key)[selected].get("write_on", {"start": 0.0, "end": 1.0}))
+                                pair[part] = float(value)
+                                update_layer(("write_on",), pair)
+                            field.valueChanged.connect(set_write_on)
+                            form.addRow(label, field)
+                        write_on_field("start", "Write on start", 0.0)
+                        write_on_field("end", "Write on end", 1.0)
+                        source_transform = edit_item.get("source_transform", {})
+                        for tname, label, default in (("rotate", "Clone rotate", 0.0), ("scale_x", "Clone scale X", 1.0),
+                                                      ("scale_y", "Clone scale Y", 1.0), ("skew_x", "Clone skew X", 0.0),
+                                                      ("skew_y", "Clone skew Y", 0.0), ("center_x", "Clone center X", 0.0),
+                                                      ("center_y", "Clone center Y", 0.0)):
+                            item_spin("source-transform-" + tname.replace("_", "-"), label, -65536, 65536, .1,
+                                      default, ("source_transform", tname))
+                        clone_filter = ElidingComboBox(); clone_filter.setObjectName("rotopaint-layer-source-filter")
+                        for value in paintknobs.CLONE_FILTERS: clone_filter.addItem(value.title(), value)
+                        clone_filter.setCurrentIndex(clone_filter.findData(edit_item.get("source_filter", "cubic")))
+                        clone_filter.currentIndexChanged.connect(
+                            lambda idx2, box=clone_filter: update_layer(("source_filter",), box.itemData(idx2)))
+                        form.addRow("Clone filter", clone_filter)
                         if edit_item["tool"] == "paint":
                             def choose_layer_color(k=key, idx=selected):
                                 entries = current_layer_items(k)

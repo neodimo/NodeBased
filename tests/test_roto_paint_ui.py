@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDoubleSpinBox, QListWidget, QPushButton
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QListWidget, QPushButton
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
@@ -209,6 +209,39 @@ class RotoPaintLayerEditorTests(unittest.TestCase):
         field.setValue(0.6)
         self.assertAlmostEqual(self.items()[1]["brush"]["strength"], 0.6)
         self.assertEqual(self.items()[0], self.shape_item)
+
+    def test_shape_item_panel_exposes_and_updates_its_mask_and_transform_settings(self):
+        self.window.viewer.paint_selected_item_index = 0
+        panel = self.panel()
+        source = panel.findChild(QComboBox, "rotopaint-layer-source")
+        locked = panel.findChild(QCheckBox, "rotopaint-layer-locked")
+        invert = panel.findChild(QCheckBox, "rotopaint-layer-invert")
+        translate = panel.findChild(QDoubleSpinBox, "rotopaint-layer-transform-translate_x")
+        self.assertIsNotNone(source); self.assertIsNotNone(locked); self.assertIsNotNone(invert)
+        self.assertIsNotNone(translate)
+        source.setCurrentIndex(source.findData("background")); locked.setChecked(True)
+        invert.setChecked(True); translate.setValue(12.0)
+        item = self.items()[0]
+        self.assertEqual(item["source"], "background")
+        self.assertTrue(item["locked"]); self.assertTrue(item["invert"])
+        self.assertEqual(item["transform"]["translate_x"], 12.0)
+
+    def test_stroke_item_panel_exposes_and_updates_effect_clone_and_write_on_settings(self):
+        self.window.viewer.paint_selected_item_index = 1
+        panel = self.panel()
+        effect = panel.findChild(QDoubleSpinBox, "rotopaint-layer-effect")
+        start = panel.findChild(QDoubleSpinBox, "rotopaint-layer-write-on-start")
+        round_source = panel.findChild(QCheckBox, "rotopaint-layer-source-round")
+        clone_filter = panel.findChild(QComboBox, "rotopaint-layer-source-filter")
+        self.assertIsNotNone(effect); self.assertIsNotNone(start); self.assertIsNotNone(round_source)
+        self.assertIsNotNone(clone_filter)
+        effect.setValue(8.0); start.setValue(.25); round_source.setChecked(True)
+        clone_filter.setCurrentIndex(clone_filter.findData("mitchell"))
+        item = self.items()[1]
+        self.assertEqual(item["effect"], 8.0)
+        self.assertEqual(item["write_on"]["start"], .25)
+        self.assertTrue(item["source_round"])
+        self.assertEqual(item["source_filter"], "mitchell")
 
     def test_move_up_swaps_the_selected_item_earlier_in_one_undo_step(self):
         self.window.viewer.paint_selected_item_index = 1
