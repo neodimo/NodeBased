@@ -23,7 +23,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libopengl0 libgl1 libxkbcommon0
+          sudo apt-get install -y libegl1 libopengl0 libgl1 libxkbcommon0 fonts-liberation2
       - run: python -m pip install .
       - run: python tools/run_tests.py -v --jobs 4
       # Optional, non-blocking: the docs/BENCHMARKS-*-4k.md method, run on this CI runner so its

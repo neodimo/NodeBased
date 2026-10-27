@@ -107,10 +107,19 @@ class LayoutTests(unittest.TestCase):
         self.assertAlmostEqual((tall[1] - tall[0]) / base_h, 2.0, delta=0.2)
 
     def test_the_font_style_changes_the_weight_and_slant(self):
-        regular, bold, italic = (draw(message="Hello", index=v, yjustify="center") for v in ("Regular", "Bold", "Italic"))
+        from PySide6.QtGui import QFontDatabase
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.instance() or QApplication(["nodebased"])
+        families = ("Liberation Sans", "Arial", "DejaVu Sans", "Noto Sans")
+        family = next((name for name in families if {"Regular", "Bold", "Italic", "Bold Italic"}
+                       <= set(QFontDatabase.styles(name))), None)
+        self.assertIsNotNone(family, "the text-style test needs a font with regular, bold and italic faces")
+        regular, bold, italic = (draw(message="Hello", font=family, index=v, yjustify="center")
+                                 for v in ("Regular", "Bold", "Italic"))
         self.assertGreater(total(bold), total(regular) * 1.1)
         self.assertGreater(float(np.abs(italic[..., 3] - regular[..., 3]).sum()), 5.0)
-        both = draw(message="Hello", index="Bold Italic", yjustify="center")
+        both = draw(message="Hello", font=family, index="Bold Italic", yjustify="center")
         self.assertGreater(total(both), total(regular) * 1.1)
         self.assertGreater(float(np.abs(both[..., 3] - bold[..., 3]).sum()), 5.0)
 
