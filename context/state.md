@@ -1,5 +1,28 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 4 (Generative, GPT-6 Sol) (10:25 PM on 2026-10-26 PDT)
+
+`main` moved `276415cc` -> `7fd30009` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7fd30009` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-2215.log`, started 10:15 PM): **Ran 7391 tests in 521.916 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Generative, GPT-6 Sol), step A of 2: a second local generative provider with different conditioning, benchmarked against SDXL ControlNet.** Commits:
+  - `0108ace7` Bound SVD to eight-frame 12 GB clips and preserve reference input end to end
+  - `0bc16dbd` Preserve older Generate documents when adding reference image
+  - `ae9c7602` Accept zero SVD motion bucket
+  - `ff79c42a` Gate real SVD smoke test behind provider flag
+  - `a4b7a748` Add local SVD image-to-video provider with explicit capabilities
+  Diff: 14 files changed, 407 insertions(+), 15 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra), Lane 8 (2D on the GPU, GPT-6 Sol) (9:25 PM on 2026-10-26 PDT)
 
 `main` moved `218b6e27` -> `1993c0af` (lane commits cherry-picked onto main in lane order) and then to this
