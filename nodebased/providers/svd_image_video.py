@@ -27,7 +27,7 @@ def resolve_settings(settings):
         if key in ("steps", "fps", "motion_bucket_id"):
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError(f"{key} must be an integer")
-            low, high = {"steps": (1, 100), "fps": (1, 30), "motion_bucket_id": (1, 255)}[key]
+            low, high = {"steps": (1, 100), "fps": (1, 30), "motion_bucket_id": (0, 255)}[key]
         else:
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
                 raise ValueError(f"{key} must be a finite number")
