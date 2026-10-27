@@ -1,3 +1,9 @@
+## 2026-10-27 — continuous mode merge: Lane 6 (Fluids, GPT-6 Sol) step A of 2: the Hot pour looks right: a soft steam column, a real pouring stream, liquid you can see in the glass, a soft shadow (integrator tick)
+
+- **What was done:** `main` `faa06788` -> `a805bb34` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `a805bb34`: Ran 7391 tests in 508.914 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 4 (Generative, GPT-6 Sol) step A of 2: a second local generative provider with different conditioning, benchmarked against SDXL ControlNet (integrator tick)
 
 - **What was done:** `main` `276415cc` -> `7fd30009` plus this docs commit. Evidence and per-lane commit
