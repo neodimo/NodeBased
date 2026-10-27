@@ -44,6 +44,7 @@ from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_descr
 from . import radialcommands
 from . import graphlook
 from . import gpu3d
+from . import roto
 from . import gpupicture
 from .playback_trace import mark as _trace_mark, mark_frame as _trace_frame
 from . import guigc
@@ -756,6 +757,7 @@ class Preferences:
     PLAYBACK_GPU_NODES = "playback/gpu_nodes"
     PLAYBACK_DECODE_WORKERS = "playback/decode_workers"
     PLAYBACK_SOURCE_WORKERS = "playback/source_workers"
+    PLAYBACK_ROTO_DRAWER = "playback/roto_drawer"
     WORKSPACE = "workspace"
 
     def __init__(self):
@@ -848,6 +850,18 @@ class Preferences:
 
     def set_source_workers(self, count):
         self._set_workers(self.PLAYBACK_SOURCE_WORKERS, count, playbackprefs.MAX_SOURCE_WORKERS)
+
+    def roto_drawer(self):
+        """The saved Roto drawer ("fast" or "legacy"), or None while the artist has not chosen."""
+        value = self._store.value(self.PLAYBACK_ROTO_DRAWER, None)
+        return value if value in playbackprefs.ROTO_DRAWERS else None
+
+    def set_roto_drawer(self, name):
+        if name in playbackprefs.ROTO_DRAWERS and name != playbackprefs.DEFAULT_ROTO_DRAWER:
+            self._store.setValue(self.PLAYBACK_ROTO_DRAWER, name)
+        else:
+            self._store.remove(self.PLAYBACK_ROTO_DRAWER)
+        self._store.sync()
 
     def _set_workers(self, key, count, maximum):
         count = playbackprefs.parse_workers(count, maximum)
@@ -8162,7 +8176,7 @@ class ProjectSettingsDialog(QDialog):
                  max_panels=5, cache_float32=False, auto_3d=False,
                  adapters=(), graphics_adapter="", graph_opengl=False, direct_edit=True, adapter_now=None,
                  gpu_nodes=False, gpu_nodes_note="", decode_workers=None, source_workers=None,
-                 automatic_workers=(0, 0), workers_note=""):
+                 automatic_workers=(0, 0), workers_note="", roto_drawer="fast", roto_drawer_note=""):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -8272,6 +8286,20 @@ class ProjectSettingsDialog(QDialog):
         self.workers_note.setObjectName("workers-note")
         self.workers_note.setVisible(bool(workers_note))
         interface.addRow("", self.workers_note)
+        self.roto_drawer = QComboBox()
+        self.roto_drawer.setObjectName("roto-drawer")
+        self.roto_drawer.addItem("Fast", "fast")
+        self.roto_drawer.addItem("Previous", "legacy")
+        self.roto_drawer.setCurrentIndex(max(0, self.roto_drawer.findData(roto_drawer)))
+        self.roto_drawer.setToolTip("Which drawer paints the Roto and RotoPaint shapes into a matte. Fast is several times quicker; "
+                                    "Previous is the drawer of earlier releases, kept for one release in case a shape looks wrong. "
+                                    "Takes effect at once.")
+        interface.addRow("Roto drawer", self.roto_drawer)
+        self.roto_drawer_note = QLabel(roto_drawer_note)
+        self.roto_drawer_note.setWordWrap(True)
+        self.roto_drawer_note.setObjectName("roto-drawer-note")
+        self.roto_drawer_note.setVisible(bool(roto_drawer_note))
+        interface.addRow("", self.roto_drawer_note)
         layout.addLayout(interface)
         theme_note = QLabel("The theme is stored per machine, not in the project: a comp handed to "
                             "another artist keeps their colours, not yours. Node colours stay fixed "
@@ -8920,6 +8948,8 @@ class Window(QMainWindow):
         # and with NODEBASED_SOURCE_WORKERS=0; one worker at four CPUs (measured, docs/PERFORMANCE.md).
         self.source_pool = SourcePool(max_workers=playbackprefs.source_workers(self.preferences.source_workers()))
         self.evaluator.source_pool = self.source_pool
+        # The Roto matte drawer: the fast one unless Settings or NODEBASED_ROTO_DRAWER says otherwise (rotofast.py).
+        roto.set_drawer(playbackprefs.roto_drawer(self.preferences.roto_drawer()))
         # While a played frame is finished and shown, the pool computes the Roto matte of the next frames
         # (rotoahead.py); NODEBASED_ROTO_AHEAD=0 turns it off.
         self.roto_ahead = RotoAhead(self.evaluator, self.source_pool)
@@ -11639,6 +11669,14 @@ class Window(QMainWindow):
 
     GPU_NODES_BUDGET_MB = 512
 
+    def apply_roto_drawer(self):
+        """Use the saved Roto drawer (or the environment's) from the next frame on; the mattes drawn by the other one
+        are dropped so the picture shows the drawer that is chosen."""
+        drawer = roto.set_drawer(playbackprefs.roto_drawer(self.preferences.roto_drawer()))
+        self.evaluator.clear()
+        self.request_preview()
+        return drawer
+
     def apply_playback_workers(self):
         """Resize the decode and source pools to the saved choice (or the environment's); takes effect at once."""
         decode = playbackprefs.decode_workers(self.preferences.decode_workers())
@@ -11783,7 +11821,10 @@ class Window(QMainWindow):
                                        source_workers=self.preferences.source_workers(),
                                        automatic_workers=(playbackprefs.automatic_decode_workers(sourcepool.available_cpus()),
                                                           playbackprefs.automatic_source_workers(sourcepool.available_cpus())),
-                                       workers_note=self.workers_note_text())
+                                       workers_note=self.workers_note_text(),
+                                       roto_drawer=playbackprefs.roto_drawer(self.preferences.roto_drawer()),
+                                       roto_drawer_note=(f"{playbackprefs.ROTO_DRAWER_ENV} decides the drawer."
+                                                         if playbackprefs.roto_drawer_forced() else ""))
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -11814,6 +11855,11 @@ class Window(QMainWindow):
                 self.preferences.set_source_workers(dialog.source_workers.currentData())
                 decode, source = self.apply_playback_workers()
                 self.statusBar().showMessage(f"Workers changed: {decode} decode, {source} source", 6000)
+            chosen_drawer = dialog.roto_drawer.currentData()
+            if chosen_drawer != playbackprefs.roto_drawer(self.preferences.roto_drawer()):
+                self.preferences.set_roto_drawer(chosen_drawer)
+                self.apply_roto_drawer()
+                self.statusBar().showMessage(f"Roto drawer: {'fast' if chosen_drawer == 'fast' else 'previous'}", 6000)
             new_cache_float32 = dialog.cache_float32.isChecked()
             if new_cache_float32 != self.preferences.display_cache_float32():
                 self.preferences.set_display_cache_float32(new_cache_float32)

@@ -9,9 +9,11 @@ Each setting has one default, here, and flipping a default is a one-line change 
   (`decodepool.DecodeAheadPool`). `None` is automatic: one thread, none at four CPUs or fewer.
 * `DEFAULT_SOURCE_WORKERS` -- threads that compute the independent sources of one frame side by side
   (`sourcepool.SourcePool`). `None` is automatic: none at three CPUs or fewer, one at four, up to three beyond.
+* `DEFAULT_ROTO_DRAWER` -- which drawer rasterises the Roto and RotoPaint shapes: `"fast"` (`rotofast.py`) or
+  `"legacy"`, the drawer of the releases before it, kept for one release so a regression can be switched off.
 
 The environment overrides the benchmarks use win over the saved choice (`NODEBASED_GPU_NODES=0|1`,
-`NODEBASED_DECODE_AHEAD_WORKERS=N`, `NODEBASED_SOURCE_WORKERS=N`), so a measurement never depends on what
+`NODEBASED_DECODE_AHEAD_WORKERS=N`, `NODEBASED_SOURCE_WORKERS=N`, `NODEBASED_ROTO_DRAWER=fast|legacy`), so a measurement never depends on what
 a Settings dialog saved on the machine.
 """
 from __future__ import annotations
@@ -21,6 +23,7 @@ import os
 DEFAULT_GPU_NODES = False
 DEFAULT_DECODE_WORKERS = None
 DEFAULT_SOURCE_WORKERS = None
+DEFAULT_ROTO_DRAWER = "fast"
 
 MAX_DECODE_WORKERS = 4
 MAX_SOURCE_WORKERS = 3
@@ -28,6 +31,8 @@ GPU_NODES_ENV = "NODEBASED_GPU_NODES"
 DECODE_LEAD_ENV = "NODEBASED_DECODE_AHEAD_FRAMES"
 DECODE_WORKERS_ENV = "NODEBASED_DECODE_AHEAD_WORKERS"
 SOURCE_WORKERS_ENV = "NODEBASED_SOURCE_WORKERS"
+ROTO_DRAWER_ENV = "NODEBASED_ROTO_DRAWER"
+ROTO_DRAWERS = ("fast", "legacy")
 
 _TRUE = ("1", "true", "yes", "on")
 _FALSE = ("0", "false", "no", "off")
@@ -160,3 +165,17 @@ def decode_lead(tier, environ=None):
 def decode_join(environ=None):
     """Whether a walk that reaches a Read whose decode is already running waits for it. `NODEBASED_DECODE_JOIN=0` turns it off."""
     return env_flag("NODEBASED_DECODE_JOIN", environ) is not False
+
+
+def roto_drawer(setting=None, environ=None):
+    """The Roto drawer to use: the environment when it names one, else the saved choice, else the default."""
+    forced = (os.environ if environ is None else environ).get(ROTO_DRAWER_ENV, "").strip().lower()
+    if forced in ROTO_DRAWERS:
+        return forced
+    saved = str(setting).strip().lower() if setting is not None else ""
+    return saved if saved in ROTO_DRAWERS else DEFAULT_ROTO_DRAWER
+
+
+def roto_drawer_forced(environ=None):
+    """True when the environment fixes the drawer, so the Settings choice has no effect."""
+    return (os.environ if environ is None else environ).get(ROTO_DRAWER_ENV, "").strip().lower() in ROTO_DRAWERS

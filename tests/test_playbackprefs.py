@@ -25,7 +25,8 @@ from tests.test_sourcepool import FRAMES, make_plates
 
 APP = QApplication.instance() or QApplication([])
 
-ENVIRONMENT = (playbackprefs.GPU_NODES_ENV, playbackprefs.DECODE_WORKERS_ENV, playbackprefs.SOURCE_WORKERS_ENV)
+ENVIRONMENT = (playbackprefs.GPU_NODES_ENV, playbackprefs.DECODE_WORKERS_ENV, playbackprefs.SOURCE_WORKERS_ENV,
+               playbackprefs.ROTO_DRAWER_ENV)
 
 
 def clean_environment():
@@ -514,6 +515,74 @@ class IslandSettingTests(unittest.TestCase):
         window.preferences.set_decode_workers(None)
         window.preferences.set_source_workers(None)
 
+
+
+class RotoDrawerSettingTests(unittest.TestCase):
+    """The Roto matte drawer is a setting: fast by default, the previous drawer one choice away, applied at once."""
+
+    def setUp(self):
+        from nodebased import roto
+        patcher = without_environment()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(roto.set_drawer, "fast")
+
+    def test_the_default_is_the_fast_drawer_and_the_environment_wins(self):
+        self.assertEqual(playbackprefs.DEFAULT_ROTO_DRAWER, "fast")
+        self.assertEqual(playbackprefs.roto_drawer(None), "fast")
+        self.assertEqual(playbackprefs.roto_drawer("legacy"), "legacy")
+        self.assertEqual(playbackprefs.roto_drawer("nonsense"), "fast")
+        with mock.patch.dict(os.environ, {playbackprefs.ROTO_DRAWER_ENV: "legacy"}):
+            self.assertEqual(playbackprefs.roto_drawer("fast"), "legacy")
+            self.assertTrue(playbackprefs.roto_drawer_forced())
+        self.assertFalse(playbackprefs.roto_drawer_forced())
+
+    def test_the_choice_round_trips_through_the_saved_preferences(self):
+        from nodebased.app import Preferences
+        preferences = Preferences()
+        self.addCleanup(preferences.set_roto_drawer, "fast")
+        self.assertIsNone(preferences.roto_drawer())
+        preferences.set_roto_drawer("legacy")
+        self.assertEqual(Preferences().roto_drawer(), "legacy")
+        preferences.set_roto_drawer("fast")            # the default is stored as no choice at all
+        self.assertIsNone(Preferences().roto_drawer())
+        preferences.set_roto_drawer("bogus")
+        self.assertIsNone(Preferences().roto_drawer())
+
+    def test_the_settings_dialog_shows_and_returns_the_drawer(self):
+        from nodebased.app import ProjectSettingsDialog
+        from nodebased.core import empty_document
+        dialog = ProjectSettingsDialog(empty_document()["settings"], roto_drawer="legacy", roto_drawer_note="fixed by the environment")
+        try:
+            self.assertEqual(dialog.roto_drawer.currentData(), "legacy")
+            self.assertFalse(dialog.roto_drawer_note.isHidden())
+            dialog.roto_drawer.setCurrentIndex(dialog.roto_drawer.findData("fast"))
+            self.assertEqual(dialog.roto_drawer.currentData(), "fast")
+        finally:
+            dialog.close()
+        plain = ProjectSettingsDialog(empty_document()["settings"])
+        try:
+            self.assertEqual(plain.roto_drawer.currentData(), "fast")
+            self.assertTrue(plain.roto_drawer_note.isHidden())
+        finally:
+            plain.close()
+
+    def test_a_running_window_switches_drawers_and_redraws(self):
+        from nodebased import roto
+        from nodebased.app import Window
+        window = Window()
+        self.addCleanup(window.close)
+        self.addCleanup(window.preferences.set_roto_drawer, "fast")
+        self.assertEqual(roto.drawer(), "fast")
+        window.evaluator.cache["stale"] = object()
+        window.preferences.set_roto_drawer("legacy")
+        self.assertEqual(window.apply_roto_drawer(), "legacy")
+        self.assertEqual(roto.drawer(), "legacy")
+        self.assertNotIn("stale", window.evaluator.cache)            # the mattes of the other drawer are dropped
+        window.preferences.set_roto_drawer("fast")
+        self.assertEqual(window.apply_roto_drawer(), "fast")
+        with mock.patch.dict(os.environ, {playbackprefs.ROTO_DRAWER_ENV: "legacy"}):
+            window.preferences.set_roto_drawer("fast")
+            self.assertEqual(window.apply_roto_drawer(), "legacy")   # the environment wins over the saved choice
 
 if __name__ == "__main__":
     unittest.main()
