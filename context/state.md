@@ -1,5 +1,33 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra), Lane 8 (2D on the GPU, GPT-6 Sol) (9:25 PM on 2026-10-26 PDT)
+
+`main` moved `218b6e27` -> `1993c0af` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `1993c0af` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-2115.log`, started 9:15 PM): **Ran 7382 tests in 534.144 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-5.6 Terra), step I of N: Read, Roto, Write, Group and the Tracker take the rest of Nuke's knobs, and Clamp clamps to values (finish 1).** Commits:
+  - `b3fe40c6` Group: score its dynamic image input
+  - `682e5da1` Write: add proxy target and full-line control
+  - `d7059bae` Read: add sequence import and metadata panel
+  Diff: 10 files changed, 144 insertions(+), 36 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D on the GPU, GPT-6 Sol), step E of 5: the Roto matte draws fast enough for the Radeon to reach 24 fps.** Commits:
+  - `e3d081dd` R6-1 step E notes: the faster Roto matte drawer, matte-alone and realistic-comp tables, stage tables, the free-matte ceiling (19.3 fps), -1027e evidence; benchmark_roto_matte --lock-check
+  - `403b4b3d` Roto fast drawer: a shape with a non-finite point keeps the old drawer's behaviour; test
+  - `e4d537e2` Roto drawer setting: Settings row, saved choice and NODEBASED_ROTO_DRAWER, applied at once with the old mattes dropped
+  - `07a1071a` Roto: a faster matte drawer (sparse scanline crossings, boxed stroke distances, vectorised signed-distance feather) that releases the interpreter lock in its heavy numpy calls; the previous drawer stays behind NODEBASED_ROTO_DRAWER=legacy
+  Diff: 19 files changed, 2594 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) (9:05 PM on 2026-10-26 PDT)
 
 `main` moved `7ace3b8b` -> `e35b5256` (lane commits cherry-picked onto main in lane order) and then to this

@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) step I of N: Read, Roto, Write, Group and the Tracker take the rest of Nuke's knobs, and Clamp clamps to values (finish 1), Lane 8 (2D on the GPU, GPT-6 Sol) step E of 5: the Roto matte draws fast enough for the Radeon to reach 24 fps (integrator tick)
+
+- **What was done:** `main` `218b6e27` -> `1993c0af` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `1993c0af`: Ran 7382 tests in 534.144 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) step I of N: Read, Roto, Write, Group and the Tracker take the rest of Nuke's knobs, and Clamp clamps to values (integrator tick)
 
 - **What was done:** `main` `7ace3b8b` -> `e35b5256` plus this docs commit. Evidence and per-lane commit
