@@ -144,6 +144,39 @@ class CoverageAgreementTests(unittest.TestCase):
         self.compare([point(5, 5), point(5, 5), point(5, 5)], 32, 32)               # no area at all
         self.compare([point(5, 5), point(30, 5), point(60, 5)], 64, 32)             # every edge horizontal
 
+    def test_a_point_that_is_not_a_number_behaves_as_it_always_did(self):
+        # validation keeps these out of a document and the shape bounds refuse them; the kernels still answer as before
+        def outcome(call):
+            with np.errstate(all="ignore"):
+                try:
+                    return call()
+                except (ValueError, OverflowError) as error:
+                    return type(error)
+
+        quad = [point(5, 5), point(40, 8), point(30, 30), point(10, 40)]
+        wire = [point(5, 5), point(30, 30), point(50, 40)]
+        for bad in (float("nan"), float("inf")):
+            closed = [dict(p) for p in quad]
+            closed[2]["x"] = bad
+            open_ = [dict(p) for p in wire]
+            open_[1]["x"] = bad
+            calls = {"coverage": lambda: roto.coverage(closed, 64, 48),
+                     "stroke": lambda: roto.stroke_coverage(open_, 64, 48, 5.0),
+                     "edge": lambda: roto.edge_feather(closed, np.ones((48, 64), np.float32), 3.0)}
+            for name, call in calls.items():
+                results = []
+                for drawer in roto.DRAWERS:
+                    roto.set_drawer(drawer)
+                    try:
+                        results.append(outcome(call))
+                    finally:
+                        roto.set_drawer("fast")
+                a, b = results
+                if isinstance(a, np.ndarray):
+                    np.testing.assert_array_equal(a, b, err_msg=name)
+                else:
+                    self.assertIs(a, b, name)
+
     def test_a_tiny_shape_inside_one_pixel(self):
         self.compare([point(10.2, 10.2), point(10.6, 10.3), point(10.4, 10.7)], 24, 24)
 

@@ -128,9 +128,11 @@ def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
     """Scanline-fill one shape's resolved points into an HxW coverage array in [0, 1].
 
     The fast drawer by default (`nodebased/rotofast.py`); `coverage_legacy` is the drawer it replaced."""
-    if drawer() == "legacy":
-        return coverage_legacy(points, width, height, origin, flattened_cache=flattened_cache)
-    return rotofast.coverage(_flatten_cached(points, flattened_cache), width, height, origin)
+    if drawer() != "legacy":
+        polyline = _flatten_cached(points, flattened_cache)
+        if np.isfinite(polyline).all():          # a shape with a NaN or infinite point keeps the old drawer's behaviour
+            return rotofast.coverage(polyline, width, height, origin)
+    return coverage_legacy(points, width, height, origin, flattened_cache=flattened_cache)
 
 
 def coverage_legacy(points, width, height, origin=(0, 0), *, flattened_cache=None):
@@ -211,7 +213,8 @@ def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="l
         vertices, offsets = rotofast.stroke_polyline(points)
         if len(vertices) < 2:
             return np.zeros((h, w), dtype=np.float32)
-        return rotofast.stroke_coverage(vertices, offsets, w, h, stroke_width, feather, falloff, origin, caps)
+        if np.isfinite(vertices).all() and np.isfinite(offsets).all() and np.isfinite(float(feather)):
+            return rotofast.stroke_coverage(vertices, offsets, w, h, stroke_width, feather, falloff, origin, caps)
     vertices = []
     offsets = []
     for index in range(len(points) - 1):
@@ -311,7 +314,7 @@ def edge_feather(points, cover, feather, falloff="linear", origin=(0, 0), *, fla
     if len(vertices) < 3 or feather == 0 and not any(
             p.get("feather_x", 0) or p.get("feather_y", 0) for p in points):
         return cover
-    if drawer() != "legacy":
+    if drawer() != "legacy" and np.isfinite(vertices).all() and np.isfinite(float(feather)):
         return rotofast.edge_feather(points, vertices, cover, feather, falloff, origin)
     # Match the adaptive Bezier flattening above; offsets follow the corresponding outline spans.
     offsets = []
