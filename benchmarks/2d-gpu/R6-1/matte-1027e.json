@@ -1,0 +1,299 @@
+{
+ "environment": {
+  "python": "3.12.13",
+  "numpy": "2.5.3",
+  "cpus": 32,
+  "reps": 7,
+  "passes": 3
+ },
+ "rows": [
+  {
+   "size": "1080p",
+   "case": "simple",
+   "ms": {
+    "fast": [
+     2.24,
+     2.03,
+     2.05
+    ],
+    "legacy": [
+     21.96,
+     23.22,
+     23.3
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.0929
+  },
+  {
+   "size": "1080p",
+   "case": "simple_feathered",
+   "ms": {
+    "fast": [
+     4.12,
+     4.9,
+     4.85
+    ],
+    "legacy": [
+     23.26,
+     23.54,
+     23.65
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.1096
+  },
+  {
+   "size": "1080p",
+   "case": "feathered50",
+   "ms": {
+    "fast": [
+     10.92,
+     10.41,
+     10.17
+    ],
+    "legacy": [
+     109.16,
+     108.14,
+     107.88
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.2078
+  },
+  {
+   "size": "1080p",
+   "case": "feathered50_motion",
+   "ms": {
+    "fast": [
+     20.89,
+     21.22,
+     20.99
+    ],
+    "legacy": [
+     447.21,
+     446.5,
+     445.72
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.2079
+  },
+  {
+   "size": "1080p",
+   "case": "simple_motion",
+   "ms": {
+    "fast": [
+     7.97,
+     7.92,
+     7.96
+    ],
+    "legacy": [
+     52.51,
+     52.3,
+     54.66
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.1098
+  },
+  {
+   "size": "1080p",
+   "case": "edge50",
+   "ms": {
+    "fast": [
+     34.44,
+     31.66,
+     32.15
+    ],
+    "legacy": [
+     150.39,
+     148.82,
+     148.64
+    ]
+   },
+   "max_diff": 0.0,
+   "covered_fraction": 0.201
+  },
+  {
+   "size": "1080p",
+   "case": "stroke10",
+   "ms": {
+    "fast": [
+     27.19,
+     27.29,
+     27.42
+    ],
+    "legacy": [
+     3765.95,
+     3722.75,
+     3732.32
+    ]
+   },
+   "max_diff": 0.0,
+   "covered_fraction": 0.0401
+  },
+  {
+   "size": "1080p",
+   "case": "two_shapes",
+   "ms": {
+    "fast": [
+     14.33,
+     14.19,
+     14.17
+    ],
+    "legacy": [
+     117.35,
+     117.14,
+     117.13
+    ]
+   },
+   "max_diff": 1.1920928955078125e-07,
+   "covered_fraction": 0.0431
+  },
+  {
+   "size": "4k",
+   "case": "simple",
+   "ms": {
+    "fast": [
+     6.45,
+     6.39,
+     6.5
+    ],
+    "legacy": [
+     78.0,
+     76.95,
+     77.58
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.0927
+  },
+  {
+   "size": "4k",
+   "case": "simple_feathered",
+   "ms": {
+    "fast": [
+     15.04,
+     15.04,
+     15.01
+    ],
+    "legacy": [
+     91.03,
+     92.14,
+     92.96
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.1095
+  },
+  {
+   "size": "4k",
+   "case": "feathered50",
+   "ms": {
+    "fast": [
+     45.65,
+     45.76,
+     45.76
+    ],
+    "legacy": [
+     426.62,
+     424.31,
+     422.31
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.2074
+  },
+  {
+   "size": "4k",
+   "case": "feathered50_motion",
+   "ms": {
+    "fast": [
+     91.53,
+     91.39,
+     91.52
+    ],
+    "legacy": [
+     1710.19,
+     1711.67,
+     1710.49
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.2075
+  },
+  {
+   "size": "4k",
+   "case": "simple_motion",
+   "ms": {
+    "fast": [
+     28.61,
+     28.6,
+     28.54
+    ],
+    "legacy": [
+     187.64,
+     184.38,
+     186.06
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.1096
+  },
+  {
+   "size": "4k",
+   "case": "edge50",
+   "ms": {
+    "fast": [
+     132.31,
+     131.9,
+     131.84
+    ],
+    "legacy": [
+     573.71,
+     568.36,
+     571.5
+    ]
+   },
+   "max_diff": 0.0,
+   "covered_fraction": 0.201
+  },
+  {
+   "size": "4k",
+   "case": "stroke10",
+   "ms": {
+    "fast": [
+     75.18,
+     75.33,
+     74.42
+    ],
+    "legacy": [
+     21767.66,
+     21745.76,
+     21782.42
+    ]
+   },
+   "max_diff": 0.0,
+   "covered_fraction": 0.0397
+  },
+  {
+   "size": "4k",
+   "case": "two_shapes",
+   "ms": {
+    "fast": [
+     70.18,
+     72.88,
+     77.62
+    ],
+    "legacy": [
+     457.26,
+     486.76,
+     505.06
+    ]
+   },
+   "max_diff": 5.960464477539063e-08,
+   "covered_fraction": 0.0429
+  }
+ ]
+}

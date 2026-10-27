@@ -1,0 +1,186 @@
+{
+ "cpu": {
+  "fast": {
+   "passes": 3,
+   "fps": "8.20 to 8.31",
+   "interval_p95_ms": "131.0 to 134.3",
+   "interval_p50_ms": "120.0 to 120.7",
+   "node_stage_p50_ms": "116.5 to 116.6",
+   "fps_values": [
+    8.306,
+    8.264,
+    8.198
+   ],
+   "cases": [
+    "cpu-48-cpu-fast-1-1",
+    "cpu-48-cpu-fast-2-1",
+    "cpu-48-cpu-fast-3-1"
+   ]
+  },
+  "legacy": {
+   "passes": 3,
+   "fps": "8.13 to 8.21",
+   "interval_p95_ms": "132.7 to 134.6",
+   "interval_p50_ms": "121.4 to 122.8",
+   "node_stage_p50_ms": "117.3 to 119.6",
+   "fps_values": [
+    8.127,
+    8.174,
+    8.205
+   ],
+   "cases": [
+    "cpu-48-cpu-legacy-1-1",
+    "cpu-48-cpu-legacy-2-1",
+    "cpu-48-cpu-legacy-3-1"
+   ]
+  }
+ },
+ "radeon": {
+  "fast": {
+   "passes": 3,
+   "fps": "17.77 to 17.95",
+   "interval_p95_ms": "65.9 to 68.4",
+   "interval_p50_ms": "53.0 to 54.5",
+   "node_stage_p50_ms": "43.2 to 46.3",
+   "fps_values": [
+    17.885,
+    17.955,
+    17.769
+   ],
+   "cases": [
+    "gpu2d-48-radeon-fast-1-1",
+    "gpu2d-48-radeon-fast-2-1",
+    "gpu2d-48-radeon-fast-3-1"
+   ]
+  },
+  "legacy": {
+   "passes": 3,
+   "fps": "17.49 to 17.61",
+   "interval_p95_ms": "63.4 to 75.8",
+   "interval_p50_ms": "54.0 to 56.2",
+   "node_stage_p50_ms": "47.6 to 51.2",
+   "fps_values": [
+    17.605,
+    17.58,
+    17.487
+   ],
+   "cases": [
+    "gpu2d-48-radeon-legacy-1-1",
+    "gpu2d-48-radeon-legacy-2-1",
+    "gpu2d-48-radeon-legacy-3-1"
+   ]
+  }
+ },
+ "rtx": {
+  "fast": {
+   "passes": 3,
+   "fps": "6.02 to 6.22",
+   "interval_p95_ms": "222.8 to 260.8",
+   "interval_p50_ms": "151.9 to 177.3",
+   "node_stage_p50_ms": "153.1 to 177.2",
+   "fps_values": [
+    6.225,
+    6.076,
+    6.021
+   ],
+   "cases": [
+    "gpu2d-48-rtx-fast-1-1",
+    "gpu2d-48-rtx-fast-2-1",
+    "gpu2d-48-rtx-fast-3-1"
+   ]
+  },
+  "legacy": {
+   "passes": 3,
+   "fps": "5.83 to 5.87",
+   "interval_p95_ms": "225.2 to 238.9",
+   "interval_p50_ms": "175.2 to 188.5",
+   "node_stage_p50_ms": "184.4 to 188.1",
+   "fps_values": [
+    5.872,
+    5.836,
+    5.827
+   ],
+   "cases": [
+    "gpu2d-48-rtx-legacy-1-1",
+    "gpu2d-48-rtx-legacy-2-1",
+    "gpu2d-48-rtx-legacy-3-1"
+   ]
+  }
+ },
+ "stand": {
+  "fast": {
+   "passes": 3,
+   "fps": "9.41 to 9.47",
+   "interval_p95_ms": "114.8 to 120.9",
+   "interval_p50_ms": "104.2 to 105.9",
+   "node_stage_p50_ms": "101.7 to 103.4",
+   "fps_values": [
+    9.467,
+    9.41,
+    9.432
+   ],
+   "cases": [
+    "gpu2d-48-stand-fast-1-1",
+    "gpu2d-48-stand-fast-2-1",
+    "gpu2d-48-stand-fast-3-1"
+   ]
+  },
+  "legacy": {
+   "passes": 3,
+   "fps": "9.07 to 9.19",
+   "interval_p95_ms": "119.8 to 122.8",
+   "interval_p50_ms": "107.4 to 109.1",
+   "node_stage_p50_ms": "105.1 to 106.4",
+   "fps_values": [
+    9.187,
+    9.134,
+    9.068
+   ],
+   "cases": [
+    "gpu2d-48-stand-legacy-1-1",
+    "gpu2d-48-stand-legacy-2-1",
+    "gpu2d-48-stand-legacy-3-1"
+   ]
+  }
+ },
+ "standcpu": {
+  "fast": {
+   "passes": 3,
+   "fps": "6.19 to 6.21",
+   "interval_p95_ms": "176.3 to 184.3",
+   "interval_p50_ms": "159.9 to 161.9",
+   "node_stage_p50_ms": "157.2 to 160.0",
+   "fps_values": [
+    6.206,
+    6.194,
+    6.209
+   ],
+   "cases": [
+    "cpu-48-standcpu-fast-1-1",
+    "cpu-48-standcpu-fast-2-1",
+    "cpu-48-standcpu-fast-3-1"
+   ]
+  },
+  "legacy": {
+   "passes": 3,
+   "fps": "6.06 to 6.12",
+   "interval_p95_ms": "177.8 to 180.9",
+   "interval_p50_ms": "162.1 to 165.4",
+   "node_stage_p50_ms": "160.2 to 162.4",
+   "fps_values": [
+    6.111,
+    6.121,
+    6.064
+   ],
+   "cases": [
+    "cpu-48-standcpu-legacy-1-1",
+    "cpu-48-standcpu-legacy-2-1",
+    "cpu-48-standcpu-legacy-3-1"
+   ]
+  }
+ },
+ "_load": {
+  "passes_started": 30,
+  "passes_with_another_suite_running": 0
+ }
+}

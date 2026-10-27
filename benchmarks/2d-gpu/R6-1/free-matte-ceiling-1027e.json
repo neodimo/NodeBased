@@ -1,0 +1,53 @@
+{
+ "what": "Radeon 8060S island (Automatic), 48 frames, first lap, uncached, 1080p, NODEBASED_ROTO_DRAWER=fast; the free rows use a copy of the comp whose Roto points are constants (tests/fixtures/playback_comp.nbcomp with the curves replaced by their start values), so the matte is drawn once and cached",
+ "fast_drawer_animated_roto": [
+  {
+   "case": "gpu2d-48-fast-1-1",
+   "fps": 17.58,
+   "interval_p95_ms": 65.877,
+   "node_stage_p50_ms": 45.954
+  },
+  {
+   "case": "gpu2d-48-fast-2-1",
+   "fps": 17.581,
+   "interval_p95_ms": 64.619,
+   "node_stage_p50_ms": 46.414
+  },
+  {
+   "case": "gpu2d-48-fast-3-1",
+   "fps": 17.695,
+   "interval_p95_ms": 66.313,
+   "node_stage_p50_ms": 47.424
+  }
+ ],
+ "static_roto_matte_free": [
+  {
+   "case": "free-1",
+   "fps": 19.249,
+   "interval_ms": {
+    "p50": 41.968,
+    "p95": 53.312,
+    "p99": 58.061
+   }
+  },
+  {
+   "case": "free-2",
+   "fps": 19.343,
+   "interval_ms": {
+    "p50": 41.952,
+    "p95": 53.119,
+    "p99": 56.987
+   }
+  },
+  {
+   "case": "free-3",
+   "fps": 19.272,
+   "interval_ms": {
+    "p50": 41.944,
+    "p95": 53.438,
+    "p99": 57.18
+   }
+  }
+ ],
+ "discarded": "a first set of three passes of each row, taken in the minutes after an integrator suite had finished (14.5 to 17.5 fps with the animated Roto), was discarded and repeated on a quiet machine"
+}

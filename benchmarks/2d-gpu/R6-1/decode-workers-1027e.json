@@ -1,0 +1,27 @@
+{
+ "what": "Radeon 8060S island (Automatic), fast drawer, one and two decode workers (NODEBASED_DECODE_AHEAD_WORKERS), three interleaved rounds",
+ "rows": {
+  "dw1": {
+   "passes": 3,
+   "fps": "17.50 to 17.81",
+   "interval_p95_ms": "65.1 to 68.7",
+   "node_stage_p50_ms": "45.9 to 47.2",
+   "fps_values": [
+    17.808,
+    17.504,
+    17.54
+   ]
+  },
+  "dw2": {
+   "passes": 3,
+   "fps": "17.59 to 18.06",
+   "interval_p95_ms": "63.4 to 66.3",
+   "node_stage_p50_ms": "44.9 to 46.7",
+   "fps_values": [
+    18.06,
+    17.798,
+    17.589
+   ]
+  }
+ }
+}

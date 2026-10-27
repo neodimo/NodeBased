@@ -1,0 +1,34 @@
+{
+ "case": "50-point curve, feather 18 (box), 1080p",
+ "solo_loop_iterations_in_two_seconds": 139284000,
+ "rows": {
+  "fast": [
+   {
+    "loop_percent_of_solo": 92.2,
+    "drawings_in_two_seconds": 21
+   },
+   {
+    "loop_percent_of_solo": 98.7,
+    "drawings_in_two_seconds": 22
+   },
+   {
+    "loop_percent_of_solo": 98.6,
+    "drawings_in_two_seconds": 21
+   }
+  ],
+  "legacy": [
+   {
+    "loop_percent_of_solo": 95.3,
+    "drawings_in_two_seconds": 2
+   },
+   {
+    "loop_percent_of_solo": 95.0,
+    "drawings_in_two_seconds": 2
+   },
+   {
+    "loop_percent_of_solo": 95.2,
+    "drawings_in_two_seconds": 2
+   }
+  ]
+ }
+}

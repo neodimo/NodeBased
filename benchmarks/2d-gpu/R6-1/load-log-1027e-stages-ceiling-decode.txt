@@ -1,0 +1,35 @@
+== pb1027e-stg
+20:52:18 start stglegacy1 other_suites=0 load=1.72
+20:52:33 end stglegacy1 other_suites=0 load=1.85
+20:52:33 start stgfast1 other_suites=0 load=1.85
+20:52:48 end stgfast1 other_suites=0 load=3.90
+20:52:48 start stglegacy2 other_suites=0 load=3.90
+20:53:02 end stglegacy2 other_suites=0 load=3.25
+20:53:02 start stgfast2 other_suites=0 load=3.25
+20:53:17 end stgfast2 other_suites=0 load=2.83
+20:53:17 start stglegacy3 other_suites=0 load=2.83
+20:53:32 end stglegacy3 other_suites=0 load=5.00
+20:53:32 start stgfast3 other_suites=0 load=5.00
+20:53:47 end stgfast3 other_suites=0 load=4.19
+done-e3
+== pb1027e-free
+20:38:55 start fast-1 other_suites=0 load=0.60
+20:39:10 end fast-1 other_suites=0 load=0.54
+20:39:25 start fast-2 other_suites=0 load=0.71
+20:39:40 end fast-2 other_suites=0 load=2.20
+20:39:54 start fast-3 other_suites=0 load=2.81
+20:40:09 end fast-3 other_suites=0 load=2.32
+== pb1027e-dw
+21:06:47 start dw1-1 other_suites=0 load=1.18
+21:07:02 end dw1-1 other_suites=0 load=1.30
+21:07:02 start dw2-1 other_suites=0 load=1.30
+21:07:17 end dw2-1 other_suites=0 load=2.70
+21:07:17 start dw1-2 other_suites=0 load=2.70
+21:07:32 end dw1-2 other_suites=0 load=2.32
+21:07:32 start dw2-2 other_suites=0 load=2.32
+21:07:47 end dw2-2 other_suites=0 load=2.04
+21:07:47 start dw1-3 other_suites=0 load=2.04
+21:08:02 end dw1-3 other_suites=0 load=6.81
+21:08:02 start dw2-3 other_suites=0 load=6.81
+21:08:17 end dw2-3 other_suites=0 load=7.70
+done-e4

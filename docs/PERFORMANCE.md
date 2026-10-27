@@ -1096,6 +1096,117 @@ The modules above and `tests.test_gpu2d`, `tests.test_rotoahead`, `tests.test_de
 Rerun: Automatic against the old choice is `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :183 --backend gpu2d --island-adapter automatic --label auto --frame-range 48 --passes 3 --budget-mb 512 --no-sampler --out-dir "$NB_RUN/pb"` (`--island-adapter default` for the old choice, `--backend cpu` for the CPU nodes; set `NODEBASED_GPU_LOCK_HELD=1` and `NODEBASED_ISLAND_PROBE_FILE=$NB_RUN/island-probe.json` inside the lock);
 the Read rows add `--env NODEBASED_READ_LOOKUP=0`; interaction is `python tools/benchmark_gpu2d.py interaction --inputs "$NB_RUN/plates" --source-workers 1 --backend gpu2d --adapter automatic --output i.json`; tests `python -m unittest tests.test_islandadapter tests.test_readlookup tests.test_playbackprefs`.
 
+### R6-1: a faster Roto and RotoPaint matte drawer (10/27, step E of 5)
+
+Step D left the Radeon island at 17.3 fps and named the Roto matte as what stood between it and 24 fps: about 44 ms for a 1080p matte on one core, drawn on workers that compete with the thread that evaluates the frame. This step replaces the drawer. Evidence is in
+`benchmarks/2d-gpu/R6-1/` under the `-1027e` names: `matte-*` (the matte alone), `drawer-playback-*` (the realistic comp, old drawer against new), `stages-radeon8060s-legacy-*` and `-fast-*` (stage tables), `free-matte-*` and `decode-workers-*` (what is left once the matte is out of the way),
+`environment-*` and `load-log-*`. Every timing row is three passes, rows interleaved; every pass of the comp ran under `/tmp/nb-gpu.lock` with no integrator suite running (`load-log-1027e.txt`: all 30 passes of the main table read `other_suites=0`; the stage, ceiling and decode rows have their own logs in `load-log-1027e-stages-ceiling-decode.txt`; a first set of the ceiling row and of the decode row, taken while or just after an integrator suite ran,
+was discarded and repeated on a quiet machine).
+
+**Result.**
+
+- *The matte is 4 to 290 times faster and agrees with the old drawer to 1.2e-7.* A 1080p matte of the realistic comp's shape takes 4.1 to 4.9 ms against 23.3 ms; a 50-point curve with a box feather 10.2 to 10.9 ms against 108 to 109; the same with motion blur 21 ms against 446 to 447; an open stroke 27 ms against 3.7 seconds (4K: 75 ms against 21.7 seconds).
+  The largest pixel difference to the old drawer is 6e-8 for fills (1.2e-7 for two shapes) and exactly 0 for strokes and the signed-distance feather; an 8-bit step is 3.9e-3.
+- *The Radeon island plays 17.77 to 17.95 fps against 17.49 to 17.61 with the old drawer in the same session* (interval p95 65.9 to 68.4 ms against 63.4 to 75.8; node stage 43.2 to 46.3 ms against 47.6 to 51.2). The stage table: node stage 52.1 ms (50.7 to 54.2) becomes 47.4 ms (47.2 to 47.8), and the Roto work on the source workers falls from 52.5 ms per frame to 24.4 ms.
+  Every other row moves a little in the same direction (table below).
+- **The Radeon does not reach 24 fps.** With the matte out of the way altogether (a Roto that never changes, so the matte costs nothing after frame 1) the same comp plays 19.25 to 19.34 fps. Better matte drawing cannot close the rest of the gap, on the CPU or on the card, so the optional matte on the card was not built.
+- *Not changed:* Roto's and RotoPaint's knobs, the document format, the cache keys (the digest of a Roto does not depend on the drawer; a test asserts it) and every other node. The old drawer stays behind a setting for one release.
+
+**What changed** (`nodebased/rotofast.py`, dispatched from `nodebased/roto.py`).
+
+- *Closed shapes.* The old drawer sorted every edge against every sub-scanline of a 16-row band, a dense ``(sub-scanlines x edges)`` problem for the whole height of the shape. The new one makes one crossing per (edge, sub-scanline) pair the edge really covers, sorts them once, takes the non-zero winding as one running sum
+  and folds the eight sub-scanlines of a row into that row as they are accumulated. The sample positions (8 per row at `(k + 0.5) / 8`), the winding rule and the horizontal clip are the old drawer's, and the half-open test of which sub-scanlines an edge covers repeats the old comparison, so coverage agrees to float rounding.
+  Tall shapes are accumulated in bands of at most 2 million cells so a 4K shape does not allocate hundreds of megabytes.
+- *Open strokes.* Every segment was measured against every pixel of the patch (a 10-point stroke is about 150 segments). A segment now touches its own bounding box widened by the stroke's reach (half the width, the largest feather, and the half pixel), the same reach for every segment, so a pixel that can be lit still meets its nearest segment and the result is identical. The
+  per-vertex arrays are built with array arithmetic.
+- *Signed-distance feather.* The per-segment normals and offsets are one array operation per span instead of a Python loop, each segment's distance field is evaluated from two one-dimensional axes on its own box, and the loop only records which segment won each pixel; the feather radius is read once for every pixel from its winner. The tie between two segments that share a vertex is
+  settled by the same float32 rounding the old drawer had, so the picture is unchanged.
+- *Compositing.* The matte and the colour are written into one output array (no concatenation and no second copy of 33 MB at 1080p), the first shape on an empty canvas is a plain write, and a shape of full opacity is not scaled by one.
+- *The interpreter lock.* Everything heavy is a large `numpy` call (ufuncs, `cumsum`, `argsort`, `copyto`), which runs without the lock. Measured with `tools/benchmark_roto_matte.py --lock-check` (`lock-check-1027e.json`): a pure-Python counting loop on the main thread runs at 92 to 99 percent of its solo speed beside a thread drawing the new matte over and over and at 95 percent beside one
+  drawing the old matte, so the old drawer released the lock for almost all of its time too, and the lock was not what the matte cost the frame (the guess in step D). What differs is how long the drawing runs: 21 to 22 drawings fit in two seconds against 2. Four threads drawing the same shapes at once get the single-thread picture (test).
+- *A shape with a non-finite point* keeps the old drawer's behaviour (the old kernels answer for it).
+- *The setting.* Settings → Interface → *Roto drawer*: Fast (default) or Previous; `NODEBASED_ROTO_DRAWER=fast|legacy` wins over the saved choice and Settings says so under the row; `roto.set_drawer("legacy")` is the call. A change takes effect at once and drops the cached mattes of the other drawer.
+  `DEFAULT_ROTO_DRAWER` in `nodebased/playbackprefs.py` is the one-line default. The previous drawer is `roto.coverage_legacy` and the unchanged bodies of `stroke_coverage` and `edge_feather`; remove it after one release.
+
+**The matte alone** (`tools/benchmark_roto_matte.py`, `roto.rasterise` on resolved shapes, no evaluator and no window; median draw time of seven drawings per pass, range over three interleaved passes; 32 CPUs idle; `matte-1027e.json`).
+
+| 1080p | Previous drawer ms | Fast drawer ms | Faster by | Largest pixel difference |
+|---|---|---|---|---|
+| 6-point polygon, no feather | 22.0 to 23.3 | 2.0 to 2.2 | 10.8x | 6.0e-08 |
+| 6-point polygon, feather 18 (box): the realistic comp's shape | 23.3 to 23.6 | 4.1 to 4.9 | 5.1x | 6.0e-08 |
+| 50-point curve, feather 18 (box) | 107.9 to 109.2 | 10.2 to 10.9 | 10.3x | 6.0e-08 |
+| 50-point curve, feather 18, motion blur (4 samples, moving) | 445.7 to 447.2 | 20.9 to 21.2 | 21.2x | 6.0e-08 |
+| 6-point polygon, feather 18, motion blur | 52.3 to 54.7 | 7.9 to 8.0 | 6.7x | 6.0e-08 |
+| 50-point curve, signed-distance feather 18, per-point offsets | 148.6 to 150.4 | 31.7 to 34.4 | 4.6x | 0 |
+| open 10-point stroke, width 30, feather 8 | 3722.8 to 3765.9 | 27.2 to 27.4 | 137x | 0 |
+| polygon with feather 10 and a subtracted 50-point blob | 117.1 to 117.3 | 14.2 to 14.3 | 8.2x | 1.2e-07 |
+
+| 4K | Previous drawer ms | Fast drawer ms | Faster by | Largest pixel difference |
+|---|---|---|---|---|
+| 6-point polygon, no feather | 77.0 to 78.0 | 6.4 to 6.5 | 12.0x | 6.0e-08 |
+| 6-point polygon, feather 18 (box) | 91.0 to 93.0 | 15.0 | 6.1x | 6.0e-08 |
+| 50-point curve, feather 18 (box) | 422.3 to 426.6 | 45.6 to 45.8 | 9.3x | 6.0e-08 |
+| 50-point curve, feather 18, motion blur (4 samples, moving) | 1710.2 to 1711.7 | 91.4 to 91.5 | 18.7x | 6.0e-08 |
+| 6-point polygon, feather 18, motion blur | 184.4 to 187.6 | 28.5 to 28.6 | 6.5x | 6.0e-08 |
+| 50-point curve, signed-distance feather 18, per-point offsets | 568.4 to 573.7 | 131.8 to 132.3 | 4.3x | 0 |
+| open 10-point stroke, width 30, feather 8 | 21745.8 to 21782.4 | 74.4 to 75.3 | 290x | 0 |
+| polygon with feather 10 and a subtracted 50-point blob | 457.3 to 505.1 | 70.2 to 77.6 | 6.6x | 6.0e-08 |
+
+The signed-distance feather is the slowest fast case: it measures every pixel near the outline against each of the outline's roughly 1000 segments and does that in float64 to keep the old drawer's tie-breaks, so it gained 4 to 5 times against 10 to 290 times elsewhere.
+Inside the played comp the Roto node takes 24 ms on the source worker (the drawer is 4 ms of it; the node alone on an idle core takes 7.7 ms, the rest is the digest, the feather and the other threads' competition for the interpreter lock and memory).
+
+**The realistic comp, old drawer against new** (`playback --no-sampler`, 48 frames, first lap, uncached, 1080p; fps / interval p95 ms / node stage p50 ms; range over three interleaved rounds; `NODEBASED_ROTO_DRAWER=legacy` against `fast`; `drawer-playback-1027e.json`).
+
+| | Previous drawer | Fast drawer | Step D (10/26, old drawer) |
+|---|---|---|---|
+| Radeon 8060S island (Automatic) | 17.49 to 17.61 / 63.4 to 75.8 / 47.6 to 51.2 | 17.77 to 17.95 / 65.9 to 68.4 / 43.2 to 46.3 | 17.26 to 17.37 / 64.5 to 66.7 / 47.7 to 50.4 |
+| RTX 3080 Ti island (named; Automatic does not choose it here) | 5.83 to 5.87 / 225.2 to 238.9 / 184.4 to 188.1 | 6.02 to 6.22 / 222.8 to 260.8 / 153.1 to 177.2 | 5.69 to 6.11 / 218.0 to 256.2 / 179.0 to 191.6 |
+| Four-CPU stand-in, island (Automatic: the Radeon) | 9.07 to 9.19 / 119.8 to 122.8 / 105.1 to 106.4 | 9.41 to 9.47 / 114.8 to 120.9 / 101.7 to 103.4 | 9.00 to 9.04 / 118.5 to 119.5 / 105.8 to 107.4 |
+| CPU nodes | 8.13 to 8.21 / 132.7 to 134.6 / 117.3 to 119.6 | 8.20 to 8.31 / 131.0 to 134.3 / 116.5 to 116.6 | 7.95 to 8.04 / 137.4 to 139.7 / 119.8 to 122.1 |
+| Four-CPU stand-in, CPU nodes | 6.06 to 6.12 / 177.8 to 180.9 / 160.2 to 162.4 | 6.19 to 6.21 / 176.3 to 184.3 / 157.2 to 160.0 | 6.06 to 6.08 / 178.9 to 183.8 / 161.3 to 161.8 |
+
+The gain is 1 to 5 percent on every row (Radeon island +0.3 fps, RTX +0.3, stand-in island +0.3, CPU nodes +0.1, stand-in CPU nodes +0.1). Neither drawer passes the interval p95 gate of 62.5 ms on all passes (the Radeon island sits at 64 to 68 ms in both). The matte had already been taken off the critical path by the read-ahead of step B; what the faster drawer removes is
+the competition it caused, which shows in the next table.
+
+**Where the Radeon frame goes now** (`playback --stages --no-sampler`, three interleaved rounds each; mean exclusive ms per fresh frame on the evaluating thread, range over the rounds; `stages-radeon8060s-*-1027e.json`).
+
+| Stage on the evaluating thread | Previous drawer | Fast drawer |
+|---|---|---|
+| Plate Read (includes the wait for the decode pool) | 9.4 (8.1 to 11.7) | 14.3 (12.0 to 15.6) |
+| ColorCorrect on the CPU kernels | 8.4 (7.5 to 9.5) | 6.9 (6.8 to 7.1) |
+| Transform staging | 9.0 (7.0 to 10.4) | 5.1 (4.1 to 6.9) |
+| Island upload | 5.8 (5.6 to 6.0) | 5.6 (5.4 to 5.8) |
+| Island kernels on the card | 5.2 (4.9 to 5.5) | 4.8 (4.6 to 4.9) |
+| Island download (copy and map) | 3.3 | 3.0 |
+| Island host work and encode | 2.1 | 1.1 |
+| Wait at the Roto join | 1.8 (1.2 to 2.8) | 0.6 (0.5 to 0.7) |
+| *Node stage* | 52.1 (50.7 to 54.2) | 47.4 (47.2 to 47.8) |
+| *Other threads, busy ms per frame:* decode pool | 48.2 | 45.3 |
+| *Roto on the source workers (drawn ahead and drawn for the frame in hand)* | 33.7 + 18.8 | 24.4 + 0 |
+
+The Roto work on the source workers halves and the Transform staging and the join lose 5 ms between them. The plate Read stage grows by 5 ms for the reason step C found: the walk now arrives at the Read sooner and waits for the decode pool, which is busy 45 ms of every 55 ms interval (two 22 ms EXR decodes per frame on one thread).
+The frame is paced by decoding and by the evaluating thread's own chain (Read, Transform staging, upload, kernels, download, ColorCorrect: 47 ms); 24 fps needs 41.7 ms.
+
+**Why 24 fps is out of reach for the matte alone.**
+
+- A comp with a static Roto, three interleaved passes beside the fast-drawer rows (Radeon island, the same session): 19.25 to 19.34 fps (interval p50 42.0 ms, p95 53.1 to 53.4 ms) against 17.58 to 17.70 with the animated Roto and the fast drawer (`free-matte-ceiling-1027e.json`). A matte costing nothing gains 1.7 fps, so a matte on the card, which could at best remove that cost, cannot reach 24 fps.
+  It also needs the shape tables and the feather on the card, a second implementation to keep within tolerance of the first, and a CPU fallback; the measurement says it is not worth building for the frame rate.
+- Two decode workers with the fast drawer (Radeon island, three interleaved rounds, `decode-workers-1027e.json`): 17.59 to 18.06 fps and interval p95 63.4 to 66.3 ms against 17.50 to 17.81 fps and 65.1 to 68.7 ms with one. The second decode worker adds about 0.2 fps, as it did in step C.
+- What stands between the Radeon and 24 fps is the chain the evaluating thread runs for every frame: the plate decode (22 ms, twice per frame), the host-side staging and the 74 MB upload (5.6 ms), the CPU ColorCorrect (6.9 ms) and the download (3.0 ms). Moving ColorCorrect into the island and keeping the finished frame on the card for the display transform removes the last two,
+  and half-float uploads halve the first; those are the next steps, none of them the matte.
+
+**Tests.** `tests/test_rotofast.py` (35 tests, 1.3 s): the coverage kernel against the old one over random polygons (self-intersecting included), random curves with handles, holes, clipped, empty, degenerate, single-pixel shapes, vertices on sub-scanline boundaries and axis-aligned boxes with analytic values (quarter pixel in, half a row in); whole mattes under both drawers for plain and curved shapes, all three
+falloffs and the falloff power, signed-distance feather with per-point offsets, inverted shapes and an inverted node, every blend mode with opacity and colour, subtract before and after painting, open strokes with every cap pair and feather, motion blur with a shutter, the legacy three-sample blur and the global blur, shape transforms and extra matrices (all within 1e-6); regions equal the full frame with each drawer
+(six regions including one-pixel strips and corners); the tile executor equals the evaluator with each drawer; the cache digest of a Roto is the same under both drawers and a second frame with the same shapes is a cache hit; a set cancel stops the Roto before any matte is drawn or stored and leaves the evaluator working; a shape with only the original fields, the realistic comp's own Roto at frames 1, 12 and 48 at 1920 x 1080, and RotoPaint shape items (whole frame and a region) draw the same; four threads drawing at once give identical pictures; the
+band size changes nothing; a point that is not a number behaves as before; each drawer never enters the other's kernels. `tests/test_playbackprefs.py` (4 new, 32 in all): the default and the environment, the saved choice round-trips, the Settings row, a running window switches and drops the old mattes.
+Lane 2's step F and H pixel tests (`tests.test_2d_fidelity_f_roto`, `tests.test_2d_fidelity_h_rotopaint`, unchanged) and the Roto, RotoPaint, tile, planar-tracking, golden, cache, knowledge and benchmark-tool modules pass (485 tests with the two new ones); the modules that open the Settings dialog pass (324 tests). The drawer changes no shader and no buffer packing, so the card test modules were not rerun; the played passes ran on the Radeon and the RTX.
+
+**Left out.** The RTX 4070 laptop, the A6000 and Windows rows stay unverified (Gonzo owns them). The 240-frame rows were not repeated. The signed-distance feather is the slowest of the new kernels (4 to 5 times faster than before) and a candidate for a float32 pass if a tolerance beyond 1e-6 is acceptable. The legacy drawer is to be removed after one release.
+
+**Needs Gonzo.** (1) The defaults from the earlier steps are unchanged: `DEFAULT_GPU_NODES`, `DEFAULT_DECODE_WORKERS`. (2) The next 24 fps work is the ColorCorrect kernel in the island with the frame kept on the card, half-float uploads and the decode pipeline (above). (3) Remove `coverage_legacy` and the setting after one release. (4) The unmeasured machines.
+
+Rerun: the matte alone is `python tools/benchmark_roto_matte.py --output matte.json` (`--sizes 1080p --cases simple feathered50 --passes 3 --reps 15`); the comp rows are the step D command with `--env NODEBASED_ROTO_DRAWER=legacy` or `=fast` (and `NODEBASED_GPU_LOCK_HELD=1` under the lock); the stage tables add `--stages`; tests `python -m unittest tests.test_rotofast tests.test_playbackprefs tests.test_2d_fidelity_f_roto tests.test_2d_fidelity_h_rotopaint`.
+
 ## Lane 2 step notes
 
 ### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)

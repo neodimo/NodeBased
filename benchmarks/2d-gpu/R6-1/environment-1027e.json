@@ -1,0 +1,19 @@
+{
+ "step": "R6-1 step E (10/27)",
+ "code_commits": {
+  "fast_drawer": "07a1071a",
+  "drawer_setting": "e4d537e2",
+  "non_finite_guard": "403b4b3d"
+ },
+ "host": {
+  "cpus": 32,
+  "kernel": "7.2.9-ogc3.1.fc44.x86_64",
+  "python": "3.12.13",
+  "numpy": "2.5.3"
+ },
+ "adapters": {
+  "discrete": "NVIDIA GeForce RTX 3080 Ti, Vulkan, USB4 enclosure",
+  "integrated": "AMD Radeon 8060S Graphics (RADV STRIX_HALO), Vulkan"
+ },
+ "method": "matte alone: tools/benchmark_roto_matte.py (roto.rasterise on resolved shapes, both drawers interleaved, 7 drawings per pass, 3 passes). Comp rows: tools/benchmark_gpu2d.py playback --no-sampler (48 frames, first lap, uncached, 1080p) driven one pass per call, rows interleaved legacy/fast, three rounds, NODEBASED_ROTO_DRAWER=legacy|fast; every pass took /tmp/nb-gpu.lock and ran with no integrator suite (load-log-1027e.txt, other_suites=0); the stand-in is taskset -c 0-3 with QT_SCALE_FACTOR=2; Automatic opens the island as the app does, the measurement kept in a file (NODEBASED_ISLAND_PROBE_FILE); the RTX row names the discrete card (--island-adapter default). Stage rows add --stages. Lock check: tools/benchmark_roto_matte.py --lock-check."
+}

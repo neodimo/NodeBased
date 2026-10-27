@@ -7,6 +7,12 @@ over the passes. The two outputs are compared too, so a speed-up that moved a pi
 
     python tools/benchmark_roto_matte.py --output matte.json
     python tools/benchmark_roto_matte.py --sizes 1080p --cases simple feathered50 --passes 3 --reps 15
+    python tools/benchmark_roto_matte.py --lock-check --output lock.json
+
+`--lock-check` measures what a drawing costs the other threads of the process: a pure-Python counting loop runs for two seconds
+while a second thread draws the 50-point feathered curve over and over, once per drawer, three interleaved rounds; the result is
+the loop's speed as a percentage of its speed alone (100 means the drawing never held the interpreter lock) and how many matte
+drawings fit in the same two seconds.
 """
 from __future__ import annotations
 
@@ -138,6 +144,49 @@ def run(args):
     return out
 
 
+def lock_check(args):
+    import threading
+
+    shape_list = resolved(cases(1.0)["feathered50"])
+
+    def spin(seconds):
+        end, count = time.perf_counter() + seconds, 0
+        while time.perf_counter() < end:
+            for _ in range(1000):
+                count += 1
+        return count
+
+    def beside(drawer, seconds=2.0):
+        roto.set_drawer(drawer)
+        roto.rasterise(shape_list, 1920, 1080)
+        stop, drawings = threading.Event(), [0]
+
+        def work():
+            while not stop.is_set():
+                roto.rasterise(shape_list, 1920, 1080)
+                drawings[0] += 1
+        thread = threading.Thread(target=work)
+        thread.start()
+        time.sleep(0.2)
+        count = spin(seconds)
+        done = drawings[0]
+        stop.set()
+        thread.join()
+        return count, done
+    solo = max(spin(2.0) for _ in range(2))
+    rows = {drawer: [] for drawer in roto.DRAWERS}
+    for _ in range(args.passes):
+        for drawer in roto.DRAWERS:
+            count, done = beside(drawer)
+            rows[drawer].append({"loop_percent_of_solo": round(100.0 * count / solo, 1), "drawings_in_two_seconds": done})
+    roto.set_drawer("fast")
+    result = {"case": "50-point curve, feather 18 (box), 1080p", "solo_loop_iterations_in_two_seconds": solo, "rows": rows}
+    for drawer, items in rows.items():
+        print(f"{drawer:7} loop at {min(i['loop_percent_of_solo'] for i in items):.1f} to {max(i['loop_percent_of_solo'] for i in items):.1f} percent of its solo speed; "
+              f"{min(i['drawings_in_two_seconds'] for i in items)} to {max(i['drawings_in_two_seconds'] for i in items)} drawings in two seconds")
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--sizes", nargs="+", choices=sorted(SIZES), default=["1080p", "4k"])
@@ -145,8 +194,9 @@ def main():
     parser.add_argument("--passes", type=int, default=3)
     parser.add_argument("--reps", type=int, default=15)
     parser.add_argument("--output")
+    parser.add_argument("--lock-check", action="store_true", help="what a drawing costs a Python loop on another thread")
     args = parser.parse_args()
-    result = run(args)
+    result = lock_check(args) if args.lock_check else run(args)
     if args.output:
         pathlib.Path(args.output).write_text(json.dumps(result, indent=1))
 

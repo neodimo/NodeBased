@@ -1,0 +1,215 @@
+{
+ "tool": "tools/benchmark_gpu2d.py stages",
+ "prefix": "gpu2d-48-stgfast",
+ "passes": [
+  {
+   "case": "gpu2d-48-stgfast-1",
+   "frames": 47,
+   "node_stage_ms": 47.795,
+   "walk_ms": 42.91,
+   "stages_ms": {
+    "walk:Read": 15.412,
+    "kernel:ColorCorrect": 7.114,
+    "island upload (host to card)": 5.751,
+    "island kernels on the card (submit to done)": 4.743,
+    "island stage:Transform": 4.389,
+    "island download: host copy into the picture": 2.474,
+    "island run: other host work (blob, submit, buffers)": 0.719,
+    "walk:frame": 0.704,
+    "join:Roto": 0.536,
+    "island download: copy and map": 0.515,
+    "island encode (host)": 0.343,
+    "island stage:Grade": 0.071,
+    "island stage:Merge": 0.061,
+    "island stage:Blur": 0.049,
+    "join:Read": 0.028,
+    "island lock wait": 0.001
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 45.9,
+    "nodebased-source: kernel:Roto": 24.793,
+    "nodebased-source: walk:Read": 5.384,
+    "nodebased-source: walk:Roto": 0.418,
+    "nodebased-source: ahead:roto": 0.02
+   }
+  },
+  {
+   "case": "gpu2d-48-stgfast-2",
+   "frames": 47,
+   "node_stage_ms": 47.214,
+   "walk_ms": 41.981,
+   "stages_ms": {
+    "walk:Read": 11.966,
+    "island stage:Transform": 6.918,
+    "kernel:ColorCorrect": 6.801,
+    "island upload (host to card)": 5.577,
+    "island kernels on the card (submit to done)": 4.881,
+    "island download: host copy into the picture": 2.44,
+    "island run: other host work (blob, submit, buffers)": 0.881,
+    "walk:frame": 0.743,
+    "island download: copy and map": 0.663,
+    "join:Roto": 0.509,
+    "island encode (host)": 0.371,
+    "island stage:Grade": 0.078,
+    "island stage:Merge": 0.07,
+    "island stage:Blur": 0.053,
+    "join:Read": 0.028,
+    "island lock wait": 0.001
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 44.688,
+    "nodebased-source: kernel:Roto": 23.542,
+    "nodebased-source: walk:Read": 6.762,
+    "nodebased-source: walk:Roto": 0.618,
+    "nodebased-source: ahead:roto": 0.025
+   }
+  },
+  {
+   "case": "gpu2d-48-stgfast-3",
+   "frames": 47,
+   "node_stage_ms": 47.158,
+   "walk_ms": 42.231,
+   "stages_ms": {
+    "walk:Read": 15.649,
+    "kernel:ColorCorrect": 6.842,
+    "island upload (host to card)": 5.371,
+    "island kernels on the card (submit to done)": 4.636,
+    "island stage:Transform": 4.078,
+    "island download: host copy into the picture": 2.425,
+    "join:Roto": 0.732,
+    "island run: other host work (blob, submit, buffers)": 0.724,
+    "walk:frame": 0.699,
+    "island download: copy and map": 0.51,
+    "island encode (host)": 0.341,
+    "island stage:Grade": 0.075,
+    "island stage:Merge": 0.069,
+    "island stage:Blur": 0.048,
+    "join:Read": 0.03,
+    "island lock wait": 0.002
+   },
+   "other_threads_busy_ms": {
+    "nodebased-decode-ahead: decode": 45.367,
+    "nodebased-source: kernel:Roto": 24.826,
+    "nodebased-source: walk:Read": 3.531,
+    "nodebased-source: walk:Roto": 0.366,
+    "nodebased-source: ahead:roto": 0.017
+   }
+  }
+ ],
+ "node_stage_ms": {
+  "mean": 47.389,
+  "min": 47.158,
+  "max": 47.795
+ },
+ "stages_ms": {
+  "walk:Read": {
+   "mean_ms": 14.343,
+   "min_ms": 11.966,
+   "max_ms": 15.649
+  },
+  "kernel:ColorCorrect": {
+   "mean_ms": 6.919,
+   "min_ms": 6.801,
+   "max_ms": 7.114
+  },
+  "island upload (host to card)": {
+   "mean_ms": 5.566,
+   "min_ms": 5.371,
+   "max_ms": 5.751
+  },
+  "island stage:Transform": {
+   "mean_ms": 5.128,
+   "min_ms": 4.078,
+   "max_ms": 6.918
+  },
+  "island kernels on the card (submit to done)": {
+   "mean_ms": 4.753,
+   "min_ms": 4.636,
+   "max_ms": 4.881
+  },
+  "island download: host copy into the picture": {
+   "mean_ms": 2.446,
+   "min_ms": 2.425,
+   "max_ms": 2.474
+  },
+  "island run: other host work (blob, submit, buffers)": {
+   "mean_ms": 0.775,
+   "min_ms": 0.719,
+   "max_ms": 0.881
+  },
+  "walk:frame": {
+   "mean_ms": 0.715,
+   "min_ms": 0.699,
+   "max_ms": 0.743
+  },
+  "join:Roto": {
+   "mean_ms": 0.592,
+   "min_ms": 0.509,
+   "max_ms": 0.732
+  },
+  "island download: copy and map": {
+   "mean_ms": 0.562,
+   "min_ms": 0.51,
+   "max_ms": 0.663
+  },
+  "island encode (host)": {
+   "mean_ms": 0.352,
+   "min_ms": 0.341,
+   "max_ms": 0.371
+  },
+  "island stage:Grade": {
+   "mean_ms": 0.075,
+   "min_ms": 0.071,
+   "max_ms": 0.078
+  },
+  "island stage:Merge": {
+   "mean_ms": 0.067,
+   "min_ms": 0.061,
+   "max_ms": 0.07
+  },
+  "island stage:Blur": {
+   "mean_ms": 0.05,
+   "min_ms": 0.048,
+   "max_ms": 0.053
+  },
+  "join:Read": {
+   "mean_ms": 0.028,
+   "min_ms": 0.028,
+   "max_ms": 0.03
+  },
+  "island lock wait": {
+   "mean_ms": 0.001,
+   "min_ms": 0.001,
+   "max_ms": 0.002
+  }
+ },
+ "other_threads_busy_ms": {
+  "nodebased-decode-ahead: decode": {
+   "mean_ms": 45.318,
+   "min_ms": 44.688,
+   "max_ms": 45.9
+  },
+  "nodebased-source: kernel:Roto": {
+   "mean_ms": 24.387,
+   "min_ms": 23.542,
+   "max_ms": 24.826
+  },
+  "nodebased-source: walk:Read": {
+   "mean_ms": 5.226,
+   "min_ms": 3.531,
+   "max_ms": 6.762
+  },
+  "nodebased-source: walk:Roto": {
+   "mean_ms": 0.467,
+   "min_ms": 0.366,
+   "max_ms": 0.618
+  },
+  "nodebased-source: ahead:roto": {
+   "mean_ms": 0.021,
+   "min_ms": 0.017,
+   "max_ms": 0.025
+  }
+ },
+ "worker_thread_top_functions": [],
+ "note": "exclusive milliseconds per accepted fresh frame on the thread that evaluates it, averaged over the frames of a pass and then over the passes; 'walk: ...' is the evaluator's own time between its nodes (cache keys, digests, windows, Python); the island run is split by its counters; other_threads_busy_ms is what the source and decode workers did inside the same node stage (it overlaps, it is not added)"
+}
