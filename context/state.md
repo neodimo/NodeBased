@@ -1,5 +1,24 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) (9:05 PM on 2026-10-26 PDT)
+
+`main` moved `7ace3b8b` -> `e35b5256` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e35b5256` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-2055.log`, started 8:55 PM): **Ran 7339 tests in 524.356 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-5.6 Terra), step I of N: Read, Roto, Write, Group and the Tracker take the rest of Nuke's knobs, and Clamp clamps to values.** Commits:
+  - `fe188777` Clamp and Group: add parity controls
+  Diff: 10 files changed, 111 insertions(+), 66 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) (8:35 PM on 2026-10-26 PDT)
 
 `main` moved `2ec026ce` -> `093ba61e` (lane commits cherry-picked onto main in lane order) and then to this

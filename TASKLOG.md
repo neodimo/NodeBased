@@ -1,3 +1,9 @@
+## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) step I of N: Read, Roto, Write, Group and the Tracker take the rest of Nuke's knobs, and Clamp clamps to values (integrator tick)
+
+- **What was done:** `main` `7ace3b8b` -> `e35b5256` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `e35b5256`: Ran 7339 tests in 524.356 s, OK (skipped=35), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-26 — continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) step H of N: the short knob rows: keyers, RotoPaint, Precomp, the time and metadata nodes, Glow, DropShadow and AddMix (resume) (finish 1) (integrator tick)
 
 - **What was done:** `main` `2ec026ce` -> `093ba61e` plus this docs commit. Evidence and per-lane commit
