@@ -899,6 +899,12 @@ class _SourceScope:
     def close(self):
         for task in self.tasks.values():
             task.finish()
+        # `values` and `hashes` point back at this scope, a reference cycle that only the cyclic collector
+        # frees; emptied here, the walk's rasters go when the call returns instead of piling up until a
+        # collection (an 8K walk held 15 GB more at its peak).
+        dict.clear(self.values)
+        dict.clear(self.hashes)
+        self.tasks = {}
 
 
 class Evaluator:

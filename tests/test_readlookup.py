@@ -112,7 +112,10 @@ class FileIdentityTests(FolderCase):
             self.assertEqual(file_identity(path), reference(path))
             with CountedCalls() as old:
                 file_identity(path)
-        self.assertGreater(old.count, 4)
+        if os.name != "nt":
+            # POSIX resolve() walks the path one lstat per part; Windows asks the system for the final path in one
+            # call, so there the old lookup is cheap as it is.
+            self.assertGreater(old.count, 4)
 
     def test_a_warm_lookup_makes_two_system_calls(self):
         path = self.exr("shot/plate.0001.exr", 0.3)

@@ -5,6 +5,7 @@ them. The pooled evaluator must give the serial evaluator's pixels bit for bit, 
 same errors on the same nodes, and leave no work running after a call returns.
 """
 import copy
+import gc
 import os
 import tempfile
 import threading
@@ -281,6 +282,25 @@ class EvaluatorTests(unittest.TestCase):
             with self.assertRaises(Exception):
                 pooled.evaluate_raster(doc, "colorcorrect", frame=3)
             self.assertEqual(active, [])
+
+    def test_the_walk_lets_go_of_its_rasters_when_the_call_returns(self):
+        # The walk's values point back at its scope; without emptying them on close, every raster of the
+        # walk waited for the cyclic collector (the 8K memory gate peaked at 27 GB instead of 12 GB).
+        scopes = []
+
+        class Recorded(imaging._SourceScope):
+            def __init__(self):
+                super().__init__()
+                scopes.append(self)
+        serial, pooled = self.evaluators()
+        gc.disable()
+        self.addCleanup(gc.enable)
+        with mock.patch.object(imaging, "_SourceScope", Recorded):
+            for evaluator in (serial, pooled):
+                evaluator.evaluate_raster(self.doc, "colorcorrect", frame=3)
+        self.assertTrue(scopes)
+        for scope in scopes:
+            self.assertEqual((dict.__len__(scope.values), dict.__len__(scope.hashes), len(scope.tasks)), (0, 0, 0))
 
     def test_a_shut_down_pool_still_evaluates_on_the_calling_thread(self):
         serial, pooled = self.evaluators()

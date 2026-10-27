@@ -28,7 +28,8 @@ def picture(red, green=0.25, blue=0.5, width=W, height=H):
 
 class FolderCase(unittest.TestCase):
     def setUp(self):
-        self.dir = Path(tempfile.mkdtemp(prefix="nb-f4-"))
+        # Resolved: a Read stores the resolved path, and Windows hands out the temp folder under its short name.
+        self.dir = Path(tempfile.mkdtemp(prefix="nb-f4-")).resolve()
         self.addCleanup(lambda: shutil.rmtree(self.dir, ignore_errors=True))
         self.cache = self.dir / "cache"
         patcher = unittest.mock.patch.dict(os.environ, {localize.CACHE_ENV: str(self.cache), localize.FROM_ENV: ""})
