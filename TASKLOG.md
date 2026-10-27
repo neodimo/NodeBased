@@ -1,3 +1,9 @@
+## 2026-10-27 — continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) step J of N: the filter, colour and keyer rows: Inpaint, LightWrap, ColorLookup, IDistort, DirBlur, Noise, Cryptomatte and the rest (integrator tick)
+
+- **What was done:** `main` `04d38175` -> `4c06e706` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `4c06e706`: Ran 7393 tests in 520.674 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-27 — continuous mode merge: Lane 6 (Fluids, GPT-6 Sol) step A of 2: the Hot pour looks right: a soft steam column, a real pouring stream, liquid you can see in the glass, a soft shadow (integrator tick)
 
 - **What was done:** `main` `faa06788` -> `a805bb34` plus this docs commit. Evidence and per-lane commit
