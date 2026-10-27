@@ -20,8 +20,11 @@ Two limitations are deliberate and recorded rather than hidden:
 from __future__ import annotations
 
 import math
+import os
 
 import numpy as np
+
+from . import rotofast
 
 # Sub-scanlines per pixel row. Vertical coverage quantises to 1/SUBSAMPLES; horizontal is exact.
 SUBSAMPLES = 8
@@ -31,6 +34,28 @@ SUBSAMPLES = 8
 MIN_SEGMENTS = 4
 MAX_SEGMENTS = 64
 SEGMENT_PIXELS = 3.0
+
+# Which drawer rasterises the shapes: "fast" (nodebased/rotofast.py, the default) or "legacy" (the drawer of
+# releases before it, kept for one release so a regression can be switched off). The environment variable wins
+# over `set_drawer`, which the window calls with the machine's saved choice.
+DRAWER_ENV = "NODEBASED_ROTO_DRAWER"
+DRAWERS = ("fast", "legacy")
+_drawer = "fast"
+
+
+def set_drawer(name):
+    """Choose the drawer for this process ("fast" or "legacy"); returns the one now in use."""
+    global _drawer
+    if name not in DRAWERS:
+        raise ValueError(f"unknown Roto drawer {name!r}; use one of {DRAWERS}")
+    _drawer = name
+    return drawer()
+
+
+def drawer():
+    """The drawer in use: the environment variable if it names one, else the last `set_drawer`."""
+    forced = os.environ.get(DRAWER_ENV, "").strip().lower()
+    return forced if forced in DRAWERS else _drawer
 
 
 def flatten_points(points, closed=True):
@@ -101,6 +126,15 @@ def _flatten_cached(points, cache):
 
 def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
     """Scanline-fill one shape's resolved points into an HxW coverage array in [0, 1].
+
+    The fast drawer by default (`nodebased/rotofast.py`); `coverage_legacy` is the drawer it replaced."""
+    if drawer() == "legacy":
+        return coverage_legacy(points, width, height, origin, flattened_cache=flattened_cache)
+    return rotofast.coverage(_flatten_cached(points, flattened_cache), width, height, origin)
+
+
+def coverage_legacy(points, width, height, origin=(0, 0), *, flattened_cache=None):
+    """The previous drawer's scanline fill (see `coverage`).
 
     Non-zero winding, so a self-intersecting shape fills the way every other package fills it and
     a hole is drawn by winding a sub-loop the other way.
@@ -173,6 +207,11 @@ def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
 def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear", origin=(0, 0), caps=("rounded", "rounded")):
     """Rasterise an open cubic as stroke coverage, round-joined, with the start and end caps `caps` (rounded, square or butt)."""
     h, w = int(height), int(width)
+    if drawer() != "legacy":
+        vertices, offsets = rotofast.stroke_polyline(points)
+        if len(vertices) < 2:
+            return np.zeros((h, w), dtype=np.float32)
+        return rotofast.stroke_coverage(vertices, offsets, w, h, stroke_width, feather, falloff, origin, caps)
     vertices = []
     offsets = []
     for index in range(len(points) - 1):
@@ -272,6 +311,8 @@ def edge_feather(points, cover, feather, falloff="linear", origin=(0, 0), *, fla
     if len(vertices) < 3 or feather == 0 and not any(
             p.get("feather_x", 0) or p.get("feather_y", 0) for p in points):
         return cover
+    if drawer() != "legacy":
+        return rotofast.edge_feather(points, vertices, cover, feather, falloff, origin)
     # Match the adaptive Bezier flattening above; offsets follow the corresponding outline spans.
     offsets = []
     area = float(np.sum(vertices[:, 0] * np.roll(vertices[:, 1], -1) -
@@ -404,15 +445,20 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
     x0, y0 = max(0, rx - pad), max(0, ry - pad)
     x1, y1 = min(w, rx + rw + pad), min(h, ry + rh + pad)
     tw, th = x1 - x0, y1 - y0
-    matte = np.zeros((th, tw), dtype=np.float32)
-    rgb = np.zeros((th, tw, 3), dtype=np.float32)
     roi = (x0, y0, tw, th)
     if region is None:
         x0, y0, tw, th = 0, 0, w, h
         roi = (x0, y0, tw, th)
+    fast = drawer() != "legacy"
+    if fast:
+        # One output array: the colour and the matte are views of it, so nothing is concatenated or copied at the end.
+        canvas = np.zeros((th, tw, 4), dtype=np.float32)
+        matte, rgb = canvas[..., 3], canvas[..., :3]
+    else:
         matte = np.zeros((th, tw), dtype=np.float32)
         rgb = np.zeros((th, tw, 3), dtype=np.float32)
     rx0, ry0, rx1, ry1 = roi[0], roi[1], roi[0] + roi[2], roi[1] + roi[3]
+    painted = False                          # whether any shape has been composited into the canvas yet
     for shape in shapes:
         if not shape.get("visible", True):
             continue
@@ -491,8 +537,11 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
         cover = (render_cover() if shape_cache is None else
                  shape_cache(shape, (sx0, sy0, sw, sh), (w, h), render_cover))
         color = np.asarray(shape.get("color", [1, 1, 1, 1]), dtype=np.float32)
-        alpha = cover * np.float32(shape["opacity"]) * color[3]
-        source = color[:3] * alpha[..., None]
+        if fast and np.float32(shape["opacity"]) * color[3] == 1.0:
+            alpha = cover                    # full opacity and alpha: nothing to scale, and nothing below writes to it
+        else:
+            alpha = cover * np.float32(shape["opacity"]) * color[3]
+        source = None if fast else color[:3] * alpha[..., None]
         py0, py1 = sy0 - y0, sy1 - y0
         px0, px1 = sx0 - x0, sx1 - x0
         matte_patch = matte[py0:py1, px0:px1]
@@ -502,8 +551,11 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
         if shape["mode"] == "subtract":
             matte_patch *= 1.0 - alpha
             rgb_patch *= 1.0 - alpha[..., None]
+            painted = True
             continue
         blend = shape.get("blend_mode", "over")
+        if source is None and blend in ("plus", "minus"):
+            source = color[:3] * alpha[..., None]
         if blend == "plus":
             rgb_patch[:] = np.clip(rgb_patch + source, 0.0, 1.0)
             matte_patch[:] = np.clip(matte_patch + alpha, 0.0, 1.0)
@@ -513,9 +565,26 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
         elif blend == "multiply":
             rgb_patch *= 1.0 - alpha[..., None] + color[:3] * alpha[..., None]
             matte_patch[:] = alpha + matte_patch * (1.0 - alpha)
+        elif fast and not painted:
+            # The first shape on an empty canvas: over is a plain write of colour times alpha.
+            for channel in range(3):
+                np.multiply(alpha, color[channel], out=rgb_patch[..., channel])
+            matte_patch[...] = alpha
+        elif fast:
+            keep = np.float32(1.0) - alpha
+            rgb_patch *= keep[..., None]
+            for channel in range(3):
+                rgb_patch[..., channel] += alpha * color[channel]
+            matte_patch *= keep
+            matte_patch += alpha
         else:
             rgb_patch[:] = source + rgb_patch * (1.0 - alpha[..., None])
             matte_patch[:] = alpha + matte_patch * (1.0 - alpha)
+        painted = True
+    if fast:
+        if invert:
+            np.subtract(np.float32(1.0), matte, out=matte)
+        return np.ascontiguousarray(canvas[ry-y0:ry-y0+rh, rx-x0:rx-x0+rw])
     if invert:
         matte = 1.0 - matte
     pixels = np.concatenate((rgb, matte[..., None]), axis=2).astype(np.float32)
