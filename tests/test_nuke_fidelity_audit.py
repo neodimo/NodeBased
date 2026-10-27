@@ -106,6 +106,10 @@ class MappingTests(unittest.TestCase):
                 for p in spec["params"]:
                     self.assertGreaterEqual(listed.count(p), 1, p)
                 slots = list(spec["inputs"]) + list(spec.get("optional_inputs", []))
+                # Group sockets are the Input nodes inside its nested graph. `in1` is present
+                # whenever a Group has an incoming image, the Nuke unnamed-input equivalent.
+                if kind == "Group":
+                    slots.append("in1")
                 self.assertEqual(sorted(i["nodebased"] for i in pair["inputs"]), sorted(slots))
 
     def test_every_pairing_names_a_real_nuke_knob_and_gives_a_reason_when_not_identical(self):

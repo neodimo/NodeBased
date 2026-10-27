@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 89.2 / 100** (167 nodes scored, rank-weighted; 91.9 counting only the nodes NodeBased has).
+**Overall fidelity: 89.3 / 100** (167 nodes scored, rank-weighted; 91.9 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -35,7 +35,7 @@ Per node, five components, each a fraction from 0 to 1:
 | Merge | 98.2 | 95.0 | 12 |
 | Transform | 85.6 | 64.9 | 20 |
 | Metadata | 99.4 | 98.9 | 5 |
-| Other | 78.7 | 39.3 | 12 |
+| Other | 79.2 | 40.7 | 12 |
 
 ## Per node
 
@@ -259,7 +259,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 2 | NoOp | `NoOp` | supported | 100.0 | - | - | 100 | - | - | no fixture |
 | 3 | Backdrop | `Backdrop` | supported | n/a | - | - | - | - | - | no fixture |
 | 4 | PostageStamp | `PostageStamp` | supported | n/a | - | - | - | - | - | no fixture |
-| 5 | Group | `Group` | supported | 83.3 | 100 (1/1) | 100 | 0 | - | - | no fixture |
+| 5 | Group | `Group` | supported | 100.0 | 100 (1/1) | 100 | 100 | - | - | no fixture |
 | 5 | Input | `Input` | supported | n/a | - | - | - | - | - | no fixture |
 | 5 | Output | `Output` | supported | n/a | - | - | - | - | - | no fixture |
 | 6 | BlinkScript | - | missing | 0.0 | 0 (0/19) | - | 0 | - | - | no fixture |

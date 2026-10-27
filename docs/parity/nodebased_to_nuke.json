@@ -3398,7 +3398,9 @@
   },
   "Group": {
    "nodebased": "Group",
-   "inputs": [],
+   "inputs": [
+    {"nodebased": "in1", "nuke": "unnamed", "kind": "mapped"}
+   ],
    "knobs": [
     {"nodebased": ["lock_connections"], "nuke": ["lock_connections"], "kind": "same"}
    ]
