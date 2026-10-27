@@ -30,6 +30,12 @@ json.dump({'peak_vram_allocated_mib':1},open(job['info'],'w'))
 
 
 class SVDTests(unittest.TestCase):
+    def test_old_demo_document_loads_with_reference_image_default(self):
+        from nodebased.core import load_document
+        path = Path(__file__).resolve().parents[1] / "examples/demo_shot/demo_shot.nbcomp"
+        doc = load_document(path)
+        self.assertEqual(doc["nodes"]["generate"]["params"]["reference_image"], "")
+
     def test_description_shows_supported_and_ignored_controls(self):
         desc = ProviderDescription.load("svd_image_video")
         self.assertTrue(desc.local_gpu)

@@ -2572,14 +2572,13 @@ def upgrade_document(document):
         if isinstance(nodes, dict):
             _add_roto_bg_slot(nodes)
             _chrome.upgrade_nodes(nodes)
-            # Fidelity step I additions preserve the established clamp and group behaviour in
-            # documents saved before these optional controls existed, including nested Groups.
+            # Additive controls preserve older documents, including nested Groups.
             def _step_i_defaults(scope):
                 for current in scope.values():
                     if not isinstance(current, dict):
                         continue
                     params = current.get("params")
-                    if isinstance(params, dict) and current.get("type") in ("Clamp", "Group"):
+                    if isinstance(params, dict) and current.get("type") in ("Clamp", "Group", "Generate"):
                         for name, value in SPECS[current["type"]]["params"].items():
                             params.setdefault(name, value)
                     graph = current.get("graph")
