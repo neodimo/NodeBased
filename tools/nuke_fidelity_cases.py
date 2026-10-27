@@ -217,9 +217,9 @@ def _cases():
                     "Clamp: values below minimum become minimum, values above maximum become maximum"))
     out.append(Case("clamp_to_values", "Clamp", "Clamp",
                     (("channels", "rgb"), ("minimum", 0.2), ("maximum", 0.8), ("MinClampTo", 0.4), ("MinClampTo_enable", True), ("MaxClampTo", 0.6),
-                     ("MaxClampTo_enable", True)), ("A",), "Clamp", None, ("A",), clamp(0.2, 0.8, 0.4, 0.6), "guide",
-                    "Clamp: with MinClampTo/MaxClampTo enabled, out-of-range values are set to those values instead",
-                    inexpressible="NodeBased's Clamp has no MinClampTo or MaxClampTo"))
+                     ("MaxClampTo_enable", True)), ("A",), "Clamp", {"channels": "rgb", "minimum": 0.2, "maximum": 0.8,
+                     "MinClampTo": 0.4, "MinClampTo_enable": 1, "MaxClampTo": 0.6, "MaxClampTo_enable": 1}, ("A",), clamp(0.2, 0.8, 0.4, 0.6), "guide",
+                    "Clamp: with MinClampTo/MaxClampTo enabled, out-of-range values are set to those values instead"))
 
     def premult(fx):
         s = fx["A"].astype(np.float64)

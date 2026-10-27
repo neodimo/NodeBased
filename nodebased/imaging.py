@@ -5923,7 +5923,12 @@ class Evaluator:
         lo = p.get("minimum", 0.0) if p.get("clamp_min", 1) else -np.inf
         hi = p.get("maximum", 1.0) if p.get("clamp_max", 1) else np.inf
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
-            out[..., c] = np.clip(image[..., c], lo, hi)
+            value = np.clip(image[..., c], lo, hi)
+            if p.get("MinClampTo_enable", 0):
+                value = np.where(image[..., c] < lo, p.get("MinClampTo", 0.0), value)
+            if p.get("MaxClampTo_enable", 0):
+                value = np.where(image[..., c] > hi, p.get("MaxClampTo", 1.0), value)
+            out[..., c] = value
         return out
 
     @staticmethod

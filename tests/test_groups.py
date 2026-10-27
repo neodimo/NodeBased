@@ -56,7 +56,7 @@ def tiled(document, target, edge=32):
 
 class GroupBasicsTests(unittest.TestCase):
     def test_registration(self):
-        self.assertEqual(SPECS["Group"]["params"], {})
+        self.assertEqual(SPECS["Group"]["params"], {"lock_connections": 0})
         self.assertEqual(SPECS["Input"]["params"], {"input_number": 1})
         self.assertEqual(SPECS["Output"]["inputs"], ["image"])
 
@@ -65,6 +65,14 @@ class GroupBasicsTests(unittest.TestCase):
                   {"op": "connect", "id": "g", "input": "in1", "source": "pre"})
         self.assertEqual(group_slots(d.document["nodes"]["g"]), ["in1"])
         self.assertTrue(np.array_equal(pixels(d.document, "g"), pixels(d.document, "pre")))
+
+    def test_lock_connections_refuses_a_group_rewire_until_unlocked(self):
+        d = build(*plate_commands(), {"op": "create", "id": "g", "type": "Group"},
+                  {"op": "connect", "id": "g", "input": "in1", "source": "pre"},
+                  {"op": "set", "id": "g", "param": "lock_connections", "value": 1})
+        with self.assertRaisesRegex(ValueError, "unlock connections"):
+            d.execute({"op": "connect", "id": "g", "input": "in1", "source": "plate"})
+        self.assertEqual(d.document["nodes"]["g"]["inputs"]["in1"], "pre")
 
     def test_group_of_grade_then_blur_matches_the_ungrouped_nodes_on_both_paths(self):
         flat = build(*chain_commands())

@@ -286,7 +286,7 @@ def make_group(doc, ids, group_id, name="Group"):
             if key in source:
                 target[key] = source.pop(key)
 
-    group = {"type": "Group", "name": name, "params": {}, "graph": graph,
+    group = {"type": "Group", "name": name, "params": {"lock_connections": 0}, "graph": graph,
              "inputs": {f"in{number}": source for number, source in enumerate(outer_sources, 1)},
              "pos": [sum(xs) / len(xs), sum(ys) / len(ys)], "disabled": False}
     for key in selected:

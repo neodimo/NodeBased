@@ -1312,6 +1312,10 @@
     {"nodebased": ["clamp_max"], "nuke": ["maximum_enable"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'maximum', scripting name `maximum_enable`"},
     {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
     {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"},
+    {"nodebased": ["MinClampTo"], "nuke": ["MinClampTo"], "kind": "same"},
+    {"nodebased": ["MinClampTo_enable"], "nuke": ["MinClampTo_enable"], "kind": "same"},
+    {"nodebased": ["MaxClampTo"], "nuke": ["MaxClampTo"], "kind": "same"},
+    {"nodebased": ["MaxClampTo_enable"], "nuke": ["MaxClampTo_enable"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
@@ -3395,7 +3399,9 @@
   "Group": {
    "nodebased": "Group",
    "inputs": [],
-   "knobs": []
+   "knobs": [
+    {"nodebased": ["lock_connections"], "nuke": ["lock_connections"], "kind": "same"}
+   ]
   },
   "Input": {
    "nodebased": "Input",

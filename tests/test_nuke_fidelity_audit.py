@@ -259,7 +259,7 @@ class FormulaCaseTests(unittest.TestCase):
         for ok in ("merge_over", "merge_plus", "merge_xor", "invert_rgb", "premult_default", "keymix_default", "colormatrix_rows"):
             self.assertEqual(results[ok]["status"], "pass", ok)
         self.assertEqual(results["merge_divide"]["status"], "pass")        # A where B <= 0, as the guide says
-        self.assertEqual(results["clamp_to_values"]["status"], "inexpressible")
+        self.assertEqual(results["clamp_to_values"]["status"], "pass")
         self.assertEqual(results["grade_levels"]["status"], "pass")
         self.assertEqual(results["merge_matte"]["status"], "not scored")
 
@@ -358,7 +358,7 @@ class ReferencePackTests(unittest.TestCase):
             res = audit.score_pair("Clamp", pair, NUKE["nodes"]["Clamp"], tmp)
             self.assertEqual(res["pixel_column"], "measured")
             self.assertIn("pixels", res["components"])
-            self.assertEqual(len(res["detail"]["pixels"]), 2)
+            self.assertEqual(len(res["detail"]["pixels"]), 3)
             plain = audit.score_pair("Clamp", pair, NUKE["nodes"]["Clamp"])
             self.assertEqual(plain["pixel_column"], "unmeasured")
             self.assertNotIn("pixels", plain["components"])

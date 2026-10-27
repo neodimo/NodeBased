@@ -221,6 +221,10 @@ SPECS = {
     "Invert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"channels": "rgb", "mix": 1.0, **_smallnodes.new_params("Invert")}},
     "Clamp": {"inputs": ["image"], "optional_inputs": ["mask"],
               "params": {"minimum": 0.0, "maximum": 1.0, "clamp_min": 1, "clamp_max": 1,
+                        # Nuke's optional replacement values are deliberately separate from the
+                        # bounds: a value below/above the bound can be replaced by any value.
+                        "MinClampTo": 0.0, "MinClampTo_enable": 0,
+                        "MaxClampTo": 1.0, "MaxClampTo_enable": 0,
                         "channels": "rgb", "mix": 1.0}},
     "Multiply": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"multiply": 1.0, "channels": "rgb", "mix": 1.0}},
     "Add": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"offset": 0.0, "channels": "rgb", "mix": 1.0}},
@@ -639,7 +643,7 @@ SPECS = {
                                           "width": 420, "height": 260}},
     # Group holds a node graph of its own (node key "graph", see groups.py). Its input slots are
     # in<N>, one per Input node inside, so `inputs` is empty here and groups.group_slots names them.
-    "Group": {"inputs": [], "params": {}},
+    "Group": {"inputs": [], "params": {"lock_connections": 0}},
     "Input": {"inputs": [], "params": {"input_number": 1}},
     "Output": {"inputs": ["image"], "params": {}},
     # Noise's "size" is Nuke's own knob name for the feature size in pixels; z_slice/octaves/
@@ -2148,7 +2152,9 @@ CHOICES["missing_frames"] = list(_precompnode.MISSING_FRAMES)
 LIMITS.update({"reload": (0, 2147483647), "reading": (0, 1), "render_order": (-1000000, 1000000),
                "use_output": (0, 1), "reload_write": (0, 2147483647)})
 CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none"]
-LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1)})
+LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1), "lock_connections": (0, 1),
+               "MinClampTo": (-1000000.0, 1000000.0), "MaxClampTo": (-1000000.0, 1000000.0),
+               "MinClampTo_enable": (0, 1), "MaxClampTo_enable": (0, 1)})
 # Step H: AddTimeCode, AppendClip and BurnIn (nodebased/metaknobs.py).
 CHOICES.update({"width_channel": list(_chrome.MASK_CHANNEL_CHOICES), "blur_channel": list(_chrome.MASK_CHANNEL_CHOICES)})
 LIMITS.update({"blur_scale": (0.0, 1000.0), "ignore_top_line": (0, 1), "avg_frames": (0, 1000), "enable_dropshadow_effect": (0, 1), "inherit_input_color": (0, 1),
@@ -2566,6 +2572,20 @@ def upgrade_document(document):
         if isinstance(nodes, dict):
             _add_roto_bg_slot(nodes)
             _chrome.upgrade_nodes(nodes)
+            # Fidelity step I additions preserve the established clamp and group behaviour in
+            # documents saved before these optional controls existed, including nested Groups.
+            def _step_i_defaults(scope):
+                for current in scope.values():
+                    if not isinstance(current, dict):
+                        continue
+                    params = current.get("params")
+                    if isinstance(params, dict) and current.get("type") in ("Clamp", "Group"):
+                        for name, value in SPECS[current["type"]]["params"].items():
+                            params.setdefault(name, value)
+                    graph = current.get("graph")
+                    if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                        _step_i_defaults(graph["nodes"])
+            _step_i_defaults(nodes)
             for node in nodes.values():
                 if isinstance(node, dict) and node.get("type") in ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D"):
                     params = node.get("params")
@@ -3422,6 +3442,8 @@ class Dispatcher:
                 _resolve_reformat_format(node["params"], doc)
         elif op == "connect":
             slot = cmd["input"]
+            if node["type"] == "Group" and node["params"].get("lock_connections", 0):
+                raise ValueError("Group: unlock connections before changing an input")
             node["inputs"][slot] = cmd.get("source")
             choices = node.setdefault("input_outputs", {})
             if cmd.get("source") is None or cmd.get("output") in (None, "out1", "rgba"):
