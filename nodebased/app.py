@@ -90,6 +90,7 @@ from .viewersettings import ViewerSettings
 from . import compare as compare_model
 from .bundle import write_frame as write_bundle_frame
 from . import metadata as metadata_module
+from . import readknobs
 from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTENSIONS, is_sequence,
                      sequence_path, sequence_pattern)
 from .cachetier import DiskCache, SharedMemoryBudget
@@ -12674,6 +12675,21 @@ class Window(QMainWindow):
                 localize_button.setToolTip("Replace the local copies of this Read's files with the current ones")
                 localize_button.clicked.connect(lambda _checked=False, k=key: self.update_localization(k))
                 form.addRow(localize_button)
+                import_sequence = QPushButton("Import sequence")
+                import_sequence.setObjectName("read-import-sequence")
+                import_sequence.setToolTip("Replace the filename's frame number with a padded sequence pattern")
+                def import_read_sequence(_checked=False, k=key):
+                    path, imported = readknobs.import_sequence(self.graph_nodes()[k]["params"].get("path", ""))
+                    if imported:
+                        self.commit_param(k, "path", path)
+                    else:
+                        self.statusBar().showMessage("This Read path has no frame number to import", 5000)
+                import_sequence.clicked.connect(import_read_sequence)
+                form.addRow(import_sequence)
+                sequence = QLabel("Sequence" if is_sequence(node["params"].get("path", "")) else "Single file")
+                sequence.setObjectName("read-sequence-state")
+                form.addRow("Source", sequence)
+                self.add_read_metadata_view(form, key)
             if node["type"] == "FrameHold":
                 # Nuke's setToCurrentFrame: first frame becomes the frame the playhead is on.
                 set_current = QPushButton("Set to current frame")
@@ -14136,6 +14152,43 @@ class Window(QMainWindow):
                                      else f"{len(rows)} differing keys"))
         summary.setObjectName("metadata-summary")
         summary.setWordWrap(True)
+        form.addRow(summary)
+
+    def add_read_metadata_view(self, form, key):
+        """The Read panel's Nuke-style source metadata table and transient filter.
+
+        Both are panel state: metadata describes the currently resolved file and the search box
+        only changes which rows are visible. Neither belongs in a saved node parameter.
+        """
+        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+        try:
+            document = self.dispatcher.document
+            frame = int(document["time"]["current"])
+            rows = sorted((self.evaluator.evaluate_raster(document, key, frame=frame, tier=1).meta or {}).items())
+            problem = ""
+        except (ValueError, OSError, KeyError) as error:
+            rows, problem = [], str(error)
+        search = QLineEdit()
+        search.setObjectName("read-metadata-filter")
+        search.setPlaceholderText("Filter metadata")
+        table = QTableWidget(len(rows), 2)
+        table.setObjectName("read-shown-metadata")
+        table.setHorizontalHeaderLabels(["Key", "Value"])
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setMinimumHeight(140)
+        for row, (name, value) in enumerate(rows):
+            table.setItem(row, 0, QTableWidgetItem(str(name)))
+            table.setItem(row, 1, QTableWidgetItem(str(value)))
+        def filter_rows(text):
+            needle = text.strip().lower()
+            for row, values in enumerate(rows):
+                table.setRowHidden(row, bool(needle) and not any(needle in str(value).lower() for value in values))
+        search.textChanged.connect(filter_rows)
+        form.addRow("Metadata", search)
+        form.addRow(table)
+        summary = QLabel(problem or f"{len(rows)} metadata keys")
+        summary.setObjectName("read-metadata-summary")
         form.addRow(summary)
 
     def add_profile_view(self, form, key):

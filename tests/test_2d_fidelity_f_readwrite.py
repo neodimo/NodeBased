@@ -20,6 +20,17 @@ from nodebased.tileexec import TileExecutor
 W, H = 24, 16
 
 
+class ReadSequenceImportTests(unittest.TestCase):
+    def test_import_sequence_turns_a_filename_frame_into_a_padded_pattern(self):
+        pattern, imported = readknobs.import_sequence("/shots/plate.0102.exr")
+        self.assertEqual(pattern, "/shots/plate.%04d.exr")
+        self.assertTrue(imported)
+
+    def test_import_sequence_leaves_a_still_or_existing_pattern_alone(self):
+        self.assertEqual(readknobs.import_sequence("/shots/plate.exr"), ("/shots/plate.exr", False))
+        self.assertEqual(readknobs.import_sequence("/shots/plate.%04d.exr"), ("/shots/plate.%04d.exr", False))
+
+
 def picture(red, green=0.25, blue=0.5, width=W, height=H):
     image = np.zeros((height, width, 4), np.float32)
     image[..., 0], image[..., 1], image[..., 2], image[..., 3] = red, green, blue, 1.0

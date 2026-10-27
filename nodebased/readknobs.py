@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import Path
 
 from . import pathcontext
 
@@ -30,6 +31,24 @@ KEYS = tuple(DEFAULTS)
 RANGE_BEHAVIOURS = ("hold", "loop", "bounce", "black")
 FRAME_MODES = ("expression", "start at", "offset")
 _SIZE = re.compile(r"^\s*(\d+)\s*[x×]\s*(\d+)\s*$")
+_FRAME_NUMBER = re.compile(r"^(.*?)(\d+)([^\d]*)$")
+
+
+def import_sequence(path):
+    """Return ``(pattern, imported)`` for the frame number in a selected filename.
+
+    The operation is deliberately presentation-only: it changes the saved Read path, while
+    the evaluator keeps using its established sequence lookup. A padded Nuke/NodeBased pattern
+    is left alone, and a still reports that there was no sequence to import.
+    """
+    text = str(path or "")
+    if "%" in text or "#" in text:
+        return text, False
+    found = _FRAME_NUMBER.match(Path(text).name)
+    if found is None:
+        return text, False
+    before, digits, after = found.groups()
+    return str(Path(text).with_name(f"{before}%0{len(digits)}d{after}")), True
 
 
 def extras(params):

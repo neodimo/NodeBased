@@ -43,10 +43,10 @@
     {"nodebased": ["value3"], "nuke": ["value3"], "kind": "same"},
     {"nodebased": ["key4"], "nuke": ["key4"], "kind": "same"},
     {"nodebased": ["value4"], "nuke": ["value4"], "kind": "same"},
-    {"nodebased": [], "nuke": ["importsequence"], "kind": "unsupported", "reason": "NodeBased's Read takes a sequence pattern (render.%04d.exr) in its path and the Browse dialog lists frame sequences, so there is no separate import step"},
-    {"nodebased": [], "nuke": ["sequence"], "kind": "unsupported", "reason": "the same: the Read's path is the frame sequence"},
-    {"nodebased": [], "nuke": ["shownmetadata"], "kind": "unsupported", "reason": "NodeBased shows a node's metadata on the ViewMetaData node, not in a table on the Read"},
-    {"nodebased": [], "nuke": ["metadatafilter"], "kind": "unsupported", "reason": "the filter box of that metadata table; see shownmetadata"}
+    {"nodebased": [], "nuke": ["importsequence"], "kind": "panel", "reason": "the Read panel's Import sequence button converts a selected filename's trailing frame number to a padded pattern"},
+    {"nodebased": [], "nuke": ["sequence"], "kind": "panel", "reason": "the Read panel states whether its path is a sequence or a single file"},
+    {"nodebased": [], "nuke": ["shownmetadata"], "kind": "panel", "reason": "the Read panel visibly lists the metadata of its resolved source file"},
+    {"nodebased": [], "nuke": ["metadatafilter"], "kind": "panel", "reason": "the Read panel's transient filter hides metadata rows without saving a node value"}
    ],
    "skip_default": ["frame"]
   },
