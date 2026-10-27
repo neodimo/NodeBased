@@ -7979,6 +7979,24 @@ class Evaluator:
         dist, bw, bh = Evaluator._box_edge_distance(p, x0, y0, w, h)
         softness = float(p.get("softness", 0.0)) * min(bw, bh) / 2.0
         coverage = (dist >= 0).astype(np.float64) if softness < 1e-9 else np.clip(dist / softness, 0.0, 1.0)
+        ramp = p.get("ramp", "none")
+        if ramp != "none":
+            xs = np.arange(x0, x0 + w, dtype=np.float64)
+            ys = np.arange(y0, y0 + h, dtype=np.float64)
+            xx, yy = np.meshgrid(xs, ys)
+            p0 = np.array([float(p.get("p0_x", 0.0)), float(p.get("p0_y", 0.0))])
+            axis = np.array([float(p.get("p1_x", 1.0)) - p0[0], float(p.get("p1_y", 0.0)) - p0[1]])
+            length2 = max(float(np.dot(axis, axis)), 1e-12)
+            amount = np.clip(((xx - p0[0]) * axis[0] + (yy - p0[1]) * axis[1]) / length2, 0.0, 1.0)
+            if ramp == "smooth0": amount = amount * amount
+            elif ramp == "smooth1": amount = 1.0 - (1.0 - amount) * (1.0 - amount)
+            elif ramp == "smooth": amount = amount * amount * (3.0 - 2.0 * amount)
+            low = np.array([p.get("color0_red", 0.0), p.get("color0_green", 0.0),
+                            p.get("color0_blue", 0.0), p.get("color0_alpha", 1.0)], dtype=np.float64)
+            high = np.array([p["red"], p["green"], p["blue"], p["alpha"]], dtype=np.float64)
+            straight = low[None, None, :] * (1.0 - amount[..., None]) + high[None, None, :] * amount[..., None]
+            alpha = coverage * straight[..., 3]
+            return np.concatenate([straight[..., :3] * alpha[..., None], alpha[..., None]], axis=-1).astype(np.float32)
         return Evaluator._paint_coverage(p, coverage)
 
     @staticmethod
@@ -8050,6 +8068,19 @@ class Evaluator:
         xs = np.arange(x0, x0 + w, dtype=np.float64)
         ys = np.arange(y0, y0 + h, dtype=np.float64)
         xx, yy = np.meshgrid(xs, ys)
+        # Nuke's Noise transform affects the procedural coordinate system, leaving its format
+        # alone.  Keep it in absolute canvas coordinates so crops and tiles sample the same field.
+        center_x, center_y = float(p.get("center_x", 0.0)), float(p.get("center_y", 0.0))
+        tx, ty = float(p.get("translate_x", 0.0)), float(p.get("translate_y", 0.0))
+        scale = max(float(p.get("scaling", 1.0)), 1e-6)
+        skew = math.tan(math.radians(float(p.get("skew", 0.0))))
+        qx, qy = (xx - center_x - tx) / scale, (yy - center_y - ty) / scale
+        qx = qx + skew * qy
+        angle = math.radians(float(p.get("rotate_x", 0.0)) + float(p.get("rotate_y", 0.0))
+                             + float(p.get("xrotate", 0.0)) + float(p.get("yrotate", 0.0)))
+        ca, sa = math.cos(angle), math.sin(angle)
+        xx = ca * qx - sa * qy + center_x
+        yy = sa * qx + ca * qy + center_y
         size = max(float(p.get("size", 64.0)), 1e-6)
         z = float(p.get("z_slice", 0.0))
         seed = int(p.get("seed", 0))
@@ -8060,11 +8091,33 @@ class Evaluator:
         total = np.zeros_like(xx)
         amplitude, freq, amp_sum = 1.0, 1.0 / size, 0.0
         for octave in range(octaves):
-            total = total + amplitude * Evaluator._value_noise(xx * freq, yy * freq, z, seed + octave * 101)
+            # Nyquist rejects octaves whose lattice would oscillate faster than a pixel.
+            if octave and int(p.get("nyquist", 1)) and freq > 0.5:
+                break
+            sample = Evaluator._value_noise(xx * freq, yy * freq, z, seed + octave * 101)
+            if p.get("type", "fBm") == "turbulence": sample = np.abs(2.0 * sample - 1.0)
+            total = total + amplitude * sample
             amp_sum += amplitude
             amplitude *= gain
             freq *= lacunarity
         value = np.clip(total / max(amp_sum, 1e-9), 0.0, 1.0) ** (1.0 / gamma)
+        ramp = p.get("ramp", "none")
+        if ramp != "none":
+            p0 = np.array([float(p.get("p0_x", 0.0)), float(p.get("p0_y", 0.0))])
+            axis = np.array([float(p.get("p1_x", 1.0)) - p0[0], float(p.get("p1_y", 0.0)) - p0[1]])
+            length2 = max(float(np.dot(axis, axis)), 1e-12)
+            amount = np.clip(((np.arange(x0, x0 + w)[None, :] - p0[0]) * axis[0]
+                              + (np.arange(y0, y0 + h)[:, None] - p0[1]) * axis[1]) / length2, 0.0, 1.0)
+            if ramp == "smooth0": amount = amount * amount
+            elif ramp == "smooth1": amount = 1.0 - (1.0 - amount) * (1.0 - amount)
+            elif ramp == "smooth": amount = amount * amount * (3.0 - 2.0 * amount)
+            value = value * amount
+            low = np.array([p.get("color0_red", 0.0), p.get("color0_green", 0.0),
+                            p.get("color0_blue", 0.0), p.get("color0_alpha", 1.0)], dtype=np.float32)
+            high = np.ones(4, dtype=np.float32)
+            color = low[None, None, :] * (1.0 - value[..., None]) + high[None, None, :] * value[..., None]
+            alpha = color[..., 3]
+            return np.concatenate([color[..., :3] * alpha[..., None], alpha[..., None]], axis=-1).astype(np.float32)
         value = value.astype(np.float32)
         alpha = np.ones_like(value)
         return np.concatenate([np.repeat(value[..., None], 3, axis=-1), alpha[..., None]], axis=-1).astype(np.float32)

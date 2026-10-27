@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -594,6 +594,8 @@ SPECS = {
                   "params": {"width": 960, "height": 540,
                             "box_x": 330.0, "box_y": 145.0, "box_width": 300.0, "box_height": 250.0,
                             "softness": 0.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
+                            "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0,
+                            "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0,
                             "mix": 1.0}},
     # Grid (lane L2 step 4c) is Nuke's Draw Grid: vertical and horizontal lines every `spacing_*`
     # pixels, starting at `grid_offset_*`, `line_width` pixels wide. `number_x`/`number_y` above zero
@@ -657,7 +659,7 @@ SPECS = {
     # generator cannot promise without moving the slice.
     "Noise": {"inputs": [], "optional_inputs": ["image", "mask"],
               "params": {"width": 960, "height": 540, "size": 64.0, "z_slice": 0.0, "octaves": 4,
-                        "lacunarity": 2.0, "gain": 0.5, "gamma": 1.0, "seed": 0, "mix": 1.0}},
+                        "lacunarity": 2.0, "gain": 0.5, "gamma": 1.0, "seed": 0, "type": "fBm", "nyquist": 1, "translate_x": 0.0, "translate_y": 0.0, "rotate_x": 0.0, "rotate_y": 0.0, "scaling": 1.0, "skew": 0.0, "center_x": 480.0, "center_y": 270.0, "xrotate": 0.0, "yrotate": 0.0, "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0, "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0, "mix": 1.0}},
     # Text renders through Qt's own text rasteriser offscreen (QPainter/QFont on a QImage), so it
     # needs no new dependency. "font" is a family name looked up through Qt's font database, not a
     # file path: whether a given family actually renders depends on what is installed on the
@@ -2163,6 +2165,7 @@ LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1), "lock_connecti
 CHOICES.update({"width_channel": list(_chrome.MASK_CHANNEL_CHOICES), "blur_channel": list(_chrome.MASK_CHANNEL_CHOICES)})
 LIMITS.update({"blur_scale": (0.0, 1000.0), "ignore_top_line": (0, 1), "avg_frames": (0, 1000), "enable_dropshadow_effect": (0, 1), "inherit_input_color": (0, 1),
                "shrink_expand": (-500.0, 500.0), "nonlinear": (0, 1), "effect_only": (0, 1)})
+LIMITS.update({"nyquist": (0, 1), "translate_x": (-1000000.0, 1000000.0), "translate_y": (-1000000.0, 1000000.0), "rotate_x": (-360.0, 360.0), "rotate_y": (-360.0, 360.0), "scaling": (0.000001, 1000000.0), "skew": (-360.0, 360.0), "xrotate": (-360.0, 360.0), "yrotate": (-360.0, 360.0), "p0_x": (-1000000.0, 1000000.0), "p0_y": (-1000000.0, 1000000.0), "p1_x": (-1000000.0, 1000000.0), "p1_y": (-1000000.0, 1000000.0), "color0_red": (-1000000.0, 1000000.0), "color0_green": (-1000000.0, 1000000.0), "color0_blue": (-1000000.0, 1000000.0), "color0_alpha": (-1000000.0, 1000000.0)})
 LIMITS.update({"use_precomputed": (0, 1), "range": (0.000001, 1000000.0), "source": (-1000000.0, 1000000.0), "target": (-1000000.0, 1000000.0),
                "onlywrap": (0, 1), "disableluma": (0, 1), "enableglow": (0, 1), "saturation": (0.0, 1000000.0), "LumaTolerance": (0.0, 1000000.0),
                "white": (-1000000.0, 1000000.0), "gray": (-1000000.0, 1000000.0), "contrast": (-1000000.0, 1000000.0), "gamma": (0.000001, 1000000.0),
@@ -2171,6 +2174,8 @@ LIMITS.update({"use_precomputed": (0, 1), "range": (0.000001, 1000000.0), "sourc
                "LABColourSpace": (0, 1), "smoothness": (0.0, 1000000.0), "stretchAmount": (-1000000.0, 1000000.0), "stretchDirection": (-360.0, 360.0),
                "detailAmount": (-1000000.0, 1000000.0)})
 CHOICES["curve_type"] = list(_curvetoolknobs.CURVE_TYPES)
+CHOICES["type"] = ["fBm", "turbulence"]
+CHOICES["ramp"] = ["none", "linear", "smooth0", "smooth1", "smooth"]
 CHOICES.update({"Quality": ["low", "normal", "high"], "fillRegion": ["Matte Alpha", "Source Alpha"],
                 "detailSource": ["Source", "Detail"]})
 LIMITS.update({"metafps": (0, 1), "use_frame": (0, 1), "meta_from_first": (0, 1), "y_padding": (0.0, 8192.0),
@@ -2574,6 +2579,15 @@ def upgrade_document(document):
             for name, value in SPECS["ColorCorrect"]["params"].items():
                 params.setdefault(name, value)
         doc["version"] = 25
+    if isinstance(doc, dict) and doc.get("version") == 25:
+        # v25 -> v26 adds the Draw Noise and Rectangle ramp/transform controls.  Each default is
+        # deliberately neutral, so loading an existing comp preserves its evaluated pixels.
+        for node in doc.get("nodes", {}).values():
+            if isinstance(node, dict) and node.get("type") in ("Noise", "Rectangle"):
+                params = node.setdefault("params", {})
+                for name, value in SPECS[node["type"]]["params"].items():
+                    params.setdefault(name, value)
+        doc["version"] = 26
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

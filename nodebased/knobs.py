@@ -634,7 +634,7 @@ KNOB_LAYOUT = {
         KnobGroup("xy", ("box_x", "box_y"), label="Area"),
         KnobGroup("xy", ("box_width", "box_height"), label="Area size"),
         KnobGroup("float_slider", ("softness",), soft_range=(0, 1)),
-        KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("color", ("red", "green", "blue", "alpha")), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Noise": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -643,7 +643,7 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("octaves",)), KnobGroup("float_slider", ("lacunarity",), soft_range=(1, 4)),
         KnobGroup("float_slider", ("gain",), soft_range=(0, 1)),
         KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
-        KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("int", ("seed",)), KnobGroup("enum", ("type",)), KnobGroup("bool", ("nyquist",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"), KnobGroup("xy", ("rotate_x", "rotate_y"), label="Rotate"), KnobGroup("float", ("scaling",), label="Scale"), KnobGroup("float", ("skew",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("float", ("xrotate",)), KnobGroup("float", ("yrotate",)), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Text": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("multiline", ("message",)), KnobGroup("string", ("font",)),
