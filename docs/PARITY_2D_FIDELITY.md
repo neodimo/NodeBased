@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 89.2 / 100** (167 nodes scored, rank-weighted; 91.8 counting only the nodes NodeBased has).
+**Overall fidelity: 89.2 / 100** (167 nodes scored, rank-weighted; 91.9 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -25,7 +25,7 @@ Per node, five components, each a fraction from 0 to 1:
 
 | Group | Rank-weighted | Plain mean | Nodes |
 |---|---|---|---|
-| Image | 85.2 | 89.5 | 6 |
+| Image | 85.9 | 90.0 | 6 |
 | Draw | 79.6 | 58.4 | 17 |
 | Time | 92.2 | 70.5 | 13 |
 | Channel | 98.4 | 97.2 | 5 |
@@ -46,7 +46,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Read | `Read` | supported | 87.1 | 100 (32/32) | 35 | - | - | - | no fixture |
-| 2 | Write | `Write` | supported | 63.8 | 56 (25/56) | 41 | - | 100 | - | no fixture |
+| 2 | Write | `Write` | supported | 67.2 | 61 (27/56) | 42 | - | 100 | - | no fixture |
 | 3 | Viewer | `Viewer` | supported | 89.7 | 83 (20/24) | - | 100 | 100 | - | no fixture |
 | 4 | Constant | `Constant` | supported | 96.2 | 100 (4/4) | 75 | - | 100 | - | no fixture |
 | 5 | UDIM Import | - | missing | n/a | - | - | - | - | - | no fixture |
@@ -280,8 +280,8 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
 | 1 | Roto (Draw #1) | `Roto` | 18.23 | 81.8 | 27 secondary knobs missing |
-| 2 | Write (Image #2) | `Write` | 18.08 | 63.8 | primary knobs missing: `proxy`, `read_all_lines`; 29 secondary knobs missing |
-| 3 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
+| 2 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
+| 3 | Write (Image #2) | `Write` | 16.38 | 67.2 | 29 secondary knobs missing |
 | 4 | Read (Image #1) | `Read` | 12.94 | 87.1 | nothing missing that the guide lists |
 | 5 | NoTimeBlur (Time #9) | - | 11.11 | 0.0 | no node (PARITY_2D.md Time #9) |
 | 6 | Root (Other #11) | - | 9.09 | 0.0 | no node: per-script project settings (PARITY_2D.md Other #11) |

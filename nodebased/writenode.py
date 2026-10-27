@@ -20,11 +20,14 @@ from . import pathcontext
 
 DEFAULTS = {"channels": "all", "colorspace": "Auto", "premultiplied": 0, "raw": 0, "views": "main", "frame_mode": "expression",
             "frame_expr": "", "create_directories": 1, "first": 1, "last": 1, "use_limit": 0, "exr_compression": "zips",
+            # A proxy destination is selected only while the document's viewer is at a proxy tier;
+            # Read all lines requests a complete decode when a Write reads its own file back.
+            "proxy": "", "read_all_lines": 0,
             # Fidelity step F: read the file back (`reading`, `on_error`, `reload`), the order Render all goes in
             # (`render_order`), and the context variables of the path (nodebased/pathcontext.py).
             "reading": 0, "on_error": "error", "reload": 0, "render_order": 1, **pathcontext.PARAMS}
 # These change what a Write shows or when it renders, not the bytes it writes.
-NOT_BYTES = ("create_directories", "first", "last", "use_limit", "frame_mode", "frame_expr", "views",
+NOT_BYTES = ("create_directories", "first", "last", "use_limit", "frame_mode", "frame_expr", "views", "proxy", "read_all_lines",
              "reading", "on_error", "reload", "render_order", *pathcontext.PARAMS)
 KEYS = tuple(DEFAULTS)
 VIEW_CHOICES = ("main",)
@@ -42,10 +45,11 @@ def active(params):
 
 
 # --------------------------------------------------------------------------------------------------- frames
-def target_of(params):
+def target_of(params, proxy=False):
     """A Write's (path, file type, bit depth), or ValueError with the reason it cannot render: the path with its context keys filled
     in, the format taken from the extension for `Auto` or the extension made to agree with an explicit choice."""
-    path = pathcontext.substitute(params["path"], params).strip()      # %{key} filled from the node's key / value pairs
+    raw_path = params.get("proxy") if proxy and str(params.get("proxy", "")).strip() else params["path"]
+    path = pathcontext.substitute(raw_path, params).strip()      # %{key} filled from the node's key / value pairs
     if not path:
         raise ValueError("Set an output path on the Write node first")
     chosen = params["file_type"]

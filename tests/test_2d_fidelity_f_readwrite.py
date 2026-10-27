@@ -31,6 +31,17 @@ class ReadSequenceImportTests(unittest.TestCase):
         self.assertEqual(readknobs.import_sequence("/shots/plate.%04d.exr"), ("/shots/plate.%04d.exr", False))
 
 
+class WriteProxyTests(unittest.TestCase):
+    def test_proxy_target_uses_proxy_path_only_when_requested(self):
+        params = {"path": "full.%04d.exr", "proxy": "proxy.%04d.exr", "file_type": "Auto", "bit_depth": "half"}
+        self.assertEqual(writenode.target_of(params)[0], "full.%04d.exr")
+        self.assertEqual(writenode.target_of(params, proxy=True)[0], "proxy.%04d.exr")
+
+    def test_proxy_target_falls_back_to_full_path_without_a_proxy_file(self):
+        params = {"path": "full.exr", "proxy": "", "file_type": "Auto", "bit_depth": "half"}
+        self.assertEqual(writenode.target_of(params, proxy=True)[0], "full.exr")
+
+
 def picture(red, green=0.25, blue=0.5, width=W, height=H):
     image = np.zeros((height, width, 4), np.float32)
     image[..., 0], image[..., 1], image[..., 2], image[..., 3] = red, green, blue, 1.0

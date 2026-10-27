@@ -2154,7 +2154,7 @@ LIMITS.update({"reload": (0, 2147483647), "reading": (0, 1), "render_order": (-1
 CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none"]
 LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1), "lock_connections": (0, 1),
                "MinClampTo": (-1000000.0, 1000000.0), "MaxClampTo": (-1000000.0, 1000000.0),
-               "MinClampTo_enable": (0, 1), "MaxClampTo_enable": (0, 1)})
+               "MinClampTo_enable": (0, 1), "MaxClampTo_enable": (0, 1), "read_all_lines": (0, 1)})
 # Step H: AddTimeCode, AppendClip and BurnIn (nodebased/metaknobs.py).
 CHOICES.update({"width_channel": list(_chrome.MASK_CHANNEL_CHOICES), "blur_channel": list(_chrome.MASK_CHANNEL_CHOICES)})
 LIMITS.update({"blur_scale": (0.0, 1000.0), "ignore_top_line": (0, 1), "avg_frames": (0, 1000), "enable_dropshadow_effect": (0, 1), "inherit_input_color": (0, 1),

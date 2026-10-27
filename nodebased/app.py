@@ -17060,9 +17060,9 @@ class Window(QMainWindow):
             return
         self.statusBar().showMessage(f"Exported {len(written)} VDB file(s)", 10000)
 
-    def write_target(self, key):
+    def write_target(self, key, proxy=False):
         """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""
-        return writenode.target_of(self.dispatcher.document["nodes"][key]["params"])
+        return writenode.target_of(self.dispatcher.document["nodes"][key]["params"], proxy=proxy)
 
     def cornerpin_button(self, key, which):
         """CornerPin's Copy 'from', Copy 'to' and Set to input: set the eight points in one undoable step."""
@@ -17155,7 +17155,9 @@ class Window(QMainWindow):
             self.statusBar().showMessage("A Write render is already running", 6000)
             return
         try:
-            path, file_type, bits = self.write_target(key)
+            use_proxy = bool(self.dispatcher.document["nodes"][key]["params"].get("proxy", "") and
+                             viewer_proxy(self.dispatcher.document) != 1)
+            path, file_type, bits = self.write_target(key, proxy=use_proxy)
         except ValueError as error:
             QMessageBox.warning(self, "Write", str(error))
             return
@@ -17230,7 +17232,8 @@ class Window(QMainWindow):
                             # current view is the worst kind of wrong output: plausible-looking
                             # frames of the wrong tree.
                             raster = self.evaluator.evaluate_raster(
-                                document, key, cancel=job["cancel"], frame=frame_number, tier=1)
+                                document, key, cancel=job["cancel"], frame=frame_number,
+                                tier=viewer_proxy(document) if use_proxy else 1)
                             # A multichannel input (Render3D's multichannel output, a multilayer Read) writes
                             # every named layer into the same EXR part; PNG only ever writes the beauty. The Write
                             # node's own knobs (channels, output transform, ...) are applied in writenode.

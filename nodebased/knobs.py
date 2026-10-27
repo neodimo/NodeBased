@@ -1035,7 +1035,8 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("use_limit",), label="Limit to range"), KnobGroup("int", ("first",), label="First frame"),
         KnobGroup("int", ("last",), label="Last frame"), KnobGroup("enum", ("exr_compression",), label="EXR compression"),
         # Read file, render order and context variables (nodebased/writenode.py, pathcontext.py); the Render buttons sit under them.
-        KnobGroup("bool", ("reading",), label="Read file"), KnobGroup("enum", ("on_error",), label="Missing frames"),
+        KnobGroup("file_write", ("proxy",), label="Proxy file"), KnobGroup("bool", ("reading",), label="Read file"),
+        KnobGroup("bool", ("read_all_lines",), label="Read all lines"), KnobGroup("enum", ("on_error",), label="Missing frames"),
         KnobGroup("int", ("reload",), label="Reload count"), KnobGroup("int", ("render_order",), label="Render order"),
         KnobGroup("string", ("key1",), label="Context key 1"), KnobGroup("string", ("value1",), label="Context value 1"),
         KnobGroup("string", ("key2",), label="Context key 2"), KnobGroup("string", ("value2",), label="Context value 2"),
