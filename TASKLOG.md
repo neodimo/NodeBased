@@ -1,3 +1,9 @@
+## 2026-10-27 — continuous mode merge: Lane 6 (Fluids, GPT-6 Sol) step B of 2: flames that glow and light the scene around them (integrator tick)
+
+- **What was done:** `main` `fa330061` -> `ac08e954` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `ac08e954`: Ran 7405 tests in 523.799 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-27 — continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) step J of N: the filter, colour and keyer rows: Inpaint, LightWrap, ColorLookup, IDistort, DirBlur, Noise, Cryptomatte and the rest (finish 1) (integrator tick)
 
 - **What was done:** `main` `aa4b8ade` -> `de3d65db` plus this docs commit. Evidence and per-lane commit
