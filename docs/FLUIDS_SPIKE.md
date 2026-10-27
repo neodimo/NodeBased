@@ -1203,7 +1203,7 @@ change the simulation cache identity until their values are applied.
 
 ## The Hot pour in a shot
 
-`examples/hot_pour_shot/` connects `nodebased/hotpour.py`'s Hot pour graph to a camera-matched plate. The saved 32-cell liquid and steam graph spans 120 frames. A 68 KB still plate comes from the same camera and set with both simulations off; the tabletop is a shadow catcher, the foreground cup is a holdout, and the directional key casts the fluid shadow. The transparent render is fitted to the plate and merged over it.
+`examples/hot_pour_shot/` connects `nodebased/hotpour.py`'s Hot pour graph to a camera-matched plate. The original 32-cell liquid and steam graph spanned 120 frames. Its 68 KB plate used a shadow catcher, cup holdout and directional key. The current 64-cell liquid / 96-cell steam version renders the glass, liquid and table together with a sized key; see **Fluids 13 A** below. The historical measurements in this section describe the original graph.
 
 On the RTX 3080 Ti, the 120-frame bake took 26.17 seconds, well under the 20-minute budget. The GPU path-tracer renders at 960 × 540 took 98.32 seconds (frame 1), 103.05 seconds (frame 60), and 103.56 seconds (frame 120). The stills are [frame 1](images/hot_pour_shot/hot-pour-001.png), [frame 60](images/hot_pour_shot/hot-pour-060.png), and [frame 120](images/hot_pour_shot/hot-pour-120.png). Measurements are in `benchmarks/hot_pour/hot-pour-shot-2026-10-14.json`; scratch frames and logs are under the lane run directory.
 
@@ -1220,6 +1220,26 @@ At small resolution, GPU-vs-CPU path tracing passed the holdout tolerance on all
 These are visual findings only; solver and lighting changes are outside this step. The reproducible runner is `examples/hot_pour_shot/render_evidence.py`.
 
 ## Lane 6 step notes
+
+### Fluids 13 A: the Hot pour looks right (2026-10-27)
+
+**Steam diagnosis (solver and render):** Surface-driven emission occupied a few moving cells of the 64-cell smoke grid. Its fast upward source velocity left a thin, fragmented plume; the earlier raster march did little to join those wisps. The shot now emits a wider, noise-free vapour source just above the rim on a 96-cell grid, with slower lift and lower dissipation and vorticity. A 0.009 m raymarch step and density scale 4 make a continuous column visible without a painted or blurred layer.
+
+**Stream diagnosis (source and shot):** The spherical liquid source was visible at the top of the frame, while a fixed continuity bridge separated from the moving spout. The source is smaller and above the frame, the bridge follows the spout's four position keys, and the reconstructed surface receives three smoothing passes. The pour now runs into the glass across frames 60, 90 and 120.
+
+**Pool diagnosis (glass and path tracing):** The old plate had already rasterized a pale glass over the area the liquid occupied. A four-bounce path also terminated some rays inside the refractive pool, leaving dark patches. The glass, liquid and table now share the live 3D render; the glass has lower alpha and specular strength, and eight transmission bounces preserve the orange pool through it. The plate supplies only the matched backdrop and table underneath.
+
+**Shadow diagnosis (shot and render):** The old hard oval came from the baked plate, so changing the live light could not soften it. A separate shadow-catcher pass also left stippled rays over the table at 32 samples. The plate has no cup shadow; the live table receives the liquid and glass shadow from a 1 × 1 Rect key in the same path trace. Its edge is soft in the replacement stills. No shadow blur or 2D paint was applied.
+
+| Frame | Before (2026-10-22 still) | After (2026-10-27 still) |
+| --- | --- | --- |
+| 60 | ![Before, frame 60](images/hot_pour_shot/before-1027/hot-pour-060.png) | ![After, frame 60](images/hot_pour_shot/hot-pour-060.png) |
+| 90 | ![Before, frame 90](images/hot_pour_shot/before-1027/hot-pour-090.png) | ![After, frame 90](images/hot_pour_shot/hot-pour-090.png) |
+| 120 | ![Before, frame 120](images/hot_pour_shot/before-1027/hot-pour-120.png) | ![After, frame 120](images/hot_pour_shot/hot-pour-120.png) |
+
+The RTX 3080 Ti baked 120 frames in **38.53 s**. The fixed 32-sample, 960 × 540 GPU stills took **5.88 s** (frame 60), **5.81 s** (90) and **5.78 s** (120), below the 300 s ceiling. CPU/GPU small-frame comparisons passed at frames 1, 60 and 120. Measurements and exact look settings are in `benchmarks/hot_pour/hot-pour-look-2026-10-27.json`. The saved graph remains loadable and the targeted Hot pour, fluid graph and simulation-cache tests pass; no solver or renderer feature was added, so unedited-graph cache keys are unchanged.
+
+**What still looks wrong:** The glass retains fine 32-sample grain and the liquid stream has hot specular highlights, particularly at its top. The steam column has a bright core beside the pour. The orange pool is visible, the stream enters the glass, and the tabletop shadow has a soft edge; these are visual observations from the replacement stills, not a claim of photographic finish.
 
 ### B: edit classes, proxy-first refresh and old-cache stop (partial, 2026-10-22)
 
@@ -1719,7 +1739,7 @@ A separate 8/32/128-sample sweep was captured before correcting the offset secon
 
 **48 GB RTX A6000 estimate (unmeasured):** the 48 GB card has four times the RTX 3080 Ti's 12 GB, so a 128-cell cache and higher-sample stills may fit where the 12 GB card needs the 32-cell showcase. The older estimate scales the measured 64-cell bake by its 8× voxel count to about 4 minutes 40 seconds for 120 frames. This remains a capacity/workload extrapolation: no A6000 memory peak, bake or render was measured, and no speedup over the same-generation RTX 3080 Ti is claimed. The latest 12 GB frame-60/90 stills took 36.66 and 37.61 seconds at 960 × 540. A fully settled 1920 × 1080 image took 79.72 seconds on the RTX 3080 Ti; neither result is an A6000 measurement.
 
-**What still looks wrong:** steam remains sparse and speckled rather than a soft column; the stream's top looks like a rounded blob; the liquid pool is hard to read through the pale glass; the tabletop shadow has a hard edge. These are visual observations from the three replacement stills.
+**What still looked wrong in those S2 stills:** steam was sparse and speckled, the stream had a rounded top, the pool was obscured by the pale plate glass, and the tabletop shadow had a hard edge. The later Fluids 13 A section shows the 2026-10-27 replacements and their remaining limits.
 
 **Measured 2026-10-20 on the 12 GB RTX 3080 Ti, 64-cell shot, GPU path tracer at 960 × 540 (corrected single-glass composition):**
 

@@ -1,7 +1,9 @@
-"""Bake the 32-cell shot, compare CPU/GPU path tracing, and write the three showcase frames."""
+"""Bake the Hot pour shot, compare CPU/GPU path tracing, and write three showcase frames."""
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import fcntl
 import json
 import time
 from pathlib import Path
@@ -16,7 +18,18 @@ from make_shot import ROOT
 
 
 COMPARE_FRAMES = (1, 60, 120)
-STILL_FRAMES = (60, 90)
+STILL_FRAMES = (60, 90, 120)
+
+
+@contextmanager
+def gpu_lock():
+    """Release the shared card between the bake, comparisons, and each showcase frame."""
+    with open("/tmp/nb-gpu.lock", "a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 def main():
@@ -40,8 +53,8 @@ def main():
     run_dir.mkdir(parents=True, exist_ok=True)
     doc = load_document(ROOT / "hot_pour_shot.nbcomp")
     doc["nodes"]["render"]["params"].update(render_backend="gpu", render_mode="pathtrace", pt_samples=2,
-                                               max_bounces=2, diffuse_bounces=1, specular_bounces=1,
-                                               transmission_bounces=2, volume_shadow_steps=1, volume_shadow_density=0.0,
+                                               max_bounces=8, diffuse_bounces=1, specular_bounces=4,
+                                               transmission_bounces=8, volume_shadow_steps=1, volume_shadow_density=0.0,
                                                sampling="fixed", noise_threshold=0.0)
     doc["nodes"]["render"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
     doc["nodes"]["plate_fit"]["params"].update(width=args.small_width, height=round(args.small_width * 9 / 16))
@@ -50,17 +63,19 @@ def main():
     fluid3d._SOLVERS.clear()
     evaluator = Evaluator(sim=simcache.SimCache(root=run_dir, memory_budget=1 << 30, disk_budget=8 << 30))
     started = time.perf_counter()
-    for frame in range(1, 121):
-        evaluator.evaluate_raster(doc, "liquid_cache", frame=frame, typed=True)
-        evaluator.evaluate_raster(doc, "steam_cache", frame=frame, typed=True)
-        if frame in COMPARE_FRAMES:
-            print(json.dumps({"baked_through": frame, "elapsed_seconds": round(time.perf_counter() - started, 2)}), flush=True)
+    with gpu_lock():
+        for frame in range(1, 121):
+            evaluator.evaluate_raster(doc, "liquid_cache", frame=frame, typed=True)
+            evaluator.evaluate_raster(doc, "steam_cache", frame=frame, typed=True)
+            if frame in COMPARE_FRAMES:
+                print(json.dumps({"baked_through": frame, "elapsed_seconds": round(time.perf_counter() - started, 2)}), flush=True)
     bake_seconds = time.perf_counter() - started
 
     gpu_small = {}
     try:
         for frame in COMPARE_FRAMES:
-            gpu_small[frame] = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels.copy()
+            with gpu_lock():
+                gpu_small[frame] = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels.copy()
             write_png(run_dir / f"gpu-small-{frame:03d}.png", gpu_small[frame])
     except Exception as exc:
         if args.adapter == "cpu":
@@ -89,9 +104,9 @@ def main():
             raise SystemExit("CPU/GPU path-tracer comparison failed")
         return
     doc["nodes"]["render"]["params"].update(
-        render_backend="gpu", width=960, height=540, pt_samples=128,
-        max_bounces=4, diffuse_bounces=1, specular_bounces=2, transmission_bounces=4,
-        volume_shadow_steps=1, volume_shadow_density=0.0, sampling="adaptive", min_samples=32, max_samples=128,
+        render_backend="gpu", width=960, height=540, pt_samples=32,
+        max_bounces=8, diffuse_bounces=1, specular_bounces=4, transmission_bounces=8,
+        volume_shadow_steps=1, volume_shadow_density=0.0, sampling="fixed", min_samples=32, max_samples=32,
         adaptive_pass_size=64, noise_threshold=0.01)
     doc["nodes"]["steam_render"]["params"].update(render_backend="gpu", width=960, height=540)
     doc["nodes"]["render"]["params"]["denoise"] = "final"
@@ -101,37 +116,41 @@ def main():
     render_seconds = {}
     for frame in STILL_FRAMES:
         before = time.perf_counter()
-        shot = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels
+        with gpu_lock():
+            shot = evaluator.evaluate_raster(doc, "comp", frame=frame).pixels
         write_png(output_dir / f"hot-pour-{frame:03d}.png", shot)
         render_seconds[str(frame)] = round(time.perf_counter() - before, 2)
         print(json.dumps({"rendered": frame, "elapsed_seconds": render_seconds[str(frame)]}), flush=True)
     result = {"adapter": args.adapter, "device": str(adapter_name),
               "liquid_cells": int(doc["nodes"]["liquid"]["params"]["max_size"]),
               "steam_cells": int(doc["nodes"]["steam"]["params"]["max_size"]), "frames": 120,
-              "visual_settings": {"volume_layer": "deterministic raster over adaptive path-traced liquid/catcher",
+              "visual_settings": {"volume_layer": "raster steam over fixed-sample path-traced liquid, glass and table",
                                   "volume_density_scale": doc["nodes"]["steam_render"]["params"]["volume_density_scale"],
                                   "volume_step_size": doc["nodes"]["steam_render"]["params"]["volume_step_size"],
                                   "key_light": doc["nodes"]["key_light"]["params"]["light_type"],
-                                  "ambient": 3.0,
+                                  "ambient": doc["nodes"]["render"]["params"]["ambient"],
                                   "key_area": [doc["nodes"]["key_light"]["params"]["area_width"],
                                                doc["nodes"]["key_light"]["params"]["area_height"]],
                                   "key_light_samples": doc["nodes"]["key_light"]["params"]["light_samples"],
-                                  "spout_radius": 0.03, "surface_smoothing": 2,
-                                  "steam_cells": 64,
+                                  "spout_radius": doc["nodes"]["spout"]["params"]["src_radius"],
+                                  "surface_smoothing": doc["nodes"]["surface"]["params"]["smoothing"],
+                                  "steam_cells": int(doc["nodes"]["steam"]["params"]["max_size"]),
                                   "steam_source_density": doc["nodes"]["steam_source"]["params"]["src_density"],
                                   "steam_source_noise": doc["nodes"]["steam_source"]["params"]["src_noise_amount"],
                                   "steam_buoyancy_lift": doc["nodes"]["steam_lift"]["params"]["buoyancy_lift"],
                                   "steam_force_strength": doc["nodes"]["steam_lift"]["params"]["strength"],
                                   "steam_vorticity": doc["nodes"]["steam"]["params"]["vorticity"],
+                                  "steam_dissipation": doc["nodes"]["steam"]["params"]["dissipation"],
                                   "diffuse_bounces": doc["nodes"]["render"]["params"]["diffuse_bounces"],
-                                  "continuity_bridge": {"radius": 0.012, "height": 0.34, "camera_z": 0.03},
+                                  "continuity_bridge": {"radius": 0.012, "height": 0.60, "camera_z": 0.03},
                                   "showcase_denoise": "final",
                                   "denoise_iterations": doc["nodes"]["render"]["params"]["denoise_iterations"],
-                                  "catcher_shadow_samples": doc["nodes"]["render"]["params"]["pt_samples"]},
+                                  "path_samples": doc["nodes"]["render"]["params"]["pt_samples"],
+                                  "path_sampling": doc["nodes"]["render"]["params"]["sampling"]},
               "bake_seconds": round(bake_seconds, 2),
               "render_seconds": render_seconds, "comparison": comparisons}
     (run_dir / "evidence.json").write_text(json.dumps(result, indent=2) + "\n")
-    benchmark = Path(__file__).resolve().parents[2] / "benchmarks" / "hot_pour" / "hot-pour-shot-2026-10-22.json"
+    benchmark = Path(__file__).resolve().parents[2] / "benchmarks" / "hot_pour" / "hot-pour-look-2026-10-27.json"
     benchmark.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2), flush=True)
     if bake_seconds >= 1200 or not all(row["passed"] for row in comparisons.values()):

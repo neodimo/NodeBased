@@ -1,4 +1,4 @@
-"""The small Hot pour shot graph retains its holdout and catcher through evaluation."""
+"""The small Hot pour shot graph renders the glass and liquid together."""
 import unittest
 from pathlib import Path
 import os
@@ -35,12 +35,13 @@ class HotPourShotTests(unittest.TestCase):
         started = time.perf_counter()
         doc = core.load_document(ROOT / "hot_pour_shot.nbcomp")
         nodes = doc["nodes"]
-        cup = nodes["front_cup"]["params"]
+        glass = nodes["glass_view_wall"]["params"]
         source = nodes["spout"]["params"]
         self.assertEqual(nodes["liquid"]["params"]["max_size"], 64)
-        self.assertEqual(nodes["render"]["params"]["transmission_bounces"], 4)
-        self.assertEqual(nodes["render"]["params"]["max_bounces"], 4)
-        self.assertEqual(nodes["render"]["params"]["specular_bounces"], 2)
+        self.assertEqual(nodes["steam"]["params"]["max_size"], 96)
+        self.assertEqual(nodes["render"]["params"]["transmission_bounces"], 8)
+        self.assertEqual(nodes["render"]["params"]["max_bounces"], 8)
+        self.assertEqual(nodes["render"]["params"]["specular_bounces"], 4)
         self.assertEqual(nodes["render"]["params"]["diffuse_bounces"], 1)
         self.assertEqual(nodes["render"]["params"]["denoise_iterations"], 8)
         self.assertEqual(nodes["render"]["params"]["volume_shadow_density"], 0.0)
@@ -54,35 +55,39 @@ class HotPourShotTests(unittest.TestCase):
         self.assertEqual(nodes["steam_render"]["params"]["render_mode"], "raster")
         self.assertEqual(nodes["steam_render"]["params"]["volumes"], "on")
         self.assertEqual((nodes["steam_render"]["params"]["volume_density_scale"],
-                          nodes["steam_render"]["params"]["volume_step_size"]), (1.0, 0.015))
+                          nodes["steam_render"]["params"]["volume_step_size"]), (4.0, 0.009))
         self.assertEqual(nodes["comp"]["inputs"]["A"], "steam_render")
         key = nodes["key_light"]["params"]
         self.assertEqual(key["light_type"], "Rect")
         self.assertEqual(key["intensity"], 3.0)
-        self.assertEqual(nodes["render"]["params"]["ambient"], 3.0)
-        self.assertEqual((key["area_width"], key["area_height"], key["light_samples"]), (0.7, 0.7, 4))
+        self.assertEqual(nodes["render"]["params"]["ambient"], 1.5)
+        self.assertEqual((key["area_width"], key["area_height"], key["light_samples"]), (1.0, 1.0, 30))
         self.assertFalse(nodes["rim_light"]["params"]["shadows"] == "on")
         self.assertEqual(nodes["pour_bridge"]["type"], "Cylinder3D")
         self.assertEqual((nodes["pour_bridge"]["params"]["cyl_radius"],
                           nodes["pour_bridge"]["params"]["cyl_height"],
-                          nodes["pour_bridge"]["params"]["tz"]), (0.012, 0.34, 0.03))
+                          nodes["pour_bridge"]["params"]["tz"]), (0.012, 0.60, 0.03))
         self.assertEqual(nodes["scene"]["inputs"]["object7"], "pour_bridge")
-        self.assertEqual(nodes["spout"]["params"]["src_radius"], 0.03)
-        self.assertEqual((nodes["surface"]["params"]["smoothing"], nodes["surface"]["params"]["roughness"]), (2, 0.06))
+        self.assertEqual(nodes["spout"]["params"]["src_radius"], 0.022)
+        self.assertEqual((nodes["surface"]["params"]["smoothing"], nodes["surface"]["params"]["roughness"]), (3, 0.06))
         self.assertEqual((nodes["steam_source"]["params"]["src_density"],
-                          nodes["steam_source"]["params"]["src_noise_amount"]), (1.0, 0.0))
+                          nodes["steam_source"]["params"]["src_noise_amount"]), (0.35, 0.0))
+        self.assertEqual(nodes["steam_source"]["params"]["fluid_emit_from"], "sphere")
+        self.assertIsNone(nodes["steam_source"]["inputs"]["geo"])
         self.assertEqual((nodes["steam_lift"]["params"]["buoyancy_lift"],
-                          nodes["steam_lift"]["params"]["strength"]), (0.12, 0.0))
-        self.assertEqual(nodes["steam"]["params"]["vorticity"], 0.12)
-        self.assertEqual(cup["holdout"], "on")
-        self.assertAlmostEqual(cup["tx"], 0.0)
-        self.assertAlmostEqual(cup["tz"], 0.0)
-        self.assertIsNone(nodes["scene"]["inputs"]["object3"],
-                          "the plate supplies the glass, so the transparent render must not draw a second one")
-        self.assertGreater(source["src_center_y"], cup["ty"] + cup["cyl_height"] / 2)
+                          nodes["steam_lift"]["params"]["strength"]), (0.04, 0.0))
+        self.assertEqual((nodes["steam"]["params"]["vorticity"], nodes["steam"]["params"]["dissipation"]), (0.04, 0.03))
+        self.assertEqual(glass["alpha"], 0.05)
+        self.assertIsNone(nodes["scene"]["inputs"]["object1"])
+        self.assertEqual(nodes["scene"]["inputs"]["object3"], "glass_view")
+        self.assertIsNone(nodes["scene"]["inputs"]["object6"])
+        self.assertEqual(nodes["table_top"]["params"]["shadow_catcher"], "off")
+        self.assertGreater(source["src_center_y"], glass["ty"] + glass["cyl_height"] / 2)
         self.assertEqual(nodes["surface"]["params"]["material"], "liquid")
         source_x = [point["value"] for point in doc["animation"]["curves"]["spout"]["tx"]["keys"]]
-        self.assertTrue(all(abs(x - cup["tx"]) < cup["cyl_radius"] for x in source_x))
+        self.assertTrue(all(abs(x - glass["tx"]) < glass["cyl_radius"] for x in source_x))
+        bridge_x = [point["value"] for point in doc["animation"]["curves"]["pour_bridge"]["tx"]["keys"]]
+        self.assertEqual(bridge_x, source_x)
         doc["nodes"]["render"]["params"].update(width=48, height=27, render_backend="cpu", pt_samples=2)
         doc["nodes"]["plate_fit"]["params"].update(width=48, height=27)
         doc["nodes"]["steam_render"]["params"].update(width=48, height=27, render_backend="cpu")
@@ -90,8 +95,8 @@ class HotPourShotTests(unittest.TestCase):
         doc["nodes"]["liquid"]["params"]["pressure"] = "auto"
         doc["nodes"]["steam"]["params"]["pressure"] = "auto"
         scene = Evaluator().evaluate_raster(doc, "scene", frame=1, typed=True)
-        self.assertTrue(any(g.shadow_catcher for g in scene.geometries))
-        self.assertTrue(any(g.holdout for g in scene.geometries))
+        self.assertFalse(any(g.shadow_catcher for g in scene.geometries))
+        self.assertFalse(any(g.holdout for g in scene.geometries))
         self.assertTrue(any(g.material == "liquid" and len(g.vertices) > 0 for g in scene.geometries),
                         "the shot renders the cached liquid surface mesh")
         self.assertTrue(scene.volumes, "the steam volume is connected into the shot")
@@ -99,22 +104,13 @@ class HotPourShotTests(unittest.TestCase):
         self.assertEqual(raw.shape, (27, 48, 4))
         self.assertTrue(np.isfinite(raw).all())
         self.assertGreater(float(raw[..., 3].max()), 0.0)
-        self.assertGreater(int(((raw[..., :3].max(axis=2) < .01) & (raw[..., 3] > .01)).sum()), 0,
-                           "the catcher contributes a black shadow layer")
-
-        # Toggle each switch in the same tiny shot and ensure it changes rendered pixels.
+        # The live glass is in front of the pool and changing its transmission alters pixels.
         evaluator = Evaluator()
         caught = evaluator.evaluate_raster(doc, "comp", frame=1).pixels
         self.assertEqual(caught.shape, (27, 48, 4))
-        cup = doc["nodes"]["front_cup"]["params"]
-        cup["holdout"] = "off"
-        cup_visible = evaluator.evaluate_raster(doc, "comp", frame=1).pixels
-        self.assertGreater(int((np.abs(cup_visible[..., :3] - caught[..., :3]).max(axis=2) > .01).sum()), 0)
-        cup["holdout"] = "on"
-        table = doc["nodes"]["table_top"]["params"]
-        table["shadow_catcher"] = "off"
-        ordinary_table = evaluator.evaluate_raster(doc, "comp", frame=1).pixels
-        self.assertGreater(int((np.abs(ordinary_table[..., :3] - caught[..., :3]).max(axis=2) > .01).sum()), 0)
+        glass["alpha"] = 0.5
+        darker_glass = evaluator.evaluate_raster(doc, "comp", frame=1).pixels
+        self.assertGreater(int((np.abs(darker_glass[..., :3] - caught[..., :3]).max(axis=2) > .01).sum()), 0)
         # A speed check, not a logic check: the hosted Windows runner (software adapter, shared cores) took 90 s.
         self.assertLess(time.perf_counter() - started, 180.0 if os.environ.get("GITHUB_ACTIONS") == "true" else 60.0)
 

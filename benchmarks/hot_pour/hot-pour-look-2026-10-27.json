@@ -1,0 +1,61 @@
+{
+  "adapter": "default",
+  "device": "NVIDIA GeForce RTX 3080 Ti / Vulkan (rgba32float)",
+  "liquid_cells": 64,
+  "steam_cells": 96,
+  "frames": 120,
+  "visual_settings": {
+    "volume_layer": "raster steam over fixed-sample path-traced liquid, glass and table",
+    "volume_density_scale": 4.0,
+    "volume_step_size": 0.009,
+    "key_light": "Rect",
+    "ambient": 1.5,
+    "key_area": [
+      1.0,
+      1.0
+    ],
+    "key_light_samples": 30,
+    "spout_radius": 0.022,
+    "surface_smoothing": 3,
+    "steam_cells": 96,
+    "steam_source_density": 0.35,
+    "steam_source_noise": 0.0,
+    "steam_buoyancy_lift": 0.04,
+    "steam_force_strength": 0.0,
+    "steam_vorticity": 0.04,
+    "steam_dissipation": 0.03,
+    "diffuse_bounces": 1,
+    "continuity_bridge": {
+      "radius": 0.012,
+      "height": 0.6,
+      "camera_z": 0.03
+    },
+    "showcase_denoise": "final",
+    "denoise_iterations": 8,
+    "path_samples": 32,
+    "path_sampling": "fixed"
+  },
+  "bake_seconds": 38.53,
+  "render_seconds": {
+    "60": 5.88,
+    "90": 5.81,
+    "120": 5.78
+  },
+  "comparison": {
+    "1": {
+      "mean_absolute_error": 0.0004681010323110968,
+      "limit": 0.017760249376296996,
+      "passed": true
+    },
+    "60": {
+      "mean_absolute_error": 0.0003214124299120158,
+      "limit": 0.017741206884384155,
+      "passed": true
+    },
+    "120": {
+      "mean_absolute_error": 0.0003204449312761426,
+      "limit": 0.017741503715515135,
+      "passed": true
+    }
+  }
+}
