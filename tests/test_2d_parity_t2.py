@@ -57,6 +57,17 @@ class CurveNodeTests(unittest.TestCase):
         tiled = tile.compose_region(d.document, "fx", region, 1, 1).pixels
         np.testing.assert_allclose(tiled, whole, atol=1e-6)
 
+    def test_color_lookup_range_changes_curve_domain_without_breaking_tiles(self):
+        p = SPECS["ColorLookup"]["params"].copy()
+        p.update(curve_master=encode(((0, 0), (1, 0.5))), range=2.0)
+        d = self.make_graph("ColorLookup", p)
+        whole = Evaluator().evaluate(dict(d.document, view="fx"))
+        # .8 is evaluated at .4 when range is two, therefore maps to .2.
+        self.assertAlmostEqual(float(whole[0, 0, 0]), .2, places=6)
+        tile = TileExecutor(tile_edge=5)
+        region = tile.canvas_region(d.document, "fx", 1, 1)
+        np.testing.assert_allclose(tile.compose_region(d.document, "fx", region, 1, 1).pixels, whole, atol=1e-6)
+
     def test_crosstalk_arbitrary_curve(self):
         p = SPECS["CrossTalk"]["params"].copy()
         p["xt_curve_r_r"] = encode(((0, 0), (.25, .8), (1, 1)))

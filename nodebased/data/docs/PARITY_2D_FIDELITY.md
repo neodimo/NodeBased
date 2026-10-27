@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 89.3 / 100** (167 nodes scored, rank-weighted; 91.9 counting only the nodes NodeBased has).
+**Overall fidelity: 90.0 / 100** (167 nodes scored, rank-weighted; 92.7 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -26,14 +26,14 @@ Per node, five components, each a fraction from 0 to 1:
 | Group | Rank-weighted | Plain mean | Nodes |
 |---|---|---|---|
 | Image | 85.9 | 90.0 | 6 |
-| Draw | 79.6 | 58.4 | 17 |
+| Draw | 81.1 | 60.6 | 17 |
 | Time | 92.2 | 70.5 | 13 |
 | Channel | 98.4 | 97.2 | 5 |
-| Color | 91.6 | 73.8 | 34 |
-| Filter | 86.6 | 63.8 | 32 |
+| Color | 92.8 | 75.2 | 34 |
+| Filter | 89.1 | 67.6 | 32 |
 | Keyer | 87.3 | 64.6 | 11 |
 | Merge | 98.2 | 95.0 | 12 |
-| Transform | 85.6 | 64.9 | 20 |
+| Transform | 86.9 | 67.7 | 20 |
 | Metadata | 99.4 | 98.9 | 5 |
 | Other | 79.2 | 40.7 | 12 |
 
@@ -64,7 +64,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 5 | Radial | `Radial` | supported | 84.9 | 74 (9/14) | 91 | 100 | 100 | - | no fixture |
 | 6 | Noise | `Noise` | supported | 76.0 | 60 (12/26) | 80 | 100 | 100 | - | no fixture |
 | 7 | RotoPaint | `RotoPaint` | supported | 91.3 | 84 (73/88) | 100 | 100 | 100 | - | no fixture |
-| 8 | LightWrap | `LightWrap` | supported | 60.8 | 36 (7/27) | 62 | 100 | 100 | - | no fixture |
+| 8 | LightWrap | `LightWrap` | supported | 98.6 | 100 (27/27) | 89 | 100 | 100 | - | no fixture |
 | 9 | Grain | `Grain` | supported | 51.7 | 56 (8/14) | 62 | 100 | 0 | - | no fixture |
 | 9 | ScannedGrain | `ScannedGrain` | supported | 20.0 | 0 (0/1) | - | 100 | - | - | no fixture |
 | 10 | DustBust | - | supported | 0.0 | 0 (0/5) | - | 0 | - | - | no fixture |
@@ -117,7 +117,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | Gamma | `Gamma` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | unmeasured |
 | 8 | Clamp | `Clamp` | supported | 99.4 | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | unmeasured |
 | 9 | HueCorrect | `HueCorrect` | supported | 73.3 | 50 (1/2) | 100 | 100 | 100 | - | no fixture |
-| 10 | ColorLookup | `ColorLookup` | supported | 53.3 | 12 (1/8) | 100 | 100 | 100 | - | no fixture |
+| 10 | ColorLookup | `ColorLookup` | supported | 100.0 | 100 (8/8) | 100 | 100 | 100 | - | no fixture |
 | 11 | Exposure | `Exposure` | supported | 93.6 | 86 (6/7) | 93 | 100 | 100 | 100 (2/2) | unmeasured |
 | 12 | HSVTool | `HSVTool` | partial | 72.8 | 59 (14/25) | 100 | 100 | - | - | no fixture |
 | 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | unmeasured |
@@ -156,7 +156,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | DropShadow | `DropShadow` | supported | 92.6 | 100 (9/9) | 56 | 100 | - | - | no fixture |
 | 8 | Defocus | `Defocus` | supported | 66.3 | 40 (2/5) | 88 | 100 | 100 | - | no fixture |
 | 8 | ZDefocus | `ZDefocus` | supported | 56.5 | 27 (8/36) | 64 | 100 | 100 | - | no fixture |
-| 9 | DirBlur | `DirBlur` | supported | 60.0 | 33 (4/12) | 67 | 100 | 100 | - | no fixture |
+| 9 | DirBlur | `DirBlur` | supported | 94.7 | 100 (12/12) | 60 | 100 | 100 | - | no fixture |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 55.2 | 22 (2/9) | 75 | 100 | 100 | - | no fixture |
 | 10 | EdgeExtend | `EdgeExtend` | supported | 40.0 | 0 (0/6) | 100 | 50 | 100 | - | no fixture |
 | 11 | Erode (fast) | `Erode` | supported | 98.1 | 100 (1/1) | 86 | 100 | 100 | - | no fixture |
@@ -173,7 +173,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 16 | EdgeDetect | `EdgeDetect` | supported | 66.1 | 36 (2/7) | 100 | 100 | 100 | - | no fixture |
 | 16 | Emboss | `Emboss` | supported | 54.5 | 18 (2/13) | 86 | 100 | 100 | - | no fixture |
 | 16 | Laplacian | `Laplacian` | supported | 44.4 | 0 (0/4) | 83 | 100 | 100 | - | no fixture |
-| 17 | Inpaint | `Inpaint` | supported | 10.3 | 0 (0/11) | - | 67 | 0 | - | no fixture |
+| 17 | Inpaint | `Inpaint` | supported | 98.8 | 100 (11/11) | 91 | 100 | 100 | - | no fixture |
 | 18 | GodRays | `GodRays` | supported | 37.1 | 30 (3/10) | 33 | 100 | 17 | - | no fixture |
 | 18 | LevelSet | `LevelSet` | supported | 100.0 | 100 (8/8) | 100 | 100 | - | - | no fixture |
 | 18 | VolumeRays | `VolumeRays` | supported | 23.2 | 4 (1/24) | - | 100 | - | - | no fixture |
@@ -230,7 +230,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 10 | AdjustBBox | `AdjustBBox` | supported | 83.3 | 100 (1/1) | 0 | 100 | - | - | no fixture |
 | 11 | BlackOutside | `BlackOutside` | supported | 100.0 | - | - | 100 | - | - | no fixture |
 | 12 | STMap | `STMap` | supported | 98.1 | 100 (6/6) | 86 | 100 | 100 | - | no fixture |
-| 13 | IDistort | `IDistort` | supported | 40.0 | 50 (4/8) | 0 | 100 | 0 | - | no fixture |
+| 13 | IDistort | `IDistort` | supported | 94.3 | 100 (8/8) | 57 | 100 | 100 | - | no fixture |
 | 14 | GridWarp | `GridWarp` | supported | 13.1 | 6 (2/34) | 0 | 50 | 17 | - | no fixture |
 | 14 | SplineWarp | `SplineWarp` | supported | 28.6 | 18 (4/23) | 0 | 67 | 50 | - | no fixture |
 | 15 | Tile | `Tile` | supported | 78.3 | 80 (4/5) | 50 | 100 | - | - | no fixture |
@@ -288,27 +288,27 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 7 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 8 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 9 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 10 | Inpaint (Filter #17) | `Inpaint` | 5.28 | 10.3 | primary knobs missing: `fillRegion`, `smoothness`, `LABColourSpace`; 8 secondary knobs missing: `stretchAmount`, `stretchDirection`, `detailSource`, `detailAmount`, `translate` ...; sockets missing: `Detail`; node chrome missing: channels selector |
-| 11 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 12 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 13 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 14 | Tracker (Transform #3) | `Tracker` | 4.90 | 85.3 | 13 secondary knobs missing |
-| 15 | LightWrap (Draw #8) | `LightWrap` | 4.90 | 60.8 | primary knobs missing: `onlywrap`, `disableluma`, `enableglow`, `saturation`, `LumaTolerance`; 15 secondary knobs missing |
-| 16 | ColorLookup (Color #10) | `ColorLookup` | 4.67 | 53.3 | primary knobs missing: `use_precomputed`, `range`, `source`, `target`, `setRGB`, `setRGBA`, `setA` |
-| 17 | IDistort (Transform #13) | `IDistort` | 4.62 | 40.0 | primary knobs missing: `blur`, `blur_scale`, `maskChannel`, `premultiplied`; node chrome missing: channels selector, mask invert |
-| 18 | DirBlur (Filter #9) | `DirBlur` | 4.44 | 60.0 | primary knobs missing: `BlurLayer`, `holdout`, `target`, `UseTarget`, `Samples`, `PixelAspect`, `Quality`, `pixeloffset` |
-| 19 | ScannedGrain (Draw #9) | `ScannedGrain` | 4.44 | 20.0 | primary knobs missing: `fullGrain` |
-| 20 | LensDistortion (Transform #20) | `Undistort` | 4.11 | 17.8 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
-| 21 | Noise (Draw #6) | `Noise` | 4.00 | 76.0 | primary knobs missing: `type`, `nyquist`; 12 secondary knobs missing: `translate`, `rotate`, `scaling`, `skew`, `center` ... |
-| 22 | Transform (Transform #1) | `Transform` | 3.85 | 96.2 | nothing missing that the guide lists |
-| 23 | Rectangle (Draw #3) | `Rectangle` | 3.79 | 88.6 | 4 secondary knobs missing: `ramp`, `p1`, `color0`, `p0` |
-| 24 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.75 | 40.0 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
-| 25 | ZMerge (Merge #12) | `ZMerge` | 3.70 | 55.6 | primary knobs missing: `backwards`, `alpha_channel` |
-| 26 | Keyer (Keyer #1) | `Keyer` | 3.70 | 96.3 | nothing missing that the guide lists |
-| 27 | TVIScale (Transform #19) | `TVIScale` | 3.68 | 30.0 | primary knobs missing: `Iterations`, `Lambda`, `A`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 28 | Encryptomatte (Keyer #8) | `Encryptomatte` | 3.57 | 42.9 | primary knobs missing: `matteNameType`, `mergeOperation`; 1 secondary knob missing: `exportWrite` |
-| 29 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.52 | 36.7 | 13 secondary knobs missing; sockets missing: `img` |
-| 30 | Viewer (Image #3) | `Viewer` | 3.42 | 89.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 10 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 11 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 12 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 13 | Tracker (Transform #3) | `Tracker` | 4.90 | 85.3 | 13 secondary knobs missing |
+| 14 | ScannedGrain (Draw #9) | `ScannedGrain` | 4.44 | 20.0 | primary knobs missing: `fullGrain` |
+| 15 | LensDistortion (Transform #20) | `Undistort` | 4.11 | 17.8 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
+| 16 | Noise (Draw #6) | `Noise` | 4.00 | 76.0 | primary knobs missing: `type`, `nyquist`; 12 secondary knobs missing: `translate`, `rotate`, `scaling`, `skew`, `center` ... |
+| 17 | Transform (Transform #1) | `Transform` | 3.85 | 96.2 | nothing missing that the guide lists |
+| 18 | Rectangle (Draw #3) | `Rectangle` | 3.79 | 88.6 | 4 secondary knobs missing: `ramp`, `p1`, `color0`, `p0` |
+| 19 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.75 | 40.0 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
+| 20 | ZMerge (Merge #12) | `ZMerge` | 3.70 | 55.6 | primary knobs missing: `backwards`, `alpha_channel` |
+| 21 | Keyer (Keyer #1) | `Keyer` | 3.70 | 96.3 | nothing missing that the guide lists |
+| 22 | TVIScale (Transform #19) | `TVIScale` | 3.68 | 30.0 | primary knobs missing: `Iterations`, `Lambda`, `A`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 23 | Encryptomatte (Keyer #8) | `Encryptomatte` | 3.57 | 42.9 | primary knobs missing: `matteNameType`, `mergeOperation`; 1 secondary knob missing: `exportWrite` |
+| 24 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.52 | 36.7 | 13 secondary knobs missing; sockets missing: `img` |
+| 25 | Viewer (Image #3) | `Viewer` | 3.42 | 89.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 26 | Denoise (Filter #12) | `Denoise` | 3.41 | 18.1 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise` |
+| 27 | Reformat (Transform #5) | `Reformat` | 3.41 | 83.0 | primary knobs missing: `box_fixed`, `clamp`, `black_outside` |
+| 28 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 29 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 30 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 
 ## Formula cases
 

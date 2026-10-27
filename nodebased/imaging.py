@@ -6802,8 +6802,11 @@ class Evaluator:
         from . import colorcurves
         result = image.copy()
         master = colorcurves.decode(p["curve_master"])
+        # `range` scales the curve editor's input domain.  A value of two makes the first half
+        # of the curve span the usual 0..1 values; the default preserves the established lookup.
+        domain = max(1e-8, float(p.get("range", 1.0)))
         for index, name in enumerate(("red", "green", "blue", "alpha")):
-            values = colorcurves.evaluate_array(master, result[..., index])
+            values = colorcurves.evaluate_array(master, result[..., index] / domain)
             result[..., index] = colorcurves.evaluate_array(colorcurves.decode(p[f"curve_{name}"]), values)
         return result
 
@@ -7124,7 +7127,7 @@ class Evaluator:
             light = np.clip(Evaluator._gaussian_2d(bg[..., :3], p.get("bgblur", 4.0))
                             - np.float32(p.get("wrap_threshold", 0.0)), 0.0, None)
         wrap = light * edge * np.float32(p.get("intensity", 1.0))
-        base = fg[..., :3]
+        base = np.zeros_like(fg[..., :3]) if p.get("onlywrap", 0) else fg[..., :3]
         operation = p.get("highlight_merge", "plus")
         if operation == "screen":
             rgb = base + wrap * (1.0 - base)

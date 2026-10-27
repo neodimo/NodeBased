@@ -281,7 +281,7 @@ SPECS = {
     "HueCorrect": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {**{f"curve_{name}": ('{"interpolation":"linear","points":[[0,0],[360,0]]}' if name.endswith("_sup") else '{"interpolation":"linear","points":[[0,1],[360,1]]}') for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "sat_thrsh": 0.0, "hue_shift": 0.0, "mix": 1.0}},
     "ColorLookup": {"inputs": ["image"], "optional_inputs": ["mask"],
-                    "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,0],[1,1]]}' for name in ("master", "red", "green", "blue", "alpha")}, "mix": 1.0}},
+                    "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,0],[1,1]]}' for name in ("master", "red", "green", "blue", "alpha")}, "use_precomputed": 1, "range": 1.0, "source": 0.0, "target": 0.0, "mix": 1.0}},
     # ColorMatrix (step 4a): a 3x3 RGB matrix as nine knobs, matrix_RC = row R, column C, so
     # out.r = matrix_00 * r + matrix_01 * g + matrix_02 * b. Defaults to the identity.
     "ColorMatrix": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -336,7 +336,9 @@ SPECS = {
     # (default: the centre of the default 960x540 format).
     "DirBlur": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"blur_type": "linear", "angle": 0.0, "length": 20.0,
-                           "center_x": 480.0, "center_y": 270.0, "channels": "rgba", "mix": 1.0}},
+                           "center_x": 480.0, "center_y": 270.0, "BlurLayer": "rgba", "holdout": "off",
+                           "target": "", "UseTarget": 0, "Samples": 0, "PixelAspect": 1.0, "Quality": "normal", "pixeloffset": 0.0,
+                           "channels": "rgba", "mix": 1.0}},
     # DropShadow (step 3b): the input's alpha, offset by `distance` along `angle` (degrees,
     # counter-clockwise from +x with y up; the default points down and to the right), blurred by
     # "shadow_size" (Nuke's `size`, renamed because "size" is a global LIMITS key with a 1 minimum
@@ -365,7 +367,9 @@ SPECS = {
     "LightWrap": {"inputs": ["fg", "bg"], "optional_inputs": ["mask"],
                   "params": {"intensity": 1.0, "wrap_diffuse": 10.0, "fgblur": 1.0, "bgblur": 4.0,
                              "wrap_threshold": 0.0, "highlight_merge": "plus", "use_constant_highlight": 0,
-                             "red": 1.0, "green": 1.0, "blue": 1.0, "mix": 1.0}},
+                             "red": 1.0, "green": 1.0, "blue": 1.0, "onlywrap": 0, "disableluma": 0, "enableglow": 0,
+                             "saturation": 1.0, "LumaTolerance": 0.0, "white": 1.0, "gray": 0.18, "contrast": 1.0,
+                             "gamma": 1.0, "gain": 1.0, "offset": 0.0, **{f"{band}_{name}": value for band in ("shadows", "midtones", "highlights") for name, value in (("gamma", 1.0), ("gain", 1.0), ("offset", 0.0))}, "mix": 1.0}},
     # Dither (step 5a): quantises to `bits` per channel with position-hashed triangular noise of
     # +/- `dither_amount` least-significant bits; `seed` picks the noise pattern.
     "Dither": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -501,7 +505,7 @@ SPECS = {
     "IDistort": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                  "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                             "uv_scale_x": 1.0, "uv_scale_y": 1.0, "uv_offset_x": 0.0, "uv_offset_y": 0.0,
-                            "filter": "bilinear", "mix": 1.0}},
+                            "filter": "bilinear", "blur": "none", "blur_scale": 1.0, "maskChannel": "rgba.alpha", "premultiplied": 1, "channels": "all", "invert_mask": 0, "mix": 1.0}},
     "SplineWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {"mix": 1.0, "curve_resolution": 12, "bbox": "source",
                               "root_warp": "A", "filter": "bilinear", "output": "image"}},
@@ -722,8 +726,8 @@ SPECS = {
                          "params": {"reference_frame": 1, "corner1_x": 0.0, "corner1_y": 0.0,
                                     "corner2_x": 100.0, "corner2_y": 0.0, "corner3_x": 100.0, "corner3_y": 100.0,
                                     "corner4_x": 0.0, "corner4_y": 100.0, "mix": 1.0}},
-    "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte"],
-                "params": {"temporal_frames": 3, "fill_method": "diffusion", "flow_backend": "auto", "mix": 1.0}},
+    "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte", "detail"],
+                "params": {"temporal_frames": 3, "fill_method": "diffusion", "flow_backend": "auto", "fillRegion": "Matte Alpha", "smoothness": 1.0, "LABColourSpace": 0, "stretchAmount": 0.0, "stretchDirection": 0.0, "detailSource": "Source", "detailAmount": 0.0, "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0, "center_x": 480.0, "center_y": 270.0, "channels": "rgb", "mix": 1.0}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0,
                   "autocrop_mode": "alpha", "autocrop_color_r": 0.0, "autocrop_color_g": 0.0, "autocrop_color_b": 0.0, "autocrop_tolerance": 0.1,
@@ -2159,7 +2163,16 @@ LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1), "lock_connecti
 CHOICES.update({"width_channel": list(_chrome.MASK_CHANNEL_CHOICES), "blur_channel": list(_chrome.MASK_CHANNEL_CHOICES)})
 LIMITS.update({"blur_scale": (0.0, 1000.0), "ignore_top_line": (0, 1), "avg_frames": (0, 1000), "enable_dropshadow_effect": (0, 1), "inherit_input_color": (0, 1),
                "shrink_expand": (-500.0, 500.0), "nonlinear": (0, 1), "effect_only": (0, 1)})
+LIMITS.update({"use_precomputed": (0, 1), "range": (0.000001, 1000000.0), "source": (-1000000.0, 1000000.0), "target": (-1000000.0, 1000000.0),
+               "onlywrap": (0, 1), "disableluma": (0, 1), "enableglow": (0, 1), "saturation": (0.0, 1000000.0), "LumaTolerance": (0.0, 1000000.0),
+               "white": (-1000000.0, 1000000.0), "gray": (-1000000.0, 1000000.0), "contrast": (-1000000.0, 1000000.0), "gamma": (0.000001, 1000000.0),
+               "gain": (-1000000.0, 1000000.0), "offset": (-1000000.0, 1000000.0), **{f"{band}_{name}": ((0.000001, 1000000.0) if name == "gamma" else (-1000000.0, 1000000.0)) for band in ("shadows", "midtones", "highlights") for name in ("gamma", "gain", "offset")},
+               "UseTarget": (0, 1), "Samples": (0, 1000), "PixelAspect": (0.000001, 1000.0), "pixeloffset": (-1000000.0, 1000000.0),
+               "LABColourSpace": (0, 1), "smoothness": (0.0, 1000000.0), "stretchAmount": (-1000000.0, 1000000.0), "stretchDirection": (-360.0, 360.0),
+               "detailAmount": (-1000000.0, 1000000.0)})
 CHOICES["curve_type"] = list(_curvetoolknobs.CURVE_TYPES)
+CHOICES.update({"Quality": ["low", "normal", "high"], "fillRegion": ["Matte Alpha", "Source Alpha"],
+                "detailSource": ["Source", "Detail"]})
 LIMITS.update({"metafps": (0, 1), "use_frame": (0, 1), "meta_from_first": (0, 1), "y_padding": (0.0, 8192.0),
                "text_scale": (0.01, 100.0), "bar_red": (0.0, 1.0), "bar_green": (0.0, 1.0), "bar_blue": (0.0, 1.0),
                "bar_alpha": (0.0, 1.0), "bar_x_border": (0.0, 8192.0), "bar_y_border": (0.0, 8192.0), "bar_fit": (0, 1)})

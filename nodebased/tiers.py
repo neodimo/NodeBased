@@ -734,7 +734,7 @@ PIXEL_UNIT_PARAMS = {
     "Blur": ("radius",), "ErodeFilter": ("filter_size",), "Emboss": ("width",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size",), "DirBlur": ("length", "center_x", "center_y"),
-    "VectorDistort": ("blur_size",),
+    "VectorDistort": ("blur_size",), "Inpaint": ("translate_x", "translate_y", "center_x", "center_y"),
     "VectorCornerPin": tuple(f"corner{i}_{axis}" for i in range(1, 5) for axis in ("x", "y")),
     "DropShadow": ("distance", "shadow_size", "shrink_expand"),
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),

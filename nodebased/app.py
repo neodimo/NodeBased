@@ -12755,6 +12755,15 @@ class Window(QMainWindow):
                     button.setToolTip(tip)
                     button.clicked.connect(lambda _checked=False, k=key, n=name: self.cornerpin_button(k, n))
                     form.addRow(button)
+            if node["type"] == "ColorLookup":
+                # The three Set buttons make a straight line from the sampled source value to its target.
+                for name, text, channels in (("colorlookup-set-rgb", "Set RGB", ("red", "green", "blue")),
+                                             ("colorlookup-set-rgba", "Set RGBA", ("red", "green", "blue", "alpha")),
+                                             ("colorlookup-set-a", "Set A", ("alpha",))):
+                    button = QPushButton(text)
+                    button.setObjectName(name)
+                    button.clicked.connect(lambda _checked=False, k=key, c=channels: self.colorlookup_set(k, c))
+                    form.addRow(button)
             if node["type"] in ("Histogram", "Sampler", "MinColor", "MatchGrade"):
                 readout = QLabel("Analyze the configured frame range")
                 readout.setWordWrap(True)
@@ -17131,6 +17140,16 @@ class Window(QMainWindow):
             display = self.evaluator.evaluate_raster(document, target=source, frame=int(document["time"]["current"])).display
             updates = cornerpinknobs.from_input_corners(display.x, display.y, display.width, display.height)
         self.command({"op": "batch", "commands": cornerpinknobs.button_commands(key, updates)})
+
+    def colorlookup_set(self, key, channels):
+        """Set ColorLookup's chosen channel curves through its source/target pair in one undo step."""
+        import json
+        p = self.graph_nodes()[key]["params"]
+        source, target = float(p.get("source", 0.0)), float(p.get("target", 0.0))
+        points = [[0.0, 0.0], [source, target], [1.0, 1.0]]
+        value = json.dumps({"interpolation": "linear", "points": points}, separators=(",", ":"))
+        self.command({"op": "batch", "commands": [{"op": "set", "id": key, "param": f"curve_{name}", "value": value}
+                                                    for name in channels]})
 
     def reload_node(self, key):
         """Nuke's reload for Read and Write: count one more reload on the node, which is part of what its result is keyed by."""

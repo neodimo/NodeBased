@@ -113,6 +113,14 @@ class LightWrapTests(unittest.TestCase):
         self.assertEqual(len({r.tobytes() for r in results.values()}), 4)
         np.testing.assert_array_equal(Evaluator._kernel("LightWrap", dict(base, intensity=0.0), [fg, bg]), fg)
 
+    def test_onlywrap_keeps_the_wrap_and_removes_the_foreground(self):
+        fg, bg = self._pair()
+        base = dict(SPECS["LightWrap"]["params"], wrap_diffuse=6.0)
+        wrapped = Evaluator._kernel("LightWrap", base, [fg, bg])
+        only = Evaluator._kernel("LightWrap", dict(base, onlywrap=1), [fg, bg])
+        np.testing.assert_allclose(only[..., :3], wrapped[..., :3] - fg[..., :3], atol=1e-6)
+        np.testing.assert_array_equal(only[..., 3], fg[..., 3])
+
 
 class DitherTests(unittest.TestCase):
     def test_mean_is_preserved_where_plain_quantising_is_not(self):
