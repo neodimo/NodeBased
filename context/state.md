@@ -1,5 +1,24 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) (7:55 AM on 2026-10-27 PDT)
+
+`main` moved `aa4b8ade` -> `de3d65db` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `de3d65db` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1027-0745.log`, started 7:45 AM): **Ran 7396 tests in 515.934 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-5.6 Terra), step J of N: the filter, colour and keyer rows: Inpaint, LightWrap, ColorLookup, IDistort, DirBlur, Noise, Cryptomatte and the rest (finish 1).** Commits:
+  - `f3606044` 2D fidelity J: complete Noise and Rectangle controls
+  Diff: 8 files changed, 202 insertions(+), 45 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) (7:25 AM on 2026-10-27 PDT)
 
 `main` moved `04d38175` -> `4c06e706` (lane commits cherry-picked onto main in lane order) and then to this
