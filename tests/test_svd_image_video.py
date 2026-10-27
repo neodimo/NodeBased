@@ -97,3 +97,14 @@ class SVDTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "cancelled"):
                     generate(bundle, state, root / "out" / "frame.####.exr", "svd_image_video",
                              sampler_settings={"fps": 8}, progress=progress)
+
+@unittest.skipUnless(os.environ.get("NODEBASED_PROVIDER_TEST") == "1", "set NODEBASED_PROVIDER_TEST=1 for real SVD generation")
+class RealSVDTest(unittest.TestCase):
+    def test_two_frame_generation_on_cuda(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state, _, bundle, _ = make_shot(root, frames=(1, 2))
+            result = generate(bundle, state, root / "out" / "frame.####.exr", "svd_image_video",
+                              seed=3, sampler_settings={"steps": 2})
+            self.assertEqual(len(result["outputs"]), 2)
+            self.assertGreater(result["run"]["peak_vram_allocated_mib"], 0)
