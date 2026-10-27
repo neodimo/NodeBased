@@ -239,6 +239,7 @@ def main():
     parser.add_argument("--out", help="folder for shot.%%04d.exr (default: out, or out-distorted)")
     parser.add_argument("--cache", help="artifact store root (NODEBASED_CACHE for the agent process; default: store, or store-distorted)")
     parser.add_argument("--graph", help="the shot graph (default: the one --plate selects)")
+    parser.add_argument("--frames", type=int, default=None, help="benchmark a prefix of the demo shot")
     parser.add_argument("--provider", default=None,
                         help="provider for the Generate step (default: the graph's own, reproject); "
                              "sdxl_controlnet runs the real model on the NVIDIA card")
@@ -263,7 +264,7 @@ def main():
     info_file = Path(args.cache).parent / "sdxl-run-info.json"
     os.environ["NODEBASED_SDXL_RUN_INFO"] = str(info_file)  # the SDXL provider writes its timings and peak VRAM here
     info_file.unlink(missing_ok=True)
-    summary = run(args.plate, args.out, args.cache, args.graph, provider=args.provider, solver=args.solver,
+    summary = run(args.plate, args.out, args.cache, args.graph, frames=args.frames, provider=args.provider, solver=args.solver,
                   focal_scale=args.focal_scale, survey_check=args.survey_check)
     if info_file.exists():
         summary["model_run"] = json.loads(info_file.read_text())

@@ -204,6 +204,12 @@ supported/partial/missing summary this page's M1 section already keeps, for M2.
   path and `ColorCorrect`'s own kernel are named in `docs/BENCHMARKS-v0.33-m2.md`'s "Throughput"
   section as the next places the same profile points at.
 
+## M4 gate: two local generative providers
+
+The M4 gate in `docs/VISION.md` asks for benchmarks of at least two providers with materially different conditioning capabilities. `sdxl_controlnet` consumes exported depth, normals, motion and object IDs; `svd_image_video` consumes one RGB reference image and uses video motion micro-conditioning. Their versioned capability cards are `nodebased/providers/sdxl_controlnet.json` and `nodebased/providers/svd_image_video.json`. Both run behind Generate's isolated worker. The model comparison and exact demo-scene measurements are in `docs/GENERATIVE_CONDITIONING.md` and `benchmarks/generative/m4-1027/`.
+
+This gate measures implementation diversity, not successful camera or depth lock. SVD-XT ignores exported depth, motion vectors, IDs and camera pose; SDXL ignores reference images and camera pose. Both generated sequences carry beauty only, so the verifier reports unavailable pass comparisons as “not conditioned.” Whether their image-derived camera, object, lighting and temporal checks pass is shown in the benchmark, without treating missing controls as passing. M5 still needs a model that accepts an explicit camera path and preserves the scene bindings at the documented tolerances.
+
 ## M3 gate
 
 docs/VISION.md's M3 gate reads: "tracked-camera reprojection tests and bounded VRAM on

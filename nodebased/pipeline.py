@@ -139,7 +139,7 @@ class Pipeline:
         options = cmd.get("options") or {}
         if not isinstance(options, dict):
             raise ValueError("generate options must be an object")
-        options = {k: v for k, v in options.items() if k in ("text",)}
+        options = {k: v for k, v in options.items() if k in ("text", "reference_frames")}
         options["seed"] = normalize_seed(cmd.get("seed", 0))
         options["sampler_settings"] = normalize_sampler_settings(cmd.get("sampler_settings"))
         if isinstance(cmd.get("output_pattern"), str) and cmd["output_pattern"]:

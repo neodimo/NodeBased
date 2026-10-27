@@ -207,7 +207,9 @@ def generate_task(options, input_ids, progress, cancelled):
         manifest_path=_unpack_artifact(store.get(bundle_id),bundle_dir)
         scene_path.with_suffix(scene_path.suffix+".artifact.json").write_text(json.dumps({"artifact_id":scene_id}))
         manifest_path.with_suffix(".artifact.json").write_text(json.dumps({"artifact_id":bundle_id}))
-        reference_frames=[]
+        reference_frames=options.get("reference_frames") or []
+        if reference_frames and "reference_frames" in options.get("feedback_controls", ()):
+            raise ValueError("choose either explicit reference frames or loop feedback")
         if "reference_frames" in options.get("feedback_controls", ()):
             if len(input_ids)<3: raise ValueError("reference-frame feedback artifact is missing")
             _unpack_artifact(store.get(input_ids[2]),previous_dir)

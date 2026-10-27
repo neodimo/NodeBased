@@ -39,6 +39,7 @@ class SVDTests(unittest.TestCase):
     def test_description_shows_supported_and_ignored_controls(self):
         desc = ProviderDescription.load("svd_image_video")
         self.assertTrue(desc.local_gpu)
+        self.assertEqual(desc.max_frames, 8)
         self.assertEqual(desc.returns["honoured"], ["reference_frames", "seed", "sampler_settings"])
         self.assertEqual(desc.control_report()["camera_pose"], "ignored")
         self.assertEqual(desc.control_report()["depth"], "ignored")
@@ -50,6 +51,40 @@ class SVDTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertIn("usage: svd_image_video.py", result.stderr)
         self.assertNotIn("ImportError", result.stderr)
+
+    def test_agent_bridge_forwards_reference_image(self):
+        from nodebased.artifacts import ArtifactStore
+        from nodebased.pipeline import Pipeline
+        with tempfile.TemporaryDirectory() as temp:
+            received = {}
+            def fake_generate(options, _inputs, _progress, _cancelled):
+                received.update(options)
+                return {"artifact_id": "1" * 64}
+            with mock.patch("nodebased.loops.generate_task", fake_generate), \
+                 mock.patch("nodebased.pipeline._conditioned_read", return_value={}):
+                Pipeline(store=ArtifactStore(root=Path(temp))).generate({
+                    "scene_state": "2" * 64, "bundle": "3" * 64, "provider": "svd_image_video",
+                    "options": {"reference_frames": ["reference.png"], "text": "ignored"}})
+            self.assertEqual(received["reference_frames"], ["reference.png"])
+
+    def test_loop_runner_passes_explicit_reference_to_worker(self):
+        from nodebased.loops import generate_task
+        received = {}
+        class FakeWorker:
+            def __init__(self, job):
+                received.update(job.options)
+            def run(self, callback):
+                return {"type": "result", "result": {"artifact_id": "1" * 64}}
+            def cancel(self):
+                pass
+        with tempfile.TemporaryDirectory() as temp, \
+             mock.patch("nodebased.artifacts.ArtifactStore.get", return_value=b"archive"), \
+             mock.patch("nodebased.loops._unpack_artifact", side_effect=lambda _blob, directory: directory / "shot.json"), \
+             mock.patch("nodebased.workers.Worker", FakeWorker):
+            generate_task({"provider_id": "svd_image_video", "_artifact_root": temp,
+                           "reference_frames": ["reference.png"]}, ["2" * 64, "3" * 64],
+                          lambda *_: None, threading.Event())
+        self.assertEqual(received["reference_frames"], ["reference.png"])
 
     def test_settings_refuse_unknown_and_bad_values(self):
         self.assertEqual(svd.resolve_settings({"fps": 8})["fps"], 8)

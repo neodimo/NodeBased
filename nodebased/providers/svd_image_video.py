@@ -121,6 +121,7 @@ def run_frames(controls, *, reference_frames, seed, sampler_settings, workdir, p
             if process.poll() is None:
                 process.kill()
                 process.wait()
+            process.stdout.close()
         if cancelled is not None and cancelled.is_set():
             raise RuntimeError("Job cancelled")
         if code:
