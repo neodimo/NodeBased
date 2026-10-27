@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-27",
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "resolution": [
+    960,
+    540
+  ],
+  "samples_per_pixel": 32,
+  "bake_seconds": 0.732,
+  "frames": {
+    "8": {
+      "seconds": 0.266,
+      "path": "docs/images/fire_shot/fire-008.png",
+      "mean_linear_rgb": 0.07058054208755493
+    },
+    "16": {
+      "seconds": 0.094,
+      "path": "docs/images/fire_shot/fire-016.png",
+      "mean_linear_rgb": 0.060982078313827515
+    },
+    "24": {
+      "seconds": 0.091,
+      "path": "docs/images/fire_shot/fire-024.png",
+      "mean_linear_rgb": 0.06441733241081238
+    }
+  },
+  "comparison_off_seconds": 0.045,
+  "comparison_mean_linear_rgb_delta": 0.032731398940086365,
+  "comparison_off_path": "docs/images/fire_shot/fire-016-mesh-light-off.png"
+}

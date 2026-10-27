@@ -391,9 +391,9 @@ a closed form exists, and fully specified in the module docstring of `nodebased/
   knobs to lower. The GPU path (`nodebased/gpuvolume.py`, docs/3D_FOUNDATION.md) raymarches the beauty
   image and matches this reference; the control passes, the `depth` output, the ray tracer and scenes with
   splats raise `gpu3d.Unsupported`, so `Backend` `auto` falls back and `gpu` reports it.
-- Not modelled, and stated so nobody assumes it: meshes do not shadow volumes, volumes do not shadow
-  each other, particles and splats are treated as behind a volume, transparent surfaces are not sorted
-  against it.
+- At step A, meshes did not shadow volumes and volumes did not shadow each other; later shadow-exchange
+  work added the first interaction. Particles and splats are treated as behind a volume, and transparent
+  surfaces are not sorted against it.
 - Control passes as `Render3D` `Output` choices (`volume_density`, `volume_motion`,
   `volume_temperature`, `volume_vorticity`) and the `depth` output, which now merges the volume's first
   hit. Definitions are in the `volumerender.py` docstring. The four `volume_*` names are also multichannel
@@ -507,7 +507,7 @@ dissipation; buoyancy and the force list; vector vorticity confinement; projecti
   rate is a divergence source in the projection: the residual the pressure solve drives to the tolerance is
   `div - expansion`, so burning cells push the air outward (asserted: `div - burn * expansion` is under the
   tolerance on every cell with an open top). Flames here are a burning, expanding, heating region; the raymarch
-  does not draw the `flame` channel as emission yet.
+  did not draw the `flame` channel as emission at step C (Fluids 13 B adds it).
 - **Determinism and cancellation.** The solver draws no random numbers of its own (source noise is a hash of
   the seed and cell; turbulence is a seeded lattice), keeps its reductions single-threaded, and is a pure function
   of its `State`, so two runs, a scrub and a jump, and a resume from a checkpoint are bit-identical (asserted).
@@ -589,7 +589,7 @@ from disk without solving and resumes to the straight-solve bytes; budgets; a so
 raymarch.
 
 **Not built or not verified.** No GPU-resident solver (advection and confinement stay on the CPU; step D). The
-`flame` channel is not drawn as emission. Colliders are voxel staircases with no sub-cell boundary treatment, and
+`flame` channel was not drawn as emission at step C (built at Fluids 13 B). Colliders are voxel staircases with no sub-cell boundary treatment, and
 a thin mesh thinner than a cell still blocks a whole cell. `cache_resolution` is not built. Only the built-in
 plume was benchmarked: later plume states, fire, colliders and more substeps need more pressure iterations and are
 unmeasured. Wind on a closed box does nothing by construction. The animated-geometry digest is recomputed on
@@ -916,7 +916,8 @@ bounds) and P2 to A2 are separate steps, not started by this one.
 `FluidSolver3D.fire` is off by default. When enabled, fuel at or above `ignition_temperature` reacts by
 `(1 - exp(-burn_rate * dt / flame_lifespan)) * (1 - fuel_inefficiency)` each substep. The unconsumed
 fuel remains in the `fuel` field. Reacted fuel adds `temperature_output` heat and `smoke_output` density;
-the per-substep reaction rate is the `flame` output used by lane 4's blackbody emission from temperature.
+the per-substep reaction rate is the `flame` output. Render3D now emits from this channel independently of its
+temperature blackbody.
 `gas_release` multiplies that rate into the divergence source before pressure projection. The older
 `burn_heat`, `burn_smoke` and `burn_expansion` fields remain as visible legacy compatibility knobs for saved graphs.
 `FluidSource3D.src_fuel` emits reactant. `WriteVDB3D` stores density, temperature,
@@ -1158,7 +1159,7 @@ recommended with route C as the fallback. Met: reproducible seeds and determinis
 `simcache`), cancellation, mass and divergence tests, in 2D (step 2) and in 3D (step C); the volume member, VDB
 import (step B), the 3D CPU solve with collision fixtures (a static and a moving solid, an open boundary, fire) and
 resource budgets for volume caches (`FluidCache3D`'s memory and disk budgets and the 16.8 million cell cap) at step
-C. Met at step D: a GPU-resident solver fast enough to scrub at 128 cubed (15 to 20 ms per substep) and to bake 256 cubed in seconds of GPU time, with the per-frame checkpoint readback over USB4 as the remaining cost. Met at step E: FLIP liquids on the particle system with a free-surface pressure solve, collider cells, a level-set surface and a splash tag, deterministic, checkpointed and cancellable, cached through `ParticleCache3D`, with the GPU SOR pressure hook (a GPU-resident FLIP is not built and 128 cubed is a bake at 2 to 5 seconds per substep). Not met: flame emission rendering, refraction and reflection of the liquid surface (requested of lane 4), and a look at the nodes on the real display.
+C. Met at step D: a GPU-resident solver fast enough to scrub at 128 cubed (15 to 20 ms per substep) and to bake 256 cubed in seconds of GPU time, with the per-frame checkpoint readback over USB4 as the remaining cost. Met at step E: FLIP liquids on the particle system with a free-surface pressure solve, collider cells, a level-set surface and a splash tag, deterministic, checkpointed and cancellable, cached through `ParticleCache3D`, with the GPU SOR pressure hook (a GPU-resident FLIP is not built and 128 cubed is a bake at 2 to 5 seconds per substep). Met at Fluids 13 B: flame-channel emission and fire-derived mesh lighting. Not met: refraction and reflection of the liquid surface (requested of lane 4), and a look at the nodes on the real display.
 
 ### Liquids 2, L1: viscosity and narrow-band FLIP
 
@@ -1220,6 +1221,36 @@ At small resolution, GPU-vs-CPU path tracing passed the holdout tolerance on all
 These are visual findings only; solver and lighting changes are outside this step. The reproducible runner is `examples/hot_pour_shot/render_evidence.py`.
 
 ## Lane 6 step notes
+
+### Fluids 13 B: flames that glow (2026-10-27)
+
+The fire solve's burn-rate channel now contributes emission independent of temperature, on the CPU raymarch,
+GPU raymarch and both path tracers. The new `volume_flame_intensity` defaults to zero; the flame colour uses
+`volume_flame_temperature` through the existing blackbody or fire ramp. The existing coarse emission grid now
+forms up to eight deterministic point lights per volume (16 per scene) for meshes when `volume_fire_light_meshes` is above zero. Mesh
+shadow rays intersect objects and attenuate through smoke on the CPU and GPU. Dense volumes are supported;
+sparse cached volumes still glow, but do not yet create derived mesh lights.
+
+The editable `examples/fire_shot/fire_shot.nbcomp` has a fuel block, floor, stone and dim blue fill. Its
+32-cell fire solve bakes through frame 24 in **0.73 s**. On the RTX 3080 Ti, a 32-sample 960 × 540 path-traced
+frame takes **0.27 s** cold (frames 16 and 24: **0.09 s** each warmed). The render timings include
+evaluation and GPU readback; the bake timing includes solver evaluation. Full measurements are in
+`benchmarks/fire_shot/fire-glow-2026-10-27.json`.
+
+![Fire at frame 8](images/fire_shot/fire-008.png)
+![Fire at frame 16](images/fire_shot/fire-016.png)
+![Fire at frame 24](images/fire_shot/fire-024.png)
+
+Mesh-light comparison at frame 16 (the fire itself is unchanged):
+
+| Fire lights meshes | Mesh lighting off |
+| --- | --- |
+| ![Orange glow on the floor and stone](images/fire_shot/fire-016.png) | ![The same fire with dark floor and stone](images/fire_shot/fire-016-mesh-light-off.png) |
+
+**What still looks wrong:** The flame is a rather straight, grainy column with an occasional bright gap
+instead of licking tongues. At 32 samples the smoke and floor retain noise. The point-light cluster gives
+soft but still visibly synthetic shadows, especially close to the fuel block. Sparse cached volumes have
+no fire-derived mesh lighting yet; the floor remains dark in that case.
 
 ### Fluids 13 A: the Hot pour looks right (2026-10-27)
 
