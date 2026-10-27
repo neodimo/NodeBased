@@ -1,3 +1,63 @@
+# NodeBased 0.45.0 — the 2D nodes at 88.7 against Nuke, and GPU nodes in Settings with an Automatic card pick
+
+## What changed since 0.44.0
+
+- **The 2D fidelity score went from 67.7 to 88.7.** Five passes of Nuke's knobs, each scored against the Nuke 17.0
+  Reference Guide and covered by pixel tests:
+  - **Time nodes**: TimeOffset, FrameHold, Retime and TimeClip take rounding modes, reverse input, range locks,
+    before/after/filter/shutter, frame mode, original range and fades, and Nuke's path mask.
+  - **Keyers**: ChromaKeyer, Keylight (ScreenKeyer), HueKeyer and Difference take Nuke's screen operations,
+    input/output/combine, gain and balance, despill bias and replace modes, the screen despot, the tuning gains, the source
+    crops and the bg input.
+  - **Grade, Merge, Blur, Sharpen and Soften** now follow Nuke's formulas: Grade's levels, gamma, reverse and clamps; every
+    Merge operation per the guide, with video colorspace, alpha masking, also merge and bbox; Nuke's filter shapes for the
+    blurs. Every masked node gets Nuke's mask fringe.
+  - **Roto** takes the feather falloff, skew and extra matrix, shutter motion blur, lifetime, open-spline end caps and an
+    output mask layer. **RotoPaint** takes premultiply, the mask strip, output mask, global motion blur and the Clone tab.
+  - **Text** takes vertical justify, kerning, tracking, leading, a block transform, a colour ramp and drop shadows.
+  - **Read** takes localization, a proxy, reload and context variables; **Write** takes read-back, render order with Render all.
+  - **The Viewer** takes Nuke's knobs (frame range and lock, increment, safe zone, overscan, shutter angle and more) in a
+    Viewer settings window. **The Tracker** takes Nuke's matching options, transform modes with live link, per-track
+    T/R/S and the Add, Delete, Select all and Average buttons. **CornerPin** takes enable1 to 4, an extra matrix and the
+    Copy from/to buttons; **Profile** a frame range and channels.
+  - **Precomp**'s Open, Render and Reload buttons work; **CurveTool**'s Go! runs its analysis; AddTimeCode, AppendClip,
+    BurnIn, AddMix, DropShadow, Glow, Median, Shuffle out2, STMap and KeyMix carry the rest of their Nuke knobs.
+  - Old documents render as before.
+- **GPU nodes are now a setting.** Grade, Transform, Blur and Merge on the graphics card (the resident island from 0.44.0)
+  can be switched on in Playback settings, alongside the decode and source worker counts; each takes effect without a restart.
+  The default stays off.
+- **Automatic graphics card for the GPU nodes.** On Automatic, each card is timed once on one frame's upload, kernels and
+  download (cached per card and driver, never during playback or while the card is busy), and the fastest card that beats the
+  CPU nodes is used. On this workstation it picks the integrated Radeon: 17.3 fps on the realistic comp against 5.7 to 6.1 on
+  the RTX 3080 Ti and 8.0 on the CPU nodes. A card you name is never overridden; Settings shows the card and why.
+- **Faster 2D playback.** A frame's independent sources (Reads, Roto, generators) are computed side by side, the Roto matte of
+  the next frames is computed ahead while the current one is shown, a Read whose decode is already running is waited for
+  instead of decoded twice, and a played frame looks its file up with 3 system calls instead of 27. The Radeon island went from
+  13.1 to 17.3 fps on the realistic comp; the graph without a window got 25 to 43% faster.
+- **First 3D frames after a rest.** After the card has idled, the half-size and full-size frames now share one packed scene,
+  the readback buffer is made ahead, and the first frames drop to a quarter size when the card is still slow, which removed up
+  to 28 ms of repacking from the switch back to full size (now 19 to 41 ms across the four test scenes). The laptop stand-in and the Radeon hold 54 ms intervals.
+- Benchmarks gained a stage trace of every thread span, a first-frame gate summarizer and an Automatic-adapter mode.
+
+## Known limits
+
+- GPU nodes are off by default. Blur radius above 4, Transform motion blur and Merge operations without a kernel stay on the
+  processor. The Radeon reaches 17.3 fps, short of 24; the RTX 3080 Ti is held back by its 2-lane link. The RTX 4070 laptop,
+  the A6000 and Windows D3D12 have not been checked.
+- Fidelity scores come from the Reference Guide; the Nuke reference renders have not been run, so pixel-level agreement with
+  real Nuke is unverified.
+- RotoPaint's per-stroke and per-shape settings work through the document and its command, with no panel for them yet.
+- On the RTX, after about 4 seconds idle, the first played 3D frames can still arrive 49 to 67 ms apart because of the card's
+  clock.
+- The Direct picture is still off by default.
+
+## Moved to 0.46.0
+
+- A faster Roto matte drawer, aiming the Radeon at 24 fps (lane 8, running now), and a decision on the GPU nodes default.
+- A per-item settings panel for RotoPaint (lane 2).
+- The Nuke reference pack run against real Nuke renders.
+- The laptop, A6000 and Windows checks for the GPU nodes.
+
 # NodeBased 0.44.0 — the 2D nodes measured against Nuke, and an opt-in GPU path for 2D
 
 ## What changed since 0.43.2
