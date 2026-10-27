@@ -535,6 +535,7 @@ class FloatSliderControl(QWidget):
         layout.addWidget(self.slider, 1)
         layout.addWidget(self.spin)
         self._syncing = False
+        self.motion = None   # the window hands its motion settings in after building the panel
         self.spin.valueChanged.connect(self._spin_changed)
         self.slider.valueChanged.connect(self._slider_changed)
         self.spin.customContextMenuRequested.connect(self.customContextMenuRequested)

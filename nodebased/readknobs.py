@@ -44,11 +44,14 @@ def import_sequence(path):
     text = str(path or "")
     if "%" in text or "#" in text:
         return text, False
-    found = _FRAME_NUMBER.match(Path(text).name)
+    name = Path(text).name
+    found = _FRAME_NUMBER.match(name)
     if found is None:
         return text, False
     before, digits, after = found.groups()
-    return str(Path(text).with_name(f"{before}%0{len(digits)}d{after}")), True
+    # Only the file name changes; the folder keeps the separators it was given (a `Path` round trip
+    # would turn "/shots/plate.0102.exr" into "\\shots\\plate.%04d.exr" on Windows).
+    return text[:len(text) - len(name)] + f"{before}%0{len(digits)}d{after}", True
 
 
 def extras(params):

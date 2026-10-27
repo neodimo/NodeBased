@@ -348,7 +348,9 @@ class BurnInTests(FileCase):
         self.assertTrue(inside(0, 20, 0, 60) and inside(0, 20, W - 60, W))
         self.assertTrue(inside(H - 20, H, 0, 60) and inside(H - 20, H, W - 60, W))
         self.assertTrue(inside(14, H - 14, W // 2 - 20, W // 2 + 20))
-        self.assertFalse(inside(0, 20, 100, W - 100))
+        # Nothing between the corners in the top band. The centre slot's columns are left out: with a
+        # 48-pixel-tall frame a real system font's ascent (Windows) reaches up into rows 0-20.
+        self.assertFalse(inside(0, 20, 100, W // 2 - 40) or inside(0, 20, W // 2 + 40, W - 100))
         # And each equals a Text node drawing the same string in the same box.
         for slot, message, justify, box in (("top_left", "TL", "left", {}), ("top_right", "TR", "right", {}),
                                             ("bottom_left", "BL", "left", {"box_y": H - 20.0}),

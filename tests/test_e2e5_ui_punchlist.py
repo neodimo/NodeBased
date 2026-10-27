@@ -393,7 +393,9 @@ class PanelRestyleTests(Base):
         self.assertEqual(margins.left(), SPACING["lg"])
         button = panel.loop_start.grab().toImage()
         self.assertEqual(button.pixelColor(button.width() // 2, 3).name(), TOKENS["acc"])
-        tree = panel.tree.grab().toImage()
+        # The empty list area, not the frame: with Windows' wider system font the columns overflow and a
+        # horizontal scroll bar takes the bottom rows of the widget.
+        tree = panel.tree.viewport().grab().toImage()
         self.assertEqual(tree.pixelColor(tree.width() // 2, tree.height() - 6).name(), "#0b0d10")
         headings = [l.text() for l in panel.findChildren(QLabel) if l.objectName() == "panel-heading"]
         self.assertEqual(headings, ["QUEUE", "BOUNDED LOOP"])
