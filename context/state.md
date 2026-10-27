@@ -1,5 +1,24 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) (8:35 PM on 2026-10-26 PDT)
+
+`main` moved `2ec026ce` -> `093ba61e` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `093ba61e` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1026-2026.log`, started 8:26 PM): **Ran 7337 tests in 548.511 s, OK (skipped=35), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-5.6 Terra), step H of N: the short knob rows: keyers, RotoPaint, Precomp, the time and metadata nodes, Glow, DropShadow and AddMix (resume) (finish 1).** Commits:
+  - `11ec6fb8` RotoPaint: expose per-item settings panel
+  Diff: 2 files changed, 163 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, Claude Sonnet 5.5) (4:05 PM on 2026-10-26 PDT)
 
 `main` moved `8ac90404` -> `32ba3515` (lane commits cherry-picked onto main in lane order) and then to this
