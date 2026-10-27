@@ -3701,6 +3701,11 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     once prepared, plus eta_seconds on updates. A callback disables the splat
     tile-work budget; callback exceptions abort rendering.
     """
+    if (volume is not None and volume.fire_light_meshes > 0 and scene.volumes
+            and output in ('rgba', 'diffuse', 'specular')
+            and not any(light.name == '__volume_fire_mesh__' for light in scene.lights)):
+        from . import volumerender
+        scene = replace(scene, lights=scene.lights + volumerender.mesh_fire_lights(scene, volume))
     if mode == "pathtrace":
         from . import pathtrace
         return pathtrace.render_scene3d(scene, camera, width, height, background, ambient, output, cancel,

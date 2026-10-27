@@ -166,7 +166,7 @@ struct Params {
   lens: vec4<f32>,     // aperture radius (0 = pinhole), focus distance, blades, blade rotation (radians)
   lens2: vec4<f32>,    // 1 / anamorphic squeeze, max samples (adaptive)
   ad: vec4<f32>,       // adaptive sampling: noise threshold, min samples, 2 when adaptive (0 = every pixel takes every sample), pass size
-  vp3: vec4<f32>,      // smoke: volume_multi_scatter amount, volume_fire_light gain
+  vp3: vec4<f32>,      // smoke: multi-scatter, fire light, flame intensity, flame kelvin
   tiles: array<vec4<u32>, 512>,                   // active tile bits
 };
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
@@ -959,7 +959,9 @@ fn vol_bases(vi: u32) -> vec4<u32> {
   let r = vh(vi, 6u);
   var temperature = 0xFFFFFFFFu;
   if (r.y >= 0.0) { temperature = u32(r.y) + (u32(r.w) << 24u); }
-  return vec4<u32>(u32(r.x) + (u32(r.z) << 24u), temperature, 0u, 0u);
+  var flame = 0xFFFFFFFFu;
+  if (vh(vi, 5u).w >= 0.0) { flame = u32(vh(vi, 5u).w) + (u32(vh(vi, 9u).w) << 24u); }
+  return vec4<u32>(u32(r.x) + (u32(r.z) << 24u), temperature, flame, 0u);
 }
 
 // `sp` is the volume's sparse header (vh(vi, 8)): a sparse grid is stored as 8-cubed tiles one after another (the
@@ -1132,6 +1134,10 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
       if (kelvin > params.vp2.y && sigma > 0.0) {
         *glow += fire_radiance(kelvin) * (params.vp2.z * sigma / mu);
       }
+    }
+    if (want_glow && bases.z != 0xFFFFFFFFu && params.vp3.z > 0.0) {
+      let flame = max(trilinear(bases.z, dims, sp, g), 0.0);
+      *glow += fire_radiance(params.vp3.w) * (params.vp3.z * flame / mu);
     }
     if (vol_uniform(key, turn, vi, k, 1u) < params.vp0.x * sigma / mu) {
 //#if COUNT
@@ -2402,6 +2408,8 @@ def _sparse_volume_grid(volume):
         raise gpu3d.Unsupported("a sparse volume whose temperature is not stored in the same tiles stays on the CPU")
     if temperature is not None and grid.rest["temperature"] != 0.0:
         raise gpu3d.Unsupported("the GPU path tracer needs a zero rest temperature in a sparse volume")
+    if volume.flame is not None and ("flame" not in grid.data or grid.rest.get("flame", 0.0) != 0.0):
+        raise gpu3d.Unsupported("the GPU path tracer needs zero-rest flame tiles alongside density")
     return grid
 
 
@@ -2485,6 +2493,7 @@ def _pack_aux(packed, ps):
             for r in range(3):
                 headers[vi, 2 + r, :3], headers[vi, 2 + r, 3] = prep.inv[r, :3], prep.inv[r, 3]
             headers[vi, 5, :3] = volume.density.shape[:3]
+            headers[vi, 5, 3] = -1.0
             sparse = gpuvolume.is_sparse(volume)
             if sparse:
                 grid = _sparse_volume_grid(volume)
@@ -2510,11 +2519,15 @@ def _pack_aux(packed, ps):
                 mask = sum(((int(smoke.excl[vi]) >> bit) & 1) << target for bit, target in packed.bit_map.items())
                 headers[vi, 7, 3] = mask
                 packed.linked |= mask
-            glow = smoke.fire_table is not None and volume.temperature is not None
+            glow = smoke.fire_table is not None and volume.temperature is not None and settings.fire_intensity > 0
             temperature = add_floats(np.ascontiguousarray(grid.data["temperature"] if sparse else volume.temperature,
                                                           "f4")) if glow else None
             headers[vi, 6] = (density & 0xFFFFFF, -1.0 if temperature is None else temperature & 0xFFFFFF,
                               density >> 24, 0 if temperature is None else temperature >> 24)
+            if smoke.fire_table is not None and volume.flame is not None and settings.flame_intensity > 0:
+                flame = add_floats(np.ascontiguousarray(grid.data["flame"] if sparse else volume.flame, "f4"))
+                headers[vi, 5, 3] = flame & 0xFFFFFF
+                headers[vi, 9, 3] = flame >> 24
         packed.volume_count, packed.volume_base = len(smoke), add(headers)
         if smoke.fire_table is not None:
             table = np.zeros((len(smoke.fire_table), 4), "f4")
@@ -2610,7 +2623,8 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
         f32[14] = (settings.noise_threshold, settings.min_samples, mode, settings.adaptive_pass_size)
         f32[13, 1] = settings.max_samples
     if ps.volumes is not None:
-        f32[15, :2] = (ps.volumes.settings.multi_scatter, ps.volumes.settings.fire_light)
+        f32[15] = (ps.volumes.settings.multi_scatter, ps.volumes.settings.fire_light,
+                   ps.volumes.settings.flame_intensity, ps.volumes.settings.flame_temperature)
     tiles = np.zeros((512, 4), "u4")
     tiles.reshape(-1)[:len(tile_bits)] = tile_bits
     return b"".join((a.tobytes(), b.tobytes(), c.tobytes(), d.tobytes(), e.tobytes(), g.tobytes(), h.tobytes(),

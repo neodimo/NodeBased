@@ -56,7 +56,7 @@ struct Params {
     extra: vec4<f32>,      // motion shutter in seconds, motion samples, pass flags (see march_sums), depth threshold
     scene: vec4<f32>,      // shadow ray epsilon (the scene's bias), mesh triangle count, 0, 0
     phase: vec4<f32>,      // anisotropy, multi scatter amount, multi scatter b (thinning per octave), octaves
-    fire: vec4<f32>,       // fire intensity, temperature scale, threshold (kelvin), 1 when fire is on
+    fire: vec4<f32>,       // fire intensity, temperature scale, threshold (kelvin), flame temperature
     table: array<vec4<f32>, %(FIRE_KNOTS)s>,   // emission radiance per log-spaced kelvin knot (volumerender.fire_table)
 };
 struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32>, shadow: vec4<f32> };
@@ -66,7 +66,7 @@ struct Vol {
     row2: vec4<f32>,
     box_min: vec4<f32>,    // xyz, voxel size
     box_max: vec4<f32>,    // xyz, and `w` the bit mask of the lights this smoke excludes (light linking; light i is bit i)
-    dims: vec4<f32>,       // grid size; w: 1 when the volume has a velocity field, plus 2 for a temperature field
+    dims: vec4<f32>,       // grid size; w: velocity=1, temperature=2, flame=4
     fwd0: vec4<f32>,       // forward object-to-world rows: xyz, translation
     fwd1: vec4<f32>,
     fwd2: vec4<f32>,
@@ -87,6 +87,7 @@ struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(1) @binding(4) var vorticity_tex: texture_3d<f32>;
 @group(1) @binding(5) var fire_tex: texture_3d<f32>;
 @group(1) @binding(6) var tile_index: texture_3d<f32>;   // sparse volumes: per tile its atlas voxel origin (xyz) and 1 in w, zeros when empty
+@group(1) @binding(7) var flame_tex: texture_3d<f32>;
 var<private> steps_taken: u32;
 
 fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
@@ -299,7 +300,7 @@ fn march_beauty(frag: vec4<f32>) -> vec4<f32> {
     // The beauty march never reads the temperature or vorticity grids; naming them keeps them in the shared
     // bind group layout that `layout='auto'` would otherwise shrink.
     if (params.extra.z < -1.0 && textureDimensions(temperature_tex).x + textureDimensions(vorticity_tex).x
-            + textureDimensions(fire_tex).x == 0u) {
+            + textureDimensions(fire_tex).x + textureDimensions(flame_tex).x == 0u) {
         return vec4<f32>(0.0);
     }
     let width = params.screen.x;
@@ -359,6 +360,9 @@ fn march_beauty(frag: vec4<f32>) -> vec4<f32> {
             probe_at = run.x;
         }
         let sigma = params.march.y * sample_density(p_obj);
+        if (params.medium.w > 0.0 && (i32(vol.dims.w) & 4) != 0) {
+            rgb += trans * params.medium.w * max(sample_flame_sharp(p_obj), 0.0) * ds * fire_radiance(params.fire.w);
+        }
         if (sigma <= 0.0) { continue; }
         let st = sigma_t_unit * sigma;
         let a = st * ds;
@@ -384,7 +388,7 @@ fn march_beauty(frag: vec4<f32>) -> vec4<f32> {
             source = params.colour.rgb * (incident + fire_light);
         }
         rgb += trans * (frac * one_minus) * source;
-        if (params.fire.w > 0.5 && (i32(vol.dims.w) & 2) != 0) {
+        if (params.fire.x > 0.0 && (i32(vol.dims.w) & 2) != 0) {
             let kelvin = params.fire.y * sample_temperature(p_obj);
             if (kelvin > params.fire.z) {
                 var emit_w = sigma * ds;
@@ -403,7 +407,7 @@ struct PassSums { density: f32, temperature: f32, vorticity: f32, first_t: f32, 
 fn march_sums(frag: vec4<f32>) -> PassSums {
     var out: PassSums;
     out.first_t = 3.0e38;
-    if (params.extra.z < -1.0 && textureDimensions(fire_tex).x == 0u) { return out; }
+    if (params.extra.z < -1.0 && textureDimensions(fire_tex).x + textureDimensions(flame_tex).x == 0u) { return out; }
     let width = params.screen.x;
     let height = params.screen.y;
     let xs = frag.x / width * 2.0 - 1.0;
@@ -543,6 +547,7 @@ def _samplers(single_tile=False):
     for name, suffix, texture, ret, zero, swizzle, rest in (
             ('density', '_sharp', 'density', 'f32', '0.0', '.r', 'vol.rest.x'),
             ('temperature', '_sharp', 'temperature_tex', 'f32', '0.0', '.r', 'vol.rest.y'),
+            ('flame', '_sharp', 'flame_tex', 'f32', '0.0', '.r', '0.0'),
             ('vorticity', '_sharp', 'vorticity_tex', 'f32', '0.0', '.r', None),
             ('velocity', '', 'velocity_tex', 'vec3<f32>', 'vec3<f32>(0.0)', '.xyz', 'vec3<f32>(vol.rest.z)')):
         if rest is None:       # computed from the dense velocity grid, so never sparse
@@ -672,11 +677,15 @@ def _bytes(volume, settings, temperature=False, vorticity=False):
             total += _atlas_bytes(grid, 4)
         if (temperature or settings.glows(volume)) and volume.temperature is not None:
             total += _atlas_bytes(grid)
+        if settings.flame_intensity > 0 and volume.flame is not None:
+            total += _atlas_bytes(grid)
         return total
     total = volume.density.nbytes
     if volume.velocity is not None and (settings.blurred(volume) or vorticity):
         total += volume.density.nbytes * 4 + (volume.density.nbytes if vorticity else 0)
     if (temperature or settings.glows(volume)) and volume.temperature is not None:
+        total += volume.density.nbytes
+    if settings.flame_intensity > 0 and volume.flame is not None:
         total += volume.density.nbytes
     return total
 
@@ -853,14 +862,28 @@ def extra_textures(state, volume, used, velocity, temperature, vorticity):
     return vel, temp, vort
 
 
+def flame_texture(state, volume, settings, used):
+    """Optional burn-rate texture, leaving the old render's uploads unchanged when the gain is zero."""
+    if settings.flame_intensity > 0 and volume.flame is not None:
+        if is_sparse(volume):
+            if volume.sparse.tile_count:
+                return _atlas(state, volume, 'flame', used)
+        else:
+            return _field(state, _digest(volume, 'flame'), lambda: (
+                np.ascontiguousarray(volume.flame.transpose(2, 1, 0), np.float32), 'r32float'), used)
+    return _field(state, ('dummy', 'r32float'), lambda: (_ONE['r32float'], 'r32float'), used)
+
+
 def fire_light_view(state, volume, settings, used):
     """(view, dims) of the coarse fire-light rgba32float texture of `volume` (volumerender.fire_light_grid), cached by
     the temperature and density digests and the settings that shape it; a one-texel dummy and None when the volume
     casts no fire light."""
     from . import volumerender
-    key = ('firelight', _digest(volume), _digest(volume, 'temperature'), volume.voxel_size, volume.shape,
+    key = ('firelight', _digest(volume), _digest(volume, 'temperature') if volume.temperature is not None else None,
+           volume.voxel_size, volume.shape,
            settings.fire_intensity, settings.temperature_scale, settings.fire_threshold, settings.fire_light,
-           settings.density_scale, settings.fire_ramp) if (
+           settings.density_scale, settings.fire_ramp, settings.flame_intensity,
+           settings.flame_temperature, _digest(volume, 'flame') if volume.flame is not None else None) if (
         settings.glows(volume) and settings.fire_light > 0 and not is_sparse(volume)) else None
     if key is not None:
         cached = state.setdefault('fire_light_grids', {})
@@ -975,15 +998,15 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     params[2, :3], params[3, :3], params[4, :3] = view[0], view[1], -view[2]
     params[5] = camera.near, camera.far, ambient, light_count
     params[6] = settings.step_size, settings.density_scale, settings.shadow_density, settings.shadow_steps
-    params[7] = settings.scattering, settings.absorption, 1.0 if lit else 0.0, 0.0
+    params[7] = settings.scattering, settings.absorption, 1.0 if lit else 0.0, settings.flame_intensity
     params[8, :3] = settings.color
     params[9] = (settings.motion_blur / settings.fps if settings.motion_blur > 0 else 0.0, settings.motion_samples,
                  pass_flags, settings.depth_threshold)
     params[10, :2] = shadow_bias, shadow_count
     params[11] = (settings.anisotropy, settings.multi_scatter, 1.0 - 0.75 * settings.multi_scatter_blur, settings.octaves)
     params[12] = (settings.fire_intensity, settings.temperature_scale, settings.fire_threshold,
-                  1.0 if settings.fire_intensity > 0 else 0.0)
-    if settings.fire_intensity > 0:
+                  settings.flame_temperature)
+    if settings.fire_intensity > 0 or settings.flame_intensity > 0:
         params[13:, :3] = volumerender.fire_table(settings)
     pipe = pipe if pipe is not None else pipeline(state, target, samples, multisampled_depth, bvh=bvh is not None and bool(shadow_count))
     params_buffer = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
@@ -1010,9 +1033,10 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
         box_min = np.array(volume.origin, np.float64)
         box_max = box_min + np.array(volume.shape, np.float64) * volume.voxel_size
         block[3, :3], block[3, 3] = box_min, volume.voxel_size
-        block[4, :3], block[4, 3] = box_max, link_mask(volume, light_order)
+        block[4, :3], block[4, 3] = box_max, link_mask(volume, light_order, skip_fire=True)
         block[5, :3] = volume.shape
-        block[5, 3] = (volume.velocity is not None) + 2 * (volume.temperature is not None)
+        block[5, 3] = ((volume.velocity is not None) + 2 * (volume.temperature is not None)
+                       + 4 * (volume.flame is not None))
         fire_view, fire_dims = fire_light_view(state, volume, settings, used)
         if fire_dims is not None:
             block[9] = fire_dims
@@ -1029,7 +1053,8 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
                     state, volume, used, settings.blurred(volume) or bool(pass_flags & 6),
                     bool(pass_flags & 1) or settings.glows(volume), bool(pass_flags & 2)))] + [
                 {'binding': 5, 'resource': fire_view},
-                {'binding': 6, 'resource': tile_index(state, volume, used)}]))
+                {'binding': 6, 'resource': tile_index(state, volume, used)},
+                {'binding': 7, 'resource': flame_texture(state, volume, settings, used)}]))
     return Prepared(pipe, group0, groups1, empty)
 
 
@@ -1315,9 +1340,14 @@ def table_lights(scene):
     return [light for light in scene.lights if light.intensity > 0 and light.kind not in scene3d._AREA]
 
 
-def link_mask(volume, light_order):
+def link_mask(volume, light_order, skip_fire=False):
     from .gpu3d import link_mask as mask_of
-    return mask_of(getattr(volume, 'light_link', scene3d.LIGHT_LINK_ALL), light_order)
+    mask = int(mask_of(getattr(volume, 'light_link', scene3d.LIGHT_LINK_ALL), light_order))
+    if skip_fire:
+        for i, light in enumerate(light_order[:24]):
+            if light.name == '__volume_fire_mesh__':
+                mask |= 1 << i  # fire-grid light is already included in the smoke source
+    return mask
 
 
 def mesh_shadow_group(state, pipeline, scene, settings, used, keep, light_order=None):

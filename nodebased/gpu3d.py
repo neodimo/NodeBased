@@ -1515,6 +1515,11 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if (volume is not None and volume.fire_light_meshes > 0 and scene.volumes
+            and output in ('rgba', 'diffuse', 'specular')
+            and not any(light.name == '__volume_fire_mesh__' for light in scene.lights)):
+        from . import volumerender
+        scene = replace(scene, lights=scene.lights + volumerender.mesh_fire_lights(scene, volume))
     _mark('render_begin')
     _mark(f'size {int(width)}x{int(height)}')
     if samples > 1 and scene3d.is_empty_scene(scene):

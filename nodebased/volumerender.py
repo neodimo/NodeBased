@@ -78,6 +78,7 @@ positive. `first_hit_depth` is the view-space depth of the first sample whose `s
 from __future__ import annotations
 
 import math
+import weakref
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -128,6 +129,9 @@ class VolumeSettings:
     fire_light: float = 1.0        # how strongly the fire lights the smoke around it
     fire_ramp: str = ""            # custom emission colour over kelvin, "K:r,g,b;K:r,g,b"; empty is blackbody
     quality: str = "custom"        # custom, preview, medium or final
+    flame_intensity: float = 0.0   # independent burn-rate emission gain
+    flame_temperature: float = 1800.0  # kelvin used for the flame colour
+    fire_light_meshes: float = 0.0  # derived light gain on meshes
 
     def validated(self):
         if not self.step_size > 0:
@@ -144,8 +148,11 @@ class VolumeSettings:
             raise ValueError("volume_multi_scatter must be between 0 and 1")
         if not 0.0 <= self.multi_scatter_blur <= 1.0:
             raise ValueError("volume_multi_scatter_blur must be between 0 and 1")
-        if not self.fire_intensity >= 0 or not self.fire_light >= 0:
-            raise ValueError("volume_fire_intensity and volume_fire_light must not be negative")
+        if any(not gain >= 0 for gain in (self.fire_intensity, self.fire_light,
+                                          self.flame_intensity, self.fire_light_meshes)):
+            raise ValueError("volume fire and flame gains must not be negative")
+        if self.flame_temperature <= 0:
+            raise ValueError("volume_flame_temperature must be positive")
         if not self.temperature_scale > 0:
             raise ValueError("volume_temperature_scale must be positive")
         if self.quality not in QUALITY_CHOICES:
@@ -159,7 +166,8 @@ class VolumeSettings:
 
     def glows(self, volume):
         """True when `volume` emits: fire is on and the volume has a temperature field."""
-        return self.fire_intensity > 0 and volume.temperature is not None
+        return ((self.fire_intensity > 0 and volume.temperature is not None)
+                or (self.flame_intensity > 0 and volume.flame is not None))
 
     @property
     def octaves(self):
@@ -294,14 +302,16 @@ def fire_light_grid(volume, settings):
         # Fire emission still samples sparse temperature/density directly in the march. Building the optional
         # blurred secondary-light grid is a separate dense-only approximation and must not expand the cache.
         return None
-    kelvin = (settings.temperature_scale * volume.temperature).astype(np.float64).reshape(-1)
-    hot = (kelvin > settings.fire_threshold) & (volume.density.reshape(-1) > 0)
-    emission = np.zeros((kelvin.size, 3))
-    if hot.any():
+    emission = np.zeros(volume.shape + (3,), np.float64)
+    if settings.fire_intensity > 0 and volume.temperature is not None:
+        kelvin = (settings.temperature_scale * volume.temperature).astype(np.float64).reshape(-1)
+        hot = (kelvin > settings.fire_threshold) & (volume.density.reshape(-1) > 0)
         table = fire_table(settings)
-        emission[hot] = fire_radiance(table, kelvin[hot]) * (
+        emission.reshape(-1, 3)[hot] = fire_radiance(table, kelvin[hot]) * (
             settings.fire_intensity * settings.density_scale * volume.density.reshape(-1)[hot].astype(np.float64))[:, None]
-    emission = emission.reshape(volume.density.shape + (3,))
+    if settings.flame_intensity > 0 and volume.flame is not None:
+        emission += (settings.flame_intensity * np.maximum(volume.flame, 0)[..., None]
+                     * fire_radiance(fire_table(settings), np.array([settings.flame_temperature]))[0])
     if not emission.any():
         return None
     factor = max(1, int(math.ceil(max(volume.shape) / FIRE_LIGHT_CELLS)))
@@ -316,6 +326,67 @@ def fire_light_grid(volume, settings):
     world_scale = abs(np.linalg.det(np.asarray(volume.matrix, np.float64)[:3, :3])) ** (1 / 3)
     blurred = _gaussian_blur(coarse, radius / cell)
     return (settings.fire_light * radius * world_scale * blurred).astype(np.float32), cell
+
+
+_mesh_fire_cache = weakref.WeakKeyDictionary()
+
+
+def mesh_fire_lights(scene, settings):
+    """Deterministic eight-octant cluster of the fire's coarse emission, for normal mesh shadow rays.
+
+    The cache is per Volume object and look settings; camera requests reuse the lights.
+    Each nonempty octant contributes one point light at its emission-weighted centroid.
+    """
+    if settings is None or settings.fire_light_meshes <= 0 or not scene.volumes:
+        return ()
+    result = []
+    for volume in scene.volumes:
+        if not settings.glows(volume) or getattr(volume, 'sparse', None) is not None:
+            continue
+        cache = _mesh_fire_cache.setdefault(volume, {})
+        key = (settings.fire_intensity, settings.flame_intensity, settings.flame_temperature,
+               settings.temperature_scale, settings.fire_threshold, settings.density_scale,
+               settings.fire_ramp, settings.fire_light_meshes)
+        if key not in cache:
+            prepared = fire_light_grid(volume, replace(settings, fire_light=1.0))
+            lamps = []
+            if prepared is not None:
+                grid, cell = prepared
+                shape = np.array(grid.shape[:3])
+                side = max(volume.shape) * volume.voxel_size
+                for octant in np.ndindex(2, 2, 2):
+                    slices = tuple(slice(0, (int(n) + 1) // 2) if bit == 0 else
+                                   slice((int(n) + 1) // 2, int(n)) for n, bit in zip(shape, octant))
+                    patch = grid[slices]
+                    if not patch.size:
+                        continue
+                    weights = np.maximum(patch @ np.array([.2722287, .6740818, .0536895]), 0)
+                    power = float(weights.sum())
+                    if power <= 1e-8:
+                        continue
+                    coords = np.indices(patch.shape[:3]).reshape(3, -1).T
+                    start = np.array([s.start for s in slices])
+                    centre = (coords + start + .5).T @ weights.reshape(-1) / power
+                    local = np.asarray(volume.origin) + centre * cell
+                    world = (np.asarray(volume.matrix) @ np.append(local, 1.0))[:3]
+                    rgb = patch.sum(axis=(0, 1, 2)).astype(np.float64)
+                    intensity = settings.fire_light_meshes * 3.0 * power * cell ** 3 / max(side ** 2, .01)
+                    if intensity <= 1e-7:
+                        continue
+                    rgb /= max(float(rgb.max()), 1e-8)
+                    lamps.append(scene3d.Light(kind='Point', color=tuple(rgb), intensity=float(intensity),
+                                               position=scene3d.Vec3(*world), shadows=True,
+                                               falloff_type='Quadratic', shadow_blur=12.0,
+                                               shadow_samples=4, name='__volume_fire_mesh__'))
+            cache[key] = tuple(lamps)
+            if len(cache) > 8:
+                cache.clear()
+                cache[key] = tuple(lamps)
+        result.extend(cache[key])
+    if len(result) > 16:
+        brightest = sorted(range(len(result)), key=lambda i: (-result[i].intensity, i))[:16]
+        result = [result[i] for i in sorted(brightest)]
+    return tuple(result)
 
 
 def vorticity_magnitude(volume):
@@ -593,6 +664,8 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
             if lit:
                 incident = np.full((len(idx), 3), float(ambient))
                 for light in lights:
+                    if light.name == '__volume_fire_mesh__':
+                        continue  # the blurred fire grid already lights the smoke
                     if light.kind in scene3d._AREA:
                         continue  # R2: volumes do not scatter area lights yet
                     if not scene3d.light_reaches(volume.light_link, light):
@@ -617,12 +690,17 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
             else:
                 source = np.broadcast_to(color, (len(idx), 3))
             rgb[idx] += trans[idx, None] * (frac * (1 - t_seg))[:, None] * source
-            if fire_table_ is not None and sigma.any():
+            if fire_table_ is not None:
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    weight = np.where(sigma_t_unit > 0, (1 - t_seg) / max(sigma_t_unit, 1e-300), sigma * seg)
+                if settings.flame_intensity > 0 and volume.flame is not None:
+                    flame = np.maximum(_shutter_mean(volume.flame, points), 0)
+                    rgb[idx] += trans[idx, None] * (settings.flame_intensity * flame * seg)[:, None] * fire_radiance(
+                        fire_table_, np.array([settings.flame_temperature]))[0]
+            if fire_table_ is not None and settings.fire_intensity > 0 and volume.temperature is not None and sigma.any():
                 kelvin = settings.temperature_scale * _shutter_mean(volume.temperature, points)
                 glow = (kelvin > settings.fire_threshold) & (sigma > 0)
                 if glow.any():
-                    with np.errstate(divide="ignore", invalid="ignore"):
-                        weight = np.where(sigma_t_unit > 0, (1 - t_seg) / max(sigma_t_unit, 1e-300), sigma * seg)
                     emitted = fire_radiance(fire_table_, kelvin[glow]) * (settings.fire_intensity * weight[glow])[:, None]
                     rgb[idx[glow]] += trans[idx[glow], None] * emitted
             trans[idx] *= t_seg

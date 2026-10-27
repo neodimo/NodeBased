@@ -1297,7 +1297,9 @@ _VOLUME_RENDER_DEFAULTS = {
     # off at 0 and the quality preset is "custom" (the step size and shadow steps above), so old documents render as before.
     "volume_anisotropy": 0.0, "volume_multi_scatter": 0.0, "volume_multi_scatter_blur": 0.5,
     "volume_fire_intensity": 0.0, "volume_temperature_scale": 1500.0, "volume_fire_threshold": 600.0,
-    "volume_fire_light": 1.0, "volume_fire_ramp": "", "volume_quality": "custom"}
+    "volume_fire_light": 1.0, "volume_fire_ramp": "", "volume_quality": "custom",
+    "volume_flame_intensity": 0.0, "volume_flame_temperature": 1800.0,
+    "volume_fire_light_meshes": 0.0}
 SPECS["Render3D"]["params"].update(_VOLUME_RENDER_DEFAULTS)
 # The path tracer's knobs (render_mode "pathtrace", nodebased/pathtrace.py). `pt_samples` is samples per pixel; the
 # existing `samples` stays the antialiasing supersampling of the raster and ray-traced modes, so old documents mean
@@ -1754,7 +1756,8 @@ LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0
 LIMITS.update({"volume_anisotropy": (-0.99, 0.99), "volume_multi_scatter": (0.0, 1.0),
                "volume_multi_scatter_blur": (0.0, 1.0), "volume_fire_intensity": (0.0, 100000.0),
                "volume_temperature_scale": (0.001, 1000000.0), "volume_fire_threshold": (0.0, 1000000.0),
-               "volume_fire_light": (0.0, 1000.0)})
+               "volume_fire_light": (0.0, 1000.0), "volume_flame_intensity": (0.0, 100000.0),
+               "volume_flame_temperature": (1.0, 1000000.0), "volume_fire_light_meshes": (0.0, 1000.0)})
 LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0), "src_falloff": (0.0, 1.0),
                "src_density": (0.0, 1000000.0), "src_temperature": (-1000000.0, 1000000.0),
                "src_fuel": (0.0, 1000000.0), "src_inherit_velocity": (0.0, 1.0), "src_noise_amount": (0.0, 1.0),

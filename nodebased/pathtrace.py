@@ -1820,6 +1820,11 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     if width < 1 or height < 1:
         raise ValueError("Render dimensions must be positive")
     raytrace._cancel(cancel)
+    if (volume is not None and volume.fire_light_meshes > 0 and scene.volumes
+            and output in ('rgba', 'diffuse', 'specular', 'denoise')
+            and not any(light.name == '__volume_fire_mesh__' for light in scene.lights)):
+        from . import volumerender
+        scene = replace(scene, lights=scene.lights + volumerender.mesh_fire_lights(scene, volume))
     check_scene(scene)
     if s.has_shadow_catchers(scene):
         # Shadow catcher (step R3): the picture with the catchers as holdouts, the shadow layer under it (nodebased/shadowcatch.py)

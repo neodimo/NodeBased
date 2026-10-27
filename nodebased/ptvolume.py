@@ -75,7 +75,8 @@ class VolumeLayer:
 
     def levels(self, vi):
         """The `MajorantLevels` of volume `vi` (built on first use), or None when skipping is off or the volume is empty."""
-        if not ENABLE_SKIP or self.max_density[vi] <= 0:
+        if (not ENABLE_SKIP or self.max_density[vi] <= 0
+                or (self.settings.flame_intensity > 0 and self.preps[vi].volume.flame is not None)):
             return None
         if vi not in self._levels:
             self._levels[vi] = majorant_levels(self.preps[vi].volume, self.majorant[vi])
@@ -97,12 +98,13 @@ def build(scene, settings=None):
         preps.append(prep)
         peak = float(volume.density.max()) if volume.density.size else 0.0
         peaks.append(peak)
-        majorant.append(max(settings.density_scale * peak * max(sigma_t, 1.0), 1e-9))
+        flame_peak = (float(volume.flame.max()) if settings.flame_intensity > 0 and volume.flame is not None else 0.0)
+        majorant.append(max(settings.density_scale * peak * max(sigma_t, 1.0), flame_peak, 1e-9))
         corners = np.array([[x, y, z] for x in (prep.box_min[0], prep.box_max[0]) for y in (prep.box_min[1], prep.box_max[1])
                             for z in (prep.box_min[2], prep.box_max[2])])
         world = corners @ prep.m[:3, :3].T + prep.m[:3, 3]
         lo, hi = np.minimum(lo, world.min(axis=0)), np.maximum(hi, world.max(axis=0))
-    table = vr.fire_table(settings) if settings.fire_intensity > 0 and any(v.temperature is not None for v in volumes) else None
+    table = vr.fire_table(settings) if any(settings.glows(v) for v in volumes) else None
     return VolumeLayer(preps, settings, sigma_t, (ss / sigma_t) if sigma_t > 0 else 0.0, majorant, peaks, table,
                        np.asarray(settings.color, np.float64), lo, hi)
 
@@ -277,7 +279,7 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None):
         alive = np.flatnonzero(t1 > t0)
         position = t0.copy()
         volume = prep.volume
-        glows = layer.fire_table is not None and volume.temperature is not None
+        glows = layer.fire_table is not None
         if levels is not None:
             o_cells = (prep.to_object(o) - prep.box_min) / volume.voxel_size      # grid-space origin and step per world unit
             d_cells = (d @ prep.inv[:3, :3].T) / volume.voxel_size
@@ -306,12 +308,18 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None):
                 g = prep.to_grid(prep.to_object(o[ray] + d[ray] * position[ray][:, None]))
                 sigma = settings.density_scale * _trilinear(volume.density, g)
                 mu_here = mu[tentative]
-                if glows:
+                if glows and settings.fire_intensity > 0 and volume.temperature is not None:
                     kelvin = settings.temperature_scale * _trilinear(volume.temperature, g)
                     glow = (kelvin > settings.fire_threshold) & (sigma > 0)
                     if glow.any():
                         weight = vr.fire_radiance(layer.fire_table, kelvin[glow]) * (settings.fire_intensity * sigma[glow] / mu_here[glow])[:, None]
                         glow_points.append((ray[glow], position[ray][glow], weight))
+                if glows and settings.flame_intensity > 0 and volume.flame is not None:
+                    flame = np.maximum(_trilinear(volume.flame, g), 0.0)
+                    if flame.any():
+                        colour = vr.fire_radiance(layer.fire_table, np.array([settings.flame_temperature]))[0]
+                        weight = colour * (settings.flame_intensity * flame / mu_here)[:, None]
+                        glow_points.append((ray, position[ray].copy(), weight))
                 real = _uniform(keys[ray], turn, vi, step, 1, pcg, rand) < layer.sigma_t_unit * sigma / mu_here
                 counts["real"] += int(real.sum())
                 hit = ray[real]
