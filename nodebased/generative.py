@@ -186,7 +186,7 @@ def _bundle_color_space(frame):
 
 def generate(manifest_path, scene_state_path, output_pattern, provider="reproject", *, description=None,
              text=None, reference_frames=None, seed=0, sampler_settings=None, progress=None,
-             artifact_store=None):
+             artifact_store=None, cancelled=None):
     """Validate capabilities before work, then emit a sequence and honoured-control manifest.
 
     The sequence's artifact id covers a `generation.json` manifest stored beside the frames:
@@ -223,7 +223,12 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
     if desc.name == "sdxl_controlnet":
         from .providers import sdxl_controlnet
         sdxl_controlnet.resolve_settings(sampler_settings)  # an unknown key or a bad value refuses before any work
-    if desc.name not in ("reproject", "null", "sdxl_controlnet"):
+    if desc.name == "svd_image_video":
+        from .providers import svd_image_video
+        svd_image_video.resolve_settings(sampler_settings)
+        if reference_frames is not None and len(reference_frames) != 1:
+            raise ValueError("SVD accepts exactly one reference image")
+    if desc.name not in ("reproject", "null", "sdxl_controlnet", "svd_image_video"):
         raise ValueError(f"No local implementation for provider {desc.name}")
     pictures, run_info = None, None
     if desc.name == "sdxl_controlnet":
@@ -236,7 +241,17 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
         Path(output_pattern).parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="sdxl-controlnet-", dir=Path(output_pattern).parent) as work:
             pictures, run_info = sdxl_controlnet.run_frames(
-                controls, text=text, seed=seed, sampler_settings=sampler_settings, workdir=work, progress=progress)
+                controls, text=text, seed=seed, sampler_settings=sampler_settings, workdir=work,
+                progress=progress, cancelled=cancelled)
+    if desc.name == "svd_image_video":
+        from .providers import svd_image_video
+        sampler_settings = svd_image_video.resolve_settings(sampler_settings)
+        import tempfile
+        Path(output_pattern).parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="svd-image-video-", dir=Path(output_pattern).parent) as work:
+            pictures, run_info = svd_image_video.run_frames(
+                controls, reference_frames=reference_frames, seed=seed, sampler_settings=sampler_settings,
+                workdir=work, progress=progress, cancelled=cancelled)
     outputs = []
     for index, frame in enumerate(controls):
         if progress:

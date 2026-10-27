@@ -1056,6 +1056,7 @@ KNOB_LAYOUT = {
                         KnobGroup("string", ("scene_state",), label="Scene state"),
                         KnobGroup("string", ("output_path",), label="Generated sequence"),
                         KnobGroup("string", ("text",), label="Text prompt"),
+                        KnobGroup("file_read", ("reference_image",), label="Reference image"),
                         KnobGroup("int", ("seed",), label="Seed"),
                         KnobGroup("string", ("sampler_settings",), label="Sampler settings (JSON)")),
 }

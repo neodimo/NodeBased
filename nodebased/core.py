@@ -924,7 +924,7 @@ SPECS = {
     # Generate is an explicit provider-write tap: its plate input passes through unchanged while
     # the panel action writes a generated sequence for ConditionedRead. Bundle/provider settings
     # remain part of the node params and therefore of both evaluator and tile content digests.
-    "Generate": {"inputs": ["image"], "params": {"provider": "reproject", "manifest": "", "scene_state": "", "output_path": "generated.%04d.exr", "text": "", "seed": 0, "sampler_settings": ""}},
+    "Generate": {"inputs": ["image"], "params": {"provider": "reproject", "manifest": "", "scene_state": "", "output_path": "generated.%04d.exr", "text": "", "reference_image": "", "seed": 0, "sampler_settings": ""}},
     # CameraSolve3D is a provider tap like Generate (the plate passes through unchanged). The `solve_camera` op
     # runs the learned monocular SLAM on the plate and writes a Camera3D with a key on every frame and a point
     # cloud into the document (nodebased/camera_solve.py). The solve is up to scale: `unit_scale` is scene units

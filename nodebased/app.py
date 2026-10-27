@@ -17029,7 +17029,9 @@ class Window(QMainWindow):
         bundle_id = json.loads(sidecar.read_text())["artifact_id"] if sidecar.exists() else ""
         job = Job(params["provider"], bundle_id, {"manifest_path": params["manifest"],
                    "scene_state_path": params["scene_state"], "output_pattern": params["output_path"],
-                   "text": params.get("text") or None, "seed": seed, "sampler_settings": sampler_settings})
+                   "text": params.get("text") or None,
+                   "reference_frames": [params["reference_image"]] if params.get("reference_image") else None,
+                   "seed": seed, "sampler_settings": sampler_settings})
         worker = Worker(job)
         self._generate_workers[key] = worker
         self._generate_progress_text[key] = "Starting isolated provider"

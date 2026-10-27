@@ -208,6 +208,7 @@ def _child(address, token, job):
             from .generative import generate
             options.setdefault("provider", job["provider_id"])
             options["progress"] = progress
+            options["cancelled"] = cancelled
             result = generate(**options)
         send({"type": "result", "artifact_id": result["artifact_id"], "result": result})
     except BaseException as exc:

@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "name": "svd_image_video",
+  "version": "1.0",
+  "locality": "local",
+  "local_gpu": true,
+  "accepts": {
+    "depth": {"accepted": false, "note": "SVD-XT does not consume the exported metric depth"},
+    "normals": {"accepted": false, "note": "SVD-XT does not consume normals"},
+    "motion": {"accepted": false, "note": "motion bucket controls amount of motion, not the exported motion vectors"},
+    "ids": {"accepted": false, "note": "SVD-XT does not consume object IDs"},
+    "camera_pose": {"accepted": false, "note": "SVD-XT has no camera trajectory or pose input"},
+    "text": {"accepted": false, "note": "SVD-XT has no text conditioning"},
+    "reference_frames": {"accepted": true, "role": "exactly one RGB reference image initializes the whole video; if omitted, the first ControlBundle beauty frame is used"},
+    "seed": {"accepted": true, "role": "CUDA generator seed for the video"},
+    "sampler_settings": {"accepted": true, "role": "steps, fps, motion_bucket_id and noise_aug_strength; unknown keys refused"}
+  },
+  "limits": {"max_resolution": [1024, 576], "max_frames": 25},
+  "color_spaces": ["ACEScg"],
+  "color": "ACEScg beauty is converted through OCIO to an sRGB reference image; external references are RGB images. SVD-XT generates 1024 by 576 sRGB frames, resized to the requested plate and converted through OCIO to ACEScg OpenEXR.",
+  "environment": {"interpreter_variable": "NODEBASED_SVD_PYTHON", "model_dir_variable": "NODEBASED_SVD_MODEL_DIR", "gpu": "NVIDIA CUDA with model CPU offload and UNet forward chunking"},
+  "returns": {"frames": "OpenEXR RGBA sequence; beauty only", "honoured": ["reference_frames", "seed", "sampler_settings"]}
+}
