@@ -1,10 +1,11 @@
 """Burn-rate glow and fire-derived mesh lights on the CPU and GPU volume paths."""
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
-from nodebased import gpu3d, pathtrace, scene3d, volumerender
+from nodebased import gpu3d, gpupathtrace, pathtrace, scene3d, volumerender
 from nodebased.core import Dispatcher, upgrade_document
 from nodebased.imaging import Evaluator
 from tests.test_volume_fire_look import BASE, hot_cold
@@ -53,7 +54,6 @@ class FlameChannelTests(unittest.TestCase):
         self.assertGreater(float(cpu_bare[..., :3].sum()), 0)
         np.testing.assert_allclose(gpu_bare, cpu_bare, atol=.005, rtol=.005)
 
-    @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
     def test_flame_only_pathtrace_emits_on_both_backends(self):
         scene = flame_scene()
         scene = replace(scene, volumes=(replace(scene.volumes[0],
@@ -62,15 +62,28 @@ class FlameChannelTests(unittest.TestCase):
         settings = volumerender.VolumeSettings(flame_intensity=1, fire_light=0)
         path = pathtrace.PathSettings(samples=32, max_bounces=1)
         cpu = pathtrace.render(scene, camera, 24, 24, settings=path, backend='cpu', volume=settings)
+        no_field = replace(scene, volumes=(replace(scene.volumes[0], flame=None),))
+        np.testing.assert_array_equal(
+            pathtrace.render(scene, camera, 24, 24, settings=path, backend='cpu',
+                             volume=volumerender.VolumeSettings()),
+            pathtrace.render(no_field, camera, 24, 24, settings=path, backend='cpu',
+                             volume=volumerender.VolumeSettings()))
+        if not gpu3d.available():
+            return
+        if not gpupathtrace.soft_supported(gpu3d._state()):
+            with self.assertRaisesRegex(ValueError, 'GPU Render3D unsupported'):
+                pathtrace.render(scene, camera, 24, 24, settings=path, backend='gpu', volume=settings)
+            np.testing.assert_allclose(
+                pathtrace.render(scene, camera, 24, 24, settings=path, backend='auto', volume=settings),
+                cpu, atol=.005, rtol=.005)
+            return
         gpu = pathtrace.render(scene, camera, 24, 24, settings=path, backend='gpu', volume=settings)
         np.testing.assert_allclose(gpu, cpu, atol=.005, rtol=.005)
-        no_field = replace(scene, volumes=(replace(scene.volumes[0], flame=None),))
-        for backend in ('cpu', 'gpu'):
-            np.testing.assert_array_equal(
-                pathtrace.render(scene, camera, 24, 24, settings=path, backend=backend,
-                                 volume=volumerender.VolumeSettings()),
-                pathtrace.render(no_field, camera, 24, 24, settings=path, backend=backend,
-                                 volume=volumerender.VolumeSettings()))
+        np.testing.assert_array_equal(
+            pathtrace.render(scene, camera, 24, 24, settings=path, backend='gpu',
+                             volume=volumerender.VolumeSettings()),
+            pathtrace.render(no_field, camera, 24, 24, settings=path, backend='gpu',
+                             volume=volumerender.VolumeSettings()))
 
     @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
     def test_sparse_flame_field_emits_on_both_gpu_paths(self):
@@ -86,8 +99,28 @@ class FlameChannelTests(unittest.TestCase):
         np.testing.assert_allclose(gpu, cpu, atol=.005, rtol=.005)
         path = pathtrace.PathSettings(samples=32, max_bounces=1)
         cpu = pathtrace.render(scene, camera, 24, 24, settings=path, backend='cpu', volume=settings)
+        if not gpupathtrace.soft_supported(gpu3d._state()):
+            with self.assertRaisesRegex(ValueError, 'GPU Render3D unsupported'):
+                pathtrace.render(scene, camera, 24, 24, settings=path, backend='gpu', volume=settings)
+            np.testing.assert_allclose(
+                pathtrace.render(scene, camera, 24, 24, settings=path, backend='auto', volume=settings),
+                cpu, atol=.005, rtol=.005)
+            return
         gpu = pathtrace.render(scene, camera, 24, 24, settings=path, backend='gpu', volume=settings)
         np.testing.assert_allclose(gpu, cpu, atol=.005, rtol=.005)
+
+    @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
+    def test_unsupported_adapter_keeps_cpu_flame_pathtrace_available(self):
+        scene = flame_scene()
+        camera = scene3d.Camera()
+        settings = volumerender.VolumeSettings(flame_intensity=1, fire_light=0)
+        path = pathtrace.PathSettings(samples=4, max_bounces=1)
+        cpu = pathtrace.render(scene, camera, 16, 16, settings=path, backend='cpu', volume=settings)
+        with patch.object(gpupathtrace, 'soft_supported', return_value=False):
+            with self.assertRaisesRegex(ValueError, 'GPU Render3D unsupported'):
+                pathtrace.render(scene, camera, 16, 16, settings=path, backend='gpu', volume=settings)
+            auto = pathtrace.render(scene, camera, 16, 16, settings=path, backend='auto', volume=settings)
+        np.testing.assert_array_equal(auto, cpu)
 
 
 class MeshLightTests(unittest.TestCase):
