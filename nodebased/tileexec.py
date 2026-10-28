@@ -1334,12 +1334,13 @@ class TileExecutor:
             az=_named_layer_array(a,name); bz=_named_layer_array(b,name)
             if az is None or bz is None: raise ValueError(f"ZMerge: missing depth layer {name!r}")
             az,bz=az[...,0],bz[...,0]
-            if params.get("depth_math")=="1/depth": az=1/np.maximum(az,1e-6); bz=1/np.maximum(bz,1e-6)
-            delta=az-bz
-            if params.get("depth_math")=="1/depth": delta=-delta
-            smooth=max(0.,float(params.get("smoothing",0)))
-            weight=(delta<0).astype(np.float32) if smooth==0 else np.clip(.5-delta/(2*smooth),0,1)
-            filtered=a.pixels*weight[...,None]+b.pixels*(1-weight[...,None])
+            alpha_channel=params.get("alpha_channel","rgba.alpha")
+            aa=ba=None
+            if alpha_channel != "none":
+                aa=_zmerge_channel_array(a,alpha_channel); ba=_zmerge_channel_array(b,alpha_channel)
+                if aa is None or ba is None: raise ValueError(f"ZMerge: missing alpha channel {alpha_channel!r}")
+                aa,ba=aa[...,0],ba[...,0]
+            filtered=imaging.Evaluator._zmerge_pixels(a.pixels,b.pixels,az,bz,aa,ba,params)
             mask=inputs[2].pixels if len(inputs)>2 and inputs[2] is not None else None
             return imaging.Evaluator._apply_mask_mix(b.pixels,filtered,mask,params.get("mix",1.0))
         if kind == "Convolve":
@@ -1696,7 +1697,8 @@ def _tile_layers(kind, params, inputs, pixels, region, disabled=False):
         name = params.get("depth_layer", "depth.Z")
         za, zb = _named_layer_array(first, name), _named_layer_array(second, name)
         if za is not None and zb is not None:
-            nearest = np.minimum(za[..., :1], zb[..., :1])
+            choose = np.maximum if params.get("backwards", False) else np.minimum
+            nearest = choose(za[..., :1], zb[..., :1])
             depth = np.repeat(nearest, 4, axis=-1)
             depth[..., 3] = 1.0
             layers[name.rsplit(".", 1)[0] if "." in name else name] = depth
@@ -1720,6 +1722,13 @@ def _named_layer_array(artifact, name):
     if index < 0 or index >= array.shape[-1]:
         return None
     return array[..., index:index + 1]
+
+
+def _zmerge_channel_array(artifact, name):
+    """Return ZMerge's selected alpha channel from RGBA or a named tile layer."""
+    if name in ("", "rgba", "rgba.alpha"):
+        return artifact.pixels[..., 3:4]
+    return _named_layer_array(artifact, name)
 
 
 def _align_array_to_region(array, source_region, target_region):

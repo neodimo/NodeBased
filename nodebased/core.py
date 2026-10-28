@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -325,7 +325,8 @@ SPECS = {
                              "max_size": 20.0, "depth_math": "depth", "bokeh_shape": "disc",
                              "blade_count": 6, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0}},
     "ZMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
-               "params": {"depth_layer": "depth.Z", "depth_math": "depth", "smoothing": 0.0, "mix": 1.0}},
+               "params": {"depth_layer": "depth.Z", "backwards": False, "alpha_channel": "rgba.alpha",
+                          "depth_math": "depth", "smoothing": 0.0, "mix": 1.0}},
     "ZSlice": {"inputs": ["image"], "optional_inputs": ["depth", "mask"],
                "params": {"depth_layer": "depth.Z", "near": 0.0001, "far": 1.0, "falloff": 0.0,
                           "depth_math": "depth", "zslice_output": "matte", "mix": 1.0}},
@@ -2591,6 +2592,25 @@ def upgrade_document(document):
                 for name, value in SPECS[node["type"]]["params"].items():
                     params.setdefault(name, value)
         doc["version"] = 26
+    if isinstance(doc, dict) and doc.get("version") == 26:
+        # v26 -> v27 adds Nuke ZMerge's direction and alpha controls.  Existing ZMerge nodes
+        # selected their lower depth with a hard switch, including with the legacy reciprocal
+        # comparison, so they explicitly retain that output on load.  New nodes use the spec
+        # defaults above: ordinary depth order and rgba.alpha compositing.
+        def _zmerge_defaults(scope):
+            for node in scope.values():
+                if not isinstance(node, dict):
+                    continue
+                if node.get("type") == "ZMerge":
+                    params = node.setdefault("params", {})
+                    params.setdefault("backwards", False)
+                    params.setdefault("alpha_channel", "none")
+                graph = node.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _zmerge_defaults(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _zmerge_defaults(doc["nodes"])
+        doc["version"] = 27
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
@@ -2974,6 +2994,9 @@ def validate(doc, _depth=0):
             if isinstance(default, str):
                 if not isinstance(value, str) or len(value) > 32768:
                     raise ValueError(f"{name} must be a path string")
+            elif type(default) is bool:
+                if type(value) is not bool:
+                    raise ValueError(f"{name} must be boolean")
             else:
                 if type(value) not in (float, int) or not math.isfinite(value):
                     raise ValueError(f"{name} must be a finite number")

@@ -23,9 +23,10 @@ class NamedLayerTileTests(unittest.TestCase):
         self.beauty = np.stack((xx / w, yy / h, (xx + yy) / (w + h), np.ones_like(xx)), -1).astype(np.float32)
         self.depth = np.stack((np.ones_like(xx) * 2, np.ones_like(xx) * 2,
                                np.ones_like(xx) * 2, np.ones_like(xx)), -1).astype(np.float32)
+        self.matte = np.zeros_like(self.beauty); self.matte[..., 3] = 0.5
         self.motion = np.stack((xx.astype(float), yy.astype(float), np.zeros_like(xx), np.ones_like(xx)), -1).astype(np.float32)
         self.path = Path(self.temp.name) / "source.exr"
-        write_exr(self.path, self.beauty, bits="float", layers={"depth": self.depth, "motion": self.motion})
+        write_exr(self.path, self.beauty, bits="float", layers={"depth": self.depth, "motion": self.motion, "matte": self.matte})
 
     def graph(self, kind, params=None, second=False):
         d = Dispatcher()
@@ -33,7 +34,7 @@ class NamedLayerTileTests(unittest.TestCase):
         if second:
             path_b = Path(self.temp.name) / "second.exr"
             depth_b = self.depth.copy(); depth_b[..., :3] = 4.0
-            write_exr(path_b, self.beauty * 0.5, bits="float", layers={"depth": depth_b})
+            write_exr(path_b, self.beauty * 0.5, bits="float", layers={"depth": depth_b, "matte": self.matte})
             d.execute({"op": "create", "type": "Read", "id": "b", "params": {"path": str(path_b)}})
         d.execute({"op": "create", "type": kind, "id": "n", "params": params or {}})
         if kind == "ZMerge" or kind == "ShuffleCopy":
@@ -90,6 +91,10 @@ class NamedLayerTileTests(unittest.TestCase):
 
     def test_zmerge_preserves_and_combines_layers(self):
         self.assert_tiled_matches("ZMerge", {"depth_layer": "depth.Z"}, second=True)
+
+    def test_zmerge_named_alpha_and_backwards_match_full_frame_and_export_depth(self):
+        self.assert_tiled_matches("ZMerge", {"depth_layer": "depth.Z", "alpha_channel": "matte.A",
+                                               "backwards": True}, second=True)
 
     def test_shufflecopy_exposes_out2_as_named_tile_layer(self):
         self.assert_tiled_matches("ShuffleCopy", {}, second=True)

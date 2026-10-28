@@ -2917,6 +2917,8 @@
    ],
    "knobs": [
     {"nodebased": ["depth_layer"], "nuke": ["z_channel"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Z channel', scripting name `z_channel`"},
+    {"nodebased": ["backwards"], "nuke": ["backwards"], "kind": "same"},
+    {"nodebased": ["alpha_channel"], "nuke": ["alpha_channel"], "kind": "same"},
     {"nodebased": ["depth_math"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["smoothing"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}

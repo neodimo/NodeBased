@@ -3964,19 +3964,19 @@ class Evaluator:
             layer = p.get("depth_layer", "depth.Z")
             az = Evaluator._layer_of(kind, a, layer).fit(out)[..., 0]
             bz = Evaluator._layer_of(kind, b, layer).fit(out)[..., 0]
-            if p.get("depth_math") == "1/depth":
-                az = 1.0 / np.maximum(az, 1e-6); bz = 1.0 / np.maximum(bz, 1e-6)
-            delta = az - bz
-            if p.get("depth_math") == "1/depth":
-                delta = -delta  # inverse depth grows toward the camera
-            smooth = max(0.0, float(p.get("smoothing", 0.0)))
-            weight = (delta < 0).astype(np.float32) if smooth == 0 else np.clip(0.5 - delta / (2 * smooth), 0, 1)
-            filtered = ap * weight[..., None] + bp * (1 - weight[..., None])
+            alpha_channel = p.get("alpha_channel", "rgba.alpha")
+            aa = ba = None
+            if alpha_channel != "none":
+                aa = Evaluator._layer_of(kind, a, alpha_channel).fit(out)[..., 0]
+                ba = Evaluator._layer_of(kind, b, alpha_channel).fit(out)[..., 0]
+            filtered = Evaluator._zmerge_pixels(ap, bp, az, bz, aa, ba, p)
             mask = inputs[2] if len(inputs) > 2 else None
             pixels = Evaluator._apply_mask_mix(bp, filtered, None if mask is None else mask.fit(out), p.get("mix", 1.0))
-            # Preserve the source depth units in the exported layer even when comparison used 1/z.
-            nearest = np.minimum(Evaluator._layer_of(kind, a, layer).fit(out)[..., 0],
-                                 Evaluator._layer_of(kind, b, layer).fit(out)[..., 0])
+            # Preserve source depth units. `backwards` uses reciprocal-depth order, so the
+            # numerically greatest source value is nearest; depth_math only transforms comparison.
+            choose = np.maximum if p.get("backwards", False) else np.minimum
+            nearest = choose(Evaluator._layer_of(kind, a, layer).fit(out)[..., 0],
+                             Evaluator._layer_of(kind, b, layer).fit(out)[..., 0])
             depth_pixels = np.repeat(nearest[..., None], 4, axis=2); depth_pixels[..., 3] = 1.0
             layer_name = layer.rsplit(".", 1)[0] if "." in layer else layer
             layers = dict(b.layers or {}); layers.update(a.layers or {})
@@ -4319,6 +4319,10 @@ class Evaluator:
         """The named layer of `raster` as a Raster, or the raster itself for "" / "rgba"."""
         if not name or name == "rgba":
             return raster
+        if name.lower() in ("rgba.alpha", "rgba.a"):
+            pixels = np.repeat(raster.pixels[..., 3:4], 4, axis=2)
+            pixels[..., 3] = 1.0
+            return Raster(pixels, raster.data, raster.display)
         layers = raster.layers or {}
         if name in layers:
             return layers[name]
@@ -4335,6 +4339,30 @@ class Evaluator:
                     return Raster(component_pixels, layer.data, layer.display)
         have = ", ".join(["rgba", *layers]) if layers else "none (wire a multichannel Read or Render3D)"
         raise ValueError(f"{kind}: no layer {name!r} on the input; available: {have}")
+
+    @staticmethod
+    def _zmerge_pixels(a, b, az, bz, alpha_a, alpha_b, params):
+        """ZMerge's shared depth order and selected-alpha composite.
+
+        ``depth_math=1/depth`` retains the old reciprocal comparison (including its smoothing
+        scale); ``backwards`` reverses that resulting order. Existing documents migrate to a
+        hard selected result, while new nodes composite the selected nearer pixel over the farther.
+        """
+        if params.get("depth_math") == "1/depth":
+            delta = -(1.0 / np.maximum(az, 1e-6) - 1.0 / np.maximum(bz, 1e-6))
+        else:
+            delta = az - bz
+        if params.get("backwards", False):
+            delta = -delta
+        smooth = max(0.0, float(params.get("smoothing", 0.0)))
+        weight = ((delta < 0).astype(np.float32) if smooth == 0
+                  else np.clip(0.5 - delta / (2 * smooth), 0, 1).astype(np.float32))
+        near = a * weight[..., None] + b * (1.0 - weight[..., None])
+        if params.get("alpha_channel", "rgba.alpha") == "none":
+            return near.astype(np.float32)
+        far = b * weight[..., None] + a * (1.0 - weight[..., None])
+        alpha = np.clip(alpha_a * weight + alpha_b * (1.0 - weight), 0.0, 1.0)
+        return (near + far * (1.0 - alpha[..., None])).astype(np.float32)
 
     @staticmethod
     def _cryptomatte(p, inputs):
