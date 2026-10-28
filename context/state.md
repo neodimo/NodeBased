@@ -1,3 +1,11 @@
+## 2026-10-27, 10:55 PM PDT — 0.46.0 package gate failed; 0.46.1 repair staged
+
+- **What was done:** The 0.46.0 tag package run failed on Windows only. Its software graphics adapter correctly rejects GPU path-traced smoke/fire; two new tests had assumed every GPU adapter supported that path. Main now contains the test-harness repair, which asserts CPU fallback on unsupported adapters and retains GPU/CPU comparisons on supported ones. Focused tests passed on the local NVIDIA, Radeon and software-renderer paths. Fresh Linux and Windows Desktop conformance is running on the repair commit.
+- **Artifacts:** Fix committed and pushed on main as `a8eb7c01` (`tests/test_volume_flame_mesh.py`). Failed package run: <https://github.com/neodimo/NodeBased/actions/runs/40627566266>. Replacement conformance: <https://github.com/neodimo/NodeBased/actions/runs/40640089541>. Patch-release notes and summary: `scratch/nb-lanes/auto/notes-0.46.1.md` and `summary-0.46.1.md` (local scratch; to be consumed by the release tick). The `v0.46.0` tag stays pushed and unpublished.
+- **State:** Partial; full replacement CI and package jobs remain unverified. Do not announce a stable release yet.
+- **Next owner + concrete artifact:** Gonzo checks Desktop conformance run `40640089541` and the latest main commit. On green Linux and Windows, arm `python3 scratch/nb-lanes/auto/tick.py release-no-preview 0.46.1 scratch/nb-lanes/auto/notes-0.46.1.md scratch/nb-lanes/auto/summary-0.46.1.md`, run `tick.py tick`, and follow exact-tip suite and tag workflows to publication. If red, repair the exact failure first.
+- **Failure mode:** GPU availability alone does not imply the adapter supports GPU path-traced volumes; tests must check `gpupathtrace.soft_supported` and verify automatic CPU fallback where it is false.
+
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
 ## Fluids 14 queued (7:07 PM on 2026-10-27 PDT)
