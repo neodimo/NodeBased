@@ -1,3 +1,24 @@
+# NodeBased 0.46.0 — fire that lights the scene, a clearer Hot pour, and sharper 2D controls
+
+## What changed since 0.45.0
+
+- **Fire emits light from its burn rate.** Flames now glow independently of the smoke temperature in the CPU and GPU volume renderers and path tracers. Dense fire volumes can cast derived light onto nearby meshes, with mesh and smoke shadows. An editable 24-frame fire shot and comparison stills show the effect on a floor and stone.
+- **The Hot pour reads more clearly in a shot.** A broader, steadier steam column rises beside a continuous stream that enters the glass. The orange liquid remains visible through the live-rendered glass, and a sized key gives the tabletop shadow a soft edge. Updated stills show frames 60, 90 and 120, with before images alongside them.
+- **2D node controls move closer to Nuke's.** Inpaint, LightWrap, ColorLookup, IDistort and DirBlur gained missing filter and colour controls; ColorLookup can set its selected RGB, RGBA or alpha curves. Noise and Rectangle received their remaining priority controls. The guide-based, rank-weighted fidelity score rose from 88.7 to 90.2 across 167 scored nodes.
+
+## Known limits
+
+- Sparse cached fire glows but does not yet derive light for nearby meshes. The fire-shot flames remain straight and grainy in places, with occasional bright gaps; the 32-sample smoke, floor and shadows also show noise. Real-display visual QA is still outstanding.
+- The Hot pour's glass retains fine 32-sample grain, the stream has strong specular highlights near its top, and the steam has a bright core. The updated stills are visual evidence, not a photographic-finish claim.
+- The 2D fidelity score is measured against the Nuke Reference Guide; pixel agreement with actual Nuke renders is unverified. ScannedGrain, Undistort, Cryptomatte, Encryptomatte, ZMerge and TVIScale still have open control rows.
+- GPU 2D nodes and the Direct picture remain off by default. The Radeon GPU-node path is below the 24 fps target; the RTX 4070 laptop, A6000, Windows D3D12 and native Wayland checks remain open.
+
+## Moved to 0.47.0
+
+- Sparse cached fire lighting for nearby meshes and a higher-detail fire-shot comparison for grain and flame gaps (Fluids lane, queued for the next model-budget slot).
+- Finish the remaining 2D fidelity rows and run the Nuke reference pack against real renders.
+- Complete the GPU 2D colour-correction and display path, then revisit its default and the 24 fps target.
+
 # NodeBased 0.45.0 — the 2D nodes at 88.7 against Nuke, and GPU nodes in Settings with an Automatic card pick
 
 ## What changed since 0.44.0
