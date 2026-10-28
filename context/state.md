@@ -1,5 +1,9 @@
 ## 2026-10-26 — 0.44.0 published (3:55 AM PDT)
 
+## Fluids 14 queued (7:07 PM on 2026-10-27 PDT)
+
+Fluids 13's flame emission and mesh-light work is merged. Fluids 14 has two written, bounded briefs in Gonzo's workspace: `scratch/nb-lanes/auto/briefs/L6-sparse-fire-1029.md` (sparse cached fire lights meshes without a dense volume) and `L6-flame-look-1029.md` (64-cell and 32/128-sample fire-shot comparison). Lane 6 is queued on GPT-5.6 Terra and held until Thursday 9:00 PM at the earliest for the single-GPT budget. Neither step is implemented or tested; the previous fire-shot's real-display visual verdict is still open. The tick state and issue #6 carry the queue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Sol) (12:35 PM on 2026-10-27 PDT)
 
 `main` moved `fa330061` -> `ac08e954` (lane commits cherry-picked onto main in lane order) and then to this
