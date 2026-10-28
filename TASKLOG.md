@@ -1,3 +1,11 @@
+## 2026-10-28, 2:20 AM PDT — 0.46.1 published after Windows package repair
+
+- **What was done:** The exact `v0.46.1` commit `503c4782` passed its full local suite and both Linux and Windows tag conformance. Both package jobs and the publish job passed. GitHub published four release assets at 2:03 AM; the `SHA256SUMS` entries match the three GitHub asset SHA-256 digests, and the manifest's downloaded bytes match GitHub's digest. The one release announcement, with DiMo ping, landed in Releases → #nodebased at 2:09 AM (message `1564929052349833269`). ZMerge merged into main afterward and is absent from this tag.
+- **Artifacts:** Published release: <https://github.com/neodimo/NodeBased/releases/tag/v0.46.1>. Package workflow: <https://github.com/neodimo/NodeBased/actions/runs/40651078246>; tag conformance: <https://github.com/neodimo/NodeBased/actions/runs/40651078264>. `scratch/nb-lanes/run/release-0461-check/SHA256SUMS` is deliberate local verification scratch. This note and the status-board update are committed/pushed on main; release assets are published on GitHub. The `v0.46.0` tag remains pushed and unpublished.
+- **State:** 0.46.1 release done. Real-display visual QA and real Nuke render comparison remain unverified; neither is claimed by the published release. The newer ZMerge main commit needs its own platform CI before any next release.
+- **Next owner + concrete artifact:** Gonzo follows main's post-release Desktop conformance at `9ed23998` and the local Linux release installation separately. Future release work starts from `v0.46.1` and this published asset set.
+- **Failure mode:** The 0.46.0 Windows package test assumed a software adapter supported GPU fire path tracing. The 0.46.1 repair tests CPU fallback there while retaining GPU/CPU comparison on capable adapters; the failed 0.46.0 tag was never moved or published.
+
 ## 2026-10-28 — continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) step K of N: ZMerge chooses depth order and blends by the selected alpha (integrator tick)
 
 - **What was done:** `main` `503c4782` -> `bb8bd82d` plus this docs commit. Evidence and per-lane commit
