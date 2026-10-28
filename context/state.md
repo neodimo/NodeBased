@@ -1,5 +1,24 @@
 ## 2026-10-28, 1:55 AM PDT — Lane 2 ZMerge depth and alpha controls recovered
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) (2:09 AM on 2026-10-28 PDT)
+
+`main` moved `503c4782` -> `bb8bd82d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `bb8bd82d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1028-0155.log`, started 1:55 AM): **Ran 7410 tests in 511.407 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-5.6 Terra), step K of N: ZMerge chooses depth order and blends by the selected alpha.** Commits:
+  - `4b20ad32` 2D fidelity: match ZMerge depth order and alpha blending
+  Diff: 11 files changed, 184 insertions(+), 55 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done:** Recovered the stopped Terra worker's nine-file worktree diff. ZMerge now chooses near depth in either direction, blends its chosen nearer input using RGBA or a named alpha channel, preserves the old hard-switch result when `alpha_channel=none`, and matches full-frame and tiled output. Existing documents migrate to the old hard-switch behavior; new nodes expose `backwards` and `alpha_channel`. Evidence: the requested focused/compatibility checks passed (37 tests), pre-commit node/panel checks passed (82 tests), the added B-nearer regression passed, and the fidelity audit is current. The audit score changed from 90.2 to 90.3; ZMerge's row changed from 55.6 to 100.0.
 - **Artifacts:** `nodebased/core.py`, `nodebased/imaging.py`, `nodebased/tileexec.py`, `nodebased/knobs.py`, `tests/test_2d_parity_step_d1.py`, `tests/test_tile_layers.py`, `docs/parity/nodebased_to_nuke.json`, and both copies of `PARITY_2D_FIDELITY.md` are committed on `openclaw/nb-2d-parity` with this note. Test logs in `scratch/nb-lanes/run/tests-L2-zmerge-recovery.log` and `tests-L2-zmerge-precommit.log` are deliberate local scratch.
 - **State:** Lane step done on its branch; integration suite, cross-platform CI, real Nuke pixel comparison, and artist display review remain unverified. The 0.46.1 release tag is separate and does not include this lane step.

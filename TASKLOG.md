@@ -1,3 +1,9 @@
+## 2026-10-28 — continuous mode merge: Lane 2 (2D parity, GPT-5.6 Terra) step K of N: ZMerge chooses depth order and blends by the selected alpha (integrator tick)
+
+- **What was done:** `main` `503c4782` -> `bb8bd82d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `bb8bd82d`: Ran 7410 tests in 511.407 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-28, 1:55 AM PDT — Lane 2 ZMerge depth and alpha controls recovered
 
 - **What was done:** Recovered the stopped Terra worker's nine-file worktree diff. ZMerge now chooses near depth in either direction, blends its chosen nearer input using RGBA or a named alpha channel, preserves the old hard-switch result when `alpha_channel=none`, and matches full-frame and tiled output. Existing documents migrate to the old hard-switch behavior; new nodes expose `backwards` and `alpha_channel`. Evidence: the requested focused/compatibility checks passed (37 tests), pre-commit node/panel checks passed (82 tests), the added B-nearer regression passed, and the fidelity audit is current. The audit score changed from 90.2 to 90.3; ZMerge's row changed from 55.6 to 100.0.
