@@ -1,3 +1,24 @@
+# NodeBased 0.47.0-preview.1
+
+Preview build of 0.47.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.47.0 release that follows.
+
+## What changed since 0.46.1
+
+- **ZMerge has artist-facing depth and alpha controls.** The `backwards` control reverses which depth wins. `alpha_channel` blends the nearer image using RGBA or a named alpha layer; `none` retains the previous hard switch. Existing documents migrate to that previous behavior, while newly created nodes expose the controls.
+- **Full-frame and tiled results agree.** The ZMerge change has regression coverage for both depth directions, named-layer alpha, and the B-nearer case. The Nuke-guide fidelity audit now scores ZMerge's control row at 100.0, up from 55.6; the overall guide-based score is 90.3, up from 90.2.
+
+## Known limits
+
+- Pixel agreement against actual Nuke renders remains unverified; the fidelity score measures the reference-guide controls. The next TVIScale fidelity step is held for the next model-budget slot.
+- Real-display visual QA of the recent releases remains open. Sparse cached fire still lacks derived lighting for nearby meshes; the fire shot and Hot pour retain the visual noise and bright areas described in 0.46.1.
+- GPU 2D nodes and the Direct picture remain off by default. The Radeon GPU-node path is below the 24 fps target; RTX 4070 laptop, A6000, Windows D3D12, and native Wayland checks remain open.
+
+## Moved to 0.48.0
+
+- Complete TVIScale and the remaining 2D control-fidelity rows, then compare against real Nuke renders.
+- Add sparse cached fire lighting for nearby meshes and review a higher-detail fire-shot comparison.
+- Complete GPU 2D colour correction and the display path, then revisit the default and 24 fps target.
+
 # NodeBased 0.46.1 — fire that lights the scene, a clearer Hot pour, and sharper 2D controls
 
 ## What changed since 0.45.0
