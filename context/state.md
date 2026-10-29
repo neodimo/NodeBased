@@ -1,3 +1,10 @@
+## 2026-10-28, 11:10 PM PDT — 0.47.0 published
+
+- GitHub published stable `v0.47.0` at 10:50 PM PDT on exact release commit `010abf53`; the release has four uploaded assets: Linux AppImage, Windows portable ZIP, Windows installer, and `SHA256SUMS`. Both Desktop conformance runs and the Linux/Windows package-and-publish workflow passed on that commit. The downloaded checksum manifest matches the three package digests reported by GitHub.
+- The release commit changed only `pyproject.toml` and `nodebased/__init__.py` version lines from 0.46.1 to 0.47.0, plus identical 0.47.0 sections prepended to `docs/RELEASE_NOTES.md` and `nodebased/data/docs/RELEASE_NOTES.md`. No unrelated change was found.
+- The tick cleared `s["release"]` and recorded 0.47.0 published at 10:59 PM PDT. Its single announcement, with DiMo ping, is visible in Releases → #nodebased as message `1565243612621578324` at 10:59 PM PDT. Release: <https://github.com/neodimo/NodeBased/releases/tag/v0.47.0>. Package workflow: <https://github.com/neodimo/NodeBased/actions/runs/40813342879>.
+- The separate local-build timer completed at 11:10 PM PDT: its ledger records a build from `v0.47.0`, and the stable `/home/omid/AppImages/NodeBased.AppImage` link now resolves to the 0.47.0 build. Manual real-display QA and actual Nuke pixel comparison remain unverified; next GPT-lane priority remains DiMo's choice.
+
 ## 2026-10-28, 7:15 AM PDT — 0.46.1 built and installed locally
 
 - **What was done:** The user timer built `v0.46.1` from its exact tag on this Linux host at 2:06 AM. `packaging/build.py` completed its frozen-AppImage smoke and live HTTPS probe before the builder installed the artifact. The local build ledger has no pending published tags. The stable `NodeBased.AppImage` link resolves to the new version; the desktop launcher and KDE task-manager pin use that stable target. The timer is enabled and its service exited successfully. Post-release main Desktop conformance passed on Linux and Windows for both the ZMerge merge and the subsequent release-state note.
