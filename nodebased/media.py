@@ -478,9 +478,18 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         # thread; every derived Raster starts with ``half = None`` in Raster.__init__.
         formats = list(spec.channelformats) or [spec.format]
         half_channels = bool(formats) and all(str(fmt).lower() == 'half' for fmt in formats)
-        if ext == '.exr' and half_channels and space in color.PASSTHROUGH and (
-                not associated or bool(np.all(rgba[..., 3] == 1.0))):
-            raster.half = rgba.astype(np.float16)
+        if not layers_only and ext == '.exr' and half_channels and space in color.PASSTHROUGH:
+            opaque = bool(np.all(rgba[..., 3] == 1.0))
+            if opaque:
+                # No colour or alpha arithmetic touched the decoded half values.
+                raster.half = rgba.astype(np.float16)
+            elif not associated:
+                # Straight alpha is premultiplied in to_working. A product of two half
+                # values is not necessarily a half value, so prove this particular frame
+                # can round-trip before giving it an exact-upload hint.
+                compact = rgba.astype(np.float16)
+                if np.array_equal(compact.astype(np.float32).view(np.uint32), rgba.view(np.uint32)):
+                    raster.half = compact
         return raster
     finally:
         source.close()

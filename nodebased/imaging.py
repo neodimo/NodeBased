@@ -8325,7 +8325,10 @@ class Evaluator:
         def weight(curve_text, lum):
             curve = colorcurves.decode(curve_text)
             xs = [point[0] for point in curve["points"]]
-            held = np.clip(lum, xs[0], xs[-1])
+            # Hold endpoints in float64. Clipping into float32 can round an end
+            # x just outside the curve, then evaluate_array extrapolates a tiny
+            # negative weight; extreme HDR/gamma makes that tiny error visible.
+            held = np.clip(np.asarray(lum, dtype=np.float64), xs[0], xs[-1])
             return colorcurves.evaluate_array(curve, held)
 
         lum = luminance(straight)

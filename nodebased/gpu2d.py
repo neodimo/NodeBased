@@ -170,6 +170,15 @@ def map_color_correct(p):
     from .core import SPECS
     from . import colorcurves
     q = {**SPECS["ColorCorrect"]["params"], **p}
+    # A large effective tone exponent amplifies float32 pow differences on
+    # HDR/low-alpha pixels beyond the pixel gate. Keep those uncommon knob
+    # combinations on the CPU until a higher-precision GPU path is available.
+    # The seeded sweep's failing cases 116, 130 and 182 have exponents 4.2–9.
+    for zone in ("shadows", "midtones", "highlights"):
+        exponent = (max(1.0, float(q["contrast"])) * max(1.0, float(q[f"{zone}_contrast"])) /
+                    max(1e-6, float(q["gamma"]) * float(q[f"{zone}_gamma"])))
+        if exponent > 4.0:
+            raise Unsupported("ColorCorrect steep contrast/gamma combination needs CPU precision")
     controls = ("saturation", "contrast", "gamma", "gain", "offset")
     identity = all(float(q[n]) == (0.0 if n == "offset" else 1.0) for n in controls) and all(
         float(q[f"{z}_{n}"]) == (0.0 if n == "offset" else 1.0)
