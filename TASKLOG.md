@@ -1,5 +1,19 @@
 ## 2026-10-30 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) step F of 6: ColorCorrect runs on the card, and exact half-float plates go up at half size (finish 1) (integrator tick)
 
+- **What was done:** `main` `fa849477` -> `59b156f6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `59b156f6`: Ran 7422 tests in 521.241 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
+## 2026-10-30, 9:15 AM PDT — GPU ColorCorrect/half-upload finish: measured negative result
+
+- **What was done — evidence:** Repaired the GPU ColorCorrect test setup that silently skipped its comparisons, added a seeded 200-case sweep and exact-half eligibility/chain coverage, fixed a CPU curve-endpoint precision error and an EXR layer-only read error. Radeon 8060S, RTX 3080 Ti and llvmpipe each passed 186 focused tests; another 54 media tests passed. Three fresh interleaved playback passes per device/phase measured Radeon 18.21–18.78 fps after GPU ColorCorrect, then 13.21–13.33 with half-float preparation enabled. Explicit opt-in `NODEBASED_GPU2D_HALF_UPLOAD=1` retains the exact half-width upload; default-off restored Radeon to 18.14–18.90 fps in three fresh passes. The 24 fps goal remains unmet.
+- **Artifacts:** Lane branch `openclaw/nb-2d-parity-b` commits `02649caa` and `77d069ce` contain code, tests, identical performance docs and committed `benchmarks/2d-gpu/R6-1/playback-colorcorrect-halfupload-1027f.json`. Raw timelines and test logs are deliberate local scratch under `scratch/nb-lanes/run/bench-L8-finish/` and `scratch/nb-lanes/run/tests-L8-*.log`; they are not committed. The generated plates under `scratch/nb-lanes/run/big-L8/plates/` remain deliberate scratch for the next decode investigation.
+- **State:** Step F is done as a defensible measured negative result, pending exact-tip integration suite. The Radeon 24 fps gate, RTX 4070/A6000/Windows measurements and 240-frame playback are unverified/open. The half path is experimental until native-half decode removes its conversion cost.
+- **Next owner + concrete artifact:** Gonzo integrates `77d069ce` through `python3 scratch/nb-lanes/auto/tick.py tick`, checks its exact-tip full-suite log, then briefs a bounded decode-retention experiment from `docs/PERFORMANCE.md` and the committed playback JSON. The next GPT job is chosen from the live budget and measured gate closure.
+- **Failure mode:** Importing `DeviceTestCase` did not run `tests.test_gpu2d`'s module setup, so prior ColorCorrect GPU tests appeared green while skipped. A smaller transfer can still slow playback when preparing it consumes decode time; measure the whole first lap before changing a default.
+
+## 2026-10-30 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) step F of 6: ColorCorrect runs on the card, and exact half-float plates go up at half size (finish 1) (integrator tick)
+
 - **What was done:** `main` `1a60460d` -> `bf2bf204` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `bf2bf204`: Ran 7415 tests in 526.857 s, OK (skipped=39), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.

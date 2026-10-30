@@ -1,5 +1,25 @@
 ## 2026-10-28, 11:10 PM PDT — 0.47.0 published
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (9:25 AM on 2026-10-30 PDT)
+
+`main` moved `fa849477` -> `59b156f6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `59b156f6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1030-0916.log`, started 9:16 AM): **Ran 7422 tests in 521.241 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), step F of 6: ColorCorrect runs on the card, and exact half-float plates go up at half size (finish 1).** Commits:
+  - `77d069ce` gpu2d: retain fast default after half-upload playback regression
+  - `02649caa` gpu2d: verify ColorCorrect across adapters and preserve exact half uploads
+  Diff: 8 files changed, 998 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (2:19 AM on 2026-10-30 PDT)
 
 `main` moved `1a60460d` -> `bf2bf204` (lane commits cherry-picked onto main in lane order) and then to this
@@ -8605,3 +8625,7 @@ Proxy-first simulation, background full-detail promotion, and pre-P4 cache stopp
 ## 2026-10-30, 2:02 AM PDT — GPU playback finish resumed
 
 The ColorCorrect GPU island and its corrected graph-timing test are on main after a 7,413-test green exact-code-tip suite (`scratch/nb-lanes/run/integ-gpu2d-fixed-1029.log`). The previous integration failure was a stale CPU-timing-row expectation: ColorCorrect is now included in GPU island staging/run timing. This is a partial feature delivery. The exact half-float input path and before/after Radeon, RTX and CPU playback measurements are still open, so the 24 fps Radeon gate is not closed. The finish worker launched at 2:00 AM after the model window reset, using `scratch/nb-lanes/auto/briefs/finish-L8-1029-2339.md`; its report and exact-tip suite decide the next merge. The generated EXR inputs live under `scratch/nb-lanes/run/big-L8/plates/`, outside the Git worktree.
+
+## 2026-10-30, 9:15 AM PDT — GPU 2D finish measured, integration pending
+
+Lane 8's bounded ColorCorrect/half-upload step is complete on `openclaw/nb-2d-parity-b` at `77d069ce`, pending exact-tip integration. The repaired ColorCorrect test harness now exercises the GPU on Radeon, RTX and llvmpipe (186 focused tests each); 54 neighboring media tests pass. Three interleaved 48-frame playback passes per tier are committed in `benchmarks/2d-gpu/R6-1/playback-colorcorrect-halfupload-1027f.json` and explained in identical `docs/PERFORMANCE.md` copies. Radeon first-lap playback: ColorCorrect on GPU with float32 uploads 18.21–18.78 fps; half-float preparation enabled 13.21–13.33 fps; safe final default with that path off 18.14–18.90 fps. `NODEBASED_GPU2D_HALF_UPLOAD=1` retains the exact upload path for experiments. The 24 fps Radeon goal is still open. The plate Read/decode wait is the largest evaluating-thread stage (~23 ms/frame with the safe default). Gonzo owns exact-tip suite integration and then a bounded native-half decode experiment; the camera-video, 2D scaling and sparse-fire jobs remain queued behind measured gate/budget review. Raw timelines and generated plates are deliberate local scratch under `scratch/nb-lanes/run/`; RTX 4070, A6000, Windows, 240-frame playback and real-display visual QA remain unverified.
