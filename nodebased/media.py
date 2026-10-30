@@ -478,7 +478,13 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         # thread; every derived Raster starts with ``half = None`` in Raster.__init__.
         formats = list(spec.channelformats) or [spec.format]
         half_channels = bool(formats) and all(str(fmt).lower() == 'half' for fmt in formats)
-        if not layers_only and ext == '.exr' and half_channels and space in color.PASSTHROUGH:
+        # The compact hint costs a second full-frame conversion during decode. Three fresh
+        # 1080p playback passes on the integrated Radeon dropped from 18.2–18.8 fps to
+        # 13.2–13.3 fps even though the bus transfer was smaller. Keep the exact upload
+        # path available for explicit experiments until decode can retain native half data.
+        half_upload_enabled = os.environ.get('NODEBASED_GPU2D_HALF_UPLOAD') == '1'
+        if (half_upload_enabled and not layers_only and ext == '.exr'
+                and half_channels and space in color.PASSTHROUGH):
             opaque = bool(np.all(rgba[..., 3] == 1.0))
             if opaque:
                 # No colour or alpha arithmetic touched the decoded half values.

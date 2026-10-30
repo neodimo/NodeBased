@@ -1,7 +1,9 @@
 """Exact half-float ingest and resident-island widening."""
 import pathlib
+import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import OpenImageIO as oiio
@@ -16,6 +18,9 @@ class HalfEligibilityTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
+        enabled = patch.dict(os.environ, {"NODEBASED_GPU2D_HALF_UPLOAD": "1"})
+        enabled.start()
+        self.addCleanup(enabled.stop)
 
     def write(self, name, pixels, fmt, channels=("R", "G", "B", "A"), space="ACEScg"):
         path = pathlib.Path(self.directory.name, name)
@@ -38,6 +43,12 @@ class HalfEligibilityTests(unittest.TestCase):
         self.assertIsNone(read_media_raster(str(self.write("converted.exr", pixels, oiio.HALF,
                                                        space="Linear Rec.709 (sRGB)"))).half)
         self.assertIsNone(read_media_raster(str(self.write("plain.png", pixels, oiio.UINT8))).half)
+
+    def test_compact_hint_is_off_by_default_after_playback_regression(self):
+        pixels = np.array([[[.3, .5, .75, 1.]]], np.float32)
+        half = self.write("default.exr", pixels, oiio.HALF)
+        with patch.dict(os.environ, {"NODEBASED_GPU2D_HALF_UPLOAD": "0"}):
+            self.assertIsNone(read_media_raster(str(half)).half)
 
     def test_alpha_math_never_sets_an_inexact_compact_hint(self):
         pixels = np.array([[[.3, .5, .75, .3]]], np.float32)

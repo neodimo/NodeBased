@@ -1,0 +1,810 @@
+{
+  "method": "1080p realistic playback comp, 48-frame uncached first lap; three interleaved passes per device/phase; real Qt window on Xvfb :183; gpu2d, 512 MiB budget, no sampler, stage trace; stage figures are mean exclusive ms per accepted frame. Four-core stand-in is this host restricted to CPUs 0\u20133 at Qt scale 2.",
+  "inputs": "/home/omid/.openclaw/workspace/scratch/nb-lanes/run/big-L8/plates (opaque half EXR, ACEScg)",
+  "raw_local_scratch": "/home/omid/.openclaw/workspace/scratch/nb-lanes/run/bench-L8-finish",
+  "source_commits": {
+    "colorcorrect_only": "b20e7158",
+    "halfupload": "02649caa plus uncommitted opt-in gate (half upload was default-on during these runs)"
+  },
+  "rows": {
+    "radeon_colorcorrect": [
+      {
+        "fps": 18.207,
+        "interval_p95_ms": 62.081,
+        "node_p50_ms": 50.098,
+        "upload_mean_ms": 5.198,
+        "outside_island_mean_ms": 34.135,
+        "stage_mean_ms": {
+          "walk:Read": 24.593,
+          "island upload (host to card)": 5.198,
+          "island kernels on the card (submit to done)": 5.049,
+          "island download: host copy into the picture": 2.311,
+          "island stage:Transform": 1.824,
+          "island run: other host work (blob, submit, buffers)": 0.671,
+          "decode": 0.618,
+          "walk:frame": 0.588,
+          "island download: copy and map": 0.578,
+          "join:Roto": 0.459,
+          "island encode (host)": 0.454,
+          "island stage:ColorCorrect": 0.146,
+          "island stage:Grade": 0.092,
+          "island stage:Merge": 0.078,
+          "island stage:Blur": 0.045,
+          "join:Read": 0.027,
+          "kernel:Read": 0.003,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 47.098,
+          "nodebased-source: kernel:Roto": 23.178,
+          "nodebased-source: walk:Read": 4.977,
+          "nodebased-source: walk:Roto": 0.349
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 18.779,
+        "interval_p95_ms": 60.558,
+        "node_p50_ms": 46.766,
+        "upload_mean_ms": 5.119,
+        "outside_island_mean_ms": 32.201,
+        "stage_mean_ms": {
+          "walk:Read": 21.824,
+          "island upload (host to card)": 5.119,
+          "island kernels on the card (submit to done)": 4.758,
+          "decode": 3.077,
+          "island download: host copy into the picture": 2.424,
+          "island stage:Transform": 1.431,
+          "island run: other host work (blob, submit, buffers)": 0.668,
+          "walk:frame": 0.558,
+          "island download: copy and map": 0.509,
+          "join:Roto": 0.48,
+          "island encode (host)": 0.434,
+          "kernel:Read": 0.239,
+          "island stage:ColorCorrect": 0.112,
+          "island stage:Grade": 0.081,
+          "island stage:Merge": 0.077,
+          "island stage:Blur": 0.045,
+          "join:Read": 0.026,
+          "island lock wait": 0.001
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 44.128,
+          "nodebased-source: kernel:Roto": 22.625,
+          "nodebased-source: walk:Read": 4.465,
+          "nodebased-source: walk:Roto": 0.387
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 18.373,
+        "interval_p95_ms": 62.219,
+        "node_p50_ms": 47.094,
+        "upload_mean_ms": 5.256,
+        "outside_island_mean_ms": 32.244,
+        "stage_mean_ms": {
+          "walk:Read": 23.043,
+          "island upload (host to card)": 5.256,
+          "island kernels on the card (submit to done)": 4.832,
+          "island download: host copy into the picture": 2.422,
+          "island stage:Transform": 1.681,
+          "join:Roto": 0.975,
+          "decode": 0.689,
+          "island download: copy and map": 0.687,
+          "island run: other host work (blob, submit, buffers)": 0.683,
+          "walk:frame": 0.609,
+          "island encode (host)": 0.462,
+          "island stage:ColorCorrect": 0.13,
+          "island stage:Grade": 0.097,
+          "island stage:Merge": 0.082,
+          "island stage:Blur": 0.049,
+          "join:Read": 0.029,
+          "island lock wait": 0.002,
+          "kernel:Read": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 44.81,
+          "nodebased-source: kernel:Roto": 23.654,
+          "nodebased-source: walk:Read": 4.754,
+          "nodebased-source: walk:Roto": 0.424,
+          "nodebased-source: ahead:roto": 0.007
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      }
+    ],
+    "radeon_halfupload": [
+      {
+        "fps": 13.329,
+        "interval_p95_ms": 85.43,
+        "node_p50_ms": 71.003,
+        "upload_mean_ms": 3.405,
+        "outside_island_mean_ms": 56.447,
+        "stage_mean_ms": {
+          "decode": 38.894,
+          "walk:Read": 11.222,
+          "island kernels on the card (submit to done)": 6.299,
+          "island upload (host to card)": 3.405,
+          "island download: host copy into the picture": 2.501,
+          "join:Read": 1.2,
+          "island run: other host work (blob, submit, buffers)": 0.681,
+          "island download: copy and map": 0.651,
+          "island stage:Transform": 0.629,
+          "walk:frame": 0.557,
+          "kernel:Read": 0.373,
+          "island encode (host)": 0.312,
+          "island stage:ColorCorrect": 0.127,
+          "island stage:Merge": 0.081,
+          "island stage:Grade": 0.071,
+          "island stage:Blur": 0.038,
+          "join:Roto": 0.007,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 68.663,
+          "nodebased-source: decode": 31.761,
+          "nodebased-source: kernel:Roto": 24.695,
+          "nodebased-source: walk:Read": 8.575,
+          "nodebased-source: walk:Roto": 0.44,
+          "nodebased-source: kernel:Read": 0.261
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 13.208,
+        "interval_p95_ms": 83.18,
+        "node_p50_ms": 72.031,
+        "upload_mean_ms": 3.471,
+        "outside_island_mean_ms": 57.441,
+        "stage_mean_ms": {
+          "decode": 41.548,
+          "walk:Read": 9.106,
+          "island kernels on the card (submit to done)": 6.204,
+          "island upload (host to card)": 3.471,
+          "island download: host copy into the picture": 2.338,
+          "join:Read": 1.525,
+          "island run: other host work (blob, submit, buffers)": 0.744,
+          "island stage:Transform": 0.742,
+          "island download: copy and map": 0.559,
+          "walk:frame": 0.545,
+          "kernel:Read": 0.363,
+          "island encode (host)": 0.321,
+          "island stage:ColorCorrect": 0.121,
+          "island stage:Merge": 0.085,
+          "island stage:Grade": 0.075,
+          "island stage:Blur": 0.038,
+          "join:Roto": 0.008,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 70.394,
+          "nodebased-source: decode": 39.079,
+          "nodebased-source: kernel:Roto": 25.818,
+          "nodebased-source: walk:Read": 6.786,
+          "nodebased-source: kernel:Read": 0.507,
+          "nodebased-source: walk:Roto": 0.41
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 13.312,
+        "interval_p95_ms": 86.578,
+        "node_p50_ms": 70.756,
+        "upload_mean_ms": 3.503,
+        "outside_island_mean_ms": 57.226,
+        "stage_mean_ms": {
+          "decode": 41.591,
+          "walk:Read": 9.023,
+          "island kernels on the card (submit to done)": 6.143,
+          "island upload (host to card)": 3.503,
+          "island download: host copy into the picture": 2.371,
+          "kernel:Read": 0.895,
+          "join:Read": 0.83,
+          "island run: other host work (blob, submit, buffers)": 0.755,
+          "island stage:Transform": 0.712,
+          "island download: copy and map": 0.58,
+          "walk:frame": 0.524,
+          "island encode (host)": 0.337,
+          "island stage:ColorCorrect": 0.12,
+          "island stage:Merge": 0.074,
+          "island stage:Grade": 0.074,
+          "island stage:Blur": 0.035,
+          "join:Roto": 0.007,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 69.957,
+          "nodebased-source: decode": 31.724,
+          "nodebased-source: kernel:Roto": 28.999,
+          "nodebased-source: walk:Read": 11.281,
+          "nodebased-source: walk:Roto": 0.413,
+          "nodebased-source: kernel:Read": 0.282
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      }
+    ],
+    "radeon_default": [
+      {
+        "fps": 18.874,
+        "interval_p95_ms": 61.495,
+        "node_p50_ms": 46.884,
+        "upload_mean_ms": 5.482,
+        "outside_island_mean_ms": 32.474,
+        "stage_mean_ms": {
+          "walk:Read": 25.161,
+          "island upload (host to card)": 5.482,
+          "island kernels on the card (submit to done)": 4.696,
+          "island download: host copy into the picture": 2.464,
+          "island stage:Transform": 1.825,
+          "island run: other host work (blob, submit, buffers)": 0.67,
+          "walk:frame": 0.563,
+          "decode": 0.547,
+          "island download: copy and map": 0.541,
+          "island encode (host)": 0.424,
+          "join:Roto": 0.237,
+          "island stage:ColorCorrect": 0.127,
+          "island stage:Grade": 0.078,
+          "island stage:Merge": 0.069,
+          "island stage:Blur": 0.043,
+          "join:Read": 0.028,
+          "kernel:Read": 0.003,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 44.931,
+          "nodebased-source: kernel:Roto": 22.774,
+          "nodebased-source: walk:Read": 4.752,
+          "nodebased-source: walk:Roto": 0.321
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 18.899,
+        "interval_p95_ms": 59.533,
+        "node_p50_ms": 46.121,
+        "upload_mean_ms": 5.266,
+        "outside_island_mean_ms": 33.144,
+        "stage_mean_ms": {
+          "walk:Read": 25.662,
+          "island upload (host to card)": 5.266,
+          "island kernels on the card (submit to done)": 4.727,
+          "island download: host copy into the picture": 2.464,
+          "island stage:Transform": 1.509,
+          "island run: other host work (blob, submit, buffers)": 0.692,
+          "join:Roto": 0.658,
+          "walk:frame": 0.56,
+          "decode": 0.493,
+          "island download: copy and map": 0.469,
+          "island encode (host)": 0.435,
+          "island stage:ColorCorrect": 0.114,
+          "island stage:Grade": 0.083,
+          "island stage:Merge": 0.064,
+          "join:Read": 0.06,
+          "island stage:Blur": 0.039,
+          "kernel:Read": 0.002,
+          "island lock wait": 0.001
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 45.355,
+          "nodebased-source: kernel:Roto": 24.479,
+          "nodebased-source: walk:Read": 4.424,
+          "nodebased-source: walk:Roto": 0.318
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 18.139,
+        "interval_p95_ms": 61.248,
+        "node_p50_ms": 41.612,
+        "upload_mean_ms": 5.362,
+        "outside_island_mean_ms": 26.849,
+        "stage_mean_ms": {
+          "walk:Read": 17.277,
+          "island upload (host to card)": 5.362,
+          "island kernels on the card (submit to done)": 4.871,
+          "island download: host copy into the picture": 2.296,
+          "island stage:Transform": 2.194,
+          "island run: other host work (blob, submit, buffers)": 0.744,
+          "join:Roto": 0.557,
+          "walk:frame": 0.528,
+          "island download: copy and map": 0.505,
+          "island encode (host)": 0.419,
+          "island stage:ColorCorrect": 0.114,
+          "island stage:Grade": 0.076,
+          "island stage:Merge": 0.061,
+          "island stage:Blur": 0.042,
+          "join:Read": 0.027,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 39.803,
+          "nodebased-source: kernel:Roto": 19.393,
+          "nodebased-source: walk:Read": 2.376,
+          "nodebased-source: walk:Roto": 0.38,
+          "nodebased-source: ahead:roto": 0.016
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      }
+    ],
+    "rtx_colorcorrect": [
+      {
+        "fps": 6.161,
+        "interval_p95_ms": 244.309,
+        "node_p50_ms": 177.728,
+        "upload_mean_ms": 92.722,
+        "outside_island_mean_ms": 21.616,
+        "stage_mean_ms": {
+          "island upload (host to card)": 92.722,
+          "island download: copy and map": 28.2,
+          "island stage:Transform": 11.539,
+          "island kernels on the card (submit to done)": 8.246,
+          "walk:Read": 4.268,
+          "island download: host copy into the picture": 2.614,
+          "island encode (host)": 1.414,
+          "join:Roto": 1.179,
+          "island run: other host work (blob, submit, buffers)": 0.809,
+          "walk:frame": 0.522,
+          "island stage:ColorCorrect": 0.106,
+          "join:Read": 0.091,
+          "island stage:Grade": 0.067,
+          "island stage:Merge": 0.059,
+          "island stage:Blur": 0.053,
+          "island lock wait": 0.001
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 115.344,
+          "nodebased-source: kernel:Roto": 53.906,
+          "nodebased-source: walk:Read": 4.561,
+          "nodebased-source: walk:Roto": 0.887,
+          "nodebased-source: ahead:roto": 0.055
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 5.902,
+        "interval_p95_ms": 276.067,
+        "node_p50_ms": 176.056,
+        "upload_mean_ms": 96.42,
+        "outside_island_mean_ms": 22.27,
+        "stage_mean_ms": {
+          "island upload (host to card)": 96.42,
+          "island download: copy and map": 30.309,
+          "island stage:Transform": 10.602,
+          "island kernels on the card (submit to done)": 9.052,
+          "walk:Read": 4.717,
+          "island download: host copy into the picture": 2.494,
+          "island run: other host work (blob, submit, buffers)": 0.865,
+          "island encode (host)": 0.78,
+          "walk:frame": 0.507,
+          "join:Roto": 0.412,
+          "island stage:ColorCorrect": 0.105,
+          "island stage:Grade": 0.063,
+          "island stage:Merge": 0.06,
+          "join:Read": 0.055,
+          "island stage:Blur": 0.048,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 116.426,
+          "nodebased-source: kernel:Roto": 49.802,
+          "nodebased-source: walk:Read": 5.016,
+          "nodebased-source: walk:Roto": 0.796,
+          "nodebased-source: ahead:roto": 0.049
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 6.442,
+        "interval_p95_ms": 210.847,
+        "node_p50_ms": 129.931,
+        "upload_mean_ms": 88.935,
+        "outside_island_mean_ms": 22.203,
+        "stage_mean_ms": {
+          "island upload (host to card)": 88.935,
+          "island download: copy and map": 25.208,
+          "island stage:Transform": 11.839,
+          "island kernels on the card (submit to done)": 7.292,
+          "walk:Read": 4.362,
+          "island download: host copy into the picture": 2.57,
+          "join:Roto": 1.443,
+          "island encode (host)": 1.122,
+          "island run: other host work (blob, submit, buffers)": 0.92,
+          "walk:frame": 0.505,
+          "island stage:ColorCorrect": 0.108,
+          "island stage:Grade": 0.065,
+          "island stage:Merge": 0.061,
+          "island stage:Blur": 0.05,
+          "join:Read": 0.025,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 113.331,
+          "nodebased-source: kernel:Roto": 55.076,
+          "nodebased-source: walk:Read": 3.669,
+          "nodebased-source: walk:Roto": 0.722,
+          "nodebased-source: ahead:roto": 0.041
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      }
+    ],
+    "rtx_halfupload": [
+      {
+        "fps": 8.835,
+        "interval_p95_ms": 166.788,
+        "node_p50_ms": 102.919,
+        "upload_mean_ms": 44.435,
+        "outside_island_mean_ms": 40.301,
+        "stage_mean_ms": {
+          "island upload (host to card)": 44.435,
+          "walk:Read": 26.72,
+          "island download: copy and map": 15.012,
+          "decode": 5.263,
+          "island kernels on the card (submit to done)": 3.791,
+          "island stage:Transform": 3.013,
+          "island download: host copy into the picture": 2.611,
+          "join:Roto": 0.792,
+          "island run: other host work (blob, submit, buffers)": 0.732,
+          "island encode (host)": 0.728,
+          "walk:frame": 0.586,
+          "kernel:Read": 0.154,
+          "island stage:ColorCorrect": 0.117,
+          "island stage:Grade": 0.088,
+          "island stage:Merge": 0.064,
+          "join:Read": 0.044,
+          "island stage:Blur": 0.039,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 100.539,
+          "nodebased-source: kernel:Roto": 26.783,
+          "nodebased-source: walk:Read": 3.976,
+          "nodebased-source: walk:Roto": 0.419,
+          "nodebased-source: ahead:roto": 0.011
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 8.28,
+        "interval_p95_ms": 172.64,
+        "node_p50_ms": 103.825,
+        "upload_mean_ms": 47.917,
+        "outside_island_mean_ms": 34.307,
+        "stage_mean_ms": {
+          "island upload (host to card)": 47.917,
+          "walk:Read": 22.9,
+          "island download: copy and map": 20.832,
+          "island kernels on the card (submit to done)": 5.975,
+          "island stage:Transform": 4.386,
+          "island download: host copy into the picture": 2.494,
+          "island encode (host)": 1.142,
+          "island run: other host work (blob, submit, buffers)": 0.86,
+          "walk:frame": 0.578,
+          "join:Roto": 0.411,
+          "island stage:ColorCorrect": 0.147,
+          "island stage:Grade": 0.094,
+          "island stage:Merge": 0.072,
+          "island stage:Blur": 0.044,
+          "join:Read": 0.029,
+          "island lock wait": 0.001
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 101.222,
+          "nodebased-source: kernel:Roto": 38.164,
+          "nodebased-source: walk:Read": 4.599,
+          "nodebased-source: walk:Roto": 0.437,
+          "nodebased-source: ahead:roto": 0.017
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 7.947,
+        "interval_p95_ms": 188.106,
+        "node_p50_ms": 109.379,
+        "upload_mean_ms": 49.472,
+        "outside_island_mean_ms": 36.38,
+        "stage_mean_ms": {
+          "island upload (host to card)": 49.472,
+          "island download: copy and map": 23.819,
+          "walk:Read": 21.798,
+          "island kernels on the card (submit to done)": 6.655,
+          "island stage:Transform": 6.447,
+          "island download: host copy into the picture": 2.574,
+          "join:Roto": 1.605,
+          "island encode (host)": 1.424,
+          "island run: other host work (blob, submit, buffers)": 0.773,
+          "walk:frame": 0.57,
+          "island stage:ColorCorrect": 0.115,
+          "island stage:Grade": 0.085,
+          "island stage:Merge": 0.066,
+          "island stage:Blur": 0.043,
+          "join:Read": 0.03,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-decode-ahead: decode": 105.097,
+          "nodebased-source: kernel:Roto": 36.133,
+          "nodebased-source: walk:Read": 4.158,
+          "nodebased-source: walk:Roto": 0.597,
+          "nodebased-source: ahead:roto": 0.018
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      }
+    ],
+    "standin_colorcorrect": [
+      {
+        "fps": 9.943,
+        "interval_p95_ms": 109.869,
+        "node_p50_ms": 97.242,
+        "upload_mean_ms": 4.53,
+        "outside_island_mean_ms": 80.132,
+        "stage_mean_ms": {
+          "decode": 51.429,
+          "join:Read": 16.557,
+          "walk:Read": 6.703,
+          "island kernels on the card (submit to done)": 5.623,
+          "island upload (host to card)": 4.53,
+          "island download: host copy into the picture": 2.143,
+          "kernel:Read": 0.805,
+          "island stage:Transform": 0.779,
+          "walk:frame": 0.604,
+          "island run: other host work (blob, submit, buffers)": 0.559,
+          "island download: copy and map": 0.504,
+          "island encode (host)": 0.327,
+          "island stage:ColorCorrect": 0.152,
+          "island stage:Merge": 0.12,
+          "island stage:Grade": 0.056,
+          "island stage:Blur": 0.029,
+          "join:Roto": 0.012,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-source: kernel:Roto": 45.363,
+          "nodebased-source: decode": 28.716,
+          "nodebased-source: walk:Read": 1.115,
+          "nodebased-source: walk:Roto": 0.36,
+          "nodebased-source: kernel:Read": 0.161
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 9.994,
+        "interval_p95_ms": 107.19,
+        "node_p50_ms": 97.848,
+        "upload_mean_ms": 4.738,
+        "outside_island_mean_ms": 79.821,
+        "stage_mean_ms": {
+          "decode": 51.833,
+          "join:Read": 17.243,
+          "island kernels on the card (submit to done)": 5.919,
+          "island upload (host to card)": 4.738,
+          "walk:Read": 4.654,
+          "island download: host copy into the picture": 2.165,
+          "kernel:Read": 1.512,
+          "walk:frame": 0.676,
+          "island stage:Transform": 0.612,
+          "island run: other host work (blob, submit, buffers)": 0.582,
+          "island download: copy and map": 0.57,
+          "island encode (host)": 0.359,
+          "island stage:ColorCorrect": 0.173,
+          "island stage:Merge": 0.14,
+          "island stage:Grade": 0.058,
+          "island stage:Blur": 0.031,
+          "join:Roto": 0.014,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-source: kernel:Roto": 45.432,
+          "nodebased-source: decode": 28.736,
+          "nodebased-source: walk:Roto": 0.48,
+          "nodebased-source: walk:Read": 0.465,
+          "nodebased-source: kernel:Read": 0.131
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 9.817,
+        "interval_p95_ms": 110.642,
+        "node_p50_ms": 98.948,
+        "upload_mean_ms": 4.611,
+        "outside_island_mean_ms": 83.046,
+        "stage_mean_ms": {
+          "decode": 50.478,
+          "join:Read": 17.019,
+          "walk:Read": 10.733,
+          "island kernels on the card (submit to done)": 5.741,
+          "island upload (host to card)": 4.611,
+          "island download: host copy into the picture": 2.188,
+          "island stage:Transform": 0.719,
+          "walk:frame": 0.635,
+          "island run: other host work (blob, submit, buffers)": 0.563,
+          "island download: copy and map": 0.543,
+          "island encode (host)": 0.337,
+          "island stage:ColorCorrect": 0.172,
+          "kernel:Read": 0.163,
+          "island stage:Merge": 0.126,
+          "island stage:Grade": 0.054,
+          "island stage:Blur": 0.029,
+          "join:Roto": 0.014,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-source: kernel:Roto": 47.146,
+          "nodebased-source: decode": 29.231,
+          "nodebased-source: walk:Read": 0.592,
+          "nodebased-source: walk:Roto": 0.46,
+          "nodebased-source: kernel:Read": 0.12
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      }
+    ],
+    "standin_halfupload": [
+      {
+        "fps": 8.907,
+        "interval_p95_ms": 122.507,
+        "node_p50_ms": 110.149,
+        "upload_mean_ms": 2.953,
+        "outside_island_mean_ms": 95.296,
+        "stage_mean_ms": {
+          "decode": 67.249,
+          "join:Read": 17.173,
+          "walk:Read": 6.08,
+          "island kernels on the card (submit to done)": 5.911,
+          "island upload (host to card)": 2.953,
+          "island download: host copy into the picture": 2.26,
+          "walk:frame": 0.647,
+          "island run: other host work (blob, submit, buffers)": 0.599,
+          "island stage:Transform": 0.57,
+          "island download: copy and map": 0.514,
+          "island encode (host)": 0.266,
+          "kernel:Read": 0.198,
+          "island stage:ColorCorrect": 0.167,
+          "island stage:Merge": 0.127,
+          "island stage:Grade": 0.066,
+          "island stage:Blur": 0.03,
+          "join:Roto": 0.014,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-source: kernel:Roto": 45.927,
+          "nodebased-source: decode": 42.676,
+          "nodebased-source: walk:Roto": 0.426,
+          "nodebased-source: walk:Read": 0.42,
+          "nodebased-source: kernel:Read": 0.146
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 8.722,
+        "interval_p95_ms": 126.838,
+        "node_p50_ms": 112.328,
+        "upload_mean_ms": 2.939,
+        "outside_island_mean_ms": 98.041,
+        "stage_mean_ms": {
+          "decode": 67.583,
+          "join:Read": 17.898,
+          "walk:Read": 6.95,
+          "island kernels on the card (submit to done)": 5.814,
+          "island upload (host to card)": 2.939,
+          "island download: host copy into the picture": 2.311,
+          "kernel:Read": 0.848,
+          "walk:frame": 0.681,
+          "island run: other host work (blob, submit, buffers)": 0.644,
+          "island stage:Transform": 0.572,
+          "island download: copy and map": 0.538,
+          "island encode (host)": 0.279,
+          "island stage:ColorCorrect": 0.186,
+          "island stage:Merge": 0.141,
+          "island stage:Grade": 0.07,
+          "island stage:Blur": 0.036,
+          "join:Roto": 0.013,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-source: kernel:Roto": 49.473,
+          "nodebased-source: decode": 43.03,
+          "nodebased-source: walk:Roto": 0.452,
+          "nodebased-source: walk:Read": 0.373,
+          "nodebased-source: kernel:Read": 0.145
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      },
+      {
+        "fps": 8.834,
+        "interval_p95_ms": 124.831,
+        "node_p50_ms": 109.761,
+        "upload_mean_ms": 2.958,
+        "outside_island_mean_ms": 96.636,
+        "stage_mean_ms": {
+          "decode": 68.441,
+          "join:Read": 13.532,
+          "walk:Read": 8.898,
+          "island kernels on the card (submit to done)": 5.899,
+          "island upload (host to card)": 2.958,
+          "island download: host copy into the picture": 2.307,
+          "kernel:Read": 0.984,
+          "walk:frame": 0.676,
+          "island run: other host work (blob, submit, buffers)": 0.593,
+          "island stage:Transform": 0.568,
+          "island download: copy and map": 0.558,
+          "island encode (host)": 0.284,
+          "island stage:ColorCorrect": 0.197,
+          "island stage:Merge": 0.15,
+          "island stage:Grade": 0.068,
+          "island stage:Blur": 0.033,
+          "join:Roto": 0.015,
+          "island lock wait": 0.002
+        },
+        "other_threads_busy_mean_ms": {
+          "nodebased-source: kernel:Roto": 48.599,
+          "nodebased-source: decode": 41.068,
+          "nodebased-source: walk:Read": 0.465,
+          "nodebased-source: walk:Roto": 0.442,
+          "nodebased-source: kernel:Read": 0.179
+        },
+        "accepted_frames": [
+          47,
+          48
+        ]
+      }
+    ]
+  }
+}

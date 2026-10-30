@@ -1207,6 +1207,22 @@ Lane 2's step F and H pixel tests (`tests.test_2d_fidelity_f_roto`, `tests.test_
 
 Rerun: the matte alone is `python tools/benchmark_roto_matte.py --output matte.json` (`--sizes 1080p --cases simple feathered50 --passes 3 --reps 15`); the comp rows are the step D command with `--env NODEBASED_ROTO_DRAWER=legacy` or `=fast` (and `NODEBASED_GPU_LOCK_HELD=1` under the lock); the stage tables add `--stages`; tests `python -m unittest tests.test_rotofast tests.test_playbackprefs tests.test_2d_fidelity_f_roto tests.test_2d_fidelity_h_rotopaint`.
 
+### R6-1: ColorCorrect island and exact half-float upload (10/30, step F of 6)
+
+ColorCorrect now stays in the GPU island. The two realistic-comp plates are opaque, half-channel ACEScg EXRs and qualify for exact half-float upload. The GPU widens their half words into the existing float32 resident buffer; pixel comparisons pass on the Radeon 8060S, RTX 3080 Ti and llvmpipe. A previously missing test-module setup had silently skipped the GPU ColorCorrect comparisons. The repaired suite runs 156 comparisons, including 200 seeded parameter cases; extreme effective tone exponents above 4 use the CPU path because GPU float32 `pow` misses the fixed pixel gate there. The CPU reference clips luminance in float64 at curve endpoints to avoid an out-of-range negative zone weight.
+
+**Fresh playback** (1080p, 48-frame uncached first lap, real window under Xvfb, three interleaved passes per row, 512 MiB budget, no sampler, stage trace; fps / interval p95 ms / node p50 ms). The four-core stand-in uses this host with CPUs 0–3 and Qt scale 2. `benchmarks/2d-gpu/R6-1/playback-colorcorrect-halfupload-1027f.json` has every pass and stage mean; raw timelines are deliberate local scratch at `scratch/nb-lanes/run/bench-L8-finish/`.
+
+| Device | Step E before | ColorCorrect on GPU, float32 upload | Half upload enabled | Final default (half upload off) |
+|---|---|---|---|---|
+| Radeon 8060S | 17.77–17.95 / 65.9–68.4 / 43.2–46.3 | 18.21–18.78 / 60.6–62.2 / 46.8–50.1 | 13.21–13.33 / 83.2–86.6 / 70.8–72.0 | 18.14–18.90 / 59.5–61.5 / 41.6–46.9 |
+| RTX 3080 Ti | 6.02–6.22 / 222.8–260.8 / 153.1–177.2 | 5.90–6.44 / 210.8–276.1 / 129.9–177.7 | 7.95–8.84 / 166.8–188.1 / 102.9–109.4 | Same code path as the float32-upload column; not separately remeasured |
+| Four-core stand-in, Radeon island | 9.41–9.47 / 114.8–120.9 / 101.7–103.4 | 9.82–9.99 / 107.2–110.6 / 97.2–98.9 | 8.72–8.91 / 122.5–126.8 / 109.8–112.3 | Same code path as the float32-upload column; not separately remeasured |
+
+The half-upload path saves Radeon island upload time (5.2 to 3.5 ms/frame) and helps the PCIe RTX (92.7 to 47.3 ms/frame), but creating the compact copy during EXR decode adds enough work to cut Radeon playback by about 5 fps. The Radeon stage trace changes from roughly 23 ms in `walk:Read` and 1.5 ms in direct decode, to 10 ms in `walk:Read` and 41 ms in direct decode; source/decode workers are busier too. Therefore `NODEBASED_GPU2D_HALF_UPLOAD=1` is an explicit experimental opt-in, and the shipped default avoids that regression. Its correctness path remains tested. The next optimization should retain native EXR half samples through decode without a second full-frame conversion, then remeasure the Radeon before changing the default.
+
+The final default does **not** meet 24 fps: the Radeon measured 18.14 to 18.90 fps. The largest evaluating-thread item is the plate Read/decode wait (about 23 ms per frame), ahead of upload (5.4 ms), island kernels (4.8 ms) and download (about 3 ms). The decode pipeline remains the next performance gate. RTX 4070 laptop, A6000, Windows and 240-frame playback remain unverified. The default GPU-node/decode-worker counts and all node knobs are unchanged.
+
 ## Lane 2 step notes
 
 ### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)
