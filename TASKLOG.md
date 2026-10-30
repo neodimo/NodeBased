@@ -1,3 +1,9 @@
+## 2026-10-30 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) step F of 6: ColorCorrect runs on the card, and exact half-float plates go up at half size (finish 1) (integrator tick)
+
+- **What was done:** `main` `1a60460d` -> `bf2bf204` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `bf2bf204`: Ran 7415 tests in 526.857 s, OK (skipped=39), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-29 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) step F of 6: ColorCorrect runs on the card, and exact half-float plates go up at half size (integrator tick)
 
 - **What was done:** `main` `d6c3fc17` -> `644173f2` plus this docs commit. Evidence and per-lane commit

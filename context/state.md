@@ -1,5 +1,24 @@
 ## 2026-10-28, 11:10 PM PDT — 0.47.0 published
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (2:19 AM on 2026-10-30 PDT)
+
+`main` moved `1a60460d` -> `bf2bf204` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `bf2bf204` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1030-0209.log`, started 2:09 AM): **Ran 7415 tests in 526.857 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), step F of 6: ColorCorrect runs on the card, and exact half-float plates go up at half size (finish 1).** Commits:
+  - `35bfd4f0` gpu2d: exact half-float plates upload at half size
+  Diff: 4 files changed, 91 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (11:32 PM on 2026-10-29 PDT)
 
 `main` moved `d6c3fc17` -> `644173f2` (lane commits cherry-picked onto main in lane order) and then to this
