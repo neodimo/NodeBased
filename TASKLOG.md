@@ -1,3 +1,9 @@
+## 2026-10-29 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) step F of 6: ColorCorrect runs on the card, and exact half-float plates go up at half size (integrator tick)
+
+- **What was done:** `main` `d6c3fc17` -> `644173f2` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `644173f2`: Ran 7413 tests in 520.729 s, OK (skipped=39), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-28, 11:10 PM PDT — NodeBased 0.47.0 publication confirmed
 
 - **What was done:** Verified stable GitHub release `v0.47.0` is public with four uploaded assets, checksum manifest matches the three package digests, exact commit's Desktop conformance and Linux/Windows package-and-publish workflows succeeded, and the tick cleared `s["release"]`. Audited commit `010abf53`: only two version-line bumps and identical 0.47.0 additions to both release-notes copies. Verified the tick's one announcement in Releases → #nodebased, message `1565243612621578324`.

@@ -1,5 +1,25 @@
 ## 2026-10-28, 11:10 PM PDT — 0.47.0 published
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (11:32 PM on 2026-10-29 PDT)
+
+`main` moved `d6c3fc17` -> `644173f2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 7 tests in 1.047 s, OK. Full suite on
+the stacked tip `644173f2` (`/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-gpu2d-fixed-1029.log`, started 11:20 PM): **Ran 7413 tests in 520.729 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), step F of 6: ColorCorrect runs on the card, and exact half-float plates go up at half size.** Commits:
+  - `644173f2` test: account for ColorCorrect inside GPU island
+  - `b20e7158` gpu2d: ColorCorrect runs in the island
+  Diff: 5 files changed, 157 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - GitHub published stable `v0.47.0` at 10:50 PM PDT on exact release commit `010abf53`; the release has four uploaded assets: Linux AppImage, Windows portable ZIP, Windows installer, and `SHA256SUMS`. Both Desktop conformance runs and the Linux/Windows package-and-publish workflow passed on that commit. The downloaded checksum manifest matches the three package digests reported by GitHub.
 - The release commit changed only `pyproject.toml` and `nodebased/__init__.py` version lines from 0.46.1 to 0.47.0, plus identical 0.47.0 sections prepended to `docs/RELEASE_NOTES.md` and `nodebased/data/docs/RELEASE_NOTES.md`. No unrelated change was found.
 - The tick cleared `s["release"]` and recorded 0.47.0 published at 10:59 PM PDT. Its single announcement, with DiMo ping, is visible in Releases → #nodebased as message `1565243612621578324` at 10:59 PM PDT. Release: <https://github.com/neodimo/NodeBased/releases/tag/v0.47.0>. Package workflow: <https://github.com/neodimo/NodeBased/actions/runs/40813342879>.
