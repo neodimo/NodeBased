@@ -27,7 +27,7 @@ class Raster:
     because every downstream alignment silently produces garbage once it drifts.
     """
 
-    __slots__ = ("pixels", "data", "display", "layers", "meta")
+    __slots__ = ("pixels", "data", "display", "layers", "meta", "half")
 
     def __init__(self, pixels, data: Region | None = None, display: Region | None = None, layers: dict | None = None,
                  meta: dict | None = None):
@@ -42,6 +42,9 @@ class Raster:
                 f"Data window {data} does not match pixel extent {(width, height)}")
         self.layers = layers
         self.meta = meta   # header attributes that ride with the layers (the Cryptomatte manifest)
+        # Set only by media.read_media_raster when the source bytes can be recovered exactly from
+        # half precision. Derived, cropped and copied rasters deliberately lose this hint.
+        self.half = None
         self.pixels = pixels
         self.data = data
         self.display = data if display is None else display

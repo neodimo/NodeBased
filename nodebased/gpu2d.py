@@ -866,8 +866,23 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 """
 
+# Half-float source uploads are widened in a small first pass.  The destination remains the
+# normal float32 resident image, so every existing shader and cache key stays unchanged.
+_WIDEN = _PRELUDE + """
+@group(0) @binding(0) var<storage, read> packed: array<u32>;
+@group(0) @binding(1) var<storage, read_write> out: array<vec4<f32>>;
+@group(0) @binding(2) var<uniform> p: Params;
+@compute @workgroup_size(64, 1, 1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (gid.x >= u32(p.i0.x)) { return; }
+    let a = unpack2x16float(packed[gid.x * 2u]);
+    let b = unpack2x16float(packed[gid.x * 2u + 1u]);
+    out[gid.x] = vec4<f32>(a, b);
+}
+"""
+
 _SHADERS = {"scan_plane": _SCAN_PLANE, "grade": _GRADE, "color_correct": _COLOR_CORRECT, "blur_h": _BLUR_H, "blur_v": _BLUR_V, "transform": _TRANSFORM,
-            "merge": _MERGE, "scan": _SCAN}
+            "merge": _MERGE, "scan": _SCAN, "widen": _WIDEN}
 
 
 def _params(out_r=(0, 0, 0, 0), r0=(0, 0, 0, 0), r1=(0, 0, 0, 0), rm=(0, 0, 0, 0), i0=(0, 0, 0, 0),
@@ -1081,7 +1096,7 @@ class GPU2D:
 
     # -- uploads -----------------------------------------------------------------------------
 
-    def upload(self, raster, key=None, plane=False):
+    def upload(self, raster, key=None, plane=False, add_params=None, passes=None, held=None):
         """A resident copy of ``raster`` (kept for reuse under ``key`` while the cache budget allows).
 
         ``plane`` uploads only the alpha channel, one float per pixel: that is all a mask input is ever read for."""
@@ -1097,9 +1112,25 @@ class GPU2D:
         started = time.perf_counter()
         pixels = np.ascontiguousarray(raster.pixels[..., 3] if plane else raster.pixels, dtype=np.float32)
         buffer, nbytes = self._acquire(pixels.nbytes)
-        self.device.queue.write_buffer(buffer, 0, pixels)
+        half = getattr(raster, "half", None) if not plane else None
+        if half is not None:
+            if add_params is None or passes is None or held is None:
+                raise Unsupported("half upload needs an island command encoder")
+            words = np.ascontiguousarray(half, dtype=np.float16).view(np.uint32)
+            # Every source needs its own packed lease until the command buffer completes: a
+            # later queue.write_buffer must never overwrite an earlier source before its widen.
+            packed, packed_bytes = self._acquire(words.nbytes)
+            held.append((packed, packed_bytes))
+            self.device.queue.write_buffer(packed, 0, words)
+            slot = add_params(_params(i0=(pixels.shape[0] * pixels.shape[1], 0, 0, 0)))
+            passes.append((self._pipeline("widen"), [(0, packed, packed_bytes), (1, buffer, nbytes)],
+                           slot, (-(-(pixels.shape[0] * pixels.shape[1]) // 64), 1, 1), 2))
+            sent = words.nbytes
+        else:
+            self.device.queue.write_buffer(buffer, 0, pixels)
+            sent = pixels.nbytes
         self.counters.uploads += 1
-        self.counters.upload_bytes += pixels.nbytes
+        self.counters.upload_bytes += sent
         self.counters.upload_ms += (time.perf_counter() - started) * 1000
         image = DeviceImage(buffer, raster.data, raster.display, self.epoch, nbytes, key)
         image.meta = getattr(raster, "meta", None)
@@ -1214,7 +1245,7 @@ class GPU2D:
                 for slot, item in enumerate(node.inputs):
                     plane = self._is_mask(node.kind, slot)
                     if item is not None and not isinstance(item, DeferredImage) and (id(item), plane) not in resident:
-                        image = self.upload(item, keymap.get((id(item), plane)), plane)
+                        image = self.upload(item, keymap.get((id(item), plane)), plane, add_params, passes, held)
                         if image.epoch != self.epoch:
                             raise StaleImage("resident image from an earlier device epoch")
                         resident[(id(item), plane)] = image

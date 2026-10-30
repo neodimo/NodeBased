@@ -5,6 +5,7 @@ import re
 import stat as stat_module
 import tempfile
 import numpy as np
+from . import color
 from .color import to_working, WORKING
 
 # Files that name their own colour space get taken at their word. OIIO normalises whatever
@@ -471,7 +472,16 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             from .metadata import header_entry
             meta = dict(entry for a in spec.extra_attribs
                         if (entry := header_entry(a.name, a.value)) is not None) or None
-        return Raster(np.ascontiguousarray(rgba), data, display, layers, meta)
+        raster = Raster(np.ascontiguousarray(rgba), data, display, layers, meta)
+        # Uploading the original half words is exact only when decoding neither changes colour
+        # nor unpremultiplies a partial-alpha image. Keep the optional compact copy on the decode
+        # thread; every derived Raster starts with ``half = None`` in Raster.__init__.
+        formats = list(spec.channelformats) or [spec.format]
+        half_channels = bool(formats) and all(str(fmt).lower() == 'half' for fmt in formats)
+        if ext == '.exr' and half_channels and space in color.PASSTHROUGH and (
+                not associated or bool(np.all(rgba[..., 3] == 1.0))):
+            raster.half = rgba.astype(np.float16)
+        return raster
     finally:
         source.close()
 
