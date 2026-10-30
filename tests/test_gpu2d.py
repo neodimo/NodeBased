@@ -217,8 +217,8 @@ class MappingTests(unittest.TestCase):
         nodes = doc["nodes"]
         order = ["plate", "grade", "transform", "blur", "roto", "background", "merge", "colorcorrect"]
         interior = gpu2d.island_interior(nodes, order, "colorcorrect")
-        self.assertEqual(interior, {"grade", "transform", "blur"})
-        self.assertEqual(gpu2d.island_interior(nodes, order, "blur"), {"grade", "transform"})
+        self.assertEqual(interior, {"grade", "transform", "blur", "merge"})
+        self.assertEqual(gpu2d.island_interior(nodes, order, "blur"), {"grade", "transform", "merge"})
         disabled = copy.deepcopy(nodes)
         disabled["merge"]["disabled"] = True
         # a bypassed Merge no longer reads the Blur through the island, so the Blur must hand over its pixels
@@ -281,7 +281,7 @@ class FallbackTests(unittest.TestCase):
         result = self.evaluate(backend)
         np.testing.assert_array_equal(result.pixels, self.cpu.pixels)
         self.assertEqual(result.data, self.cpu.data)
-        self.assertEqual([kind for kind, _ in backend.boundaries], ["Grade", "Transform", "Blur", "Merge"])
+        self.assertEqual([kind for kind, _ in backend.boundaries], ["Grade", "Transform", "Blur", "Merge", "ColorCorrect"])
         self.assertEqual({reason for _, reason in backend.boundaries}, {"stub: no kernel"})
 
     def test_a_device_lost_during_the_island_reruns_the_frame_on_the_cpu(self):
@@ -289,7 +289,7 @@ class FallbackTests(unittest.TestCase):
         result = self.evaluate(backend)
         np.testing.assert_array_equal(result.pixels, self.cpu.pixels)
         self.assertEqual(backend.runs, 1)
-        self.assertEqual(backend.boundaries, [("Merge", "stub: device lost")])
+        self.assertEqual(backend.boundaries, [("ColorCorrect", "stub: device lost")])
 
     def test_unrelated_errors_are_not_swallowed_as_fallbacks(self):
         backend = StubBackend(run=ValueError("a real graph error"))
@@ -887,7 +887,7 @@ class IslandTests(DeviceTestCase):
         self.assertLessEqual(gate_ratio(result.pixels, cpu.pixels), 1.0)
         self.assertEqual(counters["downloads"], 1)
         self.assertEqual(counters["intermediate_readbacks"], 0)
-        self.assertEqual(counters["nodes_on_gpu"], {"Grade": 1, "Transform": 1, "Blur": 1, "Merge": 1})
+        self.assertEqual(counters["nodes_on_gpu"], {"Grade": 1, "Transform": 1, "Blur": 1, "Merge": 1, "ColorCorrect": 0})
         self.assertEqual(counters["submissions"], 2)          # the island, then the single readback
         self.assertEqual(counters["cpu_boundaries"], [])
         self.assertGreaterEqual(counters["uploads"], 3)       # plate, background and matte (plus the transform table)
@@ -1045,7 +1045,7 @@ class FixtureTests(DeviceTestCase):
                     self.assertEqual(delta["downloads"], 1, f"{target} {frame}")
                     self.assertEqual(delta["intermediate_readbacks"], 0)
                     self.assertEqual(delta["cpu_boundaries"], [])
-                    self.assertEqual(delta["nodes_on_gpu"], {"Grade": 1, "Transform": 1, "Blur": 1, "Merge": 1})
+        self.assertEqual(delta["nodes_on_gpu"], {"Grade": 1, "Transform": 1, "Blur": 1, "Merge": 1, "ColorCorrect": 1})
 
     def test_a_cache_hit_skips_the_island(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -38,7 +38,7 @@ import numpy as np
 from .raster import Raster
 from .tiers import Region
 
-KINDS = ("Grade", "Transform", "Blur", "Merge")
+KINDS = ("Grade", "ColorCorrect", "Transform", "Blur", "Merge")
 
 # Blur radii whose GPU result is validated against the CPU kernel. The CPU uses a float32 shifted
 # sum up to radius 4 (the algorithm the shader repeats operation for operation) and float64
@@ -158,6 +158,52 @@ def map_grade(p):
         "black_clamp": bool(gradeknobs._get(p, "black_clamp")), "white_clamp": bool(gradeknobs._get(p, "white_clamp")),
         "mix": mix,
     }
+
+
+@dataclass
+class ColorCorrectPlan:
+    tables: np.ndarray
+
+
+def map_color_correct(p):
+    """Pack the CPU ColorCorrect's small curve and pass program for WGSL."""
+    from .core import SPECS
+    from . import colorcurves
+    q = {**SPECS["ColorCorrect"]["params"], **p}
+    controls = ("saturation", "contrast", "gamma", "gain", "offset")
+    identity = all(float(q[n]) == (0.0 if n == "offset" else 1.0) for n in controls) and all(
+        float(q[f"{z}_{n}"]) == (0.0 if n == "offset" else 1.0)
+        for z in ("shadows", "midtones", "highlights") for n in controls)
+    cc = np.zeros(64, np.float32)
+    curves = []
+    for name in ("shadows_curve", "highlights_curve"):
+        curve = colorcurves.decode(q[name])
+        if "slopes" in curve or len(curve["points"]) > 8:
+            raise Unsupported("ColorCorrect curve with keyed tangents (or over 8 points) has no GPU kernel yet")
+        curves.append(curve)
+    for base, curve in zip((0, 18), curves):
+        points = curve["points"]
+        cc[base], cc[base + 1] = len(points), float(curve["interpolation"] == "smooth")
+        cc[base + 2:base + 2 + len(points)] = [x for x, _y in points]
+        cc[base + 10:base + 10 + len(points)] = [y for _x, y in points]
+    pivots = {"shadows": .04, "midtones": .18, "highlights": .65}
+    master = {n: float(q[n]) for n in controls}
+    passes = {}
+    for zi, zone in enumerate(("shadows", "midtones", "highlights")):
+        knob = {n: float(q[f"{zone}_{n}"]) for n in controls}
+        pivot = pivots[zone] if knob["contrast"] != 1.0 else None
+        key = (knob["saturation"], knob["contrast"], knob["gamma"], knob["gain"], knob["offset"], pivot)
+        passes[key] = passes.get(key, 0) | (1 << zi)
+    cc[36], cc[37] = len(passes), master["contrast"]
+    for k, ((zsat, czone, zgamma, zgain, zoffset, pivot), mask) in enumerate(passes.items()):
+        saturation, gamma = zsat * master["saturation"], max(zgamma * master["gamma"], 1e-6)
+        gain, offset = zgain * master["gain"], zoffset + master["offset"]
+        def tone(x):
+            if pivot is not None: x = (x / pivot) ** czone * pivot
+            if master["contrast"] != 1.0: x = (x / .18) ** master["contrast"] * .18
+            return x ** (1.0 / gamma) if gamma != 1.0 else x
+        cc[38 + 8*k:46 + 8*k] = (saturation, czone, pivot or 0.0, gamma, gain, offset, mask, tone(1.0))
+    return {"identity": identity, "mix": float(q.get("mix", 1.0)), "plan": ColorCorrectPlan(cc)}
 
 
 def map_blur(p):
@@ -492,6 +538,59 @@ _GRADE = _PRELUDE + _BINDINGS_3 + _fetch("src", "r0") + _fetch_alpha("mask", "rm
 }
 """
 
+# cc layout: [0..17] shadow curve (count, smooth, 8 x, 8 y), [18..35] highlight curve;
+# [36..37] pass count/master contrast; then three 8-float pass records:
+# saturation, zone contrast, pivot, gamma, gain, offset, zone mask, tone(1).
+_COLOR_CORRECT = _PRELUDE + _BINDINGS_3 + """
+@group(0) @binding(4) var<storage, read> cc: array<f32>;
+""" + _fetch("src", "r0") + _fetch_alpha("mask", "rm") + _GATE + """
+fn cc_weight(base: u32, lum: f32) -> f32 {
+    let n = u32(cc[base]);
+    let v = clamp(lum, cc[base + 2u], cc[base + 1u + n]);
+    var result = cc[base + 10u];
+    for (var i = 0u; i + 1u < n; i = i + 1u) {
+        let x0 = cc[base + 2u + i]; let x1 = cc[base + 3u + i];
+        if (v >= x0 && v <= x1) {
+            var t = (v - x0) / (x1 - x0);
+            if (cc[base + 1u] != 0.0) { t = t * t * (3.0 - 2.0 * t); }
+            result = mix(cc[base + 10u + i], cc[base + 11u + i], t);
+        }
+    }
+    return result;
+}
+""" + _MAIN_HEAD + """
+    let s = fetch_src(ax, ay); let a = s.w;
+    let straight = select(vec3<f32>(0.0), s.xyz / a, a > 1e-8);
+    let lum = dot(straight, vec3<f32>(.2125, .7154, .0721));
+    let ws = cc_weight(0u, lum); let wh = cc_weight(18u, lum); let wm = 1.0 - ws - wh;
+    var result = vec3<f32>(0.0);
+    let count = u32(cc[36]);
+    for (var k = 0u; k < count; k = k + 1u) {
+        let b = 38u + 8u * k;
+        let saturation = cc[b]; let contrast = cc[b + 1u]; let pivot = cc[b + 2u];
+        let gamma = cc[b + 3u]; let gain = cc[b + 4u]; let offset = cc[b + 5u];
+        let mask = u32(cc[b + 6u]); let unit = cc[b + 7u];
+        var x = straight;
+        if (saturation != 1.0) { x = vec3<f32>(lum) + saturation * (straight - vec3<f32>(lum)); }
+        var pos = x;
+        if (pivot > 0.0) { pos = pow(pos / vec3<f32>(pivot), vec3<f32>(contrast)) * vec3<f32>(pivot); }
+        if (cc[37] != 1.0) { pos = pow(pos / vec3<f32>(.18), vec3<f32>(cc[37])) * vec3<f32>(.18); }
+        if (gamma != 1.0) { pos = pow(pos, vec3<f32>(1.0 / gamma)); }
+        x = select(x * vec3<f32>(unit), pos, x > vec3<f32>(0.0));
+        let corrected = x * vec3<f32>(gain) + vec3<f32>(offset);
+        if (count == 1u) { result = corrected; }
+        else {
+            var w = 0.0;
+            if ((mask & 1u) != 0u) { w = w + ws; }
+            if ((mask & 2u) != 0u) { w = w + wm; }
+            if ((mask & 4u) != 0u) { w = w + wh; }
+            result = result + w * corrected;
+        }
+    }
+    out[oi] = gated(s, vec4<f32>(result * a, a), ax, ay);
+}
+"""
+
 # Blur: horizontal pass src -> out (no gating), vertical pass tmp(src slot) -> out with gating
 # against the original image (bound as `orig`). i0.z = radius, f0.x = 1/(2r+1).
 _BLUR_H = _PRELUDE + """
@@ -767,7 +866,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 """
 
-_SHADERS = {"scan_plane": _SCAN_PLANE, "grade": _GRADE, "blur_h": _BLUR_H, "blur_v": _BLUR_V, "transform": _TRANSFORM,
+_SHADERS = {"scan_plane": _SCAN_PLANE, "grade": _GRADE, "color_correct": _COLOR_CORRECT, "blur_h": _BLUR_H, "blur_v": _BLUR_V, "transform": _TRANSFORM,
             "merge": _MERGE, "scan": _SCAN}
 
 
@@ -1022,6 +1121,8 @@ class GPU2D:
             _check_chrome(kind, params, images)
         if kind == "Grade":
             map_grade(params)
+        elif kind == "ColorCorrect":
+            map_color_correct(params)
         elif kind == "Blur":
             map_blur(params)
         elif kind == "Merge":
@@ -1036,6 +1137,8 @@ class GPU2D:
         node.meta = inherited_meta(kind, images)
         if kind == "Transform":      # build the plan now so an unsupported mode is reported at staging
             node.plan = map_transform(params, images[0].data, data)
+        elif kind == "ColorCorrect":
+            node.plan = map_color_correct(params)["plan"]
         return node
 
     # -- execution ---------------------------------------------------------------------------
@@ -1278,6 +1381,16 @@ class GPU2D:
                                       (has_mask, blend, 1 if m["identity"] else 0, aux), f0, (0.0, 0.0, 0.0, m["mix"])))
             passes.append((self._pipeline("grade"), [(0, ins[0].buffer, ins[0].nbytes), (1, mbuf, mbytes),
                                                      (2, out.buffer, out.nbytes)], slot, groups, 3))
+        elif kind == "ColorCorrect":
+            m = map_color_correct(p)
+            mbuf, mbytes, mrect, has_mask = mask_info(ins[1] if len(ins) > 1 else None)
+            blend = 1 if (has_mask or m["mix"] != 1.0) else 0
+            cc, ccbytes = table
+            slot = add_params(_params(_rect(dst), _rect(ins[0].data), (0, 0, 0, 0), mrect,
+                                      (has_mask, blend, 1 if m["identity"] else 0, 0),
+                                      (0.0, 0.0, 0.0, 0.0), (0.0, 0.0, 0.0, m["mix"])))
+            passes.append((self._pipeline("color_correct"), [(0, ins[0].buffer, ins[0].nbytes), (1, mbuf, mbytes),
+                                                              (2, out.buffer, out.nbytes), (4, cc, ccbytes)], slot, groups, 3))
         elif kind == "Blur":
             m = map_blur(p)
             mbuf, mbytes, mrect, has_mask = mask_info(ins[1] if len(ins) > 1 else None)
