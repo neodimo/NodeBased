@@ -112,9 +112,11 @@ class EndToEndTests(unittest.TestCase):
             self.assertEqual(report["wall_ms"]["n"], 4)
             self.assertTrue(all(r["finite"] for r in report["samples"]))
             kinds = set(report["kernel_ms_by_node_kind"])
-            self.assertTrue({"Read", "Roto", "ColorCorrect"} <= kinds)
+            self.assertTrue({"Read", "Roto"} <= kinds)
             self.assertEqual({"Grade", "Transform", "Blur", "Merge"} <= kinds, backend == "cpu")
+            self.assertEqual("ColorCorrect" in kinds, backend == "cpu")
             if backend == "gpu2d":
+                self.assertTrue({"island staging", "island run (upload, passes, readback)"} <= kinds)
                 self.assertTrue(all(r["island"]["downloads"] == 1 and r["island"]["intermediate_readbacks"] == 0 for r in report["samples"]))
 
     def test_graph_with_source_workers_gives_the_serial_pixels_and_records_the_count(self):

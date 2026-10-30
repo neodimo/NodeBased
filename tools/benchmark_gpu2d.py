@@ -454,7 +454,7 @@ def cmd_graph(args):
               "note": "evaluation of the whole fixture to ColorCorrect (source_workers 0 is serial: Read decodes inline, both Reads add up under Read; "
                       "above 0 the sources run on worker threads and the per-kind rows are busy time summed over threads while wall_ms stays the frame), no window and no display "
                       "conversion; kernel_ms_by_node_kind times every CPU kernel call by node kind, and under the island the island rows hold the staging and "
-                      "the run (upload, passes, terminal readback) in place of the Grade, Transform, Blur and Merge kernels",
+                      "the run (upload, passes, terminal readback) in place of the Grade, Transform, Blur, Merge and ColorCorrect kernels",
               "wall_ms": stats([r["wall_ms"] for r in rows]),
               "kernel_ms_by_node_kind": {k: stats([r["nodes_ms"].get(k, 0.0) for r in rows]) for k in keys},
               "samples": rows}
