@@ -1,3 +1,28 @@
+# NodeBased 0.48.0-preview.1
+
+Preview build of 0.48.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.48.0 release that follows.
+
+## What changed since 0.47.0
+
+- **TVIScale enlarges like Nuke's.** The node now doubles the picture with Nuke's edge-preserving enlargement: Iterations (5), Lambda (5) and A (0.0001), plus channels, mask, mask channel, invert, inject, fringe and mix. More iterations flatten noisy areas, a larger Lambda keeps more of the input's noise, and zero iterations gives a plain smooth enlargement. Graphs saved before this keep their old power-of-two resize exactly through a "Legacy scale" switch (schema 28). TVIScale's guide-fidelity score rose from 30 to 100; the overall score is 90.4.
+- **ColorCorrect runs on the graphics card.** With GPU 2D nodes enabled, ColorCorrect stays in the GPU chain alongside Grade, Transform, Blur and Merge, covering master and zone controls, curves, alpha, mask and mix; complex curves fall back to the processor. Checked on RTX 3080 Ti, Radeon 8060S and the software renderer.
+- **Optional half-size upload for half-float plates.** Exact half-float ACEScg plates can upload at half size with `NODEBASED_GPU2D_HALF_UPLOAD=1`. It stays off by default: preparing the half copies dropped Radeon playback from about 18.5 to 13.3 fps.
+- **Cached sparse fire lights nearby objects.** A cached sparse fire now lights the floor and nearby meshes the way a live fire does, with the same shadows from blockers, and its smoke is lit by its own flames. A large empty cached volume builds its light in under 4 MB.
+- **A smoother fire shot.** The fire shot uses a grid twice as fine (64 cells), four times the render samples (128) and a small seeded sideways wobble at the fuel, so the flame leans and billows with less grain and no gaps in the cached flame. The bake takes 7.7 s instead of 0.74 s, and a frame 0.28 s instead of 0.09 s.
+
+## Known limits
+
+- TVIScale's pixel agreement with a real Nuke render is unmeasured; its default smoothing is gentle (about 13% less noise at 5 iterations).
+- GPU 2D nodes and the Direct picture remain off by default. Radeon playback is about 18.5 fps, still short of the 24 fps target; RTX 4070, A6000, Windows D3D12 and native Wayland checks remain open.
+- Cached fires whose flame data sits outside their own tiles still get no light. The upper smoke in the fire shot is still speckled. The fire changes were not checked on Windows or judged on the real display.
+
+## Moved to 0.49.0
+
+- Write saves TIFF, JPEG and DPX and takes Nuke's EXR options (finished in its lane, awaiting integration).
+- Measure TVIScale and the other 2D rows against real Nuke renders.
+- Investigate native half-float decoding toward 24 fps GPU playback, then revisit the GPU default.
+- Real-display review of the new fire shot; a wind force would be a separate step.
+
 # NodeBased 0.47.0 — ZMerge follows depth and blends the chosen alpha
 
 ## What changed since 0.46.1
