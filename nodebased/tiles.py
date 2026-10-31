@@ -320,7 +320,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     # (the same call the full-frame fallback below would have made for the whole graph) and slices
     # tiles from it, the same "solve once, slice many" shape `_generator_tile` already uses for
     # Read/Constant/Checker. A graph with one of these anywhere else in the chain is still tiled.
-    "TimeBlur", "TimeEcho",
+    "TimeBlur", "TimeEcho", "NoTimeBlur",
     # Inpaint (2D parity plan 13, step E2) joins them: its temporal-observation and diffusion fill
     # both need the whole frame (neighbour frames, and border-to-centre diffusion across the full
     # matte), so it is not per-tile-local either. `_temporal_tile` solves it once per (node,
@@ -380,7 +380,7 @@ DEFAULT_HALO_PER_KIND = {
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
     "Tracker": (0, 0), "Stabilize": (0, 0),
-    "TimeBlur": (0, 0), "TimeEcho": (0, 0),  # solved whole by `_temporal_tile`, sliced per tile
+    "TimeBlur": (0, 0), "TimeEcho": (0, 0), "NoTimeBlur": (0, 0),  # solved whole by `_temporal_tile`, sliced per tile
     "RotoPaint": (0, 0),                      # same: the stroke list is solved whole, sliced per tile
 }
 
@@ -414,6 +414,7 @@ TILE_KIND_BEHAVIOR = {
     "Checker": {"source": True, "bypass_self_resolves": True, "reads_files": False},
     "TimeBlur": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "TimeEcho": {"source": False, "bypass_self_resolves": True, "reads_files": False},
+    "NoTimeBlur": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "Inpaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "TVIScale": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "RotoPaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},

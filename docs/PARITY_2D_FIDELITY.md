@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 90.4 / 100** (167 nodes scored, rank-weighted; 93.1 counting only the nodes NodeBased has).
+**Overall fidelity: 90.8 / 100** (167 nodes scored, rank-weighted; 93.1 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -27,7 +27,7 @@ Per node, five components, each a fraction from 0 to 1:
 |---|---|---|---|
 | Image | 85.9 | 90.0 | 6 |
 | Draw | 83.1 | 62.3 | 17 |
-| Time | 92.2 | 70.5 | 13 |
+| Time | 96.1 | 78.2 | 13 |
 | Channel | 98.4 | 97.2 | 5 |
 | Color | 92.8 | 75.2 | 34 |
 | Filter | 89.1 | 67.6 | 32 |
@@ -92,7 +92,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 8 | OFlow | `OFlow` | supported | 56.1 | 48 (9/21) | 43 | 100 | - | - | no fixture |
 | 8 | SmartVector | `SmartVector` | supported | 16.2 | 12 (1/11) | 0 | 50 | - | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | - | - | - | - | - | no fixture |
-| 9 | NoTimeBlur | - | missing | 0.0 | 0 (0/2) | - | 0 | - | - | no fixture |
+| 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100 (2/2) | 100 | 100 | - | - | no fixture |
 
 ### Channel
 
@@ -283,32 +283,32 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 2 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
 | 3 | Write (Image #2) | `Write` | 16.38 | 67.2 | 29 secondary knobs missing |
 | 4 | Read (Image #1) | `Read` | 12.94 | 87.1 | nothing missing that the guide lists |
-| 5 | NoTimeBlur (Time #9) | - | 11.11 | 0.0 | no node (PARITY_2D.md Time #9) |
-| 6 | Root (Other #11) | - | 9.09 | 0.0 | no node: per-script project settings (PARITY_2D.md Other #11) |
-| 7 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 8 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 9 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 10 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 11 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 12 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 13 | Tracker (Transform #3) | `Tracker` | 4.90 | 85.3 | 13 secondary knobs missing |
-| 14 | ScannedGrain (Draw #9) | `ScannedGrain` | 4.44 | 20.0 | primary knobs missing: `fullGrain` |
-| 15 | LensDistortion (Transform #20) | `Undistort` | 4.11 | 17.8 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
-| 16 | Transform (Transform #1) | `Transform` | 3.85 | 96.2 | nothing missing that the guide lists |
-| 17 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.75 | 40.0 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
-| 18 | Keyer (Keyer #1) | `Keyer` | 3.70 | 96.3 | nothing missing that the guide lists |
-| 19 | Encryptomatte (Keyer #8) | `Encryptomatte` | 3.57 | 42.9 | primary knobs missing: `matteNameType`, `mergeOperation`; 1 secondary knob missing: `exportWrite` |
-| 20 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.52 | 36.7 | 13 secondary knobs missing; sockets missing: `img` |
-| 21 | Viewer (Image #3) | `Viewer` | 3.42 | 89.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 22 | Denoise (Filter #12) | `Denoise` | 3.41 | 18.1 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise` |
-| 23 | Reformat (Transform #5) | `Reformat` | 3.41 | 83.0 | primary knobs missing: `box_fixed`, `clamp`, `black_outside` |
-| 24 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 25 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 26 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 27 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 28 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 29 | GridWarp (Transform #14) | `GridWarp` | 3.10 | 13.1 | 32 secondary knobs missing; sockets missing: `bg`, `dst`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 30 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.04 | 48.3 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img` |
+| 5 | Root (Other #11) | - | 9.09 | 0.0 | no node: per-script project settings (PARITY_2D.md Other #11) |
+| 6 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 7 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 8 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 9 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 10 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 11 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 12 | Tracker (Transform #3) | `Tracker` | 4.90 | 85.3 | 13 secondary knobs missing |
+| 13 | ScannedGrain (Draw #9) | `ScannedGrain` | 4.44 | 20.0 | primary knobs missing: `fullGrain` |
+| 14 | LensDistortion (Transform #20) | `Undistort` | 4.11 | 17.8 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
+| 15 | Transform (Transform #1) | `Transform` | 3.85 | 96.2 | nothing missing that the guide lists |
+| 16 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.75 | 40.0 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
+| 17 | Keyer (Keyer #1) | `Keyer` | 3.70 | 96.3 | nothing missing that the guide lists |
+| 18 | Encryptomatte (Keyer #8) | `Encryptomatte` | 3.57 | 42.9 | primary knobs missing: `matteNameType`, `mergeOperation`; 1 secondary knob missing: `exportWrite` |
+| 19 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.52 | 36.7 | 13 secondary knobs missing; sockets missing: `img` |
+| 20 | Viewer (Image #3) | `Viewer` | 3.42 | 89.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 21 | Denoise (Filter #12) | `Denoise` | 3.41 | 18.1 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise` |
+| 22 | Reformat (Transform #5) | `Reformat` | 3.41 | 83.0 | primary knobs missing: `box_fixed`, `clamp`, `black_outside` |
+| 23 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 24 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 25 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 26 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 27 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
+| 28 | GridWarp (Transform #14) | `GridWarp` | 3.10 | 13.1 | 32 secondary knobs missing; sockets missing: `bg`, `dst`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 29 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.04 | 48.3 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img` |
+| 30 | Radial (Draw #5) | `Radial` | 3.03 | 84.9 | primary knobs missing: `plinear`; 4 secondary knobs missing: `ramp`, `p1`, `color0`, `p0` |
 
 ## Formula cases
 

@@ -710,6 +710,12 @@ SPECS = {
     "TimeBlur": {"inputs": ["image"], "params": {"shutter": 1.0, "divisions": 10,
                   "shutter_offset": "centred", "custom_offset": 0.0}},
     "TimeEcho": {"inputs": ["image"], "params": {"frames": 3, "method": "average", "falloff": 1.0}},
+    # NoTimeBlur (fidelity step N): Nuke's own node for cutting a time blur short. Every frame request that reaches it
+    # from below is rounded (`rounding`: rint, floor, ceil, or `none` to pass the fractional frame straight through) and
+    # its one input is evaluated at that whole frame, so a TimeBlur or motion blur downstream averages whole-frame
+    # samples. `single` (Nuke's "use single frame", on by default) makes every sub-frame request inside one output frame
+    # read the same rounded frame: the rounding is applied to the output frame itself rather than to each sub-frame.
+    "NoTimeBlur": {"inputs": ["image"], "params": {"rounding": "rint", "single": 1}},
     # Motion blur samples the animated upstream image across a shutter. MotionBlur3D can also use
     # an explicit camera plus depth pass to blur a still beauty through camera motion.
     "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
@@ -1987,7 +1993,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"], "flow_on": ["luminance", "rgb"],
-           "lookup_filter": ["none", "blend"],
+           "lookup_filter": ["none", "blend"], "rounding": ["rint", "floor", "ceil", "none"],
            "premultiply_mode": ["none", "rgb", "rgba"],
            "output_alpha": ["preserve", "combined_weight", "hue_weight", "saturation_weight",
                             "brightness_weight", "hue", "saturation", "value"],
@@ -2136,7 +2142,7 @@ LIMITS.update({**{name: (0, 1) for name in ("adjust_for_luminance_changes", "cla
 LIMITS.update({**{f"enable{i}": (0, 1) for i in _cornerpinknobs.CORNERS},
                **{name: (-1000000.0, 1000000.0) for name in _cornerpinknobs.MATRIX_NAMES}})
 # TimeOffset and FrameHold's path mask (fidelity step F, nodebased/pathmask.py).
-LIMITS.update({"enable_path_mask": (0, 1), "inject_mask": (0, 1)})
+LIMITS.update({"enable_path_mask": (0, 1), "inject_mask": (0, 1), "single": (0, 1)})
 # Text's Nuke knobs (fidelity step F, nodebased/textknobs.py).
 CHOICES.update({"yjustify": list(_textknobs.YJUSTIFY), "ramp": list(_textknobs.RAMPS)})
 LIMITS.update({"global_font_scale": (0.01, 100.0), "font_width": (1.0, 1000.0), "font_height": (1.0, 1000.0),

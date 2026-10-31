@@ -770,6 +770,7 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("shutter_offset",)), KnobGroup("float", ("custom_offset",))),
     "TimeEcho": _groups(KnobGroup("int", ("frames",)), KnobGroup("enum", ("method",)),
         KnobGroup("float_slider", ("falloff",), soft_range=(0, 1))),
+    "NoTimeBlur": _groups(KnobGroup("enum", ("rounding",)), KnobGroup("bool", ("single",), label="Use single frame")),
     "TimeWarp": _groups(KnobGroup("float", ("lookup",), label="Input frame"),
         KnobGroup("enum", ("lookup_filter",), label="Filter")),
     "MotionBlur2D": _groups(KnobGroup("float", ("shutter",)), KnobGroup("enum", ("shutter_offset",)),

@@ -48,6 +48,7 @@ NODE_CATEGORIES = {
         "AppendClip": "Plays up to eight clips head to tail.",
         "TimeBlur": "Averages subframes across a shutter to blur motion.",
         "TimeEcho": "Combines the current frame with earlier frames.",
+        "NoTimeBlur": "Rounds frame requests from below so a time blur downstream samples whole frames.",
         "TimeWarp": "Maps the output frame to an input frame with an animatable curve.",
         "Kronos": "Retimes footage by blending frames or synthesizing intermediate motion.",
         "OFlow": "Retimes footage with optical-flow interpolation and a retiming shutter.",

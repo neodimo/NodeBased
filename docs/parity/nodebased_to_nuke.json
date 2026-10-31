@@ -1105,8 +1105,14 @@
    ]
   },
   "NoTimeBlur": {
-   "nodebased": null,
-   "reason": "no node (PARITY_2D.md Time #9)"
+   "nodebased": "NoTimeBlur",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["rounding"], "nuke": ["rounding"], "kind": "same"},
+    {"nodebased": ["single"], "nuke": ["single"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'use single frame', scripting name `single`; stored as 0 or 1"}
+   ]
   },
   "Shuffle": {
    "nodebased": "Shuffle",

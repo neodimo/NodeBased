@@ -36,7 +36,7 @@ DEFAULT_BYTE_CAP = 256 << 20
 
 # Kinds after which the frame a node sees is not the frame the walk asked for (or is fetched by a nested call).
 _TIME_KINDS = ("TimeOffset", "FrameHold", "Retime", "TimeClip", "FrameRange", "AppendClip",
-               "TimeBlur", "TimeEcho", "TimeWarp", "MotionBlur", "MotionBlur2D", "MotionBlur3D", "Kronos", "OFlow")
+               "TimeBlur", "TimeEcho", "NoTimeBlur", "TimeWarp", "MotionBlur", "MotionBlur2D", "MotionBlur3D", "Kronos", "OFlow")
 
 
 def default_frames() -> int:

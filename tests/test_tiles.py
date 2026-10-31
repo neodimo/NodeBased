@@ -328,7 +328,7 @@ class TileKindBehaviorRegistryTests(unittest.TestCase):
     # bypass), so it belongs in this reference set on the same terms they do. Roto (Roto plan, step
     # R2) joined the tile path the way RotoPaint did: it resolves once and resolves its own bypass.
     OLD_BYPASS_EXEMPT_KINDS = ("Read", "ReadBundle", "ConditionedRead", "Constant", "Checker",
-                               "TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint", "Roto")
+                               "TimeBlur", "TimeEcho", "NoTimeBlur", "Inpaint", "TVIScale", "RotoPaint", "Roto")
     OLD_READS_FILES_KINDS = ("Read", "ReadBundle", "ConditionedRead")
 
     def test_registry_agrees_with_the_old_hard_coded_tuples_for_every_spec_kind(self):

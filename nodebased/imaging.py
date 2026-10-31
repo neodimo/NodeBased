@@ -591,6 +591,28 @@ def _inherited_metadata(kind, images, params=None):
 
 _TIME_REMAP_KINDS = ("TimeOffset", "FrameHold", "Retime", "TimeClip", "FrameRange", "AppendClip")
 
+# The frames of the `evaluate_raster` calls now running on this thread, outermost first. NoTimeBlur's "use single frame"
+# needs to know which output frame the sub-frame request it is answering belongs to, and a request carries only its own
+# frame; the nearest whole frame on this stack is that output frame (a whole-frame TimeOffset above the blur shifts it, as it should).
+_REQUEST_FRAMES = threading.local()
+
+
+def _request_anchor(stack):
+    """The output frame the innermost request belongs to: the nearest whole-frame request, else the outermost one."""
+    for item in reversed(stack):
+        if float(item).is_integer():
+            return item
+    return stack[0] if stack else 0
+
+
+def no_time_blur_frame(request, anchor, rounding, single):
+    """The frame NoTimeBlur asks its input for. `none` passes the request through unchanged; otherwise `rounding`
+    (rint rounds halves to even, as C's rint does) is applied to the request, or with `single` to the output frame."""
+    if rounding == "none":
+        return request
+    basis = float(anchor if single else request)
+    return int({"floor": math.floor, "ceil": math.ceil}.get(rounding, lambda x: float(np.rint(x)))(basis))
+
 # M1 gate, "interactive cancellation" (docs/M1_GATE.md): `evaluate_raster` only checks `cancel`
 # once per node, so a single node whose own kernel exceeds the 100 ms budget cannot be
 # interrupted inside itself. Measured at 4K: Grade ~140 ms, Saturation ~160 ms, ColorCorrect
@@ -1487,6 +1509,9 @@ class Evaluator:
         (document) frame and would miss an edit to a keyframe elsewhere in the curve.
         """
         scope = _SourceScope()
+        stack = _REQUEST_FRAMES.__dict__.setdefault("stack", [])
+        asked = doc.get("time", {}).get("current", 1) if frame is None else frame
+        stack.append(float(asked) if isinstance(asked, float) and not asked.is_integer() else int(asked))
         try:
             return self._evaluate_raster(doc, target, cancel, frame, tier, typed, return_digest,
                                          cache_fractional, digest_only, scope)
@@ -1496,6 +1521,7 @@ class Evaluator:
                 raise
             raise earlier from None
         finally:
+            stack.pop()
             scope.close()
 
     def _evaluate_raster(self, doc, target, cancel, frame, tier, typed, return_digest,
@@ -1532,7 +1558,7 @@ class Evaluator:
                 from .core import bypass_slot
                 slot = bypass_slot(nodes[key])
                 inputs = [] if slot is None else [nodes[key]["inputs"][slot]]
-            elif nodes[key]["type"] in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "TimeWarp"):
+            elif nodes[key]["type"] in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "NoTimeBlur", "TimeWarp"):
                 # This node's input is fetched by a nested `evaluate_raster` call at a remapped
                 # frame (below), not from `values[source]` computed by this walk at `frame` --
                 # walking into it here would only evaluate and cache it at the wrong frame,
@@ -2664,11 +2690,21 @@ class Evaluator:
             inpaint_samples = None
             contactsheet_sequence = None
             timewarp_weights = None
-            temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D", "TimeWarp")
+            temporal_kinds = ("TimeBlur", "TimeEcho", "NoTimeBlur", "MotionBlur2D", "MotionBlur3D", "TimeWarp")
             transform_blur = kind in ("Transform", "CornerPin", "Tracker") and bool(params.get("motionblur", 0))
             if (kind in temporal_kinds or transform_blur) and not node["disabled"]:
                 source_key = node["inputs"]["image"]
-                if kind == "TimeWarp":
+                if kind == "NoTimeBlur":
+                    # The one input is read at the rounded frame, so everything above this node, a TimeBlur's
+                    # shutter samples included, sees whole frames. Rounded frames are whole, so they cache normally;
+                    # `none` forwards a fractional request and the caller's `cache_fractional` with it.
+                    upstream = no_time_blur_frame(frame, _request_anchor(_REQUEST_FRAMES.stack), params["rounding"],
+                                                  bool(params["single"]))
+                    sample = self.evaluate_raster(doc, source_key, cancel=cancel, frame=upstream, tier=tier,
+                                                  typed=True, return_digest=True, cache_fractional=cache_fractional)
+                    temporal_samples = [sample]
+                    fingerprint = ["no-time-blur", sample[1]]
+                elif kind == "TimeWarp":
                     # "lookup" is resolved like any other animated param above (see
                     # `_resolve_params`): a curve on it already gives the fractional value at
                     # this outer `frame`. With no curve at all the stored constant means nothing
@@ -2961,7 +2997,7 @@ class Evaluator:
             # come from, and an animated source would make it churn on every outer frame even
             # when `effective_frame` — and so the actual result — does not change (the FrameHold
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
-            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "MotionBlur", "MotionBlur2D", "MotionBlur3D", "TimeWarp") and not node["disabled"]
+            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "NoTimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D", "TimeWarp") and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
             if kind == "RotoPaint" and not node["disabled"]:
                 input_key = node["inputs"].get("image")
@@ -3193,6 +3229,8 @@ class Evaluator:
                     mask = values.get(node["inputs"].get("mask"))
                     raster = Raster(self._apply_mask_mix(a.pixels, blurred,
                         None if mask is None else mask.fit(output_data), float(params["mix"])), output_data, a.display, a.layers, a.meta)
+                elif kind == "NoTimeBlur" and temporal_samples is not None:
+                    raster = temporal_samples[0][0]
                 elif kind == "TimeWarp" and temporal_samples is not None:
                     sampled = [r for r, _ in temporal_samples]
                     reference = sampled[0]
