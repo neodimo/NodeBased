@@ -1,5 +1,26 @@
 ## 2026-10-31, 3:09 AM PDT — Lane 6 smoke grain (finish 1): the first smoke collision is stratified
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (3:29 AM on 2026-10-31 PDT)
+
+`main` moved `7e8a6983` -> `b7525282` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `b7525282` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-0319.log`, started 3:19 AM): **Ran 7641 tests in 573.653 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step A of 1: the smoke above the fire stops looking like sand (finish 1).** Commits:
+  - `3952ae40` context: record Lane 6 smoke grain finish 1
+  - `2d46b417` Fire shot: stratified first-collision evidence (grain 0.0141 to 0.0065 at frame 16), docs section and bundled copy
+  - `7e091548` Path tracer: the camera ray's first smoke collision is found by inverting the optical depth from a stratified number, with absorption by weight at that vertex, on both tracers
+  Diff: 12 files changed, 1049 insertions(+), 12 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Frame-16 grain at 128 samples 0.0141 to 0.0065 (gate at most 0.0071 met) on the RTX 3080 Ti; time 1.01 to 1.07 x the fire-sampling renderer; 2048-sample mean within 0.025 %; 220 targeted tests (28 new) pass on the RTX 3080 Ti, the
 Radeon 8060S and llvmpipe. Both tracers: `ptvolume.stratified_event` / `stratified_number`, the shader's `vol_first_event` / `strat_number`, absorption by weight at the first vertex; switches `ENABLE_STRATIFIED_FIRST` on both modules.
 Evidence versus inference: measured per component and per frame (`benchmarks/fire_shot/fire-smoke-strat-2026-10-31.json`); the split between the stratified collision and absorption by weight is from an unsaved intermediate run.

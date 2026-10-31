@@ -1,3 +1,9 @@
+## 2026-10-31 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step A of 1: the smoke above the fire stops looking like sand (finish 1) (integrator tick)
+
+- **What was done:** `main` `7e8a6983` -> `b7525282` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `b7525282`: Ran 7641 tests in 573.653 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31, 3:09 AM PDT — Lane 6 smoke grain, finish 1: the camera ray's first smoke collision is counted, not drawn (gate met)
 
 - **What was done — evidence:** the left-out item of the smoke step (grain from the smoke's own scattering, 0.0084 floor) was built as a camera-flight estimator on both tracers. For a path's first flight
