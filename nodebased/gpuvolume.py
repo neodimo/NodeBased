@@ -879,12 +879,16 @@ def fire_light_view(state, volume, settings, used):
     the temperature and density digests and the settings that shape it; a one-texel dummy and None when the volume
     casts no fire light."""
     from . import volumerender
+    # A sparse volume keys on its stored tiles and rest values (_digest never expands them); fields stored in another
+    # layout get no grid (volumerender.has_sparse_fire_light), exactly like the CPU march.
+    usable = (settings.glows(volume) and settings.fire_light > 0
+              and (not is_sparse(volume) or volumerender.has_sparse_fire_light(volume)))
     key = ('firelight', _digest(volume), _digest(volume, 'temperature') if volume.temperature is not None else None,
-           volume.voxel_size, volume.shape,
+           volume.voxel_size, volume.shape, tuple(np.asarray(volume.origin, np.float64).tolist()),
+           tuple(np.asarray(volume.matrix, np.float64).ravel().tolist()),
            settings.fire_intensity, settings.temperature_scale, settings.fire_threshold, settings.fire_light,
            settings.density_scale, settings.fire_ramp, settings.flame_intensity,
-           settings.flame_temperature, _digest(volume, 'flame') if volume.flame is not None else None) if (
-        settings.glows(volume) and settings.fire_light > 0 and not is_sparse(volume)) else None
+           settings.flame_temperature, _digest(volume, 'flame') if volume.flame is not None else None) if usable else None
     if key is not None:
         cached = state.setdefault('fire_light_grids', {})
         if key not in cached:

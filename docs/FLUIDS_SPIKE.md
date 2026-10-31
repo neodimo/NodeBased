@@ -1229,7 +1229,7 @@ GPU raymarch and both path tracers. The new `volume_flame_intensity` defaults to
 `volume_flame_temperature` through the existing blackbody or fire ramp. The existing coarse emission grid now
 forms up to eight deterministic point lights per volume (16 per scene) for meshes when `volume_fire_light_meshes` is above zero. Mesh
 shadow rays intersect objects and attenuate through smoke on the CPU and GPU. Dense volumes are supported;
-sparse cached volumes still glow, but do not yet create derived mesh lights.
+sparse cached volumes glow too, and (Fluids 13 B finish, 2026-10-30, below) now create the same derived mesh lights.
 
 The editable `examples/fire_shot/fire_shot.nbcomp` has a fuel block, floor, stone and dim blue fill. Its
 32-cell fire solve bakes through frame 24 in **0.73 s**. On the RTX 3080 Ti, a 32-sample 960 × 540 path-traced
@@ -1667,8 +1667,8 @@ adapter keeps a single-index-read path for samples inside one tile.
 2e-3 worst pixel; half-float targets 5e-3) in the viewport, in the raster Render3D (lit, unlit, three lights, supersampled, fire
 emission, motion blur from the velocity atlas, shadows on a floor, an odd-sized grid with a non-zero rest value) and in the path
 tracer (a lit turned blob, fire, a non-zero rest value, a sparse next to a dense volume), and the path tracer's picture of tiles agrees
-with the CPU reference of the same tiles. The sparse fire-light halo is not built for a sparse volume on either backend
-(`fire_light_grid` returns none for sparse frames), so compare fire with `fire_light` 0. Tests: `tests.test_sparse_gpu_volumes` and
+with the CPU reference of the same tiles. The sparse fire-light halo used to be left out for sparse volumes; since Fluids 13 B finish (2026-10-30) a sparse volume builds
+the same coarse grid from its tiles on both backends (see Lane 6 step notes), so sparse and dense agree with `fire_light` on. Tests: `tests.test_sparse_gpu_volumes` and
 `tests.test_sparse_gpu_pathtrace` (sparse against dense renders, an all-empty tile set that draws nothing and marches zero steps, a tile
 count that grows frame to frame through four atlas layouts and back with no stale tile, tiles kept out of dense arrays, the memory
 bar), passing on the RTX 3080 Ti, the Radeon 8060S and llvmpipe. Reproduce the numbers with
@@ -1824,6 +1824,36 @@ A fresh RTX run completed liquid and surface through frame 120, then hit a card-
 The laptop run completed every changed stage through 120/120 using `taskset -c 0-3`, within the 16 GiB RSS stop. For the A6000, the planning estimate is 0.8–1.3× the completed warm-cache RTX stage times; this machine has no A6000 attached or connected, so the estimate is not a measurement. Full stage data and the cold failure details are in `benchmarks/hot_pour/full-refinement-memory-rtx-2026-10-23.json` and `benchmarks/hot_pour/full-refinement-memory-integrated-2026-10-23.json`.
 
 **State:** PARTIAL. RTX warm-cache and integrated laptop runs completed all edited stages with no swap; the fresh RTX attempt still exposed a whitewater allocation failure before the adaptive warm retry. CPU/llvmpipe memory, streaming, fluid-cache and timeline checks pass. The A6000 estimate is labelled; direct A6000 measurement is unavailable on this host.
+
+### Fluids 13 B finish: sparse fire caches light nearby objects (2026-10-30)
+
+A cached fire used to glow but leave its floor dark: `fire_light_grid()` returned none for a sparse volume and
+`mesh_fire_lights()` skipped it. Both now accept a sparse volume. The coarse light grid keeps its size and
+settings (at most 32 cells a side, `ceil(longest side / 32)` voxels per cell, the same blur and scale, the same
+eight-octant clustering and 16-light scene cap). A shared helper, `volumerender._fire_emission`, computes the emission of a
+voxel from density, temperature and flame; the dense path uses it too, so dense output is unchanged. For sparse input each
+coarse cell starts with the emission of the grid's rest values times its count of voxels inside the volume, then every stored
+tile adds `emission(tile) - emission(rest)` into its cell with `np.bincount` (tiles are taken 64 at a time, so a tile
+chunk is the largest temporary). Final partial tiles and missing temperature or flame fields work. No dense volume is built:
+the tests patch `SparseGrid.to_dense` and `SparseField.__array__` to raise, and a 200-cube volume with one stored tile builds its
+grid in under 4 MB of Python-tracked memory (a dense emission array would be 192 MB). `gpuvolume.fire_light_view` uses the same
+result for sparse smoke lighting, keyed on the stored tiles and rest values of density, temperature and flame plus shape,
+voxel size, origin, transform and the light settings (the dense key now includes origin and transform as well). The GPU texture
+is the coarse grid only. Volumes whose fields are not all stored in the same tiles keep the old behaviour (no halo).
+
+**Evidence.** `tests.test_sparse_fire_lights` (13 tests): dense and sparse forms of one seeded fire give the same grid (relative
+2e-4) across a partial edge tile, factors 2 and 4, a non-zero hot rest value, a cold rest value with and without temperature or
+flame, and an empty volume; mesh-light positions, colours and intensities match the dense ones; a sparse flame lights a nearby
+cube and a blocker darkens it, on the CPU and on the GPU, and the sparse picture matches the dense picture within 5e-3; a
+sparse smoke column is lit by the halo identically on the CPU march, the GPU march and the dense volume; changing the flame,
+moving the origin gives a new cached texture and editing nothing reuses the old one; with both light gains at zero
+nothing is built. These and `tests.test_volume_fire_look`, `tests.test_volume_flame_mesh`, `tests.test_sparse_gpu_volumes` and
+`tests.test_sparse_gpu_pathtrace` (84 tests together) pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe. Not run:
+Windows. No shader or buffer layout changed.
+
+**Limits.** The coarse light stays a bounded, blurred approximation: eight point lights per volume, and a flame thinner than a
+coarse cell is averaged into it. A sparse volume whose temperature or flame is a dense array, or lives in another tile
+set, gets no halo or mesh lights. Mesh lights of a changed sparse cache are rebuilt per Volume object like dense ones.
 
 ## K2 rigid bodies — finish 1
 

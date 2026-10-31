@@ -292,34 +292,98 @@ def _gaussian_blur(grid, sigma):
     return grid
 
 
+def _fire_emission(settings, table, density, temperature, flame):
+    """Emitted radiance (..., 3) float64 of the fire at voxels holding `density`, `temperature` (or None) and
+    `flame` (or None), arrays of one shape: hot smoke by temperature and density, plus the burn-rate flame glow.
+    The dense and the sparse fire-light grids both build their emission here, so they agree voxel for voxel."""
+    emission = np.zeros(np.shape(density) + (3,), np.float64)
+    if settings.fire_intensity > 0 and temperature is not None:
+        kelvin = (settings.temperature_scale * temperature).astype(np.float64).reshape(-1)
+        hot = (kelvin > settings.fire_threshold) & (density.reshape(-1) > 0)
+        emission.reshape(-1, 3)[hot] = fire_radiance(table, kelvin[hot]) * (
+            settings.fire_intensity * settings.density_scale * density.reshape(-1)[hot].astype(np.float64))[:, None]
+    if settings.flame_intensity > 0 and flame is not None:
+        emission += (settings.flame_intensity * np.maximum(flame, 0)[..., None]
+                     * fire_radiance(table, np.array([settings.flame_temperature]))[0])
+    return emission
+
+
+def has_sparse_fire_light(volume):
+    """True when `volume` stores its density (and any temperature and flame) in the tiles of one SparseGrid, so the
+    fire-light grid can be built from the tiles alone."""
+    grid = getattr(volume, "sparse", None)
+    if grid is None or not hasattr(volume.density, "sparse_sample"):
+        return False
+    return all(field is None or (hasattr(field, "sparse_sample") and getattr(field, "grid", None) is grid)
+               for field in (volume.density, volume.temperature, volume.flame))
+
+
+_SPARSE_LIGHT_CHUNK = 64      # tiles whose emission is evaluated at once
+
+
+def _sparse_coarse_emission(volume, settings, factor):
+    """(coarse sum, padded cells): the per-coarse-cell *sum* of the fire emission of a sparse volume, from the rest
+    values (times each cell's count of voxels inside the volume) plus the tiles' difference from rest. No array of
+    the volume's size is built."""
+    grid, shape = volume.sparse, volume.shape
+    table = fire_table(settings)
+    names = {"density": "density"}
+    if volume.temperature is not None:
+        names["temperature"] = volume.temperature.name
+    if volume.flame is not None:
+        names["flame"] = volume.flame.name
+
+    def emission_of(blocks):
+        return _fire_emission(settings, table, blocks["density"], blocks.get("temperature"), blocks.get("flame"))
+
+    rest = {key: np.full((1, 1, 1), grid.rest[name], grid.data[name].dtype) for key, name in names.items()}
+    rest_emission = emission_of(rest).reshape(3)
+    cells = [-(-n // factor) for n in shape]
+    counts = [np.clip(n - np.arange(c) * factor, 0, factor) for n, c in zip(shape, cells)]
+    total = (counts[0][:, None, None] * counts[1][None, :, None] * counts[2][None, None, :]).astype(np.float64)
+    total = total[..., None] * rest_emission
+    flat = total.reshape(-1, 3)
+    tile = grid.tile
+    local = np.arange(tile)
+    for first in range(0, grid.tile_count, _SPARSE_LIGHT_CHUNK):
+        sel = slice(first, first + _SPARSE_LIGHT_CHUNK)
+        blocks = {key: grid.data[name][sel] for key, name in names.items()}
+        delta = emission_of(blocks) - rest_emission
+        origin = grid.coords[sel].astype(np.int64) * tile
+        index = [origin[:, a, None] + local[None, :] for a in range(3)]            # (chunk, tile) voxel indices
+        valid = [index[a] < shape[a] for a in range(3)]
+        mask = valid[0][:, :, None, None] & valid[1][:, None, :, None] & valid[2][:, None, None, :]
+        coarse = [index[a] // factor for a in range(3)]
+        target = ((np.minimum(coarse[0], cells[0] - 1)[:, :, None, None] * cells[1]
+                   + np.minimum(coarse[1], cells[1] - 1)[:, None, :, None]) * cells[2]
+                  + np.minimum(coarse[2], cells[2] - 1)[:, None, None, :])
+        target = target[mask]
+        for channel in range(3):
+            flat[:, channel] += np.bincount(target, weights=delta[..., channel][mask], minlength=len(flat))
+    return flat.reshape(cells + [3])
+
+
 def fire_light_grid(volume, settings):
     """(grid, cell): the light the fire casts on the smoke around it, or None. `grid` is (gx, gy, gz, 3) float32
     on cubic cells of `cell` object-space units starting at the volume's `origin` (a cell holds the blurred, scaled
-    emission field; see the module docstring), None when the volume does not glow or `fire_light` is 0."""
+    emission field; see the module docstring), None when the volume does not glow or `fire_light` is 0. A sparse
+    volume builds the same grid from its stored tiles and rest values without expanding to a dense array."""
     if not settings.glows(volume) or settings.fire_light <= 0:
         return None
-    if getattr(volume, "sparse", None) is not None:
-        # Fire emission still samples sparse temperature/density directly in the march. Building the optional
-        # blurred secondary-light grid is a separate dense-only approximation and must not expand the cache.
-        return None
-    emission = np.zeros(volume.shape + (3,), np.float64)
-    if settings.fire_intensity > 0 and volume.temperature is not None:
-        kelvin = (settings.temperature_scale * volume.temperature).astype(np.float64).reshape(-1)
-        hot = (kelvin > settings.fire_threshold) & (volume.density.reshape(-1) > 0)
-        table = fire_table(settings)
-        emission.reshape(-1, 3)[hot] = fire_radiance(table, kelvin[hot]) * (
-            settings.fire_intensity * settings.density_scale * volume.density.reshape(-1)[hot].astype(np.float64))[:, None]
-    if settings.flame_intensity > 0 and volume.flame is not None:
-        emission += (settings.flame_intensity * np.maximum(volume.flame, 0)[..., None]
-                     * fire_radiance(fire_table(settings), np.array([settings.flame_temperature]))[0])
-    if not emission.any():
-        return None
     factor = max(1, int(math.ceil(max(volume.shape) / FIRE_LIGHT_CELLS)))
-    padded_shape = [-(-n // factor) * factor for n in volume.shape]
-    grid = np.zeros(padded_shape + [3])
-    grid[:volume.shape[0], :volume.shape[1], :volume.shape[2]] = emission
-    coarse = grid.reshape(padded_shape[0] // factor, factor, padded_shape[1] // factor, factor,
-                          padded_shape[2] // factor, factor, 3).mean(axis=(1, 3, 5))
+    if getattr(volume, "sparse", None) is not None:
+        if not has_sparse_fire_light(volume):
+            return None           # fields in another layout would need the dense volume; the march still samples them
+        coarse = _sparse_coarse_emission(volume, settings, factor) / factor ** 3
+    else:
+        emission = _fire_emission(settings, fire_table(settings), volume.density, volume.temperature, volume.flame)
+        padded_shape = [-(-n // factor) * factor for n in volume.shape]
+        grid = np.zeros(padded_shape + [3])
+        grid[:volume.shape[0], :volume.shape[1], :volume.shape[2]] = emission
+        coarse = grid.reshape(padded_shape[0] // factor, factor, padded_shape[1] // factor, factor,
+                              padded_shape[2] // factor, factor, 3).mean(axis=(1, 3, 5))
+    if not coarse.any():
+        return None
     cell = factor * volume.voxel_size
     side = float(max(volume.shape) * volume.voxel_size)
     radius = FIRE_LIGHT_RADIUS * side                                    # object units
@@ -341,7 +405,7 @@ def mesh_fire_lights(scene, settings):
         return ()
     result = []
     for volume in scene.volumes:
-        if not settings.glows(volume) or getattr(volume, 'sparse', None) is not None:
+        if not settings.glows(volume):
             continue
         cache = _mesh_fire_cache.setdefault(volume, {})
         key = (settings.fire_intensity, settings.flame_intensity, settings.flame_temperature,
