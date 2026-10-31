@@ -71,6 +71,37 @@ class FireShotGraphTests(unittest.TestCase):
         self.assertEqual(_curves(document), {})
 
 
+class ShapedFlameTests(unittest.TestCase):
+    """Lane 6, fire shape step B: the shot cools its gas and colours the flame by temperature; `flame_shape=False` is the soft shot."""
+
+    OLD_RENDER = dict(volume_flame_follow_temperature=0, volume_temperature_scale=500, volume_flame_intensity=.5,
+                      volume_fire_intensity=.05)
+
+    def test_the_shot_uses_the_shaped_settings_and_the_committed_graph_has_them(self):
+        nodes = make_shot.build_document()["nodes"]
+        for name, value in make_shot.SHAPED_SOLVER.items():
+            self.assertEqual(nodes["fire"]["params"][name], value, name)
+        for name, value in make_shot.SHAPED_RENDER.items():
+            self.assertEqual(nodes["render"]["params"][name], value, name)
+        self.assertEqual(nodes["render"]["params"]["volume_flame_follow_temperature"], 1)
+
+    def test_flame_shape_off_is_the_soft_shot_of_the_grain_step(self):
+        nodes = make_shot.build_document(flame_shape=False)["nodes"]
+        solver, render = nodes["fire"]["params"], nodes["render"]["params"]
+        self.assertEqual((solver["vorticity"], solver["cooling_rate"], solver["burn_expansion"], solver["turbulence"]), (.25, .02, 0.0, 0.0))
+        for name, value in self.OLD_RENDER.items():
+            self.assertEqual(render[name], value, name)
+        self.assertEqual(render["volume_flame_temperature"], 1900)
+
+    def test_explicit_overrides_win_over_the_shaped_settings(self):
+        self.assertEqual(make_shot.build_document(cooling_rate=.3)["nodes"]["fire"]["params"]["cooling_rate"], .3)
+
+    def test_the_shaped_solver_settings_stay_inside_the_stable_range(self):
+        """Confinement of 2.5 or more made the 64-cell solve blow up after frame 30 in the sweep; the shot keeps clear of it."""
+        self.assertLessEqual(make_shot.SHAPED_SOLVER["vorticity"], 1.5)
+        self.assertEqual(make_shot.SHAPED_SOLVER.get("turbulence", 0.0), 0.0)
+
+
 class FireShotBakeTests(unittest.TestCase):
     SMALL = dict(division_size=.125, pressure="cpu", max_iterations=40)
 

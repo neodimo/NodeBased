@@ -1,8 +1,10 @@
 """Build the deterministic small fuel-fire scene used by render_evidence.py.
 
 The shot is a 64-cell fire solve (division size .03125 over the 2 x 2 x 2 metre box) rendered at 128
-path-traced samples, with a modest seeded sideways wobble on the fuel source's velocity. Pass
-`division_size=.0625, pt_samples=32, curl=0` for the earlier 32-cell straight column.
+path-traced samples, with a modest seeded sideways wobble on the fuel source's velocity and a shaped flame: the gas cools
+quickly (`SHAPED_SOLVER`) and the flame glow takes its colour from the gas temperature (`SHAPED_RENDER`), so there is a bright
+yellow core at the fuel and tongues that cool to orange and dark red. Pass `flame_shape=False` for the soft orange column of the
+grain step, and `division_size=.0625, pt_samples=32, curl=0, flame_shape=False` for the earlier 32-cell straight column.
 """
 from __future__ import annotations
 
@@ -18,6 +20,13 @@ ROOT = Path(__file__).resolve().parent
 
 
 CURL_SEED = 1029
+FUEL_TOP = .21        # world height of the fuel block's top face: the flame's cells below it are hidden inside the block
+
+# The settings the shaped flame adds to the solver and to the Render3D (docs/FLUIDS_SPIKE.md, "Fluids 13 B shape"). All are existing
+# controls except `volume_flame_follow_temperature`; they were picked from `render_evidence.py --flame-sweep` measurements.
+SHAPED_SOLVER = dict(cooling_rate=1.0, vorticity=1.0, burn_expansion=1.25)
+SHAPED_RENDER = dict(volume_flame_follow_temperature=1, volume_temperature_scale=900, volume_flame_intensity=1.0,
+                     volume_fire_intensity=.02)
 
 
 def curl_keys(curl, first=1, last=24, step=3):
@@ -29,7 +38,7 @@ def curl_keys(curl, first=1, last=24, step=3):
 
 
 def build_document(width=960, height=540, division_size=.03125, pt_samples=128, curl=.10,
-                   source_noise=0.0, **fire_overrides):
+                   source_noise=0.0, flame_shape=True, **fire_overrides):
     d = Dispatcher()
     nodes = {
         "fuel": ("FluidSource3D", dict(src_center_y=.20, src_radius=.22, src_fuel=2.0,
@@ -59,6 +68,9 @@ def build_document(width=960, height=540, division_size=.03125, pt_samples=128, 
                                     volume_flame_intensity=.5, volume_flame_temperature=1900,
                                     volume_fire_light_meshes=60.0)),
     }
+    if flame_shape:
+        nodes["fire"][1].update(SHAPED_SOLVER)
+        nodes["render"][1].update(SHAPED_RENDER)
     nodes["fire"][1].update(fire_overrides)
     for name, (kind, params) in nodes.items():
         d.execute({"op": "create", "id": name, "type": kind, "params": params})

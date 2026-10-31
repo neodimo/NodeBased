@@ -13,9 +13,10 @@ import numpy as np
 
 from nodebased import gpu3d, simcache
 from nodebased.core import load_document
-from nodebased.imaging import Evaluator, write_png
+from nodebased.imaging import Evaluator, write_png, _volume_settings
 
-from make_shot import build_document
+from make_shot import FUEL_TOP, SHAPED_RENDER, SHAPED_SOLVER, build_document
+import flame_metrics
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parents[1]
@@ -287,6 +288,140 @@ def grain(args):
     print(json.dumps(gate, indent=2), flush=True)
 
 
+METRIC_FRAMES = tuple(range(8, 25))
+FLAME_SWEEP = {
+    # the solver controls, each read with the flame glow following the gas temperature (`SHAPED_RENDER`), except the first row
+    'soft shot of the grain step (old flame colour)': dict(colour='old'),
+    'old solver settings, glow follows temperature': dict(),
+    'turbulence 3': dict(turbulence=3),
+    'turbulence 3, swirl 6': dict(turbulence=3, swirl_size=6),
+    'turbulence 8': dict(turbulence=8),
+    'shredding 2': dict(shredding=2),
+    'disturbance 1': dict(disturbance=1),
+    'cooling 0.3': dict(cooling_rate=.3),
+    'cooling 0.5': dict(cooling_rate=.5),
+    'cooling 1.0': dict(cooling_rate=1.0),
+    'cooling 2.0': dict(cooling_rate=2.0),
+    'cooling 0.5, vorticity 1.5': dict(cooling_rate=.5, vorticity=1.5),
+    'cooling 0.5, vorticity 2, expansion 2': dict(cooling_rate=.5, vorticity=2.0, burn_expansion=2.0),
+    'cooling 0.5, vorticity 3, expansion 2': dict(cooling_rate=.5, vorticity=3.0, burn_expansion=2.0),
+    'cooling 0.5, vorticity 1.5, expansion 2.5': dict(cooling_rate=.5, vorticity=1.5, burn_expansion=2.5),
+    'cooling 1.0, vorticity 1.5, expansion 2, turbulence 1, swirl 3 (blows up after frame 30)': dict(
+        cooling_rate=1.0, vorticity=1.5, burn_expansion=2.0, turbulence=1.0, swirl_size=3.0),
+    'cooling 1.0, vorticity 1, expansion 2, turbulence 1, swirl 3 (frame 0.49 to 0.56 s)': dict(
+        cooling_rate=1.0, vorticity=1.0, burn_expansion=2.0, turbulence=1.0, swirl_size=3.0),
+    'cooling 1.0, vorticity 1, expansion 1.5, turbulence 1, swirl 3': dict(
+        cooling_rate=1.0, vorticity=1.0, burn_expansion=1.5, turbulence=1.0, swirl_size=3.0),
+    'cooling 1.0, vorticity 1, expansion 1.5': dict(cooling_rate=1.0, vorticity=1.0, burn_expansion=1.5),
+    'burn rate 6, cooling 0.5, vorticity 1.5, expansion 2.5': dict(burn_rate=6, cooling_rate=.5, vorticity=1.5, burn_expansion=2.5),
+    'shaped shot (this step): cooling 1.0, vorticity 1, expansion 1.25': dict(SHAPED_SOLVER),
+}
+
+
+def bake_and_measure(document, workdir, tag):
+    """Bake a fire-shot document to frame 24 in a fresh cache; per-frame flame-shape numbers for frames 8 to 24 and the bake time."""
+    evaluator = Evaluator(sim=simcache.SimCache(root=workdir / tag, memory_budget=1 << 30, disk_budget=8 << 30))
+    with gpu_lock():
+        started = time.perf_counter()
+        evaluator.evaluate_raster(document, 'cache', frame=24, typed=True)
+        bake_s = time.perf_counter() - started
+    settings = _volume_settings(document['nodes']['render']['params'])
+    frames = {}
+    for frame in METRIC_FRAMES:
+        with gpu_lock():
+            volume = evaluator.evaluate_raster(document, 'cache', frame=frame, typed=True)
+        frames[str(frame)] = flame_metrics.frame_metrics(volume, settings, floor_height=FUEL_TOP)
+        frames[str(frame)]['colour'] = flame_metrics.colour_by_height(volume, settings, FUEL_TOP)
+    return evaluator, bake_s, frames
+
+
+def flame_sweep(args):
+    """Field-only measurements of the solver controls on the 64-cell shot (no rendering): which setting moves the flame's profile,
+    tongue count, smoke eddies and sway, and what each costs in bake time. The shaped shot's solver settings were picked from this."""
+    results = {}
+    for name, overrides in FLAME_SWEEP.items():
+        overrides = dict(overrides)
+        colour = overrides.pop('colour', 'follow')
+        document = build_document(flame_shape=False, **overrides)
+        if colour == 'follow':
+            document['nodes']['render']['params'].update(SHAPED_RENDER)
+        _, bake_s, frames = bake_and_measure(document, args.workdir, 'sweep-' + str(len(results)))
+        results[name] = {'overrides': overrides, 'colour': colour, 'bake_seconds': round(bake_s, 2), **flame_metrics.summarise(frames)}
+        print(name, json.dumps(results[name]), flush=True)
+    benchmark = REPO / 'benchmarks' / 'fire_shot' / f'fire-shape-sweep-{args.tag}.json'
+    benchmark.write_text(json.dumps({'date': args.date, 'cells': 64, 'frames': [METRIC_FRAMES[0], METRIC_FRAMES[-1]],
+                                     'variants': results}, indent=2) + '\n')
+
+
+def flame_time(args):
+    """Warm frame times of one variant in a process of its own (`--flame-time before|after`), printed as JSON.
+
+    Measured apart from the metrics pass: that pass reads every frame's volume and runs a lot of NumPy, and the frame times it leaves
+    behind in the same process run 15 to 30 % slower than a clean process. Same sequence as the grain step's timing: one warm-up render,
+    then five renders with new seeds (an identical request is answered from the image cache), median of the five."""
+    document = build_document(args.width, args.height, flame_shape=args.flame_time == 'after')
+    params = document['nodes']['render']['params']
+    evaluator = Evaluator(sim=simcache.SimCache(root=args.workdir / ('shape-' + args.flame_time), memory_budget=1 << 30,
+                                                disk_budget=8 << 30))
+    out = {}
+    with gpu_lock():
+        evaluator.evaluate_raster(document, 'cache', frame=24, typed=True)
+        for frame in FRAMES:
+            params.update(render_output='rgba', pt_samples=128, pt_seed=1)
+            evaluator.evaluate_raster(document, 'render', frame=frame)
+            seconds = []
+            for repeat in range(GRAIN_TIMING_REPEATS):
+                params['pt_seed'] = 100 + repeat
+                started = time.perf_counter()
+                evaluator.evaluate_raster(document, 'render', frame=frame)
+                seconds.append(time.perf_counter() - started)
+            out[str(frame)] = {'seconds_median': round(float(np.median(seconds)), 3), 'seconds_min': round(min(seconds), 3),
+                               'seconds_all': [round(x, 3) for x in seconds]}
+    print(json.dumps(out))
+
+
+def flame_shape(args):
+    """The soft shot (grain step) against the shaped shot: flame-shape numbers, bake and frame times, stills and a contact sheet."""
+    images_dir = REPO / 'docs' / 'images' / 'fire_shot'
+    images_dir.mkdir(parents=True, exist_ok=True)
+    runs, pictures = {}, {}
+    for name, flame_shape_on in (('before', False), ('after', True)):
+        document = build_document(args.width, args.height, flame_shape=flame_shape_on)
+        params = document['nodes']['render']['params']
+        evaluator, bake_s, frames = bake_and_measure(document, args.workdir, 'shape-' + name)
+        run = {'bake_seconds': round(bake_s, 3), 'frames': frames, 'summary': flame_metrics.summarise(frames), 'render': {}}
+        pictures[name] = {}
+        for frame in FRAMES:
+            with gpu_lock():
+                params.update(render_output='rgba', pt_samples=128, pt_seed=1)
+                pixels = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+                params['pt_seed'] = 2
+                other = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+                params.update(render_output='emission', pt_seed=1)
+                emission = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+                params.update(render_output='rgba', pt_seed=1)
+            frames[str(frame)]['image'] = flame_metrics.image_rows(emission)
+            run['render'][str(frame)] = {'grain_rms': float(np.sqrt(((pixels[..., :3] - other[..., :3]) ** 2).mean() / 2)),
+                                         'mean_linear_rgb': float(pixels[..., :3].mean())}
+            pictures[name][frame] = pixels
+            write_png(images_dir / f'fire-shape-{name}-{frame:03d}.png', pixels)
+        timing = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--workdir', str(args.workdir), '--width', str(args.width),
+                                 '--height', str(args.height), '--flame-time', name], check=True, capture_output=True, text=True)
+        for frame, numbers in json.loads(timing.stdout.strip().splitlines()[-1]).items():
+            run['render'][frame].update(numbers)
+        runs[name] = run
+        print(name, json.dumps({'bake': run['bake_seconds'], **run['summary']}), flush=True)
+    rows = [np.concatenate([downsample(pictures[n][f]) for f in FRAMES], axis=1) for n in ('before', 'after')]
+    sheet_name = f'fire-shape-before-after-{args.tag}.png'
+    write_png(images_dir / sheet_name, np.concatenate(rows, axis=0))
+    with gpu_lock():
+        device = gpu3d._state()['info'].get('device', 'unknown')
+    result = {'date': args.date, 'device': device, 'resolution': [args.width, args.height], 'samples': 128, 'before': runs['before'],
+              'after': runs['after'], 'contact_sheet': f'docs/images/fire_shot/{sheet_name}',
+              'contact_sheet_rows': ['before', 'after'], 'contact_sheet_columns': list(FRAMES)}
+    (REPO / 'benchmarks' / 'fire_shot' / f'fire-shape-{args.tag}.json').write_text(json.dumps(result, indent=2) + '\n')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--workdir', type=Path, required=True, help='disposable simulation cache outside the repository')
@@ -297,6 +432,9 @@ def main():
     parser.add_argument('--grain', action='store_true', help='compare the old and new fire-emission estimators on the shot')
     parser.add_argument('--grain-estimator', choices=('old', 'new'), help=argparse.SUPPRESS)
     parser.add_argument('--reference-samples', type=int, default=2048)
+    parser.add_argument('--flame', action='store_true', help='soft shot against the shaped flame: profile, tongues, eddies, times, stills')
+    parser.add_argument('--flame-time', choices=('before', 'after'), help=argparse.SUPPRESS)
+    parser.add_argument('--flame-sweep', action='store_true', help='field measurements of the solver controls on the 64-cell shot')
     parser.add_argument('--curl-sweep', action='store_true', help='render 64 cells with sideways curl strengths')
     parser.add_argument('--tag', default='2026-10-30')
     parser.add_argument('--date', default='2026-10-30')
@@ -309,6 +447,15 @@ def main():
     if args.grain:
         args.samples = args.samples or 128
         grain(args)
+        return
+    if args.flame_time:
+        flame_time(args)
+        return
+    if args.flame_sweep:
+        flame_sweep(args)
+        return
+    if args.flame:
+        flame_shape(args)
         return
     if args.curl_sweep:
         curl_sweep(args)

@@ -1,0 +1,369 @@
+{
+  "date": "2026-10-31",
+  "cells": 64,
+  "frames": [
+    8,
+    24
+  ],
+  "variants": {
+    "soft shot of the grain step (old flame colour)": {
+      "overrides": {},
+      "colour": "old",
+      "bake_seconds": 9.2,
+      "core_in_lowest_third_frames": 6,
+      "frames": 17,
+      "core_position_mean": 0.4091,
+      "top_over_bottom_mean": 0.9126,
+      "top_over_bottom_of_means": 0.7909,
+      "tongues_per_slice_mean": 0.5264,
+      "vorticity_mean": 184.8103,
+      "density_contrast_mean": 0.7672,
+      "sway_cells_mean": 1.694
+    },
+    "old solver settings, glow follows temperature": {
+      "overrides": {},
+      "colour": "follow",
+      "bake_seconds": 8.69,
+      "core_in_lowest_third_frames": 14,
+      "frames": 17,
+      "core_position_mean": 0.1818,
+      "top_over_bottom_mean": 0.7445,
+      "top_over_bottom_of_means": 0.3678,
+      "tongues_per_slice_mean": 0.5264,
+      "vorticity_mean": 184.8103,
+      "density_contrast_mean": 0.7672,
+      "sway_cells_mean": 1.694
+    },
+    "turbulence 3": {
+      "overrides": {
+        "turbulence": 3
+      },
+      "colour": "follow",
+      "bake_seconds": 9.39,
+      "core_in_lowest_third_frames": 13,
+      "frames": 17,
+      "core_position_mean": 0.1942,
+      "top_over_bottom_mean": 0.6932,
+      "top_over_bottom_of_means": 0.3006,
+      "tongues_per_slice_mean": 0.6295,
+      "vorticity_mean": 156.9896,
+      "density_contrast_mean": 0.7521,
+      "sway_cells_mean": 1.4601
+    },
+    "turbulence 3, swirl 6": {
+      "overrides": {
+        "turbulence": 3,
+        "swirl_size": 6
+      },
+      "colour": "follow",
+      "bake_seconds": 9.57,
+      "core_in_lowest_third_frames": 14,
+      "frames": 17,
+      "core_position_mean": 0.1848,
+      "top_over_bottom_mean": 0.5577,
+      "top_over_bottom_of_means": 0.2096,
+      "tongues_per_slice_mean": 0.2888,
+      "vorticity_mean": 683.7478,
+      "density_contrast_mean": 0.8202,
+      "sway_cells_mean": 3.4161
+    },
+    "turbulence 8": {
+      "overrides": {
+        "turbulence": 8
+      },
+      "colour": "follow",
+      "bake_seconds": 8.7,
+      "core_in_lowest_third_frames": 15,
+      "frames": 17,
+      "core_position_mean": 0.195,
+      "top_over_bottom_mean": 0.7206,
+      "top_over_bottom_of_means": 0.2838,
+      "tongues_per_slice_mean": 0.3285,
+      "vorticity_mean": 338.7475,
+      "density_contrast_mean": 0.7417,
+      "sway_cells_mean": 2.8477
+    },
+    "shredding 2": {
+      "overrides": {
+        "shredding": 2
+      },
+      "colour": "follow",
+      "bake_seconds": 8.06,
+      "core_in_lowest_third_frames": 12,
+      "frames": 17,
+      "core_position_mean": 0.1936,
+      "top_over_bottom_mean": 0.7186,
+      "top_over_bottom_of_means": 0.3967,
+      "tongues_per_slice_mean": 0.6254,
+      "vorticity_mean": 191.3356,
+      "density_contrast_mean": 0.7753,
+      "sway_cells_mean": 1.7269
+    },
+    "disturbance 1": {
+      "overrides": {
+        "disturbance": 1
+      },
+      "colour": "follow",
+      "bake_seconds": 8.03,
+      "core_in_lowest_third_frames": 12,
+      "frames": 17,
+      "core_position_mean": 0.2269,
+      "top_over_bottom_mean": 0.7564,
+      "top_over_bottom_of_means": 0.3613,
+      "tongues_per_slice_mean": 0.5902,
+      "vorticity_mean": 176.273,
+      "density_contrast_mean": 0.7761,
+      "sway_cells_mean": 1.7523
+    },
+    "cooling 0.3": {
+      "overrides": {
+        "cooling_rate": 0.3
+      },
+      "colour": "follow",
+      "bake_seconds": 8.15,
+      "core_in_lowest_third_frames": 13,
+      "frames": 17,
+      "core_position_mean": 0.1921,
+      "top_over_bottom_mean": 0.2308,
+      "top_over_bottom_of_means": 0.1917,
+      "tongues_per_slice_mean": 0.8788,
+      "vorticity_mean": 106.9593,
+      "density_contrast_mean": 0.7599,
+      "sway_cells_mean": 1.5656
+    },
+    "cooling 0.5": {
+      "overrides": {
+        "cooling_rate": 0.5
+      },
+      "colour": "follow",
+      "bake_seconds": 8.09,
+      "core_in_lowest_third_frames": 15,
+      "frames": 17,
+      "core_position_mean": 0.162,
+      "top_over_bottom_mean": 0.1556,
+      "top_over_bottom_of_means": 0.138,
+      "tongues_per_slice_mean": 0.9738,
+      "vorticity_mean": 79.2827,
+      "density_contrast_mean": 0.7105,
+      "sway_cells_mean": 1.7218
+    },
+    "cooling 1.0": {
+      "overrides": {
+        "cooling_rate": 1.0
+      },
+      "colour": "follow",
+      "bake_seconds": 7.9,
+      "core_in_lowest_third_frames": 17,
+      "frames": 17,
+      "core_position_mean": 0.2893,
+      "top_over_bottom_mean": 0.7869,
+      "top_over_bottom_of_means": 1.5087,
+      "tongues_per_slice_mean": 1.0073,
+      "vorticity_mean": 45.0812,
+      "density_contrast_mean": 0.5179,
+      "sway_cells_mean": 1.8476
+    },
+    "cooling 2.0": {
+      "overrides": {
+        "cooling_rate": 2.0
+      },
+      "colour": "follow",
+      "bake_seconds": 7.32,
+      "core_in_lowest_third_frames": 17,
+      "frames": 17,
+      "core_position_mean": 0.2405,
+      "top_over_bottom_mean": 0.5402,
+      "top_over_bottom_of_means": 0.6614,
+      "tongues_per_slice_mean": 0.9952,
+      "vorticity_mean": 28.9972,
+      "density_contrast_mean": 0.3946,
+      "sway_cells_mean": 1.6685
+    },
+    "cooling 0.5, vorticity 1.5": {
+      "overrides": {
+        "cooling_rate": 0.5,
+        "vorticity": 1.5
+      },
+      "colour": "follow",
+      "bake_seconds": 8.31,
+      "core_in_lowest_third_frames": 11,
+      "frames": 17,
+      "core_position_mean": 0.2819,
+      "top_over_bottom_mean": 0.4283,
+      "top_over_bottom_of_means": 0.2187,
+      "tongues_per_slice_mean": 0.8391,
+      "vorticity_mean": 135.4545,
+      "density_contrast_mean": 0.7301,
+      "sway_cells_mean": 1.7515
+    },
+    "cooling 0.5, vorticity 2, expansion 2": {
+      "overrides": {
+        "cooling_rate": 0.5,
+        "vorticity": 2.0,
+        "burn_expansion": 2.0
+      },
+      "colour": "follow",
+      "bake_seconds": 8.73,
+      "core_in_lowest_third_frames": 14,
+      "frames": 17,
+      "core_position_mean": 0.277,
+      "top_over_bottom_mean": 0.3845,
+      "top_over_bottom_of_means": 0.1621,
+      "tongues_per_slice_mean": 1.3415,
+      "vorticity_mean": 158.6436,
+      "density_contrast_mean": 0.6696,
+      "sway_cells_mean": 1.5874
+    },
+    "cooling 0.5, vorticity 3, expansion 2": {
+      "overrides": {
+        "cooling_rate": 0.5,
+        "vorticity": 3.0,
+        "burn_expansion": 2.0
+      },
+      "colour": "follow",
+      "bake_seconds": 9.41,
+      "core_in_lowest_third_frames": 11,
+      "frames": 17,
+      "core_position_mean": 0.3199,
+      "top_over_bottom_mean": 0.7298,
+      "top_over_bottom_of_means": 0.2874,
+      "tongues_per_slice_mean": 0.3642,
+      "vorticity_mean": 29653.409,
+      "density_contrast_mean": 0.7212,
+      "sway_cells_mean": 3.3379
+    },
+    "cooling 0.5, vorticity 1.5, expansion 2.5": {
+      "overrides": {
+        "cooling_rate": 0.5,
+        "vorticity": 1.5,
+        "burn_expansion": 2.5
+      },
+      "colour": "follow",
+      "bake_seconds": 9.05,
+      "core_in_lowest_third_frames": 12,
+      "frames": 17,
+      "core_position_mean": 0.2709,
+      "top_over_bottom_mean": 0.3569,
+      "top_over_bottom_of_means": 0.1744,
+      "tongues_per_slice_mean": 1.7337,
+      "vorticity_mean": 127.5796,
+      "density_contrast_mean": 0.5834,
+      "sway_cells_mean": 1.5031
+    },
+    "cooling 1.0, vorticity 1.5, expansion 2, turbulence 1, swirl 3 (blows up after frame 30)": {
+      "overrides": {
+        "cooling_rate": 1.0,
+        "vorticity": 1.5,
+        "burn_expansion": 2.0,
+        "turbulence": 1.0,
+        "swirl_size": 3.0
+      },
+      "colour": "follow",
+      "bake_seconds": 10.11,
+      "core_in_lowest_third_frames": 14,
+      "frames": 17,
+      "core_position_mean": 0.2836,
+      "top_over_bottom_mean": 0.7795,
+      "top_over_bottom_of_means": 0.8857,
+      "tongues_per_slice_mean": 1.8545,
+      "vorticity_mean": 116.1141,
+      "density_contrast_mean": 0.4541,
+      "sway_cells_mean": 1.6501
+    },
+    "cooling 1.0, vorticity 1, expansion 2, turbulence 1, swirl 3 (frame 0.49 to 0.56 s)": {
+      "overrides": {
+        "cooling_rate": 1.0,
+        "vorticity": 1.0,
+        "burn_expansion": 2.0,
+        "turbulence": 1.0,
+        "swirl_size": 3.0
+      },
+      "colour": "follow",
+      "bake_seconds": 8.88,
+      "core_in_lowest_third_frames": 16,
+      "frames": 17,
+      "core_position_mean": 0.2328,
+      "top_over_bottom_mean": 0.7484,
+      "top_over_bottom_of_means": 0.972,
+      "tongues_per_slice_mean": 1.7296,
+      "vorticity_mean": 93.327,
+      "density_contrast_mean": 0.4257,
+      "sway_cells_mean": 1.7731
+    },
+    "cooling 1.0, vorticity 1, expansion 1.5, turbulence 1, swirl 3": {
+      "overrides": {
+        "cooling_rate": 1.0,
+        "vorticity": 1.0,
+        "burn_expansion": 1.5,
+        "turbulence": 1.0,
+        "swirl_size": 3.0
+      },
+      "colour": "follow",
+      "bake_seconds": 9.23,
+      "core_in_lowest_third_frames": 13,
+      "frames": 17,
+      "core_position_mean": 0.2743,
+      "top_over_bottom_mean": 0.7008,
+      "top_over_bottom_of_means": 0.9605,
+      "tongues_per_slice_mean": 1.3135,
+      "vorticity_mean": 96.0685,
+      "density_contrast_mean": 0.4809,
+      "sway_cells_mean": 1.8037
+    },
+    "cooling 1.0, vorticity 1, expansion 1.5": {
+      "overrides": {
+        "cooling_rate": 1.0,
+        "vorticity": 1.0,
+        "burn_expansion": 1.5
+      },
+      "colour": "follow",
+      "bake_seconds": 8.76,
+      "core_in_lowest_third_frames": 16,
+      "frames": 17,
+      "core_position_mean": 0.2894,
+      "top_over_bottom_mean": 0.7491,
+      "top_over_bottom_of_means": 1.1292,
+      "tongues_per_slice_mean": 1.1667,
+      "vorticity_mean": 66.8508,
+      "density_contrast_mean": 0.4073,
+      "sway_cells_mean": 1.7584
+    },
+    "burn rate 6, cooling 0.5, vorticity 1.5, expansion 2.5": {
+      "overrides": {
+        "burn_rate": 6,
+        "cooling_rate": 0.5,
+        "vorticity": 1.5,
+        "burn_expansion": 2.5
+      },
+      "colour": "follow",
+      "bake_seconds": 8.62,
+      "core_in_lowest_third_frames": 6,
+      "frames": 17,
+      "core_position_mean": 0.3863,
+      "top_over_bottom_mean": 0.8872,
+      "top_over_bottom_of_means": 0.9037,
+      "tongues_per_slice_mean": 1.3466,
+      "vorticity_mean": 138.1222,
+      "density_contrast_mean": 0.4835,
+      "sway_cells_mean": 1.6625
+    },
+    "shaped shot (this step): cooling 1.0, vorticity 1, expansion 1.25": {
+      "overrides": {
+        "cooling_rate": 1.0,
+        "vorticity": 1.0,
+        "burn_expansion": 1.25
+      },
+      "colour": "follow",
+      "bake_seconds": 8.39,
+      "core_in_lowest_third_frames": 17,
+      "frames": 17,
+      "core_position_mean": 0.2681,
+      "top_over_bottom_mean": 0.7443,
+      "top_over_bottom_of_means": 1.1536,
+      "tongues_per_slice_mean": 1.1315,
+      "vorticity_mean": 67.6009,
+      "density_contrast_mean": 0.4444,
+      "sway_cells_mean": 1.7818
+    }
+  }
+}

@@ -1978,6 +1978,107 @@ jump) and from the fire reaching smoke only through random continuation rays. A 
 fire lighting the smoke from the coarse fire light grid (`volumerender.fire_light_grid`) and an expected-value single scatter along
 the flight; both change the smoke's lighting estimator, which this step did not touch. No solver, source or shot parameter changed.
 
+### Fluids 13 B shape: the flame has a core and tongues (2026-10-31)
+
+With the grain gone the shot still read as a soft orange column: no hot core at the fuel, no separate tongues, a uniform haze above.
+The step measures first and changes the least that moves the numbers. All numbers are on the 64-cell shot at frames 8 to 24 (17 frames)
+from the cached fields, so there is no sampling noise in them (`examples/fire_shot/flame_metrics.py`, run by
+`render_evidence.py --flame` and `--flame-sweep`; cells below the top of the fuel block are left out, they are hidden inside it):
+
+- **Core position**: where the brightest height slice sits in the flame's span (the slices whose peak is at least 5 % of the frame's
+  peak); 0 is the bottom. The core is "in the lowest third" when it is at most 1/3. Counted in frames out of 17.
+- **Tongues per slice**: separate 4-connected regions of at least 6 cells above 35 % of their slice's peak, in the flame (burn-rate)
+  field, averaged over the span's slices. Smoke specks do not count (an earlier count on the emission field rewarded dust).
+- **Smoke eddies**: mean vorticity magnitude and the rms of density minus its 5-cell blur (over the mean density), over smoke cells that
+  are not burning. **Sway**: the lateral spread of the flame's centroid over height, in cells.
+
+**What the temperature does to the colour.** The temperature term is already a blackbody table (`volumerender.blackbody_radiance`,
+kelvin = `volume_temperature_scale` times the stored temperature); it is not a flat ramp. The flat part is the flame glow: the burn-rate
+channel emits at one kelvin (`volume_flame_temperature`, 1900 in the shot), so wherever fuel burns the colour is the same and the
+cooling the solver does is invisible in it. A new Render3D option, `volume_flame_follow_temperature` (off by default), colours the glow
+from the gas temperature instead: kelvin = temperature scale times the stored temperature, nothing at or below the fire threshold, the
+same blackbody or ramp table, brightness following (kelvin / 1500)^4. It is wired through the CPU and GPU raymarchers, both path tracers
+(the integrated glow and the collision-summed glow) and the coarse fire-light grid, and the two sides read one rule
+(`volumerender.flame_colour`). Saved documents carry no such parameter and render pixel for pixel as before
+(see "Old documents" below). The flame's core and tongues then come from the solver cooling the gas.
+
+**The sweep** (solver controls, each with the temperature-following glow except the first row; bake time is the cold bake to frame 24):
+
+| Variant | Bake | Core in lowest third | Core position | Tongues / slice | Sway | Smoke vorticity | Density contrast |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| soft shot of the grain step (old glow) | 9.2 s | 6 / 17 | 0.41 | 0.53 | 1.69 | 185 | 0.77 |
+| same solver, glow follows temperature | 8.7 s | 14 / 17 | 0.18 | 0.53 | 1.69 | 185 | 0.77 |
+| turbulence 3 | 9.4 s | 13 / 17 | 0.19 | 0.63 | 1.46 | 157 | 0.75 |
+| turbulence 3, swirl 6 | 9.6 s | 14 / 17 | 0.19 | 0.29 | 3.42 | 684 | 0.82 |
+| turbulence 8 | 8.7 s | 15 / 17 | 0.20 | 0.33 | 2.85 | 339 | 0.74 |
+| shredding 2 | 8.1 s | 12 / 17 | 0.19 | 0.63 | 1.73 | 191 | 0.78 |
+| cooling 0.5 | 8.1 s | 15 / 17 | 0.16 | 0.97 | 1.72 | 79 | 0.71 |
+| cooling 1.0 | 7.9 s | 17 / 17 | 0.29 | 1.01 | 1.85 | 45 | 0.52 |
+| cooling 0.5, vorticity 3, expansion 2 | 9.4 s | 11 / 17 | 0.32 | 0.36 | 3.34 | 29653 | 0.72 |
+| cooling 1.0, vorticity 1, expansion 1.5 | 8.8 s | 16 / 17 | 0.29 | 1.17 | 1.76 | 67 | 0.41 |
+| **shaped shot: cooling 1.0, vorticity 1, expansion 1.25** | 8.4 s | **17 / 17** | **0.27** | **1.13** | 1.78 | 68 | 0.44 |
+
+(Full table, 21 rows: `benchmarks/fire_shot/fire-shape-sweep-2026-10-31.json`.) What it says:
+
+- The existing controls could make tongues: gas cooling (`cooling_rate`, 0.02 in the earlier shot) is the strongest lever, and burn
+  expansion and vorticity confinement raise the tongue count further. No new solver force was needed, so none was added (the solver has
+  vorticity confinement already, `vorticity`).
+- Turbulence of 8, or 3 at swirl size 6, breaks the flame into dust: fewer tongues (0.33 and 0.29), smoke vorticity 2 to 4 times higher,
+  the haze turns to specks in the stills (the same look as the grain the previous step removed). Turbulence also cost 30 s of bake until
+  the noise draw was kept (below).
+- Vorticity confinement of 3 blows the 64-cell solve up (smoke vorticity in the tens of thousands). Lower values are not safe either:
+  baked to frame 60, confinement 2 with cooling 0.5 and burn expansion 2 reaches a fastest cell speed of 149 (36 at frame 12), and 1.5 with
+  cooling 1.0, expansion 2 and turbulence 1 reaches 33774. The shot uses 1.0, which stays near 25 to frame 60 (the soft shot's is about 70).
+- Burn rate 6 moves the core up (6 / 17): a faster fuel burn does not help the profile.
+
+**Fix found on the way.** The shape turbulence rebuilt its two curl-noise draws at every substep although they change only every
+`pulse_length` frames: a 64-cell bake spent about 30 of its 40 seconds there. `fluid3d.shape_turbulence_lattice` keeps up to four draws
+(grids up to 2 million cells), on the CPU solver and the GPU solver alike; the values are the same arrays as before, so a solve is bit-for-bit
+unchanged (`tests/test_flame_follow.py`), and a turbulence bake takes 9 to 10 s instead of 40. The shot does not use turbulence.
+
+**The shot now** (`make_shot.SHAPED_SOLVER`, `SHAPED_RENDER`; `build_document(flame_shape=False)` gives the earlier soft shot): solver
+cooling 1.0 (was 0.02), vorticity 1.0 (was 0.25), burn expansion 1.25 (was 0); Render3D flame follows temperature on, temperature scale 900
+(was 500), flame intensity 1.0 (was 0.5), fire intensity 0.02 (was 0.05; keeps the smoke's own hot-gas glow low beside the flame's). A scale of 900 suits the cooler gas
+of cooling 1.0 (peak temperature about 2.7, against 10 before); the same scale on a solver with cooling 0.5, whose gas peaks near 5, burned
+the frame out to white in the stills, and 450 left a wide pink halo.
+
+**Gate** (RTX 3080 Ti, 960 x 540, 128 samples, frames 8 to 24 for the field numbers, 8 / 16 / 24 for time; `benchmarks/fire_shot/fire-shape-2026-10-31.json`):
+
+| | Before | After | Gate |
+| --- | --- | --- | --- |
+| Core brightest in the lowest third of the flame, frames of 17 | 6 | **17** | moves up: met |
+| Core position (0 bottom, 1 top), mean | 0.41 | **0.27** | moves down: met |
+| Separate bright regions per slice (tongues) | 0.53 | **1.13** (2.1 x) | moves up: met |
+| Brightest cell of the top third over the bottom third (below 1: cools with height) | 0.91 | 0.74 | |
+| The same with the mean slice peak of each third | 0.79 | 1.15 | does not move in the stated direction |
+| Smoke vorticity / density contrast over the smoke | 185 / 0.77 | 68 / 0.44 | measured only: calmer and smoother smoke |
+| Flame sway (cells) | 1.69 | 1.78 | |
+| Bake to frame 24 | 9.1 s | 8.4 s | under 15 s: met |
+| Frame time, 128 samples, frames 8 / 16 / 24 (median of five warm renders, own process) | 0.372 / 0.337 / 0.336 s | 0.495 / 0.440 / 0.417 s | under 0.5 s: met (frame 8 narrowly) |
+| Grain at frames 8 / 16 / 24 (two seeds) | 0.0072 / 0.0056 / 0.0059 | 0.0149 / 0.0141 / 0.0142 | not a gate of this step |
+
+![Before above, after below: frames 8, 16, 24 at 128 samples](images/fire_shot/fire-shape-before-after-2026-10-31.png)
+
+**Old documents.** The committed fire document as it was before this step, rendered at 128 samples with seed 1 by the code before and the
+code after this step on the RTX 3080 Ti: the cached density, temperature, flame and velocity fields at frames 8, 16 and 24 and the pixels
+are bit-for-bit identical. Render3D's new parameter defaults to 0, and a document without it renders as before
+(`tests/test_flame_follow.py`).
+
+**Adapters.** The fire, flame, mesh-light, sparse fire, sparse volume, hot pour and solver modules (348 tests with the new
+`tests/test_flame_follow.py`, `tests/test_flame_metrics.py` and the shape tests of `tests/test_fire_shot.py`) pass on the RTX 3080 Ti, the
+AMD Radeon 8060S and llvmpipe. The card matches its CPU twin within 0.005 on the temperature-following glow with and without smoke, in the
+raymarcher, on dense and sparse volumes, and in the path tracer; with two volumes (the collision-summed glow) the means agree within 6 %.
+
+**What still looks wrong.** The stills are my reading of the saved images, not the real display (**Gonzo to judge**). The flame reads as a
+compact, lobed body with a yellow core and ragged orange tongues instead of a column, but it is a bright blob more than a licking
+flame, and its lower edge sits a little above the fuel block. The smoke above it is smoother and calmer (vorticity 185 to 68, density
+contrast 0.77 to 0.44): the cooling that shapes the flame also removes the buoyant eddies, so the brief's visible eddies in the smoke are
+not delivered; turbulence brings them back but as dust and at 0.5 s or more a frame. The measures on the emission render pass moved the
+wrong way (the brightest image row sits at 0.65 to 0.73 of the flame's height against 0.25 to 0.28 before, and runs per row stay at 1.0:
+the brighter smoke halo and the camera's view of the column dominate the rows); only the field measures show the profile. The colour ratio
+of green to red does not fall with height (0.35 at the bottom third, 0.41 at the top). Grain rose to 0.014 (2.5 times step A's 0.0056)
+because the flame is brighter and more contrasty (mean peak emission 6.8 to 9.7). The vorticity ceiling is low: 2.5 or more diverges.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
