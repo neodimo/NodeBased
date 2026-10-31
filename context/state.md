@@ -1,5 +1,24 @@
 ## 2026-10-31, 9:30 AM PDT — Lane 8 decode-ahead worker sweep
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (9:39 AM on 2026-10-31 PDT)
+
+`main` moved `37cef67f` -> `090faa1d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `090faa1d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-0930.log`, started 9:30 AM): **Ran 7641 tests in 556.075 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback: a second decode-ahead thread against the 24 fps gate.** Commits:
+  - `5e02519e` playback: enable decode ahead on four cores
+  Diff: 7 files changed, 213 insertions(+), 4 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 **Evidence.** Three fresh interleaved 48-frame, 1080p native-half GPU-comp passes per Radeon setting: one worker/two-frame lead reached 21.806 fps median and 53.634 ms p95, ahead of today's one worker/one-frame lead at 20.380 fps and 59.682 ms. Two workers/one-frame lead tied its median speed (21.786 fps) but did not beat its p95; three workers did not help. The Radeon winner regressed the RTX 3080 Ti (10.403 fps / 146.633 ms p95 versus 10.770 / 134.487) and improved the four-core stand-in (11.885 / 103.329 versus 10.330 / 105.887). The raw traces are in deliberate scratch; the committed summary is `benchmarks/2d-gpu/R6-1/playback-decode-workers-1031.json`.
 
 **What landed.** Automatic decode-ahead now starts one worker at four CPUs (three or fewer remain off); its rule test changed with it. The one-frame full-size lead stays because the Radeon two-frame winner harms the RTX. `docs/PLAYBACK.md` and its bundled copy record the matrix, 24 fps gate gap, decode-thread busy time and 192 MiB peak in-flight allocation under the existing 819 MiB source-pool bound.

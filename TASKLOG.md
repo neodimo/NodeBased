@@ -1,3 +1,9 @@
+## 2026-10-31 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: a second decode-ahead thread against the 24 fps gate (integrator tick)
+
+- **What was done:** `main` `37cef67f` -> `090faa1d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `090faa1d`: Ran 7641 tests in 556.075 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31 — Lane 8 GPU playback: decode-ahead worker sweep
 
 - **What was done — evidence:** Ran three fresh interleaved 48-frame 1080p passes for each Radeon native-half matrix row (one, two and three decode workers; one- and two-frame lead). One worker/two-frame lead won there at 21.806 fps median and 53.634 ms p95, against 20.380 fps and 59.682 ms for today. The same setting regressed RTX 3080 Ti (10.403 fps / 146.633 ms versus 10.770 / 134.487) and improved the four-core stand-in (11.885 / 103.329 versus 10.330 / 105.887). Automatic decode workers therefore start at four CPUs; the normal full-size lead remains one frame. `tests.test_playbackprefs` and `tests.test_knowledge` pass (39 tests).
