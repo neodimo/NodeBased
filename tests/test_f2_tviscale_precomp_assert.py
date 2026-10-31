@@ -50,7 +50,9 @@ def tile_pixels(document, target, tile_edge=None, frame=1):
 def build_checker_tviscale(power, filter="nearest"):
     g = Graph()
     g.add("plate", "Checker", dict(width=8, height=8, size=2))
-    g.add("node", "TVIScale", dict(power=power, filter=filter), image="plate")
+    # `legacy_scale` is the older signed power-of-two resize these tests were written for; a new TVIScale is
+    # Nuke's always-2x edge-preserving enlargement (tests/test_tviscale_fidelity.py).
+    g.add("node", "TVIScale", dict(power=power, filter=filter, legacy_scale=1), image="plate")
     return g
 
 

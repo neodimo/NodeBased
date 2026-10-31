@@ -3487,7 +3487,7 @@ class Evaluator:
                 lambda k, q, i: _chrome.run_roto(
                     k, q, i, lambda k2, q2, i2: Evaluator._windowed_kernel_inner(k2, q2, i2, frame, data, cancel, progress, roto_rasterizer)),
                 SPECS[kind])
-        if kind in _chrome.FILTER_CHROME:
+        if kind in _chrome.FILTER_CHROME and kind not in _chrome.OWN_STRIP:       # TVIScale applies its own strip on the enlarged picture
             from .core import SPECS
             return _chrome.run_evaluator(
                 kind, p, inputs,
@@ -3910,6 +3910,9 @@ class Evaluator:
             # (the target aspect never drifts from the source's), so `distort` is used directly
             # rather than inventing a separate resize-type knob this legacy node never had.
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            if not p.get("legacy_scale", 0):
+                from . import tviscale
+                return tviscale.run(p, source, mask, Evaluator._resample, Region, Raster)
             if mask is not None and mask.display != source.display:
                 raise ValueError(
                     f"Mask display window {mask.display} does not match source {source.display}; "

@@ -183,7 +183,7 @@ NODE_CATEGORIES = {
         "GridWarpTracker": "Drives a deformation grid from Tracker points or named SmartVector layers.",
         "VectorDistort": "Warps reference-frame paint along cached SmartVector motion.",
         "VectorCornerPin": "Moves a keyed corner pin with the tracked surface.",
-        "TVIScale": "The legacy power-of-two up or down scaler.",
+        "TVIScale": "Enlarges the picture by two, smoothing noise while keeping edges.",
     },
     "3D": {
         "Axis3D": "Parents whatever geometry, light or scene is wired into it.",

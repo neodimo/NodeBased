@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -531,8 +531,13 @@ SPECS = {
     # no live upstream display size to state the target size in the tile executor's canvas walk,
     # so `tileexec._canvas_size_for_chain` states it directly and it joins TimeBlur/TimeEcho/
     # Inpaint's "solve once, slice many" tile path instead of Reformat's full-frame exclusion.
+    # Fidelity step L: a new node is Nuke's TVIScale, always a 2x enlargement (`filter` resamples to the 2x bilinear
+    # target, then `tvi_iterations` edge-preserving total-variation steps weighted by `tvi_lambda` and regularized by
+    # `tvi_a`, nodebased/tviscale.py), with the shared channels and mask strip. A node saved before that carries
+    # `legacy_scale` = 1 (schema migration) and keeps the signed `power` resize, mask and mix it always had.
     "TVIScale": {"inputs": ["image"], "optional_inputs": ["mask"],
-                 "params": {"power": 0, "filter": "bilinear", "mix": 1.0}},
+                 "params": {"power": 1, "filter": "bilinear", "mix": 1.0, "tvi_iterations": 5, "tvi_lambda": 5.0,
+                            "tvi_a": 0.0001, "legacy_scale": 0}},
     "VectorBlur": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                               "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
@@ -1550,7 +1555,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "frame": (-1000000.0, 1000000.0), "frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000), "reanchor_interval": (1, 100),
           "input_start": (-1000000.0, 1000000.0), "input_end": (-1000000.0, 1000000.0), "output_start": (-1000000.0, 1000000.0), "shutter_time": (0.0, 100.0),
           "vector_detail": (1, 6), "shutter_samples": (1, 32), "samples": (1, 64), "speed": (-100.0, 100.0), "fade_frames": (0, 10000), "temporal_frames": (1, 16), "blur_size": (0.0, 100.0),
-          "power": (-8, 8), "reload": (0, 1000000),
+          "power": (-8, 8), "reload": (0, 1000000), "legacy_scale": (0, 1),
+          "tvi_iterations": (0, 200), "tvi_lambda": (0.0, 10000.0), "tvi_a": (0.0, 1.0),
           **{f"corner{i}_{axis}": (-8192.0, 8192.0) for i in range(1, 5) for axis in ("x", "y")},
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
           "screen_preblur": (0.0, 50.0), "edge_grade_gain": (0.0, 10.0),
@@ -2611,6 +2617,26 @@ def upgrade_document(document):
         if isinstance(doc.get("nodes"), dict):
             _zmerge_defaults(doc["nodes"])
         doc["version"] = 27
+    if isinstance(doc, dict) and doc.get("version") == 27:
+        # v27 -> v28 gives TVIScale Nuke's always-2x enlargement with its Iterations, Lambda and A (fidelity step L).
+        # A TVIScale saved before that scaled by 2 ** power with a plain resampling filter, a mask checked against the
+        # source and mix taken against the unscaled picture; those nodes explicitly keep that behaviour.
+        def _tviscale_legacy(scope):
+            for node in scope.values():
+                if not isinstance(node, dict):
+                    continue
+                if node.get("type") == "TVIScale":
+                    params = node.setdefault("params", {})
+                    params.setdefault("power", 0)
+                    params.setdefault("legacy_scale", 1)
+                    for name, value in SPECS["TVIScale"]["params"].items():
+                        params.setdefault(name, value)
+                graph = node.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _tviscale_legacy(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _tviscale_legacy(doc["nodes"])
+        doc["version"] = 28
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

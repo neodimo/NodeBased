@@ -469,6 +469,21 @@ KNOB_LAYOUT = {
         KnobGroup("float", ("crop_softness",), label="Softness"), KnobGroup("bool", ("reformat",), label="Reformat"),
         KnobGroup("bool", ("intersect",), label="Intersect"), KnobGroup("bool", ("crop",), label="Black outside"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    # TVIScale (fidelity step L): Nuke's Iterations, Lambda and A, then the channels and mask strip (added after these) and mix.
+    "TVIScale": _groups(
+        KnobGroup("int", ("tvi_iterations",), label="Iterations",
+                  help="How many smoothing steps run on the enlarged picture. More steps flatten noisy areas further; zero is the plain enlargement."),
+        KnobGroup("float", ("tvi_lambda",), label="Lambda",
+                  help="How far the result may stray from the plain enlargement. Larger keeps more of the input's noise; smaller smooths harder."),
+        KnobGroup("float", ("tvi_a",), label="A",
+                  help="A small positive number that keeps the smoothing from dividing by zero. Leave it above zero."),
+        KnobGroup("enum", ("filter",), label="Filter",
+                  help="The resampling filter of the plain enlargement the smoothing starts from."),
+        KnobGroup("bool", ("legacy_scale",), label="Legacy scale",
+                  help="Run the older power-of-two resize (Power, Filter, mask and mix) and skip the smoothing. Set on graphs saved before the smoothing existed."),
+        KnobGroup("int", ("power",), label="Power (legacy)",
+                  help="Legacy scale only: a signed count of doublings. 1 doubles, -1 halves, 0 leaves the size alone."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Reformat": _groups(
         KnobGroup("enum", ("reformat_type",), label="Type"),
         KnobGroup("enum", ("format",)),

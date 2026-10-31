@@ -65,6 +65,9 @@ FILTER_CHROME = {
     "RotoPaint": ("all", True, False),
     # Nuke's Premult and Unpremult carry `channels` and nothing else of the strip; their kernels do rgb / rgba / alpha themselves.
     "Premult": ("rgb", False, False), "Unpremult": ("rgb", False, False),
+    # TVIScale (fidelity step L) has `channels` (default all) and the mask strip; its own kernel (nodebased/tviscale.py)
+    # applies them on the enlarged picture, so the generic wrapper below never runs it.
+    "TVIScale": ("all", True, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.
@@ -76,6 +79,9 @@ NATIVE_CHANNELS = frozenset({
 NATIVE_VALUES = frozenset({"rgb", "rgba", "alpha"})
 # Kinds with no `mix` (Nuke's Roto, Premult and Unpremult have none), which the shared tests therefore leave out of their mix checks.
 MIXLESS = frozenset({"Roto", "Premult", "Unpremult"})
+# Kinds in FILTER_CHROME whose own kernel applies the strip, on its own (changed-size) output, so the generic evaluator and
+# tile wrappers skip them: TVIScale enlarges by two, which the wrapper's source-sized arithmetic cannot follow.
+OWN_STRIP = frozenset({"TVIScale"})
 # Kinds whose own kernel does not read the mask input: the wrapper gates a wired mask for them, even with every chrome knob unchanged.
 WRAPPER_GATED = frozenset({"Roto"})
 # Merge-like nodes gate against input B (Nuke's background); everything else gates against its first input.
@@ -424,6 +430,9 @@ def needs_full_frame(kind, p):
         from . import keyerknobs
         if keyerknobs.needs_full_frame(kind, p):
             return True      # a crop is a fraction of the whole picture, which a tile does not hold
+    if kind == "TVIScale":
+        from . import tviscale
+        return tviscale.needs_full_frame(p)       # a layer, or an injected mask, is not in the sliced pixels
     if kind == "Keymix":
         from . import keymixknobs
         if keymixknobs.needs_full_frame(kind, p):

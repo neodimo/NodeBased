@@ -3350,8 +3350,17 @@
    ],
    "knobs": [
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["power"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["filter"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["tvi_iterations"], "nuke": ["Iterations"], "kind": "renamed", "reason": "same control; NodeBased's scripting names are lower case and the TVI knobs are prefixed so the shared limits table cannot mix them up with other nodes"},
+    {"nodebased": ["tvi_lambda"], "nuke": ["Lambda"], "kind": "renamed", "reason": "same control; `lambda` is a reserved word in Python"},
+    {"nodebased": ["tvi_a"], "nuke": ["A"], "kind": "renamed", "reason": "same control; prefixed like the other TVI knobs"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["power"], "kind": "extra", "reason": "NodeBased-only: the signed count of doublings of the older scaler, used only while `legacy_scale` is on (Nuke's TVIScale always enlarges by two)"},
+    {"nodebased": ["filter"], "kind": "extra", "reason": "NodeBased-only: the resampling filter of the plain 2x enlargement the smoothing starts from; the guide has no such knob"},
+    {"nodebased": ["legacy_scale"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the TVI smoothing keep the older power-of-two resize (schema 28 migration)"}
    ]
   },
   "LensDistortion": {

@@ -1262,7 +1262,7 @@ class TileExecutor:
     def _evaluate_tile_kernel(self, kind, params, inputs, buffered_region, frame):
         """Apply `kind`'s kernel on one tile's worth of inputs, with Nuke's shared node chrome around it when a
         chrome knob is changed (nodebased/ops2d_chrome.py; the same arithmetic the evaluator uses)."""
-        if kind in _chrome.FILTER_CHROME:
+        if kind in _chrome.FILTER_CHROME and kind not in _chrome.OWN_STRIP:     # TVIScale's strip ran when the node was solved whole
             return _chrome.run_tile(
                 kind, params, inputs,
                 lambda q, i: self._evaluate_tile_kernel_inner(kind, q, i, buffered_region, frame),
@@ -1899,7 +1899,7 @@ def _canvas_size_for_chain(document, target, frame, tier):
             if upstream_id is None:
                 raise ValueError("TVIScale: connect an image")
             upstream_w, upstream_h = _canvas_size_for_chain(document, upstream_id, frame, tier)
-            factor = 2.0 ** int(node["params"].get("power", 0))
+            factor = 2.0 ** int(node["params"].get("power", 0)) if node["params"].get("legacy_scale", 0) else 2.0
             return max(1, int(round(upstream_w * factor))), max(1, int(round(upstream_h * factor)))
         # Pick the next upstream node through the relevant branch.
         if node["disabled"] and not tile_bypass_self_resolves(node["type"]):
