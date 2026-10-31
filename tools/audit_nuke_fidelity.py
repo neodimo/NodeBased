@@ -77,6 +77,19 @@ def pair_key(group, name):
 
 
 # ----------------------------------------------------------------------------------------------------------- defaults
+def document_default(path):
+    """The value the document field `path` ("time.first", "settings.color.view", "settings.viewer.proxy") has in a new
+    project. A path that names no field raises KeyError, so a mapping with a typo fails instead of scoring."""
+    from nodebased import core
+    doc = core.demo_document()
+    if path == "settings.viewer.proxy":                     # optional key: absent means the full-size tier
+        return core.viewer_proxy(doc)
+    value = doc
+    for part in path.split("."):
+        value = value[part]
+    return value
+
+
 def _norm(text):
     return re.sub(r"[^a-z0-9]", "", str(text).lower())
 
@@ -173,7 +186,7 @@ def score_pair(key, pair, nuke, reference_dir=None):
     """The component fractions and the 0..100 fidelity of one Nuke node against its NodeBased counterpart."""
     from nodebased import core
     from nuke_fidelity_cases import cases_for
-    res = {"nuke": key, "nodebased": pair.get("nodebased"), "components": {}, "detail": {}}
+    res = {"nuke": key, "nodebased": pair.get("nodebased") or pair.get("document_settings"), "components": {}, "detail": {}}
     knobs = [k for k in nuke["knobs"] if k["counted"] and not k["role"].startswith("chrome:")]
     chrome = {}
     for k in nuke["knobs"]:
@@ -181,9 +194,15 @@ def score_pair(key, pair, nuke, reference_dir=None):
             chrome.setdefault(k["role"][7:], []).append(k["name"])
     sockets = list(dict.fromkeys(i["name"] for i in nuke["inputs"]))
     cases = [c for c in cases_for(key) if not c.unscored]
-    if pair.get("nodebased") is None:
+    document = pair.get("document_settings") is not None
+    if pair.get("nodebased") is None and not document:
         mapped, entries = set(), []
         spec = None
+    elif document:
+        # Root: the Nuke node is the project's own settings, which live in document fields rather than a node's params.
+        spec = None
+        entries = [e for e in pair["knobs"] if e["kind"] in ("same", "renamed", "components", "panel")]
+        mapped = {n for e in entries for n in e["nuke"]}
     else:
         spec = core.SPECS[pair["nodebased"]]
         entries = [e for e in pair["knobs"] if e["kind"] in ("same", "renamed", "components", "panel")]
@@ -197,7 +216,7 @@ def score_pair(key, pair, nuke, reference_dir=None):
         res["detail"]["missing_secondary"] = [k["name"] for k in knobs if not k["primary"] and k["name"] not in mapped]
         res["detail"]["knob_counts"] = (sum(1 for k in knobs if k["name"] in mapped), len(knobs))
     # defaults
-    if pair.get("nodebased") is not None:
+    if pair.get("nodebased") is not None or document:
         skip = set(pair.get("skip_default", []))
         vmap = pair.get("value_map", {})
         first = {}
@@ -214,7 +233,7 @@ def score_pair(key, pair, nuke, reference_dir=None):
             e = first[k["name"]]
             if len(e["nuke"]) != 1:
                 continue
-            vals = [spec["params"][p] for p in e["nodebased"]]
+            vals = [document_default(p) if document else spec["params"][p] for p in e["nodebased"]]
             nb_value = vals if len(vals) > 1 else vals[0]
             ok = compare_default(nb_value, k["default"], vmap.get(k["name"]))
             if ok is None:
@@ -251,12 +270,13 @@ def score_pair(key, pair, nuke, reference_dir=None):
         res["components"]["pixels"] = sum(1 for t in truth if t["status"] == "pass") / len(truth)
         res["detail"]["pixels"] = truth
     live = {c: f for c, f in res["components"].items()}
-    if pair.get("nodebased") is None:
+    if pair.get("nodebased") is None and not document:
         res["score"] = 0.0 if (knobs or sockets or chrome) else None
     elif live:
         res["score"] = 100.0 * sum(WEIGHTS[c] * f for c, f in live.items()) / sum(WEIGHTS[c] for c in live)
     else:
         res["score"] = None
+    res["document"] = document
     res["pixel_column"] = ("measured" if truth else ("unmeasured" if cases_for(key) else "no fixture"))
     return res
 
@@ -293,7 +313,7 @@ def summarize(units):
         if gs:
             w = sum(u["weight"] for u in gs)
             by_group[g] = (sum(u["weight"] * u["score"] for u in gs) / w, len(gs), sum(u["score"] for u in gs) / len(gs))
-    existing = [u for u in scored if u["nodebased"] is not None]
+    existing = [u for u in scored if u["nodebased"] is not None and not u.get("document")]
     w2 = sum(u["weight"] for u in existing)
     overall_existing = sum(u["weight"] * u["score"] for u in existing) / w2
     return overall, overall_existing, by_group
@@ -366,6 +386,10 @@ def build_report(reference_dir=None):
     w("")
     w("`fidelity = 100 * sum(weight * fraction) / sum(weight)` over the components the node has. A component with nothing to count (the guide lists no inputs, no formula cases, no renders) is left out and the rest renormalised. "
       "A Nuke node with no NodeBased counterpart scores 0. A node whose guide page lists no inputs or knobs cannot be measured and is left out (listed at the end).")
+    w("")
+    w("Root is the one Nuke node scored against something that is not a node: the project settings. Its pairing (`document_settings` in `docs/parity/nodebased_to_nuke.json`) names document fields, such as `time.first` or `settings.color.view`, where other pairings name a node's params. "
+      "A Root knob counts as covered only when its document field exists and changes behaviour (`tests/test_2d_parity_notimeblur.py`, `RootPairingTests`, shows each one acting); every other Root knob is listed there as unsupported with a one-line reason and scores as missing. "
+      "The defaults component compares a paired field with the value a new project starts with (`core.demo_document`). Root has no input sockets, shared chrome or formula cases, so those components are left out and only knobs and defaults are renormalised.")
     w("")
     w("**Overall** is the mean of node fidelity weighted by daily-use rank: a node in row *r* of its group weighs `1 / r`, shared equally by the Nuke nodes of a combined row "
       "(`Grain / ScannedGrain` gives each half of `1 / 9`). Rows marked n/a in PARITY_2D.md are not counted.")

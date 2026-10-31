@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 90.8 / 100** (167 nodes scored, rank-weighted; 93.1 counting only the nodes NodeBased has).
+**Overall fidelity: 90.9 / 100** (167 nodes scored, rank-weighted; 93.1 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -19,6 +19,8 @@ Per node, five components, each a fraction from 0 to 1:
 
 `fidelity = 100 * sum(weight * fraction) / sum(weight)` over the components the node has. A component with nothing to count (the guide lists no inputs, no formula cases, no renders) is left out and the rest renormalised. A Nuke node with no NodeBased counterpart scores 0. A node whose guide page lists no inputs or knobs cannot be measured and is left out (listed at the end).
 
+Root is the one Nuke node scored against something that is not a node: the project settings. Its pairing (`document_settings` in `docs/parity/nodebased_to_nuke.json`) names document fields, such as `time.first` or `settings.color.view`, where other pairings name a node's params. A Root knob counts as covered only when its document field exists and changes behaviour (`tests/test_2d_parity_notimeblur.py`, `RootPairingTests`, shows each one acting); every other Root knob is listed there as unsupported with a one-line reason and scores as missing. The defaults component compares a paired field with the value a new project starts with (`core.demo_document`). Root has no input sockets, shared chrome or formula cases, so those components are left out and only knobs and defaults are renormalised.
+
 **Overall** is the mean of node fidelity weighted by daily-use rank: a node in row *r* of its group weighs `1 / r`, shared equally by the Nuke nodes of a combined row (`Grain / ScannedGrain` gives each half of `1 / 9`). Rows marked n/a in PARITY_2D.md are not counted.
 
 ## By group
@@ -35,7 +37,7 @@ Per node, five components, each a fraction from 0 to 1:
 | Merge | 99.4 | 98.7 | 12 |
 | Transform | 88.1 | 71.2 | 20 |
 | Metadata | 99.4 | 98.9 | 5 |
-| Other | 79.2 | 40.7 | 12 |
+| Other | 80.3 | 43.0 | 12 |
 
 ## Per node
 
@@ -269,7 +271,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 8 | LiveInput | - | missing | 0.0 | 0 (0/4) | - | - | - | - | no fixture |
 | 8 | VariableGroup | - | missing | 0.0 | 0 (0/1) | - | 0 | - | - | no fixture |
 | 10 | Precomp | `Precomp` | supported | 100.0 | 100 (9/9) | 100 | - | - | - | no fixture |
-| 11 | Root | - | missing | 0.0 | 0 (0/43) | - | - | - | - | no fixture |
+| 11 | Root | `time and settings` | partial | 28.0 | 20 (7/43) | 60 | - | - | - | no fixture |
 | 13 | Assert | `Assert` | supported | n/a | - | - | - | - | - | no fixture |
 | 14 | AudioRead | - | missing | 0.0 | 0 (0/10) | - | - | - | - | no fixture |
 
@@ -283,10 +285,10 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 2 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
 | 3 | Write (Image #2) | `Write` | 16.38 | 67.2 | 29 secondary knobs missing |
 | 4 | Read (Image #1) | `Read` | 12.94 | 87.1 | nothing missing that the guide lists |
-| 5 | Root (Other #11) | - | 9.09 | 0.0 | no node: per-script project settings (PARITY_2D.md Other #11) |
-| 6 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 7 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 8 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 5 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 6 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 7 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 8 | Root (Other #11) | `time and settings` | 6.55 | 28.0 | primary knobs missing: `name`, `project_directory`, `Script_directory`, `label`, `lock_connections`, `lock_range`, `format`, `proxy_type` and 4 more; 24 secondary knobs missing |
 | 9 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
 | 10 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
 | 11 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |

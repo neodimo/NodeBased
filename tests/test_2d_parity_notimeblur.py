@@ -4,7 +4,10 @@ The plate is a Constant whose red channel is keyed per frame (linear between key
 result says which input frames were averaged. Keys 4 -> 0.0, 5 -> 1.0, 6 -> 0.2 make the average over
 whole frames differ from the average over fractional frames, and floor from ceil.
 """
+import json
+import sys
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -12,6 +15,9 @@ from nodebased.core import CHOICES, LIMITS, SPECS, bypass_slot
 from nodebased.imaging import Evaluator, no_time_blur_frame
 from nodebased.tileexec import SUPPORTED_TILED_KINDS, TileExecutor
 from tests.test_2d_parity_group_c4 import Graph
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
 
 KEYS = ((4, 0.0), (5, 1.0), (6, 0.2))
 TIME_BLUR = dict(shutter=1.0, divisions=4, shutter_offset="centred", custom_offset=0.0)
@@ -162,6 +168,96 @@ class TilePathTests(unittest.TestCase):
         g.bypass("nt")
         pixels = self.check(g, "nt", 5)
         self.assertAlmostEqual(float(pixels[0, 0, 0]), plate_value(5), places=6)
+
+
+class RootPairingTests(unittest.TestCase):
+    """Nuke's Root is the project settings. Each Root knob the mapping pairs with a document field has to name a field
+    that exists and has to change behaviour; every other counted Root knob is listed once as unsupported."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.pair = json.loads((ROOT / "docs/parity/nodebased_to_nuke.json").read_text())["pairs"]["Root"]
+        cls.nuke = json.loads((ROOT / "docs/parity/nuke_nodes.json").read_text())["nodes"]["Root"]
+        cls.paired = {e["nuke"][0]: e["nodebased"] for e in cls.pair["knobs"] if e["kind"] != "unsupported"}
+
+    def test_every_counted_root_knob_is_listed_exactly_once(self):
+        counted = [k["name"] for k in self.nuke["knobs"] if k["counted"]]
+        listed = [n for e in self.pair["knobs"] for n in e["nuke"]]
+        self.assertEqual(sorted(listed), sorted(counted))
+        for e in self.pair["knobs"]:
+            self.assertTrue(e["reason"], e)
+            self.assertEqual(e["kind"] == "unsupported", e["nodebased"] == [], e)
+
+    def test_the_paired_knobs_are_exactly_the_ones_that_act(self):
+        self.assertEqual(set(self.paired), {"first_frame", "last_frame", "fps", "OCIO_config", "monitorLUT",
+                                            "proxy", "proxy_scale"})
+        from audit_nuke_fidelity import document_default
+        for knob, fields in self.paired.items():
+            for field in fields:
+                with self.subTest(knob=knob, field=field):
+                    document_default(field)             # raises KeyError for a field the document does not have
+
+    def test_a_field_the_document_lacks_is_an_error_not_a_score(self):
+        from audit_nuke_fidelity import document_default
+        with self.assertRaises(KeyError):
+            document_default("time.shutter")
+
+    def test_the_score_counts_seven_knobs_and_the_defaults_that_agree(self):
+        from audit_nuke_fidelity import score_pair
+        res = score_pair("Root", self.pair, self.nuke)
+        self.assertEqual(res["detail"]["knob_counts"], (7, 43))
+        self.assertEqual(res["detail"]["default_counts"], (3, 5))   # frames and fps agree; the OCIO config and view do not
+        self.assertEqual(set(res["components"]), {"knobs", "defaults"})
+
+    def test_frame_range_bounds_the_playhead(self):
+        from nodebased.core import Dispatcher
+        d = Dispatcher()
+        d.execute({"op": "time", "first": 10, "last": 20, "fps": 25})
+        self.assertEqual(d.document["time"], {"first": 10, "last": 20, "current": 10, "fps": 25.0})
+        d.execute({"op": "time", "first": 12})
+        self.assertEqual(d.document["time"]["first"], 12)
+        self.assertEqual(d.document["time"]["current"], 12)
+
+    def test_fps_changes_what_a_time_based_file_reads(self):
+        from nodebased.core import Dispatcher
+        from tests.test_3d_alembic_nodes import FIXTURE
+        d = Dispatcher()
+        d.execute(dict(op="create", id="read", type="ReadAlembic3D", params={"abc_path": str(FIXTURE)}))
+        ev = Evaluator()
+        first = ev.evaluate_raster(d.document, "read", frame=1, typed=True).geometries[0].vertices.copy()
+        d.document["time"]["fps"] = 12.0
+        slower = ev.evaluate_raster(d.document, "read", frame=1, typed=True).geometries[0].vertices
+        self.assertFalse(np.array_equal(first, slower))
+
+    def test_the_ocio_config_reaches_a_colour_node_that_leaves_its_own_empty(self):
+        g = Graph()
+        g.add("plate", "Constant", dict(width=8, height=8, red=0.5, green=0.5, blue=0.5, alpha=1.0))
+        g.add("cs", "OCIOColorspace", dict(), image="plate")
+        doc = dict(g.doc, view="cs")
+        Evaluator().evaluate(doc, "cs", frame=1)
+        broken = json.loads(json.dumps(doc))
+        broken["settings"]["color"]["config"] = "/nonexistent/config.ocio"
+        with self.assertRaises(Exception):
+            Evaluator().evaluate(broken, "cs", frame=1)
+
+    def test_the_view_changes_the_picture_the_viewer_shows(self):
+        from nodebased.imaging import to_qimage
+        frame = np.full((4, 4, 4), 0.2, np.float32)
+        frame[..., 3] = 1.0
+        grey = {view: to_qimage(frame, 0.0, "RGB", view=view).pixelColor(1, 1).red() for view in ("sRGB", "Linear")}
+        self.assertNotEqual(grey["sRGB"], grey["Linear"])
+
+    def test_the_proxy_tier_shrinks_what_the_evaluator_is_asked_for(self):
+        from nodebased.core import Dispatcher, viewer_proxy
+        d = Dispatcher()
+        d.execute(dict(op="create", id="plate", type="Constant", params=dict(width=64, height=32)))
+        d.execute(dict(op="view", id="plate"))
+        self.assertEqual(viewer_proxy(d.document), 1)
+        d.execute(dict(op="viewer_proxy", tier=2))
+        tier = viewer_proxy(d.document)
+        self.assertEqual(tier, 2)
+        self.assertEqual(Evaluator().evaluate(d.document, "plate", frame=1, tier=1).shape[:2], (32, 64))
+        self.assertEqual(Evaluator().evaluate(d.document, "plate", frame=1, tier=tier).shape[:2], (16, 32))
 
 
 if __name__ == "__main__":
