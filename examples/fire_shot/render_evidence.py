@@ -6,6 +6,8 @@ from contextlib import contextmanager
 import fcntl
 import json
 from pathlib import Path
+import subprocess
+import sys
 import time
 
 import numpy as np
@@ -157,6 +159,126 @@ def curl_sweep(args):
     benchmark.write_text(json.dumps(result, indent=2) + '\n')
 
 
+GRAIN_COMPONENTS = ('rgba', 'emission', 'diffuse', 'diffuse_indirect')
+GRAIN_TIMING_REPEATS = 5
+
+
+def grain_estimator(args):
+    """One process of the grain comparison: render the shot with one fire-emission estimator and save arrays and numbers.
+
+    `--estimator old` sums the fire's glow at delta tracking's tentative collisions (what the shot used before the grain step) on
+    both tracers; `new` integrates it along each flight. Run as a separate process per estimator so no prepared scene is shared."""
+    from nodebased import gpupathtrace, ptvolume
+    estimator = args.grain_estimator
+    old = estimator == 'old'
+    gpupathtrace.ENABLE_EXPECTED_EMISSION = not old
+    ptvolume.ENABLE_EXPECTED_EMISSION = not old
+    out = args.workdir / f'grain-{estimator}'
+    out.mkdir(parents=True, exist_ok=True)
+    document = build_document(args.width, args.height)
+    params = document['nodes']['render']['params']
+    evaluator = Evaluator(sim=simcache.SimCache(root=args.workdir / 'cache', memory_budget=1 << 30, disk_budget=8 << 30))
+    with gpu_lock():
+        device = gpu3d._state()['info'].get('device', 'unknown')
+        started = time.perf_counter()
+        evaluator.evaluate_raster(document, 'cache', frame=max(FRAMES), typed=True)
+    result = {'estimator': estimator, 'device': device, 'resolution': [args.width, args.height], 'frames': {}}
+    result['bake_seconds'] = round(time.perf_counter() - started, 3)
+
+    def render(frame, seed, samples, output='rgba'):
+        params.update(pt_samples=samples, pt_seed=seed, render_output=output)
+        with gpu_lock():
+            started = time.perf_counter()
+            pixels = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+            return pixels, time.perf_counter() - started
+
+    for frame in FRAMES:
+        render(frame, 1, 8)                                                        # a warm-up: shader, scene and grid are built
+        first, _ = render(frame, 1, args.samples)
+        second, _ = render(frame, 2, args.samples)
+        # a new seed each time: an identical request is answered from the evaluator's image cache in a millisecond
+        seconds = [render(frame, 100 + i, args.samples)[1] for i in range(GRAIN_TIMING_REPEATS)]
+        np.save(out / f'f{frame}-s1.npy', first)
+        np.save(out / f'f{frame}-s2.npy', second)
+        entry = {'grain_rms': float(np.sqrt(((first[..., :3] - second[..., :3]) ** 2).mean() / 2)),
+                 'mean_linear_rgb': float((first[..., :3].mean() + second[..., :3].mean()) / 2),
+                 'seconds_min': round(min(seconds), 3), 'seconds_median': round(float(np.median(seconds)), 3),
+                 'seconds_all': [round(x, 3) for x in seconds]}
+        if frame == 16:
+            entry['components'] = {}
+            for name in GRAIN_COMPONENTS[1:]:
+                a, _ = render(frame, 1, args.samples, name)
+                b, _ = render(frame, 2, args.samples, name)
+                entry['components'][name] = {'grain_rms': float(np.sqrt(((a[..., :3] - b[..., :3]) ** 2).mean() / 2)),
+                                             'mean_linear_rgb': float((a[..., :3].mean() + b[..., :3].mean()) / 2)}
+        result['frames'][str(frame)] = entry
+        print(estimator, frame, json.dumps({k: v for k, v in entry.items() if k != 'seconds_all'}), flush=True)
+    result['reference'] = {'samples': args.reference_samples, 'frames': {}}
+    for frame in FRAMES:
+        seconds = []
+        for seed in (1, 2):
+            pixels, took = render(frame, seed, args.reference_samples)
+            np.save(out / f'f{frame}-ref-s{seed}.npy', pixels)
+            seconds.append(round(took, 2))
+        result['reference']['frames'][str(frame)] = {'seconds': seconds}
+    (out / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+
+
+def grain(args):
+    """Old versus new fire-emission estimator on the same shot: grain, time, mean agreement with a 2048-sample reference."""
+    images_dir = REPO / 'docs' / 'images' / 'fire_shot'
+    images_dir.mkdir(parents=True, exist_ok=True)
+    for estimator in ('old', 'new'):
+        command = [sys.executable, str(Path(__file__).resolve()), '--workdir', str(args.workdir), '--width', str(args.width),
+                   '--height', str(args.height), '--grain-estimator', estimator, '--samples', str(args.samples),
+                   '--reference-samples', str(args.reference_samples)]
+        subprocess.run(command, check=True)
+    runs, arrays = {}, {}
+    for estimator in ('old', 'new'):
+        folder = args.workdir / f'grain-{estimator}'
+        runs[estimator] = json.loads((folder / 'result.json').read_text())
+        arrays[estimator] = {f: [np.load(folder / f'f{f}-s{s}.npy') for s in (1, 2)] for f in FRAMES}
+        arrays[estimator].update({f'ref{f}': [np.load(folder / f'f{f}-ref-s{s}.npy') for s in (1, 2)] for f in FRAMES})
+    agreement = {}
+    for frame in FRAMES:
+        reference = sum(a[..., :3] for a in arrays['old'][f'ref{frame}']) / 2          # the pre-change renderer at 2048 samples
+        new_reference = sum(a[..., :3] for a in arrays['new'][f'ref{frame}']) / 2
+        luminance = reference.mean(-1)
+        core = luminance > np.quantile(luminance, .98)
+        floor = float(np.abs(arrays['old'][f'ref{frame}'][0][..., :3] - arrays['old'][f'ref{frame}'][1][..., :3]).mean())
+        agreement[str(frame)] = {
+            'relative_mean_difference': float((new_reference.mean() - reference.mean()) / reference.mean()),
+            'relative_mean_difference_flame_core': float((new_reference[core].mean() - reference[core].mean()) / reference[core].mean()),
+            'mean_abs_difference': float(np.abs(new_reference - reference).mean()),
+            'old_reference_two_seed_mean_abs_difference': floor}
+    ratios = {str(f): runs['new']['frames'][str(f)]['seconds_median'] / runs['old']['frames'][str(f)]['seconds_median']
+              for f in FRAMES}
+    gate = {'grain_at_frame_16_old': runs['old']['frames']['16']['grain_rms'],
+            'grain_at_frame_16_new': runs['new']['frames']['16']['grain_rms'],
+            'grain_ratio': runs['new']['frames']['16']['grain_rms'] / runs['old']['frames']['16']['grain_rms'],
+            'render_time_ratio_median_by_frame': {k: round(v, 3) for k, v in ratios.items()},
+            'worst_relative_mean_difference_at_2048': max(abs(v['relative_mean_difference']) for v in agreement.values())}
+    rows = [np.concatenate([downsample(arrays[e][f][0]) for f in FRAMES], axis=1) for e in ('old', 'new')]
+    sheet_name = f'fire-grain-before-after-{args.tag}.png'
+    write_png(images_dir / sheet_name, np.concatenate(rows, axis=0))
+    # The upper plume at frame 16, 3 x enlarged without smoothing: before above, after below.
+    crops = []
+    for e in ('old', 'new'):
+        crop = arrays[e][16][0][40:200, 330:650]
+        crops.append(np.repeat(np.repeat(crop, 3, axis=0), 3, axis=1))
+    zoom_name = f'fire-grain-before-after-zoom-{args.tag}.png'
+    write_png(images_dir / zoom_name, np.concatenate(crops, axis=0))
+    result = {'date': args.date, 'device': runs['new']['device'], 'resolution': [args.width, args.height],
+              'samples': args.samples, 'reference_samples': args.reference_samples, 'seeds': [1, 2],
+              'gate': gate, 'agreement_with_old_estimator_at_reference_samples': agreement,
+              'old': runs['old'], 'new': runs['new'],
+              'contact_sheet': f'docs/images/fire_shot/{sheet_name}', 'contact_sheet_rows': ['before', 'after'],
+              'contact_sheet_columns': list(FRAMES), 'zoom': f'docs/images/fire_shot/{zoom_name}'}
+    benchmark = REPO / 'benchmarks' / 'fire_shot' / f'fire-grain-{args.tag}.json'
+    benchmark.write_text(json.dumps(result, indent=2) + '\n')
+    print(json.dumps(gate, indent=2), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--workdir', type=Path, required=True, help='disposable simulation cache outside the repository')
@@ -164,11 +286,22 @@ def main():
     parser.add_argument('--height', type=int, default=540)
     parser.add_argument('--samples', type=int, default=None, help='override the document sample count')
     parser.add_argument('--compare', action='store_true', help='render 32 and 64 cells at 32 and 128 samples')
+    parser.add_argument('--grain', action='store_true', help='compare the old and new fire-emission estimators on the shot')
+    parser.add_argument('--grain-estimator', choices=('old', 'new'), help=argparse.SUPPRESS)
+    parser.add_argument('--reference-samples', type=int, default=2048)
     parser.add_argument('--curl-sweep', action='store_true', help='render 64 cells with sideways curl strengths')
     parser.add_argument('--tag', default='2026-10-30')
     parser.add_argument('--date', default='2026-10-30')
     args = parser.parse_args()
     args.workdir.mkdir(parents=True, exist_ok=True)
+    if args.grain_estimator:
+        args.samples = args.samples or 128
+        grain_estimator(args)
+        return
+    if args.grain:
+        args.samples = args.samples or 128
+        grain(args)
+        return
     if args.curl_sweep:
         curl_sweep(args)
         return

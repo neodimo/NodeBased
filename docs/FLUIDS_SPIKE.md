@@ -1908,6 +1908,76 @@ wrong: the upper plume is a fine speckled smoke with visible grain even at 128 s
 orange blob with little contrast between tongues, and the wobble comes from a source push, not from a wind or a turbulence force
 (no solver change was made; a real wind or curl-noise force would be a separate step and needs a measured proposal).
 
+### Fluids 13 B grain: the fire's glow stops sparkling (2026-10-30)
+
+The look stills still read as glittering dust in the flame and the thin upper smoke, and the grain only fell as 1/sqrt(N) with
+samples (0.034 to 0.017 from 32 to 128). Attribution came first, on the shot as committed (64 cells, 128 samples, frame 16,
+the wobble on, RTX 3080 Ti), two path-tracer seeds per component, grain as defined above:
+
+| Component (render output) | What it holds | Estimator before this step | Grain | Mean |
+| --- | --- | --- | --- | --- |
+| `emission` | the flame and hot gas the camera ray sees | the glow is summed at delta tracking's tentative collisions (`gpupathtrace.py`, `vol_flight` with `want_glow`): `emission / majorant` at each, a Poisson number of them | **0.0110** | 0.0133 |
+| `diffuse` | smoke lit at its first scatter (the fill light) plus the fire seen from that vertex, floor and stone | light sampling at the real collision (delta-tracked position), shadow transmittance by four fixed midpoint steps (no random number); the fire is never a sampled light: it reaches smoke only when a phase-sampled continuation ray happens through it | 0.0055 | 0.0358 |
+| `diffuse_indirect` | the same from the second scatter on | as above | 0.0013 | 0.0006 |
+| `specular`, `specular_indirect` | | | 0 | 0 |
+| everything (`rgba`) | | | **0.0142** | 0.0505 |
+
+The emission term was the dominant one: its grain was about as large as its mean, and the components add to the total's variance
+(1.2e-4 of about 2.0e-4). The shot's volume has a flame channel, so no majorant grid is built and every camera ray runs delta
+tracking against one global majorant; a flame cell a few voxels wide meets a ray in zero or one tentative collisions and the
+pixel is either dark or a large jump.
+
+**The change.** For a single volume the glow along a flight is now integrated instead of sampled: `vol_emission` (WGSL) and
+`ptvolume.expected_emission` (its CPU twin, same hashed random numbers) march the flight's regions with one stratified, jittered
+sample every four voxels (16 for a flight that starts at a smoke vertex, whose glow is weighted down by albedo and the fire-light
+gain) and add `emission * exp(-tau)` at each, where `tau` is the smoke's optical depth back to the flight's start accumulated from
+the same samples. That is the expected value of what the collision sum added, `integral e(t) T(t) dt`, with the same regions
+(a region with a zero majorant holds no collision and no glow), the same fire table and the same `volume_fire_light` gain. It stays a
+random estimator: the jitter differs per path, and delta tracking still decides where smoke absorbs and scatters. Details that
+matter:
+
+- The step shrinks where the smoke is thick: a step's optical depth at the region's extinction bound never exceeds 0.5 (`EMIT_TAU`),
+  and a flight stops at optical depth 6 (`EMIT_TAU_CAP`, the rest is under 0.3%). Without the first rule a thick, coarse test blob (24 to 40 voxels, extinction of about one per voxel) read 16%
+  high; with the limit at 2 it read 5 to 6% high, at 1 about 1.3 to 2.6%, at 0.5 about 1% (CPU-versus-GPU means at 768 samples, so
+  partly noise). The fire shot gives the same image at 0.5, 1 and 2: its steps are far thinner than that.
+- The attenuation back to a sample's step start blends the previous sample's extinction (a quarter) with the sample's own (three
+  quarters). Either alone is biased at four voxels a step (own: 0.2% low over the image and 0.6% low in the flame core; previous: 0.6% high over the image); the blend was set on
+  this shot and checked on the three frames and on the existing tests, so treat the 0.25 as measured, not derived.
+- Several volumes keep the old collision sum (the other volumes' transmittance is not known to one volume's march), on both
+  tracers. `ptvolume.ENABLE_EXPECTED_EMISSION` and `gpupathtrace.ENABLE_EXPECTED_EMISSION` set False give the old estimator on a
+  single volume too; the evidence renders the "before" with them.
+- The CPU and GPU tracers share one random-number stream and the older tests compare them pixel for pixel, so the CPU twin was
+  required, not optional: new GPU against new CPU differs by at most 8e-5 on the test blob, old against old by 1e-5.
+
+**Gate** (`render_evidence.py --grain`, RTX 3080 Ti, 960 x 540, 128 samples, seeds 1 and 2, same frames 8, 16, 24; times are the
+median of five warm renders, each with a new seed because an identical request is answered from the image cache):
+
+| | Before | After | Gate |
+| --- | --- | --- | --- |
+| Grain at frame 16 | 0.0142 | **0.0056** (0.40 x) | at most 0.0085 (half of the 0.017 first reported) and at most 0.0071 (half of this measurement): met |
+| Grain at frames 8 / 24 | 0.0148 / 0.0152 | 0.0072 / 0.0059 | |
+| `emission` grain at frame 16 | 0.0110 | 0.0021 | |
+| `diffuse` grain at frame 16 | 0.0055 | 0.0045 | |
+| Render time, frames 8 / 16 / 24 | 0.310 / 0.292 / 0.277 s | 0.341 / 0.344 / 0.337 s | at most 1.25 x: 1.10 / 1.18 / 1.22, met (frame 24 narrowly) |
+| Mean image at 2048 samples against the old renderer at 2048 | | within 0.013% (flame core, the brightest 2% of pixels: within 0.15%) | the existing tests allow 5%: met |
+| Mean absolute difference of those two 2048-sample images | | 4.1e-4 to 4.2e-4 | the old renderer's own two-seed difference is 1.1e-3 to 1.3e-3 |
+
+The 2048-sample frames themselves take 4.2 s before and 5.0 s after. Numbers and per-frame detail:
+`benchmarks/fire_shot/fire-grain-2026-10-30.json`.
+
+**Adapters.** The volume path-tracing and sparse-volume tests (the module list in the step's report, 277 tests with `tests.test_fire_grain`)
+pass on the RTX 3080 Ti, on the AMD Radeon 8060S and on llvmpipe (`force-adapter.py integrated` and `cpu`).
+
+![Before above, after below: frames 8, 16, 24 at 128 samples](images/fire_shot/fire-grain-before-after-2026-10-30.png)
+![The upper plume at frame 16, enlarged three times without smoothing: before above, after below](images/fire_shot/fire-grain-before-after-zoom-2026-10-30.png)
+
+**What is left.** The flame core and the plume read smoother in the stills, which the worker judged from the saved images, not the
+real display (**Gonzo to judge**). The dominant term is now the smoke's own scattering: `diffuse` is 0.0045 of the 0.0056, from the
+delta-tracked position of the first real collision (a thin plume gets zero or one collision per path, so a pixel is dark or a
+jump) and from the fire reaching smoke only through random continuation rays. A fix there would be a next-event estimate of the
+fire lighting the smoke from the coarse fire light grid (`volumerender.fire_light_grid`) and an expected-value single scatter along
+the flight; both change the smoke's lighting estimator, which this step did not touch. No solver, source or shot parameter changed.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
