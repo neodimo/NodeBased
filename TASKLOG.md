@@ -1,3 +1,21 @@
+## 2026-10-31, 3:09 AM PDT — Lane 6 smoke grain, finish 1: the camera ray's first smoke collision is counted, not drawn (gate met)
+
+- **What was done — evidence:** the left-out item of the smoke step (grain from the smoke's own scattering, 0.0084 floor) was built as a camera-flight estimator on both tracers. For a path's first flight
+  (`turn` 0) with fire sampling on and one volume that glows, the first collision is the distance where the optical depth reaches `-log(1 - xi)` (`ptvolume.stratified_event`, midpoint sum, 2-voxel steps; the shader's
+  `vol_first_event`), `xi` the base-2 radical inverse of the sample index rotated per pixel (`stratified_number`, `strat_number`; integers, same 24 bits on both), and the first vertex absorbs by weight (throughput x albedo) instead of by
+  coin flip. Measured on the shot (`render_evidence.py --strat-grain`, RTX 3080 Ti, 128 samples, seeds 1 and 2): frame-16 grain 0.0141 (pre fire sampling) / 0.0130 (fire sampling) to **0.0065**; frames 8 / 24 0.0066 / 0.0066;
+  `diffuse` 0.0096 to 0.0039; time 1.07 / 1.01 / 1.03 x the fire-sampling renderer; 2048-sample mean within 0.025 % of it. Per-ray collision distribution against delta tracking: CDF gap at most 0.2 % at fine steps,
+  2 % at the box entry with 2-voxel steps (the half-voxel density ramp). 220 targeted tests (28 new, `tests/test_fire_smoke_strat.py`) pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.
+- **Gate:** grain at most 0.0071 **met** (0.0065); time at most 1.3 x met; mean met; adapters met.
+- **Inference / not run:** the split "stratified collision 0.0130 to 0.0088, absorption by weight 0.0088 to 0.0065" is from an intermediate run that is not a saved benchmark. Smoke eddies are not visible (soft vertical streaks that the
+  2048-sample reference shares); stills read from saved images, not the real display. No Windows run, no full suite, no CI read, no adaptive-sampling benchmark, two volumes and splat scenes keep delta tracking.
+- **Artifacts (committed on `openclaw/nb-fluids-spike`, not pushed):** `nodebased/ptvolume.py`, `pathtrace.py`, `gpupathtrace.py` (volume header flag bit 16), `tests/test_fire_smoke_strat.py`,
+  `examples/fire_shot/render_evidence.py` (`--strat-grain`, `--rerun`), `benchmarks/fire_shot/fire-smoke-strat-2026-10-31.json`, `docs/images/fire_shot/fire-smoke-strat-before-after-*-2026-10-31.png`,
+  `docs/FLUIDS_SPIKE.md` "Fluids 13 B smoke finish" with the bundled copy. No schema bump. Large scratch under `scratch/nb-lanes/run/big-L6/strat` removed.
+- **State:** DONE.
+- **Next owner + concrete artifact:** Gonzo: judge `docs/images/fire_shot/fire-smoke-strat-before-after-2026-10-31.png` and the zoom on the real display; decide whether the later smoke vertices (second scatter on) are worth the same by-weight absorption.
+- **Failure mode recorded:** a 128-sample image mean of the thin test volume swung 6 to 13 % between seeds (heavy-tailed knot fireflies) and looked like a bias; the 2048-sample means agree within 0.3 %, so judge means at many samples. The `volume_fire_light` 0 floor of the smoke step runs delta tracking (fire sampling is off) and is not comparable with the stratified path.
+
 ## 2026-10-31, 2:55 AM PDT — 0.48.0 published (Gonzo)
 
 - **What was done:** confirmed v0.48.0 published on `4e91828f` (release `06ba1e51` + the Windows import fix `2dd58148`, retagged 12:40 AM after the first tag's Windows tests failed); 4 assets, SHA256SUMS matches GitHub's digests, release commit only bumps versions and adds identical notes, announcement posted by the tick, local build installed at 2:32 AM.

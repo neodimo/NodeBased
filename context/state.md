@@ -1,3 +1,10 @@
+## 2026-10-31, 3:09 AM PDT — Lane 6 smoke grain (finish 1): the first smoke collision is stratified
+
+Frame-16 grain at 128 samples 0.0141 to 0.0065 (gate at most 0.0071 met) on the RTX 3080 Ti; time 1.01 to 1.07 x the fire-sampling renderer; 2048-sample mean within 0.025 %; 220 targeted tests (28 new) pass on the RTX 3080 Ti, the
+Radeon 8060S and llvmpipe. Both tracers: `ptvolume.stratified_event` / `stratified_number`, the shader's `vol_first_event` / `strat_number`, absorption by weight at the first vertex; switches `ENABLE_STRATIFIED_FIRST` on both modules.
+Evidence versus inference: measured per component and per frame (`benchmarks/fire_shot/fire-smoke-strat-2026-10-31.json`); the split between the stratified collision and absorption by weight is from an unsaved intermediate run.
+Not verified: Windows, real display, adaptive sampling, two volumes and splats (they keep delta tracking). Next: Gonzo judges the stills; smoke eddies are not visible. Failure mode: judge image means at many samples (128-sample means of the thin test volume swing 6 to 13 %).
+
 ## 2026-10-31, 2:55 AM PDT — 0.48.0 published
 
 - GitHub published stable `v0.48.0` at 2:19 AM PDT on `4e91828f`, which is the release commit `06ba1e51` plus one cherry-picked fix (`2dd58148` on main: the fire-shot and Hot pour evidence scripts no longer import the Linux-only `fcntl` at load time). The first tag on `06ba1e51` was red on Windows only, because `tests/test_fire_shot.py` could not import; the tag was moved at 12:40 AM. Both tag workflows on `4e91828f` passed (Build release packages 41180356329, Desktop conformance 41180356325).
