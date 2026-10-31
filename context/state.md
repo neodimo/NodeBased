@@ -1,5 +1,27 @@
 ## 2026-10-31, 3:00 AM PDT — Lane 6 smoke grain (step A of 1): the fire is sampled as a light at smoke vertices
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (2:29 AM on 2026-10-31 PDT)
+
+`main` moved `5b0bcfc8` -> `8174b545` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `8174b545` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-0219.log`, started 2:19 AM): **Ran 7613 tests in 552.081 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step A of 1: the smoke above the fire stops looking like sand.** Commits:
+  - `cc05ce82` context: record Lane 6 smoke grain step
+  - `5e82aa70` Fire shot: smoke-grain evidence (fire sampled as a light at smoke vertices), docs section and bundled copy
+  - `f9e3f002` Fire sampling: fade the sampled share in near a smoke vertex, smoke-grain evidence mode
+  - `9d09efb6` Path tracer: smoke vertices sample the fire as a light (emitter grid, midpoint shadow, balance-heuristic weight against the phase-sampled glow) on both tracers
+  Diff: 14 files changed, 1285 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 **Evidence (measured, RTX 3080 Ti, 64 cells, 128 samples, `benchmarks/fire_shot/fire-smoke-grain-2026-10-31.json`):** frame-16 grain 0.0141 to 0.0130 (gate at most 0.0071: **missed**);
 with `volume_fire_light` 0 the grain is 0.0084, the floor no estimator of the fire's light can pass; render time 1.01 / 1.01 / 1.04 x (gate 1.3 x); 2048-sample mean within 0.045 % of the previous renderer;
 per smoke vertex the fire's light is 1.0 to 3.3 x quieter, same mean. 280 targeted tests (24 new, `tests/test_fire_smoke_nee.py`) pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.

@@ -1,3 +1,9 @@
+## 2026-10-31 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step A of 1: the smoke above the fire stops looking like sand (integrator tick)
+
+- **What was done:** `main` `5b0bcfc8` -> `8174b545` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `8174b545`: Ran 7613 tests in 552.081 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31, 3:00 AM PDT — Lane 6 smoke grain, step A of 1: the fire is sampled as a light at smoke vertices (gate missed)
 
 - **What was done — evidence:** split frame-16 grain by component on the shot as committed (RTX 3080 Ti, 128 samples): total 0.0141, smoke `diffuse` 0.0107, flame `emission` 0.0025;
