@@ -1311,7 +1311,10 @@ _VOLUME_RENDER_DEFAULTS = {
     "volume_fire_intensity": 0.0, "volume_temperature_scale": 1500.0, "volume_fire_threshold": 600.0,
     "volume_fire_light": 1.0, "volume_fire_ramp": "", "volume_quality": "custom",
     "volume_flame_intensity": 0.0, "volume_flame_temperature": 1800.0,
-    "volume_fire_light_meshes": 0.0}
+    "volume_fire_light_meshes": 0.0,
+    # 1: the flame glow's colour and brightness follow the gas temperature (volume_temperature_scale, volume_fire_threshold)
+    # instead of the fixed volume_flame_temperature; 0 keeps the earlier flame glow, so a saved document renders as before.
+    "volume_flame_follow_temperature": 0}
 SPECS["Render3D"]["params"].update(_VOLUME_RENDER_DEFAULTS)
 # The path tracer's knobs (render_mode "pathtrace", nodebased/pathtrace.py). `pt_samples` is samples per pixel; the
 # existing `samples` stays the antialiasing supersampling of the raster and ray-traced modes, so old documents mean
@@ -1770,7 +1773,8 @@ LIMITS.update({"volume_anisotropy": (-0.99, 0.99), "volume_multi_scatter": (0.0,
                "volume_multi_scatter_blur": (0.0, 1.0), "volume_fire_intensity": (0.0, 100000.0),
                "volume_temperature_scale": (0.001, 1000000.0), "volume_fire_threshold": (0.0, 1000000.0),
                "volume_fire_light": (0.0, 1000.0), "volume_flame_intensity": (0.0, 100000.0),
-               "volume_flame_temperature": (1.0, 1000000.0), "volume_fire_light_meshes": (0.0, 1000.0)})
+               "volume_flame_temperature": (1.0, 1000000.0), "volume_fire_light_meshes": (0.0, 1000.0),
+               "volume_flame_follow_temperature": (0, 1)})
 LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0), "src_falloff": (0.0, 1.0),
                "src_density": (0.0, 1000000.0), "src_temperature": (-1000000.0, 1000000.0),
                "src_fuel": (0.0, 1000000.0), "src_inherit_velocity": (0.0, 1.0), "src_noise_amount": (0.0, 1.0),

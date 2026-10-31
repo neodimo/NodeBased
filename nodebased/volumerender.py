@@ -132,6 +132,7 @@ class VolumeSettings:
     flame_intensity: float = 0.0   # independent burn-rate emission gain
     flame_temperature: float = 1800.0  # kelvin used for the flame colour
     fire_light_meshes: float = 0.0  # derived light gain on meshes
+    flame_follow: float = 0.0      # 1: the flame glow takes its colour from the gas temperature (temperature_scale, fire_threshold)
 
     def validated(self):
         if not self.step_size > 0:
@@ -263,6 +264,18 @@ def fire_table(settings):
     return np.stack([np.interp(knots, kelvin, colours[:, c]) for c in range(3)], -1).astype(np.float32)
 
 
+def flame_colour(settings, table, temperature=None):
+    """Radiance of the burn-rate glow per unit of flame and of `flame_intensity`: the (3,) colour at `flame_temperature`, or, with
+    `flame_follow` and a temperature field, the (..., 3) colour at the gas temperature's kelvin (`temperature_scale` times the
+    stored temperature), zero where that is not above `fire_threshold`. The fire's cooling then dims and reddens the flame."""
+    if not settings.flame_follow or temperature is None:
+        return fire_radiance(table, np.array([settings.flame_temperature]))[0]
+    kelvin = (settings.temperature_scale * np.asarray(temperature, np.float64)).reshape(-1)
+    colour = fire_radiance(table, kelvin)
+    colour[kelvin <= settings.fire_threshold] = 0.0
+    return colour.reshape(np.shape(temperature) + (3,))
+
+
 def fire_radiance(table, kelvin):
     """Table lookup of the emitted radiance (N, 3) at `kelvin` (N,), linear between log-spaced knots, clamped."""
     u = np.log(np.maximum(kelvin, 1e-3) / FIRE_K_LOW) / math.log(FIRE_K_HIGH / FIRE_K_LOW) * (FIRE_KNOTS - 1)
@@ -304,7 +317,7 @@ def _fire_emission(settings, table, density, temperature, flame):
             settings.fire_intensity * settings.density_scale * density.reshape(-1)[hot].astype(np.float64))[:, None]
     if settings.flame_intensity > 0 and flame is not None:
         emission += (settings.flame_intensity * np.maximum(flame, 0)[..., None]
-                     * fire_radiance(table, np.array([settings.flame_temperature]))[0])
+                     * flame_colour(settings, table, temperature))
     return emission
 
 
@@ -410,7 +423,7 @@ def mesh_fire_lights(scene, settings):
         cache = _mesh_fire_cache.setdefault(volume, {})
         key = (settings.fire_intensity, settings.flame_intensity, settings.flame_temperature,
                settings.temperature_scale, settings.fire_threshold, settings.density_scale,
-               settings.fire_ramp, settings.fire_light_meshes)
+               settings.fire_ramp, settings.fire_light_meshes, settings.flame_follow)
         if key not in cache:
             prepared = fire_light_grid(volume, replace(settings, fire_light=1.0))
             lamps = []
@@ -759,8 +772,9 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
                     weight = np.where(sigma_t_unit > 0, (1 - t_seg) / max(sigma_t_unit, 1e-300), sigma * seg)
                 if settings.flame_intensity > 0 and volume.flame is not None:
                     flame = np.maximum(_shutter_mean(volume.flame, points), 0)
-                    rgb[idx] += trans[idx, None] * (settings.flame_intensity * flame * seg)[:, None] * fire_radiance(
-                        fire_table_, np.array([settings.flame_temperature]))[0]
+                    tint = flame_colour(settings, fire_table_, _shutter_mean(volume.temperature, points)
+                                        if settings.flame_follow and volume.temperature is not None else None)
+                    rgb[idx] += trans[idx, None] * (settings.flame_intensity * flame * seg)[:, None] * tint
             if fire_table_ is not None and settings.fire_intensity > 0 and volume.temperature is not None and sigma.any():
                 kelvin = settings.temperature_scale * _shutter_mean(volume.temperature, points)
                 glow = (kelvin > settings.fire_threshold) & (sigma > 0)

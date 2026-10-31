@@ -325,7 +325,8 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None):
                 if glows and settings.flame_intensity > 0 and volume.flame is not None:
                     flame = np.maximum(_trilinear(volume.flame, g), 0.0)
                     if flame.any():
-                        colour = vr.fire_radiance(layer.fire_table, np.array([settings.flame_temperature]))[0]
+                        colour = vr.flame_colour(settings, layer.fire_table, _trilinear(volume.temperature, g)
+                                                 if settings.flame_follow and volume.temperature is not None else None)
                         weight = colour * (settings.flame_intensity * flame / mu_here)[:, None]
                         glow_points.append((ray, position[ray].copy(), weight))
                 real = _uniform(keys[ray], turn, vi, step, 1, pcg, rand) < layer.sigma_t_unit * sigma / mu_here
@@ -374,7 +375,8 @@ def expected_emission(layer, vi, o, d, t_end, keys, turn, deep, cancel=None):
     sigma_prev = np.zeros(n)
     taken = np.zeros(n, np.int64)                       # samples drawn so far: the hashed number's step
     wstep = volume.voxel_size * np.where(np.asarray(deep, bool), EMIT_CELLS_DEEP, EMIT_CELLS)
-    flame_colour = vr.fire_radiance(layer.fire_table, np.array([settings.flame_temperature]))[0]
+    flame_colour = vr.flame_colour(settings, layer.fire_table)
+    follow = bool(settings.flame_follow) and volume.temperature is not None
     if levels is not None:
         o_cells = (prep.to_object(o) - prep.box_min) / volume.voxel_size
         d_cells = (d @ prep.inv[:3, :3].T) / volume.voxel_size
@@ -410,7 +412,8 @@ def expected_emission(layer, vi, o, d, t_end, keys, turn, deep, cancel=None):
                     if glow.any():
                         e[glow] += vr.fire_radiance(layer.fire_table, kelvin[glow]) * (settings.fire_intensity * sigma[glow])[:, None]
                 if has_flame:
-                    e += flame_colour * (settings.flame_intensity * np.maximum(_trilinear(volume.flame, g), 0.0))[:, None]
+                    tint = vr.flame_colour(settings, layer.fire_table, _trilinear(volume.temperature, g)) if follow else flame_colour
+                    e += tint * (settings.flame_intensity * np.maximum(_trilinear(volume.flame, g), 0.0))[:, None]
                 sigma_t = layer.sigma_t_unit * sigma
                 blend = EMIT_SELF * sigma_t + (1.0 - EMIT_SELF) * sigma_prev[r]
                 out[r] += e * (hh * np.exp(-(tau[r] + blend * hh * ju)))[:, None]

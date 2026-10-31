@@ -67,7 +67,7 @@ def _volume_settings(params):
         params.get("volume_fire_light", 1.0), str(params.get("volume_fire_ramp", "")),
         params.get("volume_quality", "custom"),
         params.get("volume_flame_intensity", 0.0), params.get("volume_flame_temperature", 1800.0),
-        params.get("volume_fire_light_meshes", 0.0))
+        params.get("volume_fire_light_meshes", 0.0), params.get("volume_flame_follow_temperature", 0))
 
 
 def _path_settings(params, mode):

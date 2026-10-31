@@ -1621,6 +1621,7 @@ KNOB_LAYOUT["Render3D"] += [
     KnobGroup("float", ("volume_fire_light",), label="Fire light on smoke"),
     KnobGroup("float", ("volume_flame_intensity",), label="Flame intensity"),
     KnobGroup("float", ("volume_flame_temperature",), label="Flame temperature (K)"),
+    KnobGroup("bool", ("volume_flame_follow_temperature",), label="Flame follows temperature"),
     KnobGroup("float", ("volume_fire_light_meshes",), label="Fire light on meshes"),
     KnobGroup("string", ("volume_fire_ramp",), label="Fire color ramp"),
     KnobGroup("enum", ("denoise",), label="Denoise"),

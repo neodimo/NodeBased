@@ -1556,18 +1556,15 @@ class GpuSmoke3D(Smoke3D):
                    for axis, n in enumerate(self.shape)]
             field = kicks[idx[0][:, None, None], idx[1][None, :, None], idx[2][None, None, :]]
         else:
-            from .particles import turbulence_field
             swirl = max(float(p["swirl_size"]), 1e-3)
             grain = max(1, int(p["grain"]))
             pulse = max(float(p["pulse_length"]), 1e-3)
             t = (float(frame) + substep * dt) / pulse
             s0 = math.floor(t)
             tw = fluid3d._smooth(t - s0)
-            xs, ys, zs = np.meshgrid(*(np.arange(n) + 0.5 for n in self.shape), indexing="ij")
-            positions = np.stack((xs, ys, zs), axis=-1).reshape(-1, 3)
             seed = int(p.get("seed", 0))
-            a = turbulence_field(positions, "curl", swirl, grain, seed + 1013 * s0)
-            b = turbulence_field(positions, "curl", swirl, grain, seed + 1013 * (s0 + 1))
+            a = fluid3d.shape_turbulence_lattice(self.shape, swirl, grain, seed + 1013 * s0)
+            b = fluid3d.shape_turbulence_lattice(self.shape, swirl, grain, seed + 1013 * (s0 + 1))
             field = (a + (b - a) * tw).reshape(*self.shape, 3)
         return np.moveaxis(field, -1, 0).astype(np.float32) * np.float32(float(p[kind]) * dt)
 

@@ -1322,6 +1322,7 @@ Houdini Pyro's names, are:
 | Fire light (`volume_fire_light`) | How strongly the fire lights the smoke around it (default 1); 0 keeps only the smoke's own glow |
 | Flame intensity (`volume_flame_intensity`) | Burn-rate emission gain (default 0, preserving old renders); emits even without a temperature grid |
 | Flame temperature (`volume_flame_temperature`) | Kelvin used to colour burn-rate emission through the fire ramp or blackbody (default 1800) |
+| Flame follows temperature (`volume_flame_follow_temperature`) | Off (the default) keeps the single flame colour. On, the burn-rate glow takes its colour and brightness from the gas temperature (temperature scale times the stored temperature, nothing below the threshold), so a flame that cools with height goes from yellow-white to orange to dark red |
 | Fire light on meshes (`volume_fire_light_meshes`) | Gain for up to eight emission-cluster point lights per volume, 16 per scene, illuminating meshes (default 0); mesh and smoke shadow rays attenuate them |
 | Fire color ramp (`volume_fire_ramp`) | Empty is the blackbody colour; `kelvin:r,g,b;kelvin:r,g,b` stops (ACEScg radiance, linear between stops) replace it |
 
@@ -1358,7 +1359,9 @@ scattering, no fire; right, fire (`volume_fire_intensity` 0.9, `volume_temperatu
   front like scattered light. The temperature ramp `volume_fire_ramp` replaces the table with your own colours over kelvin.
   Emission adds energy only: it never changes alpha. The temperature term needs a temperature field.
 - **Flame.** The burn-rate channel emits independently at `volume_flame_temperature`, coloured by the same table or
-  custom ramp. `volume_flame_intensity` scales it; zero leaves old pictures unchanged. Its light joins the coarse fire
+  custom ramp. `volume_flame_follow_temperature` makes the colour follow the gas temperature instead (kelvin is the temperature
+  scale times the stored temperature, zero at or below the fire threshold); it needs a temperature grid and is off by default.
+  `volume_flame_intensity` scales it; zero leaves old pictures unchanged. Its light joins the coarse fire
   grid and can reach meshes when `volume_fire_light_meshes` is above zero.
 - **Fire lights the smoke.** The emission field is block-averaged to a coarse grid (at most 32 cells a side), blurred with a
   Gaussian of 15 % of the longest box side and added to the light arriving at every smoke sample, times

@@ -1138,7 +1138,12 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
     }
     if (want_glow && bases.z != 0xFFFFFFFFu && params.vp3.z > 0.0) {
       let flame = max(trilinear(bases.z, dims, sp, g), 0.0);
-      *glow += fire_radiance(params.vp3.w) * (params.vp3.z * flame / mu);
+      var tint = fire_radiance(abs(params.vp3.w));
+      if (params.vp3.w < 0.0 && has_temp) {
+        let flame_kelvin = params.vp2.x * trilinear(bases.y, dims, sp, g);
+        tint = select(vec3<f32>(0.0), fire_radiance(flame_kelvin), flame_kelvin > params.vp2.y);
+      }
+      *glow += tint * (params.vp3.z * flame / mu);
     }
     if (vol_uniform(key, turn, vi, k, 1u) < params.vp0.x * sigma / mu) {
 //#if COUNT
@@ -1197,7 +1202,14 @@ fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: 
           let kelvin = params.vp2.x * trilinear(bases.y, dims, sp, g);
           if (kelvin > params.vp2.y && sigma > 0.0) { e += fire_radiance(kelvin) * (params.vp2.z * sigma); }
         }
-        if (has_flame) { e += fire_radiance(params.vp3.w) * (params.vp3.z * max(trilinear(bases.z, dims, sp, g), 0.0)); }
+        if (has_flame) {
+          var tint = fire_radiance(abs(params.vp3.w));
+          if (params.vp3.w < 0.0 && has_temp) {
+            let flame_kelvin = params.vp2.x * trilinear(bases.y, dims, sp, g);
+            tint = select(vec3<f32>(0.0), fire_radiance(flame_kelvin), flame_kelvin > params.vp2.y);
+          }
+          e += tint * (params.vp3.z * max(trilinear(bases.z, dims, sp, g), 0.0));
+        }
         let sigma_t = params.vp0.x * sigma;
         // the integrand e * exp(-tau) at the sample, with the optical depth from the step's start to it taken at a blend of the
         // previous sample's extinction (a quarter) and this sample's (three quarters). This sample's alone is correlated with its
@@ -2591,7 +2603,8 @@ def _pack_aux(packed, ps):
                 mask = sum(((int(smoke.excl[vi]) >> bit) & 1) << target for bit, target in packed.bit_map.items())
                 headers[vi, 7, 3] = mask
                 packed.linked |= mask
-            glow = smoke.fire_table is not None and volume.temperature is not None and settings.fire_intensity > 0
+            glow = (smoke.fire_table is not None and volume.temperature is not None
+                    and (settings.fire_intensity > 0 or (settings.flame_follow and settings.flame_intensity > 0)))
             temperature = add_floats(np.ascontiguousarray(grid.data["temperature"] if sparse else volume.temperature,
                                                           "f4")) if glow else None
             headers[vi, 6] = (density & 0xFFFFFF, -1.0 if temperature is None else temperature & 0xFFFFFF,
@@ -2699,7 +2712,8 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
         f32[13, 1] = settings.max_samples
     if ps.volumes is not None:
         f32[15] = (ps.volumes.settings.multi_scatter, ps.volumes.settings.fire_light,
-                   ps.volumes.settings.flame_intensity, ps.volumes.settings.flame_temperature)
+                   ps.volumes.settings.flame_intensity,
+                   -ps.volumes.settings.flame_temperature if ps.volumes.settings.flame_follow else ps.volumes.settings.flame_temperature)
     tiles = np.zeros((512, 4), "u4")
     tiles.reshape(-1)[:len(tile_bits)] = tile_bits
     return b"".join((a.tobytes(), b.tobytes(), c.tobytes(), d.tobytes(), e.tobytes(), g.tobytes(), h.tobytes(),

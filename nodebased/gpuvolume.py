@@ -361,7 +361,12 @@ fn march_beauty(frag: vec4<f32>) -> vec4<f32> {
         }
         let sigma = params.march.y * sample_density(p_obj);
         if (params.medium.w > 0.0 && (i32(vol.dims.w) & 4) != 0) {
-            rgb += trans * params.medium.w * max(sample_flame_sharp(p_obj), 0.0) * ds * fire_radiance(params.fire.w);
+            var flame_tint = fire_radiance(abs(params.fire.w));
+            if (params.fire.w < 0.0 && (i32(vol.dims.w) & 2) != 0) {
+                let flame_kelvin = params.fire.y * sample_temperature(p_obj);
+                flame_tint = select(vec3<f32>(0.0), fire_radiance(flame_kelvin), flame_kelvin > params.fire.z);
+            }
+            rgb += trans * params.medium.w * max(sample_flame_sharp(p_obj), 0.0) * ds * flame_tint;
         }
         if (sigma <= 0.0) { continue; }
         let st = sigma_t_unit * sigma;
@@ -888,7 +893,8 @@ def fire_light_view(state, volume, settings, used):
            tuple(np.asarray(volume.matrix, np.float64).ravel().tolist()),
            settings.fire_intensity, settings.temperature_scale, settings.fire_threshold, settings.fire_light,
            settings.density_scale, settings.fire_ramp, settings.flame_intensity,
-           settings.flame_temperature, _digest(volume, 'flame') if volume.flame is not None else None) if usable else None
+           settings.flame_temperature, settings.flame_follow,
+           _digest(volume, 'flame') if volume.flame is not None else None) if usable else None
     if key is not None:
         cached = state.setdefault('fire_light_grids', {})
         if key not in cached:
@@ -1009,7 +1015,7 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     params[10, :2] = shadow_bias, shadow_count
     params[11] = (settings.anisotropy, settings.multi_scatter, 1.0 - 0.75 * settings.multi_scatter_blur, settings.octaves)
     params[12] = (settings.fire_intensity, settings.temperature_scale, settings.fire_threshold,
-                  settings.flame_temperature)
+                  -settings.flame_temperature if settings.flame_follow else settings.flame_temperature)   # negative: the glow follows the gas temperature
     if settings.fire_intensity > 0 or settings.flame_intensity > 0:
         params[13:, :3] = volumerender.fire_table(settings)
     pipe = pipe if pipe is not None else pipeline(state, target, samples, multisampled_depth, bvh=bvh is not None and bool(shadow_count))

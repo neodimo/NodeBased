@@ -765,6 +765,39 @@ def _smooth(t):
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
 
 
+_LATTICE_CACHE = OrderedDict()           # (shape, swirl, grain, seed) -> the curl-noise draw at the cell centres
+_LATTICE_CACHE_LIMIT = 4
+_LATTICE_CACHE_CELLS = 1 << 21           # larger grids are recomputed: a draw is 24 bytes a cell
+_LATTICE_LOCK = threading.Lock()
+
+
+def shape_turbulence_lattice(shape, swirl, grain, seed):
+    """The curl-noise draw (nx*ny*nz, 3 float64) the shape turbulence blends between, at the cell centres.
+
+    A draw only changes every `pulse_length` frames, so the same two draws serve every substep of those frames; they are kept
+    (a handful, grids up to 2 million cells) instead of being rebuilt each substep. The values are the ones
+    `nodebased.particles.turbulence_field` returns, so a cached solve is bit-identical to an uncached one. The array is
+    shared: callers must not write to it."""
+    from .particles import turbulence_field
+    key = (tuple(int(n) for n in shape), float(swirl), int(grain), int(seed))
+    cached = key[0][0] * key[0][1] * key[0][2] <= _LATTICE_CACHE_CELLS
+    if cached:
+        with _LATTICE_LOCK:
+            hit = _LATTICE_CACHE.get(key)
+            if hit is not None:
+                _LATTICE_CACHE.move_to_end(key)
+                return hit
+    xs, ys, zs = np.meshgrid(*(np.arange(n) + 0.5 for n in shape), indexing="ij")
+    field = turbulence_field(np.stack((xs, ys, zs), axis=-1).reshape(-1, 3), "curl", swirl, grain, seed)
+    if cached:
+        field.setflags(write=False)
+        with _LATTICE_LOCK:
+            _LATTICE_CACHE[key] = field
+            while len(_LATTICE_CACHE) > _LATTICE_CACHE_LIMIT:
+                _LATTICE_CACHE.popitem(last=False)
+    return field
+
+
 class Force:
     """A velocity force, one of buoyancy, gravity, wind, turbulence, drag. Lengths in world units."""
 
@@ -1367,7 +1400,6 @@ class Smoke3D:
         amount = float(self.params["turbulence"])
         if amount == 0.0:
             return
-        from .particles import turbulence_field
         swirl = max(float(self.params["swirl_size"]), 1e-3)
         grain = max(1, int(self.params["grain"]))
         pulse = max(float(self.params["pulse_length"]), 1e-3)
@@ -1376,10 +1408,8 @@ class Smoke3D:
         s0 = math.floor(t)
         tw = _smooth(t - s0)
         nx, ny, nz = self.shape
-        xs, ys, zs = np.meshgrid(np.arange(nx) + 0.5, np.arange(ny) + 0.5, np.arange(nz) + 0.5, indexing="ij")
-        positions = np.stack((xs, ys, zs), axis=-1).reshape(-1, 3)
-        field_a = turbulence_field(positions, "curl", swirl, grain, seed + 1013 * s0)
-        field_b = turbulence_field(positions, "curl", swirl, grain, seed + 1013 * (s0 + 1))
+        field_a = shape_turbulence_lattice(self.shape, swirl, grain, seed + 1013 * s0)
+        field_b = shape_turbulence_lattice(self.shape, swirl, grain, seed + 1013 * (s0 + 1))
         field = (field_a + (field_b - field_a) * tw).reshape(nx, ny, nz, 3)
         weight = self._field_weight(a, self.params["turbulence_field"], self.params["turbulence_range_lo"],
                                     self.params["turbulence_range_hi"], self.params["turbulence_ramp"])
