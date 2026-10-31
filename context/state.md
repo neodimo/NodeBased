@@ -1,5 +1,25 @@
 ## 2026-10-30, 9:10 PM PDT — Lane 6 fire look (step B)
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (7:59 PM on 2026-10-30 PDT)
+
+`main` moved `af7376b1` -> `d519c0b3` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `d519c0b3` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1030-1949.log`, started 7:49 PM): **Ran 7472 tests in 518.681 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step B of 2: a smoother, better sampled fire shot with honest before-and-after evidence.** Commits:
+  - `c5ec8e72` context: record Lane 6 fire look step
+  - `42a004fa` fire shot: 64 cells, 128 samples and a seeded sideways wobble, with a measured 32-versus-64-cell and 32-versus-128-sample comparison
+  Diff: 18 files changed, 1034 insertions(+), 27 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The fire shot is 64 cells, 128 samples and a seeded 0.10 sideways source wobble; evidence is in `benchmarks/fire_shot/fire-{look,curl,look-shot}-2026-10-30.json`, `docs/images/fire_shot/` and `docs/FLUIDS_SPIKE.md` ("Fluids 13 B look"). Grid sets the picture's structure, samples set the grain. Real-display verdict owed by Gonzo; no solver change.
 
 ## 2026-10-30, 7:50 PM PDT — Lane 6 sparse fire lights

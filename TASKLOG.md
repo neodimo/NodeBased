@@ -1,3 +1,9 @@
+## 2026-10-30 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step B of 2: a smoother, better sampled fire shot with honest before-and-after evidence (integrator tick)
+
+- **What was done:** `main` `af7376b1` -> `d519c0b3` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `d519c0b3`: Ran 7472 tests in 518.681 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-30, 9:10 PM PDT — Lane 6 Fluids 13 B look: a finer, less grainy fire shot
 
 - **What was done — evidence:** `make_shot.py` now takes `division_size`, `pt_samples`, `curl` and `source_noise`; the shot defaults to 64 cells, 128 samples and a seeded sideways wobble (`curl_keys`, seed 1029, 0.10) on the fuel source's velocity. `render_evidence.py` gained `--compare` (32 and 64 cells at 32 and 128 samples, frames 8, 16, 24, fixed seeds, contact sheet, image differences, flame occupancy per cached frame, grain from two seeds), `--curl-sweep` and richer default output. Measured on the RTX 3080 Ti: grain at frame 16 is 0.034 at 32 samples and 0.017 at 128 samples for both grids; 32 versus 64 cells differs 2 to 5 times more in the image than 32 versus 128 samples; the 32-cell cache has four empty height slices at frame 8 and the 64-cell cache has none; the 64-cell bake takes 7.7 s (0.74 s at 32 cells); a 128-sample frame takes 0.28 s warm. Curl 0.10 raises flame sway from 0.3 to 0.5 cells up to 1.4 to 1.9 cells. Mesh light on the new shot still reads (mean delta 0.022). `tests/test_fire_shot.py` (10 tests) plus fire, flame-mesh, sparse-fire-light, hot-pour and knowledge tests pass (62 + 15).
