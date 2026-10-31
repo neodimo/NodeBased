@@ -1,3 +1,9 @@
+## 2026-10-31 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step A of 1: the smoke above the fire curls, through the existing up-res node (finish 1) (integrator tick)
+
+- **What was done:** `main` `1ac2f1ad` -> `9602249b` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `9602249b`: Ran 7658 tests in 568.084 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31, 12:45 PM PDT — Lane 6 smoke up-res, finish 1: factor 4 rendered (frame-time gate far from met, default stays off)
 
 - **What was done — evidence:** the left-out item that can run here, the factor-4 render, is in. Added `render_evidence.py --upres-render` (stills, grain, image structure, times; no 17-frame field pass: that pass at factor 4 ran 25 minutes without finishing, processor-bound, and was stopped by its own PID) and `--timing-from` (reads a saved `--upres-time on` output; the in-harness timing call of factor 4 failed once for a reason not found, the same call run alone succeeded). Measured on the RTX 3080 Ti, 960 x 540, 128 samples, x4 / turbulence 2 / swirl 8 / grain 2: bake 2.2 s coarse + 70.8 s up-res; frame time median of five **6.5 s (frame 8), 43.9 s (16), 79.7 s (24)** against 0.89 / 0.82 / 0.79 s without; frame-16 grain 0.0067 (gate 0.0071 met); image smoke structure 0.080 / 0.095 / 0.091 against 0.065 / 0.084 / 0.080 (x2: 0.069 / 0.085 / 0.081). Stills: finer, more broken smoke with short streaks, still no curls. Targeted tests (96: fire grain, fire shot, flame metrics, up-res, reinjection, sparse GPU volumes, fluid edits) pass on the RTX, the Radeon 8060S and llvmpipe; `tests.test_knowledge` passes.

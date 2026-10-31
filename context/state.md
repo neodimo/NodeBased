@@ -1,5 +1,25 @@
 ## 2026-10-31, 12:45 PM PDT — Lane 6 smoke up-res, finish 1: factor 4 rendered (default stays off)
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (1:00 PM on 2026-10-31 PDT)
+
+`main` moved `1ac2f1ad` -> `9602249b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `9602249b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-1250.log`, started 12:50 PM): **Ran 7658 tests in 568.084 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step A of 1: the smoke above the fire curls, through the existing up-res node (finish 1).** Commits:
+  - `b3eed51f` context: record Lane 6 smoke up-res finish 1 (factor 4 rendered)
+  - `93f65e62` Fire shot evidence: render-only up-res comparison (--upres-render), factor-4 smoke up-res rendered and measured; docs section and bundled copy
+  Diff: 8 files changed, 314 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Factor 4 (turbulence 2, swirl 8, grain 2) rendered on the RTX 3080 Ti at 960 x 540, 128 samples: bake 73 s, frame time 6.5 s / 43.9 s / 79.7 s at frames 8 / 16 / 24
 (without: 0.89 / 0.82 / 0.79 s), grain 0.0067, image smoke structure up 14 to 24 %, no curls. Gate not met; the shot's default stays off. New: `render_evidence.py --upres-render`,
 `--timing-from`; benchmark `benchmarks/fire_shot/fire-smoke-upres-render-x4-2026-10-31.json`. Left: Windows, the real display, curls (the up-res node adds no velocity detail).
