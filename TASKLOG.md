@@ -1,3 +1,9 @@
+## 2026-10-30 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step L of N: TVIScale gets Nuke's edge-preserving two-times enlargement, Lane 6 (Fluids, Claude Sonnet 5.5) step A of 2: sparse fire caches light nearby objects without expanding the volume (integrator tick)
+
+- **What was done:** `main` `ae50d9fe` -> `295b2285` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `295b2285`: Ran 7464 tests in 534.106 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-30, 7:50 PM PDT — Lane 6 Fluids 13 B finish: sparse fire caches light nearby objects
 
 - **What was done — evidence:** `volumerender.fire_light_grid()` and `mesh_fire_lights()` now accept sparse volumes. A shared `_fire_emission` helper serves the dense and sparse paths (dense output unchanged); the sparse path builds the same bounded coarse grid from rest values plus stored-tile differences, with no dense array. `gpuvolume.fire_light_view` uses it for sparse smoke lighting with a key covering tiles, rest values, shape, voxel size, origin, transform and light settings. New `tests/test_sparse_fire_lights.py` (13 tests) plus `tests.test_volume_fire_look`, `test_volume_flame_mesh`, `test_sparse_gpu_volumes`, `test_sparse_gpu_pathtrace` (84 tests) pass on the RTX 3080 Ti, Radeon 8060S and llvmpipe; `tests.test_knowledge` passes. No shader or buffer layout changed.

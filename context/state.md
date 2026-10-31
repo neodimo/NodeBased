@@ -1,5 +1,29 @@
 ## 2026-10-30, 7:50 PM PDT — Lane 6 sparse fire lights
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5) (7:39 PM on 2026-10-30 PDT)
+
+`main` moved `ae50d9fe` -> `295b2285` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `295b2285` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1030-1926.log`, started 7:26 PM): **Ran 7464 tests in 534.106 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step L of N: TVIScale gets Nuke's edge-preserving two-times enlargement.** Commits:
+  - `80e21277` TVIScale: Nuke's edge-preserving 2x enlargement (Iterations, Lambda, A, channels and mask strip); older graphs keep the power-of-two resize via schema 28
+  Diff: 17 files changed, 632 insertions(+), 44 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step A of 2: sparse fire caches light nearby objects without expanding the volume.** Commits:
+  - `1b21d93a` context: record Lane 6 sparse fire lights step
+  - `b9cce977` fluids: sparse fire caches light nearby objects through the same coarse light grid, without expanding the volume
+  Diff: 7 files changed, 447 insertions(+), 31 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Sparse fire caches now feed the same coarse fire-light grid as dense ones (`volumerender._fire_emission`, `fire_light_grid`, `mesh_fire_lights`, `gpuvolume.fire_light_view`), built from rest values and stored tiles only. Commit `b9cce977` on `openclaw/nb-fluids-spike`, tests in `tests/test_sparse_fire_lights.py`; checked on RTX 3080 Ti, Radeon 8060S and llvmpipe; not pushed. Limit: fields stored outside the volume's own tiles get no halo.
 
 ## Lane 2 fidelity step L — TVIScale enlarges by two and keeps edges (7:50 PM on 2026-10-30 PDT)
