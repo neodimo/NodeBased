@@ -1,3 +1,9 @@
+## 2026-10-31 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback follow-up: retain native-half EXR samples through decode (integrator tick)
+
+- **What was done:** `main` `94d85e16` -> `cbe77070` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `cbe77070`: Ran 7559 tests in 528.355 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step N of N: a NoTimeBlur node, and the project settings counted as Nuke's Root (integrator tick)
 
 - **What was done:** `main` `4926b8bf` -> `2a035b71` plus this docs commit. Evidence and per-lane commit

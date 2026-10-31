@@ -1,5 +1,26 @@
 ## Lane 2 fidelity step N — NoTimeBlur and Root (12:15 AM on 2026-10-31 PDT)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (12:49 AM on 2026-10-31 PDT)
+
+`main` moved `94d85e16` -> `cbe77070` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `cbe77070` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-0039.log`, started 12:39 AM): **Ran 7559 tests in 528.355 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback follow-up: retain native-half EXR samples through decode.** Commits:
+  - `b61af506` context: record native half playback evidence
+  - `a4e758ec` gpu2d: enable native half EXR upload by default
+  - `a414a7ba` media: retain native half EXR samples through decode
+  Diff: 7 files changed, 134 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:29 AM on 2026-10-31 PDT)
 
 `main` moved `4926b8bf` -> `2a035b71` (lane commits cherry-picked onto main in lane order) and then to this
