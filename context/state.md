@@ -1,3 +1,11 @@
+## 2026-10-31, 2:55 AM PDT — 0.48.0 published
+
+- GitHub published stable `v0.48.0` at 2:19 AM PDT on `4e91828f`, which is the release commit `06ba1e51` plus one cherry-picked fix (`2dd58148` on main: the fire-shot and Hot pour evidence scripts no longer import the Linux-only `fcntl` at load time). The first tag on `06ba1e51` was red on Windows only, because `tests/test_fire_shot.py` could not import; the tag was moved at 12:40 AM. Both tag workflows on `4e91828f` passed (Build release packages 41180356329, Desktop conformance 41180356325).
+- Four assets: Linux AppImage, Windows portable ZIP, Windows installer, `SHA256SUMS`; the downloaded manifest matches the three package digests GitHub reports. The release commit changes only the two version lines and adds identical 0.48.0 sections to both `RELEASE_NOTES.md` copies; the tag adds only the two example scripts on top.
+- The tick cleared `s["release"]`, recorded 0.48.0 at 2:19 AM, and posted the announcement (with DiMo ping) in Releases → #nodebased. The local-build timer built `v0.48.0` at 2:32 AM; `/home/omid/AppImages/NodeBased.AppImage` resolves to it.
+- Also this night: the Linux preview package had failed because upstream rebuilt appimagetool's `continuous` asset; `packaging/build.py` now pins the tagged 1.9.1 release (`750a2a88`).
+- **Unverified / watch:** real-display QA of 0.48.0; Nuke pixel truth. Main Desktop conformance on `a2db7871` failed once on Windows in `tests.test_write_formats.DpxTests.test_big_endian_reaches_the_header` (big- and little-endian DPX read back with different pixels); the next two main runs passed, so it is intermittent. Write formats landed after the tag and are not in 0.48.0; check it before 0.49.0.
+
 ## 2026-10-31, 3:00 AM PDT — Lane 6 smoke grain (step A of 1): the fire is sampled as a light at smoke vertices
 
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (2:29 AM on 2026-10-31 PDT)

@@ -1,3 +1,9 @@
+## 2026-10-31, 2:55 AM PDT — 0.48.0 published (Gonzo)
+
+- **What was done:** confirmed v0.48.0 published on `4e91828f` (release `06ba1e51` + the Windows import fix `2dd58148`, retagged 12:40 AM after the first tag's Windows tests failed); 4 assets, SHA256SUMS matches GitHub's digests, release commit only bumps versions and adds identical notes, announcement posted by the tick, local build installed at 2:32 AM.
+- **Not done / unverified:** real-display QA; the intermittent Windows DPX byte-order test failure on main (`a2db7871`) is not yet investigated.
+- **Next owner + artifact:** Gonzo, `tests/test_write_formats.py` DpxTests on Windows before 0.49.0.
+
 ## 2026-10-31 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step A of 1: the smoke above the fire stops looking like sand (integrator tick)
 
 - **What was done:** `main` `5b0bcfc8` -> `8174b545` plus this docs commit. Evidence and per-lane commit
