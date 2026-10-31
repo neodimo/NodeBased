@@ -1,3 +1,24 @@
+## 2026-10-31, 3:00 AM PDT — Lane 6 smoke grain, step A of 1: the fire is sampled as a light at smoke vertices (gate missed)
+
+- **What was done — evidence:** split frame-16 grain by component on the shot as committed (RTX 3080 Ti, 128 samples): total 0.0141, smoke `diffuse` 0.0107, flame `emission` 0.0025;
+  with `volume_fire_light` 0 the total is 0.0084 (so the fire's light on smoke is 65 % of the variance, and 0.0084 is the floor no fire estimator can go below). Built next-event
+  estimation of the fire at smoke vertices on both tracers (`ptvolume.FireEmitter`, `fire_nee_sample`, `fire_nee_value`, `fire_transmittance`, `expected_emission`'s `mis`; the shader's
+  `vol_fire_light` and friends): emitter = the coarse emission grid before its blur, balance-heuristic weights in volume measure against the phase-sampled continuation glow, a near-field
+  fade (a vertex inside a dense knot was 3.6 x noisier without it), midpoint-rule shadow transmittance (ratio tracking was built first and ran 1.7 to 4.6 x noisier per fire sample; kept as the
+  test reference `ratio_transmittance`). Per vertex the fire's light is 1.0 to 3.3 x quieter with the same mean. On the shot (`render_evidence.py --smoke-grain`, 128 samples): frame-16 grain 0.0141 to
+  0.0130, time 1.01 to 1.04 x, 2048-sample mean within 0.045 % of the previous renderer. 280 targeted tests pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe (24 new in `tests/test_fire_smoke_nee.py`).
+- **Gate:** grain half of 0.0141 **missed** (0.0130 against at most 0.0071); time 1.3 x met; mean met; adapters met.
+- **Inference / not run:** that the remaining grain is mostly whether and where a camera ray scatters in the thin plume (collision presence, about `sqrt((1 - p) / (p N))` relative) is reasoned from
+  the 0.0084 floor and delta tracking's structure, not separately measured. Stills read from saved images, not the real display. No Windows run, no full suite, no CI read. Smoke eddies are not visible in the close-up (the grain is still there).
+- **Artifacts (committed on `openclaw/nb-fluids-spike`, not pushed):** `nodebased/ptvolume.py`, `pathtrace.py`, `gpupathtrace.py` (packed volume header 10 to 16 vec4), `volumerender.py` (`fire_coarse_emission`, `fire_light_grid` unchanged),
+  `tests/test_fire_smoke_nee.py`, `examples/fire_shot/render_evidence.py` (`--smoke-grain`), `benchmarks/fire_shot/fire-smoke-grain-2026-10-31.json`, `docs/images/fire_shot/fire-smoke-grain-before-after-*-2026-10-31.png`,
+  `docs/FLUIDS_SPIKE.md` "Fluids 13 B smoke" with the bundled copy. No schema bump.
+- **State:** DONE as an estimator (unbiased, tested, no slower), BLOCKED on the gate. Not done: the camera-flight estimator below.
+- **Next owner + concrete artifact:** Gonzo decides on one more Lane 6 step: an expected-value single scatter along the camera flight (stratified in-scattering samples weighted by transmittance, lighting evaluated at a
+  few of them by the vertex-lighting code, the real collision's own lighting skipped) or a forced first collision with the camera ray split into scattered and passing branches; measure frame-16 grain against 0.0071 and
+  render time against 1.3 x. Start from "What dominates, and why" in `docs/FLUIDS_SPIKE.md`.
+- **Failure mode recorded:** fire sampling cannot reach the gate on its own; a draw from the whole fire is noisier than the continuation inside a dense emitter (fixed by the near-field fade); two volumes and splat scenes keep the previous estimator.
+
 ## 2026-10-31 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step B of 2: the flame has a hot core and licking tongues (integrator tick)
 
 - **What was done:** `main` `a2db7871` -> `9583035e` plus this docs commit. Evidence and per-lane commit

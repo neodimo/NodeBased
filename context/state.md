@@ -1,3 +1,15 @@
+## 2026-10-31, 3:00 AM PDT — Lane 6 smoke grain (step A of 1): the fire is sampled as a light at smoke vertices
+
+**Evidence (measured, RTX 3080 Ti, 64 cells, 128 samples, `benchmarks/fire_shot/fire-smoke-grain-2026-10-31.json`):** frame-16 grain 0.0141 to 0.0130 (gate at most 0.0071: **missed**);
+with `volume_fire_light` 0 the grain is 0.0084, the floor no estimator of the fire's light can pass; render time 1.01 / 1.01 / 1.04 x (gate 1.3 x); 2048-sample mean within 0.045 % of the previous renderer;
+per smoke vertex the fire's light is 1.0 to 3.3 x quieter, same mean. 280 targeted tests (24 new, `tests/test_fire_smoke_nee.py`) pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.
+**What changed.** Both tracers sample the fire as a light at each smoke vertex (one volume that glows, `volume_fire_light` above 0, no splats): `ptvolume.FireEmitter` (the coarse emission grid before its blur, `volumerender.fire_coarse_emission`),
+`fire_nee_sample` / `fire_nee_value` / `fire_transmittance`, weights against the continuation glow in `expected_emission` (`mis`), near-field fade `NEE_NEAR_CELLS`, switches `ENABLE_FIRE_NEE` on both modules; the shader's `vol_fire_light`
+family; the packed volume header grew 10 to 16 vec4. No solver, shot or schema change.
+**Inference / not verified.** Collision presence (whether and where a camera ray scatters in the thin plume) dominating the remaining grain is reasoned, not measured; stills read from saved images; no Windows run, no full suite; smoke eddies not visible in the close-up.
+**Next owner + artifact.** Gonzo: judge `docs/images/fire_shot/fire-smoke-grain-before-after-2026-10-31.png`, decide on a camera-flight step (expected single scatter or forced first collision), see "What dominates, and why" in `docs/FLUIDS_SPIKE.md`.
+**Failure modes.** Ratio tracking for the fire's shadow ray was 1.7 to 4.6 x noisier than the midpoint rule (kept only as the test reference); no near-field fade made a vertex inside a dense knot 3.6 x noisier; two volumes and splat scenes keep the previous estimator.
+
 ## 2026-10-31, 1:20 AM PDT — Lane 6 fire shape (step B of 2)
 
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (1:29 AM on 2026-10-31 PDT)
