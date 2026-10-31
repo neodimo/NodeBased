@@ -1158,7 +1158,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         if ps.volumes is not None:
             # smoke: the next real collision along each ray, and the fire the ray sees on the way to it
             t_end = np.minimum(t, np.where(vd >= 1, t_light, np.inf))
-            t_event, glow, in_volume = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel)
+            t_event, glow, in_volume = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel, deep=vd >= 1)
             evented = t_event < t_end
             smoke_run[rows[~evented]] = 0
             if glow.any():

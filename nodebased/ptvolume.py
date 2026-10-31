@@ -49,6 +49,12 @@ from .volumerender import _trilinear
 
 PI = math.pi
 MAX_COLLISIONS = 4096       # tentative collisions one ray may take through one volume before it is let through
+ENABLE_EXPECTED_EMISSION = True   # False sums the fire's glow at the tentative collisions again (the baseline the tests compare against)
+EMIT_CELLS = 4.0            # emission quadrature: voxels per jittered sample on a flight from the camera or a surface ...
+EMIT_CELLS_DEEP = 16.0      # ... and on a flight that starts at a smoke vertex (its glow is weighted down); the shader's twins
+EMIT_TAU = 0.5              # a step's optical depth at the region's extinction bound never exceeds this: dense smoke is sampled finer
+EMIT_TAU_CAP = 6.0          # a flight whose optical depth passes this adds nothing more (exp(-6) < 2.5e-3)
+EMIT_SELF = 0.75            # share of the sample's own extinction in the optical depth back to the step's start; the rest is the previous one's
 ENABLE_SKIP = True          # False keeps the box as the whole majorant (the baseline the measurements compare against)
 MAJORANT_TILE = 16          # voxels along one edge of a cell of the fine majorant grid
 MAJORANT_RATIO = 4          # fine cells along one edge of a cell of the coarse level above it
@@ -255,12 +261,14 @@ def _uniform(keys, turn, volume, step, slot, pcg, rand):
     return rand(key, step * 4 + slot)
 
 
-def free_flight(layer, o, d, t_end, keys, turn, cancel=None):
+def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None):
     """Delta tracking of unit-direction rays from `o` up to distance `t_end` (per ray; may be inf).
 
     Returns `(t_event, emission, owner)`: the distance of each ray's first real collision (inf for none), the fire's
-    contribution along the ray up to it, (N, 3), before the path throughput multiplies it, and the index of the volume
-    that collision happened in (-1 for none). Absorption and scattering are the caller's."""
+    contribution along the ray, (N, 3), before the path throughput multiplies it, and the index of the volume
+    that collision happened in (-1 for none). Absorption and scattering are the caller's. With one volume the fire's
+    contribution is `expected_emission` over the whole flight (`deep` marks the rays that start at a smoke vertex); with several
+    it is summed at the tentative collisions up to the first real one."""
     from .pathtrace import pcg, rand
     n = len(o)
     t_event = np.full(n, np.inf)
@@ -279,7 +287,7 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None):
         alive = np.flatnonzero(t1 > t0)
         position = t0.copy()
         volume = prep.volume
-        glows = layer.fire_table is not None
+        glows = layer.fire_table is not None and not _expected(layer)
         if levels is not None:
             o_cells = (prep.to_object(o) - prep.box_min) / volume.voxel_size      # grid-space origin and step per world unit
             d_cells = (d @ prep.inv[:3, :3].T) / volume.voxel_size
@@ -330,7 +338,91 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None):
     for ray, t, weight in glow_points:
         keep = t <= t_event[ray]
         np.add.at(emission, ray[keep], weight[keep])
+    if _expected(layer):
+        emission = expected_emission(layer, 0, o, d, t_end, keys, turn, np.zeros(n, bool) if deep is None else deep, cancel)
     return t_event, emission, owner
+
+
+def _expected(layer):
+    """Whether the fire's glow along a flight is integrated (`expected_emission`) rather than summed at collisions."""
+    return ENABLE_EXPECTED_EMISSION and len(layer.preps) == 1 and layer.fire_table is not None
+
+
+def expected_emission(layer, vi, o, d, t_end, keys, turn, deep, cancel=None):
+    """The fire's emission along rays of one volume up to `t_end`, weighted by the smoke's transmittance from the ray's start
+    (N, 3): the expected value of what delta tracking's tentative collisions add, found by jittered quadrature over the same
+    regions (a region with a zero majorant holds neither collision nor glow). One sample per `EMIT_CELLS` voxels (`EMIT_CELLS_DEEP`
+    where `deep`), stratified with the same hashed numbers as the shader's `vol_emission`, which this mirrors line for line.
+    Used for one volume; with several the other volumes' transmittance is unknown here and `free_flight` sums the glow at the
+    collisions as before."""
+    from .pathtrace import pcg, rand
+    n = len(o)
+    out = np.zeros((n, 3))
+    settings = layer.settings
+    prep = layer.preps[vi]
+    volume = prep.volume
+    has_temp = settings.fire_intensity > 0 and volume.temperature is not None
+    has_flame = settings.flame_intensity > 0 and volume.flame is not None
+    if not n or layer.fire_table is None or not (has_temp or has_flame) or layer.majorant[vi] <= 1e-8:
+        return out
+    levels = layer.levels(vi)
+    t0, t1 = _clip(prep, o, d)
+    t1 = np.minimum(t1, t_end)
+    alive = np.flatnonzero(t1 > t0)
+    position = t0.copy()
+    tau = np.zeros(n)
+    sigma_prev = np.zeros(n)
+    taken = np.zeros(n, np.int64)                       # samples drawn so far: the hashed number's step
+    wstep = volume.voxel_size * np.where(np.asarray(deep, bool), EMIT_CELLS_DEEP, EMIT_CELLS)
+    flame_colour = vr.fire_radiance(layer.fire_table, np.array([settings.flame_temperature]))[0]
+    if levels is not None:
+        o_cells = (prep.to_object(o) - prep.box_min) / volume.voxel_size
+        d_cells = (d @ prep.inv[:3, :3].T) / volume.voxel_size
+    for _ in range(MAX_COLLISIONS):
+        if not len(alive):
+            break
+        raytrace._cancel(cancel)
+        here = position[alive]
+        if levels is None:
+            mu, leave = np.full(len(alive), layer.majorant[vi]), t1[alive]
+        else:
+            mu, leave = local_majorant(levels, o_cells[alive] + d_cells[alive] * here[:, None], d_cells[alive], here)
+            leave = np.minimum(leave, t1[alive])
+        end = np.minimum(leave, t1[alive])
+        sampled = (mu > 0) & (end > here)
+        if sampled.any():
+            rays = alive[sampled]
+            start, stop = here[sampled], end[sampled]
+            count = np.maximum(1, np.ceil((stop - start) / np.minimum(wstep[rays], EMIT_TAU / mu[sampled])).astype(np.int64))
+            h = (stop - start) / count
+            for j in range(int(count.max())):
+                live = j < count
+                r, hh = rays[live], h[live]
+                ju = _uniform(keys[r], turn, vi, taken[r], 2, pcg, rand)
+                taken[r] += 1
+                t = start[live] + (j + ju) * hh
+                g = prep.to_grid(prep.to_object(o[r] + d[r] * t[:, None]))
+                sigma = settings.density_scale * _trilinear(volume.density, g)
+                e = np.zeros((len(r), 3))
+                if has_temp:
+                    kelvin = settings.temperature_scale * _trilinear(volume.temperature, g)
+                    glow = (kelvin > settings.fire_threshold) & (sigma > 0)
+                    if glow.any():
+                        e[glow] += vr.fire_radiance(layer.fire_table, kelvin[glow]) * (settings.fire_intensity * sigma[glow])[:, None]
+                if has_flame:
+                    e += flame_colour * (settings.flame_intensity * np.maximum(_trilinear(volume.flame, g), 0.0))[:, None]
+                sigma_t = layer.sigma_t_unit * sigma
+                blend = EMIT_SELF * sigma_t + (1.0 - EMIT_SELF) * sigma_prev[r]
+                out[r] += e * (hh * np.exp(-(tau[r] + blend * hh * ju)))[:, None]
+                tau[r] += sigma_t * hh
+                sigma_prev[r] = sigma_t
+            done = np.zeros(len(alive), bool)
+            done[sampled] = tau[rays] > EMIT_TAU_CAP
+        else:
+            done = np.zeros(len(alive), bool)
+        position[alive] = np.maximum(leave, here) + 1e-5
+        alive = alive[~done & (position[alive] < t1[alive])]
+    return out
 
 
 # --- shadow rays ---------------------------------------------------------------------------------------------

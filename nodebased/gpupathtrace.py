@@ -66,6 +66,7 @@ def reuse_counters():
     uniform buffers created, readback buffers made, command buffers submitted."""
     return dict(COUNTERS)
 COUNT_COLLISIONS = False   # compile the volume counting variant: a render's rgb is the mean (tentative, real, region hops) per path
+ENABLE_EXPECTED_EMISSION = True   # False sums the fire's glow at delta tracking's collisions again (the baseline the fire-grain evidence compares against)
 ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
 STACK = 64
 TLAS_STACK = 32
@@ -1149,12 +1150,83 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
   return INF;
 }
 
+// The fire's emission along a free flight through volume `vi` up to `tcap`, weighted by the smoke's transmittance back to
+// the flight's start: the expected value of what the tentative collisions of `vol_flight` (want_glow) add, found by jittered
+// quadrature over the same regions (a region whose majorant is zero holds no collision and no glow there). One sample per
+// `EMIT_CELLS` voxels, stratified; the optical depth is accumulated from the same samples. Only for one volume: with several, the
+// other volumes' transmittance is not known here and `vol_flight` keeps gathering the glow itself.
+const EMIT_CELLS: f32 = 4.0;
+const EMIT_TAU: f32 = 0.5;          // a step's optical depth at the region's extinction bound never exceeds this: dense smoke is sampled finer
+const EMIT_CELLS_DEEP: f32 = 16.0;    // flights that start at a smoke vertex: their glow is weighted down by the albedo and the fire-light gain
+fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u32, cells: f32,
+                glow: ptr<function, vec3<f32>>) {
+  let head = vh(vi, 1u);
+  if (head.w <= 1e-8) { return; }
+  let clip = vol_clip(vi, o, d);
+  let t1 = min(clip.y, tcap);
+  if (!(t1 > clip.x)) { return; }
+  var position = clip.x;
+  let bmin = vh(vi, 0u).xyz;
+  let voxel = vh(vi, 0u).w;
+  let dims = vec3<i32>(vh(vi, 5u).xyz);
+  let bases = vol_bases(vi);
+  let sp = vh(vi, 8u);
+  let has_temp = bases.y != 0xFFFFFFFFu;
+  let has_flame = bases.z != 0xFFFFFFFFu && params.vp3.z > 0.0;
+  let oo = vol_object(vi, o);
+  let dd = vol_object_dir(vi, d);
+  let wstep = voxel * cells;
+  var tau = 0.0;
+  var sigma_prev = 0.0;
+  var sample_index = 0u;
+  var sum = vec3<f32>(0.0);
+  for (var k = 0u; k < MAX_COLLISIONS; k++) {
+    let local = vol_majorant(vi, oo, dd, position, t1);
+    let end = min(local.y, t1);
+    if (local.x > 0.0 && end > position) {
+      let n = max(1u, u32(ceil((end - position) / min(wstep, EMIT_TAU / local.x))));
+      let h = (end - position) / f32(n);
+      for (var j = 0u; j < n; j++) {
+        let ju = vol_uniform(key, turn, vi, sample_index, 2u);
+        let t = position + (f32(j) + ju) * h;
+        sample_index++;
+        let g = (oo + dd * t - bmin) / voxel - vec3<f32>(0.5);
+        let sigma = params.vp0.w * trilinear(bases.x, dims, sp, g);
+        var e = vec3<f32>(0.0);
+        if (has_temp) {
+          let kelvin = params.vp2.x * trilinear(bases.y, dims, sp, g);
+          if (kelvin > params.vp2.y && sigma > 0.0) { e += fire_radiance(kelvin) * (params.vp2.z * sigma); }
+        }
+        if (has_flame) { e += fire_radiance(params.vp3.w) * (params.vp3.z * max(trilinear(bases.z, dims, sp, g), 0.0)); }
+        let sigma_t = params.vp0.x * sigma;
+        // the integrand e * exp(-tau) at the sample, with the optical depth from the step's start to it taken at a blend of the
+        // previous sample's extinction (a quarter) and this sample's (three quarters). This sample's alone is correlated with its
+        // emission and sums low, the previous one's alone sums high; the weights were set on the fire shot at four voxels a step
+        // so the 2048-sample mean matches the delta-tracking estimator's (see docs/FLUIDS_SPIKE.md, "Fluids 13 B grain").
+        sum += e * (h * exp(-(tau + (0.75 * sigma_t + 0.25 * sigma_prev) * h * ju)));
+        tau += sigma_t * h;
+        sigma_prev = sigma_t;
+      }
+      if (tau > 6.0) { break; }
+    }
+    position = max(local.y, position) + 1e-5;
+    if (position >= t1) { break; }
+  }
+  *glow += sum;
+}
+
 // the first real collision of every volume (independent processes), and the fire seen on the way to it
-fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, glow: ptr<function, vec3<f32>>) -> f32 {
+fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, deep: bool,
+                  glow: ptr<function, vec3<f32>>) -> f32 {
   let n = params.h.x;
   let fire = (params.h.w & 2u) != 0u;
   hit_volume = 0u;
-  if (n == 1u) { return vol_flight(0u, o, d, t_end, key, turn, fire, glow); }
+  if (n == 1u && (params.h.w & 4u) != 0u) { return vol_flight(0u, o, d, t_end, key, turn, fire, glow); }
+  if (n == 1u) {
+    let t_one = vol_flight(0u, o, d, t_end, key, turn, false, glow);
+    if (fire) { vol_emission(0u, o, d, t_end, key, turn, select(EMIT_CELLS, EMIT_CELLS_DEEP, deep), glow); }
+    return t_one;
+  }
   var t_event = INF;
   for (var vi = 0u; vi < n; vi++) {
     let te = vol_flight(vi, o, d, min(t_end, t_event), key, turn, false, glow);
@@ -1384,7 +1456,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       var t_end = h.t;
       if (vdepth >= 1u) { t_end = min(t_end, t_light); }
       var glow = vec3<f32>(0.0);
-      t_event = vol_flight_all(o, d, t_end, key, turn, &glow);
+      t_event = vol_flight_all(o, d, t_end, key, turn, vdepth >= 1u, &glow);
       evented = t_event < t_end;
       if (max(glow.x, max(glow.y, glow.z)) > 0.0) {
         // fire seen from a smoke vertex is the fire lighting the smoke: `volume_fire_light` is its gain
@@ -2603,7 +2675,10 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     env_visible = 1 if ps.envs and ps.envs[0].visible_to_camera else 0
     e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, env_visible, packed.linked], "u4")
     g = np.array([ps.shapes, packed.splat_count, packed.splat_base, packed.splat_root], "u4")
-    h = np.array([packed.volume_count, packed.volume_base, packed.fire_base, packed.flags], "u4")
+    # bit 4: sum the fire's glow at delta tracking's collisions (ENABLE_EXPECTED_EMISSION off); set here, not in the packed scene,
+    # because the packed scene is reused between renders
+    h = np.array([packed.volume_count, packed.volume_base, packed.fire_base,
+                  packed.flags | (0 if ENABLE_EXPECTED_EMISSION else 4)], "u4")
     f32 = np.zeros((16, 4), "f4")
     right, up, forward = view[0], view[1], -view[2]
     f32[0, :3], f32[0, 3] = right, width / max(height, 1)
