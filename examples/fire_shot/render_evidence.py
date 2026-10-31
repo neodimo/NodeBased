@@ -295,8 +295,12 @@ def smoke_grain_estimator(args):
     from nodebased import gpupathtrace, ptvolume
     estimator = args.smoke_grain_estimator
     old = estimator == 'old'
+    # old: delta tracking, the fire reached only by phase-sampled rays; new: the fire also sampled as a light at smoke vertices;
+    # strat: new plus the camera ray's first smoke collision found by inverting the optical depth with a stratified number
     gpupathtrace.ENABLE_FIRE_NEE = not old
     ptvolume.ENABLE_FIRE_NEE = not old
+    gpupathtrace.ENABLE_STRATIFIED_FIRST = estimator == 'strat'
+    ptvolume.ENABLE_STRATIFIED_FIRST = estimator == 'strat'
     out = args.workdir / f'smoke-{estimator}'
     out.mkdir(parents=True, exist_ok=True)
     document = build_document(args.width, args.height)
@@ -330,7 +334,7 @@ def smoke_grain_estimator(args):
                       'seconds_all': [round(x, 3) for x in seconds]})
         if frame == 16:
             entry['components'] = {name: grain_of(frame, name)[2] for name in GRAIN_COMPONENTS[1:]}
-            if not old:
+            if estimator != 'old':
                 entry['fire_light_off'] = {'rgba': grain_of(frame, 'rgba', volume_fire_light=0.0)[2],
                                            'diffuse': grain_of(frame, 'diffuse', volume_fire_light=0.0)[2]}
                 params.update(volume_fire_light=1.0)
@@ -394,6 +398,66 @@ def smoke_grain(args):
               'contact_sheet': f'docs/images/fire_shot/{sheet_name}', 'contact_sheet_rows': ['before', 'after'],
               'contact_sheet_columns': list(FRAMES), 'zoom': f'docs/images/fire_shot/{zoom_name}'}
     (REPO / 'benchmarks' / 'fire_shot' / f'fire-smoke-grain-{args.tag}.json').write_text(json.dumps(result, indent=2) + '\n')
+    print(json.dumps(gate, indent=2), flush=True)
+
+
+def strat_grain(args):
+    """The camera ray's first smoke collision stratified (with absorption by weight at that vertex) against fire sampling alone, and
+    against the renderer before fire sampling: grain, time, agreement with a 2048-sample reference rendered by the step before."""
+    images_dir = REPO / 'docs' / 'images' / 'fire_shot'
+    images_dir.mkdir(parents=True, exist_ok=True)
+    order = ('old', 'new', 'strat')           # before fire sampling, with fire sampling (the step before this one), with the stratified first collision
+    for estimator in order:
+        if (args.workdir / f'smoke-{estimator}' / 'result.json').exists() and not args.rerun:
+            continue
+        subprocess.run([sys.executable, str(Path(__file__).resolve()), '--workdir', str(args.workdir), '--width', str(args.width),
+                        '--height', str(args.height), '--smoke-grain-estimator', estimator, '--samples', str(args.samples),
+                        '--reference-samples', str(args.reference_samples)], check=True)
+    runs, arrays = {}, {}
+    for estimator in order:
+        folder = args.workdir / f'smoke-{estimator}'
+        runs[estimator] = json.loads((folder / 'result.json').read_text())
+        arrays[estimator] = {f: [np.load(folder / f'f{f}-s{s}.npy') for s in (1, 2)] for f in FRAMES}
+        arrays[estimator].update({f'ref{f}': [np.load(folder / f'f{f}-ref-s{s}.npy') for s in (1, 2)] for f in FRAMES})
+    agreement = {}
+    for frame in FRAMES:
+        reference = sum(a[..., :3] for a in arrays['new'][f'ref{frame}']) / 2          # the step before, at the reference sample count
+        stratified = sum(a[..., :3] for a in arrays['strat'][f'ref{frame}']) / 2
+        core = reference.mean(-1) > np.quantile(reference.mean(-1), .98)
+        smoke = (reference.mean(-1) > np.quantile(reference.mean(-1), .5)) & ~core
+        agreement[str(frame)] = {
+            'relative_mean_difference': float((stratified.mean() - reference.mean()) / reference.mean()),
+            'relative_mean_difference_flame_core': float((stratified[core].mean() - reference[core].mean()) / reference[core].mean()),
+            'relative_mean_difference_smoke': float((stratified[smoke].mean() - reference[smoke].mean()) / reference[smoke].mean()),
+            'mean_abs_difference': float(np.abs(stratified - reference).mean()),
+            'step_before_two_seed_mean_abs_difference': float(np.abs(arrays['new'][f'ref{frame}'][0][..., :3]
+                                                                     - arrays['new'][f'ref{frame}'][1][..., :3]).mean())}
+    ratios = {str(f): runs['strat']['frames'][str(f)]['seconds_median'] / runs['new']['frames'][str(f)]['seconds_median'] for f in FRAMES}
+    ratios_old = {str(f): runs['strat']['frames'][str(f)]['seconds_median'] / runs['old']['frames'][str(f)]['seconds_median'] for f in FRAMES}
+    old16, mid16, new16 = (runs[e]['frames']['16'] for e in order)
+    gate = {'grain_at_frame_16_before_fire_sampling': old16['grain_rms'], 'grain_at_frame_16_fire_sampling': mid16['grain_rms'],
+            'grain_at_frame_16_stratified': new16['grain_rms'],
+            'grain_ratio_to_before_fire_sampling': new16['grain_rms'] / old16['grain_rms'], 'grain_gate_at_most': old16['grain_rms'] / 2,
+            'render_time_ratio_to_fire_sampling_by_frame': {k: round(v, 3) for k, v in ratios.items()},
+            'render_time_ratio_to_before_fire_sampling_by_frame': {k: round(v, 3) for k, v in ratios_old.items()},
+            'render_time_gate_at_most': 1.3,
+            'worst_relative_mean_difference_at_reference_samples': max(abs(v['relative_mean_difference']) for v in agreement.values())}
+    rows = [np.concatenate([downsample(arrays[e][f][0]) for f in FRAMES], axis=1) for e in ('new', 'strat')]
+    sheet_name = f'fire-smoke-strat-before-after-{args.tag}.png'
+    write_png(images_dir / sheet_name, np.concatenate(rows, axis=0))
+    crops = []
+    for e in ('new', 'strat'):
+        crop = arrays[e][16][0][40:200, 330:650]
+        crops.append(np.repeat(np.repeat(crop, 3, axis=0), 3, axis=1))
+    zoom_name = f'fire-smoke-strat-before-after-zoom-{args.tag}.png'
+    write_png(images_dir / zoom_name, np.concatenate(crops, axis=0))
+    result = {'date': args.date, 'device': runs['strat']['device'], 'resolution': [args.width, args.height],
+              'samples': args.samples, 'reference_samples': args.reference_samples, 'seeds': [1, 2],
+              'gate': gate, 'agreement_with_fire_sampling_at_reference_samples': agreement,
+              'before_fire_sampling': runs['old'], 'fire_sampling': runs['new'], 'stratified': runs['strat'],
+              'contact_sheet': f'docs/images/fire_shot/{sheet_name}', 'contact_sheet_rows': ['before', 'after'],
+              'contact_sheet_columns': list(FRAMES), 'zoom': f'docs/images/fire_shot/{zoom_name}'}
+    (REPO / 'benchmarks' / 'fire_shot' / f'fire-smoke-strat-{args.tag}.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(gate, indent=2), flush=True)
 
 
@@ -541,8 +605,10 @@ def main():
     parser.add_argument('--grain', action='store_true', help='compare the old and new fire-emission estimators on the shot')
     parser.add_argument('--grain-estimator', choices=('old', 'new'), help=argparse.SUPPRESS)
     parser.add_argument('--smoke-grain', action='store_true', help='fire sampled as a light at smoke vertices against the previous renderer')
-    parser.add_argument('--smoke-grain-estimator', choices=('old', 'new'), help=argparse.SUPPRESS)
+    parser.add_argument('--smoke-grain-estimator', choices=('old', 'new', 'strat'), help=argparse.SUPPRESS)
+    parser.add_argument('--strat-grain', action='store_true', help='the camera ray\'s first smoke collision stratified, against fire sampling alone and the step before it')
     parser.add_argument('--reference-samples', type=int, default=2048)
+    parser.add_argument('--rerun', action='store_true', help='--strat-grain renders every variant again instead of reading the saved ones')
     parser.add_argument('--flame', action='store_true', help='soft shot against the shaped flame: profile, tongues, eddies, times, stills')
     parser.add_argument('--flame-time', choices=('before', 'after'), help=argparse.SUPPRESS)
     parser.add_argument('--flame-sweep', action='store_true', help='field measurements of the solver controls on the 64-cell shot')
@@ -554,6 +620,12 @@ def main():
     if args.smoke_grain_estimator:
         args.samples = args.samples or 128
         smoke_grain_estimator(args)
+        return
+    if args.strat_grain:
+        args.samples = args.samples or 128
+        with gpu_lock():
+            args.device = gpu3d._state()['info'].get('device', 'unknown')
+        strat_grain(args)
         return
     if args.smoke_grain:
         args.samples = args.samples or 128

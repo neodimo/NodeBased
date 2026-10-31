@@ -2177,6 +2177,73 @@ many samples, the gain, the shader constants) pass on the RTX 3080 Ti, on the AM
 **Not verified.** Windows; the real display; scenes with several volumes or splats (they keep the previous estimator); a flame much
 denser than the shot's beyond the test volume's dense knot.
 
+### Fluids 13 B smoke finish: the camera ray's first smoke collision is counted, not drawn (2026-10-31)
+
+The smoke step above left frame-16 grain at 0.0130 (gate at most 0.0071) and named the cause it could not reach: the lighting at a smoke
+collision is smooth in the collision's position, while the presence of a collision is not. Delta tracking decides, for each of a pixel's
+128 samples, whether the camera ray scatters in the thin plume at all, and where; a pixel is dark in one sample and bright in the next. **The
+grain gate is met** (0.0141 to 0.0065, 0.46 x) with the mean image unchanged and render time within 1.07 x.
+
+**The estimator** (`ptvolume.stratified_event`, `ptvolume.stratified_number`, `pathtrace._medium_event`; the shader's `vol_first_event`,
+`strat_number`, and the by-weight branch of the collision; both tracers):
+
+- **First collision by inversion.** For the camera ray's first flight (`turn` 0, no scatter yet) the collision is the distance at which the
+  optical depth from the ray's start reaches `-log(1 - xi)`, or none if the flight leaves the smoke (or reaches the surface) first. For `xi`
+  uniform this is delta tracking's distribution: a collision chance of `1 - exp(-tau)`, then the density along the ray. The optical depth is a
+  midpoint sum over the regions `expected_emission` uses, one step per `STRAT_CELLS` (2) voxels and per `STRAT_TAU` (0.25) of optical depth
+  at the region's extinction bound; a ray stops summing where it reaches its target.
+- **A stratified `xi`.** `xi` for sample `s` of a pixel is the base-2 radical inverse of `s` (a bit reversal), rotated by a number hashed from the
+  pixel and the seed (Cranley-Patterson), in integers so the card and the CPU get the same 24 bits. Any run of consecutive samples is spread
+  evenly over [0, 1), so of a pixel's 64 samples through a thin plume the number that scatter is `p x 64` to within one, where delta
+  tracking draws it from a binomial (the tests count both). The rotation is independent per pixel, so each sample's `xi` is uniform and the
+  estimator is unbiased; samples of different pixels are not correlated.
+- **Absorption by weight at that vertex.** The first vertex used to absorb with probability one minus the albedo (a sixth of the shot's scatters,
+  scattering 1.0 and absorption 0.2), drawing those samples black. It now always scatters and its throughput gains the albedo. Later vertices keep the coin flip.
+- **Switches and limits.** The same conditions as fire sampling: one volume that glows, `volume_fire_light` above 0, no splats; otherwise the render is the
+  previous one bit for bit. `ptvolume.ENABLE_STRATIFIED_FIRST` and `gpupathtrace.ENABLE_STRATIFIED_FIRST` set False give delta tracking at the
+  first collision on both tracers (the evidence's "before"). Only a path's first flight is stratified (later flights, motion-blurred
+  renders on the CPU, data passes and several volumes keep delta tracking). Shader flag bit 16 of the volume header word. No solver,
+  shot or schema change.
+
+**Gate** (`render_evidence.py --strat-grain`, RTX 3080 Ti, 960 x 540, 128 samples, seeds 1 and 2, frames 8, 16, 24; times are the median of five warm
+renders with new seeds; "before" is the renderer of the smoke step above, "pre-NEE" the one before it):
+
+| | Pre-NEE | Before | After | Gate |
+| --- | --- | --- | --- | --- |
+| Grain at frame 16 | 0.0141 | 0.0130 | **0.0065** (0.46 x of pre-NEE) | at most 0.0071: **met** |
+| Grain at frames 8 / 24 | 0.0149 / 0.0142 | 0.0137 / 0.0130 | 0.0066 / 0.0066 | |
+| `diffuse` grain at frame 16 | 0.0107 | 0.0096 | 0.0039 | |
+| `diffuse_indirect` / `emission` grain at frame 16 | 0.0038 / 0.0025 | 0.0032 / 0.0025 | 0.0028 / 0.0025 | |
+| Render time, frames 8 / 16 / 24 (s) | 0.758 / 0.750 / 0.781 | 0.860 / 0.799 / 0.776 | 0.918 / 0.804 / 0.800 | after at most 1.3 x before |
+| After over before | | | 1.07 / 1.01 / 1.03 | met |
+| After over pre-NEE | | | 1.21 / 1.07 / 1.02 | |
+| Mean image at 2048 samples against the before renderer at 2048 | | | within 0.025 % (flame core 0.07 %, smoke 0.03 %) | the tracer's tests allow 5 %: met |
+
+Numbers per frame and component: `benchmarks/fire_shot/fire-smoke-strat-2026-10-31.json`. An intermediate run with the stratified first
+collision and the coin-flip absorption (not saved as a benchmark) measured 0.0088 at frame 16: the stratified collision brings the grain from 0.0130
+to 0.0088 and absorbing by weight to 0.0065. The `volume_fire_light` 0 floor of the smoke step (0.0084) is a delta-tracked render, since
+fire sampling is off there, and is not comparable with the stratified column; the stratified path with the fire's light on has `diffuse` grain 0.0039.
+
+![Before above, after below: frames 8, 16, 24 at 128 samples](images/fire_shot/fire-smoke-strat-before-after-2026-10-31.png)
+![The upper plume at frame 16, enlarged three times without smoothing: before above, after below](images/fire_shot/fire-smoke-strat-before-after-zoom-2026-10-31.png)
+
+**Accuracy of the quadrature.** On rays through the test volume the cumulative distribution of the collision distance differs from delta tracking's by at most
+0.14 % at 2-voxel steps (0.09 % at 0.25 voxel) on rays through the knot, and on a haze-only ray by 2 % at 2-voxel steps (0.19 % at 0.25 voxel), all of it where the ray
+enters the box: the density ramps in over the first half voxel (zero-padded trilinear) and a 2-voxel midpoint misses the ramp, which adds 0.02 of optical depth at each
+entry. The shot's mean image at 2048 samples agrees within 0.025 %, and a finer step would cost render time, so the steps stay at 2 voxels.
+
+**Eddies.** Once the grain is gone the close-up shows a smooth orange haze with soft vertical streaks; the 2048-sample reference has the same streaks (the spread of the
+row and column means of the stretched crop agrees to 0.5 %), so they are structure of the smoke, and no eddy-scale swirls are visible. The shape step's cooling made the smoke calm
+(vorticity 185 to 68), and this step changes no solver setting. Reading the saved images, not the real display (**Gonzo to judge**).
+
+**Adapters.** The volume path-tracing, sparse-volume, fire and fire-shot modules (220 tests with `tests/test_fire_smoke_strat.py`, 28 new: the stratified numbers, the
+collision against delta tracking and against the exponential slab, the pixel's scatter count, the CPU twin against the card pixel for pixel on the same seed with the
+estimator on and off and in a thin plume, the means at many samples, the coverage grain, the shader constants) pass on the RTX 3080 Ti, on the AMD Radeon 8060S
+(`force-adapter.py integrated`) and on llvmpipe (`cpu`).
+
+**Not verified.** Windows; the real display; scenes with several volumes or splats (they keep the previous estimator); adaptive-sampling renders (each pixel's samples
+stay consecutive, so a run of any length is spread evenly, but no benchmark was run); a plume denser than the test volume's knot.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up

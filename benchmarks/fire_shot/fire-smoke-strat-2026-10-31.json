@@ -1,0 +1,345 @@
+{
+  "date": "2026-10-31",
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "resolution": [
+    960,
+    540
+  ],
+  "samples": 128,
+  "reference_samples": 2048,
+  "seeds": [
+    1,
+    2
+  ],
+  "gate": {
+    "grain_at_frame_16_before_fire_sampling": 0.014104576781392097,
+    "grain_at_frame_16_fire_sampling": 0.012964382767677307,
+    "grain_at_frame_16_stratified": 0.006484363228082657,
+    "grain_ratio_to_before_fire_sampling": 0.45973468956809505,
+    "grain_gate_at_most": 0.007052288390696049,
+    "render_time_ratio_to_fire_sampling_by_frame": {
+      "8": 1.067,
+      "16": 1.006,
+      "24": 1.031
+    },
+    "render_time_ratio_to_before_fire_sampling_by_frame": {
+      "8": 1.211,
+      "16": 1.072,
+      "24": 1.024
+    },
+    "render_time_gate_at_most": 1.3,
+    "worst_relative_mean_difference_at_reference_samples": 0.00024636765010654926
+  },
+  "agreement_with_fire_sampling_at_reference_samples": {
+    "8": {
+      "relative_mean_difference": 5.1243561756564304e-05,
+      "relative_mean_difference_flame_core": 7.091550651239231e-05,
+      "relative_mean_difference_smoke": 7.986649143276736e-05,
+      "mean_abs_difference": 0.0008632473181933165,
+      "step_before_two_seed_mean_abs_difference": 0.0016918438486754894
+    },
+    "16": {
+      "relative_mean_difference": -7.197830564109609e-05,
+      "relative_mean_difference_flame_core": -0.0006657367921434343,
+      "relative_mean_difference_smoke": 0.00012914935359731317,
+      "mean_abs_difference": 0.0007345524500124156,
+      "step_before_two_seed_mean_abs_difference": 0.001480668201111257
+    },
+    "24": {
+      "relative_mean_difference": -0.00024636765010654926,
+      "relative_mean_difference_flame_core": -0.0002047692978521809,
+      "relative_mean_difference_smoke": -0.0002934961230494082,
+      "mean_abs_difference": 0.000728882267139852,
+      "step_before_two_seed_mean_abs_difference": 0.0015115413116291165
+    }
+  },
+  "before_fire_sampling": {
+    "estimator": "old",
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "resolution": [
+      960,
+      540
+    ],
+    "frames": {
+      "8": {
+        "grain_rms": 0.014883829280734062,
+        "mean_linear_rgb": 0.09628382325172424,
+        "seconds_min": 0.756,
+        "seconds_median": 0.758,
+        "seconds_all": [
+          0.819,
+          0.784,
+          0.756,
+          0.758,
+          0.757
+        ]
+      },
+      "16": {
+        "grain_rms": 0.014104576781392097,
+        "mean_linear_rgb": 0.08894169330596924,
+        "seconds_min": 0.747,
+        "seconds_median": 0.75,
+        "seconds_all": [
+          0.747,
+          0.753,
+          0.75,
+          0.75,
+          0.751
+        ],
+        "components": {
+          "emission": {
+            "grain_rms": 0.0025265368167310953,
+            "mean_linear_rgb": 0.024855542927980423
+          },
+          "diffuse": {
+            "grain_rms": 0.010663545690476894,
+            "mean_linear_rgb": 0.05685559660196304
+          },
+          "diffuse_indirect": {
+            "grain_rms": 0.0038175482768565416,
+            "mean_linear_rgb": 0.003082641866058111
+          }
+        }
+      },
+      "24": {
+        "grain_rms": 0.01415682677179575,
+        "mean_linear_rgb": 0.08723282068967819,
+        "seconds_min": 0.764,
+        "seconds_median": 0.781,
+        "seconds_all": [
+          0.764,
+          0.767,
+          0.781,
+          0.784,
+          0.812
+        ]
+      }
+    },
+    "reference": {
+      "samples": 2048,
+      "frames": {
+        "8": {
+          "seconds": [
+            11.76,
+            11.52
+          ]
+        },
+        "16": {
+          "seconds": [
+            11.44,
+            11.42
+          ]
+        },
+        "24": {
+          "seconds": [
+            10.79,
+            10.83
+          ]
+        }
+      }
+    }
+  },
+  "fire_sampling": {
+    "estimator": "new",
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "resolution": [
+      960,
+      540
+    ],
+    "frames": {
+      "8": {
+        "grain_rms": 0.013656994327902794,
+        "mean_linear_rgb": 0.09625588357448578,
+        "seconds_min": 0.844,
+        "seconds_median": 0.86,
+        "seconds_all": [
+          0.847,
+          0.844,
+          0.86,
+          0.871,
+          0.932
+        ]
+      },
+      "16": {
+        "grain_rms": 0.012964382767677307,
+        "mean_linear_rgb": 0.08891990780830383,
+        "seconds_min": 0.787,
+        "seconds_median": 0.799,
+        "seconds_all": [
+          0.788,
+          0.787,
+          0.805,
+          0.799,
+          0.799
+        ],
+        "components": {
+          "emission": {
+            "grain_rms": 0.0025265368167310953,
+            "mean_linear_rgb": 0.024855542927980423
+          },
+          "diffuse": {
+            "grain_rms": 0.009647417813539505,
+            "mean_linear_rgb": 0.0568365603685379
+          },
+          "diffuse_indirect": {
+            "grain_rms": 0.0032307379879057407,
+            "mean_linear_rgb": 0.003079861868172884
+          }
+        },
+        "fire_light_off": {
+          "rgba": {
+            "grain_rms": 0.008363106288015842,
+            "mean_linear_rgb": 0.08200564235448837
+          },
+          "diffuse": {
+            "grain_rms": 0.006080465391278267,
+            "mean_linear_rgb": 0.051340509206056595
+          }
+        }
+      },
+      "24": {
+        "grain_rms": 0.012988241389393806,
+        "mean_linear_rgb": 0.087199866771698,
+        "seconds_min": 0.769,
+        "seconds_median": 0.776,
+        "seconds_all": [
+          0.772,
+          0.769,
+          0.778,
+          0.776,
+          0.782
+        ]
+      }
+    },
+    "reference": {
+      "samples": 2048,
+      "frames": {
+        "8": {
+          "seconds": [
+            11.96,
+            11.92
+          ]
+        },
+        "16": {
+          "seconds": [
+            11.83,
+            11.74
+          ]
+        },
+        "24": {
+          "seconds": [
+            11.39,
+            11.34
+          ]
+        }
+      }
+    }
+  },
+  "stratified": {
+    "estimator": "strat",
+    "device": "NVIDIA GeForce RTX 3080 Ti",
+    "resolution": [
+      960,
+      540
+    ],
+    "frames": {
+      "8": {
+        "grain_rms": 0.0065850019454956055,
+        "mean_linear_rgb": 0.09625674784183502,
+        "seconds_min": 0.907,
+        "seconds_median": 0.918,
+        "seconds_all": [
+          0.93,
+          0.907,
+          0.918,
+          0.916,
+          1.139
+        ]
+      },
+      "16": {
+        "grain_rms": 0.006484363228082657,
+        "mean_linear_rgb": 0.0889173150062561,
+        "seconds_min": 0.799,
+        "seconds_median": 0.804,
+        "seconds_all": [
+          0.804,
+          0.817,
+          0.818,
+          0.802,
+          0.799
+        ],
+        "components": {
+          "emission": {
+            "grain_rms": 0.0025265368167310953,
+            "mean_linear_rgb": 0.024855542927980423
+          },
+          "diffuse": {
+            "grain_rms": 0.003879901487380266,
+            "mean_linear_rgb": 0.05683714523911476
+          },
+          "diffuse_indirect": {
+            "grain_rms": 0.002816468011587858,
+            "mean_linear_rgb": 0.003079457674175501
+          }
+        },
+        "fire_light_off": {
+          "rgba": {
+            "grain_rms": 0.008363106288015842,
+            "mean_linear_rgb": 0.08200564235448837
+          },
+          "diffuse": {
+            "grain_rms": 0.006080465391278267,
+            "mean_linear_rgb": 0.051340509206056595
+          }
+        }
+      },
+      "24": {
+        "grain_rms": 0.006598778069019318,
+        "mean_linear_rgb": 0.08716301620006561,
+        "seconds_min": 0.794,
+        "seconds_median": 0.8,
+        "seconds_all": [
+          0.797,
+          0.794,
+          0.8,
+          0.804,
+          0.807
+        ]
+      }
+    },
+    "reference": {
+      "samples": 2048,
+      "frames": {
+        "8": {
+          "seconds": [
+            12.33,
+            12.12
+          ]
+        },
+        "16": {
+          "seconds": [
+            11.44,
+            11.41
+          ]
+        },
+        "24": {
+          "seconds": [
+            11.23,
+            11.63
+          ]
+        }
+      }
+    }
+  },
+  "contact_sheet": "docs/images/fire_shot/fire-smoke-strat-before-after-2026-10-31.png",
+  "contact_sheet_rows": [
+    "before",
+    "after"
+  ],
+  "contact_sheet_columns": [
+    8,
+    16,
+    24
+  ],
+  "zoom": "docs/images/fire_shot/fire-smoke-strat-before-after-zoom-2026-10-31.png"
+}
