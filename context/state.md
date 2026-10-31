@@ -1,3 +1,15 @@
+## Lane 2 fidelity step N — NoTimeBlur and Root (12:15 AM on 2026-10-31 PDT)
+
+Branch `openclaw/nb-2d-parity`, on `4926b8bf`, two feature commits (NoTimeBlur, Root) plus this note; not pushed.
+
+**Evidence.** `tests/test_2d_parity_notimeblur.py` 26 tests OK plus the targeted modules listed in TASKLOG.md. Fidelity report regenerated (both copies): overall 90.4 -> 90.9; NoTimeBlur 0.0 -> 100.0 (Time #9, supported); Root 0.0 -> 28.0 (Other #11, partial; 7 of 43 knobs paired, defaults 3 of 5 agree). PARITY_2D counts: supported 124, partial 4, missing 5.
+
+**What landed.** `NoTimeBlur` (rounding, single) on the evaluator and the tile path, bypass, Time toolbar entry, mapping and docs; `tools/audit_nuke_fidelity.py` scores a `document_settings` pairing against document fields; Root paired with `time.first/last/fps`, `settings.color.config`, `settings.color.view`, `settings.viewer.proxy`.
+
+**Not verified.** No full suite, CI, Windows or real Nuke renders. `single`'s anchor rule is a reading of "use single frame".
+
+**Remaining below 100.** 12 deliberate omissions or preset rows 2.3 points; secondary knobs and per-format tabs of Roto, Write, Read and others 5.4; on-purpose default differences 1.5; Root's unpaired knobs 0.2; pixel truth unmeasured.
+
 ## 2026-10-30, 8:40 PM PDT — Lane 6 fire grain (step A of 2)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5) (9:09 PM on 2026-10-30 PDT)
