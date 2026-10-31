@@ -66,6 +66,7 @@ def reuse_counters():
     uniform buffers created, readback buffers made, command buffers submitted."""
     return dict(COUNTERS)
 COUNT_COLLISIONS = False   # compile the volume counting variant: a render's rgb is the mean (tentative, real, region hops) per path
+ENABLE_STRATIFIED_FIRST = True    # False leaves the camera ray's first smoke collision to delta tracking again (the baseline the smoke-grain evidence compares against)
 ENABLE_FIRE_NEE = True            # False leaves the fire reaching smoke only by phase-sampled continuation rays again (the baseline the smoke-grain evidence compares against)
 ENABLE_EXPECTED_EMISSION = True   # False sums the fire's glow at delta tracking's collisions again (the baseline the fire-grain evidence compares against)
 ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
@@ -1246,6 +1247,54 @@ fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: 
   *glow += sum;
 }
 
+// The camera ray's first real collision by inverting the optical depth (ptvolume.stratified_event): the distance at which the optical
+// depth from the flight's start reaches -log(1 - xi), INF where the flight ends first. `xi` is the stratified number of the sample
+// (`strat_xi`), so a pixel's samples that scatter and those that pass are counted evenly instead of drawn. A midpoint sum over the
+// regions `vol_emission` uses, one step per STRAT_CELLS voxels and per STRAT_TAU of optical depth at the region's extinction bound.
+const STRAT_CELLS: f32 = 2.0;
+const STRAT_TAU: f32 = 0.25;
+const STRAT_SALT: u32 = 0x5712A7u;
+var<private> strat_xi: f32 = 0.0;
+fn strat_number(pixel: u32, sample: u32, seed: u32) -> f32 {
+  return f32((reverseBits(sample) + pcg(pixel + pcg(seed + STRAT_SALT))) >> 8u) * (1.0 / 16777216.0);
+}
+fn vol_first_event(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, xi: f32) -> f32 {
+  let head = vh(vi, 1u);
+  if (head.w <= 1e-8) { return INF; }
+  let clip = vol_clip(vi, o, d);
+  let t1 = min(clip.y, tcap);
+  if (!(t1 > clip.x)) { return INF; }
+  var position = clip.x;
+  let bmin = vh(vi, 0u).xyz;
+  let voxel = vh(vi, 0u).w;
+  let dims = vec3<i32>(vh(vi, 5u).xyz);
+  let bases = vol_bases(vi);
+  let sp = vh(vi, 8u);
+  let oo = vol_object(vi, o);
+  let dd = vol_object_dir(vi, d);
+  let wstep = voxel * STRAT_CELLS;
+  let target_tau = -log(1.0 - min(xi, 1.0 - 1e-7));
+  var tau = 0.0;
+  for (var k = 0u; k < MAX_COLLISIONS; k++) {
+    let local = vol_majorant(vi, oo, dd, position, t1);
+    let end = min(local.y, t1);
+    if (local.x > 0.0 && end > position) {
+      let n = max(1u, u32(ceil((end - position) / min(wstep, STRAT_TAU / local.x))));
+      let h = (end - position) / f32(n);
+      for (var j = 0u; j < n; j++) {
+        let t = position + (f32(j) + 0.5) * h;
+        let g = (oo + dd * t - bmin) / voxel - vec3<f32>(0.5);
+        let dtau = params.vp0.x * params.vp0.w * trilinear(bases.x, dims, sp, g) * h;
+        if (tau + dtau >= target_tau) { return position + (f32(j) + (target_tau - tau) / max(dtau, 1e-30)) * h; }
+        tau += dtau;
+      }
+    }
+    position = max(local.y, position) + 1e-5;
+    if (position >= t1) { break; }
+  }
+  return INF;
+}
+
 // the first real collision of every volume (independent processes), and the fire seen on the way to it
 fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, deep: bool, mis_pdf: f32,
                   glow: ptr<function, vec3<f32>>) -> f32 {
@@ -1254,7 +1303,10 @@ fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, d
   hit_volume = 0u;
   if (n == 1u && (params.h.w & 4u) != 0u) { return vol_flight(0u, o, d, t_end, key, turn, fire, glow); }
   if (n == 1u) {
-    let t_one = vol_flight(0u, o, d, t_end, key, turn, false, glow);
+    // bit 16: the camera ray's first flight takes its collision from the sample's stratified number
+    let strat = fire && turn == 0u && !deep && (params.h.w & 16u) != 0u;
+    var t_one = INF;
+    if (strat) { t_one = vol_first_event(0u, o, d, t_end, strat_xi); } else { t_one = vol_flight(0u, o, d, t_end, key, turn, false, glow); }
     if (fire) { vol_emission(0u, o, d, t_end, key, turn, select(EMIT_CELLS, EMIT_CELLS_DEEP, deep), mis_pdf, glow); }
     return t_one;
   }
@@ -1623,7 +1675,10 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         (*acc).alpha = 1.0;
         (*acc).albedo = params.vp1.xyz;
       }
-      if (!(rnd(key, dim + VOL_ABSORB_DIM) < params.vp0.y) || bounces >= max_b || capped) { break; }
+      // bit 16: the stratified first collision goes with absorption by weight at the first vertex (pathtrace._medium_event)
+      let by_weight = vdepth == 0u && (params.h.w & 16u) != 0u;
+      if ((!by_weight && !(rnd(key, dim + VOL_ABSORB_DIM) < params.vp0.y)) || bounces >= max_b || capped) { break; }
+      if (by_weight) { thr = thr * params.vp0.y; }
       let g = params.vp0.z;
       // the second smoke vertex in a row: everything the path gathers from here on gains `1 + volume_multi_scatter`, once
       if (smoke_run == 1u) { thr = thr * (1.0 + params.vp3.x); }
@@ -2152,6 +2207,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(workgroup_id) wi
   var no_first: First;
   for (var s = 0u; s < count; s++) {
     let key = path_key(pixel, sample_base + s, params.b.z);
+//#if VOLUMES
+    strat_xi = strat_number(pixel, sample_base + s, params.b.z);
+//#endif
     var jx = 0.5;
     var jy = 0.5;
     if (code < 7u) { jx = rnd(key, 0u); jy = rnd(key, 1u); }
@@ -2844,7 +2902,8 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     # bit 4: sum the fire's glow at delta tracking's collisions (ENABLE_EXPECTED_EMISSION off); set here, not in the packed scene,
     # because the packed scene is reused between renders
     h = np.array([packed.volume_count, packed.volume_base, packed.fire_base,
-                  (packed.flags & ~(0 if ENABLE_FIRE_NEE and ENABLE_EXPECTED_EMISSION else 8)) | (0 if ENABLE_EXPECTED_EMISSION else 4)], "u4")
+                  (packed.flags & ~(0 if ENABLE_FIRE_NEE and ENABLE_EXPECTED_EMISSION else 8)) | (0 if ENABLE_EXPECTED_EMISSION else 4)
+                  | (16 if ENABLE_STRATIFIED_FIRST and ENABLE_FIRE_NEE and ENABLE_EXPECTED_EMISSION and packed.flags & 8 else 0)], "u4")
     f32 = np.zeros((16, 4), "f4")
     right, up, forward = view[0], view[1], -view[2]
     f32[0, :3], f32[0, 3] = right, width / max(height, 1)

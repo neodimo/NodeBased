@@ -68,6 +68,10 @@ NEE_TAU = 1.0               # ... and per this much optical depth at the volume'
 NEE_MAX_STEPS = 48
 NEE_HALO = 0.05             # share of the neighbouring cells' emission a cell's sampling weight also holds (trilinear reads one voxel beyond a cell)
 NEE_FLOOR = 1e-3            # share of the samples drawn uniformly over the grid, so no cell the fine field could glow in has zero probability
+ENABLE_STRATIFIED_FIRST = True   # False leaves the camera ray's first smoke collision to delta tracking again (the baseline the measurements compare against)
+STRAT_SALT = 0x5712A7       # seed offset of the per-pixel rotation of the stratified sequence
+STRAT_CELLS = 2.0           # first-collision quadrature: one midpoint step per this many voxels ...
+STRAT_TAU = 0.25            # ... and per this much optical depth at the region's extinction bound; the shader's twins
 ENABLE_SKIP = True          # False keeps the box as the whole majorant (the baseline the measurements compare against)
 MAJORANT_TILE = 16          # voxels along one edge of a cell of the fine majorant grid
 MAJORANT_RATIO = 4          # fine cells along one edge of a cell of the coarse level above it
@@ -333,7 +337,7 @@ def _uniform(keys, turn, volume, step, slot, pcg, rand):
     return rand(key, step * 4 + slot)
 
 
-def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None, mis=None):
+def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None, mis=None, xi=None):
     """Delta tracking of unit-direction rays from `o` up to distance `t_end` (per ray; may be inf).
 
     Returns `(t_event, emission, owner)`: the distance of each ray's first real collision (inf for none), the fire's
@@ -342,7 +346,9 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None, mis=None
     contribution is `expected_emission` over the whole flight (`deep` marks the rays that start at a smoke vertex); with several
     it is summed at the tentative collisions up to the first real one. `mis` is `(on, pdf)` per ray: the rays that leave a smoke
     vertex whose fire was also sampled by next-event estimation (`fire_nee`), with the phase pdf their direction was drawn with;
-    their glow is weighted against that sampling (`expected_emission`)."""
+    their glow is weighted against that sampling (`expected_emission`). `xi`, per ray, is a stratified number (`stratified_number`)
+    for the rays that are a path's first flight from the camera, nan for the rest: with one volume that glows their collision is
+    `stratified_event` rather than delta tracking."""
     from .pathtrace import pcg, rand
     n = len(o)
     t_event = np.full(n, np.inf)
@@ -353,12 +359,20 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None, mis=None
     settings = layer.settings
     glow_points = []          # (ray, t, weight) of every emission sample, filtered against the final events
     counts = layer.counts
+    strat = np.zeros(n, bool)
+    if xi is not None and ENABLE_STRATIFIED_FIRST and _expected(layer):
+        xi = np.asarray(xi, np.float64)
+        strat = ~np.isnan(xi)
+        if strat.any():
+            rows = np.flatnonzero(strat)
+            t_event[rows] = stratified_event(layer, 0, o[rows], d[rows], t_end[rows] if np.ndim(t_end) else t_end, xi[rows], cancel)
+            owner[rows[t_event[rows] < np.inf]] = 0
     for vi, prep in enumerate(layer.preps):
         raytrace._cancel(cancel)
         levels = layer.levels(vi)
         t0, t1 = _clip(prep, o, d)
         t1 = np.minimum(np.minimum(t1, t_end), t_event)
-        alive = np.flatnonzero(t1 > t0)
+        alive = np.flatnonzero((t1 > t0) & ~strat)
         position = t0.copy()
         volume = prep.volume
         glows = layer.fire_table is not None and not _expected(layer)
@@ -416,6 +430,92 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None, mis=None
     if _expected(layer):
         emission = expected_emission(layer, 0, o, d, t_end, keys, turn, np.zeros(n, bool) if deep is None else deep, cancel, mis)
     return t_event, emission, owner
+
+
+def bit_reverse(v):
+    """The bits of uint32 `v` in reverse order: the base-2 radical inverse of a sample index, times 2^32."""
+    v = np.asarray(v, np.uint32)
+    v = ((v >> np.uint32(1)) & np.uint32(0x55555555)) | ((v & np.uint32(0x55555555)) << np.uint32(1))
+    v = ((v >> np.uint32(2)) & np.uint32(0x33333333)) | ((v & np.uint32(0x33333333)) << np.uint32(2))
+    v = ((v >> np.uint32(4)) & np.uint32(0x0F0F0F0F)) | ((v & np.uint32(0x0F0F0F0F)) << np.uint32(4))
+    v = ((v >> np.uint32(8)) & np.uint32(0x00FF00FF)) | ((v & np.uint32(0x00FF00FF)) << np.uint32(8))
+    return (v >> np.uint32(16)) | (v << np.uint32(16))
+
+
+def stratified_number(pixel, sample, seed):
+    """The stratified uniform number [0, 1) of sample `sample` of `pixel`: the van der Corput sequence of the sample index, rotated by
+    a number hashed from the pixel (Cranley-Patterson), computed in integers so the card gets the same 24 bits. Any run of
+    consecutive samples is spread evenly over [0, 1), so a pixel's samples that scatter in the smoke and those that pass are
+    counted, not drawn."""
+    from .pathtrace import pcg
+    with np.errstate(over="ignore"):
+        rotation = pcg(np.asarray(pixel, np.uint32) + pcg(np.uint32(seed) + np.uint32(STRAT_SALT)))
+        word = bit_reverse(sample) + rotation
+    return (word >> np.uint32(8)).astype(np.float64) * (1.0 / 16777216.0)
+
+
+def stratified_event(layer, vi, o, d, t_end, xi, cancel=None):
+    """The first real collision of rays through volume `vi`, found by inverting the optical depth rather than by delta tracking: the
+    distance at which the optical depth from the ray's start reaches `-log(1 - xi)`, or inf where the ray leaves the smoke (or reaches
+    `t_end`) first. With `xi` uniform this is the same distribution as delta tracking's first collision (a collision chance of
+    `1 - exp(-tau)`, then the density along the ray); with `xi` stratified over a pixel's samples the number of rays that collide
+    and where along the ray are spread evenly instead of drawn independently. The optical depth is a midpoint sum over the same
+    regions as `expected_emission`, one step per `STRAT_CELLS` voxels and per `STRAT_TAU` of optical depth at the region's extinction
+    bound; the shader's `vol_first_event` mirrors it line for line."""
+    n = len(o)
+    out = np.full(n, np.inf)
+    prep = layer.preps[vi]
+    volume = prep.volume
+    settings = layer.settings
+    if not n or layer.majorant[vi] <= 1e-8:
+        return out
+    target = -np.log1p(-np.minimum(np.asarray(xi, np.float64), 1 - 1e-12))
+    levels = layer.levels(vi)
+    t0, t1 = _clip(prep, o, d)
+    t1 = np.minimum(t1, t_end)
+    alive = np.flatnonzero(t1 > t0)
+    position = t0.copy()
+    tau = np.zeros(n)
+    wstep = volume.voxel_size * STRAT_CELLS
+    if levels is not None:
+        o_cells = (prep.to_object(o) - prep.box_min) / volume.voxel_size
+        d_cells = (d @ prep.inv[:3, :3].T) / volume.voxel_size
+    for _ in range(MAX_COLLISIONS):
+        if not len(alive):
+            break
+        raytrace._cancel(cancel)
+        here = position[alive]
+        if levels is None:
+            mu, leave = np.full(len(alive), layer.majorant[vi]), t1[alive]
+        else:
+            mu, leave = local_majorant(levels, o_cells[alive] + d_cells[alive] * here[:, None], d_cells[alive], here)
+            leave = np.minimum(leave, t1[alive])
+        end = np.minimum(leave, t1[alive])
+        sampled = (mu > 0) & (end > here)
+        found = np.zeros(len(alive), bool)
+        if sampled.any():
+            rays = alive[sampled]
+            start, stop = here[sampled], end[sampled]
+            count = np.maximum(1, np.ceil((stop - start) / np.minimum(wstep, STRAT_TAU / mu[sampled])).astype(np.int64))
+            h = (stop - start) / count
+            pending = np.ones(len(rays), bool)
+            for j in range(int(count.max())):
+                live = pending & (j < count)
+                r, hh = rays[live], h[live]
+                t = start[live] + (j + 0.5) * hh
+                g = prep.to_grid(prep.to_object(o[r] + d[r] * t[:, None]))
+                dtau = layer.sigma_t_unit * settings.density_scale * _trilinear(volume.density, g) * hh
+                reached = tau[r] + dtau >= target[r]
+                hit = r[reached]
+                fraction = (target[hit] - tau[hit]) / np.maximum(dtau[reached], 1e-300)
+                out[hit] = start[live][reached] + (j + fraction) * hh[reached]
+                tau[r] += dtau
+                rows = np.flatnonzero(live)
+                pending[rows[reached]] = False
+            found[sampled] = ~pending
+        position[alive] = np.maximum(leave, here) + 1e-5
+        alive = alive[~found & (position[alive] < t1[alive])]
+    return out
 
 
 def _expected(layer):

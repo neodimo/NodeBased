@@ -1102,10 +1102,12 @@ def _add_class(acc, rows, cls, vertex_depth, value):
                 bucket[rows[sel]] += value[sel]
 
 
-def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
+def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None, strat=None):
     """Radiance buckets and first-hit information for `len(o)` camera rays (unit directions `d`).
 
     `tmin`/`tmax` bound the camera ray only (the near and far planes); every later ray starts at zero.
+    `strat`, per ray, is the stratified number (`ptvolume.stratified_number`) the first flight through the smoke uses when one volume
+    glows and fire sampling is on (`ptvolume.stratified_event`); None leaves delta tracking.
     Returns (`_Accum`, first) where `first` holds alpha (coverage), albedo and the first hit's shape, t,
     shading normal, position and uv for the data passes.
     """
@@ -1160,7 +1162,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
             t_end = np.minimum(t, np.where(vd >= 1, t_light, np.inf))
             # a ray leaving a smoke vertex shares the fire with that vertex's next-event sample: its glow is weighted against it
             mis = (prev_shape[rows] <= -3, prev_pdf[rows]) if _fire_nee_on(ps) else None
-            t_event, glow, in_volume = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel, deep=vd >= 1, mis=mis)
+            xi = strat[rows] if strat is not None and turn == 0 and _strat_on(ps) else None
+            t_event, glow, in_volume = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel, deep=vd >= 1, mis=mis, xi=xi)
             evented = t_event < t_end
             smoke_run[rows[~evented]] = 0
             if glow.any():
@@ -1365,6 +1368,11 @@ def _fire_nee_on(ps):
     return ps.volumes is not None and ps.splats is None and ps.volumes.emitter() is not None
 
 
+def _strat_on(ps):
+    """Whether the camera ray's first smoke vertex is stratified (`ptvolume.stratified_event`): fire sampling is on and one volume glows."""
+    return ptvolume.ENABLE_STRATIFIED_FIRST and _fire_nee_on(ps) and ptvolume._expected(ps.volumes)
+
+
 def _volume_reaches(ps, owner, bit):
     """Per smoke vertex (`owner` is its volume), whether light `bit` lights it (light linking)."""
     return ps.reaches(-3 - owner, bit)
@@ -1380,7 +1388,10 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
     n = len(r)
     key = keys[r]
     g = float(layer.settings.anisotropy)
-    scatter = rand(key, dim + _VOL_ABSORB_DIM) < layer.scatter_fraction
+    # the stratified first collision (`ptvolume.stratified_event`) goes with absorption by weight at that first vertex: the path always
+    # scatters, its throughput gaining the albedo, instead of a third of the pixel's samples being drawn black
+    by_weight = (vd == 0) & _strat_on(ps)
+    scatter = by_weight | (rand(key, dim + _VOL_ABSORB_DIM) < layer.scatter_fraction)
     can = scatter & (bounces[r] < settings.max_bounces) & ~capped[r]
     alive[r[~can]] = False
     keep = np.flatnonzero(can)
@@ -1388,6 +1399,7 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
         return
     r, pos, wd, vd, key, owner = r[keep], pos[keep], wd[keep], vd[keep], key[keep], owner[keep]
     run = run[keep]
+    by_weight = by_weight[keep]
     n = len(r)
     none = np.full(n, -1)
     zero = np.zeros((n, 3))
@@ -1460,6 +1472,7 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
                                                                                 fire_e[live], fire_pv[live], f, fire_t)
     tint = layer.color
     tp = throughput[r] * np.where(run == 1, 1.0 + layer.settings.multi_scatter, 1.0)[:, None]
+    tp = tp * np.where(by_weight, layer.scatter_fraction, 1.0)[:, None]
     gathered = tp * tint * direct
     first_vertex = vd == 0
     if first_vertex.any():
@@ -1965,7 +1978,8 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
             y = rep // width + rand(keys, 1)
             if timed is None:
                 d, eye, _, tmin, tmax = camera_rays(camera, width, height, x, y, keys)
-                acc, first = trace_paths(ps, np.broadcast_to(eye, d.shape), d, keys, settings, tmin, tmax, cancel)
+                acc, first = trace_paths(ps, np.broadcast_to(eye, d.shape), d, keys, settings, tmin, tmax, cancel,
+                                         strat=ptvolume.stratified_number(rep, sample, settings.seed))
             else:
                 acc, first = _trace_timed(timed, path_time(rep, sample, settings.seed, len(timed)), width, height,
                                           x, y, keys, settings, cancel)
