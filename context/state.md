@@ -1,5 +1,31 @@
 ## 2026-10-30, 8:40 PM PDT — Lane 6 fire grain (step A of 2)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5) (9:09 PM on 2026-10-30 PDT)
+
+`main` moved `06ba1e51` -> `c819ca42` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `c819ca42` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1030-2059.log`, started 8:59 PM): **Ran 7532 tests in 526.911 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step M of N: Write delivers TIFF, JPEG and DPX, and takes Nuke's EXR options.** Commits:
+  - `e00108e0` context: record Lane 2 Write formats step
+  - `dc373b29` Write: TIFF, JPEG and DPX files with Nuke's per-format knobs, and the EXR options autocrop, metadata, interleave, first part, full layer names, truncated names and DWA level
+  Diff: 13 files changed, 1153 insertions(+), 49 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step A of 2: the fire and its smoke stop sparkling.** Commits:
+  - `18e3e203` context: record Lane 6 fire grain step
+  - `2bdf77dd` Fire shot: grain evidence for the integrated emission estimator, before and after stills, benchmark and docs section
+  - `ed449439` Path tracer: integrate the fire's emission along each flight instead of summing it at random collisions, on the card and its CPU twin
+  Diff: 13 files changed, 869 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The fire shot's emission grain is down from 0.0110 to 0.0021 and the whole picture's from 0.0142 to 0.0056 at 128 samples (frame 16, RTX 3080 Ti), at 1.10 to 1.22 x the render time, with the 2048-sample mean within 0.013% of the old renderer.
 For a single volume the glow along a flight is integrated (`gpupathtrace.vol_emission`, `ptvolume.expected_emission`: jittered samples every 4 voxels, 16 from a smoke vertex, optical-depth step limit 0.5, stop at 6, 0.75 / 0.25 extinction blend), not summed at tentative collisions; several volumes keep the old sum, and `ENABLE_EXPECTED_EMISSION` False on both tracers gives it back. The CPU and GPU tracers stay in pixel lockstep because they share the random numbers.
 Evidence: `benchmarks/fire_shot/fire-grain-2026-10-30.json`, `docs/FLUIDS_SPIKE.md` "Fluids 13 B grain", stills `docs/images/fire_shot/fire-grain-before-after-*`. Targeted tests (277) pass on the RTX 3080 Ti, AMD Radeon 8060S and llvmpipe. Left: the smoke's own scattering (`diffuse` 0.0045), the real-display verdict (Gonzo), a Windows run.

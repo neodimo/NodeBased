@@ -1,3 +1,9 @@
+## 2026-10-30 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step M of N: Write delivers TIFF, JPEG and DPX, and takes Nuke's EXR options, Lane 6 (Fluids, Claude Sonnet 5.5) step A of 2: the fire and its smoke stop sparkling (integrator tick)
+
+- **What was done:** `main` `06ba1e51` -> `c819ca42` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `c819ca42`: Ran 7532 tests in 526.911 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-30, 8:40 PM PDT — Lane 6 fire grain, step A of 2: the fire and its smoke stop sparkling
 
 - **What was done — evidence:** attribution first, on the shot at frame 16 (128 samples, two seeds): `emission` grain 0.0110 (about its own mean 0.0133), `diffuse` 0.0055, `diffuse_indirect` 0.0013, specular 0; everything 0.0142. The emission estimator summed the fire's glow at delta tracking's tentative collisions (one global majorant because the volume has a flame channel). Replaced, for a single volume, by `vol_emission` (WGSL, `gpupathtrace.py`) and `ptvolume.expected_emission` (CPU twin, same hashed numbers, wired through `free_flight(..., deep=)` and one call in `pathtrace.py`): stratified jittered samples every 4 voxels (16 from a smoke vertex) of `emission * exp(-tau)`, step limited to optical depth 0.5, stop at optical depth 6, attenuation to a sample from a 0.75 own / 0.25 previous extinction blend. Measured on the RTX 3080 Ti: frame-16 grain 0.0142 -> 0.0056; emission grain 0.0110 -> 0.0021; render time 1.10 / 1.18 / 1.22 x for frames 8 / 16 / 24 (limit 1.25 x); mean image at 2048 samples within 0.013% of the old renderer (flame core within 0.15%). 277 targeted tests (volume path tracing, sparse volumes, flame mesh, data passes, fire look, fire shot and the new `tests/test_fire_grain.py`) pass on the RTX 3080 Ti, the AMD Radeon 8060S and llvmpipe.
