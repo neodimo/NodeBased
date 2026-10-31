@@ -5,6 +5,7 @@ import argparse
 from contextlib import contextmanager
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -491,18 +492,20 @@ FLAME_SWEEP = {
 }
 
 
-def bake_and_measure(document, workdir, tag):
-    """Bake a fire-shot document to frame 24 in a fresh cache; per-frame flame-shape numbers for frames 8 to 24 and the bake time."""
+def bake_and_measure(document, workdir, tag, node='cache'):
+    """Bake a fire-shot document to frame 24 in a fresh cache; per-frame flame-shape numbers for frames 8 to 24 and the bake time.
+
+    `node` is the volume node whose output is measured: the fire cache, or the up-res node when the shot has one."""
     evaluator = Evaluator(sim=simcache.SimCache(root=workdir / tag, memory_budget=1 << 30, disk_budget=8 << 30))
     with gpu_lock():
         started = time.perf_counter()
-        evaluator.evaluate_raster(document, 'cache', frame=24, typed=True)
+        evaluator.evaluate_raster(document, node, frame=24, typed=True)
         bake_s = time.perf_counter() - started
     settings = _volume_settings(document['nodes']['render']['params'])
     frames = {}
     for frame in METRIC_FRAMES:
         with gpu_lock():
-            volume = evaluator.evaluate_raster(document, 'cache', frame=frame, typed=True)
+            volume = evaluator.evaluate_raster(document, node, frame=frame, typed=True)
         frames[str(frame)] = flame_metrics.frame_metrics(volume, settings, floor_height=FUEL_TOP)
         frames[str(frame)]['colour'] = flame_metrics.colour_by_height(volume, settings, FUEL_TOP)
     return evaluator, bake_s, frames
@@ -524,6 +527,136 @@ def flame_sweep(args):
     benchmark = REPO / 'benchmarks' / 'fire_shot' / f'fire-shape-sweep-{args.tag}.json'
     benchmark.write_text(json.dumps({'date': args.date, 'cells': 64, 'frames': [METRIC_FRAMES[0], METRIC_FRAMES[-1]],
                                      'variants': results}, indent=2) + '\n')
+
+
+UPRES_SWEEP = {
+    # FluidUpres3D between the fire cache and the render: factor 2 unless stated; the first row is the shot as it is (no up-res)
+    'no up-res (the shot as it was)': None,
+    'x2, no turbulence': dict(),
+    'x2, turbulence 1, swirl 3': dict(turbulence=1.0, swirl_size=3.0),
+    'x2, turbulence 1, swirl 4': dict(turbulence=1.0, swirl_size=4.0),
+    'x2, turbulence 1, swirl 6': dict(turbulence=1.0, swirl_size=6.0),
+    'x2, turbulence 1, swirl 8': dict(turbulence=1.0, swirl_size=8.0),
+    'x2, turbulence 2, swirl 4': dict(turbulence=2.0, swirl_size=4.0),
+    'x2, turbulence 2, swirl 8': dict(turbulence=2.0, swirl_size=8.0),
+    'x2, turbulence 2, swirl 16': dict(turbulence=2.0, swirl_size=16.0),
+    'x2, turbulence 2, swirl 8, grain 3': dict(turbulence=2.0, swirl_size=8.0, grain=3),
+    'x4, turbulence 2, swirl 8': dict(upres_factor='4', turbulence=2.0, swirl_size=8.0),
+}
+
+
+def upres_sweep(args):
+    """Field-only measurements (no rendering) of the up-res node's settings on the shaped 64-cell shot: scale-matched smoke density
+    contrast and vorticity over the smoke, flame-shape numbers read from the up-res output, and the bake time with and without it."""
+    results = {}
+    names = args.variants or list(UPRES_SWEEP)
+    for name in names:
+        overrides = UPRES_SWEEP[name]
+        document = build_document(smoke_upres=False if overrides is None else overrides)
+        node = 'cache' if overrides is None else 'upres'
+        _, bake_s, frames = bake_and_measure(document, args.workdir, 'upsweep-' + str(len(results)), node)
+        results[name] = {'settings': overrides, 'bake_seconds': round(bake_s, 2), **flame_metrics.summarise(frames)}
+        print(name, json.dumps(results[name]), flush=True)
+        shutil.rmtree(args.workdir / ('upsweep-' + str(len(results) - 1)), ignore_errors=True)
+    benchmark = REPO / 'benchmarks' / 'fire_shot' / f'fire-smoke-upres-sweep-{args.tag}.json'
+    benchmark.write_text(json.dumps({'date': args.date, 'cells': 64, 'frames': [METRIC_FRAMES[0], METRIC_FRAMES[-1]],
+                                     'variants': results}, indent=2) + '\n')
+
+
+def upres_time(args):
+    """Warm frame times of the shot without (`off`) and with (`on`) the up-res pass in a process of its own, printed as JSON.
+
+    Same sequence as `flame_time`: one warm-up render, then five renders with new seeds, median of the five. Also the bake time of the
+    cache (frame 24) and the time the up-res node adds to it."""
+    settings = json.loads(args.upres_settings) if args.upres_time == 'on' else False
+    document = build_document(args.width, args.height, smoke_upres=settings)
+    params = document['nodes']['render']['params']
+    evaluator = Evaluator(sim=simcache.SimCache(root=args.workdir / ('upres-time-' + args.upres_time), memory_budget=1 << 30,
+                                                disk_budget=8 << 30))
+    out = {'frames': {}}
+    with gpu_lock():
+        started = time.perf_counter()
+        evaluator.evaluate_raster(document, 'cache', frame=24, typed=True)
+        out['coarse_bake_seconds'] = round(time.perf_counter() - started, 3)
+        if args.upres_time == 'on':
+            started = time.perf_counter()
+            evaluator.evaluate_raster(document, 'upres', frame=24, typed=True)
+            out['upres_bake_seconds'] = round(time.perf_counter() - started, 3)
+        for frame in FRAMES:
+            params.update(render_output='rgba', pt_samples=128, pt_seed=1)
+            evaluator.evaluate_raster(document, 'render', frame=frame)
+            seconds = []
+            for repeat in range(GRAIN_TIMING_REPEATS):
+                params['pt_seed'] = 100 + repeat
+                started = time.perf_counter()
+                evaluator.evaluate_raster(document, 'render', frame=frame)
+                seconds.append(time.perf_counter() - started)
+            out['frames'][str(frame)] = {'seconds_median': round(float(np.median(seconds)), 3), 'seconds_min': round(min(seconds), 3),
+                                         'seconds_all': [round(x, 3) for x in seconds]}
+    print(json.dumps(out))
+
+
+def upres_compare(args):
+    """The shaped shot against the same shot through the up-res pass: smoke structure (field and image), flame measures, grain, times, stills."""
+    images_dir = REPO / 'docs' / 'images' / 'fire_shot'
+    images_dir.mkdir(parents=True, exist_ok=True)
+    settings = json.loads(args.upres_settings)
+    runs, pictures = {}, {}
+    for name, option in (('before', False), ('after', settings)):
+        document = build_document(args.width, args.height, smoke_upres=option)
+        params = document['nodes']['render']['params']
+        node = 'upres' if option is not False else 'cache'
+        evaluator, bake_s, frames = bake_and_measure(document, args.workdir, 'upres-' + name, node)
+        run = {'settings': option, 'bake_seconds': round(bake_s, 3), 'frames': frames, 'summary': flame_metrics.summarise(frames),
+               'render': {}}
+        pictures[name] = {}
+        for frame in FRAMES:
+            with gpu_lock():
+                params.update(render_output='rgba', pt_samples=128, pt_seed=1)
+                first = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+                params['pt_seed'] = 2
+                second = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+                params.update(render_output='emission', pt_seed=1)
+                emission = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+                params.update(render_output='rgba', pt_seed=1)
+            frames[str(frame)]['image'] = flame_metrics.image_rows(emission)
+            run['render'][str(frame)] = {'grain_rms': float(np.sqrt(((first[..., :3] - second[..., :3]) ** 2).mean() / 2)),
+                                         'mean_linear_rgb': float(first[..., :3].mean())}
+            pictures[name][frame] = (first, second)
+            if frame == 16:
+                write_png(images_dir / f'fire-smoke-upres-{name}-{frame:03d}.png', first)
+        runs[name] = run
+        print(name, json.dumps({'bake': run['bake_seconds'], **run['summary']}), flush=True)
+    for frame in FRAMES:                  # smoke structure on the pixels the unprocessed shot calls smoke, for both
+        mask = flame_metrics.smoke_mask(pictures['before'][frame][0])
+        for name in ('before', 'after'):
+            runs[name]['render'][str(frame)]['smoke_image'] = flame_metrics.smoke_structure(*pictures[name][frame], mask)
+            runs[name]['render'][str(frame)]['smoke_image_by_blur_width'] = {
+                str(width): flame_metrics.smoke_structure(*pictures[name][frame], mask, width)['structure'] for width in (7, 15, 31, 63)}
+        runs['after']['render'][str(frame)]['smoke_pixels'] = int(mask.sum())
+    for name, option in (('before', 'off'), ('after', 'on')):
+        timing = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--workdir', str(args.workdir), '--width', str(args.width),
+                                 '--height', str(args.height), '--upres-time', option, '--upres-settings', args.upres_settings],
+                                check=True, capture_output=True, text=True)
+        measured = json.loads(timing.stdout.strip().splitlines()[-1])
+        for frame, numbers in measured.pop('frames').items():
+            runs[name]['render'][frame].update(numbers)
+        runs[name]['timing_process'] = measured
+    sheet = [np.concatenate([downsample(pictures[n][f][0]) for f in FRAMES], axis=1) for n in ('before', 'after')]
+    sheet_name = f'fire-smoke-upres-before-after-{args.tag}.png'
+    write_png(images_dir / sheet_name, np.concatenate(sheet, axis=0))
+    crops = []
+    for name in ('before', 'after'):
+        crop = pictures[name][16][0][40:200, 330:650]
+        crops.append(np.repeat(np.repeat(crop, 3, axis=0), 3, axis=1))
+    zoom_name = f'fire-smoke-upres-before-after-zoom-{args.tag}.png'
+    write_png(images_dir / zoom_name, np.concatenate(crops, axis=0))
+    with gpu_lock():
+        device = gpu3d._state()['info'].get('device', 'unknown')
+    result = {'date': args.date, 'device': device, 'resolution': [args.width, args.height], 'samples': 128, 'upres_settings': settings,
+              'before': runs['before'], 'after': runs['after'], 'contact_sheet': f'docs/images/fire_shot/{sheet_name}',
+              'contact_sheet_rows': ['before', 'after'], 'contact_sheet_columns': list(FRAMES), 'zoom': f'docs/images/fire_shot/{zoom_name}'}
+    (REPO / 'benchmarks' / 'fire_shot' / f'fire-smoke-upres-{args.tag}.json').write_text(json.dumps(result, indent=2) + '\n')
 
 
 def flame_time(args):
@@ -612,6 +745,11 @@ def main():
     parser.add_argument('--flame', action='store_true', help='soft shot against the shaped flame: profile, tongues, eddies, times, stills')
     parser.add_argument('--flame-time', choices=('before', 'after'), help=argparse.SUPPRESS)
     parser.add_argument('--flame-sweep', action='store_true', help='field measurements of the solver controls on the 64-cell shot')
+    parser.add_argument('--upres-sweep', action='store_true', help='field measurements of the up-res node\'s settings on the shaped shot')
+    parser.add_argument('--variants', nargs='*', help='only these --upres-sweep rows (by name)')
+    parser.add_argument('--upres', action='store_true', help='the shaped shot against the same shot through the up-res pass')
+    parser.add_argument('--upres-time', choices=('off', 'on'), help=argparse.SUPPRESS)
+    parser.add_argument('--upres-settings', default='{}', help='FluidUpres3D settings as JSON for --upres')
     parser.add_argument('--curl-sweep', action='store_true', help='render 64 cells with sideways curl strengths')
     parser.add_argument('--tag', default='2026-10-30')
     parser.add_argument('--date', default='2026-10-30')
@@ -644,6 +782,15 @@ def main():
         return
     if args.flame_sweep:
         flame_sweep(args)
+        return
+    if args.upres_sweep:
+        upres_sweep(args)
+        return
+    if args.upres_time:
+        upres_time(args)
+        return
+    if args.upres:
+        upres_compare(args)
         return
     if args.flame:
         flame_shape(args)

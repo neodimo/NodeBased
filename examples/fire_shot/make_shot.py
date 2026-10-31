@@ -4,7 +4,8 @@ The shot is a 64-cell fire solve (division size .03125 over the 2 x 2 x 2 metre 
 path-traced samples, with a modest seeded sideways wobble on the fuel source's velocity and a shaped flame: the gas cools
 quickly (`SHAPED_SOLVER`) and the flame glow takes its colour from the gas temperature (`SHAPED_RENDER`), so there is a bright
 yellow core at the fuel and tongues that cool to orange and dark red. Pass `flame_shape=False` for the soft orange column of the
-grain step, and `division_size=.0625, pt_samples=32, curl=0, flame_shape=False` for the earlier 32-cell straight column.
+grain step, `smoke_upres=True` (or a dict of FluidUpres3D settings) for the up-res detail pass between the cache and the render
+(off by default), and `division_size=.0625, pt_samples=32, curl=0, flame_shape=False` for the earlier 32-cell straight column.
 """
 from __future__ import annotations
 
@@ -29,6 +30,11 @@ SHAPED_RENDER = dict(volume_flame_follow_temperature=1, volume_temperature_scale
                      volume_fire_intensity=.02)
 
 
+# The up-res detail pass between the fire cache and the render (docs/FLUIDS_SPIKE.md, "Fluids 13 B smoke up-res"). Off unless asked for:
+# `smoke_upres=True` uses these, a dict overrides them.
+SMOKE_UPRES = dict(upres_factor="2", turbulence=0.0, swirl_size=1.0, grain=2, seed=0)
+
+
 def curl_keys(curl, first=1, last=24, step=3):
     """Seeded sideways source velocity: (frame, vel_x, vel_z) every few frames, same numbers every run."""
     phase = np.random.default_rng(CURL_SEED).uniform(0, 2 * math.pi, 2)
@@ -38,7 +44,7 @@ def curl_keys(curl, first=1, last=24, step=3):
 
 
 def build_document(width=960, height=540, division_size=.03125, pt_samples=128, curl=.10,
-                   source_noise=0.0, flame_shape=True, **fire_overrides):
+                   source_noise=0.0, flame_shape=True, smoke_upres=False, **fire_overrides):
     d = Dispatcher()
     nodes = {
         "fuel": ("FluidSource3D", dict(src_center_y=.20, src_radius=.22, src_fuel=2.0,
@@ -72,15 +78,19 @@ def build_document(width=960, height=540, division_size=.03125, pt_samples=128, 
         nodes["fire"][1].update(SHAPED_SOLVER)
         nodes["render"][1].update(SHAPED_RENDER)
     nodes["fire"][1].update(fire_overrides)
+    up_settings = smoke_upres if isinstance(smoke_upres, dict) else {}
+    smoke_upres = smoke_upres not in (False, None)        # an empty dict still asks for the pass, with its default settings
+    if smoke_upres:
+        nodes["upres"] = ("FluidUpres3D", {**SMOKE_UPRES, **up_settings})
     for name, (kind, params) in nodes.items():
         d.execute({"op": "create", "id": name, "type": kind, "params": params})
     for target, slot, source in (
         ("fire", "fluid", "fuel"), ("cache", "volume", "fire"),
         ("scene", "object0", "floor"), ("scene", "object1", "stone"),
-        ("scene", "object2", "cache"), ("scene", "object3", "fill"),
+        ("scene", "object2", "upres" if smoke_upres else "cache"), ("scene", "object3", "fill"),
         ("scene", "object4", "fuel_block"),
         ("render", "scene", "scene"), ("render", "camera", "camera"),
-    ):
+    ) + ((("upres", "volume", "cache"),) if smoke_upres else ()):
         d.execute({"op": "connect", "id": target, "input": slot, "source": source})
     for frame, vx, vz in curl_keys(curl) if curl else ():
         d.execute({"op": "set_key", "id": "fuel", "param": "src_vel_x", "frame": frame, "value": vx})

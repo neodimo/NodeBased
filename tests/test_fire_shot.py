@@ -71,6 +71,33 @@ class FireShotGraphTests(unittest.TestCase):
         self.assertEqual(_curves(document), {})
 
 
+class SmokeUpresOptionTests(unittest.TestCase):
+    """Lane 6, smoke up-res step: the shot can route the fire cache through FluidUpres3D; the committed shot keeps its graph."""
+
+    def test_the_option_is_off_by_default_and_adds_no_node(self):
+        nodes = make_shot.build_document()["nodes"]
+        self.assertNotIn("upres", nodes)
+        self.assertEqual(nodes["scene"]["inputs"]["object2"], "cache")
+
+    def test_the_option_inserts_the_up_res_node_between_the_cache_and_the_scene(self):
+        for option in (True, {}, {"upres_factor": "4", "turbulence": 1.0}):
+            with self.subTest(option=option):
+                nodes = make_shot.build_document(smoke_upres=option)["nodes"]
+                self.assertEqual(nodes["upres"]["type"], "FluidUpres3D")
+                self.assertEqual(nodes["upres"]["inputs"]["volume"], "cache")
+                self.assertEqual(nodes["scene"]["inputs"]["object2"], "upres")
+        nodes = make_shot.build_document(smoke_upres={"upres_factor": "4", "turbulence": 1.0})["nodes"]
+        self.assertEqual(nodes["upres"]["params"]["upres_factor"], "4")
+        self.assertEqual(nodes["upres"]["params"]["turbulence"], 1.0)
+
+    def test_the_other_nodes_are_unchanged_by_the_option(self):
+        plain, with_up = make_shot.build_document()["nodes"], make_shot.build_document(smoke_upres=True)["nodes"]
+        for name, node in plain.items():
+            if name == "scene":
+                continue
+            self.assertEqual(node["params"], with_up[name]["params"], name)
+
+
 class ShapedFlameTests(unittest.TestCase):
     """Lane 6, fire shape step B: the shot cools its gas and colours the flame by temperature; `flame_shape=False` is the soft shot."""
 

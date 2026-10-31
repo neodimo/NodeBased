@@ -143,3 +143,75 @@ class EddyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UpresScaleTests(unittest.TestCase):
+    """Lane 6, smoke up-res step: the measures read an up-res volume (2 or 4 times finer) over the same physical size."""
+
+    def test_cell_scale_follows_the_voxel_size(self):
+        for factor in (1, 2, 4):
+            v = replace(volume(np.zeros((4, 4, 4))), voxel_size=fm.REFERENCE_VOXEL / factor)
+            self.assertEqual(fm.cell_scale_of(v), factor)
+
+    def test_the_blur_covers_the_same_physical_size_at_every_resolution(self):
+        n = 16
+        x = np.arange(n * 2)
+        coarse = np.where((np.arange(n) // 2) % 2 == 0, 1.0, .2).astype(np.float32)[:, None, None] * np.ones((n, n, n), np.float32)
+        fine = np.repeat(np.repeat(np.repeat(coarse, 2, axis=0), 2, axis=1), 2, axis=2)
+        a = replace(volume(np.zeros_like(coarse), density=coarse), voxel_size=fm.REFERENCE_VOXEL)
+        b = replace(volume(np.zeros_like(fine), density=fine), voxel_size=fm.REFERENCE_VOXEL / 2)
+        self.assertAlmostEqual(fm.smoke_eddies(a)["density_contrast"], fm.smoke_eddies(b)["density_contrast"], delta=.06)
+        self.assertEqual(len(x), n * 2)
+
+    def test_box_blur_matches_the_direct_five_cell_blur(self):
+        d = np.random.default_rng(1).random((9, 10, 11)).astype(np.float32)
+        blur = d.copy()
+        for axis in range(3):
+            padded = np.pad(blur, [(2, 2) if a == axis else (0, 0) for a in range(3)], mode="edge")
+            blur = sum(np.take(padded, np.arange(k, k + d.shape[axis]), axis=axis) for k in range(5)) / 5
+        np.testing.assert_allclose(fm._box_blur(d, 5), blur, atol=1e-6)
+
+    def test_tongue_regions_scale_with_the_cell_size(self):
+        flame = np.zeros((16, 4, 16), np.float32)
+        flame[2:4, :, 2:4] = 1.0                       # 4 cells per slice: below the 6-cell minimum
+        self.assertEqual(fm.tongue_counts(flame)["mean"], 0.0)
+        flame[2:6, :, 2:6] = 1.0                       # 16 cells: a tongue at scale 1, but not at scale 2 (24 needed)
+        self.assertEqual(fm.tongue_counts(flame)["mean"], 1.0)
+        self.assertEqual(fm.tongue_counts(flame, cell_scale=2)["mean"], 0.0)
+
+    def test_flame_field_core_reads_the_flame_channel_alone(self):
+        flame = np.zeros((4, 10, 4), np.float32)
+        flame[1:3, :, 1:3] = np.linspace(1.0, .2, 10)[None, :, None]
+        self.assertTrue(fm.flame_field_core(flame)["in_lowest_third"])
+        self.assertEqual(fm.flame_field_core(flame)["position"], 0.0)
+        flame = flame[:, ::-1]
+        self.assertFalse(fm.flame_field_core(flame)["in_lowest_third"])
+
+
+class SmokeImageStructureTests(unittest.TestCase):
+    def _images(self, pattern):
+        rng = np.random.default_rng(0)
+        h, w = 120, 160
+        yy, xx = np.mgrid[:h, :w]
+        base = np.zeros((h, w, 4))
+        base[..., :3] = (.5 + pattern * np.sin(xx / 3.) * np.sin(yy / 4.))[..., None]
+        return base + rng.normal(0, .05, base.shape), base + rng.normal(0, .05, base.shape)
+
+    def test_shared_pattern_counts_and_independent_noise_does_not(self):
+        mask = np.ones((120, 160), bool)
+        patterned = fm.smoke_structure(*self._images(.2), mask)
+        flat = fm.smoke_structure(*self._images(0.0), mask)
+        self.assertGreater(patterned["structure"], .1)
+        self.assertLess(flat["structure"], .02)
+        self.assertAlmostEqual(patterned["noise_rms_over_mean"], flat["noise_rms_over_mean"], delta=.01)
+
+    def test_smoke_mask_leaves_out_the_dark_background_and_the_flame(self):
+        image = np.zeros((50, 50, 4))
+        image[..., :3] = np.linspace(.2, .5, 50)[None, :, None]
+        image[:10, :10, :3] = .01                      # background
+        image[45:, 45:, :3] = 20.0                     # flame (1 % of the pixels)
+        mask = fm.smoke_mask(image)
+        self.assertFalse(mask[:10, :10].any())
+        self.assertFalse(mask[45:, 45:].any())
+        self.assertTrue(mask[20, 35])                  # brighter than the median, not the flame
+        self.assertFalse(mask[20, 2])                  # dimmer than the median

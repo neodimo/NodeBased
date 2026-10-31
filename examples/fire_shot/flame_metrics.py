@@ -15,6 +15,7 @@ LIVE_FRACTION = .05          # a slice or row counts as part of the flame when i
 TONGUE_FRACTION = .35        # a tongue is a connected region above this fraction of its own slice's peak
 TONGUE_MIN_CELLS = 6         # smaller regions are speckle, not a tongue
 SMOKE_THRESHOLD = .05        # density above which a cell holds smoke
+REFERENCE_VOXEL = 2.0 / 64   # the 64-cell shot's voxel size in metres
 
 
 def emission_luminance(volume, settings):
@@ -29,8 +30,8 @@ def emission_luminance(volume, settings):
     return emission @ LUMA
 
 
-def label_regions(mask):
-    """Number of 4-connected regions of at least `TONGUE_MIN_CELLS` cells in a 2D boolean mask (no SciPy here)."""
+def label_regions(mask, min_cells=TONGUE_MIN_CELLS):
+    """Number of 4-connected regions of at least `min_cells` cells in a 2D boolean mask (no SciPy here)."""
     mask = np.asarray(mask, bool)
     seen = np.zeros_like(mask)
     count = 0
@@ -46,7 +47,7 @@ def label_regions(mask):
                 if 0 <= ni < mask.shape[0] and 0 <= nj < mask.shape[1] and mask[ni, nj] and not seen[ni, nj]:
                     seen[ni, nj] = True
                     stack.append((ni, nj))
-        count += size >= TONGUE_MIN_CELLS
+        count += size >= min_cells
     return count
 
 
@@ -102,10 +103,11 @@ def height_profile(luma):
             'peaks': peaks.round(4).tolist()}
 
 
-def tongue_counts(flame):
+def tongue_counts(flame, cell_scale=1):
     """Separate bright regions per horizontal slice of the flame (burn-rate) field: the mean over the slices of the flame's span
     (and the maximum). A region is a 4-connected set of at least `TONGUE_MIN_CELLS` cells above `TONGUE_FRACTION` of its
-    slice's peak, so unburnt smoke specks do not count."""
+    slice's peak, so unburnt smoke specks do not count. `cell_scale` is how many times finer the grid is than the 64-cell shot
+    (an up-res output): the minimum region grows with its square so the same physical size counts."""
     flame = np.maximum(np.asarray(flame, np.float32), 0)
     peaks = flame.reshape(flame.shape[0], flame.shape[1], -1).max(axis=(0, 2))
     span = flame_span(peaks)
@@ -114,8 +116,25 @@ def tongue_counts(flame):
     counts = []
     for y in range(span[0], span[1] + 1):
         plane = flame[:, y, :]
-        counts.append(label_regions(plane >= TONGUE_FRACTION * plane.max()))
+        counts.append(label_regions(plane >= TONGUE_FRACTION * plane.max(), TONGUE_MIN_CELLS * cell_scale ** 2))
     return {'mean': round(float(np.mean(counts)), 3), 'max': int(max(counts)), 'slices': len(counts)}
+
+
+def cell_scale_of(volume):
+    """How many times finer than the 64-cell shot's grid (2 / 64 metres) the volume is: 1 for the shot, 2 or 4 for its up-res output."""
+    return max(1, int(round(REFERENCE_VOXEL / float(volume.voxel_size))))
+
+
+def _box_blur(field, width):
+    """Separable box blur of odd `width` cells with edge replication, by cumulative sums."""
+    half = width // 2
+    out = field.astype(np.float64)
+    for axis in range(3):
+        padded = np.pad(out, [(half + 1, half) if a == axis else (0, 0) for a in range(3)], mode='edge')
+        total = np.cumsum(padded, axis=axis)
+        n = field.shape[axis]
+        out = (np.take(total, np.arange(width, width + n), axis=axis) - np.take(total, np.arange(0, n), axis=axis)) / width
+    return out.astype(np.float32)
 
 
 def smoke_eddies(volume):
@@ -123,8 +142,9 @@ def smoke_eddies(volume):
 
     The cells are those with density above `SMOKE_THRESHOLD` and a flame (burn rate) below `LIVE_FRACTION` of the frame's peak
     flame, so the fast flame zone does not count. `vorticity_mean` is the mean |curl v| (1/s) over them. `density_contrast` is the rms
-    of (density - its 5-cell box blur) over them, divided by their mean density: how much of the haze is structure rather than a
-    smooth column."""
+    of (density - its box blur) over them, divided by their mean density: how much of the haze is structure rather than a
+    smooth column. The blur is 5 cells of the 64-cell shot, so an up-res volume (2 or 4 times finer) is blurred over the same
+    physical size and its extra detail counts."""
     density = np.asarray(volume.density, np.float32)
     smoke = density > SMOKE_THRESHOLD
     if volume.flame is not None:
@@ -139,10 +159,7 @@ def smoke_eddies(volume):
         grad = [[np.gradient(v[..., c], h, axis=a) for a in range(3)] for c in range(3)]
         wx, wy, wz = grad[2][1] - grad[1][2], grad[0][2] - grad[2][0], grad[1][0] - grad[0][1]
         out['vorticity_mean'] = float(np.sqrt(wx * wx + wy * wy + wz * wz)[smoke].mean())
-    blur = density.copy()
-    for axis in range(3):
-        padded = np.pad(blur, [(2, 2) if a == axis else (0, 0) for a in range(3)], mode='edge')
-        blur = sum(np.take(padded, np.arange(k, k + density.shape[axis]), axis=axis) for k in range(5)) / 5
+    blur = _box_blur(density, 5 * cell_scale_of(volume) | 1)
     out['density_contrast'] = float(np.sqrt(((density - blur)[smoke] ** 2).mean()) / density[smoke].mean())
     return out
 
@@ -185,12 +202,26 @@ def image_rows(emission):
             'tongues_mean': round(float(np.mean(counts)), 3), 'peak': round(float(peaks.max()), 4)}
 
 
+def flame_field_core(flame):
+    """Where the flame (burn rate) field itself peaks along its height: 0 at the bottom of its span, 1 at the top, and whether that is in the
+    lowest third. Read from the flame channel alone, so it does not depend on the smoke density the emission measures multiply it by."""
+    flame = np.maximum(np.asarray(flame, np.float32), 0)
+    peaks = flame.reshape(flame.shape[0], flame.shape[1], -1).max(axis=(0, 2))
+    span = flame_span(peaks)
+    if span is None:
+        return {'position': None, 'in_lowest_third': False}
+    lo, hi = span
+    position = int(np.argmax(peaks[lo:hi + 1])) / max(hi - lo, 1)
+    return {'position': round(position, 3), 'in_lowest_third': position <= 1 / 3 + 1e-9}
+
+
 def frame_metrics(volume, settings, emission_pixels=None, floor_height=0.0):
     """All the flame-shape numbers for one frame. `floor_height` is the top of whatever hides the flame's lowest cells."""
     luma = above(emission_luminance(volume, settings), volume, floor_height)
     profile = height_profile(luma)
     entry = {'profile': {k: v for k, v in profile.items() if k != 'peaks'},
-             'tongues': tongue_counts(above(np.asarray(volume.flame, np.float32), volume, floor_height)),
+             'tongues': tongue_counts(above(np.asarray(volume.flame, np.float32), volume, floor_height), cell_scale_of(volume)),
+             'flame_field_core': flame_field_core(above(np.asarray(volume.flame, np.float32), volume, floor_height)),
              'eddies': smoke_eddies(volume), 'sway_cells': column_sway(volume),
              'peak_luminance': round(float(luma.max()), 4), 'height_peaks': profile['peaks']}
     if emission_pixels is not None:
@@ -208,6 +239,8 @@ def summarise(frames):
         return round(float(np.mean(values)), 4) if values else None
 
     return {'core_in_lowest_third_frames': sum(bool(e['profile']['core_in_lowest_third']) for e in entries),
+            'flame_field_core_in_lowest_third_frames': sum(bool(e['flame_field_core']['in_lowest_third']) for e in entries),
+            'flame_field_core_position_mean': mean(lambda e: e['flame_field_core']['position']),
             'frames': len(entries),
             'core_position_mean': mean(lambda e: e['profile']['core_position']),
             'top_over_bottom_mean': mean(lambda e: e['profile']['top_over_bottom']),
@@ -240,3 +273,35 @@ def colour_by_height(volume, settings, floor_height=0.0):
     return {'bottom_g_over_r': round(float(bottom[1] / max(bottom[0], 1e-9)), 4),
             'top_g_over_r': round(float(top[1] / max(top[0], 1e-9)), 4),
             'bottom_luminance_share': round(float(bottom @ LUMA / max(total, 1e-9)), 4)}
+
+
+def highpass(image, width=15):
+    """Image minus its box blur of `width` pixels (edge replicated), per channel; the structure finer than the blur."""
+    half = width // 2
+    out = np.asarray(image, np.float64)
+    for axis in (0, 1):
+        padded = np.pad(out, [(half + 1, half) if a == axis else (0, 0) for a in range(out.ndim)], mode='edge')
+        total = np.cumsum(padded, axis=axis)
+        n = image.shape[axis]
+        out = (np.take(total, np.arange(width, width + n), axis=axis) - np.take(total, np.arange(0, n), axis=axis)) / width
+    return np.asarray(image, np.float64) - out
+
+
+def smoke_structure(a, b, mask, width=15):
+    """Eddy-scale structure of the smoke in two renders with independent noise (H, W, 4 each) over a pixel `mask`.
+
+    The luminance of each image is high-passed (a box of `width` pixels, 15 unless said) and the structure is the square root of the covariance of the two
+    high-passes over the mask, over the mean luminance there: the noise is independent between the renders, so it drops out of the
+    covariance and what is left is the pattern both renders share. Zero when there is none."""
+    la, lb = np.asarray(a[..., :3], np.float64) @ LUMA, np.asarray(b[..., :3], np.float64) @ LUMA
+    ha, hb = highpass(la, width), highpass(lb, width)
+    covariance = float((ha[mask] * hb[mask]).mean())
+    mean = float(((la + lb) / 2)[mask].mean())
+    return {'structure': round(float(np.sqrt(max(covariance, 0.0)) / max(mean, 1e-9)), 5), 'mean_luminance': round(mean, 5),
+            'noise_rms_over_mean': round(float(np.sqrt(max(((ha[mask] - hb[mask]) ** 2).mean() / 2 - 0.0, 0.0)) / max(mean, 1e-9)), 5)}
+
+
+def smoke_mask(image):
+    """Pixels of the smoke above the flame in an image: brighter than the median pixel and outside the brightest 2 % (the flame)."""
+    luma = np.asarray(image[..., :3], np.float64) @ LUMA
+    return (luma > np.quantile(luma, .5)) & (luma <= np.quantile(luma, .98))
