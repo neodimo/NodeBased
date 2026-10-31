@@ -1,0 +1,194 @@
+{
+  "date": "2026-10-31",
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "resolution": [
+    960,
+    540
+  ],
+  "samples": 128,
+  "upres_settings": {
+    "upres_factor": "4",
+    "turbulence": 2.0,
+    "swirl_size": 8.0,
+    "grain": 2,
+    "seed": 0
+  },
+  "before": {
+    "settings": false,
+    "render": {
+      "8": {
+        "grain_rms": 0.0065850019454956055,
+        "mean_linear_rgb": 0.09625932574272156,
+        "smoke_image": {
+          "structure": 0.06453,
+          "mean_luminance": 0.15509,
+          "noise_rms_over_mean": 0.04127
+        },
+        "smoke_image_by_blur_width": {
+          "7": 0.03728,
+          "15": 0.06453,
+          "31": 0.12107,
+          "63": 0.24121
+        },
+        "seconds_median": 0.888,
+        "seconds_min": 0.876,
+        "seconds_all": [
+          0.876,
+          0.88,
+          0.891,
+          0.888,
+          0.899
+        ]
+      },
+      "16": {
+        "grain_rms": 0.006484363228082657,
+        "mean_linear_rgb": 0.08891602605581284,
+        "smoke_image": {
+          "structure": 0.08421,
+          "mean_luminance": 0.13713,
+          "noise_rms_over_mean": 0.04541
+        },
+        "smoke_image_by_blur_width": {
+          "7": 0.04723,
+          "15": 0.08421,
+          "31": 0.16007,
+          "63": 0.30374
+        },
+        "seconds_median": 0.821,
+        "seconds_min": 0.818,
+        "seconds_all": [
+          0.999,
+          0.818,
+          0.819,
+          0.821,
+          0.827
+        ]
+      },
+      "24": {
+        "grain_rms": 0.006598778069019318,
+        "mean_linear_rgb": 0.08716592192649841,
+        "smoke_image": {
+          "structure": 0.07987,
+          "mean_luminance": 0.13089,
+          "noise_rms_over_mean": 0.04524
+        },
+        "smoke_image_by_blur_width": {
+          "7": 0.04705,
+          "15": 0.07987,
+          "31": 0.14837,
+          "63": 0.29859
+        },
+        "seconds_median": 0.79,
+        "seconds_min": 0.784,
+        "seconds_all": [
+          0.792,
+          0.784,
+          0.789,
+          0.794,
+          0.79
+        ]
+      }
+    },
+    "timing_process": {
+      "coarse_bake_seconds": 0.007
+    }
+  },
+  "after": {
+    "settings": {
+      "upres_factor": "4",
+      "turbulence": 2.0,
+      "swirl_size": 8.0,
+      "grain": 2,
+      "seed": 0
+    },
+    "render": {
+      "8": {
+        "grain_rms": 0.006581718567758799,
+        "mean_linear_rgb": 0.09283193200826645,
+        "smoke_image": {
+          "structure": 0.07985,
+          "mean_luminance": 0.14681,
+          "noise_rms_over_mean": 0.04698
+        },
+        "smoke_image_by_blur_width": {
+          "7": 0.04104,
+          "15": 0.07985,
+          "31": 0.14449,
+          "63": 0.25878
+        },
+        "seconds_median": 6.503,
+        "seconds_min": 5.731,
+        "seconds_all": [
+          5.731,
+          6.074,
+          6.503,
+          6.881,
+          6.696
+        ]
+      },
+      "16": {
+        "grain_rms": 0.006728956941515207,
+        "mean_linear_rgb": 0.08884526789188385,
+        "smoke_image": {
+          "structure": 0.09496,
+          "mean_luminance": 0.13539,
+          "noise_rms_over_mean": 0.05217
+        },
+        "smoke_image_by_blur_width": {
+          "7": 0.04917,
+          "15": 0.09496,
+          "31": 0.17283,
+          "63": 0.30392
+        },
+        "seconds_median": 43.873,
+        "seconds_min": 42.959,
+        "seconds_all": [
+          43.982,
+          43.873,
+          47.449,
+          43.042,
+          42.959
+        ]
+      },
+      "24": {
+        "grain_rms": 0.006594271864742041,
+        "mean_linear_rgb": 0.08745316416025162,
+        "smoke_image": {
+          "structure": 0.09106,
+          "mean_luminance": 0.13089,
+          "noise_rms_over_mean": 0.05039
+        },
+        "smoke_image_by_blur_width": {
+          "7": 0.04833,
+          "15": 0.09106,
+          "31": 0.16668,
+          "63": 0.30252
+        },
+        "seconds_median": 79.7,
+        "seconds_min": 76.542,
+        "seconds_all": [
+          78.614,
+          90.346,
+          80.684,
+          79.7,
+          76.542
+        ]
+      }
+    },
+    "timing_process": {
+      "coarse_bake_seconds": 2.242,
+      "upres_bake_seconds": 70.756
+    }
+  },
+  "contact_sheet": "docs/images/fire_shot/fire-smoke-upres-before-after-x4-2026-10-31.png",
+  "contact_sheet_rows": [
+    "before",
+    "after"
+  ],
+  "contact_sheet_columns": [
+    8,
+    16,
+    24
+  ],
+  "zoom": "docs/images/fire_shot/fire-smoke-upres-before-after-zoom-x4-2026-10-31.png"
+}

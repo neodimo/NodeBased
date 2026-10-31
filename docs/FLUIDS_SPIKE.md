@@ -2325,13 +2325,30 @@ occupied tiles); the noise's density peaks (4 to 6 x the coarse maximum) most li
 use to step, which would add the rest (3.3 to 4.8 s); that cause was not isolated. Without the up-res the shot already misses the 0.75 s gate (0.80 to 0.90 s since the strat step), so the gate cannot be met by this
 route without a cheaper volume path; the sparse volume path-tracing work (`docs/FLUIDS_SPIKE.md`, "N2" and "H2") is where that would be done.
 
+**Factor 4, rendered** (finish 1; `render_evidence.py --upres-render --timing-from`, the same shot, 960 x 540, 128 samples, seeds 1 and 2, RTX 3080 Ti; x4, turbulence 2, swirl 8, grain 2;
+`benchmarks/fire_shot/fire-smoke-upres-render-x4-2026-10-31.json`; stills `fire-smoke-upres-before-after-x4-2026-10-31.png` and the zoom beside it). The 17-frame field pass of `--upres` did not
+finish in 25 minutes at factor 4 (the processor-bound measures on the fine volumes), so this run renders only; its field numbers are the x4 row of the sweep above.
+
+| | Without | x2 | x4 | Gate |
+| --- | --- | --- | --- | --- |
+| Bake to frame 24 (up-res part) | 8.5 s | 17.3 s | 2.2 s coarse + 70.8 s up-res (75 s in the sweep) | under 30 s: **not met** |
+| 128-sample frame, frames 8 / 16 / 24 (median of five) | 0.89 / 0.82 / 0.79 s | 2.4 / 3.5 / 3.7 s | **6.5 / 43.9 / 79.7 s** | under 0.75 s: **not met** |
+| Frame-16 grain | 0.0065 | 0.0061 | 0.0067 | at most 0.0071: met |
+| Image smoke structure, frames 8 / 16 / 24 (15-pixel high-pass) | 0.065 / 0.084 / 0.080 | 0.069 / 0.085 / 0.081 | 0.080 / 0.095 / 0.091 | up clearly |
+| Smoke contrast in the field (sweep) | 0.44 | 0.91 | 0.96 | up clearly |
+
+Reading it: factor 4 takes the image structure up 14 to 24 % (x2: 1 to 8 %), the field contrast from 0.91 to 0.96, and costs 8 to 90 times the frame time of the shot without it
+(the time climbs with the frame, 6.5 s at frame 8 to 80 s at frame 24, as the plume fills more fine tiles; it is processor-bound, the card sat near 0 % between volume uploads).
+Grain stays in the gate. In the stills the smoke is finer and more broken than x2: small dark gaps and short streaks at 4 to 12 pixels, a little tilted by the sideways drift, still
+no curls or rolled eddies (the node adds density detail only; vorticity stays at the coarse 55). Factor 4 is not a candidate for the shot's default and the default stays off.
+
 **Adapters.** The fire, fire-shot, flame-metric, up-res, sparse-volume and fluid-edit modules (209 tests; `tests/test_fluid_upres_reinject.py` adds 7: the flame, temperature
 and fuel follow the coarse cache each frame, the older pass kept the first frame's flame, smoke that arrives later is kept and mass matches, detail is seeded once and
 a stationary plume does not flicker, new smoke gets new detail each frame, the card against the CPU for a reinjected frame, and the evaluator through the fire shot;
 `tests/test_flame_metrics.py` adds 7 for the scale-matched measures and the image structure; `tests/test_fire_shot.py` adds 3 for the shot option) pass on the RTX 3080 Ti, on the AMD
 Radeon 8060S (`force-adapter.py integrated`) and on llvmpipe (`cpu`).
 
-**Not verified.** Windows; the real display; factor 4 beyond its bake time (no render); a solver or `FluidUpres3D` default (none changed); the older carry-only pass for old
+**Not verified.** Windows (no Windows machine in this lane; the CI build covers it); the real display (stills read from saved images); factor 4 is now rendered (frame times above) but its field measures come from the sweep, not the 17-frame pass; a solver or `FluidUpres3D` default (none changed); the older carry-only pass for old
 documents with up-res nodes now reinjects too (their cached up-res frames are rebuilt); a cheaper render path that would let the up-res meet the frame-time gate.
 
 ## K2 rigid bodies — finish 1
