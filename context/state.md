@@ -1,5 +1,26 @@
 ## 2026-10-31, 11:10 AM PDT — Lane 6 smoke up-res: the fire shot's smoke through FluidUpres3D (default stays off)
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (11:30 AM on 2026-10-31 PDT)
+
+`main` moved `a6e34ebc` -> `59f4eacf` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `59f4eacf` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-1120.log`, started 11:20 AM): **Ran 7658 tests in 575.317 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step A of 1: the smoke above the fire curls, through the existing up-res node.** Commits:
+  - `8646335a` docs: smoke up-res section (eddy contrast up, frame-time gate not met), notes and bundled copy
+  - `1b9facda` Fire shot: optional up-res pass for the smoke (off by default), scale-matched smoke and flame measures, up-res sweep and comparison evidence
+  - `8cc3f849` FluidUpres3D: take the flame, temperature and new smoke from the coarse cache every frame; read coarse frames through the node's own store
+  Diff: 18 files changed, 5724 insertions(+), 82 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 **Evidence.** Targeted tests on this branch (`nodebased/fluid_upres.py`, `nodebased/imaging.py`, the fire-shot example and tests): 209 tests (fire, fire-shot, flame-metrics, up-res, up-res reinjection, sparse volumes, fluid edits) pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe; `tests.test_knowledge` passes. Measurements on the RTX 3080 Ti at 960 x 540, 128 samples: `benchmarks/fire_shot/fire-smoke-upres-2026-10-31.json` (comparison) and `fire-smoke-upres-sweep-2026-10-31.json` (11 settings).
 
 **What changed.** `FluidUpres3D` now reinjects the coarse cache every frame (the shipped pass dropped the flame and temperature of a continuing fire after frame 1): fine = coarse sampled on the fine grid + carried detail; new smoke is seeded with curl-noise detail once. The evaluator's up-res loop reads coarse frames through the node's store (it solved the coarse simulation twice). `make_shot.build_document(smoke_upres=...)` adds the node to the shot (off by default). Measures are scale-matched for up-res volumes (`flame_metrics.cell_scale_of`).
