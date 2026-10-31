@@ -1065,6 +1065,19 @@ KNOB_LAYOUT = {
         KnobGroup("string", ("frame_expr",), label="Frame"), KnobGroup("bool", ("create_directories",), label="Create directories"),
         KnobGroup("bool", ("use_limit",), label="Limit to range"), KnobGroup("int", ("first",), label="First frame"),
         KnobGroup("int", ("last",), label="Last frame"), KnobGroup("enum", ("exr_compression",), label="EXR compression"),
+        # Fidelity step M: each file format's own knobs; Properties shows only those of the format the Write writes
+        # (writenode.hidden_params).
+        KnobGroup("float_slider", ("exr_dw_compression_level",), label="Compression level", soft_range=(0, 100)),
+        KnobGroup("bool", ("exr_autocrop",), label="Autocrop"), KnobGroup("enum", ("exr_metadata",), label="Metadata"),
+        KnobGroup("enum", ("exr_interleave",), label="Interleave"), KnobGroup("string", ("exr_first_part",), label="First part"),
+        KnobGroup("bool", ("exr_standard_layer_name_format",), label="Standard layer name format"),
+        KnobGroup("bool", ("exr_write_full_layer_names",), label="Write full layer names"),
+        KnobGroup("bool", ("exr_truncate_channel_names",), label="Truncate channel names"),
+        KnobGroup("enum", ("tiff_datatype",), label="TIFF data type"), KnobGroup("enum", ("tiff_compression",), label="TIFF compression"),
+        KnobGroup("float_slider", ("jpeg_quality",), label="JPEG quality", soft_range=(0, 1)),
+        KnobGroup("enum", ("jpeg_sub_sampling",), label="JPEG sub-sampling"),
+        KnobGroup("enum", ("dpx_datatype",), label="DPX data type"), KnobGroup("bool", ("dpx_fill",), label="DPX fill"),
+        KnobGroup("bool", ("dpx_big_endian",), label="DPX big endian"), KnobGroup("enum", ("dpx_transfer",), label="DPX transfer"),
         # Read file, render order and context variables (nodebased/writenode.py, pathcontext.py); the Render buttons sit under them.
         KnobGroup("file_write", ("proxy",), label="Proxy file"), KnobGroup("bool", ("reading",), label="Read file"),
         KnobGroup("bool", ("read_all_lines",), label="Read all lines"), KnobGroup("enum", ("on_error",), label="Missing frames"),

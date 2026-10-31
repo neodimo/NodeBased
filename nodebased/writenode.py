@@ -1,6 +1,9 @@
 """Nuke's Write-node knobs that change what is written and how: `channels`, the output transform (`colorspace`, `raw`),
 `premultiplied`, `views`, the frame number written into the file name (`frame_mode` / `frame_expr`), `create_directories`,
-the limit to a frame range (`use_limit` with `first` / `last`) and the EXR `exr_compression`.
+the limit to a frame range (`use_limit` with `first` / `last`), the EXR `exr_compression` and, since fidelity step M, the
+per-format options of Nuke's Write: TIFF, JPEG and DPX files (nodebased/writeformats.py) and the EXR options `autocrop`,
+`metadata`, `interleave`, `first part`, `standard layer name format`, `write full layer names`, `truncate channel names` and the
+DWAA / DWAB `compression level`.
 
 Each default writes what Write always wrote: every channel and layer, EXR in the working space or PNG through the sRGB
 display view, the document's own frame numbers, missing directories created, no range limit. `active(params)` is False for
@@ -16,7 +19,18 @@ from pathlib import Path
 
 import numpy as np
 
-from . import pathcontext
+from . import pathcontext, writeformats
+
+# Fidelity step M: the EXR options of Nuke's Write. Every default writes the EXR that Write always wrote. `metadata` defaults
+# to "all metadata except input/*", which is what Write always wrote; Nuke's own default, "default metadata", leaves out the
+# exr/* keys as well. `standardlayernameformat` orders layer, view and channel in a name, and with the one view NodeBased has
+# the two orders coincide, so it is stored and shown but changes no byte.
+EXR_DEFAULTS = {"exr_autocrop": 0, "exr_metadata": "all metadata except input/*", "exr_interleave": "channels, layers and views",
+                "exr_first_part": "", "exr_standard_layer_name_format": 0, "exr_write_full_layer_names": 0,
+                "exr_truncate_channel_names": 0, "exr_dw_compression_level": 45.0}
+METADATA_CHOICES = ("no metadata", "default metadata", "default metadata and exr/*", "all metadata except input/*", "all metadata")
+INTERLEAVE_CHOICES = ("channels, layers and views", "channels and layers", "channels")
+EXR_PARAMS = ("bit_depth", "exr_compression", *EXR_DEFAULTS)
 
 DEFAULTS = {"channels": "all", "colorspace": "Auto", "premultiplied": 0, "raw": 0, "views": "main", "frame_mode": "expression",
             "frame_expr": "", "create_directories": 1, "first": 1, "last": 1, "use_limit": 0, "exr_compression": "zips",
@@ -25,10 +39,14 @@ DEFAULTS = {"channels": "all", "colorspace": "Auto", "premultiplied": 0, "raw": 
             "proxy": "", "read_all_lines": 0,
             # Fidelity step F: read the file back (`reading`, `on_error`, `reload`), the order Render all goes in
             # (`render_order`), and the context variables of the path (nodebased/pathcontext.py).
-            "reading": 0, "on_error": "error", "reload": 0, "render_order": 1, **pathcontext.PARAMS}
+            "reading": 0, "on_error": "error", "reload": 0, "render_order": 1, **pathcontext.PARAMS,
+            **EXR_DEFAULTS, **writeformats.DEFAULTS}
 # These change what a Write shows or when it renders, not the bytes it writes.
 NOT_BYTES = ("create_directories", "first", "last", "use_limit", "frame_mode", "frame_expr", "views", "proxy", "read_all_lines",
-             "reading", "on_error", "reload", "render_order", *pathcontext.PARAMS)
+             "reading", "on_error", "reload", "render_order", *pathcontext.PARAMS,
+             # TIFF, JPEG and DPX files are written by their own writer, never by the EXR / PNG path `active` decides; the EXR
+             # options are read by `exr_options` instead.
+             *writeformats.DEFAULTS, *EXR_DEFAULTS)
 KEYS = tuple(DEFAULTS)
 VIEW_CHOICES = ("main",)
 # What each output transform is called inside an EXR's `oiio:ColorSpace` tag, so Read's Auto finds its way back.
@@ -40,7 +58,8 @@ def extras(params):
 
 
 def active(params):
-    """True when any Write knob here differs from the value that leaves Write as it was."""
+    """True when any Write knob here differs from the value that leaves Write as it was. The EXR options (`exr_options`) and
+    the TIFF, JPEG and DPX knobs are not part of this question."""
     return any(params.get(key, default) != default for key, default in DEFAULTS.items() if key not in NOT_BYTES)
 
 
@@ -54,13 +73,17 @@ def target_of(params, proxy=False):
         raise ValueError("Set an output path on the Write node first")
     chosen = params["file_type"]
     suffix = Path(path).suffix.lower().lstrip(".")
+    named = writeformats.format_of_suffix(suffix)
     if chosen == "Auto":
-        if suffix not in ("exr", "png"):
-            raise ValueError(f"Cannot infer a format from {Path(path).name!r}; choose exr or png, or use that extension")
-        chosen = suffix
-    elif suffix != chosen:
+        if named is None:
+            raise ValueError(f"Cannot infer a format from {Path(path).name!r}; choose exr, png, tiff, jpeg or dpx, "
+                             "or use that extension")
+        chosen = named
+    elif chosen not in writeformats.EXTENSIONS:
+        raise ValueError(f"Write: unknown file type {chosen!r}")
+    elif named != chosen:
         # Honour the explicit choice and make the filename agree with it, rather than writing PNG bytes into a file called .exr.
-        path = str(Path(path).with_suffix("." + chosen))
+        path = str(Path(path).with_suffix("." + writeformats.EXTENSIONS[chosen][0]))
     return path, chosen, params["bit_depth"]
 
 
@@ -156,12 +179,14 @@ def select_layers(layers, wanted):
 
 # -------------------------------------------------------------------------------------- output transform
 def output_space(params, file_type):
-    """The space the file holds: 'Raw' (no conversion), a named space, or 'Auto' resolved per file type."""
+    """The space the file holds: 'Raw' (no conversion), a named space, or 'Auto' resolved per file type: the working space
+    for EXR and for a 32-bit float TIFF, sRGB for every other file."""
     if int(params.get("raw", 0)):
         return "Raw"
     space = str(params.get("colorspace", "Auto"))
     if space == "Auto":
-        return "ACEScg" if file_type == "exr" else "sRGB"
+        float_tiff = file_type == "tiff" and params.get("tiff_datatype", writeformats.DEFAULTS["tiff_datatype"]) == "32 bit float"
+        return "ACEScg" if file_type == "exr" or float_tiff else "sRGB"
     return space
 
 
@@ -190,8 +215,14 @@ def write_raster(raster, target, file_type, bits, params):
     from . import imaging, media
     check_views(params)
     pixels = raster.to_display()
+    if file_type in writeformats.STILL_FORMATS:
+        letters, _wanted = channel_plan(params.get("channels", "all"))
+        writeformats.write_still(target, pixels, file_type, params, letters, output_space(params, file_type),
+                                 bool(int(params.get("premultiplied", 0))))
+        return len(letters.replace("A", "")) + (1 if "A" in letters and file_type != "jpeg" else 0)
     layers = media.raster_layer_arrays(raster)
-    if not active(params):
+    options = exr_options(params, raster.meta) if file_type == "exr" else None
+    if not active(params) and options is None:
         if file_type == "exr":
             media.write_exr(target, pixels, bits=bits, layers=layers, metadata=raster.meta,
                             compression=str(params.get("exr_compression", "zips")))
@@ -205,23 +236,106 @@ def write_raster(raster, target, file_type, bits, params):
         converted = pixels if space in ("ACEScg", "Raw") else to_output(pixels, space, premultiplied, straight_file=False)
         media.write_exr(target, converted, bits=bits, layers=select_layers(layers, wanted), metadata=raster.meta,
                         compression=str(params.get("exr_compression", "zips")), beauty=letters,
-                        colorspace_tag=EXR_TAGS[space])
+                        colorspace_tag=EXR_TAGS[space], options=options)
     else:
         write_png_channels(target, pixels, letters, space, premultiplied)
     return len(letters)
+
+
+# ---------------------------------------------------------------------------------------------- EXR options
+def exr_attributes(meta, choice):
+    """(header attributes, write the typed timecode) for a `metadata` choice of the EXR options.
+
+    The stream's metadata keys are `input/*` (where the pixels came from), `exr/*` (header attributes an EXR Read found), the
+    `timecode`, and any other `a/b` key a metadata node or another tool made. `no metadata` writes none of them; `default
+    metadata` the timecode and the other keys; `default metadata and exr/*` those and the exr/* keys; `all metadata except
+    input/*` is the same set (NodeBased has no other prefix), and `all metadata` adds the input/* keys, under their own names.
+    A Cryptomatte manifest (`cryptomatte/...`) is part of the layers it describes and is written whatever the choice."""
+    from .metadata import TIMECODE_KEY, key_to_header
+    if choice not in METADATA_CHOICES:
+        raise ValueError(f"Write: metadata must be one of {', '.join(METADATA_CHOICES)}, got {choice!r}")
+    attributes = {}
+    for key, value in (meta or {}).items():
+        if key.startswith("cryptomatte/"):
+            wanted = True
+        elif key.startswith("input/"):
+            wanted = choice == "all metadata"
+        elif key.startswith("exr/"):
+            wanted = choice in ("default metadata and exr/*", "all metadata except input/*", "all metadata")
+        else:
+            wanted = choice != "no metadata"
+        if not wanted:
+            continue
+        name = key_to_header(key) or (key if key.startswith("input/") and ":" not in key else None)
+        if name is not None:
+            attributes[name] = str(value)
+    return attributes, choice != "no metadata" and TIMECODE_KEY in (meta or {})
+
+
+def exr_options(params, meta):
+    """The `options` for `media.write_exr` that the Write's EXR knobs ask for, or None when every one is at its default (the
+    EXR is then written by the unchanged call)."""
+    levels = {key: params.get(key, default) for key, default in EXR_DEFAULTS.items()}
+    compression = str(params.get("exr_compression", "zips"))
+    dwa = compression in ("dwaa", "dwab")
+    if all(levels[key] == EXR_DEFAULTS[key] for key in ("exr_autocrop", "exr_metadata", "exr_interleave", "exr_first_part",
+                                                        "exr_write_full_layer_names", "exr_truncate_channel_names")) and not dwa:
+        return None
+    interleave = levels["exr_interleave"]
+    if interleave not in INTERLEAVE_CHOICES:
+        raise ValueError(f"Write: interleave must be one of {', '.join(INTERLEAVE_CHOICES)}, got {interleave!r}")
+    attributes, timecode = exr_attributes(meta, levels["exr_metadata"])
+    options = {"autocrop": bool(int(levels["exr_autocrop"])), "attributes": attributes, "timecode": timecode,
+               "parts": "layers" if interleave == "channels" else "single",
+               "full_layer_names": bool(int(levels["exr_write_full_layer_names"])),
+               "truncate_names": bool(int(levels["exr_truncate_channel_names"]))}
+    if interleave == "channels" and str(params.get("channels", "all")).strip().lower() == "all":
+        options["first_part"] = str(levels["exr_first_part"]).strip()
+    if dwa:
+        options["dw_level"] = float(levels["exr_dw_compression_level"])
+    return options
+
+
+# ------------------------------------------------------------------------------------- what Properties shows
+def panel_format(params):
+    """The file format the Write is set to write: its `file_type`, or for Auto the one its path's extension names. An Auto Write
+    with no recognised extension shows the EXR knobs, as every Write did before TIFF, JPEG and DPX."""
+    chosen = params.get("file_type", "Auto")
+    if chosen in writeformats.EXTENSIONS:
+        return chosen
+    suffix = Path(str(params.get("path", "") or "")).suffix
+    return writeformats.format_of_suffix(suffix) or "exr"
+
+
+def hidden_params(params):
+    """The params Properties leaves out because they belong to a file format the Write is not set to write."""
+    shown = panel_format(params)
+    hidden = set()
+    if shown != "exr":
+        hidden.update(EXR_PARAMS)
+    for name, keys in writeformats.PARAMS.items():
+        if name != shown:
+            hidden.update(keys)
+    return hidden
+
+
+def straight_output(frame, space, premultiplied):
+    """(colour, alpha) of a premultiplied working-space `frame` as an output file holds them: colour converted into `space`
+    (straight, unless `premultiplied` asks for the colour as it is), alpha clamped to 0..1. Colour is not clamped here."""
+    from .color import display_rgb
+    alpha = np.clip(frame[..., 3:4], 0, 1)
+    if space == "sRGB" and not premultiplied:
+        straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
+        return np.array(display_rgb(straight, "sRGB"), dtype=np.float32), alpha
+    return np.array(to_output(frame, space, premultiplied, straight_file=True)[..., :3], dtype=np.float32), alpha
 
 
 def write_png_channels(path, frame, letters, space, premultiplied):
     """8-bit PNG of the selected colour channels (unselected colour reads 0), with alpha only when A is selected."""
     from PySide6.QtGui import QImage
     from PySide6.QtCore import QSaveFile, QIODevice
-    from .color import display_rgb
-    alpha = np.clip(frame[..., 3:4], 0, 1)
-    if space == "sRGB" and not premultiplied:
-        straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
-        colour = np.clip(display_rgb(straight, "sRGB"), 0, 1)
-    else:
-        colour = np.clip(to_output(frame, space, premultiplied, straight_file=True)[..., :3], 0, 1)
+    colour, alpha = straight_output(frame, space, premultiplied)
+    colour = np.clip(colour, 0, 1)
     for index, letter in enumerate("RGB"):
         if letter not in letters:
             colour[..., index] = 0.0

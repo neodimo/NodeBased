@@ -46,6 +46,12 @@ class SliderDrawTests(unittest.TestCase):
                 continue
             key = f"slider_scan_{index}"
             w.dispatcher.execute({"op": "create", "id": key, "type": node_type, "pos": [0, 0]})
+            if node_type == "Write":
+                # Write shows the knobs of the format it writes (writenode.hidden_params); the JPEG slider is checked with the
+                # format set to JPEG in tests/test_write_formats.py.
+                from nodebased import writenode
+                hidden = writenode.hidden_params(w.dispatcher.document["nodes"][key]["params"])
+                params = [param for param in params if param not in hidden]
             panel = w.build_node_panel(key)
             w.set_properties_widget(panel)
             APP.processEvents()

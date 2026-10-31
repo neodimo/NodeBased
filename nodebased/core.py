@@ -1957,9 +1957,9 @@ MERGE_OPERATIONS = ("over", "under", "plus", "minus", "multiply", "screen", "max
                     "color-burn")
 TRANSFORM_FILTERS = ("nearest", "bilinear", "cubic")
 TRACKER_MODES = _trackerknobs.MODES
-# Write destinations. Deliberately the two formats media.py can actually write; a format list
-# longer than the writer is a promise the render button cannot keep.
-WRITE_FILE_TYPES = ("Auto", "exr", "png")
+# Write destinations. Deliberately the formats the writers can actually write (media.py for EXR, imaging.py for PNG,
+# writeformats.py for TIFF, JPEG and DPX); a format list longer than the writers is a promise the render button cannot keep.
+WRITE_FILE_TYPES = ("Auto", "exr", "png", "tiff", "jpeg", "dpx")
 EXR_BIT_DEPTHS = ("half", "float")
 # Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
 # "leave it alone" option, because that is the one that hides a mistake.
@@ -2167,7 +2167,16 @@ CHOICES["on_error"] = list(MISSING_FRAME_POLICIES)
 CHOICES["missing_frames"] = list(_precompnode.MISSING_FRAMES)
 LIMITS.update({"reload": (0, 2147483647), "reading": (0, 1), "render_order": (-1000000, 1000000),
                "use_output": (0, 1), "reload_write": (0, 2147483647)})
-CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none"]
+CHOICES["exr_compression"] = ["zips", "zip", "piz", "rle", "pxr24", "none", "dwaa", "dwab"]
+# Fidelity step M: Write's TIFF, JPEG, DPX and EXR options (nodebased/writeformats.py, writenode.py).
+from . import writeformats as _writeformats
+from . import writenode as _writenode
+CHOICES.update({key: list(values) for key, values in _writeformats.CHOICES.items()})
+CHOICES["exr_metadata"] = list(_writenode.METADATA_CHOICES)
+CHOICES["exr_interleave"] = list(_writenode.INTERLEAVE_CHOICES)
+LIMITS.update({"jpeg_quality": (0.0, 1.0), "dpx_fill": (0, 1), "dpx_big_endian": (0, 1), "exr_autocrop": (0, 1),
+               "exr_standard_layer_name_format": (0, 1), "exr_write_full_layer_names": (0, 1),
+               "exr_truncate_channel_names": (0, 1), "exr_dw_compression_level": (0.0, 1000.0)})
 LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1), "lock_connections": (0, 1),
                "MinClampTo": (-1000000.0, 1000000.0), "MaxClampTo": (-1000000.0, 1000000.0),
                "MinClampTo_enable": (0, 1), "MaxClampTo_enable": (0, 1), "read_all_lines": (0, 1)})

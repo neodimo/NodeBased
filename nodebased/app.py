@@ -55,7 +55,7 @@ from .knobfit import (ElidingComboBox, FittedDoubleSpinBox, FittedSpinBox, Wrapp
 from . import analysisregion
 from . import ops2d_chrome
 from . import pathcontext
-from . import curvetoolknobs, writenode
+from . import curvetoolknobs, writeformats, writenode
 from . import presets as preset_model
 from . import fluidshelf
 from . import fluidknobpresets
@@ -12475,6 +12475,7 @@ class Window(QMainWindow):
                     held.insertRow(first + 1, caption)
                 help_rows.clear()
 
+            write_hidden = writenode.hidden_params(node["params"]) if node["type"] == "Write" else ()
             for group in knob_layout(node["type"]):
                 if group.help or group.section:
                     # Rows are added by many branches below; the caption goes in at the next iteration.
@@ -12483,6 +12484,8 @@ class Window(QMainWindow):
                     form = rotopaint_holds["mix" if group.params == ("mix",) else "advanced"]
                 if group.kind == "legacy":
                     continue
+                if node["type"] == "Write" and set(group.params) & write_hidden:
+                    continue            # a file format the Write is not set to write keeps its knobs out of the panel
                 if group.section != last_section:
                     last_section = group.section
                     if group.section:
@@ -15502,7 +15505,7 @@ class Window(QMainWindow):
     def browse_write(self, key):
         path, selected = QFileDialog.getSaveFileName(
             self, "Write output", self.dispatcher.document["nodes"][key]["params"]["path"] or "render.%04d.exr",
-            "OpenEXR (*.exr);;PNG (*.png)")
+            "OpenEXR (*.exr);;PNG (*.png);;TIFF (*.tif *.tiff);;JPEG (*.jpg *.jpeg);;DPX (*.dpx)")
         if path:
             self.command({"op": "set", "id": key, "param": "path", "value": path})
 
@@ -17324,7 +17327,7 @@ class Window(QMainWindow):
             self.set_node_error(key, text)
             self.statusBar().showMessage(f"{text} · {written} of {len(frames)} frames written", 20000)
             return
-        detail = f"{file_type} · {bits + ' float' if file_type == 'exr' else '8-bit sRGB'}"
+        detail = writeformats.describe(file_type, write_params, bits)
         if written < len(frames):
             self.statusBar().showMessage(
                 f"Render cancelled after {written} of {len(frames)} frames · {path} · {detail}", 12000)

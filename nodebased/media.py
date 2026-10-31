@@ -28,7 +28,9 @@ _TAGGED_SPACES = {'lin_ap1_scene': 'ACEScg', 'acescg': 'ACEScg',
 # because OpenImageIO is imported lazily — packaged builds must not pay for it on import.
 HALF_MAX = 65504.0
 EXR_BITS = {'half': 'half', 'float': 'float'}
-EXR_COMPRESSIONS = ('zips', 'zip', 'piz', 'rle', 'pxr24', 'none')
+EXR_COMPRESSIONS = ('zips', 'zip', 'piz', 'rle', 'pxr24', 'none', 'dwaa', 'dwab')
+DWA_COMPRESSIONS = ('dwaa', 'dwab')
+DEFAULT_DWA_LEVEL = 45.0                  # Nuke's dw_compression_level default; OpenEXR's own default is 45 as well
 DEFAULT_EXR_BITS = 'half'
 DEFAULT_EXR_COMPRESSION = 'zips'
 
@@ -665,7 +667,7 @@ def raster_layer_arrays(raster):
 
 
 def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRESSION, layers=None,
-              metadata=None, beauty='RGBA', colorspace_tag=WORKING):
+              metadata=None, beauty='RGBA', colorspace_tag=WORKING, options=None):
     """Write RGBA scene-linear EXR. Defaults: 16-bit half, ZIPS (one-scanline zip).
 
     `bits='float'` keeps full 32-bit precision for data passes that need it (depth, IDs,
@@ -679,6 +681,12 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
     (name -> string) is written into the header as-is, e.g. the `cryptomatte/<key>/...` entries.
     `beauty` names the beauty channels written, in R, G, B, A order (a subset drops the others; '' writes layers only), and
     `colorspace_tag` is the `oiio:ColorSpace` the file declares (the working space unless the Write converted the colour).
+
+    `options` (None writes the file exactly as before) holds the Write node's EXR knobs, see nodebased/writenode.py:
+    `autocrop` (data window = bounding box of the non-zero alpha, display window = the frame), `attributes` (the header
+    strings to write in place of the ones `metadata` gives) and `timecode` (write the typed timecode attribute),
+    `parts` ('single' or 'layers': one part per layer) with `first_part`, `full_layer_names` and `truncate_names`, and
+    `dw_level` (the DWAA / DWAB compression level).
     """
     import OpenImageIO as oiio
     if bits not in EXR_BITS:
@@ -689,12 +697,15 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
     path = Path(path).expanduser().resolve()
     if path.suffix.lower() != '.exr':
         raise ValueError('EXR output path must end in .exr')
+    options = options or {}
     pixels = half_safe(frame) if bits == 'half' else np.ascontiguousarray(frame, np.float32)
     names = ['R', 'G', 'B', 'A']
     if beauty != 'RGBA':
         keep = [index for index, letter in enumerate('RGBA') if letter in beauty]
         pixels = np.ascontiguousarray(pixels[..., keep])
         names = [names[index] for index in keep]
+    # (part name, bare channel names, full channel names, first column in `pixels`); the beauty is the part `rgba`.
+    groups = [('rgba', list(names), list(names), 0)] if names else []
     if layers:
         planes = [pixels]
         for name, layer in layers.items():
@@ -706,34 +717,78 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
             wanted = layer_channels(name)
             planes.append(half_safe(layer[..., :len(wanted)]) if bits == 'half'
                           else np.ascontiguousarray(layer[..., :len(wanted)], np.float32))
+            groups.append((name, list(wanted), [f'{name}.{channel}' for channel in wanted], len(names)))
             names += [f'{name}.{channel}' for channel in wanted]
         pixels = np.ascontiguousarray(np.concatenate(planes, axis=2))
     if not names:
         raise ValueError('Nothing to write: the selected channels name no channel of this image')
+    if options.get('truncate_names'):
+        groups = [(part, bare, [_truncate_channel(full) for full in fulls], first) for part, bare, fulls, first in groups]
+        names = [full for _part, _bare, fulls, _first in groups for full in fulls]
+        if len(set(names)) != len(names):
+            raise ValueError('Truncating channel names to 31 characters makes two channels share a name; rename a layer')
+    # The data window: the whole frame, or with autocrop the bounding box of the non-zero alpha (a frame with no alpha above
+    # zero is written whole, because OpenEXR has no empty window).
+    top, left, height, width = 0, 0, frame.shape[0], frame.shape[1]
+    if options.get('autocrop'):
+        box = _alpha_box(frame)
+        if box is not None:
+            top, left, height, width = box
+            pixels = np.ascontiguousarray(pixels[top:top + height, left:left + width])
+    dwa_level = options.get('dw_level')
+    compression_name = f'{compression}:{float(dwa_level):g}' if compression in DWA_COMPRESSIONS and dwa_level is not None else compression
+    parts = options.get('parts', 'single')
+    if parts == 'layers':
+        first = str(options.get('first_part') or '')
+        ordered = sorted(groups, key=lambda group: group[0])
+        ordered.sort(key=lambda group: group[0] != first)           # the chosen part first, the rest alphabetical
+    else:
+        ordered = None
     fd, temporary = tempfile.mkstemp(prefix='.' + path.stem, suffix='.exr', dir=path.parent)
     os.close(fd)
     writer = None
     try:
-        spec = oiio.ImageSpec(frame.shape[1], frame.shape[0], len(names), oiio.TypeDesc(EXR_BITS[bits]))
-        spec.channelnames = names
-        # Tag what is actually in the buffer: working-space scene-linear. Reading one of our
-        # own EXRs back is then a true no-op instead of a silent Rec.709 -> ACEScg conversion.
-        spec.attribute('oiio:ColorSpace', colorspace_tag)
-        spec.attribute('compression', compression)
-        from .metadata import EXR_TIMECODE_ATTRIBUTE, header_metadata, timecode_words
-        for attribute, value in header_metadata(metadata).items():
-            spec.attribute(attribute, value)
-        words = timecode_words(metadata)
-        if words is not None:
-            spec.attribute(EXR_TIMECODE_ATTRIBUTE, oiio.TypeDesc('timecode'), words)
+        def make_spec(channel_names, part=None):
+            spec = oiio.ImageSpec(width, height, len(channel_names), oiio.TypeDesc(EXR_BITS[bits]))
+            spec.channelnames = channel_names
+            spec.x, spec.y = left, top
+            spec.full_x, spec.full_y, spec.full_width, spec.full_height = 0, 0, frame.shape[1], frame.shape[0]
+            # Tag what is actually in the buffer: working-space scene-linear. Reading one of our
+            # own EXRs back is then a true no-op instead of a silent Rec.709 -> ACEScg conversion.
+            spec.attribute('oiio:ColorSpace', colorspace_tag)
+            spec.attribute('compression', compression_name)
+            from .metadata import EXR_TIMECODE_ATTRIBUTE, header_metadata, timecode_words
+            header = options['attributes'] if 'attributes' in options else header_metadata(metadata)
+            for attribute, value in header.items():
+                spec.attribute(attribute, value)
+            words = timecode_words(metadata) if options.get('timecode', True) else None
+            if words is not None:
+                spec.attribute(EXR_TIMECODE_ATTRIBUTE, oiio.TypeDesc('timecode'), words)
+            if part is not None:
+                spec.attribute('oiio:subimagename', part)
+            return spec
         writer = oiio.ImageOutput.create(temporary)
-        if writer is None or not writer.open(temporary, spec):
+        if ordered is None:
+            spec = make_spec(names)
+            opened = writer.open(temporary, spec) if writer is not None else False
+        else:
+            full = bool(options.get('full_layer_names'))
+            specs = [make_spec(fulls if full else bares, part) for part, bares, fulls, _first in ordered]
+            opened = writer.open(temporary, specs) if writer is not None else False
+        if writer is None or not opened:
             raise ValueError('Cannot open EXR output: ' + oiio.geterror())
         # Hand OIIO float32 and let it do the narrowing conversion; it applies the correct
         # round-to-nearest-even, which an intermediate numpy astype('float16') also does but
         # would force a second full-frame copy.
-        if not writer.write_image(pixels):
-            raise ValueError('Cannot write EXR: ' + writer.geterror())
+        if ordered is None:
+            if not writer.write_image(pixels):
+                raise ValueError('Cannot write EXR: ' + writer.geterror())
+        else:
+            for index, (_part, bares, _fulls, first_column) in enumerate(ordered):
+                if index and not writer.open(temporary, specs[index], 'AppendSubimage'):
+                    raise ValueError('Cannot add an EXR part: ' + writer.geterror())
+                if not writer.write_image(np.ascontiguousarray(pixels[..., first_column:first_column + len(bares)])):
+                    raise ValueError('Cannot write EXR: ' + writer.geterror())
         if not writer.close():
             raise ValueError('Cannot finalize EXR: ' + writer.geterror())
         writer = None
@@ -743,3 +798,19 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
             writer.close()
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def _truncate_channel(name, limit=31):
+    """A channel name cut to OpenEXR 1.x's 31 characters, the way Nuke's truncate channel names does (the end is kept, so the
+    channel letter survives)."""
+    return name if len(name) <= limit else name[-limit:]
+
+
+def _alpha_box(frame):
+    """(top, left, height, width) of the bounding box of the frame's non-zero alpha, or None when there is none."""
+    alpha = np.asarray(frame)[..., 3] != 0
+    rows = np.flatnonzero(alpha.any(axis=1))
+    if rows.size == 0:
+        return None
+    columns = np.flatnonzero(alpha.any(axis=0))
+    return int(rows[0]), int(columns[0]), int(rows[-1] - rows[0] + 1), int(columns[-1] - columns[0] + 1)
