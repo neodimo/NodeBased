@@ -1,0 +1,236 @@
+{
+  "date": "2026-10-30",
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "resolution": [
+    960,
+    540
+  ],
+  "seeds": [
+    1,
+    2
+  ],
+  "variants": {
+    "32c-32spp": {
+      "cells": 32,
+      "samples": 32,
+      "shot_options": {
+        "curl": 0
+      },
+      "bake_seconds": 0.735,
+      "frames": {
+        "8": {
+          "seconds": 0.249,
+          "mean_linear_rgb": 0.07058054208755493,
+          "flame": {
+            "peak": 1.421573519706726,
+            "occupied_cells": 428,
+            "occupied_fraction": 0.0130615234375,
+            "empty_slices": 4,
+            "height_slices": 29,
+            "lateral_sway_cells": 0.0
+          }
+        },
+        "16": {
+          "seconds": 0.086,
+          "mean_linear_rgb": 0.060982078313827515,
+          "flame": {
+            "peak": 1.4704091548919678,
+            "occupied_cells": 358,
+            "occupied_fraction": 0.01092529296875,
+            "empty_slices": 0,
+            "height_slices": 29,
+            "lateral_sway_cells": 0.364
+          },
+          "grain_rms": 0.034049686044454575
+        },
+        "24": {
+          "seconds": 0.078,
+          "mean_linear_rgb": 0.06441733241081238,
+          "flame": {
+            "peak": 1.483020544052124,
+            "occupied_cells": 335,
+            "occupied_fraction": 0.010223388671875,
+            "empty_slices": 0,
+            "height_slices": 29,
+            "lateral_sway_cells": 0.509
+          }
+        }
+      }
+    },
+    "32c-128spp": {
+      "cells": 32,
+      "samples": 128,
+      "shot_options": {
+        "curl": 0
+      },
+      "bake_seconds": 0.7,
+      "frames": {
+        "8": {
+          "seconds": 0.263,
+          "mean_linear_rgb": 0.07061142474412918,
+          "flame": {
+            "peak": 1.421573519706726,
+            "occupied_cells": 428,
+            "occupied_fraction": 0.0130615234375,
+            "empty_slices": 4,
+            "height_slices": 29,
+            "lateral_sway_cells": 0.0
+          }
+        },
+        "16": {
+          "seconds": 0.267,
+          "mean_linear_rgb": 0.061020683497190475,
+          "flame": {
+            "peak": 1.4704091548919678,
+            "occupied_cells": 358,
+            "occupied_fraction": 0.01092529296875,
+            "empty_slices": 0,
+            "height_slices": 29,
+            "lateral_sway_cells": 0.364
+          },
+          "grain_rms": 0.01709134876728058
+        },
+        "24": {
+          "seconds": 0.252,
+          "mean_linear_rgb": 0.06443270295858383,
+          "flame": {
+            "peak": 1.483020544052124,
+            "occupied_cells": 335,
+            "occupied_fraction": 0.010223388671875,
+            "empty_slices": 0,
+            "height_slices": 29,
+            "lateral_sway_cells": 0.509
+          }
+        }
+      }
+    },
+    "64c-32spp": {
+      "cells": 64,
+      "samples": 32,
+      "shot_options": {
+        "curl": 0
+      },
+      "bake_seconds": 7.723,
+      "frames": {
+        "8": {
+          "seconds": 0.385,
+          "mean_linear_rgb": 0.09730438888072968,
+          "flame": {
+            "peak": 1.5041627883911133,
+            "occupied_cells": 4464,
+            "occupied_fraction": 0.01702880859375,
+            "empty_slices": 0,
+            "height_slices": 57,
+            "lateral_sway_cells": 0.289
+          }
+        },
+        "16": {
+          "seconds": 0.1,
+          "mean_linear_rgb": 0.057767320424318314,
+          "flame": {
+            "peak": 1.499763011932373,
+            "occupied_cells": 2464,
+            "occupied_fraction": 0.0093994140625,
+            "empty_slices": 0,
+            "height_slices": 57,
+            "lateral_sway_cells": 0.458
+          },
+          "grain_rms": 0.03510038182139397
+        },
+        "24": {
+          "seconds": 0.095,
+          "mean_linear_rgb": 0.055643342435359955,
+          "flame": {
+            "peak": 1.5037051439285278,
+            "occupied_cells": 2273,
+            "occupied_fraction": 0.008670806884765625,
+            "empty_slices": 0,
+            "height_slices": 58,
+            "lateral_sway_cells": 0.515
+          }
+        }
+      }
+    },
+    "64c-128spp": {
+      "cells": 64,
+      "samples": 128,
+      "shot_options": {
+        "curl": 0
+      },
+      "bake_seconds": 7.724,
+      "frames": {
+        "8": {
+          "seconds": 0.589,
+          "mean_linear_rgb": 0.097347192466259,
+          "flame": {
+            "peak": 1.5041627883911133,
+            "occupied_cells": 4464,
+            "occupied_fraction": 0.01702880859375,
+            "empty_slices": 0,
+            "height_slices": 57,
+            "lateral_sway_cells": 0.289
+          }
+        },
+        "16": {
+          "seconds": 0.28,
+          "mean_linear_rgb": 0.057774823158979416,
+          "flame": {
+            "peak": 1.499763011932373,
+            "occupied_cells": 2464,
+            "occupied_fraction": 0.0093994140625,
+            "empty_slices": 0,
+            "height_slices": 57,
+            "lateral_sway_cells": 0.458
+          },
+          "grain_rms": 0.017461612820625305
+        },
+        "24": {
+          "seconds": 0.284,
+          "mean_linear_rgb": 0.055645279586315155,
+          "flame": {
+            "peak": 1.5037051439285278,
+            "occupied_cells": 2273,
+            "occupied_fraction": 0.008670806884765625,
+            "empty_slices": 0,
+            "height_slices": 58,
+            "lateral_sway_cells": 0.515
+          }
+        }
+      }
+    }
+  },
+  "image_differences_mean_abs_linear": {
+    "32c_vs_64c_at_32spp": {
+      "8": 0.032484427094459534,
+      "16": 0.01131038460880518,
+      "24": 0.014473030343651772
+    },
+    "32c_vs_64c_at_128spp": {
+      "8": 0.03127920627593994,
+      "16": 0.010595766827464104,
+      "24": 0.013866732828319073
+    },
+    "32spp_vs_128spp_at_32c": {
+      "8": 0.006509747821837664,
+      "16": 0.005688884761184454,
+      "24": 0.006148145534098148
+    },
+    "32spp_vs_128spp_at_64c": {
+      "8": 0.008787008933722973,
+      "16": 0.005680475849658251,
+      "24": 0.00536423921585083
+    }
+  },
+  "contact_sheet": "docs/images/fire_shot/fire-compare-2026-10-30.png",
+  "contact_sheet_rows": [
+    "32c-32spp",
+    "32c-128spp",
+    "64c-32spp",
+    "64c-128spp"
+  ],
+  "contact_sheet_columns": [
+    8,
+    16,
+    24
+  ]
+}

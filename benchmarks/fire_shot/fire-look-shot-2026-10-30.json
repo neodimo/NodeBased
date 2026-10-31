@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-30",
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "resolution": [
+    960,
+    540
+  ],
+  "cells": 64,
+  "samples_per_pixel": 128,
+  "bake_seconds": 8.614,
+  "frames": {
+    "8": {
+      "seconds": 0.668,
+      "path": "docs/images/fire_shot/fire-look-008.png",
+      "mean_linear_rgb": 0.06357176601886749,
+      "flame": {
+        "peak": 1.4980316162109375,
+        "occupied_cells": 5105,
+        "occupied_fraction": 0.019474029541015625,
+        "empty_slices": 0,
+        "height_slices": 57,
+        "lateral_sway_cells": 1.425
+      }
+    },
+    "16": {
+      "seconds": 0.283,
+      "path": "docs/images/fire_shot/fire-look-016.png",
+      "mean_linear_rgb": 0.0504777617752552,
+      "flame": {
+        "peak": 1.5059587955474854,
+        "occupied_cells": 2827,
+        "occupied_fraction": 0.010784149169921875,
+        "empty_slices": 0,
+        "height_slices": 58,
+        "lateral_sway_cells": 1.903
+      },
+      "grain_rms": 0.014249461703002453
+    },
+    "24": {
+      "seconds": 0.276,
+      "path": "docs/images/fire_shot/fire-look-024.png",
+      "mean_linear_rgb": 0.052256010472774506,
+      "flame": {
+        "peak": 1.497360110282898,
+        "occupied_cells": 2744,
+        "occupied_fraction": 0.010467529296875,
+        "empty_slices": 0,
+        "height_slices": 58,
+        "lateral_sway_cells": 1.801
+      }
+    }
+  },
+  "comparison_off_seconds": 0.132,
+  "comparison_mean_linear_rgb_delta": 0.021784376353025436,
+  "comparison_off_path": "docs/images/fire_shot/fire-look-016-mesh-light-off.png"
+}

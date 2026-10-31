@@ -1250,7 +1250,7 @@ Mesh-light comparison at frame 16 (the fire itself is unchanged):
 **What still looks wrong:** The flame is a rather straight, grainy column with an occasional bright gap
 instead of licking tongues. At 32 samples the smoke and floor retain noise. The point-light cluster gives
 soft but still visibly synthetic shadows, especially close to the fuel block. Sparse cached volumes have
-no fire-derived mesh lighting yet; the floor remains dark in that case.
+no fire-derived mesh lighting yet; the floor remains dark in that case. (The mesh-light gap closed in Fluids 13 B finish; the column and grain are revisited in Fluids 13 B look, below.)
 
 ### Fluids 13 A: the Hot pour looks right (2026-10-27)
 
@@ -1854,6 +1854,59 @@ Windows. No shader or buffer layout changed.
 **Limits.** The coarse light stays a bounded, blurred approximation: eight point lights per volume, and a flame thinner than a
 coarse cell is averaged into it. A sparse volume whose temperature or flame is a dense array, or lives in another tile
 set, gets no halo or mesh lights. Mesh lights of a changed sparse cache are rebuilt per Volume object like dense ones.
+
+### Fluids 13 B look: a finer, less grainy fire shot (2026-10-30)
+
+The 13 B stills showed a straight, grainy column with bright gaps. Changing one thing at a time on the RTX 3080 Ti
+(`render_evidence.py --compare`, the same frames 8, 16 and 24, same bounds, fuel source, camera and lights, fixed seeds)
+separates the grid from the sampling:
+
+| Variant (960 × 540) | Bake to frame 24 | Render, frames 16 / 24 | Grain at frame 16 | Flame cells at 16 | Empty height slices at 8 / 16 / 24 |
+| --- | --- | --- | --- | --- | --- |
+| 32 cells, 32 samples | 0.74 s | 0.09 s | 0.034 | 358 | 4 / 0 / 0 |
+| 32 cells, 128 samples | 0.70 s | 0.26 s | 0.017 | 358 | 4 / 0 / 0 |
+| 64 cells, 32 samples | 7.7 s | 0.10 s | 0.035 | 2464 | 0 / 0 / 0 |
+| 64 cells, 128 samples | 7.7 s | 0.28 s | 0.017 | 2464 | 0 / 0 / 0 |
+
+Grain is the rms difference between two renders of the same frame with different path-tracer seeds, divided by the square
+root of two (a pure sampling-noise measure). Quadrupling the samples halves it at either cell count, and the 64-cell grid
+does not add noise. The mean image difference between 32 and 64 cells (0.011 to 0.032) is two to five times the difference
+between 32 and 128 samples (0.005 to 0.009): the grid sets the picture's structure and the samples set its grain. The cached
+flame field is continuous in height at 64 cells at every measured frame; at 32 cells, frame 8 has four empty height slices,
+which are the bright gaps the render showed. No source, burn or advection parameter was changed to get this, and the
+renderer's fire math is untouched.
+
+The 64-cell column was still straight (the flame centroid moves only 0.3 to 0.5 cells from the source's axis). A seeded sideways
+wobble on the fuel source's velocity (`curl_keys` in `make_shot.py`: `src_vel_x` and `src_vel_z` keyed every three frames from
+a fixed seed, amplitude 0.10 in the source's velocity units, upward velocity and the source's position unchanged) raises that to 1.4 to 1.9
+cells. `--curl-sweep` renders 0, 0.10 and 0.20 (and 0.20 with source noise): 0.10 bends the plume visibly without leaving the
+fuel block, 0.20 bends it further and smears the upper flame. The shot uses 0.10 without source noise. Replay is deterministic:
+the same document gives bit-identical flame and density at frame 8 from two empty caches (`tests/test_fire_shot.py`).
+
+**The shot now.** `examples/fire_shot/fire_shot.nbcomp` (regenerate with `make_shot.py`) is a 64-cell solve rendered at 128
+samples with the 0.10 wobble; `make_shot.build_document(division_size=.0625, pt_samples=32, curl=0)` rebuilds the earlier
+shot. On the RTX 3080 Ti the bake through frame 24 takes 8.6 s (0.74 s before), and a 128-sample 960 × 540 frame takes 0.28 s
+warm (0.67 s cold) against 0.09 s for the old 32-sample frame. Full numbers are in `benchmarks/fire_shot/fire-look-2026-10-30.json`
+(the four-way comparison), `fire-curl-2026-10-30.json` and `fire-look-shot-2026-10-30.json` (the shot as committed).
+
+![Four variants, frames 8, 16 and 24: 32 cells at 32 samples, 32 at 128, 64 at 32, 64 at 128](images/fire_shot/fire-compare-2026-10-30.png)
+![Curl sweep at 64 cells and 128 samples: straight, 0.10, 0.20, 0.20 with source noise](images/fire_shot/fire-curl-2026-10-30.png)
+![The shot at frame 16](images/fire_shot/fire-look-016.png)
+
+Mesh-light comparison on the new shot at frame 16 (the fire is unchanged between the two):
+
+| Fire lights meshes | Mesh lighting off |
+| --- | --- |
+| ![Orange glow on the floor and stone](images/fire_shot/fire-look-016.png) | ![The same fire with dark floor and stone](images/fire_shot/fire-look-016-mesh-light-off.png) |
+
+The mean brightness change from the mesh light is 0.022 (0.033 on the 32-cell shot, whose flame was brighter on average).
+
+**Verdict.** In the contact sheet the 128-sample rows look cleaner than the 32-sample rows and the 64-cell rows show finer
+tongues than the 32-cell rows; the curl shot leans and billows instead of standing straight. This comes from the saved stills as the
+worker saw them, not from the real display: **Gonzo to judge the picture on the real display.** What still looks
+wrong: the upper plume is a fine speckled smoke with visible grain even at 128 samples (grain 0.014), the flame core is a soft
+orange blob with little contrast between tongues, and the wobble comes from a source push, not from a wind or a turbulence force
+(no solver change was made; a real wind or curl-noise force would be a separate step and needs a measured proposal).
 
 ## K2 rigid bodies — finish 1
 

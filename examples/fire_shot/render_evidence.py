@@ -14,6 +14,8 @@ from nodebased import gpu3d, simcache
 from nodebased.core import load_document
 from nodebased.imaging import Evaluator, write_png
 
+from make_shot import build_document
+
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parents[1]
 
@@ -28,19 +30,161 @@ def gpu_lock():
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
+FRAMES = (8, 16, 24)
+
+
+def flame_occupancy(volume, threshold_fraction=.05):
+    """Measure how continuous the cached flame field is, with no rendering involved."""
+    flame = np.asarray(volume.flame, dtype=np.float32)
+    peak = float(flame.max())
+    if peak <= 0:
+        return {'peak': 0.0, 'occupied_cells': 0, 'occupied_fraction': 0.0, 'empty_slices': 0,
+                'height_slices': 0, 'lateral_sway_cells': 0.0}
+    live = flame > peak * threshold_fraction
+    # Volumes are indexed [ix, iy, iz]: height is the second axis.
+    per_slice = live.reshape(live.shape[0], live.shape[1], -1).sum(axis=(0, 2))
+    rows = np.flatnonzero(per_slice)
+    span = rows[-1] - rows[0] + 1 if rows.size else 0
+    empty = int(span - rows.size)
+    sway = 0.0
+    if rows.size > 1:
+        centroids = []
+        for y in rows:
+            plane = flame[:, y, :]
+            total = float(plane.sum())
+            if total > 0:
+                xi, zi = np.indices(plane.shape)
+                centroids.append(((plane * xi).sum() / total, (plane * zi).sum() / total))
+        if len(centroids) > 1:
+            sway = float(np.asarray(centroids).std(axis=0).max())
+    return {'peak': peak, 'occupied_cells': int(live.sum()), 'occupied_fraction': float(live.mean()),
+            'empty_slices': empty, 'height_slices': int(span), 'lateral_sway_cells': round(sway, 3)}
+
+
+def downsample(pixels, factor=2):
+    h, w = pixels.shape[0] // factor * factor, pixels.shape[1] // factor * factor
+    return pixels[:h, :w].reshape(h // factor, factor, w // factor, factor, -1).mean(axis=(1, 3))
+
+
+def render_variant(cells, samples, workdir, width, height, frames=FRAMES, seeds=(1,), tag=None, **shot):
+    """Bake one cell count and render the same frames at one sample count, once per seed."""
+    document = build_document(width, height, division_size=2.0 / cells, pt_samples=samples, **shot)
+    document['nodes']['render']['params']['pt_seed'] = seeds[0]
+    evaluator = Evaluator(sim=simcache.SimCache(root=workdir / (tag or f'cells{cells}'), memory_budget=1 << 30,
+                                                disk_budget=8 << 30))
+    started = time.perf_counter()
+    with gpu_lock():
+        evaluator.evaluate_raster(document, 'cache', frame=max(frames), typed=True)
+    bake_s = time.perf_counter() - started
+    result = {'cells': cells, 'samples': samples, 'shot_options': shot, 'bake_seconds': round(bake_s, 3), 'frames': {}}
+    images = {}
+    for frame in frames:
+        with gpu_lock():
+            volume = evaluator.evaluate_raster(document, 'cache', frame=frame, typed=True)
+        occupancy = flame_occupancy(volume)
+        started = time.perf_counter()
+        with gpu_lock():
+            pixels = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+        seconds = time.perf_counter() - started
+        entry = {'seconds': round(seconds, 3), 'mean_linear_rgb': float(pixels[..., :3].mean()),
+                 'flame': occupancy}
+        images[frame] = pixels
+        if frame == 16 and len(seeds) > 1:
+            other = []
+            for seed in seeds[1:]:
+                document['nodes']['render']['params']['pt_seed'] = seed
+                with gpu_lock():
+                    other.append(evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy())
+            document['nodes']['render']['params']['pt_seed'] = seeds[0]
+            # Independent seeds differ only by Monte Carlo noise: rms difference / sqrt(2) is the grain.
+            entry['grain_rms'] = float(np.sqrt(((pixels[..., :3] - other[0][..., :3]) ** 2).mean() / 2))
+        result['frames'][str(frame)] = entry
+    return result, images
+
+
+def compare(args):
+    workdir = args.workdir
+    images_dir = REPO / 'docs' / 'images' / 'fire_shot'
+    images_dir.mkdir(parents=True, exist_ok=True)
+    runs, pictures = {}, {}
+    for cells in (32, 64):
+        for samples in (32, 128):
+            key = f'{cells}c-{samples}spp'
+            runs[key], pictures[key] = render_variant(cells, samples, workdir, args.width, args.height,
+                                                      seeds=(1, 2), tag=f'cells{cells}-{samples}', curl=0)
+            print(key, json.dumps({f: (v['seconds'], round(v['mean_linear_rgb'], 4), v.get('grain_rms'))
+                                   for f, v in runs[key]['frames'].items()}), flush=True)
+    differences = {}
+    for samples in (32, 128):
+        a, b = pictures[f'32c-{samples}spp'], pictures[f'64c-{samples}spp']
+        differences[f'32c_vs_64c_at_{samples}spp'] = {
+            str(f): float(np.abs(a[f][..., :3] - b[f][..., :3]).mean()) for f in FRAMES}
+    for cells in (32, 64):
+        a, b = pictures[f'{cells}c-32spp'], pictures[f'{cells}c-128spp']
+        differences[f'32spp_vs_128spp_at_{cells}c'] = {
+            str(f): float(np.abs(a[f][..., :3] - b[f][..., :3]).mean()) for f in FRAMES}
+    # Contact sheet: rows are the four variants, columns are frames 8, 16 and 24, at half size.
+    rows = [np.concatenate([downsample(pictures[key][f]) for f in FRAMES], axis=1) for key in runs]
+    sheet = np.concatenate(rows, axis=0)
+    sheet_name = f'fire-compare-{args.tag}.png'
+    write_png(images_dir / sheet_name, sheet)
+    result = {'date': args.date, 'device': args.device, 'resolution': [args.width, args.height],
+              'seeds': [1, 2], 'variants': runs, 'image_differences_mean_abs_linear': differences,
+              'contact_sheet': f'docs/images/fire_shot/{sheet_name}',
+              'contact_sheet_rows': list(runs), 'contact_sheet_columns': list(FRAMES)}
+    benchmark = REPO / 'benchmarks' / 'fire_shot' / f'fire-look-{args.tag}.json'
+    benchmark.write_text(json.dumps(result, indent=2) + '\n')
+    print(json.dumps(differences, indent=2), flush=True)
+
+
+def curl_sweep(args):
+    """Render 64 cells at 128 samples with several seeded sideways-curl strengths."""
+    images_dir = REPO / 'docs' / 'images' / 'fire_shot'
+    runs, pictures = {}, {}
+    for name, shot in (('straight', {'curl': 0}), ('curl-0.10', {'curl': .10}), ('curl-0.20', {'curl': .20}),
+                       ('curl-0.20-noise', {'curl': .20, 'source_noise': .35})):
+        runs[name], pictures[name] = render_variant(64, 128, args.workdir, args.width, args.height,
+                                                    seeds=(1, 2), tag=f'sweep-{name}', **shot)
+        print(name, json.dumps({f: (v['seconds'], v['flame']['lateral_sway_cells'], v['flame']['occupied_cells'])
+                                for f, v in runs[name]['frames'].items()}), flush=True)
+    rows = [np.concatenate([downsample(pictures[key][f]) for f in FRAMES], axis=1) for key in runs]
+    sheet_name = f'fire-curl-{args.tag}.png'
+    write_png(images_dir / sheet_name, np.concatenate(rows, axis=0))
+    result = {'date': args.date, 'resolution': [args.width, args.height], 'cells': 64, 'samples': 128,
+              'variants': runs, 'contact_sheet': f'docs/images/fire_shot/{sheet_name}',
+              'contact_sheet_rows': list(runs), 'contact_sheet_columns': list(FRAMES)}
+    benchmark = REPO / 'benchmarks' / 'fire_shot' / f'fire-curl-{args.tag}.json'
+    benchmark.write_text(json.dumps(result, indent=2) + '\n')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--workdir', type=Path, required=True, help='disposable simulation cache outside the repository')
     parser.add_argument('--width', type=int, default=960)
     parser.add_argument('--height', type=int, default=540)
-    parser.add_argument('--samples', type=int, default=32)
+    parser.add_argument('--samples', type=int, default=None, help='override the document sample count')
+    parser.add_argument('--compare', action='store_true', help='render 32 and 64 cells at 32 and 128 samples')
+    parser.add_argument('--curl-sweep', action='store_true', help='render 64 cells with sideways curl strengths')
+    parser.add_argument('--tag', default='2026-10-30')
+    parser.add_argument('--date', default='2026-10-30')
     args = parser.parse_args()
     args.workdir.mkdir(parents=True, exist_ok=True)
+    if args.curl_sweep:
+        curl_sweep(args)
+        return
+    if args.compare:
+        with gpu_lock():
+            args.device = gpu3d._state()['info'].get('device', 'unknown')
+        compare(args)
+        return
     images = REPO / 'docs' / 'images' / 'fire_shot'
     images.mkdir(parents=True, exist_ok=True)
     document = load_document(ROOT / 'fire_shot.nbcomp')
     params = document['nodes']['render']['params']
-    params.update(width=args.width, height=args.height, pt_samples=args.samples, sampling='fixed')
+    params.update(width=args.width, height=args.height, sampling='fixed')
+    if args.samples:
+        params['pt_samples'] = args.samples
+    samples = int(params['pt_samples'])
     evaluator = Evaluator(sim=simcache.SimCache(root=args.workdir, memory_budget=1 << 30,
                                                 disk_budget=8 << 30))
     with gpu_lock():
@@ -55,26 +199,34 @@ def main():
         with gpu_lock():
             pixels = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
         seconds = time.perf_counter() - started
-        write_png(images / f'fire-{frame:03d}.png', pixels)
-        frames[str(frame)] = {'seconds': round(seconds, 3), 'path': f'docs/images/fire_shot/fire-{frame:03d}.png',
-                              'mean_linear_rgb': float(pixels[..., :3].mean())}
+        write_png(images / f'fire-look-{frame:03d}.png', pixels)
+        with gpu_lock():
+            volume = evaluator.evaluate_raster(document, 'cache', frame=frame, typed=True)
+        frames[str(frame)] = {'seconds': round(seconds, 3), 'path': f'docs/images/fire_shot/fire-look-{frame:03d}.png',
+                              'mean_linear_rgb': float(pixels[..., :3].mean()), 'flame': flame_occupancy(volume)}
         if frame == 16:
             on = pixels
+            params['pt_seed'] = 2
+            with gpu_lock():
+                other = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+            params['pt_seed'] = 1
+            frames[str(frame)]['grain_rms'] = float(np.sqrt(((pixels[..., :3] - other[..., :3]) ** 2).mean() / 2))
     off_document = load_document(ROOT / 'fire_shot.nbcomp')
     off_document['nodes']['render']['params'].update(width=args.width, height=args.height,
-                                                     pt_samples=args.samples, sampling='fixed',
+                                                     pt_samples=samples, sampling='fixed',
                                                      volume_fire_light_meshes=0.0)
     started = time.perf_counter()
     with gpu_lock():
         off = evaluator.evaluate_raster(off_document, 'render', frame=16).pixels.copy()
     off_s = time.perf_counter() - started
-    write_png(images / 'fire-016-mesh-light-off.png', off)
-    result = {'date': '2026-10-27', 'device': device, 'resolution': [args.width, args.height],
-              'samples_per_pixel': args.samples, 'bake_seconds': round(bake_s, 3), 'frames': frames,
+    write_png(images / 'fire-look-016-mesh-light-off.png', off)
+    solver = document['nodes']['fire']['params']
+    result = {'date': args.date, 'device': device, 'resolution': [args.width, args.height],
+              'cells': round(2.0 / solver['division_size']), 'samples_per_pixel': samples, 'bake_seconds': round(bake_s, 3), 'frames': frames,
               'comparison_off_seconds': round(off_s, 3),
               'comparison_mean_linear_rgb_delta': float((on - off)[..., :3].mean()),
-              'comparison_off_path': 'docs/images/fire_shot/fire-016-mesh-light-off.png'}
-    benchmark = REPO / 'benchmarks' / 'fire_shot' / 'fire-glow-2026-10-27.json'
+              'comparison_off_path': 'docs/images/fire_shot/fire-look-016-mesh-light-off.png'}
+    benchmark = REPO / 'benchmarks' / 'fire_shot' / f'fire-look-shot-{args.tag}.json'
     benchmark.parent.mkdir(parents=True, exist_ok=True)
     benchmark.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2), flush=True)

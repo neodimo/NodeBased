@@ -1,5 +1,5 @@
 {
-  "version": 26,
+  "version": 28,
   "nodes": {
     "fuel": {
       "type": "FluidSource3D",
@@ -53,7 +53,7 @@
       "type": "FluidSolver3D",
       "name": "FluidSolver3D",
       "params": {
-        "division_size": 0.0625,
+        "division_size": 0.03125,
         "bounds_min_x": -1,
         "bounds_min_y": 0,
         "bounds_min_z": -1,
@@ -468,7 +468,7 @@
         "volume_flame_intensity": 0.5,
         "volume_flame_temperature": 1900,
         "volume_fire_light_meshes": 60.0,
-        "pt_samples": 32,
+        "pt_samples": 128,
         "max_bounces": 3,
         "diffuse_bounces": 2,
         "specular_bounces": 1,
@@ -514,7 +514,84 @@
     "fps": 24.0
   },
   "animation": {
-    "curves": {}
+    "curves": {
+      "fuel": {
+        "src_vel_x": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": -0.03869
+            },
+            {
+              "frame": 4,
+              "value": 0.09966
+            },
+            {
+              "frame": 7,
+              "value": -0.0229
+            },
+            {
+              "frame": 10,
+              "value": -0.0855
+            },
+            {
+              "frame": 13,
+              "value": 0.07574
+            },
+            {
+              "frame": 16,
+              "value": 0.03869
+            },
+            {
+              "frame": 19,
+              "value": -0.09966
+            },
+            {
+              "frame": 22,
+              "value": 0.0229
+            }
+          ]
+        },
+        "src_vel_z": {
+          "interpolation": "linear",
+          "keys": [
+            {
+              "frame": 1,
+              "value": -0.02133
+            },
+            {
+              "frame": 4,
+              "value": 0.06161
+            },
+            {
+              "frame": 7,
+              "value": -0.08968
+            },
+            {
+              "frame": 10,
+              "value": 0.1
+            },
+            {
+              "frame": 13,
+              "value": -0.0905
+            },
+            {
+              "frame": 16,
+              "value": 0.06309
+            },
+            {
+              "frame": 19,
+              "value": -0.02317
+            },
+            {
+              "frame": 22,
+              "value": -0.02133
+            }
+          ]
+        }
+      }
+    }
   },
   "settings": {
     "color": {
