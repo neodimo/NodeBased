@@ -2079,6 +2079,104 @@ the brighter smoke halo and the camera's view of the column dominate the rows); 
 of green to red does not fall with height (0.35 at the bottom third, 0.41 at the top). Grain rose to 0.014 (2.5 times step A's 0.0056)
 because the flame is brighter and more contrasty (mean peak emission 6.8 to 9.7). The vorticity ceiling is low: 2.5 or more diverges.
 
+### Fluids 13 B smoke: the fire is sampled as a light at smoke vertices (2026-10-31)
+
+The shape step left the smoke above the fire as an evenly speckled cloud, and frame-16 grain at 0.0141. The grain step had named the
+cause: the fire reaches smoke only when a phase-sampled continuation ray happens through it, which for a small bright flame is a rare
+large jump. This step adds next-event estimation of the fire at every smoke vertex. **The grain gate was missed** (0.0141 to 0.0130
+against at most 0.0071); the estimator does what it should at a vertex, and the numbers below say what the image's grain is made of instead.
+
+**Attribution first** (the shot as committed, 64 cells, 128 samples, frame 16, RTX 3080 Ti, grain as defined above, two seeds):
+
+| Render output | Grain | Mean | Grain with `volume_fire_light` 0 |
+| --- | --- | --- | --- |
+| `rgba` (everything) | **0.0141** | 0.0889 | **0.0084** |
+| `emission` (the flame the camera sees) | 0.0025 | 0.0249 | 0.0025 |
+| `diffuse` (smoke lit at its first scatter) | 0.0107 | 0.0569 | 0.0061 |
+| `diffuse_indirect` | 0.0038 | 0.0031 | 0.0012 |
+
+Smoke in-scattering is 0.0107 of the 0.0141 (variance 1.1e-4 of 2.0e-4), so it dominates, and the fire's light on the smoke is 65 % of the
+total variance (2.0e-4 against 7.0e-5 with the fire's light off). The same table shows the limit of this step: with the fire's light on the
+smoke switched off, which no estimator of that light can touch, the grain is still 0.0084, above the gate's 0.0071.
+
+**The estimator** (`ptvolume.FireEmitter`, `fire_nee_sample`, `fire_nee_value`, `fire_transmittance`; the shader's `vol_fire_light`,
+`vol_fire_transmittance`, `vol_fire_share`, `vol_fire_density`; both tracers):
+
+- **Distribution.** The coarse emission grid of `volumerender.fire_light_grid`, taken before its blur (`volumerender.fire_coarse_emission`;
+  `fire_light_grid` itself is unchanged): each cell weighs its emission plus 5 % of its 3 x 3 x 3 neighbourhood's (trilinear reads a voxel past a
+  cell) plus a uniform floor of 0.1 % of the mass, so every cell the fine emission could be positive in has a probability. The blurred grid would
+  have spread the samples over the fifteen-percent halo where there is no emission. A point is a cell by that probability and a uniform position
+  in it; its emission is the fine field's (`_emission_at`, the same terms as the flight's quadrature). Its density per world volume is
+  `pmf / cell_world^3`.
+- **Light.** `phase * e * T / (p_V r^2)` at each vertex, `T` the smoke's transmittance to the point and a mesh shadow ray toward it; the gain
+  `volume_fire_light` multiplies it as it multiplies the glow a continuation ray gathers.
+- **Weights.** The continuation ray's glow (`expected_emission`) and the sampled fire share each fire point by the balance heuristic taken in
+  volume measure: the sampled fire keeps `p_V delta r^2 / (p_V delta r^2 + phase)`, the continuation `phase / (phase + p_V delta t^2)`. They sum to 1
+  at every point whatever `delta` is, so the sum is unbiased for any `delta`; 2 voxels was set by a variance sweep (`NEE_DELTA_CELLS`). Inside 4 voxels
+  of a vertex the sampled share fades in as `(r / 4 voxels)^2` (`NEE_NEAR_CELLS`): without it a vertex in the middle of a dense knot of fire
+  was 3.6 times noisier than the continuation alone, with it 1.03 times.
+- **Shadow transmittance is the midpoint rule, not ratio tracking.** Ratio tracking was built first (`ptvolume.ratio_transmittance`, kept as the
+  unbiased reference the tests compare against) and ran 1.7 to 4.6 times noisier per fire sample through a dense flame (per-vertex
+  standard deviation 0.0113 against 0.0041, 0.0050 against 0.0011, 0.048 against 0.028, 0.0136 against 0.0071 at four vertices), with the same mean. The shot's other shadow rays are deterministic too.
+  `fire_transmittance`: one step per 4 voxels and per 1.0 of optical depth at the smoke's own extinction bound, at most 48.
+- **Switches and limits.** One volume that glows, `volume_fire_light` above 0, and no splats (their shadows are not traced toward the
+  fire); otherwise the render is the previous one bit for bit. `ptvolume.ENABLE_FIRE_NEE` and `gpupathtrace.ENABLE_FIRE_NEE` set False give the
+  previous estimator on both tracers (the evidence's "before"). The packed volume header grew from 10 to 16 vec4 (the emitter table,
+  its grid, the object-to-world rows and the extinction bound).
+
+**At one smoke vertex** (CPU, 40 000 hashed numbers each, `g` 0, the test volume of `tests/test_fire_smoke_nee.py`; standard deviation of the
+fire's light there by sampled fire plus weighted continuation, against the continuation alone; the means agree within 2 %):
+
+| Vertex (test volume, world units) | Continuation alone | Both | |
+| --- | --- | --- | --- |
+| (0.2, -0.2, 0.5), far from the fire | 0.0122 | 0.0037 | 3.3 x quieter |
+| (-0.6, -0.3, -0.2), far | 0.0502 | 0.0239 | 2.1 x |
+| (-0.5, -0.55, 0.1), far | 0.0339 | 0.0119 | 2.8 x |
+| (-0.05, -0.06, 0.04), 0.3 from the knot's middle | 0.0911 | 0.0660 | 1.4 x |
+| (-0.36, 0.20, 0.04), 0.26 from it | 0.122 | 0.103 | 1.2 x |
+| (-0.20, -0.06, 0.04), against the knot | 0.258 | 0.251 | 1.0 x |
+| (-0.36, -0.06, 0.04), in the middle of the knot | 0.0453 | 0.0467 | 1.0 x |
+
+**Gate** (`render_evidence.py --smoke-grain`, RTX 3080 Ti, 960 x 540, 128 samples, seeds 1 and 2, frames 8, 16, 24; times are the median
+of five warm renders with new seeds):
+
+| | Before | After | Gate |
+| --- | --- | --- | --- |
+| Grain at frame 16 | 0.0141 | **0.0130** (0.92 x) | at most 0.0071: **missed** |
+| Grain at frames 8 / 24 | 0.0149 / 0.0142 | 0.0137 / 0.0130 | |
+| `diffuse` grain at frame 16 | 0.0107 | 0.0097 | |
+| Grain of the 2048-sample frames (frames 8 / 16 / 24) | 0.0037 / 0.0036 / 0.0036 | 0.0034 / 0.0033 / 0.0033 | |
+| Render time, frames 8 / 16 / 24 | 0.823 / 0.786 / 0.746 s | 0.830 / 0.795 / 0.778 s | at most 1.3 x: 1.01 / 1.01 / 1.04, met |
+| Mean image at 2048 samples against the previous renderer at 2048 | | within 0.045 % (flame core: within 0.08 %) | the tracer's tests allow 5 %: met |
+
+(Frame times in this run are slower than the 0.4 to 0.5 s of the shape step's report on the same card and shot; both columns were measured
+back to back in this run, so the ratios are what to read.) Numbers per frame and component: `benchmarks/fire_shot/fire-smoke-grain-2026-10-31.json`.
+
+![Before above, after below: frames 8, 16, 24 at 128 samples](images/fire_shot/fire-smoke-grain-before-after-2026-10-31.png)
+![The upper plume at frame 16, enlarged three times without smoothing: before above, after below](images/fire_shot/fire-smoke-grain-before-after-zoom-2026-10-31.png)
+
+**What dominates, and why.** Per vertex the fire's light is two to three times quieter; the image's grain barely moves because most of it is not
+the fire's light. With the fire's light on smoke off the grain is 0.0084, and the smoke there is lit by one dim fill light and the ambient
+sky. *Inference, not separately measured:* the grain of a thin plume is mostly which of a pixel's 128 camera rays scatter at all and where
+along the ray (delta tracking gives a thin plume zero or one real collision per path, so a pixel is dark or a jump, and its relative
+noise is about `sqrt((1 - p) / (p N))` for a collision chance `p`), which light sampling at the collision does not touch. The lighting at a
+collision is smooth in the collision's position; the presence of a collision is not. The fix is an estimator on the camera flight, not on
+the light: the expected value of the single scatter along the flight (the smoke's in-scattering integrated by stratified samples with the
+transmittance, like `vol_emission` does for the glow, with the lighting evaluated at a few of them by the code that lights a vertex), or a
+forced first collision with the camera ray split into a scattered and a passing branch. Either costs several lighting evaluations per
+camera ray that crosses the plume, where a collision's lighting is evaluated today at only the rays that scatter, so it will cost render time against the 1.3 x gate.
+
+**Eddies.** In the close-up the smoke is a smooth orange haze with fine speckle; the grain is still there, and no eddies are visible in
+it: the shape step's cooling made the smoke calmer (vorticity 185 to 68), and this step changes no solver setting. Reading the saved
+images, not the real display (**Gonzo to judge**).
+
+**Adapters.** The volume path-tracing, sparse-volume, fire and fire-shot modules (280 tests with `tests/test_fire_smoke_nee.py`, 24 new:
+the emitter, the vertex estimators, the CPU twin against the card pixel for pixel on the same seed with the estimator on and off, the means at
+many samples, the gain, the shader constants) pass on the RTX 3080 Ti, on the AMD Radeon 8060S (`force-adapter.py integrated`) and on llvmpipe (`cpu`).
+
+**Not verified.** Windows; the real display; scenes with several volumes or splats (they keep the previous estimator); a flame much
+denser than the shot's beyond the test volume's dense knot.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up

@@ -21,5 +21,9 @@ flame_shape=False)` the earlier 32-cell straight shot.
   process, and writes grain, render time, per-component grain at frame 16 and the mean agreement at 2048 samples to
   `benchmarks/fire_shot/fire-grain-<tag>.json`, with a before/after contact sheet and a zoom of the upper plume.
 
+- `--smoke-grain`: renders the shot with the fire sampled as a light at smoke vertices and without (each in its own process), and writes
+  grain, render time, per-component grain at frame 16 (with the fire's light on smoke switched off as the floor), the mean agreement at 2048
+  samples and a before/after contact sheet and smoke close-up to `benchmarks/fire_shot/fire-smoke-grain-<tag>.json`.
+
 The shot contains a floor, a stone beside the fire and one dim blue fill light. The simulation cache is disposable; only
 the graph, scripts, benchmark files and rendered stills are deliverables.

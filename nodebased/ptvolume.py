@@ -558,7 +558,7 @@ def fire_transmittance(layer, vi, o, d, dist):
     """`exp(-tau)` through volume `vi` along rays (unit `d`, up to `dist`) by the midpoint rule: one step per `NEE_STEP_CELLS`
     voxels, more where the extinction bound would put more than `NEE_TAU` of optical depth in a step. Deterministic, like the
     shadow rays of the lights; the shader's `vol_fire_transmittance` mirrors it. (Ratio tracking, `ratio_transmittance`, has the
-    same mean but ran 2.8 to 3.7 times noisier per fire sample through a dense flame: see docs/FLUIDS_SPIKE.md.)"""
+    same mean but ran 1.7 to 4.6 times noisier per fire sample through a dense flame: see docs/FLUIDS_SPIKE.md.)"""
     n = len(o)
     out = np.ones(n)
     prep = layer.preps[vi]
