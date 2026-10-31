@@ -1,3 +1,9 @@
+## 2026-10-31 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step N of N: a NoTimeBlur node, and the project settings counted as Nuke's Root (integrator tick)
+
+- **What was done:** `main` `4926b8bf` -> `2a035b71` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `2a035b71`: Ran 7558 tests in 535.811 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31, 12:15 AM PDT — Lane 2 fidelity step N: NoTimeBlur, and the project settings counted as Nuke's Root
 
 - **What was done — evidence:** `NoTimeBlur` added (`rounding` rint/floor/ceil/none, `single` on by default). The evaluator reads its input at the rounded frame; `single` rounds the output frame, found on a per-thread stack of running `evaluate_raster` requests (`imaging._REQUEST_FRAMES`, nearest whole-frame request). Tests in `tests/test_2d_parity_notimeblur.py` (26, all pass): a TimeBlur (shutter 1, 4 divisions) over a keyed Constant at frame 5 averages frames 5,5,5,5 (rint), 4,4,5,5 (floor), 5,5,6,6 (ceil) with `single` off and reads frame 5 alone with it on; without NoTimeBlur it blurs; `none` forwards fractional frames; tiled equals full frame for every mode; bypass passes through. Root: 7 of 43 knobs paired with document fields (`time.first/last/fps`, `settings.color.config`, `settings.color.view`, `settings.viewer.proxy`), each shown acting by a test; 36 listed unsupported with a reason. Audit tool gained one rule (`document_settings`, `document_default`), stated in the report's scoring section. Fidelity 90.4 -> 90.9 (NoTimeBlur 0.0 -> 100.0, Root 0.0 -> 28.0). Targeted runs: new module, test_knobs, test_tiers, test_core, FluidPropertiesPanelTests, PropertiesLabelTests, test_bypass, test_nodecatalog, test_tiles, test_cache_correctness, the time/e2 parity modules, test_knowledge, test_nuke_fidelity_audit, test_2d_parity_step_w3: all OK.

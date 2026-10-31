@@ -1,5 +1,26 @@
 ## Lane 2 fidelity step N — NoTimeBlur and Root (12:15 AM on 2026-10-31 PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:29 AM on 2026-10-31 PDT)
+
+`main` moved `4926b8bf` -> `2a035b71` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `2a035b71` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-0019.log`, started 12:19 AM): **Ran 7558 tests in 535.811 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step N of N: a NoTimeBlur node, and the project settings counted as Nuke's Root.** Commits:
+  - `57e98b2c` context: record Lane 2 fidelity step N (NoTimeBlur and Root) in TASKLOG and state
+  - `7f00d13a` Root: score Nuke's project settings against the document fields that exist and act
+  - `8882a4a1` NoTimeBlur: rounds frame requests from below so a time blur above it samples whole frames
+  Diff: 21 files changed, 520 insertions(+), 97 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-parity`, on `4926b8bf`, two feature commits (NoTimeBlur, Root) plus this note; not pushed.
 
 **Evidence.** `tests/test_2d_parity_notimeblur.py` 26 tests OK plus the targeted modules listed in TASKLOG.md. Fidelity report regenerated (both copies): overall 90.4 -> 90.9; NoTimeBlur 0.0 -> 100.0 (Time #9, supported); Root 0.0 -> 28.0 (Other #11, partial; 7 of 43 knobs paired, defaults 3 of 5 agree). PARITY_2D counts: supported 124, partial 4, missing 5.
