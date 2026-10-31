@@ -2222,21 +2222,23 @@ class Evaluator:
                         from . import fluid_upres
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         value = None
+                        earlier = None
                         first = min(int(getattr(fluid, "start_frame", frame)), int(frame)) \
                             if fluid is not None else int(frame)
                         for up_frame in range(first, int(frame) + 1):
                             if cancel is not None and hasattr(cancel, "check"):
                                 cancel.check()
                             coarse = incoming if up_frame == int(frame) else fluid3d.cached_volume(
-                                fluid, up_frame, self._sim_memory, cancel, "float32", "all")
+                                fluid, up_frame, store, cancel, "float32", "all")
                             guide_velocity = coarse.velocity
                             if fluid is not None and guide_velocity is not None:
                                 next_coarse = fluid3d.cached_volume(
-                                    fluid, up_frame + 1, self._sim_memory, cancel, "float32", "all")
+                                    fluid, up_frame + 1, store, cancel, "float32", "all")
                                 if next_coarse.velocity is not None:
                                     guide_velocity = 0.5 * (guide_velocity + next_coarse.velocity)
                             value = fluid_upres.cached_upres(coarse, params, up_frame, store, cancel,
-                                                             guide_velocity, value)
+                                                             guide_velocity, value, earlier, True)
+                            earlier = coarse
                 elif kind == "Normals3D":
                     source = values[node["inputs"]["geo"]]
                     value = source if node["disabled"] or source is None else scene3d.normals_from_node(source, params)

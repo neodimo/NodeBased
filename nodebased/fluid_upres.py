@@ -43,60 +43,145 @@ def _active_fine_tiles(source, factor, previous=None, halo=1):
     return np.argwhere(mask).astype(np.int32)
 
 
-def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previous=None, params=None):
+def _sparse_blocks(fields, coords, shape, coarse_shape, backend, guide, previous, step):
+    """Fine-grid tile blocks (`coords` x 8 x 8 x 8 per field, plus the sampled guide velocity when there is a guide) for the active tiles.
+
+    With `previous` the blocks are that fine state carried back along `guide`; without it they are the coarse `fields` sampled on the fine
+    grid (carried back along `guide` first when there is one)."""
+    if backend == "gpu":
+        from .fluid_upres_gpu import reconstruct_sparse
+        return reconstruct_sparse(fields, coords, shape, guide, previous, step)
+    if backend != "cpu":
+        raise ValueError("sparse up-res backend must be cpu or gpu")
+    local = np.indices((TILE, TILE, TILE), dtype=np.int32)
+    xyz = [coords[:, axis, None, None, None] * TILE + local[axis] for axis in range(3)]
+    valid = np.ones((len(coords), TILE, TILE, TILE), dtype=bool)
+    for axis in range(3):
+        valid &= xyz[axis] < shape[axis]
+    sample = [(p.astype(np.float32) * np.float32((coarse_shape[i] - 1) / (shape[i] - 1)))
+              for i, p in enumerate(xyz)]
+    velocity = None
+    if guide is not None:
+        velocity = np.stack([fluid3d.trilerp(guide[..., axis], *sample) for axis in range(3)], axis=-1)
+        back = [xyz[axis].astype(np.float32) - velocity[..., axis] * np.float32(step)
+                for axis in range(3)]
+        back = [np.clip(back[axis], 0, shape[axis] - 1) for axis in range(3)]
+    else:
+        back = [p.astype(np.float32) for p in xyz]
+    blocks = {}
+    for name, field in fields.items():
+        prior = getattr(previous, name) if previous is not None else None
+        if prior is not None:
+            block = fluid3d.trilerp(prior, *back).astype(np.float32)
+        elif guide is not None:
+            coarse_back = [back[axis] * np.float32((coarse_shape[axis] - 1) /
+                                                   (shape[axis] - 1)) for axis in range(3)]
+            block = fluid3d.trilerp(field, *coarse_back).astype(np.float32)
+        else:
+            block = fluid3d.trilerp(field, *sample).astype(np.float32)
+        block[~valid] = 0
+        blocks[name] = block
+    if velocity is not None:
+        velocity[~valid] = 0
+        blocks["velocity"] = velocity.astype(np.float32)
+    return blocks
+
+
+def _curl_y(positions, size, octaves, seed):
+    """The y component of `particles.turbulence_field(positions, "curl", ...)` alone: a third of its noise evaluations."""
+    from .particles import _fbm
+    points = positions.astype(np.float64) / float(size)
+    eps = 1e-3
+
+    def derivative(salt, axis):
+        step = np.zeros(3)
+        step[axis] = eps
+        return (_fbm(points + step, seed, salt, octaves) - _fbm(points - step, seed, salt, octaves)) / (2.0 * eps)
+    return derivative(17, 2) - derivative(29, 0)
+
+
+def _tile_noise(coords, params, seed, stride=1):
+    """Curl-noise detail (zero mean) at every voxel of the given fine tiles, shape (len(coords), 8, 8, 8).
+
+    `stride` 1 evaluates the noise at every voxel. A larger stride evaluates it on a lattice that many voxels apart over the tiles'
+    bounding box and interpolates trilinearly: about `stride ** 3` times fewer evaluations, with features smaller than two lattice
+    steps smoothed away (the reinjecting pass uses 2, since it draws a new pattern every frame)."""
+    from .particles import turbulence_field
+    local = np.indices((TILE, TILE, TILE), dtype=np.float32).reshape(3, -1).T
+    out = np.empty((len(coords), TILE, TILE, TILE), np.float32)
+    size = max(.001, float(params.get("swirl_size", 1.0)))
+    octaves = max(1, int(params.get("grain", 2)))
+    if stride <= 1:
+        for first in range(0, len(coords), 128):
+            group = coords[first:first + 128]
+            positions = (group[:, None, :].astype(np.float32) * TILE + local[None, :, :]).reshape(-1, 3)
+            noise = turbulence_field(positions, "curl", size, octaves, int(seed))[:, 1]
+            out[first:first + len(group)] = noise.reshape(-1, TILE, TILE, TILE)
+        return out
+    low = coords.min(axis=0).astype(np.int64) * TILE // stride
+    high = (coords.max(axis=0).astype(np.int64) + 1) * TILE // stride + 2
+    axes = [np.arange(low[a], high[a], dtype=np.float32) * stride for a in range(3)]
+    # Shifted off the integers: the noise's lattice nodes (swirl size 1, 2, 4... put the samples on them) have no curl, so a lattice
+    # sitting exactly on them would read zero. The pattern is random, so a fixed shift changes nothing statistically.
+    lattice = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3) + np.float32(.37)
+    values = np.empty(len(lattice), np.float32)
+    for first in range(0, len(lattice), 1 << 16):
+        values[first:first + (1 << 16)] = _curl_y(lattice[first:first + (1 << 16)], size, octaves, int(seed))
+    values = values.reshape(high - low)
+    for first in range(0, len(coords), 128):
+        group = coords[first:first + 128]
+        positions = (group[:, None, :].astype(np.float32) * TILE + local[None, :, :]).reshape(-1, 3)
+        at = [positions[:, a] / stride - low[a] for a in range(3)]
+        out[first:first + len(group)] = fluid3d.trilerp(values, *at).reshape(-1, TILE, TILE, TILE)
+    return out
+
+
+def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previous=None, params=None,
+                      previous_source=None, frame=None):
     """Reconstruct only smoke/fuel-bearing tiles; return compact field blocks.
 
     Guided transport samples the cached velocity into just the active fine
     tiles. A prior sparse frame supplies compact tiles for temporal advance.
+
+    With `frame` given the pass reinjects the coarse cache every frame: the fine field is the coarse field sampled on the fine
+    grid plus the detail left over from the previous frame carried along the guide (`previous_source` is the previous coarse
+    frame, whose own sampled-and-carried copy is subtracted from the carried fine field, so only the detail is carried), and new
+    detail is seeded into the smoke that arrived this frame. Without it (the older behaviour) the fine field is the previous fine
+    field carried along, with nothing new entering after the first frame.
     """
     factor = int(factor)
     if factor not in (2, 4):
         raise ValueError("sparse up-res factor must be 2 or 4")
     shape = tuple(n * factor for n in source.density.shape)
+    coarse_shape = tuple(source.density.shape)
     guide = source.velocity if guide_velocity is None else guide_velocity
     fps = getattr(getattr(source, "stream", None), "fps", 24.0)
     step = 1.0 / (max(float(fps), 1e-6) * float(source.voxel_size) / factor)
     halo = 1 if guide is None else max(1, int(np.ceil(float(np.max(np.abs(guide))) * step / TILE)) + 1)
     coords = _active_fine_tiles(source, factor, previous, halo)
-    fields = {name: getattr(source, name) for name in ("density", "temperature", "flame", "fuel")
-              if getattr(source, name) is not None}
-    if backend == "gpu":
-        from .fluid_upres_gpu import reconstruct_sparse
-        blocks = reconstruct_sparse(fields, coords, shape, guide, previous, step)
-    elif backend == "cpu":
-        local = np.indices((TILE, TILE, TILE), dtype=np.int32)
-        xyz = [coords[:, axis, None, None, None] * TILE + local[axis] for axis in range(3)]
-        valid = np.ones((len(coords), TILE, TILE, TILE), dtype=bool)
-        for axis in range(3):
-            valid &= xyz[axis] < shape[axis]
-        sample = [(p.astype(np.float32) * np.float32((source.density.shape[i] - 1) / (shape[i] - 1)))
-                  for i, p in enumerate(xyz)]
-        velocity = None
-        if guide is not None:
-            velocity = np.stack([fluid3d.trilerp(guide[..., axis], *sample) for axis in range(3)], axis=-1)
-            back = [xyz[axis].astype(np.float32) - velocity[..., axis] * np.float32(step)
-                    for axis in range(3)]
-            back = [np.clip(back[axis], 0, shape[axis] - 1) for axis in range(3)]
+    names = ("density", "temperature", "flame", "fuel")
+    fields = {name: getattr(source, name) for name in names if getattr(source, name) is not None}
+    blocks = _sparse_blocks(fields, coords, shape, coarse_shape, backend, guide, previous, step)
+    fresh = None
+    if frame is not None:
+        # Reinjection: coarse field now + (fine carried - coarse carried). With no previous frame this is just the coarse field now.
+        now = _sparse_blocks(fields, coords, shape, coarse_shape, backend, None, None, step) if guide is not None or previous is not None else blocks
+        if previous is not None and previous_source is not None and guide is not None:
+            before = {name: getattr(previous_source, name) for name in fields if getattr(previous_source, name, None) is not None}
+            carried = _sparse_blocks(before, coords, shape, coarse_shape, backend, guide, None, step)
+            for name in fields:
+                if name in carried:
+                    blocks[name] = now[name] + blocks[name] - carried[name]
+                else:
+                    blocks[name] = now[name]
+            fresh = np.maximum(now["density"] - carried["density"], 0.0) if "density" in carried else now["density"]
         else:
-            back = [p.astype(np.float32) for p in xyz]
-        blocks = {}
-        for name, field in fields.items():
-            prior = getattr(previous, name) if previous is not None else None
-            if prior is not None:
-                block = fluid3d.trilerp(prior, *back).astype(np.float32)
-            elif guide is not None:
-                coarse_back = [back[axis] * np.float32((source.density.shape[axis] - 1) /
-                                                       (shape[axis] - 1)) for axis in range(3)]
-                block = fluid3d.trilerp(field, *coarse_back).astype(np.float32)
-            else:
-                block = fluid3d.trilerp(field, *sample).astype(np.float32)
-            block[~valid] = 0
-            blocks[name] = block
-        if velocity is not None:
-            velocity[~valid] = 0
-            blocks["velocity"] = velocity.astype(np.float32)
-    else:
-        raise ValueError("sparse up-res backend must be cpu or gpu")
+            for name in fields:
+                blocks[name] = now[name]
+            fresh = now["density"]
+        for name in ("density", "flame", "fuel"):
+            if name in blocks:
+                np.maximum(blocks[name], 0.0, out=blocks[name])
     # Candidate halo tiles may be wholly empty after interpolation. Do not
     # retain or cache them, even if another channel has nonzero background.
     occupied = np.any(blocks["density"] != 0, axis=(1, 2, 3))
@@ -104,21 +189,19 @@ def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previo
         occupied |= np.any(blocks["fuel"] != 0, axis=(1, 2, 3))
     coords = coords[occupied]
     blocks = {name: block[occupied] for name, block in blocks.items()}
+    if fresh is not None:
+        fresh = fresh[occupied]
     params = params or DEFAULTS
     amount = float(params.get("turbulence", 0.0))
     shredding = float(params.get("shredding", 0.0))
-    if (amount or shredding) and previous is None and len(coords):
-        from .particles import turbulence_field
+    if (amount or shredding) and len(coords) and (previous is None or frame is not None):
         detail = max(0.0, min(amount, 2.0)) + max(0.0, min(shredding, 2.0))
-        local = np.indices((TILE, TILE, TILE), dtype=np.float32).reshape(3, -1).T
-        for first in range(0, len(coords), 128):
-            group = coords[first:first + 128]
-            positions = (group[:, None, :].astype(np.float32) * TILE + local[None, :, :]).reshape(-1, 3)
-            noise = turbulence_field(
-                positions, "curl", max(.001, float(params.get("swirl_size", 1.0))),
-                max(1, int(params.get("grain", 2))), int(params.get("seed", 0)))[:, 1]
-            blocks["density"][first:first + len(group)] *= np.maximum(
-                0.0, 1.0 + np.float32(detail) * noise.reshape(-1, TILE, TILE, TILE))
+        seed = int(params.get("seed", 0)) + (0 if frame is None else 7919 * int(frame))
+        noise = _tile_noise(coords, params, seed, 1 if fresh is None else 2)
+        if fresh is None:
+            blocks["density"] *= np.maximum(0.0, 1.0 + np.float32(detail) * noise)
+        else:
+            blocks["density"] = np.maximum(0.0, blocks["density"] + np.float32(detail) * noise * fresh)
     if len(coords):
         mass = float(np.sum(source.density, dtype=np.float64)) * factor ** 3
         got = float(np.sum(blocks["density"], dtype=np.float64))
@@ -232,16 +315,22 @@ def upres_volume(source, params, frame, guide_velocity=None, previous=None):
                         temperature=temperature, velocity=velocity, flame=flame, fuel=fuel, frame=int(frame))
 
 
-def run_key(source_stream, params):
-    body = json.dumps([getattr(source_stream, "run", None), params], sort_keys=True).encode()
-    return hashlib.sha256(body).hexdigest()
+def run_key(source_stream, params, reinject=False):
+    body = [getattr(source_stream, "run", None), params]
+    if reinject:
+        body.append("reinject")      # frames that carry the coarse cache's new content differ from the older carry-only frames
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
 
 
-def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None, previous=None):
-    """Serve an up-res frame from its own bounded SimCache."""
+def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None, previous=None,
+                 previous_source=None, reinject=False):
+    """Serve an up-res frame from its own bounded SimCache.
+
+    `reinject` (the evaluator sets it) takes each frame's flame, temperature, fuel and new smoke from the coarse cache instead of only
+    carrying the first frame's state forward, and `previous_source` is the previous coarse frame (see `upres_sparse_grid`)."""
     if cancel is not None:
         cancel.check()
-    key = run_key(getattr(source, "stream", None), params)
+    key = run_key(getattr(source, "stream", None), params, reinject)
     got = store.get(key, int(frame))
     if got is None:
         sparse_ok = int(params["upres_factor"]) in (2, 4)
@@ -251,12 +340,14 @@ def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None,
             try:
                 grid = upres_sparse_grid(source, params["upres_factor"],
                                          "gpu" if backend in ("gpu", "auto") else "cpu",
-                                         guide_velocity, previous, params)
+                                         guide_velocity, previous, params, previous_source,
+                                         int(frame) if reinject else None)
             except Unsupported:
                 if backend == "gpu":
                     raise
                 grid = upres_sparse_grid(source, params["upres_factor"], "cpu",
-                                         guide_velocity, previous, params)
+                                         guide_velocity, previous, params, previous_source,
+                                         int(frame) if reinject else None)
             arrays = grid.arrays()
             meta = {"frame": int(frame), "sparse_shape": grid.shape}
         else:
